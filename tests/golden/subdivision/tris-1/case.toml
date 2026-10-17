@@ -1,0 +1,12 @@
+feature = "subdivision"
+observation = "docs/parity/subdivision.md"
+description = "Default pyramid (4 triangles + 1 quad, see input.obj) under Subdivision Surface, level 1"
+mesh = "mesh.obj"
+
+[params]
+input = "pyramid"
+level = 1
+
+[import]
+scale = 1.0
+flip_z = false

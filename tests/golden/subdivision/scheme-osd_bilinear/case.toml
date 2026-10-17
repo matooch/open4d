@@ -1,0 +1,13 @@
+feature = "subdivision"
+observation = "docs/parity/subdivision.md"
+description = "Default cube under Subdivision Surface, level 2, Type osd_bilinear"
+mesh = "mesh.obj"
+
+[params]
+input = "cube"
+level = 2
+scheme = "osd_bilinear"
+
+[import]
+scale = 1.0
+flip_z = false
