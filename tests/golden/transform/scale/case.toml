@@ -1,0 +1,13 @@
+feature = "transform"
+observation = "docs/parity/transform.md"
+description = "Default cube, object scale fields (S.X, S.Y, S.Z) = (2, 3, 4)"
+mesh = "mesh.obj"
+
+[params]
+scale_1 = 2.0
+scale_2 = 3.0
+scale_3 = 4.0
+
+[import]
+scale = 1.0
+flip_z = false

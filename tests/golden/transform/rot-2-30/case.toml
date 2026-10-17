@@ -1,0 +1,11 @@
+feature = "transform"
+observation = "docs/parity/transform.md"
+description = "Default cube, rotation field 2 (R.P) = 30"
+mesh = "mesh.obj"
+
+[params]
+rot_2 = 30.0
+
+[import]
+scale = 1.0
+flip_z = false

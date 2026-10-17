@@ -1,0 +1,10 @@
+feature = "transform"
+observation = "docs/parity/transform.md"
+description = "Default cube, no transform changed"
+mesh = "mesh.obj"
+
+[params]
+
+[import]
+scale = 1.0
+flip_z = false
