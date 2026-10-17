@@ -1,11 +1,13 @@
 //! forge-generators: parametric primitives. Spec: docs/specs/PRIMITIVES.md
 //! (vertex and face orders come from docs/parity/{plane,cube,sphere}.md).
 
+mod boole;
 mod cube;
 mod plane;
 mod sphere;
 mod subdivision;
 
+pub use boole::{boole, inputs_of as boole_inputs_of};
 pub use subdivision::{input_of, subdivide, subdivide_with_creases};
 
 use std::collections::BTreeMap;
@@ -36,7 +38,8 @@ impl Plugin for Primitives {
 
     fn register(&self, r: &mut Registry) -> Result<(), RegistryError> {
         types().into_iter().try_for_each(|t| r.register(t))?;
-        r.register(subdivision::node_type())
+        r.register(subdivision::node_type())?;
+        r.register(boole::node_type())
     }
 }
 
@@ -100,7 +103,8 @@ pub fn build(type_id: &str, values: &BTreeMap<String, Value>) -> Result<PolyMesh
 }
 
 /// Local-space mesh of any generator node in a scene (docs/specs/SUBDIVISION.md §4):
-/// primitives from their params, the subdivision generator from its input child.
+/// primitives from their params, the subdivision generator from its input child, the
+/// boolean generator from its two inputs (docs/specs/BOOLE.md §1).
 /// `Ok(None)` for nodes without geometry.
 pub fn evaluate(scene: &Scene, id: NodeId) -> Result<Option<PolyMesh>, BuildError> {
     let Some(node) = scene.node(id) else {
@@ -114,6 +118,9 @@ pub fn evaluate(scene: &Scene, id: NodeId) -> Result<Option<PolyMesh>, BuildErro
         };
         return subdivision::evaluate_subdivision(scene, id, &p);
     }
+    if node.type_id == boole::TYPE {
+        return boole::evaluate_boole(scene, id);
+    }
     match build(&node.type_id, &node.params) {
         Ok(mesh) => Ok(Some(mesh)),
         Err(BuildError::UnknownType(_)) => Ok(None),
@@ -121,11 +128,19 @@ pub fn evaluate(scene: &Scene, id: NodeId) -> Result<Option<PolyMesh>, BuildErro
     }
 }
 
-/// True if the node is the input a parent generator consumes (not drawn itself).
+/// True if the node is an input a parent generator consumes (not drawn itself):
+/// the subdivision input (SUBDIVISION.md §1) or a boolean's A or B (BOOLE.md §1).
 pub fn is_consumed(scene: &Scene, id: NodeId) -> bool {
-    scene
+    let Some(p) = scene
         .node(id)
         .and_then(|n| n.parent)
         .and_then(|p| scene.node(p))
-        .is_some_and(|p| p.type_id == subdivision::TYPE && input_of(scene, p.id) == Some(id))
+    else {
+        return false;
+    };
+    match p.type_id.as_str() {
+        subdivision::TYPE => input_of(scene, p.id) == Some(id),
+        boole::TYPE => boole::inputs_of(scene, p.id).contains(&id),
+        _ => false,
+    }
 }

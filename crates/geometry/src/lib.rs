@@ -1,6 +1,7 @@
 //! forge-geometry: polygon meshes, half-edge connectivity, normals, selections and
 //! splines. Spec: docs/specs/GEOMETRY.md.
 
+pub mod boolean;
 pub mod halfedge;
 pub mod mesh;
 pub mod normals;

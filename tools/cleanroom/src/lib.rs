@@ -171,7 +171,8 @@ fn walk(dir: &Path, prefix: &str, cfg: &Config, out: &mut Vec<Violation>) -> io:
             if !SKIP_DIRS.contains(&name.as_str()) {
                 walk(&entry.path(), &format!("{rel}/"), cfg, out)?;
             }
-        } else if file_type.is_file() {
+        } else if file_type.is_file() && !(prefix.is_empty() && name == ".git") {
+            // A root `.git` *file* is a git worktree's pointer to its metadata.
             check_file(&entry.path(), &rel, &name, cfg, out)?;
         }
     }

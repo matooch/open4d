@@ -45,7 +45,10 @@ fn renumbered_and_resplit_cube_is_the_same_surface() {
         }
     }
     let t = Tolerance::default();
-    assert!(!compare_meshes(&a, &b, &t).passed(), "strict sees the order");
+    assert!(
+        !compare_meshes(&a, &b, &t).passed(),
+        "strict sees the order"
+    );
     let r = compare_geometric(&a, &b, &t);
     assert!(r.passed(), "{:?}", r.failures);
     assert_eq!(r.points, (8, 8));
@@ -62,7 +65,11 @@ fn moved_point_fails_points_and_planes() {
     let mut b = cube();
     b.positions[7][0] += 0.25;
     let r = compare_geometric(&a, &b, &Tolerance::default());
-    assert!(has(&r.failures, "points: expected point"), "{:?}", r.failures);
+    assert!(
+        has(&r.failures, "points: expected point"),
+        "{:?}",
+        r.failures
+    );
     assert!(has(&r.failures, "planes"), "{:?}", r.failures);
 
     // within tolerance passes

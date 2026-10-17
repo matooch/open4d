@@ -245,3 +245,24 @@ fn subdivision_inputs_are_drawn_only_through_their_generator() {
     let (_, mesh, _, _) = &scene_meshes(st.doc.scene(), &Default::default())[0];
     assert_eq!(mesh.points.len(), 98, "default viewport level 2");
 }
+
+#[test]
+fn boole_inputs_are_drawn_only_through_their_generator() {
+    use forge_ui::commands::{Command, execute};
+    use forge_ui::viewport_panel::scene_meshes;
+    let mut st = state();
+    let boole = create(&mut st, "forge.boole");
+    let a = create(&mut st, "forge.cube");
+    let b = create(&mut st, "forge.cube");
+    execute(&mut st, Command::Reparent(a, Some(boole))).unwrap();
+    execute(&mut st, Command::Reparent(b, Some(boole))).unwrap();
+    st.doc
+        .transact("move", |tx| {
+            tx.set_param(b, "transform.pos", Value::Vec3([50.0, 50.0, 50.0]))
+        })
+        .unwrap();
+    let meshes = scene_meshes(st.doc.scene(), &Default::default());
+    let drawn: Vec<NodeId> = meshes.iter().map(|(id, ..)| *id).collect();
+    assert_eq!(drawn, [boole]);
+    assert_eq!(meshes[0].1.points.len(), 14, "A subtract B");
+}

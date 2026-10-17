@@ -483,14 +483,9 @@ pub fn compare_geometric(expected: &Mesh, actual: &Mesh, tol: &Tolerance) -> Geo
     let (epl, apl) = (planes(expected, t), planes(actual, t));
     let mut matched = vec![false; apl.len()];
     for e in &epl {
-        let found = apl
-            .iter()
-            .enumerate()
-            .find(|(i, a)| {
-                !matched[*i]
-                    && close(a.n, e.n, normal_tolerance(t, e.area))
-                    && (a.d - e.d).abs() <= t
-            });
+        let found = apl.iter().enumerate().find(|(i, a)| {
+            !matched[*i] && close(a.n, e.n, normal_tolerance(t, e.area)) && (a.d - e.d).abs() <= t
+        });
         let Some((i, a)) = found else {
             failures.push(format!(
                 "planes: expected plane n {:?} d {} (area {}) missing",
