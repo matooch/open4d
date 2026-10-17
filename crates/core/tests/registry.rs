@@ -127,6 +127,7 @@ fn listing_is_sorted_and_filterable() {
         ids,
         [
             "forge.null",
+            "forge.smoothing",
             "test.bend",
             "test.box",
             "test.mat",
@@ -134,7 +135,7 @@ fn listing_is_sorted_and_filterable() {
         ]
     );
     let tags: Vec<&str> = r.types_in(Category::Tag).map(|t| t.id.as_str()).collect();
-    assert_eq!(tags, ["test.sel"]);
+    assert_eq!(tags, ["forge.smoothing", "test.sel"]);
     let bx = r.get("test.box").unwrap();
     assert_eq!(bx.find_param("segments").unwrap().label, "Segments");
     assert!(bx.find_param("nope").is_none());

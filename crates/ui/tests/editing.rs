@@ -156,7 +156,8 @@ fn create_tag_needs_an_active_node() {
     assert!(execute(&mut st, Command::Create("test.sel".into())).is_err());
     let b = create(&mut st, "test.box");
     execute(&mut st, Command::Create("test.sel".into())).unwrap();
-    assert_eq!(st.doc.scene().node(b).unwrap().tags.len(), 1);
+    let tags = &st.doc.scene().node(b).unwrap().tags;
+    assert_eq!(tags.len(), 2, "smoothing tag from creation + the new tag");
     assert_eq!(
         st.selection.active,
         Some(b),
@@ -195,4 +196,29 @@ fn reparent_cycles_are_reported() {
     assert_eq!(st.doc.scene().node(a).unwrap().name, "Rig");
     execute(&mut st, Command::ToggleExpanded(a)).unwrap();
     assert!(st.expanded.contains(&a));
+}
+
+#[test]
+fn creating_a_generator_attaches_a_smoothing_tag_in_one_step() {
+    let mut st = state();
+    let steps = st.doc.history().undo_labels().len();
+    let b = create(&mut st, "test.box");
+    let tags = st.doc.scene().node(b).unwrap().tags.clone();
+    assert_eq!(tags.len(), 1);
+    assert_eq!(
+        st.doc.scene().node(tags[0]).unwrap().type_id,
+        "forge.smoothing"
+    );
+    assert_eq!(st.doc.history().undo_labels().len(), steps + 1);
+    let n = create(&mut st, "forge.null");
+    assert!(
+        st.doc.scene().node(n).unwrap().tags.is_empty(),
+        "objects get none"
+    );
+    execute(&mut st, Command::Undo).unwrap();
+    execute(&mut st, Command::Undo).unwrap();
+    assert!(
+        st.doc.scene().is_empty(),
+        "tag removed with the same undo step"
+    );
 }

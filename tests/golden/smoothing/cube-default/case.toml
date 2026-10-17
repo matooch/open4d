@@ -1,0 +1,10 @@
+feature = "smoothing"
+observation = "docs/parity/smoothing.md"
+description = "Default cube with its default Phong tag (Phong Angle 40)"
+mesh = "mesh.obj"
+
+[params]
+
+[import]
+scale = 1.0
+flip_z = false

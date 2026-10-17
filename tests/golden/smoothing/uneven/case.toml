@@ -1,0 +1,11 @@
+feature = "smoothing"
+observation = "docs/parity/smoothing.md"
+description = "Default cone with Rotation Segments 3 (minimum), default Phong tag (40)"
+mesh = "mesh.obj"
+
+[params]
+cone_segments = 3
+
+[import]
+scale = 1.0
+flip_z = false

@@ -77,6 +77,7 @@ Do these in order; each unblocks code that is waiting on it.
 | 7 | [subdivision.md](subdivision.md) | subdivision surfaces | 7 |
 | 8 | [boole.md](boole.md) | booleans | 6 |
 | 9 | [defaults.md](defaults.md) | the parity-pending UI/tool defaults | – |
+| 10 | [viewport.md](viewport.md) | un-mirrored viewport display (handedness) | – |
 
 [TEMPLATE.md](TEMPLATE.md) is the blank form for any other feature.
 

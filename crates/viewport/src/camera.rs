@@ -41,6 +41,19 @@ pub enum AxisView {
     NegZ,
 }
 
+/// How world coordinates map to the right-handed display space
+/// (docs/specs/SMOOTHING.md §4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Handedness {
+    /// World = display.
+    #[default]
+    Right,
+    /// Left-handed world (the reference app): display = world with Z negated.
+    Left,
+}
+
+/// Orbit camera. `target`, `yaw` and `pitch` live in display space; use the
+/// `*_world` accessors for world-space positions and directions.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera {
     pub target: DVec3,
@@ -48,6 +61,7 @@ pub struct Camera {
     pub yaw: f64,
     pub pitch: f64,
     pub projection: Projection,
+    pub handedness: Handedness,
 }
 
 impl Default for Camera {
@@ -58,6 +72,7 @@ impl Default for Camera {
             yaw: 0.0,
             pitch: 0.0,
             projection: Projection::Perspective { fov_y: FRAC_PI_4 },
+            handedness: Handedness::Right,
         }
     }
 }
@@ -86,8 +101,37 @@ impl Camera {
         self.right().cross(self.forward())
     }
 
+    /// World ↔ display mirror (its own inverse).
+    pub fn mirror(&self) -> DVec3 {
+        match self.handedness {
+            Handedness::Right => DVec3::ONE,
+            Handedness::Left => DVec3::new(1.0, 1.0, -1.0),
+        }
+    }
+
+    pub fn target_world(&self) -> DVec3 {
+        self.target * self.mirror()
+    }
+
+    pub fn eye_world(&self) -> DVec3 {
+        self.eye() * self.mirror()
+    }
+
+    pub fn forward_world(&self) -> DVec3 {
+        self.forward() * self.mirror()
+    }
+
+    pub fn right_world(&self) -> DVec3 {
+        self.right() * self.mirror()
+    }
+
+    pub fn up_world(&self) -> DVec3 {
+        self.up() * self.mirror()
+    }
+
+    /// World → view: mirror into display space, then look at the target.
     pub fn view(&self) -> DMat4 {
-        look_at_mat4(self.eye(), self.target, DVec3::Y)
+        look_at_mat4(self.eye(), self.target, DVec3::Y) * DMat4::from_scale(self.mirror())
     }
 
     pub fn projection(&self, aspect: f64) -> DMat4 {
@@ -141,9 +185,9 @@ impl Camera {
         }
     }
 
-    /// Centres the box and fits its bounding sphere into view.
+    /// Centres the world box and fits its bounding sphere into view.
     pub fn frame(&mut self, min: DVec3, max: DVec3) {
-        self.target = (min + max) / 2.0;
+        self.target = (min + max) / 2.0 * self.mirror();
         let radius = ((max - min).length() / 2.0).max(MIN_SIZE);
         match &mut self.projection {
             Projection::Perspective { fov_y } => self.distance = radius / (*fov_y / 2.0).sin(),
@@ -154,7 +198,14 @@ impl Camera {
         }
     }
 
+    /// Puts the eye on the named side of the target (world axes).
     pub fn look_along(&mut self, view: AxisView) {
+        // Display-space Z is negated for a left-handed world.
+        let view = match (self.handedness, view) {
+            (Handedness::Left, AxisView::PosZ) => AxisView::NegZ,
+            (Handedness::Left, AxisView::NegZ) => AxisView::PosZ,
+            (_, v) => v,
+        };
         (self.yaw, self.pitch) = match view {
             AxisView::PosX => (FRAC_PI_2, 0.0),
             AxisView::NegX => (-FRAC_PI_2, 0.0),
@@ -190,7 +241,7 @@ impl Camera {
         };
         match self.projection {
             Projection::Perspective { .. } => {
-                let eye = self.eye();
+                let eye = self.eye_world();
                 Ray {
                     origin: eye,
                     dir: (unproject(0.0) - eye).normalize(),
@@ -198,7 +249,7 @@ impl Camera {
             }
             Projection::Orthographic { .. } => Ray {
                 origin: unproject(0.0),
-                dir: self.forward(),
+                dir: self.forward_world(),
             },
         }
     }

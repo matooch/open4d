@@ -10,7 +10,9 @@ Sources: published literature and public API docs only; no reference-app observa
 - Lambert diffuse shading with a camera headlight; wgpu 30 public API docs; glam
   `look_at_rh` / `perspective_rh` / `orthographic_rh` (depth range [0, 1]).
 
-**Engine convention** (not a parity claim): right-handed, +Y up, as in glam. Mapping
+**Engine convention** (not a parity claim): right-handed, +Y up, as in glam. The
+camera can display a left-handed world un-mirrored (`Handedness::Left`,
+docs/specs/SMOOTHING.md §4). Mapping
 the reference app's conventions happens at import (harness `[import]`) and needs
 docs/parity/transform.md. **Deferred until that observation exists:** rotate gizmo,
 object-local gizmo axes, object transforms in the viewport. UX choices that a

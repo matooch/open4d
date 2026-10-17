@@ -132,8 +132,13 @@ fn tree_rows_follow_hierarchy_and_expansion() {
     assert_eq!(ids, [a, b, c]);
     assert_eq!(rows[1].depth, 1);
     assert_eq!(rows[1].type_label, "Box");
-    assert_eq!(rows[1].tags.len(), 1);
-    assert_eq!(rows[1].tags[0].1, "Selection");
+    assert_eq!(
+        rows[1].tags.len(),
+        2,
+        "smoothing tag from creation + Selection"
+    );
+    assert_eq!(rows[1].tags[0].1, "Smoothing");
+    assert_eq!(rows[1].tags[1].1, "Selection");
     assert!(!rows[1].missing_type);
 }
 

@@ -94,7 +94,7 @@ impl Default for Gizmo {
 pub fn world_per_pixel_at(cam: &Camera, p: DVec3, viewport_h: f64) -> f64 {
     match cam.projection {
         Projection::Perspective { fov_y } => {
-            let depth = (p - cam.eye()).dot(cam.forward());
+            let depth = (p - cam.eye_world()).dot(cam.forward_world());
             2.0 * depth * (fov_y / 2.0).tan() / viewport_h
         }
         Projection::Orthographic { height } => height / viewport_h,
@@ -245,7 +245,7 @@ impl Drag {
             }
             Handle::Center if scale => Start::Screen { x0: x },
             Handle::Center => {
-                let n = cam.forward();
+                let n = cam.forward_world();
                 let hit0 = ray.at(ray_plane(&ray, o, n)?);
                 Start::Plane {
                     plane_normal: n,

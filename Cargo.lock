@@ -1116,6 +1116,7 @@ dependencies = [
 name = "forge-geometry"
 version = "0.1.0"
 dependencies = [
+ "forge-parity-harness",
  "glam",
  "thiserror 2.0.21",
 ]

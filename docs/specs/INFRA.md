@@ -138,6 +138,13 @@ as a list; a valid case has none. An empty `tests/golden/` is valid.
   shortest `f64` formatting; an empty mesh prints `bbox: empty` instead of the
   three bbox lines.
 
+- `parse_obj_corner_normals(src) -> Result<Vec<Vec<Option<[f64; 3]>>>, ObjError>`: per face,
+  per corner, the `vn` the corner references (`i/t/n` or `i//n`; 1-based, negative =
+  relative), `None` when the corner names no normal; out-of-range or zero indices are
+  errors with the line number. Faces match `parse_obj` one to one.
+- `max_normal_error(expected, actual: &[Vec<[f64; 3]>]) -> Option<f64>`: max abs
+  component difference over all corners; `None` if the face/corner shapes differ.
+
 ### 4.1 `golden` CLI (observation helper)
 
 - `golden info <file.obj>`: prints `mesh_info`, then `normals: N`, `uvs: N`.

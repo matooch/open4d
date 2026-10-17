@@ -1,0 +1,10 @@
+feature = "smoothing"
+observation = "docs/parity/smoothing.md"
+description = "Default cylinder (Rotation Segments 36, Height Segments 1, caps on) with default Phong tag (40)"
+mesh = "mesh.obj"
+
+[params]
+
+[import]
+scale = 1.0
+flip_z = false

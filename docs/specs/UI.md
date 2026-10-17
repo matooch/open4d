@@ -84,7 +84,8 @@ errors are returned (and shown in `status`) and change nothing. Name edits go th
 `Command::{Create(type_id), DeleteSelected, Undo, Redo, Rename(id, name),
 Reparent(id, Option<NodeId>), ToggleExpanded(id), SetShading(Shading),
 FrameAll}`; `execute(&mut EditorState, Command) -> Result<(), String>`.
-- `Create`: new node at the end of the root list, selected alone; a `Tag` type is
+- `Create`: new node at the end of the root list, selected alone; a new Generator node
+  also gets one `forge.smoothing` tag in the same undo step (SMOOTHING.md §2); a `Tag` type is
   attached to the active node instead (error without one).
 - `DeleteSelected`: one transaction deleting every selected node not already inside
   another selected node's subtree; selection cleared.

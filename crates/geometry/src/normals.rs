@@ -102,12 +102,28 @@ pub fn corner_normals(mesh: &PolyMesh, smoothing_angle: f64, w: Weighting) -> Ve
         .map(|(f, poly)| {
             poly.iter()
                 .map(|&v| {
-                    incident[v as usize]
+                    let included: Vec<(usize, usize)> = incident[v as usize]
                         .iter()
+                        .copied()
                         .filter(|(g, _)| *g == f || normals[f].dot(normals[*g]) >= min_dot)
-                        .map(|&(g, c)| normals[g] * weight(&mesh.points, &mesh.polys[g], c, w))
-                        .sum::<DVec3>()
-                        .normalize_or_zero()
+                        .collect();
+                    let sum = |weighting: Weighting| {
+                        included
+                            .iter()
+                            .map(|&(g, c)| {
+                                normals[g] * weight(&mesh.points, &mesh.polys[g], c, weighting)
+                            })
+                            .sum::<DVec3>()
+                    };
+                    let weighted = sum(w);
+                    // Degenerate corners (e.g. zero-length edges at a cone apex) carry no
+                    // weight; fall back to the plain sum of the same polygons.
+                    let n = if weighted.length() < 1e-12 {
+                        sum(Weighting::Uniform)
+                    } else {
+                        weighted
+                    };
+                    n.normalize_or_zero()
                 })
                 .collect()
         })
