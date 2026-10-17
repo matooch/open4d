@@ -91,6 +91,7 @@ flip_z = false                           # negate Z and reverse face winding (de
 [tolerance]                              # optional
 position = 1e-4                          # max abs per-component error (default 1e-4)
 psnr = 40.0                              # min image PSNR in dB (default 40.0)
+compare = "strict"                       # "strict" (compare_meshes, default) or "geometric" (§4.2)
 ```
 
 Unknown keys are an error (catches typos). `observation` must not contain `..`. If
@@ -154,6 +155,34 @@ as a list; a valid case has none. An empty `tests/golden/` is valid.
   exits 1 if any, else prints `ok: N cases`.
 - The harness's own tests use a hand-written fixture repo in
   `crates/parity-harness/tests/fixtures/` (synthetic, not reference data).
+
+### 4.2 Geometric comparison (`compare = "geometric"`)
+
+For features whose reference numbering is algorithm-specific (booleans,
+docs/specs/BOOLE.md), a case may opt in to comparing the *surface* instead of the
+order. `compare_meshes` is unchanged; `Tolerance::compare` (`Compare::Strict` default,
+`Compare::Geometric`) tells the feature's parity test which one to call.
+
+`compare_geometric(expected, actual, &Tolerance) -> GeometricReport`, with
+`t = position`:
+1. **Points**: the distinct positions used by faces (positions within `t` are one
+   point). Every expected point must have an actual point within `t` (max abs
+   component) and vice versa; failures name the first missing point.
+2. **Oriented planes**: each face contributes its Newell normal `N` (area `|N|/2`,
+   unit normal `n`) and `d = n·c` (`c` its vertex centroid). Faces whose unit normals
+   differ by ≤ `max(4t/√a, 1e-6)` per component (`a` the face's or plane's area) and whose `d` differ by ≤ `t` share a plane. Per
+   plane: total area and area-weighted centroid (fan-triangle centroids). The two
+   plane sets must match one to one; per plane, the area may differ by at most
+   `t × P` (`P` = the expected faces' total perimeter in that plane) and the centroid by
+   `t` plus `t × P / A`.
+3. **Closedness**: after merging points as in 1, a mesh is closed iff every directed
+   edge `u→v` has exactly one opposite `v→u` and no edge repeats. Both must agree.
+4. **Volume** (closed meshes only): `Σ (p0 · (p1 × p2)) / 6` over fan triangles;
+   `|ΔV| ≤ t × expected total area`.
+
+`GeometricReport { points: (usize, usize), planes: (usize, usize), closed: (bool,
+bool), volume: Option<(f64, f64)>, face_counts: (usize, usize), failures }` —
+`face_counts` is informational (never a failure); `passed()` iff no failures.
 
 ## 5. CI (`.github/workflows/ci.yml`, ubuntu-latest)
 

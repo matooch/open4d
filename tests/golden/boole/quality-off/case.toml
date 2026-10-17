@@ -10,3 +10,6 @@ b_pos = [50.0, 50.0, 50.0]
 [import]
 scale = 1.0
 flip_z = false
+
+[tolerance]
+compare = "geometric"
