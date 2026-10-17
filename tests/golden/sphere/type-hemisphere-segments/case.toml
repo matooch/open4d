@@ -1,0 +1,12 @@
+feature = "sphere"
+observation = "docs/parity/sphere.md"
+description = "Sphere with Type Hemisphere and Segments 8"
+mesh = "mesh.obj"
+
+[params]
+type = "hemisphere"
+segments = 8
+
+[import]
+scale = 1.0
+flip_z = false

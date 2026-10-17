@@ -110,6 +110,11 @@ impl Scene {
     }
 
     /// Number of nodes, tags included.
+    /// The scene's revision counter; any edit raises it.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     pub fn len(&self) -> usize {
         self.nodes.len()
     }

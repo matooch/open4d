@@ -1,0 +1,12 @@
+feature = "plane"
+observation = "docs/parity/plane.md"
+description = "Plane with Width Segments 3, Height Segments 5"
+mesh = "mesh.obj"
+
+[params]
+segments_w = 3
+segments_h = 5
+
+[import]
+scale = 1.0
+flip_z = false

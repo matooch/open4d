@@ -1,0 +1,11 @@
+feature = "plane"
+observation = "docs/parity/plane.md"
+description = "Default plane with Orientation -Z"
+mesh = "mesh.obj"
+
+[params]
+orientation = "neg_z"
+
+[import]
+scale = 1.0
+flip_z = false

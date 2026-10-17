@@ -10,3 +10,6 @@
 
 Observation kit and per-feature forms: [README.md](README.md).
 | Object transforms (pos/rot HPB/scale, parent composition) | docs/specs/TRANSFORM.md | tests/golden/transform (8) + calibration (1), from docs/parity/transform.md | crates/core/tests/transform_parity.rs | Passing locally (all 9 cases within 1e-4). Other rotation orders and viewport handedness await observation |
+| Plane primitive | docs/specs/PRIMITIVES.md §1 | tests/golden/plane (9) | crates/generators/tests/parity.rs | 9/9 exact |
+| Cube primitive | docs/specs/PRIMITIVES.md §2 | tests/golden/cube (6) | crates/generators/tests/parity.rs | 4/6 exact; fillet (2 cases) and separate surfaces unsupported |
+| Sphere primitive | docs/specs/PRIMITIVES.md §3 | tests/golden/sphere (15) | crates/generators/tests/parity.rs | 7/15 exact (standard, hemisphere); tetra/hexa/octa/icosahedron types (8 cases) unsupported |

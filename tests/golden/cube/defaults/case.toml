@@ -1,0 +1,10 @@
+feature = "cube"
+observation = "docs/parity/cube.md"
+description = "Default cube, nothing changed"
+mesh = "mesh.obj"
+
+[params]
+
+[import]
+scale = 1.0
+flip_z = false

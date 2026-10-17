@@ -1,0 +1,11 @@
+feature = "sphere"
+observation = "docs/parity/sphere.md"
+description = "Default sphere with Type Icosahedron"
+mesh = "mesh.obj"
+
+[params]
+type = "icosahedron"
+
+[import]
+scale = 1.0
+flip_z = false

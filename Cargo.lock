@@ -1103,6 +1103,14 @@ version = "0.1.0"
 [[package]]
 name = "forge-generators"
 version = "0.1.0"
+dependencies = [
+ "forge-core",
+ "forge-geometry",
+ "forge-parity-harness",
+ "glam",
+ "thiserror 2.0.21",
+ "toml",
+]
 
 [[package]]
 name = "forge-geometry"
@@ -1154,6 +1162,7 @@ name = "forge-studio"
 version = "0.1.0"
 dependencies = [
  "forge-core",
+ "forge-generators",
  "forge-ui",
 ]
 
@@ -1165,6 +1174,7 @@ dependencies = [
  "egui",
  "egui_kittest",
  "forge-core",
+ "forge-generators",
  "forge-geometry",
  "forge-viewport",
  "glam",

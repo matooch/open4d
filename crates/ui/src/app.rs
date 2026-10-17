@@ -314,9 +314,14 @@ impl Editor {
             (rect.width() * ppp).round() as u32,
             (rect.height() * ppp).round() as u32,
         ];
-        let tex = self
-            .viewport
-            .render(rs, size, &self.state.camera, self.state.shading);
+        let tex = self.viewport.render(
+            rs,
+            size,
+            &self.state.camera,
+            self.state.shading,
+            self.state.doc.scene(),
+            &self.state.selection.nodes,
+        );
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
         ui.painter().image(tex, rect, uv, egui::Color32::WHITE);
         let label = SHADINGS

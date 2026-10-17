@@ -1,0 +1,11 @@
+feature = "sphere"
+observation = "docs/parity/sphere.md"
+description = "Sphere with Radius 37.5"
+mesh = "mesh.obj"
+
+[params]
+radius = 37.5
+
+[import]
+scale = 1.0
+flip_z = false

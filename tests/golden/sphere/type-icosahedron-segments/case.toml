@@ -1,0 +1,12 @@
+feature = "sphere"
+observation = "docs/parity/sphere.md"
+description = "Sphere with Type Icosahedron and Segments 8"
+mesh = "mesh.obj"
+
+[params]
+type = "icosahedron"
+segments = 8
+
+[import]
+scale = 1.0
+flip_z = false

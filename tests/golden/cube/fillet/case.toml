@@ -1,0 +1,13 @@
+feature = "cube"
+observation = "docs/parity/cube.md"
+description = "Cube with Fillet on, Fillet Radius 20, Fillet Subdivision 3"
+mesh = "mesh.obj"
+
+[params]
+fillet = true
+fillet_radius = 20.0
+fillet_segments = 3
+
+[import]
+scale = 1.0
+flip_z = false

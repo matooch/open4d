@@ -1,0 +1,13 @@
+feature = "cube"
+observation = "docs/parity/cube.md"
+description = "Cube with Segments X/Y/Z = (3, 2, 3)"
+mesh = "mesh.obj"
+
+[params]
+segments_x = 3
+segments_y = 2
+segments_z = 3
+
+[import]
+scale = 1.0
+flip_z = false
