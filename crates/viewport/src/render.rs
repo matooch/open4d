@@ -12,7 +12,7 @@ use glam::DVec3;
 use wgpu::util::DeviceExt;
 
 use crate::camera::Camera;
-use crate::gizmo::{Axis, Gizmo, Plane};
+use crate::gizmo::{Axis, Gizmo, GizmoMode, Plane};
 use crate::grid::{Grid, LineKind};
 
 const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -571,8 +571,17 @@ fn gizmo_vertices(g: &Gizmo, cam: &Camera, viewport_h: f64, pal: &Palette) -> Ve
         Axis::Z => pal.gizmo_z,
     };
     let mut out = Vec::new();
+    if g.mode == GizmoMode::Rotate {
+        for a in Axis::ALL {
+            let ring = g.ring_points(a, l);
+            for k in 0..ring.len() {
+                line(&mut out, ring[k], ring[(k + 1) % ring.len()], axis_color(a));
+            }
+        }
+        return out;
+    }
     for a in Axis::ALL {
-        line(&mut out, g.origin, g.origin + a.vec() * l, axis_color(a));
+        line(&mut out, g.origin, g.origin + g.axis(a) * l, axis_color(a));
     }
     for p in Plane::ALL {
         let c = g.plane_corners(p, l);

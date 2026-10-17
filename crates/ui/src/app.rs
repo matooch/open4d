@@ -3,18 +3,23 @@
 
 use eframe::egui_wgpu;
 use egui::{Key, KeyboardShortcut, Modifiers, RichText, Sense, Ui};
+use forge_core::transform::{Transform, rotation_part};
 use forge_core::{NodeId, Value};
+use forge_viewport::gizmo::{Drag, Gizmo, GizmoMode, Space as GizmoSpace};
 use forge_viewport::render::Shading;
+use glam::DVec3;
 
 use crate::attributes::{
     Gesture, Widget, apply_edit, attribute_rows, from_display, to_display, unit_suffix,
 };
 use crate::commands::{Command, category_label, create_menu, execute};
+use crate::coordinates::{Row, Space, Third, coord_view, set_coord};
 use crate::dock::{Area, Dock, Panel};
+use crate::manipulate::{apply_drag, pick_node};
 use crate::state::EditorState;
 use crate::theme::Theme;
 use crate::tree::tree_rows;
-use crate::viewport_panel::{NavInput, ViewportPanel, apply_nav, nav_action};
+use crate::viewport_panel::{NavInput, SceneView, ViewportPanel, apply_nav, nav_action};
 
 const SHADINGS: [(Shading, &str); 5] = [
     (Shading::Smooth, "Smooth"),
@@ -35,6 +40,12 @@ pub struct Editor {
     gesture_seq: u64,
     gesture: Option<u64>,
     play_accum: f32,
+    gizmo_mode: GizmoMode,
+    gizmo_space: GizmoSpace,
+    coord_space: Space,
+    coord_third: Third,
+    /// The gizmo drag in progress: drag state, node, its transform at the start, gesture.
+    gizmo_drag: Option<(Drag, NodeId, Transform, u64)>,
 }
 
 impl eframe::App for Editor {
@@ -53,6 +64,11 @@ impl Editor {
             gesture_seq: 0,
             gesture: None,
             play_accum: 0.0,
+            gizmo_mode: GizmoMode::Translate,
+            gizmo_space: GizmoSpace::Object,
+            coord_space: Space::Local,
+            coord_third: Third::Scale,
+            gizmo_drag: None,
         }
     }
 
@@ -146,6 +162,26 @@ impl Editor {
                 }
             }
         });
+        // Gizmo modes and space (ours, parity-pending): W move, E rotate, R scale, Q axes.
+        ctx.input(|i| {
+            if i.modifiers.is_none() {
+                if i.key_pressed(Key::W) {
+                    self.gizmo_mode = GizmoMode::Translate;
+                }
+                if i.key_pressed(Key::E) {
+                    self.gizmo_mode = GizmoMode::Rotate;
+                }
+                if i.key_pressed(Key::R) {
+                    self.gizmo_mode = GizmoMode::Scale;
+                }
+                if i.key_pressed(Key::Q) {
+                    self.gizmo_space = match self.gizmo_space {
+                        GizmoSpace::Object => GizmoSpace::World,
+                        GizmoSpace::World => GizmoSpace::Object,
+                    };
+                }
+            }
+        });
         if ctx.input(|i| i.key_pressed(Key::F2))
             && let Some(id) = self.state.selection.active
             && let Some(n) = self.state.doc.scene().node(id)
@@ -201,6 +237,17 @@ impl Editor {
                         ui.close();
                     }
                 }
+                ui.separator();
+                ui.radio_value(
+                    &mut self.gizmo_space,
+                    GizmoSpace::Object,
+                    "Gizmo axes: object",
+                );
+                ui.radio_value(
+                    &mut self.gizmo_space,
+                    GizmoSpace::World,
+                    "Gizmo axes: world",
+                );
                 ui.separator();
                 if ui.button("Frame all").clicked() {
                     self.run(Command::FrameAll);
@@ -280,6 +327,7 @@ impl Editor {
             Panel::ObjectTree => self.tree_ui(ui),
             Panel::Attributes => self.attributes_ui(ui),
             Panel::Timeline => self.timeline_ui(ui),
+            Panel::Coordinates => self.coordinates_ui(ui),
         }
     }
 
@@ -314,13 +362,20 @@ impl Editor {
             (rect.width() * ppp).round() as u32,
             (rect.height() * ppp).round() as u32,
         ];
+        if !input.alt {
+            self.viewport_interaction(ui, &response, rect, ppp, size);
+        }
+        let gizmo = self.current_gizmo();
         let tex = self.viewport.render(
             rs,
             size,
             &self.state.camera,
             self.state.shading,
-            self.state.doc.scene(),
-            &self.state.selection.nodes,
+            SceneView {
+                scene: self.state.doc.scene(),
+                selected: &self.state.selection.nodes,
+                gizmo: gizmo.as_ref(),
+            },
         );
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
         ui.painter().image(tex, rect, uv, egui::Color32::WHITE);
@@ -335,6 +390,185 @@ impl Editor {
             egui::FontId::proportional(12.0),
             Theme::default().weak_text,
         );
+    }
+
+    /// Gizmo at the active node, in its object frame or world axes (MANIPULATE.md §2, §5).
+    fn current_gizmo(&self) -> Option<Gizmo> {
+        let id = self.state.selection.active?;
+        let m = self.state.doc.scene().world_matrix(id)?;
+        let object = self.gizmo_space == GizmoSpace::Object || self.gizmo_mode == GizmoMode::Scale;
+        let axes = if object {
+            let r = rotation_part(&m);
+            [r.x_axis, r.y_axis, r.z_axis]
+        } else {
+            [DVec3::X, DVec3::Y, DVec3::Z]
+        };
+        Some(Gizmo {
+            origin: m.w_axis.truncate(),
+            mode: self.gizmo_mode,
+            axes,
+            ..Gizmo::default()
+        })
+    }
+
+    /// Left-button picking and gizmo drags (positions in render pixels).
+    fn viewport_interaction(
+        &mut self,
+        ui: &Ui,
+        response: &egui::Response,
+        rect: egui::Rect,
+        ppp: f32,
+        size: [u32; 2],
+    ) {
+        let (w, h) = (size[0].max(1) as f64, size[1].max(1) as f64);
+        let Some(pos) = response.interact_pointer_pos() else {
+            return;
+        };
+        let (x, y) = (
+            ((pos.x - rect.min.x) * ppp) as f64,
+            ((pos.y - rect.min.y) * ppp) as f64,
+        );
+        let cam = self.state.camera;
+        let modifiers = ui.input(|i| i.modifiers);
+        if response.drag_started_by(egui::PointerButton::Primary)
+            && let (Some(g), Some(id)) = (self.current_gizmo(), self.state.selection.active)
+            && let Some(handle) = g.hit_test(&cam, x, y, w, h)
+            && let Some(drag) = Drag::begin(&g, handle, &cam, x, y, w, h)
+            && let Some(start) = self.state.doc.scene().local_transform(id)
+        {
+            self.gesture_seq += 1;
+            self.gizmo_drag = Some((drag, id, start, self.gesture_seq));
+        }
+        if let Some((drag, id, start, n)) = &mut self.gizmo_drag {
+            if response.dragged_by(egui::PointerButton::Primary) {
+                let snap = modifiers.command.then_some(match self.gizmo_mode {
+                    GizmoMode::Translate => 10.0,
+                    GizmoMode::Rotate => 15f64.to_radians(),
+                    GizmoMode::Scale => 0.1,
+                });
+                let delta = drag.update(&cam, x, y, w, h, snap);
+                let (id, start, n) = (*id, *start, *n);
+                self.state.status =
+                    match apply_drag(&mut self.state.doc, id, &start, delta, Gesture::Drag(n)) {
+                        Ok(()) => String::new(),
+                        Err(e) => e.to_string(),
+                    };
+            }
+            if response.drag_stopped() {
+                self.gizmo_drag = None;
+            }
+            return;
+        }
+        if response.clicked() {
+            match pick_node(self.state.doc.scene(), &cam, x, y, w, h) {
+                Some(id) if modifiers.command => self.state.selection.toggle(id),
+                Some(id) => self.state.selection.click(id),
+                None if !modifiers.command => self.state.selection.clear(),
+                None => {}
+            }
+        }
+    }
+
+    fn coordinates_ui(&mut self, ui: &mut Ui) {
+        let Some(id) = self.state.selection.active else {
+            ui.weak("Nothing selected");
+            return;
+        };
+        ui.horizontal(|ui| {
+            ui.radio_value(&mut self.coord_space, Space::Local, "Local");
+            ui.radio_value(&mut self.coord_space, Space::World, "World");
+            ui.separator();
+            ui.radio_value(&mut self.coord_third, Third::Scale, "Scale");
+            ui.radio_value(&mut self.coord_third, Third::Size, "Size");
+        });
+        let Some(view) = coord_view(
+            self.state.doc.scene(),
+            id,
+            self.coord_space,
+            self.coord_third,
+        ) else {
+            return;
+        };
+        let third_label = match self.coord_third {
+            Third::Scale => "Scale",
+            Third::Size => "Size",
+        };
+        let rows = [
+            (
+                Row::Position,
+                "Position",
+                ["X", "Y", "Z"],
+                Some(view.pos),
+                false,
+            ),
+            (
+                Row::Rotation,
+                "Rotation",
+                ["H", "P", "B"],
+                Some(view.rot),
+                true,
+            ),
+            (
+                Row::Third(self.coord_third),
+                third_label,
+                ["X", "Y", "Z"],
+                view.third,
+                false,
+            ),
+        ];
+        egui::Grid::new(("coords", id))
+            .num_columns(4)
+            .show(ui, |ui| {
+                for (row, label, axes, value, degrees) in rows {
+                    let l = ui.label(label);
+                    let Some(value) = value else {
+                        ui.weak("no mesh");
+                        ui.end_row();
+                        continue;
+                    };
+                    let mut shown = if degrees {
+                        value.map(f64::to_degrees)
+                    } else {
+                        value
+                    };
+                    let mut gesture = None;
+                    for (k, axis) in axes.iter().enumerate() {
+                        let r = ui
+                            .add(
+                                egui::DragValue::new(&mut shown[k])
+                                    .speed(0.1)
+                                    .prefix(format!("{axis} ")),
+                            )
+                            .labelled_by(l.id);
+                        if r.changed() {
+                            gesture = Some(if r.dragged() {
+                                self.gesture_for(r.drag_started())
+                            } else {
+                                Gesture::Commit
+                            });
+                        }
+                    }
+                    if let Some(g) = gesture {
+                        let value = if degrees {
+                            shown.map(f64::to_radians)
+                        } else {
+                            shown
+                        };
+                        self.state.status = match set_coord(
+                            &mut self.state.doc,
+                            id,
+                            self.coord_space,
+                            row,
+                            value,
+                            g,
+                        ) {
+                            Ok(()) => String::new(),
+                            Err(e) => e.to_string(),
+                        };
+                    }
+                    ui.end_row();
+                }
+            });
     }
 
     fn tree_ui(&mut self, ui: &mut Ui) {

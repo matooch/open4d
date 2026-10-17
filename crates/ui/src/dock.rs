@@ -35,14 +35,16 @@ pub enum Panel {
     ObjectTree,
     Attributes,
     Timeline,
+    Coordinates,
 }
 
 impl Panel {
-    pub const ALL: [Panel; 4] = [
+    pub const ALL: [Panel; 5] = [
         Panel::Viewport,
         Panel::ObjectTree,
         Panel::Attributes,
         Panel::Timeline,
+        Panel::Coordinates,
     ];
 
     pub fn title(self) -> &'static str {
@@ -51,6 +53,7 @@ impl Panel {
             Panel::ObjectTree => "Objects",
             Panel::Attributes => "Attributes",
             Panel::Timeline => "Timeline",
+            Panel::Coordinates => "Coordinates",
         }
     }
 
@@ -60,6 +63,7 @@ impl Panel {
             Panel::ObjectTree => Area::RightTop,
             Panel::Attributes => Area::RightBottom,
             Panel::Timeline => Area::Bottom,
+            Panel::Coordinates => Area::Bottom,
         }
     }
 }

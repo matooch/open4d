@@ -6,7 +6,9 @@
 pub mod app;
 pub mod attributes;
 pub mod commands;
+pub mod coordinates;
 pub mod dock;
+pub mod manipulate;
 pub mod state;
 pub mod theme;
 pub mod timeline;
