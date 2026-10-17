@@ -122,6 +122,29 @@ as a list; a valid case has none. An empty `tests/golden/` is valid.
   (so validation can flag it).
 - `validate_case(repo_root, &GoldenCase) -> Vec<String>`: rules in §3.
 - Integration test validates every case under the real `tests/golden/`.
+- `mesh_info(&Mesh) -> MeshInfo { vertices, unused_vertices, faces, face_sizes:
+  BTreeMap<usize, usize>, bbox: Option<([f64; 3], [f64; 3])> }`; `obj_extras(&str)
+  -> ObjExtras { normals: usize, uvs: usize }` counts `vn` / `vt` statements.
+  `Display` for `MeshInfo`:
+  ```
+  vertices: 8 (unused 0)
+  faces: 6 (4-gons 6)
+  bbox min: (-100, -100, -100)
+  bbox max: (100, 100, 100)
+  size: (200, 200, 200)
+  centre: (0, 0, 0)
+  ```
+  Face sizes are listed ascending as `3-gons N, 4-gons N, …`; numbers use Rust's
+  shortest `f64` formatting; an empty mesh prints `bbox: empty` instead of the
+  three bbox lines.
+
+### 4.1 `golden` CLI (observation helper)
+
+- `golden info <file.obj>`: prints `mesh_info`, then `normals: N`, `uvs: N`.
+  Exit 2 on unreadable/invalid files (message names the line).
+- `golden check [repo_root]` (default `.`): validates every case under
+  `<root>/tests/golden/`; prints each problem as `<feature>/<case>: <problem>` and
+  exits 1 if any, else prints `ok: N cases`.
 - The harness's own tests use a hand-written fixture repo in
   `crates/parity-harness/tests/fixtures/` (synthetic, not reference data).
 
