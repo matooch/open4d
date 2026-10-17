@@ -1,0 +1,12 @@
+feature = "subdivision"
+observation = "docs/parity/subdivision.md"
+description = "Default cube under Subdivision Surface, Subdivision Editor 2 (default type)"
+mesh = "mesh.obj"
+
+[params]
+input = "cube"
+level = 2
+
+[import]
+scale = 1.0
+flip_z = false

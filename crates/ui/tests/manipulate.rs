@@ -225,3 +225,44 @@ fn pick_node_finds_the_object_under_the_cursor() {
     );
     assert_eq!(pick_node(st.doc.scene(), &cam, 2.0, 2.0, w, h), None);
 }
+
+#[test]
+fn subdivision_inputs_are_drawn_only_through_their_generator() {
+    use forge_ui::viewport_panel::scene_meshes;
+    let mut st = state();
+    let sub = create(&mut st, "forge.subdivision");
+    let cube = create(&mut st, "forge.cube");
+    forge_ui::commands::execute(
+        &mut st,
+        forge_ui::commands::Command::Reparent(cube, Some(sub)),
+    )
+    .unwrap();
+    let drawn: Vec<NodeId> = scene_meshes(st.doc.scene(), &Default::default())
+        .into_iter()
+        .map(|(id, ..)| id)
+        .collect();
+    assert_eq!(drawn, [sub]);
+    let (_, mesh, _, _) = &scene_meshes(st.doc.scene(), &Default::default())[0];
+    assert_eq!(mesh.points.len(), 98, "default viewport level 2");
+}
+
+#[test]
+fn boole_inputs_are_drawn_only_through_their_generator() {
+    use forge_ui::commands::{Command, execute};
+    use forge_ui::viewport_panel::scene_meshes;
+    let mut st = state();
+    let boole = create(&mut st, "forge.boole");
+    let a = create(&mut st, "forge.cube");
+    let b = create(&mut st, "forge.cube");
+    execute(&mut st, Command::Reparent(a, Some(boole))).unwrap();
+    execute(&mut st, Command::Reparent(b, Some(boole))).unwrap();
+    st.doc
+        .transact("move", |tx| {
+            tx.set_param(b, "transform.pos", Value::Vec3([50.0, 50.0, 50.0]))
+        })
+        .unwrap();
+    let meshes = scene_meshes(st.doc.scene(), &Default::default());
+    let drawn: Vec<NodeId> = meshes.iter().map(|(id, ..)| *id).collect();
+    assert_eq!(drawn, [boole]);
+    assert_eq!(meshes[0].1.points.len(), 14, "A subtract B");
+}

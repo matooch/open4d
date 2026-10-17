@@ -1,0 +1,15 @@
+feature = "boole"
+observation = "docs/parity/boole.md"
+description = "Boole A subtract B with High Quality off"
+mesh = "mesh.obj"
+
+[params]
+high_quality = false
+b_pos = [50.0, 50.0, 50.0]
+
+[import]
+scale = 1.0
+flip_z = false
+
+[tolerance]
+compare = "geometric"

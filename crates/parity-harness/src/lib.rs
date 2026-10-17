@@ -140,6 +140,8 @@ pub struct Tolerance {
     pub position: f64,
     /// Min image PSNR in dB.
     pub psnr: f64,
+    /// Which mesh comparison the feature's parity test applies.
+    pub compare: Compare,
 }
 
 impl Default for Tolerance {
@@ -147,8 +149,20 @@ impl Default for Tolerance {
         Tolerance {
             position: 1e-4,
             psnr: 40.0,
+            compare: Compare::Strict,
         }
     }
+}
+
+/// `[tolerance] compare` (docs/specs/INFRA.md §4.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Compare {
+    /// [`compare_meshes`]: order, topology and positions.
+    #[default]
+    Strict,
+    /// [`compare_geometric`]: same points, surface per oriented plane, volume.
+    Geometric,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -266,6 +280,261 @@ pub fn compare_meshes(expected: &Mesh, actual: &Mesh, tol: &Tolerance) -> MeshRe
         topology_match,
         bbox_error,
         max_position_error,
+        failures,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Geometric comparison (docs/specs/INFRA.md §4.2)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GeometricReport {
+    /// Distinct used points (expected, actual).
+    pub points: (usize, usize),
+    /// Oriented planes (expected, actual).
+    pub planes: (usize, usize),
+    /// Closedness (expected, actual).
+    pub closed: (bool, bool),
+    /// Volumes (expected, actual) when both are closed.
+    pub volume: Option<(f64, f64)>,
+    /// Informational only.
+    pub face_counts: (usize, usize),
+    pub failures: Vec<String>,
+}
+
+impl GeometricReport {
+    pub fn passed(&self) -> bool {
+        self.failures.is_empty()
+    }
+}
+
+type V3 = [f64; 3];
+
+fn sub(a: V3, b: V3) -> V3 {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+fn add(a: V3, b: V3) -> V3 {
+    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+}
+
+fn scale(a: V3, k: f64) -> V3 {
+    [a[0] * k, a[1] * k, a[2] * k]
+}
+
+fn dot(a: V3, b: V3) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn cross(a: V3, b: V3) -> V3 {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn norm(a: V3) -> f64 {
+    dot(a, a).sqrt()
+}
+
+fn close(a: V3, b: V3, t: f64) -> bool {
+    max_abs_diff(&a, &b) <= t
+}
+
+/// Per vertex index, the id of its distinct point (`usize::MAX` if unused); plus the
+/// distinct points.
+fn distinct_points(m: &Mesh, t: f64) -> (Vec<usize>, Vec<V3>) {
+    let mut used = vec![false; m.positions.len()];
+    for &v in m.faces.iter().flatten() {
+        used[v as usize] = true;
+    }
+    let mut points: Vec<V3> = Vec::new();
+    let ids = m
+        .positions
+        .iter()
+        .zip(&used)
+        .map(|(p, &u)| {
+            if !u {
+                return usize::MAX;
+            }
+            points
+                .iter()
+                .position(|q| close(*p, *q, t))
+                .unwrap_or_else(|| {
+                    points.push(*p);
+                    points.len() - 1
+                })
+        })
+        .collect();
+    (ids, points)
+}
+
+struct Plane {
+    n: V3,
+    d: f64,
+    area: f64,
+    /// Sum of area × triangle centroid.
+    moment: V3,
+    perimeter: f64,
+}
+
+fn planes(m: &Mesh, t: f64) -> Vec<Plane> {
+    let mut out: Vec<Plane> = Vec::new();
+    for f in &m.faces {
+        let p: Vec<V3> = f.iter().map(|&i| m.positions[i as usize]).collect();
+        let k = p.len();
+        let mut newell = [0.0; 3];
+        let mut perimeter = 0.0;
+        for i in 0..k {
+            newell = add(newell, cross(p[i], p[(i + 1) % k]));
+            perimeter += norm(sub(p[(i + 1) % k], p[i]));
+        }
+        let len = norm(newell);
+        if len == 0.0 {
+            continue;
+        }
+        let n = scale(newell, 1.0 / len);
+        let c = scale(p.iter().fold([0.0; 3], |s, q| add(s, *q)), 1.0 / k as f64);
+        let d = dot(n, c);
+        let mut area = 0.0;
+        let mut moment = [0.0; 3];
+        for i in 1..k - 1 {
+            let a = dot(n, cross(sub(p[i], p[0]), sub(p[i + 1], p[0]))) / 2.0;
+            let tc = scale(add(add(p[0], p[i]), p[i + 1]), 1.0 / 3.0);
+            area += a;
+            moment = add(moment, scale(tc, a));
+        }
+        let nt = normal_tolerance(t, area);
+        match out
+            .iter_mut()
+            .find(|q| close(q.n, n, nt) && (q.d - d).abs() <= t)
+        {
+            Some(q) => {
+                q.area += area;
+                q.moment = add(q.moment, moment);
+                q.perimeter += perimeter;
+            }
+            None => out.push(Plane {
+                n,
+                d,
+                area,
+                moment,
+                perimeter,
+            }),
+        }
+    }
+    out
+}
+
+/// Unit normals of a face of area `a` whose corners move by `t` turn by about `t/√a`.
+fn normal_tolerance(t: f64, a: f64) -> f64 {
+    (4.0 * t / a.abs().sqrt()).max(1e-6)
+}
+
+fn is_closed(m: &Mesh, ids: &[usize]) -> bool {
+    let mut edges: BTreeMap<(usize, usize), usize> = BTreeMap::new();
+    for f in &m.faces {
+        for i in 0..f.len() {
+            let (a, b) = (ids[f[i] as usize], ids[f[(i + 1) % f.len()] as usize]);
+            *edges.entry((a, b)).or_insert(0) += 1;
+        }
+    }
+    !edges.is_empty()
+        && edges
+            .iter()
+            .all(|(&(a, b), &n)| n == 1 && edges.get(&(b, a)) == Some(&1))
+}
+
+fn volume(m: &Mesh) -> f64 {
+    m.faces
+        .iter()
+        .map(|f| {
+            let p = |i: usize| m.positions[f[i] as usize];
+            (1..f.len() - 1)
+                .map(|i| dot(p(0), cross(p(i), p(i + 1))) / 6.0)
+                .sum::<f64>()
+        })
+        .sum()
+}
+
+/// Same surface regardless of numbering and polygon split (docs/specs/INFRA.md §4.2).
+pub fn compare_geometric(expected: &Mesh, actual: &Mesh, tol: &Tolerance) -> GeometricReport {
+    let t = tol.position;
+    let mut failures = Vec::new();
+
+    let (eids, ep) = distinct_points(expected, t);
+    let (aids, ap) = distinct_points(actual, t);
+    if let Some(p) = ep.iter().find(|p| !ap.iter().any(|q| close(**p, *q, t))) {
+        failures.push(format!("points: expected point {p:?} missing"));
+    }
+    if let Some(p) = ap.iter().find(|p| !ep.iter().any(|q| close(**p, *q, t))) {
+        failures.push(format!("points: unexpected point {p:?}"));
+    }
+    if ep.len() != ap.len() {
+        failures.push(format!(
+            "points: expected {} distinct, got {}",
+            ep.len(),
+            ap.len()
+        ));
+    }
+
+    let (epl, apl) = (planes(expected, t), planes(actual, t));
+    let mut matched = vec![false; apl.len()];
+    for e in &epl {
+        let found = apl.iter().enumerate().find(|(i, a)| {
+            !matched[*i] && close(a.n, e.n, normal_tolerance(t, e.area)) && (a.d - e.d).abs() <= t
+        });
+        let Some((i, a)) = found else {
+            failures.push(format!(
+                "planes: expected plane n {:?} d {} (area {}) missing",
+                e.n, e.d, e.area
+            ));
+            continue;
+        };
+        matched[i] = true;
+        if (a.area - e.area).abs() > t * e.perimeter + 1e-12 {
+            failures.push(format!(
+                "planes: n {:?} d {}: area expected {}, got {}",
+                e.n, e.d, e.area, a.area
+            ));
+        } else if e.area > 0.0 && a.area > 0.0 {
+            let ec = scale(e.moment, 1.0 / e.area);
+            let ac = scale(a.moment, 1.0 / a.area);
+            if !close(ec, ac, t + t * e.perimeter / e.area) {
+                failures.push(format!(
+                    "planes: n {:?} d {}: centroid expected {ec:?}, got {ac:?}",
+                    e.n, e.d
+                ));
+            }
+        }
+    }
+    for (a, _) in apl.iter().zip(&matched).filter(|(_, m)| !**m) {
+        failures.push(format!(
+            "planes: unexpected plane n {:?} d {} (area {})",
+            a.n, a.d, a.area
+        ));
+    }
+
+    let closed = (is_closed(expected, &eids), is_closed(actual, &aids));
+    if closed.0 != closed.1 {
+        failures.push(format!("closed: expected {}, got {}", closed.0, closed.1));
+    }
+    let volume = (closed.0 && closed.1).then(|| (volume(expected), volume(actual)));
+    if let Some((ev, av)) = volume {
+        let area: f64 = epl.iter().map(|p| p.area.abs()).sum();
+        if (ev - av).abs() > t * area + 1e-12 {
+            failures.push(format!("volume: expected {ev}, got {av}"));
+        }
+    }
+
+    GeometricReport {
+        points: (ep.len(), ap.len()),
+        planes: (epl.len(), apl.len()),
+        closed,
+        volume,
+        face_counts: (expected.faces.len(), actual.faces.len()),
         failures,
     }
 }

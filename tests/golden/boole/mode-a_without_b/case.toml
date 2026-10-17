@@ -1,0 +1,15 @@
+feature = "boole"
+observation = "docs/parity/boole.md"
+description = "Boole of default cube A at origin and default cube B at (50, 50, 50), mode a_without_b"
+mesh = "mesh.obj"
+
+[params]
+mode = "a_without_b"
+b_pos = [50.0, 50.0, 50.0]
+
+[import]
+scale = 1.0
+flip_z = false
+
+[tolerance]
+compare = "geometric"

@@ -117,6 +117,20 @@ fn scan_finds_content_path_and_extension_violations() {
 }
 
 #[test]
+fn worktree_git_file_at_the_root_is_skipped() {
+    let dir = tempfile::tempdir().unwrap();
+    write(
+        dir.path(),
+        ".git",
+        b"gitdir: /home/xyz/repo/.git/worktrees/w\n",
+    );
+    write(dir.path(), "sub/.git", b"xyz\n");
+    let v = scan(dir.path(), &cfg()).unwrap();
+    let rendered: Vec<String> = v.iter().map(ToString::to_string).collect();
+    assert_eq!(rendered, vec!["sub/.git:1:1: forbidden word \"xyz\""]);
+}
+
+#[test]
 fn scan_of_clean_tree_is_empty() {
     let dir = tempfile::tempdir().unwrap();
     write(dir.path(), "a/b/c.rs", b"fn ok() {}\n");

@@ -1,0 +1,13 @@
+feature = "subdivision"
+observation = "docs/parity/subdivision.md"
+description = "Default cube under Subdivision Surface, level 2, Type catmull_clark"
+mesh = "mesh.obj"
+
+[params]
+input = "cube"
+level = 2
+scheme = "catmull_clark"
+
+[import]
+scale = 1.0
+flip_z = false
