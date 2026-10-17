@@ -85,8 +85,8 @@ result. Fewer than two inputs: one input → that input unchanged; none → no m
 Observed with A = default cube, B = default cube at (50, 50, 50):
 `union` 20 points / 18 quads; `a_minus_b` 14 / 12 quads (new corner (−50, −50, −50));
 `intersect` 8 / 6 (box (−50, −50, −50)..(100, 100, 100)); `a_without_b` A's 13 points,
-9 faces, B's 3 faces missing. Every quad and point is reproduced by §2; the cut faces'
-split differs (§4).
+9 faces, B's 3 faces missing. Every point and the surface of every face are reproduced by §2 (face counts agree
+too); numbering and start corners differ.
 
 ## 4. Hide new edges
 
@@ -98,8 +98,9 @@ the same region split into quads (two per L-shaped face in `mode-a_minus_b`).
   removal of every diagonal whose removal leaves both sides convex).
 - **off**: a region without holes that is convex, or whose loop equals its source
   polygon, is kept as one polygon; any other region is split into convex pieces as
-  above. Hertel–Mehlhorn does not reproduce the reference's quad split (parity-pending:
-  only counts differ; the surface is the same).
+  above. On the observed cases this gives the reference's counts (two quads per L,
+  12 faces in `mode-a_minus_b`, 18 in `mode-union`), but which diagonal is cut and the
+  corner order are ours (parity-pending for other shapes; the surface is the same).
 
 ## 5. Unsupported
 
