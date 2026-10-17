@@ -2,12 +2,17 @@
 name = "forge-core"
 version.workspace = true
 edition.workspace = true
-description = "Scene graph, parameter descriptors, undo, dirty/cache, native file format, node registry."
+description = "Scene graph, parameter descriptors, transforms, undo, dirty/cache, native file format, node registry."
 
 [dependencies]
+glam = "0.34"
 ron = "0.12"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
+
+[dev-dependencies]
+forge-parity-harness = { path = "../parity-harness" }
+toml = "1"
 
 [lints]
 workspace = true

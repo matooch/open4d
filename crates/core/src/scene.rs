@@ -8,6 +8,9 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use glam::DMat4;
+
+use crate::transform::Transform;
 use crate::{NodeType, Registry, Value};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -129,6 +132,23 @@ impl Scene {
             }
         }
         out
+    }
+
+    /// The node's own transform; `None` for missing nodes and tags.
+    pub fn local_transform(&self, id: NodeId) -> Option<Transform> {
+        let n = self.node(id)?;
+        (!n.is_tag()).then(|| Transform::from_params(&n.params))
+    }
+
+    /// Parent chain composed root-first: `world(parent) · local(id)`.
+    pub fn world_matrix(&self, id: NodeId) -> Option<DMat4> {
+        let mut m = self.local_transform(id)?.matrix();
+        let mut parent = self.node(id)?.parent;
+        while let Some(p) = parent {
+            m = self.local_transform(p)?.matrix() * m;
+            parent = self.node(p)?.parent;
+        }
+        Some(m)
     }
 
     /// Max revision over the node, its subtree, its tags and its link targets.

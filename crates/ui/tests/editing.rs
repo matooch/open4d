@@ -16,7 +16,7 @@ fn rows_follow_descriptors_and_groups() {
     assert_eq!(view.type_label, "Box");
     assert!(view.editable);
     let groups: Vec<&str> = view.groups.iter().map(|(g, _)| g.as_str()).collect();
-    assert_eq!(groups, ["Object", "Shape", "Parameters"]);
+    assert_eq!(groups, ["Coordinates", "Object", "Shape", "Parameters"]);
     let labels = |g: usize| {
         view.groups[g]
             .1
@@ -24,10 +24,11 @@ fn rows_follow_descriptors_and_groups() {
             .map(|r| r.label.as_str())
             .collect::<Vec<_>>()
     };
-    assert_eq!(labels(0), ["Size", "Twist", "Segments"]);
-    assert_eq!(labels(1), ["Ratio", "Enabled"]);
+    assert_eq!(labels(0), ["Position", "Rotation", "Scale"]);
+    assert_eq!(labels(1), ["Size", "Twist", "Segments"]);
+    assert_eq!(labels(2), ["Ratio", "Enabled"]);
     assert_eq!(
-        labels(2),
+        labels(3),
         ["Mode", "Target", "Offset", "Tint", "Note"],
         "hidden param omitted"
     );
