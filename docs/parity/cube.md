@@ -29,6 +29,7 @@ field, then reading back what it shows.
 | defaults | – | 8 / 6 (4-gons 6) / size (200, 200, 200), centre (0, 0, 0) | normals 6, uvs 4 |
 | sizes | size = (100, 200, 300) | 8 / 6 (4-gons 6) / size (100, 200, 300), centre (0, 0, 0) | normals 6, uvs 4 |
 | segments | segments = (2, 3, 4) | 54 / 52 (4-gons 52) / size (200, 200, 200), centre (0, 0, 0) | normals 6, uvs 29. Exported as-is. |
+| segments-wide | segments = (3, 2, 3) | 44 / 42 (4-gons 42) / size (200, 200, 200), centre (0, 0, 0) | normals 6, uvs 20. Exported as-is; added so the top/bottom faces have more than one interior column. |
 | fillet | fillet on, radius = 20, fillet segments = 3 | 104 / 114 (3-gons 24, 4-gons 90) / size (200, 200, 200), centre (0, 0, 0) | normals 105, uvs 44 |
 | fillet-segments | fillet on + segments = (2, 2, 2) | 326 / 344 (3-gons 40, 4-gons 304) / size (200, 200, 200), centre (0, 0, 0) | Fillet Radius and Fillet Subdivision left at their defaults (40, 5). normals 327, uvs 113 |
 
