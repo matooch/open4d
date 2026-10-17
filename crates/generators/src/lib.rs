@@ -4,10 +4,13 @@
 mod cube;
 mod plane;
 mod sphere;
+mod subdivision;
+
+pub use subdivision::{input_of, subdivide, subdivide_with_creases};
 
 use std::collections::BTreeMap;
 
-use forge_core::{NodeType, Plugin, Registry, RegistryError, Value};
+use forge_core::{NodeId, NodeType, Plugin, Registry, RegistryError, Scene, Value};
 use forge_geometry::PolyMesh;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -32,7 +35,8 @@ impl Plugin for Primitives {
     }
 
     fn register(&self, r: &mut Registry) -> Result<(), RegistryError> {
-        types().into_iter().try_for_each(|t| r.register(t))
+        types().into_iter().try_for_each(|t| r.register(t))?;
+        r.register(subdivision::node_type())
     }
 }
 
@@ -93,4 +97,35 @@ pub fn build(type_id: &str, values: &BTreeMap<String, Value>) -> Result<PolyMesh
         "forge.sphere" => sphere::build(&p),
         _ => unreachable!("types() and build() list the same ids"),
     }
+}
+
+/// Local-space mesh of any generator node in a scene (docs/specs/SUBDIVISION.md §4):
+/// primitives from their params, the subdivision generator from its input child.
+/// `Ok(None)` for nodes without geometry.
+pub fn evaluate(scene: &Scene, id: NodeId) -> Result<Option<PolyMesh>, BuildError> {
+    let Some(node) = scene.node(id) else {
+        return Ok(None);
+    };
+    if node.type_id == subdivision::TYPE {
+        let ty = subdivision::node_type();
+        let p = Params {
+            ty: &ty,
+            values: &node.params,
+        };
+        return subdivision::evaluate_subdivision(scene, id, &p);
+    }
+    match build(&node.type_id, &node.params) {
+        Ok(mesh) => Ok(Some(mesh)),
+        Err(BuildError::UnknownType(_)) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// True if the node is the input a parent generator consumes (not drawn itself).
+pub fn is_consumed(scene: &Scene, id: NodeId) -> bool {
+    scene
+        .node(id)
+        .and_then(|n| n.parent)
+        .and_then(|p| scene.node(p))
+        .is_some_and(|p| p.type_id == subdivision::TYPE && input_of(scene, p.id) == Some(id))
 }

@@ -225,3 +225,23 @@ fn pick_node_finds_the_object_under_the_cursor() {
     );
     assert_eq!(pick_node(st.doc.scene(), &cam, 2.0, 2.0, w, h), None);
 }
+
+#[test]
+fn subdivision_inputs_are_drawn_only_through_their_generator() {
+    use forge_ui::viewport_panel::scene_meshes;
+    let mut st = state();
+    let sub = create(&mut st, "forge.subdivision");
+    let cube = create(&mut st, "forge.cube");
+    forge_ui::commands::execute(
+        &mut st,
+        forge_ui::commands::Command::Reparent(cube, Some(sub)),
+    )
+    .unwrap();
+    let drawn: Vec<NodeId> = scene_meshes(st.doc.scene(), &Default::default())
+        .into_iter()
+        .map(|(id, ..)| id)
+        .collect();
+    assert_eq!(drawn, [sub]);
+    let (_, mesh, _, _) = &scene_meshes(st.doc.scene(), &Default::default())[0];
+    assert_eq!(mesh.points.len(), 98, "default viewport level 2");
+}

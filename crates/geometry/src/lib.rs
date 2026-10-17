@@ -6,6 +6,7 @@ pub mod mesh;
 pub mod normals;
 pub mod selection;
 pub mod spline;
+pub mod subdivide;
 pub mod triangulate;
 
 pub use halfedge::{HalfEdgeMesh, HeId, TopologyError};

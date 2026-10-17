@@ -98,9 +98,12 @@ pub fn scene_meshes(
     let mut out = Vec::new();
     for root in scene.roots() {
         for id in std::iter::once(*root).chain(scene.descendants(*root)) {
-            let Some(node) = scene.node(id) else { continue };
-            let (Ok(mut mesh), Some(m)) = (
-                forge_generators::build(&node.type_id, &node.params),
+            // a generator's input child is drawn through the generator (SUBDIVISION.md §4)
+            if forge_generators::is_consumed(scene, id) {
+                continue;
+            }
+            let (Ok(Some(mut mesh)), Some(m)) = (
+                forge_generators::evaluate(scene, id),
                 scene.world_matrix(id),
             ) else {
                 continue;

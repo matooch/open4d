@@ -49,8 +49,7 @@ fn column_lengths(m: &DMat4) -> DVec3 {
 
 /// Bounding-box size of a generator node's local mesh.
 fn mesh_size(scene: &Scene, id: NodeId) -> Option<DVec3> {
-    let n = scene.node(id)?;
-    let mesh = forge_generators::build(&n.type_id, &n.params).ok()?;
+    let mesh = forge_generators::evaluate(scene, id).ok()??;
     let first = *mesh.points.first()?;
     let (lo, hi) = mesh
         .points
