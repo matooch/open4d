@@ -2,6 +2,17 @@
 name = "forge-viewport"
 version.workspace = true
 edition.workspace = true
+description = "Viewport: camera navigation, picking, snapping, grid, gizmos and the wgpu renderer."
+
+[dependencies]
+bytemuck = { version = "1", features = ["derive"] }
+forge-geometry = { path = "../geometry" }
+glam = "0.34"
+pollster = "1"
+wgpu = "30"
+
+[dev-dependencies]
+png = "0.18"
 
 [lints]
 workspace = true

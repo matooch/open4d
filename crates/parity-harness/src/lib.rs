@@ -400,3 +400,91 @@ pub fn validate_case(repo_root: &Path, case: &GoldenCase) -> Vec<String> {
     }
     problems
 }
+
+// ---------------------------------------------------------------------------
+// Observation helpers (docs/specs/INFRA.md §4, §4.1)
+// ---------------------------------------------------------------------------
+
+/// Summary of a golden mesh, printed by `golden info`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MeshInfo {
+    pub vertices: usize,
+    /// Points no face uses.
+    pub unused_vertices: usize,
+    pub faces: usize,
+    /// Face size → count.
+    pub face_sizes: BTreeMap<usize, usize>,
+    pub bbox: Option<([f64; 3], [f64; 3])>,
+}
+
+pub fn mesh_info(mesh: &Mesh) -> MeshInfo {
+    let mut used = vec![false; mesh.positions.len()];
+    let mut face_sizes = BTreeMap::new();
+    for f in &mesh.faces {
+        *face_sizes.entry(f.len()).or_insert(0) += 1;
+        for &v in f {
+            used[v as usize] = true;
+        }
+    }
+    MeshInfo {
+        vertices: mesh.positions.len(),
+        unused_vertices: used.iter().filter(|u| !**u).count(),
+        faces: mesh.faces.len(),
+        face_sizes,
+        bbox: bbox(mesh),
+    }
+}
+
+impl fmt::Display for MeshInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let v3 = |v: [f64; 3]| format!("({}, {}, {})", v[0], v[1], v[2]);
+        writeln!(
+            f,
+            "vertices: {} (unused {})",
+            self.vertices, self.unused_vertices
+        )?;
+        let sizes: Vec<String> = self
+            .face_sizes
+            .iter()
+            .map(|(k, n)| format!("{k}-gons {n}"))
+            .collect();
+        if sizes.is_empty() {
+            writeln!(f, "faces: {}", self.faces)?;
+        } else {
+            writeln!(f, "faces: {} ({})", self.faces, sizes.join(", "))?;
+        }
+        match self.bbox {
+            None => writeln!(f, "bbox: empty"),
+            Some((lo, hi)) => {
+                writeln!(f, "bbox min: {}", v3(lo))?;
+                writeln!(f, "bbox max: {}", v3(hi))?;
+                writeln!(
+                    f,
+                    "size: {}",
+                    v3([hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]])
+                )?;
+                let c = |k: usize| (lo[k] + hi[k]) / 2.0;
+                writeln!(f, "centre: {}", v3([c(0), c(1), c(2)]))
+            }
+        }
+    }
+}
+
+/// Counts of OBJ statements the mesh parser ignores but observers should know about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ObjExtras {
+    pub normals: usize,
+    pub uvs: usize,
+}
+
+pub fn obj_extras(src: &str) -> ObjExtras {
+    let mut e = ObjExtras::default();
+    for line in src.lines() {
+        match line.split_whitespace().next() {
+            Some("vn") => e.normals += 1,
+            Some("vt") => e.uvs += 1,
+            _ => {}
+        }
+    }
+    e
+}

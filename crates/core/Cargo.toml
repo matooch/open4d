@@ -2,6 +2,12 @@
 name = "forge-core"
 version.workspace = true
 edition.workspace = true
+description = "Scene graph, parameter descriptors, undo, dirty/cache, native file format, node registry."
+
+[dependencies]
+ron = "0.12"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
 
 [lints]
 workspace = true
