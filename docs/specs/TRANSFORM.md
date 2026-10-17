@@ -33,9 +33,8 @@ helpers: glam 0.34 (`glam::DMat4`).
 - Export bakes world transforms into vertices; the parity test therefore compares
   world-space points.
 
-Not covered yet (needs observation): which way the reference viewport's default
-camera looks, so the viewport can show the left-handed world un-mirrored
-(VIEWPORT.md keeps its right-handed display until then); object-axis vs world-axis
+Viewport display: resolved in docs/specs/SMOOTHING.md §4 (left-handed camera).
+Not covered yet (needs observation): object-axis vs world-axis
 gizmos; "Freeze Transformation"; quaternion mode; coordinate-manager Size/Size+ modes.
 
 ## 2. Transform parameters (registry)

@@ -13,3 +13,5 @@ Observation kit and per-feature forms: [README.md](README.md).
 | Plane primitive | docs/specs/PRIMITIVES.md §1 | tests/golden/plane (9) | crates/generators/tests/parity.rs | 9/9 exact |
 | Cube primitive | docs/specs/PRIMITIVES.md §2 | tests/golden/cube (6) | crates/generators/tests/parity.rs | 4/6 exact; fillet (2 cases) and separate surfaces unsupported |
 | Sphere primitive | docs/specs/PRIMITIVES.md §3 | tests/golden/sphere (15) | crates/generators/tests/parity.rs | 7/15 exact (standard, hemisphere); tetra/hexa/octa/icosahedron types (8 cases) unsupported |
+| Smoothing (tag, 40° default, corner normals) | docs/specs/SMOOTHING.md §1–3 | tests/golden/smoothing (5) | crates/geometry/tests/smoothing_parity.rs | 5/5 exact (normals within 1e-5); weighting still parity-pending (cases are symmetric) |
+| Viewport handedness (left-handed display) | docs/specs/SMOOTHING.md §4 | docs/parity/viewport.md (screen directions) | crates/viewport/tests/camera.rs | Passing; exact default camera pose not shown by the reference app |

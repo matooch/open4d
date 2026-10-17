@@ -71,6 +71,7 @@ categories can be registered but not yet placed in a scene (`NotPlaceable`).
   types are added.
 - `get(id)`, `types()` (sorted by id), `types_in(category)`.
 - `Registry::with_builtins()` registers `forge.null` (Object; only the transform params).
+  It also registers the `forge.smoothing` tag (docs/specs/SMOOTHING.md §2).
 - Hierarchy types get `transform.pos/rot/scale` prepended; `transform.*` ids are
   reserved (`RegistryError::ReservedParam`). See docs/specs/TRANSFORM.md §2.
 

@@ -72,6 +72,15 @@ H. Gouraud, "Continuous Shading of Curved Surfaces", IEEE TC (1971).
   `smoothing_angle` (radians, inclusive) of `f`'s normal; `f` itself always counts.
   `smoothing_angle ≥ π` equals `vertex_normals`; `0` gives flat (poly) normals for
   non-coplanar neighbours. **Parity-pending** (pairwise rule, not fan regions).
+  Observed (docs/parity/smoothing.md, docs/specs/SMOOTHING.md §1): the pairwise rule
+  reproduces all 5 smoothing golden cases at their angles (default 40°); the weighting
+  stays parity-pending (those cases are symmetric).
+- Degenerate corners: if a corner's weighted sum has length < 1e-12 (e.g. angle
+  weighting where every included corner has a zero-length edge), the corner uses the
+  unweighted sum of the same polygons instead. Observed: the 3-sided cone in
+  docs/parity/smoothing.md exports its apex as quads with a repeated vertex
+  (`[10, 11, 11, 21]`), and those corners carry their face's normal. (Such polygons
+  also mean `PolyMesh::validate` must later accept repeated vertices for cone parity.)
 
 ## 4. Selections (`selection`)
 

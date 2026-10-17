@@ -42,8 +42,8 @@ fn ceil_pow10(v: f64) -> f64 {
 pub fn grid_lines(cam: &Camera, viewport_h: f64) -> Grid {
     let spacing = ceil_pow10(MIN_PX * cam.world_per_pixel(viewport_h));
     let major = 10.0 * spacing;
-    let cx = (cam.target.x / major).round() * major;
-    let cz = (cam.target.z / major).round() * major;
+    let cx = (cam.target_world().x / major).round() * major;
+    let cz = (cam.target_world().z / major).round() * major;
     let half = HALF_CELLS as f64 * spacing;
     let kind = |coord: f64, axis: LineKind| {
         let index = (coord / spacing).round() as i64;

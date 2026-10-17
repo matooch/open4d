@@ -116,6 +116,8 @@ impl Registry {
         let mut r = Registry::new();
         r.register(NodeType::new("forge.null", "Null", crate::Category::Object))
             .expect("built-ins are valid");
+        r.register(crate::smoothing::node_type())
+            .expect("built-ins are valid");
         r
     }
 

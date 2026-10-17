@@ -8,5 +8,8 @@ description = "Polygon meshes, half-edge connectivity, normals, selections and s
 glam = "0.34"
 thiserror = "2"
 
+[dev-dependencies]
+forge-parity-harness = { path = "../parity-harness" }
+
 [lints]
 workspace = true

@@ -125,13 +125,27 @@ pub struct MeshBuffers {
 }
 
 impl MeshBuffers {
+    /// Fully smooth normals; see [`MeshBuffers::with_device`] for a smoothing angle.
     pub fn new(gpu: &Gpu, mesh: &PolyMesh, selection: &Selection) -> MeshBuffers {
-        Self::with_device(&gpu.device, mesh, selection)
+        Self::with_device(&gpu.device, mesh, selection, Some(PI))
     }
 
-    /// Same as [`MeshBuffers::new`] for any wgpu device (e.g. an app's own).
-    pub fn with_device(d: &wgpu::Device, mesh: &PolyMesh, selection: &Selection) -> MeshBuffers {
-        let smooth = corner_normals(mesh, PI, Weighting::Angle);
+    /// For any wgpu device (e.g. an app's own). `smoothing`: the smoothing angle of the
+    /// "smooth" normals, `None` for faceted (docs/specs/SMOOTHING.md §3).
+    pub fn with_device(
+        d: &wgpu::Device,
+        mesh: &PolyMesh,
+        selection: &Selection,
+        smoothing: Option<f64>,
+    ) -> MeshBuffers {
+        let smooth = match smoothing {
+            Some(angle) => corner_normals(mesh, angle, Weighting::Angle),
+            None => mesh
+                .polys
+                .iter()
+                .map(|p| vec![poly_normal(&mesh.points, p); p.len()])
+                .collect(),
+        };
         let flat: Vec<DVec3> = mesh
             .polys
             .iter()
@@ -444,7 +458,7 @@ impl Renderer {
             .view_proj(width as f64 / height as f64)
             .as_mat4()
             .to_cols_array_2d();
-        let light = f3(-cam.forward());
+        let light = f3(-cam.forward_world());
         let uniforms = |base: [f32; 3], smooth: bool, bias: f32| Uniforms {
             view_proj,
             base: rgba(base),
@@ -571,7 +585,7 @@ fn gizmo_vertices(g: &Gizmo, cam: &Camera, viewport_h: f64, pal: &Palette) -> Ve
     }
     // centre handle: a small square in the view plane
     let r = l * 0.06;
-    let (rt, up) = (cam.right() * r, cam.up() * r);
+    let (rt, up) = (cam.right_world() * r, cam.up_world() * r);
     let sq = [
         g.origin - rt - up,
         g.origin + rt - up,

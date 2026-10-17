@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use forge_core::{Document, NodeId, Registry, Scene};
-use forge_viewport::camera::Camera;
+use forge_viewport::camera::{Camera, Handedness};
 use forge_viewport::render::Shading;
 
 use crate::dock::Dock;
@@ -82,9 +82,20 @@ pub struct EditorState {
 }
 
 impl EditorState {
+    /// Left-handed view matching the reference default directions; the exact default
+    /// pose is not shown by the reference app (docs/specs/SMOOTHING.md §4).
+    pub fn default_camera() -> Camera {
+        Camera {
+            yaw: 0.68,
+            pitch: 0.52,
+            distance: 1000.0,
+            handedness: Handedness::Left,
+            ..Camera::default()
+        }
+    }
+
     pub fn new(registry: Arc<Registry>) -> EditorState {
-        let mut camera = Camera::default();
-        camera.orbit(0.6, 0.45);
+        let camera = Self::default_camera();
         EditorState {
             doc: Document::new(registry),
             selection: NodeSelection::default(),

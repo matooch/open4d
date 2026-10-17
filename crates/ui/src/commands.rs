@@ -1,7 +1,6 @@
 //! Editor commands shared by menus, shortcuts and panels (docs/specs/UI.md §5).
 
 use forge_core::{Category, NodeId, Registry};
-use forge_viewport::camera::Camera;
 use forge_viewport::render::Shading;
 
 use crate::state::EditorState;
@@ -44,10 +43,21 @@ pub fn execute(s: &mut EditorState, cmd: Command) -> Result<(), String> {
                     })
                     .map_err(err)?;
             } else {
+                // New generators come with a smoothing tag (docs/specs/SMOOTHING.md §2).
+                let smooth = ty.category == Category::Generator
+                    && s.doc
+                        .scene()
+                        .registry()
+                        .get(forge_core::smoothing::TAG)
+                        .is_some();
                 let id = s
                     .doc
                     .transact(&format!("Create {}", ty.label), |tx| {
-                        tx.create(&type_id, None, None)
+                        let id = tx.create(&type_id, None, None)?;
+                        if smooth {
+                            tx.attach_tag(forge_core::smoothing::TAG, id, None)?;
+                        }
+                        Ok(id)
                     })
                     .map_err(err)?;
                 s.selection.click(id);
@@ -107,8 +117,7 @@ pub fn execute(s: &mut EditorState, cmd: Command) -> Result<(), String> {
         Command::SetShading(shading) => s.shading = shading,
         Command::FrameAll => {
             // No geometry yet (Phase 5): reset to the default view.
-            s.camera = Camera::default();
-            s.camera.orbit(0.6, 0.45);
+            s.camera = EditorState::default_camera();
         }
     }
     Ok(())

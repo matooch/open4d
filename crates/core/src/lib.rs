@@ -7,6 +7,7 @@ pub mod file;
 mod param;
 mod registry;
 mod scene;
+pub mod smoothing;
 pub mod transform;
 
 pub use cache::EvalCache;

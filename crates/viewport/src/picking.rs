@@ -65,12 +65,12 @@ pub fn pick_poly(mesh: &PolyMesh, ray: &Ray) -> Option<PolyHit> {
 fn occluded(mesh: &PolyMesh, tris: &Tris, cam: &Camera, p: DVec3) -> bool {
     let (dir, max_t) = match cam.projection {
         Projection::Perspective { .. } => {
-            let to_eye = cam.eye() - p;
+            let to_eye = cam.eye_world() - p;
             (to_eye.normalize(), to_eye.length())
         }
-        Projection::Orthographic { .. } => (-cam.forward(), f64::INFINITY),
+        Projection::Orthographic { .. } => (-cam.forward_world(), f64::INFINITY),
     };
-    let eps = 1e-6 * (cam.eye() - p).length().max(1.0);
+    let eps = 1e-6 * (cam.eye_world() - p).length().max(1.0);
     let ray = Ray { origin: p, dir };
     tris.iter().any(|(_, t)| {
         let [a, b, c] = t.map(|i| mesh.points[i as usize]);

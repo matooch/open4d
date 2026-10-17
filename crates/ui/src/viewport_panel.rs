@@ -82,7 +82,11 @@ struct SceneMeshes {
 }
 
 /// World-space meshes of every generator node, with whether each is selected.
-pub fn scene_meshes(scene: &Scene, selected: &BTreeSet<NodeId>) -> Vec<(NodeId, PolyMesh, bool)> {
+/// Also returns each node's smoothing angle (`None` = faceted).
+pub fn scene_meshes(
+    scene: &Scene,
+    selected: &BTreeSet<NodeId>,
+) -> Vec<(NodeId, PolyMesh, bool, Option<f64>)> {
     let mut out = Vec::new();
     for root in scene.roots() {
         for id in std::iter::once(*root).chain(scene.descendants(*root)) {
@@ -96,7 +100,8 @@ pub fn scene_meshes(scene: &Scene, selected: &BTreeSet<NodeId>) -> Vec<(NodeId, 
             for p in &mut mesh.points {
                 *p = m.transform_point3(*p);
             }
-            out.push((id, mesh, selected.contains(&id)));
+            let smoothing = forge_core::smoothing::smoothing_angle(scene, id);
+            out.push((id, mesh, selected.contains(&id), smoothing));
         }
     }
     out
@@ -181,10 +186,10 @@ impl ViewportPanel {
         {
             let items = scene_meshes(scene, selected)
                 .into_iter()
-                .map(|(_, mesh, sel)| {
+                .map(|(_, mesh, sel, smoothing)| {
                     let color = if sel { SELECTED_TINT } else { palette.object };
                     (
-                        MeshBuffers::with_device(device, &mesh, &Selection::default()),
+                        MeshBuffers::with_device(device, &mesh, &Selection::default(), smoothing),
                         color,
                     )
                 })

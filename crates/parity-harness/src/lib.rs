@@ -488,3 +488,79 @@ pub fn obj_extras(src: &str) -> ObjExtras {
     }
     e
 }
+
+// ---------------------------------------------------------------------------
+// Exported normals (docs/specs/INFRA.md §4)
+// ---------------------------------------------------------------------------
+
+/// Per face, per corner, the normal the corner references (`None` if none).
+pub fn parse_obj_corner_normals(src: &str) -> Result<Vec<Vec<Option<[f64; 3]>>>, ObjError> {
+    let mut normals: Vec<[f64; 3]> = Vec::new();
+    let mut faces = Vec::new();
+    for (i, raw) in src.lines().enumerate() {
+        let err = |message: String| ObjError {
+            line: i + 1,
+            message,
+        };
+        let line = raw.split('#').next().unwrap_or("");
+        let mut tokens = line.split_whitespace();
+        match tokens.next() {
+            Some("vn") => {
+                let mut n = [0.0; 3];
+                for slot in &mut n {
+                    let tok = tokens
+                        .next()
+                        .ok_or_else(|| err("normal needs 3 components".into()))?;
+                    *slot = tok
+                        .parse()
+                        .map_err(|_| err(format!("bad normal component `{tok}`")))?;
+                }
+                normals.push(n);
+            }
+            Some("f") => {
+                let count = normals.len() as i64;
+                let corners = tokens
+                    .map(|tok| {
+                        let Some(idx) = tok.split('/').nth(2).filter(|s| !s.is_empty()) else {
+                            return Ok(None);
+                        };
+                        let n: i64 = idx
+                            .parse()
+                            .map_err(|_| err(format!("bad normal index `{tok}`")))?;
+                        let resolved = match n {
+                            0 => return Err(err("normal index 0 is invalid".into())),
+                            n if n > 0 => n - 1,
+                            n => count + n,
+                        };
+                        if !(0..count).contains(&resolved) {
+                            return Err(err(format!(
+                                "normal index {n} out of range ({count} normals)"
+                            )));
+                        }
+                        Ok(Some(normals[resolved as usize]))
+                    })
+                    .collect::<Result<Vec<_>, ObjError>>()?;
+                faces.push(corners);
+            }
+            _ => {}
+        }
+    }
+    Ok(faces)
+}
+
+/// Max abs component difference over all corners; `None` if the shapes differ.
+pub fn max_normal_error(expected: &[Vec<[f64; 3]>], actual: &[Vec<[f64; 3]>]) -> Option<f64> {
+    if expected.len() != actual.len()
+        || expected.iter().zip(actual).any(|(a, b)| a.len() != b.len())
+    {
+        return None;
+    }
+    Some(
+        expected
+            .iter()
+            .flatten()
+            .zip(actual.iter().flatten())
+            .map(|(a, b)| max_abs_diff(a, b))
+            .fold(0.0, f64::max),
+    )
+}
