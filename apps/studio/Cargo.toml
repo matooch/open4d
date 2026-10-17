@@ -2,6 +2,11 @@
 name = "forge-studio"
 version.workspace = true
 edition.workspace = true
+description = "The Forge3D editor application."
+
+[dependencies]
+forge-core = { path = "../../crates/core" }
+forge-ui = { path = "../../crates/ui" }
 
 [lints]
 workspace = true
