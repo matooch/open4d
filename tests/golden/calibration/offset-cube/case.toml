@@ -1,0 +1,13 @@
+feature = "calibration"
+observation = "docs/parity/export-settings.md"
+description = "Default cube moved to position (10, 20, 30); determines export scale and axis flips"
+mesh = "mesh.obj"
+
+[params]
+pos_1 = 10.0
+pos_2 = 20.0
+pos_3 = 30.0
+
+[import]
+scale = 1.0
+flip_z = false
