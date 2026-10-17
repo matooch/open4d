@@ -7,7 +7,7 @@ use std::io;
 use std::path::Path;
 
 /// Directory names never descended into.
-const SKIP_DIRS: [&str; 2] = ["target", ".git"];
+const SKIP_DIRS: [&str; 3] = ["target", ".git", ".claude"];
 
 /// Parsed `forbidden.txt`. All entries are stored ASCII-lowercased.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]

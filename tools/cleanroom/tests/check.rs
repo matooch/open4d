@@ -136,3 +136,15 @@ fn scan_of_clean_tree_is_empty() {
     write(dir.path(), "a/b/c.rs", b"fn ok() {}\n");
     assert!(scan(dir.path(), &cfg()).unwrap().is_empty());
 }
+
+#[test]
+fn scan_skips_local_tool_state() {
+    let dir = tempfile::tempdir().unwrap();
+    write(
+        dir.path(),
+        ".claude/worktrees/copy/CLAUDE.md",
+        b"acme corp xyz\n",
+    );
+    write(dir.path(), "src/ok.rs", b"fn ok() {}\n");
+    assert!(scan(dir.path(), &cfg()).unwrap().is_empty());
+}
