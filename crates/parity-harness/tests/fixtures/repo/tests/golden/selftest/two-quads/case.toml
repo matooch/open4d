@@ -1,0 +1,15 @@
+feature = "selftest"
+observation = "docs/parity/selftest.md"
+description = "Two quads sharing an edge, exported in cm with flipped Z"
+mesh = "mesh.obj"
+
+[params]
+width = 2.0
+segments = 2
+
+[import]
+scale = 0.01
+flip_z = true
+
+[tolerance]
+position = 1e-6

@@ -1,0 +1,15 @@
+[package]
+name = "forge-parity-harness"
+version.workspace = true
+edition.workspace = true
+description = "Loads golden reference data and diffs our output against it (docs/PARITY.md)."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

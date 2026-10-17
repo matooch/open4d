@@ -1,0 +1,40 @@
+# Clean-room gate config. Format: docs/specs/INFRA.md §2.
+# Policy: docs/CLEANROOM.md. Add entries freely; removing one needs a reason in the commit.
+
+# Vendor and product names (case-insensitive substrings).
+term maxon
+term cinema 4d
+term cinema4d
+term cinema_4d
+term cinema-4d
+term mograph
+term xpresso
+term bodypaint
+term zbrush
+term redshift
+term red giant
+term redgiant
+term thinking particles
+
+# Short or collision-prone names (whole words, camelCase-aware).
+word c4d
+word modata
+word mospline
+word motext
+word moinstance
+
+# Reference-app scene, library, plugin, resource and string files.
+ext c4d
+ext lib4d
+ext xdl64
+ext cdl64
+ext xlib
+ext res
+ext str
+
+# Paths allowed to name the reference app: policy docs, specs and parity observations,
+# golden exports (exporter headers name their origin), and this file.
+exclude CLAUDE.md
+exclude docs/
+exclude tests/golden/
+exclude tools/cleanroom/forbidden.txt

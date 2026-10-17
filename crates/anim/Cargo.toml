@@ -1,0 +1,7 @@
+[package]
+name = "forge-anim"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
