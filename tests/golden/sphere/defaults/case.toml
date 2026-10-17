@@ -1,0 +1,10 @@
+feature = "sphere"
+observation = "docs/parity/sphere.md"
+description = "Default sphere, nothing changed"
+mesh = "mesh.obj"
+
+[params]
+
+[import]
+scale = 1.0
+flip_z = false

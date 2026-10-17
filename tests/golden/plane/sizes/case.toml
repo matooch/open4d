@@ -1,0 +1,12 @@
+feature = "plane"
+observation = "docs/parity/plane.md"
+description = "Plane with Width 300, Height 100"
+mesh = "mesh.obj"
+
+[params]
+width = 300.0
+height = 100.0
+
+[import]
+scale = 1.0
+flip_z = false

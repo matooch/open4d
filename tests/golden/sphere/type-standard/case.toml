@@ -1,0 +1,11 @@
+feature = "sphere"
+observation = "docs/parity/sphere.md"
+description = "Default sphere with Type Standard"
+mesh = "mesh.obj"
+
+[params]
+type = "standard"
+
+[import]
+scale = 1.0
+flip_z = false

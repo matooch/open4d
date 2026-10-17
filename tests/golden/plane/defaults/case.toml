@@ -1,0 +1,10 @@
+feature = "plane"
+observation = "docs/parity/plane.md"
+description = "Default plane, nothing changed"
+mesh = "mesh.obj"
+
+[params]
+
+[import]
+scale = 1.0
+flip_z = false
