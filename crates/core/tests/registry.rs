@@ -14,7 +14,7 @@ fn builtins_contain_null() {
     let null = r.get("forge.null").expect("null registered");
     assert_eq!(null.category, Category::Object);
     assert_eq!(null.label, "Null");
-    assert!(null.params.is_empty());
+    assert_eq!(null.params.len(), 3, "transform params only");
     assert!(Registry::new().get("forge.null").is_none());
 }
 

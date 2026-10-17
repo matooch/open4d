@@ -7,6 +7,7 @@ pub mod file;
 mod param;
 mod registry;
 mod scene;
+pub mod transform;
 
 pub use cache::EvalCache;
 pub use document::{Document, EditError, History, Tx};

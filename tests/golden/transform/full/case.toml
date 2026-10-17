@@ -1,0 +1,19 @@
+feature = "transform"
+observation = "docs/parity/transform.md"
+description = "Default cube, position (10, 20, 30), rotation (30, 45, 60), scale (2, 3, 4)"
+mesh = "mesh.obj"
+
+[params]
+pos_1 = 10.0
+pos_2 = 20.0
+pos_3 = 30.0
+rot_1 = 30.0
+rot_2 = 45.0
+rot_3 = 60.0
+scale_1 = 2.0
+scale_2 = 3.0
+scale_3 = 4.0
+
+[import]
+scale = 1.0
+flip_z = false

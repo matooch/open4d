@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use crate::{ParamDesc, ParamKind};
+use crate::{ParamDesc, ParamKind, transform};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Category {
@@ -74,6 +74,8 @@ pub enum RegistryError {
     InvalidDefault { type_id: String, param: String },
     #[error("{type_id}: enum {param:?} needs at least one option and unique option ids")]
     InvalidEnum { type_id: String, param: String },
+    #[error("{type_id}: parameter id {param:?} uses the reserved `transform.` prefix")]
+    ReservedParam { type_id: String, param: String },
 }
 
 /// A bundle of node types registered together.
@@ -117,12 +119,27 @@ impl Registry {
         r
     }
 
-    pub fn register(&mut self, ty: NodeType) -> Result<(), RegistryError> {
+    /// Registers a type; hierarchy types get the transform params prepended
+    /// (docs/specs/TRANSFORM.md §2).
+    pub fn register(&mut self, mut ty: NodeType) -> Result<(), RegistryError> {
         if !valid_type_id(&ty.id) {
             return Err(RegistryError::InvalidTypeId(ty.id));
         }
         if self.types.contains_key(&ty.id) {
             return Err(RegistryError::DuplicateType(ty.id));
+        }
+        if let Some(p) = ty
+            .params
+            .iter()
+            .find(|p| p.id.starts_with(transform::PREFIX))
+        {
+            return Err(RegistryError::ReservedParam {
+                type_id: ty.id.clone(),
+                param: p.id.clone(),
+            });
+        }
+        if ty.category.is_hierarchy() {
+            ty.params.splice(0..0, transform::params());
         }
         let mut seen = BTreeSet::new();
         for p in &ty.params {

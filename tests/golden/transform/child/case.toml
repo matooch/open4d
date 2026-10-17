@@ -1,0 +1,13 @@
+feature = "transform"
+observation = "docs/parity/transform.md"
+description = "Default cube at local position (100, 0, 0), child of a Null at (0, 50, 0) with rotation field 1 = 90"
+mesh = "mesh.obj"
+
+[params]
+pos_1 = 100.0
+parent_pos_2 = 50.0
+parent_rot_1 = 90.0
+
+[import]
+scale = 1.0
+flip_z = false

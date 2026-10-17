@@ -70,7 +70,9 @@ categories can be registered but not yet placed in a scene (`NotPlaceable`).
 - `install(&dyn Plugin)`: atomic — if any registration fails, none of that plugin's
   types are added.
 - `get(id)`, `types()` (sorted by id), `types_in(category)`.
-- `Registry::with_builtins()` registers `forge.null` (Object, no params).
+- `Registry::with_builtins()` registers `forge.null` (Object; only the transform params).
+- Hierarchy types get `transform.pos/rot/scale` prepended; `transform.*` ids are
+  reserved (`RegistryError::ReservedParam`). See docs/specs/TRANSFORM.md §2.
 
 `trait Plugin { fn id(&self) -> &str; fn register(&self, r: &mut Registry) -> Result<(), RegistryError>; }`
 

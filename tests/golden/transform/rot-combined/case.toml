@@ -1,0 +1,13 @@
+feature = "transform"
+observation = "docs/parity/transform.md"
+description = "Default cube, rotation fields (H, P, B) = (30, 45, 60), order HPB"
+mesh = "mesh.obj"
+
+[params]
+rot_1 = 30.0
+rot_2 = 45.0
+rot_3 = 60.0
+
+[import]
+scale = 1.0
+flip_z = false
