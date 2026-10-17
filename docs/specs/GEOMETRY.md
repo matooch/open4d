@@ -125,7 +125,7 @@ Each segment has local parameter `t ∈ [0, 1]`. `eval(seg, t)`, `derivative(seg
 Variant choices (uniform vs centripetal Catmull–Rom, B-spline end conditions) are
 **parity-pending**.
 
-Utilities:
+Utilities (§5):
 - `tessellate(steps_per_segment) -> Vec<DVec3>`: `steps` samples per segment
   (`t = k/steps`, `k < steps`) plus the final end point for open splines.
 - `length()`: sum over segments of a 5-point Gauss–Legendre quadrature of `|C'(t)|`
@@ -134,3 +134,20 @@ Utilities:
   length from start to end (closed: `count` points around the loop, not repeating
   the start), via a cumulative-length table (64 samples per segment) inverted by
   binary search and linear interpolation of the parameter.
+
+## 6. Polygon triangulation (`triangulate`) — added for Phase 3
+
+Ref: D. Eberly, "Triangulation by Ear Clipping", Geometric Tools (2002).
+
+`triangulate_poly(points, poly) -> Vec<[u32; 3]>` returns `k − 2` triangles of
+**mesh vertex indices** for a `k`-gon, each wound like the polygon (same sign of
+normal against the Newell normal).
+- Triangles pass through unchanged; for `k > 3` the polygon is projected onto the
+  plane of its Newell normal (2D basis from the normal) and ear-clipped: scan the
+  remaining corners in order from the first; the first convex corner whose triangle
+  contains no other remaining vertex (inclusive of edges) is clipped as
+  `(prev, corner, next)`; repeat.
+- If no ear is found (degenerate or self-intersecting input) or the normal is zero,
+  the remaining corners are fan-triangulated from the first remaining corner.
+- `triangulate(mesh) -> Vec<(u32, [u32; 3])>`: `(poly index, triangle)` for every
+  polygon in order.
