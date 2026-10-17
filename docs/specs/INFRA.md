@@ -48,7 +48,9 @@ Effect: identifiers like `xyz_tool`, `XyzTool`, `load_xyz` match; lowercase hex 
 `9a1xyzf0` does not.
 
 ### Scan
-- Walks the repo root recursively; always skips `target/` and `.git/` directories,
+- Walks the repo root recursively; always skips `target/`, `.git/` and `.claude/` directories
+  (`.claude/` holds local, untracked tool state such as agent worktrees — full copies of
+  the repo whose docs legitimately name the reference app),
   and a `.git` *file* at the root (a git worktree's pointer to its metadata, which
   holds the checkout's absolute path).
 - For each non-excluded file: checks the repo-relative path (`/`-separated) and every
