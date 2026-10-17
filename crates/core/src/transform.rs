@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use glam::{DMat4, DVec3};
+use glam::{DMat3, DMat4, DVec3, EulerRot};
 
 use crate::{ParamDesc, Unit, Value};
 
@@ -66,4 +66,29 @@ impl Transform {
             scale: get(SCALE, DVec3::ONE),
         }
     }
+}
+
+impl Transform {
+    /// The rotation part of [`Transform::matrix`]: `Ry(−h) · Rx(−p) · Rz(−b)`.
+    pub fn rotation(&self) -> DMat3 {
+        DMat3::from_rotation_y(-self.rot.x)
+            * DMat3::from_rotation_x(-self.rot.y)
+            * DMat3::from_rotation_z(-self.rot.z)
+    }
+}
+
+/// `(h, p, b)` with `Ry(−h)·Rx(−p)·Rz(−b) = m` (docs/specs/MANIPULATE.md §1).
+pub fn hpb_from_rotation(m: DMat3) -> DVec3 {
+    let (a, b, c) = m.to_euler(EulerRot::YXZ);
+    DVec3::new(-a, -b, -c)
+}
+
+/// Upper 3×3 of `m` with normalized columns.
+pub fn rotation_part(m: &DMat4) -> DMat3 {
+    let m3 = DMat3::from_mat4(*m);
+    DMat3::from_cols(
+        m3.x_axis.normalize_or_zero(),
+        m3.y_axis.normalize_or_zero(),
+        m3.z_axis.normalize_or_zero(),
+    )
 }

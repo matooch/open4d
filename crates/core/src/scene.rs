@@ -145,6 +145,18 @@ impl Scene {
         (!n.is_tag()).then(|| Transform::from_params(&n.params))
     }
 
+    /// World matrix of the parent (identity for roots); `None` for missing nodes and tags.
+    pub fn parent_world_matrix(&self, id: NodeId) -> Option<DMat4> {
+        let n = self.node(id)?;
+        if n.is_tag() {
+            return None;
+        }
+        match n.parent {
+            None => Some(DMat4::IDENTITY),
+            Some(p) => self.world_matrix(p),
+        }
+    }
+
     /// Parent chain composed root-first: `world(parent) · local(id)`.
     pub fn world_matrix(&self, id: NodeId) -> Option<DMat4> {
         let mut m = self.local_transform(id)?.matrix();

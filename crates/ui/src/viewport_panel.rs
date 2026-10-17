@@ -8,6 +8,7 @@ use forge_core::{NodeId, Scene};
 use forge_geometry::PolyMesh;
 use forge_geometry::selection::Selection;
 use forge_viewport::camera::Camera;
+use forge_viewport::gizmo::Gizmo;
 use forge_viewport::grid::grid_lines;
 use forge_viewport::render::{DrawMesh, Frame, MeshBuffers, Palette, Renderer, Settings, Shading};
 
@@ -45,6 +46,13 @@ pub fn nav_action(i: &NavInput) -> NavAction {
     } else {
         NavAction::None
     }
+}
+
+/// What the viewport draws this frame besides the grid.
+pub struct SceneView<'a> {
+    pub scene: &'a Scene,
+    pub selected: &'a BTreeSet<NodeId>,
+    pub gizmo: Option<&'a Gizmo>,
 }
 
 /// Base colour of selected objects (our palette).
@@ -115,9 +123,13 @@ impl ViewportPanel {
         size: [u32; 2],
         cam: &Camera,
         shading: Shading,
-        scene: &Scene,
-        selected: &BTreeSet<NodeId>,
+        view: SceneView,
     ) -> egui::TextureId {
+        let SceneView {
+            scene,
+            selected,
+            gizmo,
+        } = view;
         let device = &rs.device;
         let renderer = self
             .renderer
@@ -216,7 +228,7 @@ impl ViewportPanel {
         let frame = Frame {
             meshes: &draw,
             grid: Some(&grid),
-            gizmo: None,
+            gizmo,
             settings: Settings {
                 shading,
                 show_points: false,

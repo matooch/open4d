@@ -62,6 +62,7 @@ impl Plugin for TestPlugin {
 pub fn registry() -> Arc<Registry> {
     let mut r = Registry::with_builtins();
     r.install(&TestPlugin).unwrap();
+    r.install(&forge_generators::Primitives).unwrap();
     Arc::new(r)
 }
 

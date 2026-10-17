@@ -13,6 +13,7 @@ fn setup(mode: GizmoMode) -> (Camera, Gizmo, f64) {
         origin: DVec3::ZERO,
         mode,
         size_px: 100.0,
+        ..Gizmo::default()
     };
     let l = g.world_length(&c, H);
     (c, g, l)
@@ -158,4 +159,105 @@ fn degenerate_drags_do_not_start() {
     let (cs, gs, _) = setup(GizmoMode::Scale);
     // scaling from the axis origin has no reference length
     assert!(Drag::begin(&gs, Handle::Axis(Axis::X), &cs, W / 2.0, H / 2.0, W, H).is_none());
+}
+
+// ---- docs/specs/MANIPULATE.md §2: object frames and rotation ----
+
+fn rotated_frame() -> [DVec3; 3] {
+    // 90° about +Y (right-handed): X -> -Z, Z -> +X
+    [DVec3::NEG_Z, DVec3::Y, DVec3::X]
+}
+
+#[test]
+fn axis_handles_follow_the_frame() {
+    let c = Camera::default();
+    let mut g = Gizmo {
+        axes: rotated_frame(),
+        ..Gizmo::default()
+    };
+    g.origin = DVec3::ZERO;
+    let l = g.world_length(&c, H);
+    // the gizmo's X handle now points along world -Z, i.e. at the camera: not pickable;
+    // its Z handle lies along world +X
+    let (x, y) = px(&c, DVec3::X * 0.8 * l);
+    assert_eq!(g.hit_test(&c, x, y, W, H), Some(Handle::Axis(Axis::Z)));
+    let d = translate(drag(
+        &c,
+        &g,
+        Handle::Axis(Axis::Z),
+        DVec3::X * 0.5 * l,
+        DVec3::X * 0.5 * l + DVec3::X * 3.0,
+        None,
+    ));
+    close(d, DVec3::new(3.0, 0.0, 0.0), 1e-6);
+    assert_eq!(Axis::Y.index(), 1);
+}
+
+fn rotate(d: DragDelta) -> (DVec3, f64) {
+    match d {
+        DragDelta::Rotate { axis, angle } => (axis, angle),
+        other => panic!("expected rotate, got {other:?}"),
+    }
+}
+
+#[test]
+fn rotate_rings_hit_and_measure_signed_angles() {
+    let c = Camera::default(); // looking down -Z at the origin
+    let g = Gizmo {
+        mode: GizmoMode::Rotate,
+        ..Gizmo::default()
+    };
+    let l = g.world_length(&c, H);
+    // the Z ring faces the camera: a circle of radius l in the XY plane
+    let (x, y) = px(
+        &c,
+        DVec3::new(l, 0.0, 0.0) * std::f64::consts::FRAC_1_SQRT_2
+            + DVec3::new(0.0, l, 0.0) * std::f64::consts::FRAC_1_SQRT_2,
+    );
+    assert_eq!(g.hit_test(&c, x, y, W, H), Some(Handle::Axis(Axis::Z)));
+    // inside the Z ring, away from the edge-on X and Y rings (lines through the centre)
+    let (ix, iy) = px(&c, DVec3::new(0.4 * l, 0.3 * l, 0.0));
+    assert_eq!(
+        g.hit_test(&c, ix, iy, W, H),
+        None,
+        "no centre handle in rotate mode"
+    );
+
+    let from = DVec3::X * l;
+    let to = DVec3::Y * l; // +90° about +Z (right-handed)
+    let (axis, angle) = rotate(drag(&c, &g, Handle::Axis(Axis::Z), from, to, None));
+    close(axis, DVec3::Z, 1e-12);
+    assert!(
+        (angle - std::f64::consts::FRAC_PI_2).abs() < 1e-6,
+        "{angle}"
+    );
+    let (_, back) = rotate(drag(&c, &g, Handle::Axis(Axis::Z), to, from, None));
+    assert!((back + std::f64::consts::FRAC_PI_2).abs() < 1e-6, "{back}");
+    let near = DVec3::new(
+        l * 20f64.to_radians().cos(),
+        l * 20f64.to_radians().sin(),
+        0.0,
+    );
+    let (_, snapped) = rotate(drag(
+        &c,
+        &g,
+        Handle::Axis(Axis::Z),
+        from,
+        near,
+        Some(15f64.to_radians()),
+    ));
+    assert!((snapped - 15f64.to_radians()).abs() < 1e-9, "{snapped}");
+}
+
+#[test]
+fn rotate_drags_need_a_ring_and_a_plane() {
+    let c = Camera::default();
+    let g = Gizmo {
+        mode: GizmoMode::Rotate,
+        ..Gizmo::default()
+    };
+    let (cx, cy) = px(&c, DVec3::ZERO);
+    assert!(Drag::begin(&g, Handle::Center, &c, cx, cy, W, H).is_none());
+    // a ray through the origin hits the Z ring's plane at the origin: no start vector
+    assert!(Drag::begin(&g, Handle::Axis(Axis::Z), &c, cx, cy, W, H).is_none());
 }
