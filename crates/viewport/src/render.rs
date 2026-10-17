@@ -126,6 +126,11 @@ pub struct MeshBuffers {
 
 impl MeshBuffers {
     pub fn new(gpu: &Gpu, mesh: &PolyMesh, selection: &Selection) -> MeshBuffers {
+        Self::with_device(&gpu.device, mesh, selection)
+    }
+
+    /// Same as [`MeshBuffers::new`] for any wgpu device (e.g. an app's own).
+    pub fn with_device(d: &wgpu::Device, mesh: &PolyMesh, selection: &Selection) -> MeshBuffers {
         let smooth = corner_normals(mesh, PI, Weighting::Angle);
         let flat: Vec<DVec3> = mesh
             .polys
@@ -170,7 +175,6 @@ impl MeshBuffers {
                 selected: flag(selection.points.contains(i as u32)),
             })
             .collect();
-        let d = &gpu.device;
         MeshBuffers {
             tris: Vertices::new(d, "mesh tris", &tris),
             edges: Vertices::new(d, "mesh edges", &edges),

@@ -6,6 +6,7 @@ description = "The Forge3D editor application."
 
 [dependencies]
 forge-core = { path = "../../crates/core" }
+forge-generators = { path = "../../crates/generators" }
 forge-ui = { path = "../../crates/ui" }
 
 [lints]

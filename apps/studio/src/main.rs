@@ -3,8 +3,11 @@
 use std::sync::Arc;
 
 use forge_core::Registry;
+use forge_generators::Primitives;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    forge_ui::run(Arc::new(Registry::with_builtins()))?;
+    let mut registry = Registry::with_builtins();
+    registry.install(&Primitives)?;
+    forge_ui::run(Arc::new(registry))?;
     Ok(())
 }

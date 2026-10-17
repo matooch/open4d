@@ -135,6 +135,7 @@ Transactions:
   nodes it touches with a new revision: `set_param`/`rename` → that node; `create`/
   `attach_tag`/`delete`/`move_node` → the affected parent(s) or host (and new
   nodes).
+- `scene.revision()`: the current value of that counter (any edit raises it).
 - `scene.deep_revision(id) -> Option<u64>` = max of the node's own revision and the
   deep revisions of its children, its tags, and the nodes its `Link` params point to
   (cycle-safe; dangling links ignored). `None` if the node does not exist.

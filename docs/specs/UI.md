@@ -104,8 +104,10 @@ SmoothWire, FlatWire).
 
 Renders with forge-viewport's `Renderer` on the eframe wgpu device into an offscreen
 `Rgba8Unorm` texture registered with egui as-is, so palette values display as
-authored (matching the snapshot PNGs). Recreated on resize. Draws
-the grid; no geometry until Phase 5. Without a wgpu render state (tests) it shows a
+authored (matching the snapshot PNGs). Recreated on resize. Draws the grid and every
+generator node (`forge_generators::build`, placed by `Scene::world_matrix`); selected
+nodes use the selection colour. GPU meshes are rebuilt only when `Scene::revision()` or
+the selection changes; nodes whose build is unsupported are skipped. Without a wgpu render state (tests) it shows a
 "Viewport unavailable" label.
 
 Navigation `nav_action(input) -> NavAction` (**parity-pending**, ours):

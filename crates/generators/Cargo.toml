@@ -2,6 +2,17 @@
 name = "forge-generators"
 version.workspace = true
 edition.workspace = true
+description = "Parametric primitives and generators (docs/specs/PRIMITIVES.md)."
+
+[dependencies]
+forge-core = { path = "../core" }
+forge-geometry = { path = "../geometry" }
+glam = "0.34"
+thiserror = "2"
+
+[dev-dependencies]
+forge-parity-harness = { path = "../parity-harness" }
+toml = "1"
 
 [lints]
 workspace = true

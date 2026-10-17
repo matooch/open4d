@@ -77,6 +77,30 @@ fn sample_hierarchy(state: &mut state::EditorState) {
     let _ = execute(state, Command::Reparent(hand, Some(arm)));
     state.expanded.extend([rig, arm]);
     state.selection.click(arm);
+
+    // Primitives, when the registry has them: a floor plane and two objects on it.
+    let place = |s: &mut state::EditorState, ty: &str, pos: [f64; 3]| {
+        s.doc.scene().registry().get(ty)?;
+        let _ = execute(s, Command::Create(ty.into()));
+        let id = s.selection.active?;
+        let _ = attributes::apply_edit(
+            &mut s.doc,
+            id,
+            "transform.pos",
+            forge_core::Value::Vec3(pos),
+            attributes::Gesture::Commit,
+        );
+        Some(id)
+    };
+    place(state, "forge.plane", [0.0, 0.0, 0.0]);
+    let cube = place(state, "forge.cube", [-150.0, 100.0, 0.0]);
+    place(state, "forge.sphere", [150.0, 100.0, 50.0]);
+    if let Some(cube) = cube {
+        state.selection.click(cube);
+        state
+            .camera
+            .frame([-400.0, 0.0, -400.0].into(), [400.0, 250.0, 400.0].into());
+    }
 }
 
 /// Opens the editor window and runs until it is closed.

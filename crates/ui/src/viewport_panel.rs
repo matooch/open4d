@@ -1,10 +1,15 @@
 //! Embedded viewport: navigation mapping and wgpu-to-egui texture plumbing
 //! (docs/specs/UI.md §6).
 
+use std::collections::BTreeSet;
+
 use eframe::egui_wgpu;
+use forge_core::{NodeId, Scene};
+use forge_geometry::PolyMesh;
+use forge_geometry::selection::Selection;
 use forge_viewport::camera::Camera;
 use forge_viewport::grid::grid_lines;
-use forge_viewport::render::{Frame, Palette, Renderer, Settings, Shading};
+use forge_viewport::render::{DrawMesh, Frame, MeshBuffers, Palette, Renderer, Settings, Shading};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct NavInput {
@@ -42,6 +47,9 @@ pub fn nav_action(i: &NavInput) -> NavAction {
     }
 }
 
+/// Base colour of selected objects (our palette).
+const SELECTED_TINT: [f32; 3] = [0.95, 0.62, 0.30];
+
 pub fn apply_nav(cam: &mut Camera, action: NavAction, viewport_h: f64) {
     match action {
         NavAction::None => {}
@@ -63,6 +71,35 @@ struct Target {
 pub struct ViewportPanel {
     renderer: Option<Renderer>,
     target: Option<Target>,
+    /// GPU meshes of the scene's generator nodes, keyed by scene revision and selection.
+    meshes: Option<SceneMeshes>,
+}
+
+struct SceneMeshes {
+    revision: u64,
+    selection: BTreeSet<NodeId>,
+    items: Vec<(MeshBuffers, [f32; 3])>,
+}
+
+/// World-space meshes of every generator node, with whether each is selected.
+pub fn scene_meshes(scene: &Scene, selected: &BTreeSet<NodeId>) -> Vec<(NodeId, PolyMesh, bool)> {
+    let mut out = Vec::new();
+    for root in scene.roots() {
+        for id in std::iter::once(*root).chain(scene.descendants(*root)) {
+            let Some(node) = scene.node(id) else { continue };
+            let (Ok(mut mesh), Some(m)) = (
+                forge_generators::build(&node.type_id, &node.params),
+                scene.world_matrix(id),
+            ) else {
+                continue;
+            };
+            for p in &mut mesh.points {
+                *p = m.transform_point3(*p);
+            }
+            out.push((id, mesh, selected.contains(&id)));
+        }
+    }
+    out
 }
 
 impl ViewportPanel {
@@ -73,6 +110,8 @@ impl ViewportPanel {
         size: [u32; 2],
         cam: &Camera,
         shading: Shading,
+        scene: &Scene,
+        selected: &BTreeSet<NodeId>,
     ) -> egui::TextureId {
         let device = &rs.device;
         let renderer = self
@@ -134,18 +173,49 @@ impl ViewportPanel {
                 texture_id,
             });
         }
+        let palette = Palette::default();
+        if self
+            .meshes
+            .as_ref()
+            .is_none_or(|m| m.revision != scene.revision() || m.selection != *selected)
+        {
+            let items = scene_meshes(scene, selected)
+                .into_iter()
+                .map(|(_, mesh, sel)| {
+                    let color = if sel { SELECTED_TINT } else { palette.object };
+                    (
+                        MeshBuffers::with_device(device, &mesh, &Selection::default()),
+                        color,
+                    )
+                })
+                .collect();
+            self.meshes = Some(SceneMeshes {
+                revision: scene.revision(),
+                selection: selected.clone(),
+                items,
+            });
+        }
+        let draw: Vec<DrawMesh> = self
+            .meshes
+            .iter()
+            .flat_map(|m| &m.items)
+            .map(|(mesh, color)| DrawMesh {
+                mesh,
+                color: *color,
+            })
+            .collect();
         let t = self.target.as_ref().expect("target created above");
         let color_view = t.color.create_view(&Default::default());
         let depth_view = t.depth.create_view(&Default::default());
         let grid = grid_lines(cam, size[1] as f64);
         let frame = Frame {
-            meshes: &[],
+            meshes: &draw,
             grid: Some(&grid),
             gizmo: None,
             settings: Settings {
                 shading,
                 show_points: false,
-                palette: Palette::default(),
+                palette,
             },
         };
         let mut encoder = device.create_command_encoder(&Default::default());
