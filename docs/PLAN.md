@@ -1,6 +1,6 @@
 # Phased plan (tick boxes only after parity test passes)
 0. [x] Workspace, CI, parity-harness, golden-data layout, CLEANROOM checks (CI fails on forbidden strings/trademarks).
-1. [ ] core: scene graph, param descriptors, undo, serialization, dirty/cache system, plugin registry.
+1. [x] core: scene graph, param descriptors, undo, serialization, dirty/cache system, plugin registry.
 2. [ ] geometry: mesh/spline types, subdivision, normals, selections, booleans.
 3. [ ] viewport (wgpu): navigation, shading modes, selection, gizmos, snapping, grid.
 4. [ ] ui: docking, Object/Attribute/Material/Coordinate/Timeline managers, layouts, modern dark theme.
