@@ -1,0 +1,13 @@
+feature = "capsule"
+observation = "docs/parity/capsule.md"
+description = "Capsule Slice on, From 0, To 270"
+mesh = "mesh.obj"
+
+[params]
+slice = true
+slice_from = 0.0
+slice_to = 270.0
+
+[import]
+scale = 1.0
+flip_z = false

@@ -1,0 +1,10 @@
+feature = "capsule"
+observation = "docs/parity/capsule.md"
+description = "Default capsule"
+mesh = "mesh.obj"
+
+[params]
+
+[import]
+scale = 1.0
+flip_z = false

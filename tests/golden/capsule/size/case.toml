@@ -1,0 +1,12 @@
+feature = "capsule"
+observation = "docs/parity/capsule.md"
+description = "Capsule Radius 30, Height 300"
+mesh = "mesh.obj"
+
+[params]
+radius = 30.0
+height = 300.0
+
+[import]
+scale = 1.0
+flip_z = false
