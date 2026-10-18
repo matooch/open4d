@@ -1,0 +1,20 @@
+feature = "sweep"
+observation = "docs/parity/sweep.md"
+description = "Sweep End Scale 50 percent"
+mesh = "mesh.obj"
+
+[params]
+end_scale = 50.0
+[params.input]
+type = "circle_spline"
+radius = 20.0
+plane = "xy"
+
+[params.input2]
+type = "circle_spline"
+radius = 200.0
+plane = "xy"
+
+[import]
+scale = 1.0
+flip_z = false

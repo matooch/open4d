@@ -1,0 +1,21 @@
+feature = "sweep"
+observation = "docs/parity/sweep.md"
+description = "Sweep: profile Rectangle 40x20, path Circle r200"
+mesh = "mesh.obj"
+
+[params]
+
+[params.input]
+type = "rectangle_spline"
+width = 40.0
+height = 20.0
+plane = "xy"
+
+[params.input2]
+type = "circle_spline"
+radius = 200.0
+plane = "xy"
+
+[import]
+scale = 1.0
+flip_z = false

@@ -1,0 +1,18 @@
+feature = "sweep"
+observation = "docs/parity/sweep.md"
+description = "Sweep: profile Circle r20, path default Helix"
+mesh = "mesh.obj"
+
+[params]
+
+[params.input]
+type = "circle_spline"
+radius = 20.0
+plane = "xy"
+
+[params.input2]
+type = "helix_spline"
+
+[import]
+scale = 1.0
+flip_z = false
