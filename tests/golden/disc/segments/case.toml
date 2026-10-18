@@ -1,0 +1,12 @@
+feature = "disc"
+observation = "docs/parity/disc.md"
+description = "Disc Rotation Segments 7, Disc Segments 3"
+mesh = "mesh.obj"
+
+[params]
+rotation_segments = 7
+disc_segments = 3
+
+[import]
+scale = 1.0
+flip_z = false
