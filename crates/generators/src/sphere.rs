@@ -6,7 +6,7 @@ use forge_core::{Category, NodeType, ParamDesc, Unit};
 use forge_geometry::PolyMesh;
 use glam::DVec3;
 
-use crate::{BuildError, Params};
+use crate::{BuildError, Params, platonic};
 
 pub(crate) fn node_type() -> NodeType {
     NodeType::new("forge.sphere", "Sphere", Category::Generator)
@@ -40,7 +40,15 @@ pub(crate) fn build(p: &Params) -> Result<PolyMesh, BuildError> {
         "standard" => false,
         "hemisphere" if bands.is_multiple_of(2) => true,
         "hemisphere" => return Err(BuildError::Unsupported("hemisphere with an odd band count")),
-        _ => return Err(BuildError::Unsupported("platonic sphere types")),
+        kind @ ("tetrahedron" | "octahedron" | "icosahedron") => {
+            let n = platonic::frequency(kind, p.int("segments"));
+            return Ok(platonic::triangles(kind, n, r));
+        }
+        "hexahedron" => {
+            let n = platonic::frequency("hexahedron", p.int("segments"));
+            return Ok(platonic::hexahedron(n, r));
+        }
+        _ => return Err(BuildError::Unsupported("unknown sphere type")),
     };
     let ring_point = |ring: usize, k: usize| {
         let theta = ring as f64 * PI / bands as f64;

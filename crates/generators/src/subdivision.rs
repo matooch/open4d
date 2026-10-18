@@ -5,7 +5,7 @@ use forge_geometry::PolyMesh;
 use std::collections::BTreeSet;
 
 use forge_geometry::Edge;
-use forge_geometry::subdivide::subdivide_levels_with_creases;
+use forge_geometry::subdivide::{subdivide_levels_with_creases, subdivide_osd};
 
 use crate::{BuildError, Params, evaluate};
 
@@ -57,10 +57,9 @@ pub fn subdivide_with_creases(
 ) -> Result<PolyMesh, BuildError> {
     let smooth = match scheme {
         "catmull_clark" | "catmull_clark_ngons" => true,
-        // Observed: OpenSubdiv schemes number their output differently (not derived yet).
-        "osd_catmull_clark" | "osd_bilinear" => {
-            return Err(BuildError::Unsupported("OpenSubdiv vertex order"));
-        }
+        // §3.1: OpenSubdiv numbers its output level by level.
+        "osd_catmull_clark" => return Ok(subdivide_osd(mesh, level, true, creases)),
+        "osd_bilinear" => return Ok(subdivide_osd(mesh, level, false, creases)),
         // Observed: the export ignores the adaptive level and keeps the input.
         "osd_catmull_clark_adaptive" => return Ok(mesh.clone()),
         "osd_loop" => return Err(BuildError::Unsupported("Loop subdivision")),
