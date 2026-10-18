@@ -3,8 +3,11 @@
 
 mod boole;
 mod cube;
+mod lathe;
 mod plane;
 mod platonic;
+mod pyramid;
+mod round;
 mod sphere;
 mod subdivision;
 
@@ -28,8 +31,19 @@ pub enum BuildError {
 /// The primitive node types.
 pub struct Primitives;
 
-fn types() -> [NodeType; 3] {
-    [plane::node_type(), cube::node_type(), sphere::node_type()]
+fn types() -> [NodeType; 10] {
+    [
+        plane::node_type(),
+        cube::node_type(),
+        sphere::node_type(),
+        round::cylinder_type(),
+        round::cone_type(),
+        round::disc_type(),
+        round::torus_type(),
+        round::tube_type(),
+        round::capsule_type(),
+        pyramid::node_type(),
+    ]
 }
 
 impl Plugin for Primitives {
@@ -99,6 +113,13 @@ pub fn build(type_id: &str, values: &BTreeMap<String, Value>) -> Result<PolyMesh
         "forge.plane" => Ok(plane::build(&p)),
         "forge.cube" => cube::build(&p),
         "forge.sphere" => sphere::build(&p),
+        "forge.cylinder" => round::build_cylinder(&p),
+        "forge.cone" => round::build_cone(&p),
+        "forge.disc" => round::build_disc(&p),
+        "forge.torus" => round::build_torus(&p),
+        "forge.tube" => round::build_tube(&p),
+        "forge.capsule" => round::build_capsule(&p),
+        "forge.pyramid" => pyramid::build(&p),
         _ => unreachable!("types() and build() list the same ids"),
     }
 }

@@ -18,10 +18,10 @@ Observation kit and per-feature forms: [README.md](README.md).
 | Rotate gizmo, object/world gizmo axes, coordinate panel, viewport picking | docs/specs/MANIPULATE.md | derived from tests/golden/transform conventions | crates/core/tests/hpb.rs, crates/viewport/tests/gizmo.rs, crates/ui/tests/manipulate.rs | Passing locally; gizmo look, sizes and keys are ours (parity-pending); "Object (Abs)" and "Size+" not implemented |
 | Subdivision surface (Catmull–Clark, creases, reference vertex/face order) | docs/specs/SUBDIVISION.md | tests/golden/subdivision (11) | crates/generators/tests/subdivision_parity.rs | 10/11 exact (cube levels 1–3, cylinder, plane, pyramid, catmull_clark, adaptive, OpenSubdiv Catmull-Clark and bilinear: SUBDIVISION.md §3.1); Loop unsupported |
 | Boolean generator (BSP split, winding-number classification, coplanar merge) + geometric comparison | docs/specs/BOOLE.md, docs/specs/INFRA.md §4.2 | tests/golden/boole (6), `compare = "geometric"` | crates/generators/tests/boole_parity.rs, crates/geometry/tests/boolean.rs, crates/parity-harness/tests/geometric.rs | 5/6 match geometrically (mode-union, mode-a_minus_b, mode-intersect, mode-a_without_b, hide-edges: same points, area per oriented plane, closedness, volume; face counts also equal); quality-off (High Quality off) unsupported. Reference numbering/quad split not reproduced (geometric parity only). Local run 2026-10-17: fmt, clippy -D warnings, FORGE_REQUIRE_GPU=1 cargo test --workspace (233 passed), cleanroom ok, golden check ok (61 cases) |
-| Cylinder primitive | – | tests/golden/cylinder (10) | – | Observed (docs/parity/cylinder.md), not implemented |
-| Cone primitive | – | tests/golden/cone (9) | – | Observed (docs/parity/cone.md), not implemented |
-| Disc primitive | – | tests/golden/disc (6) | – | Observed (docs/parity/disc.md), not implemented |
-| Torus primitive | – | tests/golden/torus (5) | – | Observed (docs/parity/torus.md), not implemented |
-| Tube primitive | – | tests/golden/tube (6) | – | Observed (docs/parity/tube.md), not implemented |
-| Capsule primitive | – | tests/golden/capsule (5) | – | Observed (docs/parity/capsule.md), not implemented |
-| Pyramid primitive | – | tests/golden/pyramid (4) | – | Observed (docs/parity/pyramid.md), not implemented |
+| Cylinder primitive | docs/specs/PRIMITIVES2.md §2–3 | tests/golden/cylinder (10) | crates/generators/tests/parity.rs | 10/10 exact (incl. fillet, slice) |
+| Cone primitive | docs/specs/PRIMITIVES2.md §2, §4 | tests/golden/cone (9) | crates/generators/tests/parity.rs | 8/9 exact; slice exact except its cut triangles (geometric match: reference triangulation not derived) |
+| Disc primitive | docs/specs/PRIMITIVES2.md §2, §5 | tests/golden/disc (6) | crates/generators/tests/parity.rs | 6/6 exact |
+| Torus primitive | docs/specs/PRIMITIVES2.md §2, §6 | tests/golden/torus (5) | crates/generators/tests/parity.rs | 4/5 exact; slice exact except its cut triangles (geometric match) |
+| Tube primitive | docs/specs/PRIMITIVES2.md §2, §7 | tests/golden/tube (6) | crates/generators/tests/parity.rs | 6/6 exact (incl. fillet, slice) |
+| Capsule primitive | docs/specs/PRIMITIVES2.md §2, §8 | tests/golden/capsule (5) | crates/generators/tests/parity.rs | 4/5 exact; slice exact except its cut triangles (geometric match) |
+| Pyramid primitive | docs/specs/PRIMITIVES2.md §9 | tests/golden/pyramid (4) | crates/generators/tests/parity.rs | 4/4 exact |
