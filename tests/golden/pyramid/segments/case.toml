@@ -1,0 +1,11 @@
+feature = "pyramid"
+observation = "docs/parity/pyramid.md"
+description = "Pyramid Segments 3"
+mesh = "mesh.obj"
+
+[params]
+segments = 3
+
+[import]
+scale = 1.0
+flip_z = false
