@@ -1,0 +1,18 @@
+feature = "extrude"
+observation = "docs/parity/extrude.md"
+description = "Extrude Start and End caps None, default Circle spline"
+mesh = "mesh.obj"
+
+[params]
+cap_start = "none"
+cap_end = "none"
+[params.input]
+type = "circle_spline"
+radius = 200.0
+plane = "xy"
+intermediate = "adaptive"
+intermediate_angle = 5.0
+
+[import]
+scale = 1.0
+flip_z = false

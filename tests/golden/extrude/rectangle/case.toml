@@ -1,0 +1,18 @@
+feature = "extrude"
+observation = "docs/parity/extrude.md"
+description = "Extrude defaults of a default Rectangle spline"
+mesh = "mesh.obj"
+
+[params]
+
+[params.input]
+type = "rectangle_spline"
+width = 400.0
+height = 400.0
+plane = "xy"
+intermediate = "adaptive"
+intermediate_angle = 5.0
+
+[import]
+scale = 1.0
+flip_z = false
