@@ -1,0 +1,11 @@
+feature = "cone"
+observation = "docs/parity/cone.md"
+description = "Cone Bottom fillet on (Radius 50, Height 50, Fillet Segments 5 defaults)"
+mesh = "mesh.obj"
+
+[params]
+fillet_bottom = true
+
+[import]
+scale = 1.0
+flip_z = false
