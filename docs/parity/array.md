@@ -1,44 +1,46 @@
 # Array generator — observation
 
-Status: not observed · App version: TODO · OS: TODO · Observer: TODO · Date: TODO
-Exporter settings: [export-settings.md](export-settings.md) (note any deviation here).
+Status: observed · App version: Cinema 4D R20.059 (Build RB272827) · OS: Windows 11 Pro 10.0.26200 · Observer: observer session · Date: 2026-10-18
+Exporter settings: [export-settings.md](export-settings.md) (no deviation).
 Folder: `tests/golden/array/<case>/`.
 
 ## Where it lives
-Menu path / how it is created: TODO (new scene each case: File > New).
+Create > Modeling > Array (new scene each case: File > New; in the last two cases the
+same scene was reused with only the Array values changed). Attributes tabs: Basic,
+Coord., Object.
 
-Input: one default Cube (size reduced as listed) as the child of the generator.
+Input: one default Cube with Size 50 / 50 / 50 as the child of the generator, at the
+origin.
+
+**What the export contains:** the result is written directly (no Current State to
+Object needed), as one `o` group per copy, named `Cube.N` … `Cube.1` (highest number first;
+e.g. `Cube.8` … `Cube.1` for 8 cubes). `input.obj` = the child cube alone, exported with the generator disabled
+(same for all cases).
 
 ## Parameters (as shown in the app)
 
-Fill every parameter of the generator's main tab (label, default, min/max found by
-typing a huge and a negative value, unit, enum options). Use lowercase snake_case keys
-(suggestions below); use the same keys in `case.toml` `[params]`. Record each
-**input** object's type, parameters and transform in `case.toml` too, as sub-tables
-`[params.input]`, `[params.input2]`, … in child order (e.g. `type = "cube"`,
-`pos = [150.0, 0.0, 0.0]`, `size_x = 50.0`; spline params with their own keys), so the
-input can be rebuilt exactly. For mesh inputs also export them as `input.obj`,
-`input2.obj`, … in the case folder.
-
 | App label | Our key | Type | Default | Min | Max | Unit shown | Notes |
 |---|---|---|---|---|---|---|---|
-| TODO | TODO | | | | | | |
+| Radius | `radius` | float | 250 | not tested | not tested | cm | |
+| Copies | `copies` | int | 7 | not tested | not tested | – | **the result has Copies + 1 objects** (7 → 8 cubes) |
+| Amplitude | `amplitude` | float | 0 | not tested | not tested | cm | vertical wave |
+| Frequency | `frequency` | float | 0 | not tested | not tested | – | wave speed (animation) |
+| Array Frequency | `array_frequency` | float | 10 | not tested | not tested | – | number of wave periods around the ring |
+| Render Instance | `render_instance` | bool | off | – | – | – | not used |
 
-Enum options (label → our key): TODO
+No partial / end-angle option exists, so the **partial** row was skipped.
 
 ## Cases
 
-Export the **generator** (with its children) selected, so the file holds the generated
-result. If the export instead writes the children separately or unchanged, note it and
-try making the generator editable (Current State to Object) first, then export that.
-
 | Case | Inputs and parameters changed from default | `golden info` output (vertices / faces / size) | Notes |
 |---|---|---|---|
-| defaults | cube child size (50, 50, 50) | | |
-| copies | copies = 5, radius = 300, cube size (50, 50, 50) | | |
-| wave | amplitude = 50, frequency = 2, cube size (50, 50, 50) | | |
-| partial | array angle (or partial/end angle option, if any) = 180, cube size (50, 50, 50) | | |
+| defaults | cube child size (50, 50, 50) | 64 / 48 (4-gons 48) / size (550, 50, 550), centre (0, 0, 0); normals 18, uvs 4 | 8 cubes at 45° steps; the first written cube is centred at (0, 0, 250) (first vertex (-25, -25, 225)), the next at 45° towards +X; copies are rotated to face the centre |
+| copies | copies = 5, radius = 300, cube size (50, 50, 50) | 48 / 36 (4-gons 36) / size (587.91650390625, 50, 650), centre (0, 0, 0); normals 14, uvs 4 | 6 cubes at 60° steps; objects `Cube.6` … `Cube.1` |
+| wave | amplitude = 50, frequency = 2, cube size (50, 50, 50) | 64 / 48 (4-gons 48) / size (550, 150, 550), centre (0, 0, 0); normals 18, uvs 4 | at frame 0 the cubes are lifted by 0, +50, 0, -50, 0, +50, 0, -50 cm in output order |
+| partial | – | skipped | no such option in this version |
 
 ## Behaviour notes
-- Which parameters are greyed out or hidden by others: TODO
-- Anything surprising (welding, caps, seams, order of copies): TODO
+- Which parameters are greyed out or hidden by others: none seen.
+- Anything surprising: Copies counts the extra copies, so N copies give N + 1 objects,
+  evenly spaced over 360°. Each copy is a separate `o` group in the OBJ. The wave height
+  at a given copy depends on Array Frequency (10 by default) and the current frame.
