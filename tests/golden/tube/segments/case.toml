@@ -1,0 +1,13 @@
+feature = "tube"
+observation = "docs/parity/tube.md"
+description = "Tube Rotation Segments 7, Cap Segments 2, Height Segments 3"
+mesh = "mesh.obj"
+
+[params]
+rotation_segments = 7
+cap_segments = 2
+height_segments = 3
+
+[import]
+scale = 1.0
+flip_z = false

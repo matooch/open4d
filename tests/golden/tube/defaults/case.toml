@@ -1,0 +1,10 @@
+feature = "tube"
+observation = "docs/parity/tube.md"
+description = "Default tube"
+mesh = "mesh.obj"
+
+[params]
+
+[import]
+scale = 1.0
+flip_z = false
