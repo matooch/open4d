@@ -1,0 +1,12 @@
+feature = "cone"
+observation = "docs/parity/cone.md"
+description = "Cone Top Radius 30, Top fillet on (defaults)"
+mesh = "mesh.obj"
+
+[params]
+top_radius = 30.0
+fillet_top = true
+
+[import]
+scale = 1.0
+flip_z = false

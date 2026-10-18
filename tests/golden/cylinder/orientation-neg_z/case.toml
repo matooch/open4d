@@ -1,0 +1,11 @@
+feature = "cylinder"
+observation = "docs/parity/cylinder.md"
+description = "Cylinder Orientation -Z"
+mesh = "mesh.obj"
+
+[params]
+orientation = "neg_z"
+
+[import]
+scale = 1.0
+flip_z = false

@@ -1,0 +1,11 @@
+feature = "cylinder"
+observation = "docs/parity/cylinder.md"
+description = "Cylinder with Fillet on (fillet Segments 5, Radius 20 default)"
+mesh = "mesh.obj"
+
+[params]
+fillet = true
+
+[import]
+scale = 1.0
+flip_z = false

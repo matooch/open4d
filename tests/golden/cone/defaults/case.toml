@@ -1,0 +1,10 @@
+feature = "cone"
+observation = "docs/parity/cone.md"
+description = "Default cone"
+mesh = "mesh.obj"
+
+[params]
+
+[import]
+scale = 1.0
+flip_z = false

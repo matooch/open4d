@@ -1,0 +1,11 @@
+feature = "torus"
+observation = "docs/parity/torus.md"
+description = "Torus Orientation +X"
+mesh = "mesh.obj"
+
+[params]
+orientation = "pos_x"
+
+[import]
+scale = 1.0
+flip_z = false

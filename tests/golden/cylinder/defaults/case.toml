@@ -1,0 +1,10 @@
+feature = "cylinder"
+observation = "docs/parity/cylinder.md"
+description = "Default cylinder"
+mesh = "mesh.obj"
+
+[params]
+
+[import]
+scale = 1.0
+flip_z = false

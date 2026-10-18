@@ -1,0 +1,12 @@
+feature = "torus"
+observation = "docs/parity/torus.md"
+description = "Torus Ring Radius 150, Pipe Radius 20"
+mesh = "mesh.obj"
+
+[params]
+ring_radius = 150.0
+pipe_radius = 20.0
+
+[import]
+scale = 1.0
+flip_z = false

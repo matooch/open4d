@@ -1,0 +1,11 @@
+feature = "disc"
+observation = "docs/parity/disc.md"
+description = "Disc Inner Radius 30"
+mesh = "mesh.obj"
+
+[params]
+inner_radius = 30.0
+
+[import]
+scale = 1.0
+flip_z = false

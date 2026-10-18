@@ -1,0 +1,12 @@
+feature = "cylinder"
+observation = "docs/parity/cylinder.md"
+description = "Cylinder cap Segments 3, Rotation Segments 7"
+mesh = "mesh.obj"
+
+[params]
+cap_segments = 3
+rotation_segments = 7
+
+[import]
+scale = 1.0
+flip_z = false

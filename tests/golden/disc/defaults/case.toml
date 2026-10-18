@@ -1,0 +1,10 @@
+feature = "disc"
+observation = "docs/parity/disc.md"
+description = "Default disc"
+mesh = "mesh.obj"
+
+[params]
+
+[import]
+scale = 1.0
+flip_z = false

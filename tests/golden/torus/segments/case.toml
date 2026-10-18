@@ -1,0 +1,12 @@
+feature = "torus"
+observation = "docs/parity/torus.md"
+description = "Torus Ring Segments 7, Pipe Segments 5"
+mesh = "mesh.obj"
+
+[params]
+ring_segments = 7
+pipe_segments = 5
+
+[import]
+scale = 1.0
+flip_z = false

@@ -78,6 +78,13 @@ Do these in order; each unblocks code that is waiting on it.
 | 8 | [boole.md](boole.md) | booleans | 6 |
 | 9 | [defaults.md](defaults.md) | the parity-pending UI/tool defaults | – |
 | 10 | [viewport.md](viewport.md) | un-mirrored viewport display (handedness) | – |
+| 11 | [cylinder.md](cylinder.md) | primitives II | 10 |
+| 12 | [cone.md](cone.md) | primitives II | 9 |
+| 13 | [disc.md](disc.md) | primitives II | 6 |
+| 14 | [torus.md](torus.md) | primitives II | 5 |
+| 15 | [tube.md](tube.md) | primitives II | 6 |
+| 16 | [capsule.md](capsule.md) | primitives II | 4 |
+| 17 | [pyramid.md](pyramid.md) | primitives II | 4 |
 
 [TEMPLATE.md](TEMPLATE.md) is the blank form for any other feature.
 

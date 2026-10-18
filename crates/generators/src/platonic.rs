@@ -99,19 +99,33 @@ fn triangle_solid(kind: &str) -> (Vec<DVec3>, Vec<[u32; 3]>) {
 /// Tetrahedron, octahedron or icosahedron at frequency `n`, radius `r`.
 pub(crate) fn triangles(kind: &str, n: usize, r: f64) -> PolyMesh {
     let (base, faces) = triangle_solid(kind);
-    let on_sphere = |p: DVec3| p.normalize() * r;
-    let mut points: Vec<DVec3> = base.iter().map(|&p| p * r).collect();
+    let faces: Vec<Vec<u32>> = faces.iter().map(|f| f.to_vec()).collect();
+    flat_subdivision(&base, &faces, n, |p| p.normalize() * r)
+}
 
-    // Edge points: edges in first-appearance order (A→B, B→C, C→A), each walked from its
-    // lower-index vertex.
+/// Faces (quads `[c0, c1, c2, c3]` and triangles `(A, B, C)`) cut flat at frequency `n`,
+/// every point then mapped by `map` (PRIMITIVES.md §3.1, PRIMITIVES2.md §9).
+pub(crate) fn flat_subdivision(
+    base: &[DVec3],
+    faces: &[Vec<u32>],
+    n: usize,
+    map: impl Fn(DVec3) -> DVec3,
+) -> PolyMesh {
+    let mut points: Vec<DVec3> = base.iter().map(|&p| map(p)).collect();
+
+    // Edge points: edges in first-appearance order over the face cycles, each walked
+    // from its lower-index vertex.
     let mut edge_start = std::collections::BTreeMap::new();
-    for f in &faces {
-        for i in 0..3 {
-            let (a, b) = (f[i].min(f[(i + 1) % 3]), f[i].max(f[(i + 1) % 3]));
+    for f in faces {
+        for i in 0..f.len() {
+            let (a, b) = (
+                f[i].min(f[(i + 1) % f.len()]),
+                f[i].max(f[(i + 1) % f.len()]),
+            );
             edge_start.entry((a, b)).or_insert_with(|| {
                 let start = points.len() as u32;
                 let (pa, pb) = (base[a as usize], base[b as usize]);
-                points.extend((1..n).map(|t| on_sphere(pa.lerp(pb, t as f64 / n as f64))));
+                points.extend((1..n).map(|t| map(pa.lerp(pb, t as f64 / n as f64))));
                 start
             });
         }
@@ -129,17 +143,51 @@ pub(crate) fn triangles(kind: &str, n: usize, r: f64) -> PolyMesh {
         }
     };
 
-    // Rows r = 0..=n from apex A; P(r, 0) on A→B, P(r, r) on A→C, interior per face.
-    let mut polys = Vec::with_capacity(faces.len() * n * n);
-    for &[a, b, c] in &faces {
-        let (pa, pb, pc) = (base[a as usize], base[b as usize], base[c as usize]);
+    let mut polys = Vec::new();
+    for f in faces {
         let interior = points.len() as u32;
+        let corner = |i: usize| base[f[i] as usize];
+        if let &[c0, c1, c2, c3] = f.as_slice() {
+            // Quad grid b(i, k): i along c0→c1, k along c0→c3; interior i outer, k inner.
+            for i in 1..n {
+                for k in 1..n {
+                    let (u, v) = (i as f64 / n as f64, k as f64 / n as f64);
+                    let p = corner(0) * (1.0 - u) * (1.0 - v)
+                        + corner(1) * u * (1.0 - v)
+                        + corner(2) * u * v
+                        + corner(3) * (1.0 - u) * v;
+                    points.push(map(p));
+                }
+            }
+            let b = |i: usize, k: usize| -> u32 {
+                if k == 0 {
+                    on_edge(c0, c1, i)
+                } else if i == n {
+                    on_edge(c1, c2, k)
+                } else if k == n {
+                    on_edge(c3, c2, i)
+                } else if i == 0 {
+                    on_edge(c0, c3, k)
+                } else {
+                    interior + ((i - 1) * (n - 1) + k - 1) as u32
+                }
+            };
+            for i in 0..n {
+                for k in 0..n {
+                    polys.push(vec![b(i, k), b(i + 1, k), b(i + 1, k + 1), b(i, k + 1)]);
+                }
+            }
+            continue;
+        }
+        let (a, b, c) = (f[0], f[1], f[2]);
+        let (pa, pb, pc) = (corner(0), corner(1), corner(2));
+        // Rows r = 0..=n from apex A; P(r, 0) on A→B, P(r, r) on A→C, interior per face.
         for row in 2..n {
             for i in 1..row {
                 let flat = pa
                     + (pb - pa) * ((row - i) as f64 / n as f64)
                     + (pc - pa) * (i as f64 / n as f64);
-                points.push(on_sphere(flat));
+                points.push(map(flat));
             }
         }
         let p = |row: usize, i: usize| -> u32 {

@@ -1,0 +1,11 @@
+feature = "cylinder"
+observation = "docs/parity/cylinder.md"
+description = "Cylinder with Caps off"
+mesh = "mesh.obj"
+
+[params]
+caps = false
+
+[import]
+scale = 1.0
+flip_z = false

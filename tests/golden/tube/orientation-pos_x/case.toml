@@ -1,0 +1,11 @@
+feature = "tube"
+observation = "docs/parity/tube.md"
+description = "Tube Orientation +X"
+mesh = "mesh.obj"
+
+[params]
+orientation = "pos_x"
+
+[import]
+scale = 1.0
+flip_z = false

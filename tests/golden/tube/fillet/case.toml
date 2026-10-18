@@ -1,0 +1,11 @@
+feature = "tube"
+observation = "docs/parity/tube.md"
+description = "Tube with Fillet on (defaults)"
+mesh = "mesh.obj"
+
+[params]
+fillet = true
+
+[import]
+scale = 1.0
+flip_z = false

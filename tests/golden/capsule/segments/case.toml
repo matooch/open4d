@@ -1,0 +1,13 @@
+feature = "capsule"
+observation = "docs/parity/capsule.md"
+description = "Capsule Height Segments 3, Cap Segments 3, Rotation Segments 7"
+mesh = "mesh.obj"
+
+[params]
+height_segments = 3
+cap_segments = 3
+rotation_segments = 7
+
+[import]
+scale = 1.0
+flip_z = false
