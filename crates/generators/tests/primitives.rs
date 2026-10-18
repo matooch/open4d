@@ -47,19 +47,9 @@ fn errors_for_unknown_types_and_unimplemented_options() {
         build("forge.nope", &BTreeMap::new()),
         Err(BuildError::UnknownType(_))
     ));
-    let fillet = p(&[("fillet", Value::Bool(true))]);
-    assert!(matches!(
-        build("forge.cube", &fillet),
-        Err(BuildError::Unsupported(_))
-    ));
     let sep = p(&[("separate_surfaces", Value::Bool(true))]);
     assert!(matches!(
         build("forge.cube", &sep),
-        Err(BuildError::Unsupported(_))
-    ));
-    let ico = p(&[("type", Value::Enum("icosahedron".into()))]);
-    assert!(matches!(
-        build("forge.sphere", &ico),
         Err(BuildError::Unsupported(_))
     ));
     // hemisphere needs an even band count: 10 segments -> 5 bands
@@ -77,4 +67,38 @@ fn errors_for_unknown_types_and_unimplemented_options() {
 fn odd_segments_round_up() {
     let s = build("forge.sphere", &p(&[("segments", Value::Int(9))])).unwrap();
     assert_eq!((s.points.len(), s.polys.len()), (42, 50));
+}
+
+/// PRIMITIVES.md §2.1, §3.1: fillet and platonic meshes are closed at untested settings.
+#[test]
+fn fillet_and_platonic_meshes_are_closed() {
+    let closed = |id: &str, params: &[(&str, Value)]| {
+        let m = build(id, &p(params)).unwrap();
+        m.validate().unwrap();
+        let he = forge_geometry::HalfEdgeMesh::build(&m).unwrap();
+        assert!(he.is_closed(), "{id} {params:?}");
+    };
+    for s in [1, 2, 7] {
+        closed(
+            "forge.cube",
+            &[
+                ("fillet", Value::Bool(true)),
+                ("fillet_segments", Value::Int(s)),
+                ("segments_x", Value::Int(3)),
+                ("segments_z", Value::Int(2)),
+                ("size_y", Value::Float(80.0)),
+            ],
+        );
+    }
+    for kind in ["tetrahedron", "hexahedron", "octahedron", "icosahedron"] {
+        for segments in [3, 13] {
+            closed(
+                "forge.sphere",
+                &[
+                    ("type", Value::Enum(kind.into())),
+                    ("segments", Value::Int(segments)),
+                ],
+            );
+        }
+    }
 }

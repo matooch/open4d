@@ -4,6 +4,7 @@
 mod boole;
 mod cube;
 mod plane;
+mod platonic;
 mod sphere;
 mod subdivision;
 

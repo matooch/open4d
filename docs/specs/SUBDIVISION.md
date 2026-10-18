@@ -68,9 +68,24 @@ Order (observed, `cube-1`, `tris-1`):
 | scheme | result |
 |---|---|
 | `catmull_clark_ngons` (default), `catmull_clark` | §2 (identical on all observed cases) |
-| `osd_catmull_clark`, `osd_bilinear` | `Unsupported`: same counts and bbox as §2 but a different (OpenSubdiv) vertex and face numbering, shared by both (first face `[0, 74, 26, 81]` in `scheme-*`); not derived yet. `linear()` (face point = average, edge point = midpoint, vertices unchanged) is ready for bilinear once the order is known |
+| `osd_catmull_clark` | §2 positions in the **OpenSubdiv order** (§3.1) |
+| `osd_bilinear` | linear positions (face point = average, edge point = midpoint, vertices unchanged) in the OpenSubdiv order (§3.1) |
 | `osd_catmull_clark_adaptive` | the **input, unsubdivided** (observed: the export ignores the adaptive level) |
 | `osd_loop` | `Unsupported` (triangulates first; the split is not derived) |
+
+### 3.1 OpenSubdiv order (observed, `scheme-osd_bilinear`, `scheme-osd_catmull_clark`)
+
+Applied level by level; the input edge list is the first-appearance order with the
+first-seen direction `(a, b)`.
+- Vertices: the previous level's vertices (same order), then one face point per face
+  (face order), then one edge point per edge (edge order).
+- Faces: per face, one child per corner `k = 0, …, n−1`; child `k` keeps the parent's
+  orientation with its corner at position `k` (mod 4): `child[k] = c_k`,
+  `child[k+1] = E(c_k, c_{k+1})`, `child[k+2] = F`, `child[k+3] = E(c_{k−1}, c_k)`.
+- Edges of the new level: per face, the inner edges `(F, E(c_k, c_{k+1}))` for
+  `k = 0..n−1`; then per previous edge `(a, b)` its halves `(a, m)` and `(m, b)`.
+- Confirmed on an all-quad cube at level 2; the n-gon child rule (mod 4) and the inner
+  edges' direction (which orders level ≥ 3) are unverified (**parity-pending**).
 
 ## 4. Evaluation and display
 

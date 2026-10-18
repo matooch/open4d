@@ -307,3 +307,90 @@ pub fn subdivide_levels_with_creases(
     }
     PolyMesh { points, polys }
 }
+
+/// One step in the OpenSubdiv order (docs/specs/SUBDIVISION.md §3.1). `edges` is the
+/// current level's edge list `(a, b)`; returns the next level's mesh, creases and edges.
+fn osd_step(
+    mesh: &PolyMesh,
+    smooth: bool,
+    creases: &BTreeSet<Edge>,
+    edges: &[(u32, u32)],
+) -> (PolyMesh, BTreeSet<Edge>, Vec<(u32, u32)>) {
+    let (sub, sharp) = step(mesh, smooth, creases);
+    let (nv, nf) = (mesh.points.len(), mesh.polys.len());
+    let slot: BTreeMap<Edge, usize> = edges
+        .iter()
+        .enumerate()
+        .map(|(i, &(a, b))| (Edge::new(a, b), i))
+        .collect();
+    let fp = |f: usize| (nv + f) as u32;
+    let ep = |a: u32, b: u32| (nv + nf + slot[&Edge::new(a, b)]) as u32;
+
+    // `step` numbering (originals, then per face its face point and new edge points) → ours
+    let mut remap: Vec<u32> = (0..nv as u32).collect();
+    let mut seen = BTreeSet::new();
+    for (f, poly) in mesh.polys.iter().enumerate() {
+        remap.push(fp(f));
+        for i in 0..poly.len() {
+            let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+            if seen.insert(Edge::new(a, b)) {
+                remap.push(ep(a, b));
+            }
+        }
+    }
+    let mut points = vec![DVec3::ZERO; sub.points.len()];
+    for (i, p) in sub.points.iter().enumerate() {
+        points[remap[i] as usize] = *p;
+    }
+
+    let mut polys = Vec::with_capacity(sub.polys.len());
+    let mut next_edges = Vec::with_capacity(2 * edges.len() + sub.polys.len());
+    for (f, poly) in mesh.polys.iter().enumerate() {
+        let n = poly.len();
+        let c = |k: usize| poly[k % n];
+        for k in 0..n {
+            let mut q = [0u32; 4];
+            q[k % 4] = c(k);
+            q[(k + 1) % 4] = ep(c(k), c(k + 1));
+            q[(k + 2) % 4] = fp(f);
+            q[(k + 3) % 4] = ep(c(k + n - 1), c(k));
+            polys.push(q.to_vec());
+        }
+        next_edges.extend((0..n).map(|k| (fp(f), ep(c(k), c(k + 1)))));
+    }
+    for &(a, b) in edges {
+        let m = ep(a, b);
+        next_edges.extend([(a, m), (m, b)]);
+    }
+    let sharp = sharp
+        .iter()
+        .map(|e| Edge::new(remap[e.0 as usize], remap[e.1 as usize]))
+        .collect();
+    (PolyMesh { points, polys }, sharp, next_edges)
+}
+
+/// `levels` steps in the OpenSubdiv vertex and face order (docs/specs/SUBDIVISION.md
+/// §3.1); `smooth` false gives bilinear positions.
+pub fn subdivide_osd(
+    input: &PolyMesh,
+    levels: usize,
+    smooth: bool,
+    creases: &BTreeSet<Edge>,
+) -> PolyMesh {
+    let mut edges = Vec::new();
+    let mut seen = BTreeSet::new();
+    for poly in &input.polys {
+        for i in 0..poly.len() {
+            let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+            if seen.insert(Edge::new(a, b)) {
+                edges.push((a, b));
+            }
+        }
+    }
+    let (mut cur, mut sharp) = (input.clone(), creases.clone());
+    for _ in 0..levels {
+        let (next, next_sharp, next_edges) = osd_step(&cur, smooth, &sharp, &edges);
+        (cur, sharp, edges) = (next, next_sharp, next_edges);
+    }
+    cur
+}
