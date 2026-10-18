@@ -1,0 +1,14 @@
+feature = "symmetry"
+observation = "docs/parity/symmetry.md"
+description = "Symmetry defaults (Weld Points on) of a default cube at (100, 0, 0) touching the mirror plane"
+mesh = "mesh.obj"
+
+[params]
+
+[params.input]
+type = "cube"
+pos = [100.0, 0.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false

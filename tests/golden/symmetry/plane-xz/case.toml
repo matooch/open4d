@@ -1,0 +1,14 @@
+feature = "symmetry"
+observation = "docs/parity/symmetry.md"
+description = "Symmetry Mirror Plane XZ of a default cube at (0, 150, 0)"
+mesh = "mesh.obj"
+
+[params]
+mirror_plane = "xz"
+[params.input]
+type = "cube"
+pos = [0.0, 150.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false
