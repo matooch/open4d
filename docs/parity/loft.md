@@ -14,9 +14,11 @@ Inputs: two Circle splines as children: the first radius 200 at (0, 0, 0), the s
 Fill every parameter of the generator's main tab (label, default, min/max found by
 typing a huge and a negative value, unit, enum options). Use lowercase snake_case keys
 (suggestions below); use the same keys in `case.toml` `[params]`. Record each
-**input** object's type, parameters and transform in `case.toml` too, under
-`[input]` / `[input2]` (e.g. `type = "cube"`, `pos = [150.0, 0.0, 0.0]`, plus any
-changed params), so the input can be rebuilt exactly.
+**input** object's type, parameters and transform in `case.toml` too, as sub-tables
+`[params.input]`, `[params.input2]`, … in child order (e.g. `type = "cube"`,
+`pos = [150.0, 0.0, 0.0]`, `size_x = 50.0`; spline params with their own keys), so the
+input can be rebuilt exactly. For mesh inputs also export them as `input.obj`,
+`input2.obj`, … in the case folder.
 
 | App label | Our key | Type | Default | Min | Max | Unit shown | Notes |
 |---|---|---|---|---|---|---|---|
