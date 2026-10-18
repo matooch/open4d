@@ -85,6 +85,15 @@ Do these in order; each unblocks code that is waiting on it.
 | 15 | [tube.md](tube.md) | primitives II | 6 |
 | 16 | [capsule.md](capsule.md) | primitives II | 4 |
 | 17 | [pyramid.md](pyramid.md) | primitives II | 4 |
+| 18 | [splines.md](splines.md) | spline export, spline inputs | 6 |
+| 19 | [symmetry.md](symmetry.md) | generators II | 5 |
+| 20 | [array.md](array.md) | generators II | 4 |
+| 21 | [connect.md](connect.md) | generators II | 4 |
+| 22 | [instance.md](instance.md) | generators II | 1 |
+| 23 | [extrude.md](extrude.md) | generators II (spline input) | 6 |
+| 24 | [lathe.md](lathe.md) | generators II (spline input) | 4 |
+| 25 | [loft.md](loft.md) | generators II (spline input) | 4 |
+| 26 | [sweep.md](sweep.md) | generators II (spline input) | 5 |
 
 [TEMPLATE.md](TEMPLATE.md) is the blank form for any other feature.
 
