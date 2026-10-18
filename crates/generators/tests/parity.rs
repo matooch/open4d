@@ -9,18 +9,7 @@ use forge_parity_harness::{Mesh, compare_meshes, discover_cases};
 
 /// Cases whose options are observed but not implemented yet. A case leaving or
 /// joining this set fails the test until the list is updated.
-const UNSUPPORTED: &[&str] = &[
-    "cube/fillet",
-    "cube/fillet-segments",
-    "sphere/type-hexahedron",
-    "sphere/type-hexahedron-segments",
-    "sphere/type-icosahedron",
-    "sphere/type-icosahedron-segments",
-    "sphere/type-octahedron",
-    "sphere/type-octahedron-segments",
-    "sphere/type-tetrahedron",
-    "sphere/type-tetrahedron-segments",
-];
+const UNSUPPORTED: &[&str] = &[];
 
 fn registry() -> Registry {
     let mut r = Registry::with_builtins();
@@ -93,5 +82,5 @@ fn primitives_match_the_reference() {
     println!("matched exactly: {}", matched.join(", "));
     let expected: BTreeSet<String> = UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, expected, "unsupported set changed");
-    assert!(matched.len() >= 19, "only {} cases matched", matched.len());
+    assert!(matched.len() >= 30, "only {} cases matched", matched.len());
 }
