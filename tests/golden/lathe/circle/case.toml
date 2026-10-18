@@ -1,0 +1,16 @@
+feature = "lathe"
+observation = "docs/parity/lathe.md"
+description = "Lathe defaults of a Circle spline radius 50 at (150,0,0)"
+mesh = "mesh.obj"
+
+[params]
+
+[params.input]
+type = "circle_spline"
+radius = 50.0
+plane = "xy"
+pos = [150.0, 0.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false
