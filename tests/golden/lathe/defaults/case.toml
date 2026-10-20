@@ -1,0 +1,17 @@
+feature = "lathe"
+observation = "docs/parity/lathe.md"
+description = "Lathe defaults (360, Subdivision 24) of a Rectangle spline 100x200 at (150,0,0)"
+mesh = "mesh.obj"
+
+[params]
+
+[params.input]
+type = "rectangle_spline"
+width = 100.0
+height = 200.0
+plane = "xy"
+pos = [150.0, 0.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false

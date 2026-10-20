@@ -1,0 +1,17 @@
+feature = "array"
+observation = "docs/parity/array.md"
+description = "Array Copies 5, Radius 300 of a 50 cm cube"
+mesh = "mesh.obj"
+
+[params]
+copies = 5
+radius = 300.0
+[params.input]
+type = "cube"
+size_x = 50.0
+size_y = 50.0
+size_z = 50.0
+
+[import]
+scale = 1.0
+flip_z = false

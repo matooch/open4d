@@ -1,0 +1,10 @@
+feature = "splines"
+observation = "docs/parity/splines.md"
+description = "Default Circle spline (exports as an empty OBJ)"
+mesh = "mesh.obj"
+
+[params]
+
+[import]
+scale = 1.0
+flip_z = false

@@ -1,0 +1,17 @@
+feature = "extrude"
+observation = "docs/parity/extrude.md"
+description = "Extrude Subdivision 3 of a default Circle spline"
+mesh = "mesh.obj"
+
+[params]
+subdivision = 3
+[params.input]
+type = "circle_spline"
+radius = 200.0
+plane = "xy"
+intermediate = "adaptive"
+intermediate_angle = 5.0
+
+[import]
+scale = 1.0
+flip_z = false

@@ -1,0 +1,18 @@
+feature = "connect"
+observation = "docs/parity/connect.md"
+description = "Connect (Weld on), child order swapped: cube at (200,0,0) first, then (0,0,0)"
+mesh = "mesh.obj"
+
+[params]
+
+[params.input]
+type = "cube"
+pos = [200.0, 0.0, 0.0]
+
+[params.input2]
+type = "cube"
+pos = [0.0, 0.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false

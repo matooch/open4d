@@ -1,0 +1,23 @@
+feature = "loft"
+observation = "docs/parity/loft.md"
+description = "Loft Mesh Subdivision U 7, V 3"
+mesh = "mesh.obj"
+
+[params]
+mesh_subdivision_u = 7
+mesh_subdivision_v = 3
+[params.input]
+type = "circle_spline"
+radius = 200.0
+plane = "xz"
+pos = [0.0, 0.0, 0.0]
+
+[params.input2]
+type = "circle_spline"
+radius = 100.0
+plane = "xz"
+pos = [0.0, 200.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false

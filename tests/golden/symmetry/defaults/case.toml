@@ -1,0 +1,14 @@
+feature = "symmetry"
+observation = "docs/parity/symmetry.md"
+description = "Symmetry (defaults, Mirror Plane ZY) of a default cube at (150, 0, 0)"
+mesh = "mesh.obj"
+
+[params]
+
+[params.input]
+type = "cube"
+pos = [150.0, 0.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false

@@ -4,14 +4,19 @@
 mod boole;
 mod cube;
 mod lathe;
+mod modeling;
 mod plane;
 mod platonic;
 mod pyramid;
 mod round;
 mod sphere;
+mod spline_gens;
+pub mod splines;
 mod subdivision;
 
 pub use boole::{boole, inputs_of as boole_inputs_of};
+pub use modeling::{array, connect, inputs_of as modeling_inputs_of, symmetry};
+pub use spline_gens::{extrude, lathe, loft, spline_inputs_of, sweep};
 pub use subdivision::{input_of, subdivide, subdivide_with_creases};
 
 use std::collections::BTreeMap;
@@ -54,6 +59,17 @@ impl Plugin for Primitives {
     fn register(&self, r: &mut Registry) -> Result<(), RegistryError> {
         types().into_iter().try_for_each(|t| r.register(t))?;
         r.register(subdivision::node_type())?;
+        r.register(modeling::symmetry_type())?;
+        r.register(modeling::array_type())?;
+        r.register(modeling::connect_type())?;
+        r.register(modeling::instance_type())?;
+        r.register(splines::circle_type())?;
+        r.register(splines::rectangle_type())?;
+        r.register(splines::helix_type())?;
+        r.register(spline_gens::extrude_type())?;
+        r.register(spline_gens::lathe_type())?;
+        r.register(spline_gens::loft_type())?;
+        r.register(spline_gens::sweep_type())?;
         r.register(boole::node_type())
     }
 }
@@ -92,6 +108,13 @@ impl Params<'_> {
 
     pub(crate) fn bool(&self, id: &str) -> bool {
         matches!(self.get(id), Value::Bool(true))
+    }
+
+    pub(crate) fn link(&self, id: &str) -> Option<NodeId> {
+        match self.get(id) {
+            Value::Link(l) => l,
+            other => unreachable!("{id} is not a link: {other:?}"),
+        }
     }
 
     pub(crate) fn enumeration(&self, id: &str) -> String {
@@ -143,6 +166,12 @@ pub fn evaluate(scene: &Scene, id: NodeId) -> Result<Option<PolyMesh>, BuildErro
     if node.type_id == boole::TYPE {
         return boole::evaluate_boole(scene, id);
     }
+    if spline_gens::spline_input_count(&node.type_id).is_some() {
+        return spline_gens::evaluate_spline_gen(scene, id, &node.type_id, &node.params);
+    }
+    if modeling::input_count(&node.type_id).is_some() || node.type_id == modeling::INSTANCE {
+        return modeling::evaluate_modeling(scene, id, &node.type_id, &node.params);
+    }
     match build(&node.type_id, &node.params) {
         Ok(mesh) => Ok(Some(mesh)),
         Err(BuildError::UnknownType(_)) => Ok(None),
@@ -163,6 +192,10 @@ pub fn is_consumed(scene: &Scene, id: NodeId) -> bool {
     match p.type_id.as_str() {
         subdivision::TYPE => input_of(scene, p.id) == Some(id),
         boole::TYPE => boole::inputs_of(scene, p.id).contains(&id),
+        t if modeling::input_count(t).is_some() => modeling::inputs_of(scene, p.id).contains(&id),
+        t if spline_gens::spline_input_count(t).is_some() => {
+            spline_gens::spline_inputs_of(scene, p.id).contains(&id)
+        }
         _ => false,
     }
 }

@@ -1,0 +1,17 @@
+feature = "lathe"
+observation = "docs/parity/lathe.md"
+description = "Lathe Angle 270 (Subdivision 24) of the rectangle"
+mesh = "mesh.obj"
+
+[params]
+angle = 270.0
+[params.input]
+type = "rectangle_spline"
+width = 100.0
+height = 200.0
+plane = "xy"
+pos = [150.0, 0.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false

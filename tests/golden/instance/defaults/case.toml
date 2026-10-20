@@ -1,0 +1,15 @@
+feature = "instance"
+observation = "docs/parity/instance.md"
+description = "Instance (Instance Mode) of a default cube at the origin, instance moved to (300, 0, 0); mesh.obj = the instance's group cut from the scene export scene.obj"
+mesh = "mesh.obj"
+
+[params]
+pos = [300.0, 0.0, 0.0]
+
+[params.input]
+type = "cube"
+pos = [0.0, 0.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false

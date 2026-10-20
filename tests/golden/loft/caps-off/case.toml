@@ -1,0 +1,23 @@
+feature = "loft"
+observation = "docs/parity/loft.md"
+description = "Loft Start and End caps None"
+mesh = "mesh.obj"
+
+[params]
+cap_start = "none"
+cap_end = "none"
+[params.input]
+type = "circle_spline"
+radius = 200.0
+plane = "xz"
+pos = [0.0, 0.0, 0.0]
+
+[params.input2]
+type = "circle_spline"
+radius = 100.0
+plane = "xz"
+pos = [0.0, 200.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false

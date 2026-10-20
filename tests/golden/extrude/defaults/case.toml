@@ -1,0 +1,17 @@
+feature = "extrude"
+observation = "docs/parity/extrude.md"
+description = "Extrude defaults (Movement 0,0,20) of a default Circle spline"
+mesh = "mesh.obj"
+
+[params]
+
+[params.input]
+type = "circle_spline"
+radius = 200.0
+plane = "xy"
+intermediate = "adaptive"
+intermediate_angle = 5.0
+
+[import]
+scale = 1.0
+flip_z = false

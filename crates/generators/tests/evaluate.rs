@@ -158,3 +158,117 @@ fn boole_of_sphere_and_cube_is_closed() {
     let u = parts("union");
     assert!((u + i - vol(&sphere) - vol(&cube)).abs() < 1e-6 * vol(&cube));
 }
+
+/// GENERATORS2.md §1, §3: our own weld (the export weld hides it in the parity cases).
+#[test]
+fn symmetry_and_connect_weld_their_own_points() {
+    use std::collections::BTreeMap;
+    let mut cube = forge_generators::build("forge.cube", &BTreeMap::new()).unwrap();
+    for p in &mut cube.points {
+        p.x += 100.0; // -X face on the mirror plane
+    }
+    let weld = |on: bool, key: &str| BTreeMap::from([(key.to_string(), Value::Bool(on))]);
+    let s = forge_generators::symmetry(&cube, &weld(true, "weld_points")).unwrap();
+    assert_eq!((s.points.len(), s.polys.len()), (12, 12));
+    let s = forge_generators::symmetry(&cube, &weld(false, "weld_points")).unwrap();
+    assert_eq!((s.points.len(), s.polys.len()), (16, 12));
+
+    let mut b = cube.clone();
+    for p in &mut b.points {
+        p.x += 200.0;
+    }
+    let pair = [cube.clone(), b];
+    let c = forge_generators::connect(&pair, &weld(true, "weld")).unwrap();
+    assert_eq!((c.points.len(), c.polys.len()), (12, 11));
+    let c = forge_generators::connect(&pair, &weld(false, "weld")).unwrap();
+    assert_eq!((c.points.len(), c.polys.len()), (16, 12));
+}
+
+/// GENERATORS2.md §0, §4: modeling generators consume their inputs; instances don't.
+#[test]
+fn modeling_generators_consume_inputs_and_instances_follow_their_reference() {
+    use forge_generators::is_consumed;
+    let mut d = doc();
+    let (sym, cube, inst) = d
+        .transact("b", |tx| {
+            let sym = tx.create("forge.symmetry", None, None)?;
+            let cube = tx.create("forge.cube", Some(sym), None)?;
+            tx.set_param(cube, "transform.pos", Value::Vec3([150.0, 0.0, 0.0]))?;
+            let inst = tx.create("forge.instance", None, None)?;
+            tx.set_param(inst, "reference", Value::Link(Some(sym)))?;
+            Ok((sym, cube, inst))
+        })
+        .unwrap();
+    assert!(is_consumed(d.scene(), cube));
+    assert!(!is_consumed(d.scene(), sym));
+    let m = evaluate(d.scene(), inst).unwrap().unwrap();
+    assert_eq!(m.points.len(), 16, "instance of the symmetry result");
+    let empty = d
+        .transact("e", |tx| tx.create("forge.instance", None, None))
+        .unwrap();
+    assert!(evaluate(d.scene(), empty).unwrap().is_none());
+}
+
+#[test]
+fn instance_cycles_have_no_geometry() {
+    let mut d = doc();
+    let (a, b) = d
+        .transact("c", |tx| {
+            let a = tx.create("forge.instance", None, None)?;
+            let b = tx.create("forge.instance", None, None)?;
+            tx.set_param(a, "reference", Value::Link(Some(b)))?;
+            tx.set_param(b, "reference", Value::Link(Some(a)))?;
+            Ok((a, b))
+        })
+        .unwrap();
+    assert!(evaluate(d.scene(), a).unwrap().is_none());
+    assert!(evaluate(d.scene(), b).unwrap().is_none());
+}
+
+/// GENERATORS2.md §5–10: spline generators consume their spline children and build
+/// valid meshes; closed extrusions and lofts are closed.
+#[test]
+fn spline_generators_build_closed_meshes() {
+    use forge_generators::is_consumed;
+    let mut d = doc();
+    let (ex, circle, lathe, loft, sweep) = d
+        .transact("b", |tx| {
+            let ex = tx.create("forge.extrude", None, None)?;
+            let circle = tx.create("forge.circle_spline", Some(ex), None)?;
+            let lathe = tx.create("forge.lathe", None, None)?;
+            let rect = tx.create("forge.rectangle_spline", Some(lathe), None)?;
+            tx.set_param(rect, "width", Value::Float(100.0))?;
+            tx.set_param(rect, "transform.pos", Value::Vec3([150.0, 0.0, 0.0]))?;
+            tx.set_param(lathe, "angle", Value::Float(4.0))?;
+            let loft = tx.create("forge.loft", None, None)?;
+            for (r, y) in [(200.0, 0.0), (100.0, 200.0), (150.0, 400.0)] {
+                let c = tx.create("forge.circle_spline", Some(loft), None)?;
+                tx.set_param(c, "radius", Value::Float(r))?;
+                tx.set_param(c, "plane", Value::Enum("xz".into()))?;
+                tx.set_param(c, "transform.pos", Value::Vec3([0.0, y, 0.0]))?;
+            }
+            let sweep = tx.create("forge.sweep", None, None)?;
+            let prof = tx.create("forge.circle_spline", Some(sweep), None)?;
+            tx.set_param(prof, "radius", Value::Float(20.0))?;
+            tx.create("forge.helix_spline", Some(sweep), None)?;
+            Ok((ex, circle, lathe, loft, sweep))
+        })
+        .unwrap();
+    assert!(is_consumed(d.scene(), circle));
+    assert!(
+        evaluate(d.scene(), circle).unwrap().is_none(),
+        "splines have no mesh"
+    );
+    // the reference loft's sides are wound against its caps (as exported): valid only
+    evaluate(d.scene(), loft)
+        .unwrap()
+        .unwrap()
+        .validate()
+        .unwrap();
+    for id in [ex, lathe, sweep] {
+        let m = evaluate(d.scene(), id).unwrap().unwrap();
+        m.validate().unwrap();
+        let he = forge_geometry::HalfEdgeMesh::build(&m).unwrap();
+        assert!(he.is_closed(), "{:?}", d.scene().node(id).unwrap().type_id);
+    }
+}

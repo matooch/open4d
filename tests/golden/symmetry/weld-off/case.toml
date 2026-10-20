@@ -1,0 +1,14 @@
+feature = "symmetry"
+observation = "docs/parity/symmetry.md"
+description = "Symmetry with Weld Points off, default cube at (100, 0, 0)"
+mesh = "mesh.obj"
+
+[params]
+weld_points = false
+[params.input]
+type = "cube"
+pos = [100.0, 0.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false
