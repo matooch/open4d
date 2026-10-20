@@ -210,6 +210,31 @@ fn max_abs_diff<'a>(
         .fold(0.0, f64::max)
 }
 
+/// The reference exporter's weld (docs/specs/GENERATORS2.md §0): points equal within
+/// 1e-6 merge into their first occurrence, later points are renumbered in order, and
+/// faces keep their corners (possibly repeated).
+pub fn export_weld(mesh: &Mesh) -> Mesh {
+    let key = |p: &[f64; 3]| p.map(|c| (c * 1e6).round() as i64);
+    let mut first: std::collections::HashMap<[i64; 3], u32> = std::collections::HashMap::new();
+    let mut positions = Vec::new();
+    let remap: Vec<u32> = mesh
+        .positions
+        .iter()
+        .map(|p| {
+            *first.entry(key(p)).or_insert_with(|| {
+                positions.push(*p);
+                (positions.len() - 1) as u32
+            })
+        })
+        .collect();
+    let faces = mesh
+        .faces
+        .iter()
+        .map(|f| f.iter().map(|&i| remap[i as usize]).collect())
+        .collect();
+    Mesh { positions, faces }
+}
+
 pub fn compare_meshes(expected: &Mesh, actual: &Mesh, tol: &Tolerance) -> MeshReport {
     let mut failures = Vec::new();
     let vertex_counts = (expected.positions.len(), actual.positions.len());
