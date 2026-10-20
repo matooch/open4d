@@ -16,3 +16,6 @@ Goal: a native Linux, Rust, functional-parity reimplementation of a classic DCC 
 - Everything is a plugin-registered node (objects, generators, deformers, effectors, fields, shaders, render engines).
 - Parameters are data-driven descriptors (id, type, range, default, UI hint) so UI, undo, animation, and serialization derive from one definition.
 - Work one checklist item at a time from docs/PLAN.md; tick it only when its parity test passes.
+
+## Roles
+- Planner / observer / implementer hand-off: docs/agents/README.md. An implementer (e.g. a local model) follows docs/agents/IMPLEMENTER.md and works one brief from docs/agents/tasks/ at a time.
