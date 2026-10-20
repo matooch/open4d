@@ -7,7 +7,22 @@ use forge_core::{Document, NodeId, ParamKind, Registry, Value};
 use forge_generators::{Primitives, evaluate};
 use forge_parity_harness::{Mesh, compare_meshes, discover_cases, export_weld};
 
-const FEATURES: &[&str] = &["symmetry", "array", "connect", "instance"];
+const FEATURES: &[&str] = &[
+    "symmetry", "array", "connect", "instance", "extrude", "lathe", "loft", "sweep",
+];
+
+/// Observed cases not derived yet (GENERATORS2.md §9–10).
+const UNSUPPORTED: &[&str] = &[
+    "loft/caps-off",
+    "loft/defaults",
+    "loft/mesh-subdivision",
+    "loft/three",
+    "sweep/defaults",
+    "sweep/end-rotation",
+    "sweep/end-scale",
+    "sweep/helix",
+    "sweep/rectangle-profile",
+];
 
 fn vec3(v: &toml::Value) -> Value {
     let a = v.as_array().expect("pos is an array");
@@ -17,6 +32,15 @@ fn vec3(v: &toml::Value) -> Value {
             .unwrap()
     };
     Value::Vec3([f(0), f(1), f(2)])
+}
+
+/// Case files hold angles as typed in the app (degrees); angle params store radians.
+fn angle(desc: &forge_core::ParamDesc, v: f64) -> f64 {
+    if desc.ui.unit == forge_core::Unit::Angle {
+        v.to_radians()
+    } else {
+        v
+    }
 }
 
 /// Sets a node's params from a case table: `pos` is the position, `type` is skipped,
@@ -43,8 +67,11 @@ fn apply(
         let value = match (&desc.kind, v) {
             (ParamKind::Bool, toml::Value::Boolean(b)) => Value::Bool(*b),
             (ParamKind::Int { .. }, toml::Value::Integer(i)) => Value::Int(*i),
-            (ParamKind::Float { .. }, toml::Value::Integer(i)) => Value::Float(*i as f64),
-            (ParamKind::Float { .. }, toml::Value::Float(f)) => Value::Float(*f),
+            (ParamKind::Float { .. }, toml::Value::Integer(i)) => {
+                Value::Float(angle(desc, *i as f64))
+            }
+            (ParamKind::Float { .. }, toml::Value::Float(f)) => Value::Float(angle(desc, *f)),
+            (ParamKind::Vec3 { .. }, v @ toml::Value::Array(_)) => vec3(v),
             (ParamKind::Enum { .. }, toml::Value::String(s)) => Value::Enum(s.clone()),
             other => panic!("{type_id}.{k}: unexpected value {other:?}"),
         };
@@ -59,6 +86,7 @@ fn generators_match_the_reference() {
     let reg = Arc::new(reg);
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
     let mut matched = Vec::new();
+    let mut unsupported = std::collections::BTreeSet::new();
     for case in discover_cases(&root).unwrap() {
         if !FEATURES.contains(&case.feature.as_str()) {
             continue;
@@ -91,9 +119,16 @@ fn generators_match_the_reference() {
                 Ok(generator)
             })
             .unwrap();
-        let mesh = evaluate(doc.scene(), generator)
-            .unwrap()
-            .unwrap_or_else(|| panic!("{key}: no geometry"));
+        let mesh = match evaluate(doc.scene(), generator) {
+            Err(forge_generators::BuildError::Unsupported(what)) => {
+                println!("{key}: unsupported ({what})");
+                unsupported.insert(key);
+                continue;
+            }
+            other => other
+                .unwrap()
+                .unwrap_or_else(|| panic!("{key}: no geometry")),
+        };
         let world = doc.scene().local_transform(generator).unwrap().matrix();
         let ours = export_weld(&Mesh {
             positions: mesh
@@ -103,7 +138,7 @@ fn generators_match_the_reference() {
                 .collect(),
             faces: mesh.polys.clone(),
         });
-        let expected = case.expected_mesh().unwrap().unwrap();
+        let expected = export_weld(&case.expected_mesh().unwrap().unwrap());
         let r = compare_meshes(&expected, &ours, &m.tolerance);
         assert!(
             r.passed(),
@@ -114,5 +149,8 @@ fn generators_match_the_reference() {
         matched.push(key);
     }
     println!("matched exactly: {}", matched.join(", "));
-    assert_eq!(matched.len(), 13, "{matched:?}");
+    let want: std::collections::BTreeSet<String> =
+        UNSUPPORTED.iter().map(|s| s.to_string()).collect();
+    assert_eq!(unsupported, want, "unsupported set changed");
+    assert_eq!(matched.len(), 13 + 11, "{matched:?}");
 }

@@ -210,23 +210,42 @@ fn max_abs_diff<'a>(
         .fold(0.0, f64::max)
 }
 
-/// The reference exporter's weld (docs/specs/GENERATORS2.md §0): points equal within
-/// 1e-6 merge into their first occurrence, later points are renumbered in order, and
-/// faces keep their corners (possibly repeated).
+/// Distance under which [`export_weld`] merges points (well below the 1e-4 position
+/// tolerance, well above float noise).
+pub const WELD_TOLERANCE: f64 = 1e-6;
+
+/// Canonical weld for comparing against the reference exporter, which merges exactly
+/// equal points (docs/specs/GENERATORS2.md §0): points within [`WELD_TOLERANCE`] merge
+/// into their first occurrence, later points are renumbered in order, and faces keep
+/// their corners (possibly repeated). Applied to both sides, it also removes the
+/// reference's own near-duplicates that differ only by rounding noise.
 pub fn export_weld(mesh: &Mesh) -> Mesh {
-    let key = |p: &[f64; 3]| p.map(|c| (c * 1e6).round() as i64);
-    let mut first: std::collections::HashMap<[i64; 3], u32> = std::collections::HashMap::new();
-    let mut positions = Vec::new();
-    let remap: Vec<u32> = mesh
-        .positions
-        .iter()
-        .map(|p| {
-            *first.entry(key(p)).or_insert_with(|| {
-                positions.push(*p);
-                (positions.len() - 1) as u32
-            })
-        })
-        .collect();
+    let tol = WELD_TOLERANCE;
+    let cell = |p: &[f64; 3]| p.map(|c| (c / tol).floor() as i64);
+    let mut grid: std::collections::HashMap<[i64; 3], Vec<u32>> = std::collections::HashMap::new();
+    let mut positions: Vec<[f64; 3]> = Vec::new();
+    let mut remap = Vec::with_capacity(mesh.positions.len());
+    for p in &mesh.positions {
+        let c = cell(p);
+        let mut found = None;
+        for d in 0..27 {
+            let n = [c[0] + d % 3 - 1, c[1] + d / 3 % 3 - 1, c[2] + d / 9 - 1];
+            for &i in grid.get(&n).into_iter().flatten() {
+                let q = positions[i as usize];
+                let dist = (0..3).map(|k| (q[k] - p[k]).powi(2)).sum::<f64>().sqrt();
+                if dist <= tol && found.is_none_or(|f| i < f) {
+                    found = Some(i);
+                }
+            }
+        }
+        let i = found.unwrap_or_else(|| {
+            positions.push(*p);
+            let i = (positions.len() - 1) as u32;
+            grid.entry(c).or_default().push(i);
+            i
+        });
+        remap.push(i);
+    }
     let faces = mesh
         .faces
         .iter()
