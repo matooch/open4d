@@ -16,7 +16,7 @@ mod subdivision;
 
 pub use boole::{boole, inputs_of as boole_inputs_of};
 pub use modeling::{array, connect, inputs_of as modeling_inputs_of, symmetry};
-pub use spline_gens::{extrude, lathe, spline_inputs_of};
+pub use spline_gens::{extrude, lathe, loft, spline_inputs_of, sweep};
 pub use subdivision::{input_of, subdivide, subdivide_with_creases};
 
 use std::collections::BTreeMap;

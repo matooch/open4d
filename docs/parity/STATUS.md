@@ -25,3 +25,12 @@ Observation kit and per-feature forms: [README.md](README.md).
 | Tube primitive | docs/specs/PRIMITIVES2.md §2, §7 | tests/golden/tube (6) | crates/generators/tests/parity.rs | 6/6 exact (incl. fillet, slice) |
 | Capsule primitive | docs/specs/PRIMITIVES2.md §2, §8 | tests/golden/capsule (5) | crates/generators/tests/parity.rs | 4/5 exact; slice exact except its cut triangles (geometric match) |
 | Pyramid primitive | docs/specs/PRIMITIVES2.md §9 | tests/golden/pyramid (4) | crates/generators/tests/parity.rs | 4/4 exact |
+| Symmetry generator | docs/specs/GENERATORS2.md §0–1 | tests/golden/symmetry (5) | crates/generators/tests/generators_parity.rs | 5/5 exact (after the exporter's weld, §0) |
+| Array generator | docs/specs/GENERATORS2.md §2 | tests/golden/array (3) | crates/generators/tests/generators_parity.rs | 3/3 exact; animated wave phase not modelled |
+| Connect generator | docs/specs/GENERATORS2.md §3 | tests/golden/connect (4) | crates/generators/tests/generators_parity.rs | 4/4 exact |
+| Instance object | docs/specs/GENERATORS2.md §4 | tests/golden/instance (1) | crates/generators/tests/generators_parity.rs | 1/1 exact |
+| Spline primitives (circle, rectangle, helix) | docs/specs/GENERATORS2.md §6 | none (splines don't export, tests/golden/splines/circle) | via the generators below | circle and rectangle exact through extrude/lathe/loft/sweep; helix point rule from one case |
+| Extrude generator | docs/specs/GENERATORS2.md §7 | tests/golden/extrude (7) | crates/generators/tests/generators_parity.rs | 7/7 exact |
+| Lathe generator | docs/specs/GENERATORS2.md §8 | tests/golden/lathe (4) | crates/generators/tests/generators_parity.rs | 4/4 exact |
+| Loft generator | docs/specs/GENERATORS2.md §9 | tests/golden/loft (4) | crates/generators/tests/generators_parity.rs | 3/4: caps-off exact, defaults and three exact except cap triangles (geometric); mesh-subdivision (U = 7) known mismatch |
+| Sweep generator | docs/specs/GENERATORS2.md §10 | tests/golden/sweep (5) | crates/generators/tests/generators_parity.rs | 4/5 exact (closed paths); helix (non-planar frame) known mismatch |

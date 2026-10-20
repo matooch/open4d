@@ -58,6 +58,12 @@ reference gives no geometry, and so does a cycle of instances (an instance of an
 instance follows the chain to its first non-instance). The reference is not consumed
 (it stays visible).
 
+## 5. Spline inputs
+
+Extrude and lathe take their first spline child, sweep its first two (profile, path),
+loft all of them, in child order; each is placed by its local transform and consumed.
+Spline primitives have no mesh of their own (they are not drawn as meshes yet).
+
 ## 6. Spline primitives (`forge.circle_spline`, `forge.rectangle_spline`, `forge.helix_spline`)
 
 Splines do not export (docs/parity/splines.md); everything below is derived from the
@@ -75,9 +81,11 @@ ellipse/ring, the rectangle's rounding and the helix biases → `Unsupported`.
 - **Rectangle** `width`, `height` 400: lines through `(w/2, h/2), (−w/2, h/2),
   (−w/2, −h/2), (w/2, −h/2)`, closed (`extrude/rectangle`, `lathe/defaults`).
 - **Helix** (`start_radius`, `end_radius` 200, `start_angle` 0, `end_angle` 720°,
-  `height` 200, `subdivision` 100 per turn): an open polyline of `subdivision·turns`
-  segments, `(r cos a, r sin a, −height·s)` (rises along −Z: `sweep/helix` centre
-  z −100). **Parity-pending** beyond the point count (201).
+  `height` 200, `subdivision` 100 per turn): the points `(r cos a, r sin a, −height·s)`
+  at `s = i/(subdivision·turns)` (rises along −Z: `sweep/helix` centre z −100), joined
+  by lines, **skipping the second and the second-to-last point** (observed: the default
+  helix path has 199 points at z = 0, −2, −3, …, −198, −200). **Parity-pending** for
+  other settings.
 - **Plane:** `xy` as is; `xz` maps (x, y, z) → (x, −z, y) (the loft circles); `zy`
   (x, y, z) → (−z, y, x) (not observed).
 
@@ -121,10 +129,56 @@ The reference writes the end cap's points separately (they differ from the last 
 only by ~1e-14 and survive its exact weld); ours share the last column, and parity
 compares both sides after `export_weld` (§0).
 
+## 9. Loft (`forge.loft`)
+
+Params: `mesh_subdivision_u` 30, `mesh_subdivision_v` 10, `organic_form`, `loop`,
+`linear_interpolation` false, `subdivision_per_segment` true, caps as Extrude with
+`cap_type` default triangles; other option values, open sections and a single section
+→ `Unsupported`.
+- **Sections:** every spline child (child order), placed by its transform, sampled at
+  `U − 1` points uniform in spline parameter, `s_i = segments·i/(U − 1)` (the closed
+  seam not repeated; `loft/defaults`: none of the 29 points lands on ±200).
+  **Known mismatch:** with U = 7 the reference takes s = 0, 2/3, 1, 2, 8/3, 3 instead of
+  0, 2/3, 4/3, 2, 8/3, 10/3 (`loft/mesh-subdivision`; not understood).
+- **Between sections:** per sample index, a cubic Hermite curve through the sections'
+  samples, V rows per section pair (`t = j/V`). Tangent at an end section: the chord to
+  its neighbour; at an inner section m: the unit of `P(m+1) − P(m−1)` times the chord of
+  the segment being built (fitted to `loft/three` to 4 digits; two sections give
+  straight, evenly spaced rows).
+- **Faces:** per row pair, `[r(j,i+1), r(j+1,i+1), r(j+1,i), r(j,i)]` (wound opposite to
+  Extrude, and against the caps: the exported loft is not consistently oriented), i
+  wrapping. Caps from the first ring (wound as the ring) and the last ring
+  (reversed), triangulated by the reference with an underived method; ours ear-clip,
+  and parity compares the caps geometrically (§11).
+
+## 10. Sweep (`forge.sweep`)
+
+Params: `end_scale` 100 %, `end_rotation` 0°, `banking` true, `constant_cross_section`
+true, caps as Extrude with `cap_type` default triangles; other values → `Unsupported`.
+Inputs: the first spline child is the profile, the second the path (both placed by
+their transforms; the profile is read in its XY coordinates).
+- **Rings:** one per path point (closed paths don't repeat the first). Tangent: the
+  bisector of the unit incoming and outgoing chords (ends: the one chord). Normal: at
+  the first point away from the bend, then parallel-transported point to point;
+  binormal = tangent × normal. Profile (x, y) → `normal·x·mitre + binormal·y`.
+- **Constant cross section:** `mitre = 1/cos(half the turn)` where the path turns by 5°
+  or more, else 1 (`sweep/defaults`: rings 15–16, turning 4.6°, are not stretched; the
+  5° threshold is **parity-pending**, a chord-ratio rule would fit too).
+- **Scale and twist:** with f = length along the path / total length (closed paths
+  include the closing chord), the profile is scaled by `1 + (end_scale − 1)·f` and
+  rotated by `−end_rotation·f` before the mitre (`sweep/end-scale`, `end-rotation`).
+- **Faces:** `[g(k,i), g(k,i+1), g(k+1,i+1), g(k+1,i)]` per ring pair and profile span;
+  open paths with closed profiles get triangulated caps.
+- **Known mismatch:** along a non-planar path (`sweep/helix`) the reference's frame starts
+  0.4° tilted and twists less than parallel transport (48° against 56° over the default
+  helix); not derived.
+
 ## 11. Parity tests
 
 `crates/generators/tests/generators_parity.rs`: each case rebuilds its inputs from
 `[params.input]`, `[params.input2]`, … (`type` = a primitive id suffix, `pos` the
 position, other keys that primitive's params) in a scene, evaluates the generator, and
 compares `export_weld` of ours and of the export strictly (topology, 1e-4); its
-`UNSUPPORTED` list names the cases not derived yet.
+`KNOWN_MISMATCH` list pins the two cases above that we build but don't match, and
+`CAP_GEOMETRIC` the loft cases whose caps are compared geometrically (all points and
+every face before the caps exactly).

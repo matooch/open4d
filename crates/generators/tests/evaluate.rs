@@ -224,3 +224,51 @@ fn instance_cycles_have_no_geometry() {
     assert!(evaluate(d.scene(), a).unwrap().is_none());
     assert!(evaluate(d.scene(), b).unwrap().is_none());
 }
+
+/// GENERATORS2.md §5–10: spline generators consume their spline children and build
+/// valid meshes; closed extrusions and lofts are closed.
+#[test]
+fn spline_generators_build_closed_meshes() {
+    use forge_generators::is_consumed;
+    let mut d = doc();
+    let (ex, circle, lathe, loft, sweep) = d
+        .transact("b", |tx| {
+            let ex = tx.create("forge.extrude", None, None)?;
+            let circle = tx.create("forge.circle_spline", Some(ex), None)?;
+            let lathe = tx.create("forge.lathe", None, None)?;
+            let rect = tx.create("forge.rectangle_spline", Some(lathe), None)?;
+            tx.set_param(rect, "width", Value::Float(100.0))?;
+            tx.set_param(rect, "transform.pos", Value::Vec3([150.0, 0.0, 0.0]))?;
+            tx.set_param(lathe, "angle", Value::Float(4.0))?;
+            let loft = tx.create("forge.loft", None, None)?;
+            for (r, y) in [(200.0, 0.0), (100.0, 200.0), (150.0, 400.0)] {
+                let c = tx.create("forge.circle_spline", Some(loft), None)?;
+                tx.set_param(c, "radius", Value::Float(r))?;
+                tx.set_param(c, "plane", Value::Enum("xz".into()))?;
+                tx.set_param(c, "transform.pos", Value::Vec3([0.0, y, 0.0]))?;
+            }
+            let sweep = tx.create("forge.sweep", None, None)?;
+            let prof = tx.create("forge.circle_spline", Some(sweep), None)?;
+            tx.set_param(prof, "radius", Value::Float(20.0))?;
+            tx.create("forge.helix_spline", Some(sweep), None)?;
+            Ok((ex, circle, lathe, loft, sweep))
+        })
+        .unwrap();
+    assert!(is_consumed(d.scene(), circle));
+    assert!(
+        evaluate(d.scene(), circle).unwrap().is_none(),
+        "splines have no mesh"
+    );
+    // the reference loft's sides are wound against its caps (as exported): valid only
+    evaluate(d.scene(), loft)
+        .unwrap()
+        .unwrap()
+        .validate()
+        .unwrap();
+    for id in [ex, lathe, sweep] {
+        let m = evaluate(d.scene(), id).unwrap().unwrap();
+        m.validate().unwrap();
+        let he = forge_geometry::HalfEdgeMesh::build(&m).unwrap();
+        assert!(he.is_closed(), "{:?}", d.scene().node(id).unwrap().type_id);
+    }
+}

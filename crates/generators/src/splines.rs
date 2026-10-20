@@ -281,8 +281,12 @@ pub fn build_curve(type_id: &str, values: &BTreeMap<String, Value>) -> Result<Cu
                 let (a, r) = (a0 + (a1 - a0) * s, r0 + (r1 - r0) * s);
                 DVec3::new(r * a.cos(), r * a.sin(), -p.float("height") * s)
             };
+            // Observed (`sweep/helix`): the points next to both ends are skipped.
+            let keep: Vec<usize> = (0..=n)
+                .filter(|&i| n < 4 || (i != 1 && i != n - 1))
+                .collect();
             Curve {
-                segments: (0..n).map(|i| line(pt(i), pt(i + 1))).collect(),
+                segments: keep.windows(2).map(|w| line(pt(w[0]), pt(w[1]))).collect(),
                 linear: true,
                 closed: false,
             }

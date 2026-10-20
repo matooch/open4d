@@ -5,24 +5,25 @@ use std::sync::Arc;
 
 use forge_core::{Document, NodeId, ParamKind, Registry, Value};
 use forge_generators::{Primitives, evaluate};
-use forge_parity_harness::{Mesh, compare_meshes, discover_cases, export_weld};
+use forge_parity_harness::{
+    Mesh, Tolerance, compare_geometric, compare_meshes, discover_cases, export_weld,
+};
 
 const FEATURES: &[&str] = &[
     "symmetry", "array", "connect", "instance", "extrude", "lathe", "loft", "sweep",
 ];
 
-/// Observed cases not derived yet (GENERATORS2.md §9–10).
-const UNSUPPORTED: &[&str] = &[
-    "loft/caps-off",
-    "loft/defaults",
-    "loft/mesh-subdivision",
-    "loft/three",
-    "sweep/defaults",
-    "sweep/end-rotation",
-    "sweep/end-scale",
-    "sweep/helix",
-    "sweep/rectangle-profile",
-];
+/// Observed cases not derived yet.
+const UNSUPPORTED: &[&str] = &[];
+
+/// Cases we build but that differ, pinned so a fix shows up (GENERATORS2.md §9–10: a
+/// 6-point loft section snaps two samples to segment starts; the sweep frame along a
+/// non-planar path twists less than parallel transport). Not understood yet.
+const KNOWN_MISMATCH: &[&str] = &["loft/mesh-subdivision", "sweep/helix"];
+
+/// Cases whose caps the reference triangulates with an underived method (GENERATORS2.md
+/// §9–10): exact except the trailing cap triangles, plus a geometric comparison.
+const CAP_GEOMETRIC: &[&str] = &["loft/defaults", "loft/three"];
 
 fn vec3(v: &toml::Value) -> Value {
     let a = v.as_array().expect("pos is an array");
@@ -139,6 +140,20 @@ fn generators_match_the_reference() {
             faces: mesh.polys.clone(),
         });
         let expected = export_weld(&case.expected_mesh().unwrap().unwrap());
+        if KNOWN_MISMATCH.contains(&key.as_str()) {
+            let r = compare_meshes(&expected, &ours, &m.tolerance);
+            assert!(
+                !r.passed(),
+                "{key} matches now: remove it from KNOWN_MISMATCH"
+            );
+            println!("{key}: known mismatch");
+            continue;
+        }
+        if CAP_GEOMETRIC.contains(&key.as_str()) {
+            check_cap_geometric(&key, &expected, &ours, &m.tolerance);
+            matched.push(key);
+            continue;
+        }
         let r = compare_meshes(&expected, &ours, &m.tolerance);
         assert!(
             r.passed(),
@@ -152,5 +167,38 @@ fn generators_match_the_reference() {
     let want: std::collections::BTreeSet<String> =
         UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 13 + 11, "{matched:?}");
+    assert_eq!(matched.len(), 13 + 11 + 7, "{matched:?}");
+}
+
+/// Exact positions and faces up to a trailing run of triangles in both meshes (the
+/// caps), and a geometric match of those caps.
+fn check_cap_geometric(key: &str, expected: &Mesh, ours: &Mesh, tol: &Tolerance) {
+    let points = |m: &Mesh| Mesh {
+        positions: m.positions.clone(),
+        faces: Vec::new(),
+    };
+    let same = compare_meshes(&points(expected), &points(ours), tol);
+    assert!(same.passed(), "{key}: {:?}", same.failures);
+    assert_eq!(expected.faces.len(), ours.faces.len(), "{key}: face count");
+    let first_diff = expected
+        .faces
+        .iter()
+        .zip(&ours.faces)
+        .position(|(a, b)| a != b)
+        .unwrap_or(expected.faces.len());
+    for m in [expected, ours] {
+        assert!(
+            m.faces[first_diff..].iter().all(|f| f.len() == 3),
+            "{key}: faces differ before the caps (face {first_diff}: expected {:?}, got {:?})",
+            expected.faces.get(first_diff),
+            ours.faces.get(first_diff)
+        );
+    }
+    // everything before the caps matched exactly; compare the caps as surfaces
+    let caps = |m: &Mesh| Mesh {
+        positions: m.positions.clone(),
+        faces: m.faces[first_diff..].to_vec(),
+    };
+    let r = compare_geometric(&caps(expected), &caps(ours), tol);
+    assert!(r.passed(), "{key}: {:?}", r.failures);
 }

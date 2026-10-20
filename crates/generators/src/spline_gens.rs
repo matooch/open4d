@@ -272,7 +272,238 @@ pub(crate) fn evaluate_spline_gen(
     match type_id {
         EXTRUDE => extrude(first, values).map(Some),
         LATHE => lathe(first, values).map(Some),
-        LOFT => Err(BuildError::Unsupported("loft")),
-        _ => Err(BuildError::Unsupported("sweep")),
+        LOFT => loft(&curves, values).map(Some),
+        _ if curves.len() < 2 => Ok(None),
+        _ => sweep(&curves[0], &curves[1], values).map(Some),
     }
+}
+
+/// Start and end caps of a ring `q` (closed outline) as ear-clipped triangles: the
+/// start wound like `q`, the end reversed (§9, §10; the reference's own triangulation
+/// is not derived).
+fn triangle_caps(points: &[DVec3], start: &[u32], end: &[u32], p: &Params) -> Vec<Vec<u32>> {
+    let mut out = Vec::new();
+    if p.enumeration("cap_start") == "cap" {
+        out.extend(
+            triangulate_poly(points, start)
+                .into_iter()
+                .map(|t| t.to_vec()),
+        );
+    }
+    if p.enumeration("cap_end") == "cap" {
+        let rev: Vec<u32> = end.iter().rev().copied().collect();
+        out.extend(
+            triangulate_poly(points, &rev)
+                .into_iter()
+                .map(|t| t.to_vec()),
+        );
+    }
+    out
+}
+
+/// Loft (§9): closed sections sampled uniformly in spline parameter, joined by cubic
+/// Hermite curves per sample.
+pub fn loft(curves: &[Curve], values: &BTreeMap<String, Value>) -> Result<PolyMesh, BuildError> {
+    let ty = loft_type();
+    let p = Params { ty: &ty, values };
+    no_fillets(&p)?;
+    if p.bool("organic_form")
+        || p.bool("loop")
+        || p.bool("linear_interpolation")
+        || !p.bool("subdivision_per_segment")
+    {
+        return Err(BuildError::Unsupported(
+            "loft options other than the defaults",
+        ));
+    }
+    if curves.len() < 2 {
+        return Err(BuildError::Unsupported("loft of one section"));
+    }
+    if curves.iter().any(|c| !c.closed) {
+        return Err(BuildError::Unsupported("loft of open sections"));
+    }
+    let u = p.int("mesh_subdivision_u") - 1;
+    let v = p.int("mesh_subdivision_v");
+    let sections: Vec<Vec<DVec3>> = curves
+        .iter()
+        .map(|c| {
+            let segs = c.segments.len() as f64;
+            (0..u).map(|i| c.at(segs * i as f64 / u as f64)).collect()
+        })
+        .collect();
+    let s = sections.len();
+    // per sample index, its point in every section
+    let columns: Vec<Vec<DVec3>> = (0..u)
+        .map(|i| sections.iter().map(|sec| sec[i]).collect())
+        .collect();
+    let mut points = Vec::with_capacity(u * ((s - 1) * v + 1));
+    for k in 0..s - 1 {
+        let last = if k == s - 2 { v } else { v - 1 };
+        for j in 0..=last {
+            let t = j as f64 / v as f64;
+            let (h00, h10, h01, h11) = (
+                1.0 - 3.0 * t * t + 2.0 * t * t * t,
+                t - 2.0 * t * t + t * t * t,
+                3.0 * t * t - 2.0 * t * t * t,
+                t * t * t - t * t,
+            );
+            for column in &columns {
+                let pt = |m: usize| column[m];
+                let (p0, p1) = (pt(k), pt(k + 1));
+                // Tangent at section m, scaled to the chord of the segment it serves.
+                let tangent = |m: usize, chord: f64| {
+                    let dir = if m == 0 {
+                        pt(1) - pt(0)
+                    } else if m == s - 1 {
+                        pt(m) - pt(m - 1)
+                    } else {
+                        pt(m + 1) - pt(m - 1)
+                    };
+                    dir.normalize_or_zero() * chord
+                };
+                let chord = (p1 - p0).length();
+                let m0 = tangent(k, chord);
+                let m1 = tangent(k + 1, chord);
+                points.push(p0 * h00 + m0 * h10 + p1 * h01 + m1 * h11);
+            }
+        }
+    }
+    let rows = points.len() / u;
+    let r = |j: usize, i: usize| (j * u + i % u) as u32;
+    let mut polys = Vec::new();
+    for j in 0..rows - 1 {
+        for i in 0..u {
+            polys.push(vec![r(j, i + 1), r(j + 1, i + 1), r(j + 1, i), r(j, i)]);
+        }
+    }
+    let start: Vec<u32> = (0..u).map(|i| r(0, i)).collect();
+    let end: Vec<u32> = (0..u).map(|i| r(rows - 1, i)).collect();
+    polys.extend(triangle_caps(&points, &start, &end, &p));
+    Ok(PolyMesh { points, polys })
+}
+
+/// Sweep (§10): the profile placed at every path point in a mitred, parallel-transported
+/// frame, scaled and twisted linearly towards the path end.
+pub fn sweep(
+    profile: &Curve,
+    path: &Curve,
+    values: &BTreeMap<String, Value>,
+) -> Result<PolyMesh, BuildError> {
+    let ty = sweep_type();
+    let p = Params { ty: &ty, values };
+    no_fillets(&p)?;
+    if !p.bool("banking") || !p.bool("constant_cross_section") {
+        return Err(BuildError::Unsupported(
+            "sweep options other than the defaults",
+        ));
+    }
+    let shape = profile.points(5f64.to_radians());
+    let route = path.points(5f64.to_radians());
+    let (n, m) = (route.len(), shape.len());
+    if n < 2 {
+        return Err(BuildError::Unsupported("sweep along a single point"));
+    }
+    let closed = path.closed;
+    let unit = |a: DVec3, b: DVec3| (b - a).normalize_or_zero();
+    let (incoming, outgoing): (Vec<Option<DVec3>>, Vec<Option<DVec3>>) = (0..n)
+        .map(|k| {
+            let prev = if k > 0 {
+                Some(route[k - 1])
+            } else if closed {
+                Some(route[n - 1])
+            } else {
+                None
+            };
+            let next = if k + 1 < n {
+                Some(route[k + 1])
+            } else if closed {
+                Some(route[0])
+            } else {
+                None
+            };
+            (
+                prev.map(|q| unit(q, route[k])),
+                next.map(|q| unit(route[k], q)),
+            )
+        })
+        .unzip();
+    let tangents: Vec<DVec3> = (0..n)
+        .map(|k| match (incoming[k], outgoing[k]) {
+            (Some(a), Some(b)) => (a + b).normalize_or_zero(),
+            (Some(a), None) => a,
+            (None, Some(b)) => b,
+            (None, None) => DVec3::Y,
+        })
+        .collect();
+    // Initial normal: away from the bend at the first point, else any perpendicular.
+    let bend = match (incoming[0], outgoing[0]) {
+        (Some(a), Some(b)) => a - b,
+        _ => outgoing[1.min(n - 1)]
+            .zip(incoming[1.min(n - 1)])
+            .map_or(DVec3::ZERO, |(b, a)| a - b),
+    };
+    let t0 = tangents[0];
+    let mut normal = (bend - t0 * bend.dot(t0)).normalize_or_zero();
+    if normal == DVec3::ZERO {
+        normal = t0.any_orthonormal_vector();
+    }
+    let (end_scale, end_rotation) = (p.float("end_scale") / 100.0, p.float("end_rotation"));
+    // Scale and twist spread by length along the path (closed: the closing chord counts).
+    let mut along = vec![0.0; n];
+    for k in 1..n {
+        along[k] = along[k - 1] + (route[k] - route[k - 1]).length();
+    }
+    let total = along[n - 1]
+        + if closed {
+            (route[0] - route[n - 1]).length()
+        } else {
+            0.0
+        };
+    let mut points = Vec::with_capacity(n * m);
+    for k in 0..n {
+        let t = tangents[k];
+        if k > 0 {
+            // parallel transport of the normal from the previous tangent to this one
+            let q = glam::DQuat::from_rotation_arc(tangents[k - 1], t);
+            normal = (q * normal).normalize_or_zero();
+        }
+        let binormal = t.cross(normal);
+        // Constant cross section: stretch along the bend by 1/cos(half turn), but only
+        // where the path turns by 5° or more (observed: rings 15 and 16 of
+        // `sweep/defaults`, turning 4.6°, are not stretched).
+        let mitre = match (incoming[k], outgoing[k]) {
+            (Some(a), Some(b)) if a.angle_between(b) >= 5f64.to_radians() - 1e-9 => {
+                1.0 / t.dot(b).max(1e-6)
+            }
+            _ => 1.0,
+        };
+        let f = if total > 0.0 { along[k] / total } else { 0.0 };
+        let scale = 1.0 + (end_scale - 1.0) * f;
+        let (s, c) = (-end_rotation * f).sin_cos();
+        points.extend(shape.iter().map(|q| {
+            let (x, y) = (q.x * scale, q.y * scale);
+            let (x, y) = (x * c - y * s, x * s + y * c);
+            route[k] + normal * (x * mitre) + binormal * y
+        }));
+    }
+    let ring = |k: usize, i: usize| ((k % n) * m + i % m) as u32;
+    let spans = if profile.closed { m } else { m - 1 };
+    let rings = if closed { n } else { n - 1 };
+    let mut polys = Vec::new();
+    for k in 0..rings {
+        for i in 0..spans {
+            polys.push(vec![
+                ring(k, i),
+                ring(k, i + 1),
+                ring(k + 1, i + 1),
+                ring(k + 1, i),
+            ]);
+        }
+    }
+    if !closed && profile.closed {
+        let start: Vec<u32> = (0..m).rev().map(|i| ring(0, i)).collect();
+        let end: Vec<u32> = (0..m).rev().map(|i| ring(n - 1, i)).collect();
+        polys.extend(triangle_caps(&points, &start, &end, &p));
+    }
+    Ok(PolyMesh { points, polys })
 }
