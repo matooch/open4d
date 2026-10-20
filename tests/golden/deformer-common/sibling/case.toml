@@ -1,0 +1,30 @@
+feature = "deformer-common"
+observation = "docs/parity/deformer-common.md"
+description = "Null > Cube, Bend (90): Bend is a sibling of the cube under a Null"
+mesh = "mesh.obj"
+
+[params]
+hierarchy = "Null > Cube, Bend"
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+parent = "null"
+
+[params.input2]
+type = "bend"
+strength = 90.0
+size = [250.0, 250.0, 250.0]
+mode = "limited"
+angle = 0.0
+keep_y_axis_length = false
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+parent = "null"
+
+[import]
+scale = 1.0
+flip_z = false

@@ -1,0 +1,30 @@
+feature = "deformer-common"
+observation = "docs/parity/deformer-common.md"
+description = "Cube > Bend (90) with the Bend disabled (green tick off)"
+mesh = "mesh.obj"
+
+[params]
+hierarchy = "Cube > Bend (disabled)"
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[params.input2]
+type = "bend"
+strength = 90.0
+size = [250.0, 250.0, 250.0]
+mode = "limited"
+angle = 0.0
+keep_y_axis_length = false
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+parent = "input"
+enabled = false
+
+[import]
+scale = 1.0
+flip_z = false
