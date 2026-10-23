@@ -45,14 +45,22 @@ Status: draft · Source: docs/parity/{bend,twist,deformer-common,taper,bulge,she
     (359.15, 259.15, 100)). A deformer that only scales or offsets (§3–§5) has no
     tangent to travel along: it holds the value at `t = 1` above the box, which is why
     Taper keeps its top scale there (`taper/strength`).
-  - `within_box`: only points inside the box deform, everything else is unchanged
-    (`bend/mode-box`, `twist/mode-box`: the part above the box is not carried along).
+  - `within_box`: only points inside the box deform, everything else is unchanged —
+    on **all three axes**: `|x| ≤ size_x/2`, `|y| ≤ size_y/2`, `|z| ≤ size_z/2`
+    (`bend/mode-box`, `twist/mode-box`: the part above the box is not carried along;
+    `bend/mode-box-narrow-x`: the `x = ±100` columns stay unmoved while `|x| ≤ 50`
+    bends; `bend/mode-box-narrow-z`: all 90 vertices at `|z| = 100` exactly unmoved,
+    versus the 40 in `bend/mode-box` that are outside in y as well). One exception:
+    the whole deformation is **suppressed** when the box spans the parent object's x/z
+    extent in neither axis (`bend/mode-box-narrow`: size (100, 250, 100) against the
+    200 × 400 × 200 cube → the undeformed cube, although points lie inside the box;
+    with a (100, 400, 100) cube the box (120, 250, 150) does deform, so the threshold
+    follows the object's extent, not an absolute size). In `limited` the box's x/z
+    size is ignored (`deformer-common/on-plane`: points with |x|, |z| > 125 deform
+    normally).
   - `unlimited`: the same rate continues below and above the box
     (`bend/mode-unlimited`: min y −299.40 = the arc at t = −0.3; `twist/mode-unlimited`:
     the corner (−100, −200, −100) → (−134.50, −200, −43.70) = a −27° turn).
-- Whether `within_box` also gates on x and z is **parity-pending**: the observed objects
-  are narrower than the box in x/z except `deformer-common/on-plane`, where points with
-  |x|, |z| > 125 deform normally in `limited`.
 - Rotation about the deformer's Y axis used by all deformers (left-handed export
   coordinates, sense fixed by `twist/angle`: (−100, 0, −100) → (0, 0, −141.42)):
   `R(θ)(x, z) = (x·cos θ − z·sin θ, x·sin θ + z·cos θ)`, y unchanged.
@@ -91,7 +99,8 @@ radius
 R = h/α + (keep_y_axis_length ? 0 : size_x/2)
 ```
 
-(`α = 0` → no deformation). The bend happens in the (x, y) plane, z carried through;
+(`α = 0` → no deformation, confirmed by `bend/strength-zero`: strength 0° with angle 45°
+exports the undeformed cube). The bend happens in the (x, y) plane, z carried through;
 the neutral line (x = 0) follows the circle with centre `C = (R, −h/2)` and radius `R`:
 
 ```
@@ -144,9 +153,12 @@ matches with the same `R`.
 | `keep-length` | `R = h/α`, no `size_x/2` (bbox max (234.155, 134.155)) |
 | `moved` | the inverse deformer transform: box at world y −25…225 (max (255.35, 354.43)) |
 | `rotated` | bank 90°: the bend frame follows the deformer's transform |
+| `mode-box-narrow` | box (100, 250, 100): `within_box` suppressed entirely (undeformed cube) — the box spans the object's x/z extent in neither axis |
+| `mode-box-narrow-x` | box (100, 250, 250): `within_box` gates per point on x (outer columns unmoved, inner bent to x 184.26) |
+| `mode-box-narrow-z` | box (250, 250, 100): `within_box` gates per point on z (same bbox as `mode-box`, z = ±100 columns unmoved) |
+| `strength-zero` | α = 0 with angle 45° → the undeformed cube: a zero strength means no deformation regardless of the angle |
 
-`α = 0` with `angle ≠ 0` was never observed; a zero strength is treated as "no
-deformation" (**parity-pending**).
+`within_box` details (suppression and per-point x/z gating) are §0.
 
 ## 2. Twist (`forge.twist`)
 
@@ -359,18 +371,20 @@ is byte-identical to `defaults`; `spherify/moved` centres the sphere on (50, 100
 
 ## 9. Parity
 
-Test: `crates/modifiers/tests/deformers_parity.rs` — features `bend` (11 cases),
+Test: `crates/modifiers/tests/deformers_parity.rs` — features `bend` (14 cases),
 `twist` (7), `deformer-common` (6), `taper` (8), `bulge` (7), `shear` (7) and
-`spherify` (5) — 51 in all — are rebuilt from their `case.toml` (`parent`, `hierarchy`,
+`spherify` (5) — 54 in all — are rebuilt from their `case.toml` (`parent`, `hierarchy`,
 `rot` degrees HPB, vec3 `size` are the keys the batch added; `level` maps to
 `level_view`) and compared with `export_weld` on both sides (GENERATORS2 §0).
 
 - `UNSUPPORTED`: none.
-- `KNOWN_MISMATCH`: none.
+- `KNOWN_MISMATCH` (observed, not derived yet): `bend/mode-box-narrow`,
+  `bend/mode-box-narrow-x`, `bend/mode-box-narrow-z` — our `within_box` gates only on
+  y (§0); the observed mode gates per point on x/y/z and suppresses the whole
+  deformation when the box spans the object's x/z extent in neither axis.
 - Evaluation order and placement rules are §0; the modifier maths are §1–§6.
 - Parity-pending (implemented, seen in one configuration only): sibling deformers below
-  the object (§0), `within_box` gating only on y (§0),
-  zero strength with a non-zero `angle` (§1), `fillet` together with
+  the object (§0), `fillet` together with
   `curvature < 100` (§3, §4, §5 — the one fillet case has curvature 100, so "fillet
   replaces the blend" and "fillet blends into it" cannot be told apart), the curvature
   blend extrapolated *below* the box in `unlimited` (§3–§5 — every unlimited case has

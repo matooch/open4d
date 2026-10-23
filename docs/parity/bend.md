@@ -66,6 +66,10 @@ Enum options (label → our key): `Limited` → `limited` (default), `Within Box
 | keep-length | strength = 90°, Keep Y-Axis Length **on** (it is off by default, so every other case has it off) | 162 / 160 (4-gons 160) / size (334.1549377441406, 334.1549377441406, 200), centre (67.07746887207031, -32.92253112792969, 0); bbox min (-100, -200, -100), max (234.15493774414063, 134.15493774414063, 100) | smaller result than `strength` |
 | moved | strength = 90°, deformer position (0, 100, 0) | 162 / 160 (4-gons 160) / size (355.3467559814453, 554.4253540039063, 200), centre (77.67337799072266, 77.21267700195313, 0); bbox min (-100, -200, -100), max (255.3467559814453, 354.42535400390625, 100) | same X extent as mode-box |
 | rotated | strength = 90°, deformer rotation H 0, P 0, B 90 | 162 / 160 (4-gons 160) / size (465.0294494628906, 465.0294494628906, 200), centre (120.67945861816406, -38.47547912597656, 0); bbox min (-111.83526611328125, -270.9902038574219, -100), max (353.1941833496094, 194.03924560546875, 100) | the bend follows the deformer's rotation |
+| mode-box-narrow | strength = 90°, mode = Within Box, size = (100, 250, 100) | 162 / 160 (4-gons 160) / size (200, 400, 200), centre (0, 0, 0); bbox min (-100, -200, -100), max (100, 200, 100); normals 6, uvs 45 | the box is narrower than the cube in x **and** z: the export is the **undeformed cube** (= `input.obj`), even though points with \|x\| ≤ 50, \|z\| ≤ 50, \|y\| ≤ 125 lie inside the box |
+| mode-box-narrow-x | strength = 90°, mode = Within Box, size = (100, 250, 250) | 162 / 160 (4-gons 160) / size (284.25762939453125, 400, 200), centre (42.128814697265625, 0, 0); bbox min (-100, -200, -100), max (184.25762939453125, 200, 100) | narrower in x only: **per-point x gating** — the \|x\| ≤ 50 columns bend (X max 184.26), the x = ±100 columns stay completely unmoved (X min −100, Y max 200) |
+| mode-box-narrow-z | strength = 90°, mode = Within Box, size = (250, 250, 100) | 162 / 160 (4-gons 160) / size (355.3467559814453, 454.42535400390625, 200), centre (77.67337799072266, 27.212677001953125, 0); bbox min (-100, -200, -100), max (255.3467559814453, 254.42535400390625, 100) | narrower in z only: same bbox as `mode-box` (same size_x → same R), but **per-point z gating** — all 90 vertices at \|z\| = 100 exactly are unmoved (`mode-box` has only the 40 outside the box) |
+| strength-zero | strength = **0°**, angle = 45° | 162 / 160 (4-gons 160) / size (200, 400, 200), centre (0, 0, 0); bbox min (-100, -200, -100), max (100, 200, 100); normals 6, uvs 45 | α = 0 with angle ≠ 0: the export is the undeformed cube — a zero strength means no deformation regardless of the angle |
 
 ## Behaviour notes
 - What the deformer's default Size is, and whether "Fit to Parent" (if offered) was
@@ -78,3 +82,16 @@ Enum options (label → our key): `Limited` → `limited` (default), `Within Box
   along rigidly; Within Box deforms only the points inside the box; Unlimited bends every
   point along the arc. The deformation is in the OBJ export itself. Strength and Angle
   had no clamp at ±99999; Size clamps at 0.
+- **Within Box gates per point on all three axes** (`mode-box-narrow-x`,
+  `mode-box-narrow-z`, 2026-10-23): only points with |x| ≤ size_x/2 **and**
+  |y| ≤ size_y/2 **and** |z| ≤ size_z/2 deform. In `mode-box-narrow-z` all 90 vertices
+  at |z| = 100 exactly keep their original coordinates; `mode-box` (full box) has only
+  the 40 that are also outside in y.
+- **The whole deformation is suppressed when the box spans the parent object's x/z
+  extent in neither axis** (exported: `mode-box-narrow`; interactive sweep with the
+  200 × 400 × 200 cube: (100, 250, 150), (100, 250, 125), (50, 250, 150),
+  (120, 250, 190) and (120, 250, 150) leave the cube undeformed — points inside the box
+  and all — while (100, 250, 200), (150, 250, 250) and (250, 250, 150) deform). The
+  threshold follows the object, not an absolute size: a cube of (100, 400, 100) with
+  box (120, 250, 150) bends (interactive, verified by panel + viewport crops).
+- α = 0 (`strength-zero`): strength 0 with angle 45° exports the undeformed cube.

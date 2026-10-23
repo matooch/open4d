@@ -1,0 +1,24 @@
+feature = "bend"
+observation = "docs/parity/bend.md"
+description = "Bend strength 90, mode Within Box, size (100, 250, 100) (box narrower than the cube in x and z): no deformation at all"
+mesh = "mesh.obj"
+
+[params]
+strength = 90.0
+size = [100.0, 250.0, 100.0]
+mode = "within_box"
+angle = 0.0
+keep_y_axis_length = false
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false
