@@ -95,7 +95,7 @@ Do these in order; each unblocks code that is waiting on it.
 | 25 | [loft.md](loft.md) | generators II (spline input) | 4 |
 | 26 | [sweep.md](sweep.md) | generators II (spline input) | 5 |
 | 27 | [deformer-common.md](deformer-common.md) | deformer stack and placement rules | 6 |
-| 28 | [bend.md](bend.md) | deformers | 10 |
+| 28 | [bend.md](bend.md) | deformers | 11 |
 | 29 | [twist.md](twist.md) | deformers | 7 |
 | 30 | [taper.md](taper.md) | deformers | 7 |
 | 31 | [bulge.md](bulge.md) | deformers | 6 |

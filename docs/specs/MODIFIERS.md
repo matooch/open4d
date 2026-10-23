@@ -123,9 +123,11 @@ face** instead of on the centre line, so the shape stretches:
 - `deformer-common/on-plane` (plane at y = 0, t = 0.5, φ = 45°): (−200, 0, −200) →
   (−58.19, 217.35, −200), computed with `R = 284.1549`.
 
-Every case has `size_x = size_z`, so whether the term is `size_x/2`, `size_z/2` or
-`(size_x + size_z)/4` cannot be told apart from the data: **parity-pending**, `size_x/2`
-is used. It does not depend on `angle`: `bend/angle` matches with the same `R`.
+`bend/size-nonuniform` (size (300, 250, 100), h = 250) settles the term: `R = 159.155 +
+150 = 309.155` → bbox max (384.155, 284.155), which matches `size_x/2` and rules out
+`size_z/2` (`R` = 209.155 → max (284.155, 184.155)) and `(size_x + size_z)/4`
+(`R` = 259.155 → max (334.155, 234.155)). It does not depend on `angle`: `bend/angle`
+matches with the same `R`.
 
 ### Cases (all cite their golden folder)
 
@@ -138,6 +140,7 @@ is used. It does not depend on `angle`: `bend/angle` matches with the same `R`.
 | `mode-unlimited` | t extrapolates below the box (min y −299.40, min x −95.27) |
 | `mode-box` | only in-box points deform (max (255.35, 254.43): the vertex at y = 100, φ = 81°) |
 | `size` | the box (100, 200, 100) drives `h` and the `size_x/2` term |
+| `size-nonuniform` | box (300, 250, 100): the half-size term is `size_x/2`, not `size_z/2` or `(size_x+size_z)/4` (max (384.155, 284.155)) |
 | `keep-length` | `R = h/α`, no `size_x/2` (bbox max (234.155, 134.155)) |
 | `moved` | the inverse deformer transform: box at world y −25…225 (max (255.35, 354.43)) |
 | `rotated` | bank 90°: the bend frame follows the deformer's transform |
@@ -356,17 +359,17 @@ is byte-identical to `defaults`; `spherify/moved` centres the sphere on (50, 100
 
 ## 9. Parity
 
-Test: `crates/modifiers/tests/deformers_parity.rs` — features `bend` (10 cases),
+Test: `crates/modifiers/tests/deformers_parity.rs` — features `bend` (11 cases),
 `twist` (7), `deformer-common` (6), `taper` (8), `bulge` (7), `shear` (7) and
-`spherify` (5) — 50 in all — are rebuilt from their `case.toml` (`parent`, `hierarchy`,
+`spherify` (5) — 51 in all — are rebuilt from their `case.toml` (`parent`, `hierarchy`,
 `rot` degrees HPB, vec3 `size` are the keys the batch added; `level` maps to
 `level_view`) and compared with `export_weld` on both sides (GENERATORS2 §0).
 
 - `UNSUPPORTED`: none.
 - `KNOWN_MISMATCH`: none.
 - Evaluation order and placement rules are §0; the modifier maths are §1–§6.
-- Parity-pending (implemented, seen in one configuration only): the `size_x/2` term of
-  `R` (§1), sibling deformers below the object (§0), `within_box` gating only on y (§0),
+- Parity-pending (implemented, seen in one configuration only): sibling deformers below
+  the object (§0), `within_box` gating only on y (§0),
   zero strength with a non-zero `angle` (§1), `fillet` together with
   `curvature < 100` (§3, §4, §5 — the one fillet case has curvature 100, so "fillet
   replaces the blend" and "fillet blends into it" cannot be told apart), the curvature

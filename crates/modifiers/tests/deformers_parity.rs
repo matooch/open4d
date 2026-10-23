@@ -232,5 +232,5 @@ fn deformers_match_the_reference() {
     let want: std::collections::BTreeSet<String> =
         UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 10 + 7 + 6 + 8 + 7 + 7 + 5, "{matched:?}");
+    assert_eq!(matched.len(), 11 + 7 + 6 + 8 + 7 + 7 + 5, "{matched:?}");
 }
