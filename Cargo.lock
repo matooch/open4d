@@ -1106,6 +1106,7 @@ version = "0.1.0"
 dependencies = [
  "forge-core",
  "forge-geometry",
+ "forge-modifiers",
  "forge-parity-harness",
  "glam",
  "thiserror 2.0.21",
@@ -1128,6 +1129,14 @@ version = "0.1.0"
 [[package]]
 name = "forge-modifiers"
 version = "0.1.0"
+dependencies = [
+ "forge-core",
+ "forge-generators",
+ "forge-geometry",
+ "forge-parity-harness",
+ "glam",
+ "toml",
+]
 
 [[package]]
 name = "forge-parity-harness"
@@ -1164,6 +1173,7 @@ version = "0.1.0"
 dependencies = [
  "forge-core",
  "forge-generators",
+ "forge-modifiers",
  "forge-ui",
 ]
 

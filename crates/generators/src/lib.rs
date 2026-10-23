@@ -151,7 +151,22 @@ pub fn build(type_id: &str, values: &BTreeMap<String, Value>) -> Result<PolyMesh
 /// primitives from their params, the subdivision generator from its input child, the
 /// boolean generator from its two inputs (docs/specs/BOOLE.md §1).
 /// `Ok(None)` for nodes without geometry.
+///
+/// The node's enabled deformer children are applied to the mesh in tree order
+/// (docs/specs/MODIFIERS.md §0), so callers see the deformed object.
 pub fn evaluate(scene: &Scene, id: NodeId) -> Result<Option<PolyMesh>, BuildError> {
+    let mut mesh = evaluate_geometry(scene, id)?;
+    if let Some(mesh) = mesh.as_mut() {
+        for d in deformer_children(scene, id) {
+            forge_modifiers::apply_deformer(scene, d, id, &mut mesh.points);
+        }
+    }
+    Ok(mesh)
+}
+
+/// [`evaluate`] without the deformers: used where only the presence of geometry
+/// matters (the input probes of subdivision, the modeling generators and boole).
+pub(crate) fn evaluate_geometry(scene: &Scene, id: NodeId) -> Result<Option<PolyMesh>, BuildError> {
     let Some(node) = scene.node(id) else {
         return Ok(None);
     };
@@ -177,6 +192,41 @@ pub fn evaluate(scene: &Scene, id: NodeId) -> Result<Option<PolyMesh>, BuildErro
         Err(BuildError::UnknownType(_)) => Ok(None),
         Err(e) => Err(e),
     }
+}
+
+/// The enabled deformer nodes that deform `id`'s mesh, in tree order (MODIFIERS.md
+/// §0): the deformer children of the node, then the deformer children of a parent
+/// without geometry of its own — a deformer under a Null is a sibling of the object
+/// and deforms it (`deformer-common/sibling`).
+fn deformer_children(scene: &Scene, id: NodeId) -> Vec<NodeId> {
+    let Some(node) = scene.node(id) else {
+        return Vec::new();
+    };
+    let deformers = |n: &forge_core::Node| {
+        n.children
+            .iter()
+            .copied()
+            .filter(|c| forge_modifiers::is_deformer(scene, *c))
+            .collect::<Vec<_>>()
+    };
+    let mut out = deformers(node);
+    if let Some(parent) = node.parent.and_then(|p| scene.node(p))
+        && !produces_geometry(&parent.type_id)
+    {
+        out.extend(deformers(parent));
+    }
+    out
+}
+
+/// True for the node types that build a mesh of their own, so a parent that only
+/// groups objects (a Null) passes its deformers on to them (MODIFIERS.md §0).
+fn produces_geometry(type_id: &str) -> bool {
+    types().iter().any(|t| t.id == type_id)
+        || type_id == subdivision::TYPE
+        || type_id == boole::TYPE
+        || type_id == modeling::INSTANCE
+        || modeling::input_count(type_id).is_some()
+        || spline_gens::spline_input_count(type_id).is_some()
 }
 
 /// True if the node is an input a parent generator consumes (not drawn itself):
