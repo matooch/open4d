@@ -1,5 +1,5 @@
-//! Parity: docs/specs/MODIFIERS.md §0–2 and §9 against
-//! tests/golden/{bend,twist,deformer-common}.
+//! Parity: docs/specs/MODIFIERS.md §0–6 and §9 against
+//! tests/golden/{bend,twist,deformer-common,taper,bulge,shear,spherify}.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -10,7 +10,15 @@ use forge_generators::{Primitives, evaluate};
 use forge_modifiers::Deformers;
 use forge_parity_harness::{Mesh, compare_meshes, discover_cases, export_weld};
 
-const FEATURES: &[&str] = &["bend", "twist", "deformer-common"];
+const FEATURES: &[&str] = &[
+    "bend",
+    "twist",
+    "deformer-common",
+    "taper",
+    "bulge",
+    "shear",
+    "spherify",
+];
 
 /// Observed cases not derived yet (MODIFIERS.md §9).
 const UNSUPPORTED: &[&str] = &[];
@@ -224,5 +232,5 @@ fn deformers_match_the_reference() {
     let want: std::collections::BTreeSet<String> =
         UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 10 + 7 + 6, "{matched:?}");
+    assert_eq!(matched.len(), 10 + 7 + 6 + 8 + 7 + 7 + 5, "{matched:?}");
 }

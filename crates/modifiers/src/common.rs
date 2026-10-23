@@ -30,6 +30,19 @@ pub(crate) enum Placement {
     Carry,
 }
 
+impl Placement {
+    /// The `t` a point deforms with, or `None` when it keeps its place. `Carry` is
+    /// `t = 1`: the deformers that only scale or offset (Taper, Bulge, Shear) hold the
+    /// value they have at the top of the box above it (MODIFIERS.md §0).
+    pub(crate) fn t(self) -> Option<f64> {
+        match self {
+            Placement::Unchanged => None,
+            Placement::Deform(t) => Some(t),
+            Placement::Carry => Some(1.0),
+        }
+    }
+}
+
 /// `t = (y + h/2) / h` and the mode rules; `h` is `size_y`.
 pub(crate) fn placement(mode: &str, y: f64, h: f64) -> Placement {
     if h <= 0.0 {
@@ -45,6 +58,33 @@ pub(crate) fn placement(mode: &str, y: f64, h: f64) -> Placement {
         _ if y < lo => Placement::Unchanged,
         _ if y > hi => Placement::Carry,
         _ => Placement::Deform(t),
+    }
+}
+
+/// `smoothstep(x) = 3x² − 2x³`, the profile of the Fillet option (MODIFIERS.md §3, §4).
+pub(crate) fn smoothstep(x: f64) -> f64 {
+    x * x * (3.0 - 2.0 * x)
+}
+
+/// Taper's and Shear's curve over the box (MODIFIERS.md §3, §5): `curvature` (a
+/// fraction, 1 = 100 %) blends the linear profile with the quadratic one, `fillet`
+/// replaces the blend with `smoothstep`.
+pub(crate) fn taper_curve(t: f64, curvature: f64, fillet: bool) -> f64 {
+    if fillet {
+        smoothstep(t)
+    } else {
+        curvature * t * t + (1.0 - curvature) * t
+    }
+}
+
+/// Bulge's curve (MODIFIERS.md §4), centred on the box: `u` is −1 at the bottom and +1
+/// at the top, and `g(±1) = 0`, so the bulge vanishes at the ends of the box.
+pub(crate) fn bulge_curve(u: f64, curvature: f64, fillet: bool) -> f64 {
+    let (u2, a) = (u * u, u.abs());
+    if fillet {
+        smoothstep(1.0 - a)
+    } else {
+        curvature * (1.0 - u2) + (1.0 - curvature) * (1.0 - a)
     }
 }
 
@@ -85,6 +125,93 @@ impl Default for TwistParams {
             size: DVec3::from(DEFAULT_SIZE),
             mode: "limited".to_string(),
             angle: 0.0,
+        }
+    }
+}
+
+/// Parameters of `forge.taper` (MODIFIERS.md §3). `strength` and `curvature` are
+/// **percent as the app shows them** (50 = 50 %), so `curvature` defaults to 100.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TaperParams {
+    pub size: DVec3,
+    pub mode: String,
+    pub strength: f64,
+    pub curvature: f64,
+    pub fillet: bool,
+}
+
+impl Default for TaperParams {
+    fn default() -> Self {
+        TaperParams {
+            size: DVec3::from(DEFAULT_SIZE),
+            mode: "limited".to_string(),
+            strength: 0.0,
+            curvature: 100.0,
+            fillet: false,
+        }
+    }
+}
+
+/// Parameters of `forge.bulge` (MODIFIERS.md §4): the same as Taper's.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BulgeParams {
+    pub size: DVec3,
+    pub mode: String,
+    pub strength: f64,
+    pub curvature: f64,
+    pub fillet: bool,
+}
+
+impl Default for BulgeParams {
+    fn default() -> Self {
+        BulgeParams {
+            size: DVec3::from(DEFAULT_SIZE),
+            mode: "limited".to_string(),
+            strength: 0.0,
+            curvature: 100.0,
+            fillet: false,
+        }
+    }
+}
+
+/// Parameters of `forge.shear` (MODIFIERS.md §5); `angle` is in **radians** and turns
+/// the offset direction about Y.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShearParams {
+    pub size: DVec3,
+    pub mode: String,
+    pub strength: f64,
+    pub angle: f64,
+    pub curvature: f64,
+    pub fillet: bool,
+}
+
+impl Default for ShearParams {
+    fn default() -> Self {
+        ShearParams {
+            size: DVec3::from(DEFAULT_SIZE),
+            mode: "limited".to_string(),
+            strength: 0.0,
+            angle: 0.0,
+            curvature: 100.0,
+            fillet: false,
+        }
+    }
+}
+
+/// Parameters of `forge.spherify` (MODIFIERS.md §6): no box and no mode — every point
+/// is treated. `strength` is percent as the app shows it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpherifyParams {
+    pub radius: f64,
+    pub strength: f64,
+}
+
+impl Default for SpherifyParams {
+    fn default() -> Self {
+        SpherifyParams {
+            radius: 200.0,
+            strength: 50.0,
         }
     }
 }
@@ -153,5 +280,41 @@ mod tests {
     fn a_zero_height_box_deforms_nothing() {
         assert_eq!(placement("limited", 0.0, 0.0), Placement::Unchanged);
         assert_eq!(placement("unlimited", 10.0, 0.0), Placement::Unchanged);
+    }
+
+    #[test]
+    fn carry_is_the_value_at_the_top_of_the_box() {
+        assert_eq!(Placement::Carry.t(), Some(1.0));
+        assert_eq!(Placement::Deform(0.25).t(), Some(0.25));
+        assert_eq!(Placement::Unchanged.t(), None);
+    }
+
+    fn close(a: f64, b: f64) {
+        assert!((a - b).abs() < 1e-12, "{a} != {b}");
+    }
+
+    #[test]
+    fn the_curvature_blend_runs_from_linear_to_quadratic() {
+        close(taper_curve(0.5, 0.0, false), 0.5);
+        close(taper_curve(0.5, 1.0, false), 0.25);
+        // `taper/curvature` (c = 1/2) and `taper/fillet`.
+        close(taper_curve(0.1, 0.5, false), 0.055);
+        close(taper_curve(0.1, 1.0, true), 0.028);
+        close(taper_curve(1.0, 0.5, false), 1.0);
+        close(taper_curve(1.0, 0.5, true), 1.0);
+    }
+
+    #[test]
+    fn the_bulge_curve_vanishes_at_the_box_ends_and_is_symmetric() {
+        close(bulge_curve(1.0, 1.0, false), 0.0);
+        close(bulge_curve(-1.0, 1.0, false), 0.0);
+        close(bulge_curve(0.0, 1.0, false), 1.0);
+        close(bulge_curve(0.8, 1.0, false), bulge_curve(-0.8, 1.0, false));
+        // `bulge/strength`, `bulge/curvature` and `bulge/fillet` at u = −0.8.
+        close(bulge_curve(-0.8, 1.0, false), 0.36);
+        close(bulge_curve(-0.8, 0.5, false), 0.28);
+        close(bulge_curve(-0.8, 1.0, true), 0.104);
+        // `bulge/mode-unlimited` extrapolates u to −1.6.
+        close(bulge_curve(-1.6, 1.0, false), -1.56);
     }
 }
