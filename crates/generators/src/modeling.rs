@@ -6,7 +6,7 @@ use forge_core::{Category, NodeId, NodeType, ParamDesc, Scene, Unit, Value};
 use forge_geometry::PolyMesh;
 use glam::DVec3;
 
-use crate::{BuildError, Params, evaluate};
+use crate::{BuildError, Params, evaluate, evaluate_geometry};
 
 pub const SYMMETRY: &str = "forge.symmetry";
 pub const ARRAY: &str = "forge.array";
@@ -95,7 +95,7 @@ pub fn inputs_of(scene: &Scene, id: NodeId) -> Vec<NodeId> {
     node.children
         .iter()
         .copied()
-        .filter(|c| matches!(evaluate(scene, *c), Ok(Some(_)) | Err(_)))
+        .filter(|c| matches!(evaluate_geometry(scene, *c), Ok(Some(_)) | Err(_)))
         .take(take)
         .collect()
 }

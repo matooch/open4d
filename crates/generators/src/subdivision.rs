@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use forge_geometry::Edge;
 use forge_geometry::subdivide::{subdivide_levels_with_creases, subdivide_osd};
 
-use crate::{BuildError, Params, evaluate};
+use crate::{BuildError, Params, evaluate, evaluate_geometry};
 
 pub const TYPE: &str = "forge.subdivision";
 
@@ -74,7 +74,7 @@ pub fn input_of(scene: &Scene, id: NodeId) -> Option<NodeId> {
     node.children
         .iter()
         .copied()
-        .find(|c| matches!(evaluate(scene, *c), Ok(Some(_)) | Err(_)))
+        .find(|c| matches!(evaluate_geometry(scene, *c), Ok(Some(_)) | Err(_)))
 }
 
 pub(crate) fn evaluate_subdivision(

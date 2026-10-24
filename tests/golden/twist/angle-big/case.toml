@@ -1,0 +1,22 @@
+feature = "twist"
+observation = "docs/parity/twist.md"
+description = "Twist angle 360"
+mesh = "mesh.obj"
+
+[params]
+angle = 360.0
+size = [250.0, 250.0, 250.0]
+mode = "limited"
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false

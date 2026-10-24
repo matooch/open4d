@@ -1,0 +1,25 @@
+feature = "deformer-common"
+observation = "docs/parity/deformer-common.md"
+description = "Plane (defaults) > Bend (90)"
+mesh = "mesh.obj"
+
+[params]
+hierarchy = "Plane > Bend"
+
+[params.input]
+type = "plane"
+
+[params.input2]
+type = "bend"
+strength = 90.0
+size = [250.0, 250.0, 250.0]
+mode = "limited"
+angle = 0.0
+keep_y_axis_length = false
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+parent = "input"
+
+[import]
+scale = 1.0
+flip_z = false

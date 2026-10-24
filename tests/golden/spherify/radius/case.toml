@@ -1,0 +1,21 @@
+feature = "spherify"
+observation = "docs/parity/spherify.md"
+description = "Spherify strength 100%, radius 100"
+mesh = "mesh.obj"
+
+[params]
+radius = 100.0
+strength = 100.0
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false

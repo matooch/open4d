@@ -34,3 +34,10 @@ Observation kit and per-feature forms: [README.md](README.md).
 | Lathe generator | docs/specs/GENERATORS2.md §8 | tests/golden/lathe (4) | crates/generators/tests/generators_parity.rs | 4/4 exact |
 | Loft generator | docs/specs/GENERATORS2.md §9 | tests/golden/loft (4) | crates/generators/tests/generators_parity.rs | 3/4: caps-off exact, defaults and three exact except cap triangles (geometric); mesh-subdivision (U = 7) known mismatch |
 | Sweep generator | docs/specs/GENERATORS2.md §10 | tests/golden/sweep (5) | crates/generators/tests/generators_parity.rs | 4/5 exact (closed paths); helix (non-planar frame) known mismatch |
+| Deformer common behaviour (box, modes, tree order, enabled, sibling, on a generator) | docs/specs/MODIFIERS.md §0, §9 | tests/golden/deformer-common (6) | crates/modifiers/tests/deformers_parity.rs | 6/6 exact (bend+twist stack order, Null sibling, subdivided-then-bent, disabled, on-plane) |
+| Bend deformer | docs/specs/MODIFIERS.md §1 | tests/golden/bend (10) | crates/modifiers/tests/deformers_parity.rs | 10/10 exact (arc radius `h/strength + size_x/2` with Keep Y-Axis Length off: the `size_x/2` term is parity-pending) |
+| Twist deformer | docs/specs/MODIFIERS.md §2 | tests/golden/twist (7) | crates/modifiers/tests/deformers_parity.rs | 7/7 exact (rotation sense from `twist/angle`) |
+| Taper deformer | docs/specs/MODIFIERS.md §3 | tests/golden/taper (8) | crates/modifiers/tests/deformers_parity.rs | 8/8 exact (`curvature` blend, `fillet`, box `size`, modes, negative strength) |
+| Bulge deformer | docs/specs/MODIFIERS.md §4 | tests/golden/bulge (7) | crates/modifiers/tests/deformers_parity.rs | 7/7 exact (centred `u`, `g(±1) = 0` so `within_box` = `limited` here) |
+| Shear deformer | docs/specs/MODIFIERS.md §5 | tests/golden/shear (7) | crates/modifiers/tests/deformers_parity.rs | 7/7 exact (offset `strength·(size_y/2)·f(t)` along `angle`, Taper's curve) |
+| Spherify deformer | docs/specs/MODIFIERS.md §6 | tests/golden/spherify (5) | crates/modifiers/tests/deformers_parity.rs | 5/5 exact (no box and no mode; the sphere follows the deformer's transform) |
