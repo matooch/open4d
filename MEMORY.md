@@ -104,7 +104,7 @@ more golden case.
 Two observer loops settled three pendings; parity is now 52 matched exactly with 3
 `KNOWN_MISMATCH` (`bend/mode-box-narrow{,-x,-z}`), gate green (`ok: 195 cases`).
 
-### Derived rules (C4D R20.059, golden-proven)
+### Derived rules (Reference App golden-proven)
 
 - `R = h/α + size_x/2` — the half-size term is `size_x/2`, not `size_z/2` or
   `(size_x+size_z)/4` (`bend/size-nonuniform`, box (300,250,100) → max (384.155, 284.155)).
