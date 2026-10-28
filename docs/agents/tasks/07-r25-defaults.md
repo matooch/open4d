@@ -1,6 +1,6 @@
 # 07 · R25 defaults with version-aware parity tests
 
-Status: blocked (needs O4 `docs/parity/r25-defaults.md` and the committed O1 cases) · Branch: `batch-08` · Planner: main session · Implementer: Claude Sonnet 5.5 (local, macOS)
+Status: ready · Branch: `batch-08` · Planner: main session · Implementer: Claude Sonnet 5.5 (local, macOS)
 
 ## Goal
 Our node types use the **R25** defaults and ranges, and every parity test still passes:
@@ -48,11 +48,25 @@ defaults. The O1 drift cases run as parity cases.
 - Do 1 and 2 first and run the whole gate **before** touching any default: everything
   must still pass (the overlay is a no-op while defaults are still R20). Then change the
   defaults; any R20 case that now fails means an overlay row is missing.
-- O1 already lists the expected differences: sphere segments 16 (R20 24); cylinder
-  height segments 4, rotation segments 16, fillet segments 3, fillet radius 3; torus ring
-  radius 100, ring segments 32, pipe segments 16; extrude offset 100 (R20 20, the field
-  is now called Offset and has a new Direction option, default Auto); boole type union
-  (R20 A subtract B), hide new edges on. O4 is the authority for exact values.
+- O4 (`docs/parity/r25-defaults.md`) is the authority: 73 `!` rows across the primitives,
+  splines, generators. The deformers and the smoothing tag have none. Planner rulings on its
+  open points:
+  - **Slice To = 180** in R25 (machine readback of π). R20's 360 was "reading uncertain".
+    Every golden slice case sets `slice_to` explicitly, so the overlay entry only matters
+    for completeness: put `slice_to = 360` in the R20 overlay as the R20 file states.
+  - **Boole type stays A subtract B** (O4 readback, same as R20). O1's "union" was the drift
+    case's explicit `mode = "union"`. Only `hide_new_edges` moves (off → on).
+  - **Extrude**: R25 replaced Movement (x, y, z) by one Offset number plus a Direction
+    list. Map it to our existing key: `movement_z` default 20 → 100. Direction is a new
+    R25-only parameter (out of scope).
+  - **Enum defaults that name an option we don't have** (e.g. loft `cap_type` N-gon,
+    `subdivide_uvs` Edge, spline `intermediate` Uniform): if our enum has the option, switch
+    the default. If not, keep the R20 default, list it in the spec as "R25 default not
+    supported yet", and don't add the option in this brief.
+  - Rows marked "reading uncertain" or "from the mesh" in the R20 column (cone
+    `fillet_segments`, capsule segments) are R20 values: put them in the overlay as written.
+  - "none (±999999999 accepted)" means no clamp: don't add a range for it. Only add or
+    change a range where O4 shows a finite clamp that differs from ours.
 - **Vertex order may have changed in R25 for torus and extrude** (O1: with the R20
   values typed in, the same vertex set and counts but a different order). So
   `r25-drift/torus-slice` and `r25-drift/extrude-rectangle-caps-quadrangles` may fail
