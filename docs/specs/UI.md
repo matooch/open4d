@@ -83,7 +83,7 @@ errors are returned (and shown in `status`) and change nothing. Name edits go th
 
 `Command::{Create(type_id), DeleteSelected, Undo, Redo, Rename(id, name),
 Reparent(id, Option<NodeId>), ToggleExpanded(id), SetShading(Shading),
-FrameAll}`; `execute(&mut EditorState, Command) -> Result<(), String>`.
+FrameAll, MakeEditable, CurrentStateToObject}`; `execute(&mut EditorState, Command) -> Result<(), String>`.
 - `Create`: new node at the end of the root list, selected alone; a new Generator node
   also gets one `forge.smoothing` tag in the same undo step (SMOOTHING.md §2); a `Tag` type is
   attached to the active node instead (error without one).
@@ -91,11 +91,16 @@ FrameAll}`; `execute(&mut EditorState, Command) -> Result<(), String>`.
   another selected node's subtree; selection cleared.
 - `Undo`/`Redo`: then `retain_existing`.
 - `Reparent`: appends as last child (None = root end).
+- `MakeEditable`, `CurrentStateToObject`: act on every selected node, one undo step for
+  the whole selection; rules in EDITABLE.md §1. Nodes that make no mesh are skipped with a
+  message in `EditorState.status`. The selection becomes the new objects. Edit menu items
+  "Make Editable" and "Current State to Object".
 - `FrameAll`: no geometry yet → resets the camera to default (placeholder until
   Phase 5).
 
 `create_menu(registry) -> Vec<(Category, Vec<(type_id, label)>)>`: placeable
-categories only (hierarchy + Tag), in `Category` order, types sorted by label.
+categories only (hierarchy + Tag), in `Category` order, types sorted by label; types
+with `in_create_menu == false` (the polygon object) are left out.
 
 Key bindings (**parity-pending**, ours): Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo,
 Delete delete selected, F2 rename active, 1–5 shading (Smooth, Flat, Wire,
@@ -141,7 +146,7 @@ and on window has WCAG contrast ≥ 7, weak text ≥ 4.5, accent text on accent 
 ## 9. App (`app`, `apps/studio`)
 
 `forge_ui::run()` opens a window titled "Forge3D" (eframe, wgpu backend) with a menu
-bar (File: New; Edit: Undo/Redo/Delete; Create: §5 menu; View: shading; Window:
+bar (File: New; Edit: Undo/Redo/Delete/Make Editable/Current State to Object; Create: §5 menu; View: shading; Window:
 open/move panels, reset layout), the dock (§2) and a status bar. `apps/studio`
 calls it with `Registry::with_builtins()`. Window menu: one toggle per panel labelled
 "<Panel> panel", a "Move <Panel>" submenu per panel with "<Panel> to <area>" items,

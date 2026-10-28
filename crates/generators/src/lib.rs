@@ -7,6 +7,7 @@ mod lathe;
 mod modeling;
 mod plane;
 mod platonic;
+mod polygon;
 mod pyramid;
 mod round;
 mod sphere;
@@ -16,6 +17,10 @@ mod subdivision;
 
 pub use boole::{boole, inputs_of as boole_inputs_of};
 pub use modeling::{array, connect, inputs_of as modeling_inputs_of, symmetry};
+pub use polygon::{
+    EditableError, TYPE as POLYGON, current_state_to_object, from_poly_mesh, make_editable,
+    to_poly_mesh,
+};
 pub use spline_gens::{extrude, lathe, loft, spline_inputs_of, sweep};
 pub use subdivision::{input_of, subdivide, subdivide_with_creases};
 
@@ -70,7 +75,8 @@ impl Plugin for Primitives {
         r.register(spline_gens::lathe_type())?;
         r.register(spline_gens::loft_type())?;
         r.register(spline_gens::sweep_type())?;
-        r.register(boole::node_type())
+        r.register(boole::node_type())?;
+        r.register(polygon::node_type())
     }
 }
 
@@ -178,6 +184,9 @@ pub(crate) fn evaluate_geometry(scene: &Scene, id: NodeId) -> Result<Option<Poly
         };
         return subdivision::evaluate_subdivision(scene, id, &p);
     }
+    if node.type_id == polygon::TYPE {
+        return Ok(Some(polygon::stored_mesh(scene, id)));
+    }
     if node.type_id == boole::TYPE {
         return boole::evaluate_boole(scene, id);
     }
@@ -224,6 +233,7 @@ fn produces_geometry(type_id: &str) -> bool {
     types().iter().any(|t| t.id == type_id)
         || type_id == subdivision::TYPE
         || type_id == boole::TYPE
+        || type_id == polygon::TYPE
         || type_id == modeling::INSTANCE
         || modeling::input_count(type_id).is_some()
         || spline_gens::spline_input_count(type_id).is_some()

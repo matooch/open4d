@@ -1,8 +1,38 @@
 //! Parameter values and descriptors (docs/specs/CORE.md §1).
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{Category, NodeId};
+
+/// An editable polygon mesh: points and polygons as corner-index lists
+/// (docs/specs/CORE.md §1). Conversion to the geometry crate's mesh lives in
+/// forge-generators.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct MeshData {
+    pub points: Vec<[f64; 3]>,
+    pub polys: Vec<Vec<u32>>,
+}
+
+impl MeshData {
+    /// Finite coordinates; polygons with at least 3 corners, at least 3 distinct indices
+    /// among them, all `< points.len()`. A repeated index is allowed because the cone
+    /// primitive's side quads at the apex repeat it (`[10, 11, 11, 21]`, tests/golden/cone).
+    pub fn validate(&self) -> Result<(), ParamError> {
+        if self.points.iter().flatten().any(|c| !c.is_finite()) {
+            return Err(ParamError::NotFinite);
+        }
+        let n = self.points.len();
+        for poly in &self.polys {
+            let distinct: std::collections::BTreeSet<u32> = poly.iter().copied().collect();
+            if poly.len() < 3 || distinct.len() < 3 || distinct.iter().any(|i| *i as usize >= n) {
+                return Err(ParamError::OutOfRange);
+            }
+        }
+        Ok(())
+    }
+}
 
 /// The only representation of a parameter value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -17,6 +47,7 @@ pub enum Value {
     Enum(String),
     String(String),
     Link(Option<NodeId>),
+    Mesh(Arc<MeshData>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,6 +81,7 @@ pub enum ParamKind {
     Link {
         accepts: Vec<Category>,
     },
+    Mesh,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -197,6 +229,15 @@ impl ParamDesc {
         Self::new(id, label, kind, Value::Link(None))
     }
 
+    /// A hidden, non-animatable mesh parameter whose default is the empty mesh.
+    pub fn mesh(id: &str, label: &str) -> ParamDesc {
+        let default = Value::Mesh(Arc::new(MeshData::default()));
+        let mut d = Self::new(id, label, ParamKind::Mesh, default);
+        d.ui.hidden = true;
+        d.animatable = false;
+        d
+    }
+
     /// Hard range for `Int`, `Float` and `Vec3` parameters.
     ///
     /// # Panics
@@ -287,6 +328,7 @@ impl ParamDesc {
             }
             (ParamKind::String, v @ Value::String(_)) => Ok(v),
             (ParamKind::Link { .. }, v @ Value::Link(_)) => Ok(v),
+            (ParamKind::Mesh, Value::Mesh(m)) => m.validate().map(|()| Value::Mesh(m)),
             _ => Err(ParamError::TypeMismatch),
         }
     }

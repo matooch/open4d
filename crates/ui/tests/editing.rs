@@ -222,3 +222,87 @@ fn creating_a_generator_attaches_a_smoothing_tag_in_one_step() {
         "tag removed with the same undo step"
     );
 }
+
+#[test]
+fn make_editable_and_current_state_to_object_are_one_undo_step_each() {
+    let mut st = state();
+    assert!(
+        execute(&mut st, Command::MakeEditable).is_err(),
+        "needs a selection"
+    );
+    let cube = create(&mut st, "forge.cube");
+    let sphere = create(&mut st, "forge.sphere");
+    let null = create(&mut st, "forge.null");
+    st.selection.click(cube);
+    st.selection.toggle(sphere);
+    st.selection.toggle(null);
+    let before = forge_core::file::save(st.doc.scene());
+    let steps = st.doc.history().undo_labels().len();
+
+    execute(&mut st, Command::MakeEditable).unwrap();
+    let scene = st.doc.scene();
+    assert_eq!(st.doc.history().undo_labels().len(), steps + 1, "one step");
+    assert!(!scene.contains(cube) && !scene.contains(sphere));
+    let polys: Vec<NodeId> = scene
+        .roots()
+        .iter()
+        .copied()
+        .filter(|id| scene.node(*id).unwrap().type_id == "forge.polygon")
+        .collect();
+    let names: Vec<&str> = polys
+        .iter()
+        .map(|id| scene.node(*id).unwrap().name.as_str())
+        .collect();
+    assert_eq!(names, ["Cube", "Sphere"], "tree order kept, names kept");
+    assert_eq!(st.status, "Make Editable: Null has no mesh");
+    assert_eq!(
+        st.selection.nodes.iter().copied().collect::<Vec<_>>(),
+        polys
+    );
+    assert!(scene.contains(null));
+    // the polygon objects carry the primitives' meshes and the smoothing tag
+    for p in &polys {
+        let Some(Value::Mesh(m)) = scene.param(*p, "mesh") else {
+            panic!("mesh param")
+        };
+        assert!(!m.points.is_empty() && !m.polys.is_empty());
+        assert_eq!(scene.node(*p).unwrap().tags.len(), 1);
+    }
+
+    execute(&mut st, Command::Undo).unwrap();
+    assert_eq!(forge_core::file::save(st.doc.scene()), before);
+
+    // Current State to Object: sources stay, a copy follows each of them
+    st.selection.click(cube);
+    st.selection.toggle(sphere);
+    let steps = st.doc.history().undo_labels().len();
+    execute(&mut st, Command::CurrentStateToObject).unwrap();
+    let scene = st.doc.scene();
+    assert_eq!(st.doc.history().undo_labels().len(), steps + 1, "one step");
+    assert_eq!(scene.roots().len(), 5);
+    assert_eq!(scene.roots()[0], cube);
+    assert_eq!(scene.roots()[2], sphere);
+    assert_eq!(
+        scene.node(scene.roots()[1]).unwrap().type_id,
+        "forge.polygon"
+    );
+    assert_eq!(
+        scene.node(scene.roots()[3]).unwrap().type_id,
+        "forge.polygon"
+    );
+    assert_eq!(st.selection.nodes.len(), 2);
+    assert!(st.status.is_empty());
+    execute(&mut st, Command::Undo).unwrap();
+    assert_eq!(forge_core::file::save(st.doc.scene()), before);
+}
+
+#[test]
+fn the_polygon_object_is_not_offered_by_the_create_menu() {
+    let st = state();
+    let listed = create_menu(st.doc.scene().registry())
+        .into_iter()
+        .flat_map(|(_, items)| items)
+        .any(|(id, _)| id == "forge.polygon");
+    assert!(!listed);
+    assert!(st.doc.scene().registry().get("forge.polygon").is_some());
+}
