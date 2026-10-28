@@ -191,3 +191,81 @@ label also names the mode.
 - Display: `display_selection` per mode, `component_shading`; the renderer's sized points
   (`crates/viewport/tests/render.rs`, GPU) draw a square in the wire or selection colour and
   are hidden behind filled faces.
+
+## 3. Moving, rotating and scaling components (`crates/ui/src/component_edit.rs`)
+
+Sources: own design (brief docs/agents/tasks/06-component-transform.md); gizmo, axes, drag
+deltas and snapping are MANIPULATE.md §2–3 and VIEWPORT.md §3. No observation of the
+reference app exists, so **every rule below is parity-pending** (brief 10 observes them).
+
+### 3.1 Where the core lives
+The pure maths is in `forge-ui` (`component_edit.rs`), not in `forge-generators`: it needs
+`DragDelta` (viewport crate), the stored selection sets and the mode, none of which the
+generators crate knows. It uses `MeshData` and the geometry crate's `IndexSet`,
+`edges_to_points` and `polys_to_points`, so it needs no GPU and no egui.
+
+### 3.2 Affected points and pivot
+- `affected_points(mesh, mode, sets)`: Points mode uses the point set, Edges mode
+  `edges_to_points` of the edge set, Polys mode `polys_to_points` of the polygon set.
+  Indices past the element count are ignored. Model mode gives the empty set.
+- `pivot(mesh, points)`: the mean of the affected points' positions, in object space
+  (the stored mesh). `None` for an empty set.
+
+### 3.3 `transform_points(mesh, points, m) -> MeshData`
+Applies the object-space matrix `m` (`transform_point3`) to the listed points only; the
+other points and all polygons are copied unchanged. Indices past the point count are
+ignored. Pure and deterministic.
+
+### 3.4 From a gizmo delta to `m`
+The gizmo sits at the world position of the pivot, `P = W · c` (`W` the node's world matrix,
+`c` the pivot). Its axes follow the existing axis setting (object frame, or world axes for
+Move and Rotate; Scale always uses the object frame, MANIPULATE.md §2). A `DragDelta` is in
+world space (MANIPULATE.md §3), so the world-space transform `M` is:
+
+| Delta | `M` |
+|---|---|
+| `Translate(w)` | translation by `w` |
+| `Rotate{axis, angle}` | rotation about `axis` through `P` |
+| `Scale(f)` | scale by `f` along the object axes `A = rotation_part(W)` through `P`: `T(P) · A · diag(f) · Aᵀ · T(−P)` |
+
+and the object-space matrix is `m = W⁻¹ · M · W`. This handles non-uniform scale and any
+rotation of the object or its parents: a world move becomes `W⁻¹ · w` (as `apply_drag`
+does for parents); a rotation about a world axis of a non-uniformly scaled object becomes
+whatever object-space map gives that world result; a Scale in the object frame reduces to
+`diag(f)` about `c`.
+
+### 3.5 Drag and undo
+A drag starts when a primary press hits a gizmo handle and the mode is a component mode with
+a target and a non-empty affected set. The drag keeps the **start mesh**, the affected set
+and the pivot `c` taken at the start. On every frame
+`mesh = transform_points(start_mesh, set, m(delta))` is written with
+`doc.transact_merged(label, "gizmo:<id>:<n>", ...)`, the pattern of `apply_drag`
+(MANIPULATE.md §3): the whole drag is one undo step ("Move", "Rotate", "Scale"), and undo
+restores the mesh at drag start. Only the `mesh` param is written; the stored selection
+sets are unchanged. Snapping is the gizmo's own (`Drag::update` with the Ctrl/Cmd step,
+`snap.rs`): 10 units, 15 degrees, 0.1.
+
+A component mode with a target but an empty affected set draws no gizmo, and a press on
+the spot where it would be does nothing special (it is a click or a rectangle select). In
+a component mode without a target (no polygon object active) the object gizmo works as in
+Model mode. In Model mode nothing changes.
+
+### 3.6 Display and Coordinates panel
+With a target and a non-empty set the gizmo is drawn at `P` (the pivot of the current
+mesh, so it follows the drag). The Coordinates panel gets a read-only "Pivot" row in
+component modes: the pivot in object space (Local) or world space (World), whichever
+coordinate space is chosen; it shows "no selection" if the set is empty. Numeric entry for
+components is out of scope.
+
+### 3.7 Checks (`crates/ui/tests/component_edit.rs`)
+- `transform_points` on a made-editable default cube: top polygon +50 in y gives y = 150 for
+  the four points and the others unchanged; scale 2 about the centroid; 90 degrees about y;
+  empty set and out-of-range indices change nothing.
+- Points, edges and polygons modes move exactly the points of their set.
+- World-axis move and rotate on a rotated, non-uniformly scaled object: the world positions
+  of the affected points change by the delta (move) or by the world rotation (rotate); the
+  others keep their world position.
+- Scale about the pivot in the object frame under non-uniform scale.
+- A drag over several frames is one undo step; undo restores the mesh; redo reapplies it.
+  Frames are computed from the start mesh (no accumulation).
+- A Bend child above an edited polygon object: `evaluate` reflects both the edit and the bend.

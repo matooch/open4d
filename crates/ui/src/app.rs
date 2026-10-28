@@ -15,6 +15,7 @@ use crate::attributes::{
     Gesture, Widget, apply_edit, attribute_rows, from_display, to_display, unit_suffix,
 };
 use crate::commands::{Command, category_label, create_menu, execute};
+use crate::component_edit::{ComponentDrag, pivot_view, pivot_world};
 use crate::components::{
     ClickModifiers, EditMode, SelectCmd, target as component_target, viewport_click, viewport_rect,
 };
@@ -74,6 +75,8 @@ pub struct Editor {
     coord_third: Third,
     /// The gizmo drag in progress: drag state, node, its transform at the start, gesture.
     gizmo_drag: Option<(Drag, NodeId, Transform, u64)>,
+    /// The gizmo drag on components in progress: drag state, component drag, gesture.
+    component_drag: Option<(Drag, ComponentDrag, u64)>,
     /// The rectangle select in progress, `[x0, y0, x1, y1]` in render pixels.
     rect_drag: Option<[f64; 4]>,
     /// File menu (docs/specs/IO.md §2): dialogs, current file, revision at the last
@@ -106,6 +109,7 @@ impl Editor {
             coord_space: Space::Local,
             coord_third: Third::Scale,
             gizmo_drag: None,
+            component_drag: None,
             rect_drag: None,
             dialogs: Box::new(NativeDialogs),
             file_path: None,
@@ -566,6 +570,12 @@ impl Editor {
     fn current_gizmo(&self) -> Option<Gizmo> {
         let id = self.state.selection.active?;
         let m = self.state.doc.scene().world_matrix(id)?;
+        // component modes: the gizmo sits on the selected components (EDITABLE.md §3.6)
+        let origin = if component_target(&self.state).is_some() {
+            pivot_world(&self.state)?
+        } else {
+            m.w_axis.truncate()
+        };
         let object = self.gizmo_space == GizmoSpace::Object || self.gizmo_mode == GizmoMode::Scale;
         let axes = if object {
             let r = rotation_part(&m);
@@ -574,7 +584,7 @@ impl Editor {
             [DVec3::X, DVec3::Y, DVec3::Z]
         };
         Some(Gizmo {
-            origin: m.w_axis.truncate(),
+            origin,
             mode: self.gizmo_mode,
             axes,
             ..Gizmo::default()
@@ -619,23 +629,47 @@ impl Editor {
         };
         let (x, y) = to_pixels(pos);
         let cam = self.state.camera;
+        let snap_step = |mode: GizmoMode| {
+            modifiers.command.then_some(match mode {
+                GizmoMode::Translate => 10.0,
+                GizmoMode::Rotate => 15f64.to_radians(),
+                GizmoMode::Scale => 0.1,
+            })
+        };
         if response.drag_started_by(egui::PointerButton::Primary)
-            && let (Some(g), Some(id)) = (self.current_gizmo(), self.state.selection.active)
+            && let Some(g) = self.current_gizmo()
             && let Some(handle) = g.hit_test(&cam, x, y, w, h)
             && let Some(drag) = Drag::begin(&g, handle, &cam, x, y, w, h)
-            && let Some(start) = self.state.doc.scene().local_transform(id)
         {
-            self.gesture_seq += 1;
-            self.gizmo_drag = Some((drag, id, start, self.gesture_seq));
+            if component_target(&self.state).is_some() {
+                // a gizmo drag in a component mode edits the components (EDITABLE.md §3.5)
+                if let Some(cd) = ComponentDrag::begin(&self.state) {
+                    self.gesture_seq += 1;
+                    self.component_drag = Some((drag, cd, self.gesture_seq));
+                }
+            } else if let Some(id) = self.state.selection.active
+                && let Some(start) = self.state.doc.scene().local_transform(id)
+            {
+                self.gesture_seq += 1;
+                self.gizmo_drag = Some((drag, id, start, self.gesture_seq));
+            }
+        }
+        if let Some((drag, cd, n)) = &mut self.component_drag {
+            if response.dragged_by(egui::PointerButton::Primary) {
+                let delta = drag.update(&cam, x, y, w, h, snap_step(self.gizmo_mode));
+                self.state.status = match cd.apply(&mut self.state.doc, delta, Gesture::Drag(*n)) {
+                    Ok(()) => String::new(),
+                    Err(e) => e.to_string(),
+                };
+            }
+            if response.drag_stopped() {
+                self.component_drag = None;
+            }
+            return;
         }
         if let Some((drag, id, start, n)) = &mut self.gizmo_drag {
             if response.dragged_by(egui::PointerButton::Primary) {
-                let snap = modifiers.command.then_some(match self.gizmo_mode {
-                    GizmoMode::Translate => 10.0,
-                    GizmoMode::Rotate => 15f64.to_radians(),
-                    GizmoMode::Scale => 0.1,
-                });
-                let delta = drag.update(&cam, x, y, w, h, snap);
+                let delta = drag.update(&cam, x, y, w, h, snap_step(self.gizmo_mode));
                 let (id, start, n) = (*id, *start, *n);
                 self.state.status =
                     match apply_drag(&mut self.state.doc, id, &start, delta, Gesture::Drag(n)) {
@@ -762,6 +796,21 @@ impl Editor {
                             Ok(()) => String::new(),
                             Err(e) => e.to_string(),
                         };
+                    }
+                    ui.end_row();
+                }
+                // component modes: the pivot of the selected components (EDITABLE.md §3.6)
+                if component_target(&self.state).is_some() {
+                    ui.label("Pivot");
+                    match pivot_view(&self.state, self.coord_space == Space::World) {
+                        Some(p) => {
+                            for (k, axis) in ["X", "Y", "Z"].iter().enumerate() {
+                                ui.label(format!("{axis} {:.3}", p[k]));
+                            }
+                        }
+                        None => {
+                            ui.weak("no selection");
+                        }
                     }
                     ui.end_row();
                 }
