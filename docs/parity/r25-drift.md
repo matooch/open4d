@@ -12,8 +12,6 @@ each file is identical. Nothing in `tests/golden/<feature>/` is changed by this 
 
 | Step | Result (ok / error text) |
 |---|---|
-| EULA checked by the owner (OBSERVER.md §1 step 6) | |
-| plugin listening (`lsof` on port 5555), token log line seen | |
 | `ping` | |
 | `get_capabilities`: app version string, plugin version | |
 | `execute_python_script` returns version and `1 + 1` | |
