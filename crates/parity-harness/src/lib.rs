@@ -689,6 +689,68 @@ pub fn discover_cases(golden_root: &Path) -> io::Result<Vec<GoldenCase>> {
     Ok(cases)
 }
 
+// ---------------------------------------------------------------------------
+// App version and the R20 defaults overlay (docs/specs/INFRA.md §3.1)
+// ---------------------------------------------------------------------------
+
+/// The reference app version an observation was made with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppVersion {
+    R20,
+    R25,
+}
+
+/// The version named in the `Status:` header line of the case's observation file: the
+/// first `R2` + digit token after `App version:`. Errors name the observation file.
+pub fn app_version(repo_root: &Path, manifest: &CaseManifest) -> Result<AppVersion, String> {
+    let rel = &manifest.observation;
+    let src =
+        fs::read_to_string(repo_root.join(rel)).map_err(|e| format!("{rel}: unreadable ({e})"))?;
+    let status = src
+        .lines()
+        .find(|l| l.starts_with("Status:"))
+        .ok_or_else(|| format!("{rel}: no `Status:` header line"))?;
+    let after = status
+        .split_once("App version:")
+        .map(|(_, rest)| rest)
+        .ok_or_else(|| format!("{rel}: no `App version:` in the Status line"))?;
+    let bytes = after.as_bytes();
+    for i in 0..bytes.len().saturating_sub(2) {
+        if bytes[i] == b'R' && bytes[i + 1] == b'2' && bytes[i + 2].is_ascii_digit() {
+            return match &after[i..i + 3] {
+                "R20" => Ok(AppVersion::R20),
+                "R25" => Ok(AppVersion::R25),
+                other => Err(format!("{rel}: unsupported app version {other}")),
+            };
+        }
+    }
+    Err(format!("{rel}: no R20 / R25 token after `App version:`"))
+}
+
+/// The params whose R20 default differs from our R25 descriptor defaults, for the node
+/// type `node_type` (our type id without `forge.`), from `tests/defaults/r20.toml`, in
+/// case-file units. Empty for R25 and for a type without a table. Panics if the file is
+/// missing or malformed: it is test data.
+pub fn defaults_overlay(
+    repo_root: &Path,
+    version: AppVersion,
+    node_type: &str,
+) -> BTreeMap<String, toml::Value> {
+    if version == AppVersion::R25 {
+        return BTreeMap::new();
+    }
+    let path = repo_root.join("tests/defaults/r20.toml");
+    let src = fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("{}: unreadable ({e})", path.display()));
+    let doc: toml::Table =
+        toml::from_str(&src).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    match doc.get(node_type) {
+        None => BTreeMap::new(),
+        Some(toml::Value::Table(t)) => t.clone().into_iter().collect(),
+        Some(_) => panic!("{}: [{node_type}] is not a table", path.display()),
+    }
+}
+
 /// Problems with a case; empty means valid.
 pub fn validate_case(repo_root: &Path, case: &GoldenCase) -> Vec<String> {
     let manifest = match case.manifest() {

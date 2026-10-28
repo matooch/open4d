@@ -18,17 +18,20 @@ vertex positions, same surface per oriented plane, same volume and closedness
 
 ## 1. Node
 
-Category `Generator`, label "Boole". Parameters (ids from the observation):
+Category `Generator`, label "Boole". Parameters (ids from the observation). Defaults are the
+**R25** ones ([docs/parity/r25-defaults.md](../parity/r25-defaults.md)); `mode` stays
+`a_minus_b` (O4 readback; the union in r25-drift.md was the case's own `mode`), only
+`hide_new_edges` moved. R20 cases get the R20 value from `tests/defaults/r20.toml` (INFRA.md §3.1).
 
 | id | label | kind | default | effect |
 |---|---|---|---|---|
 | `mode` | Boolean Type | Enum `union, a_minus_b, intersect, a_without_b` | `a_minus_b` | §3 |
 | `high_quality` | High Quality | Bool | `true` | off → `Unsupported` (§5) |
-| `hide_new_edges` | Hide new edges | Bool | `false` | §4 |
+| `hide_new_edges` | Hide new edges | Bool | `true` (R20: `false`) | §4 |
 | `single_object` | Create single object | Bool | `false` | stored (our result is always one mesh) |
 | `phong_breaks` | Create Phong breaks at intersections | Bool | `false` | stored (no effect yet) |
 | `select_intersections` | Select intersections | Bool | `false` | stored (no effect yet) |
-| `optimize_points` | Optimize Points | Float, distance, ≥ 0 | `0.01` | stored (greyed out with the defaults) |
+| `optimize_points` | Optimize Points | Float, distance, ≥ 0.0001 (R25 clamp) | `0.01` | stored (greyed out with the defaults) |
 
 Inputs: the generator's **first two hierarchy children** that evaluate to a mesh, A then
 B, each placed by its local transform (as the subdivision input, SUBDIVISION.md §1).

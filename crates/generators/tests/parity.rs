@@ -1,9 +1,12 @@
 //! Parity: docs/specs/PRIMITIVES.md §4 against tests/golden/{plane,cube,sphere}.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::path::Path;
 
-use forge_core::{ParamKind, Registry, Value};
+mod common;
+
+use common::{resolved_params, typed_params};
+use forge_core::Registry;
 use forge_generators::{BuildError, Primitives, build};
 use forge_parity_harness::{Mesh, Tolerance, compare_geometric, compare_meshes, discover_cases};
 
@@ -26,42 +29,6 @@ fn registry() -> Registry {
     r
 }
 
-/// Case files hold angles as typed in the app (degrees); angle params store radians.
-fn angle(desc: &forge_core::ParamDesc, v: f64) -> f64 {
-    if desc.ui.unit == forge_core::Unit::Angle {
-        v.to_radians()
-    } else {
-        v
-    }
-}
-
-/// The case's `[params]` as validated values, keyed like our param ids.
-fn params(
-    reg: &Registry,
-    type_id: &str,
-    raw: &BTreeMap<String, toml::Value>,
-) -> BTreeMap<String, Value> {
-    let ty = reg.get(type_id).unwrap();
-    raw.iter()
-        .map(|(k, v)| {
-            let desc = ty
-                .find_param(k)
-                .unwrap_or_else(|| panic!("{type_id}: case key {k:?} is not a param"));
-            let value = match (&desc.kind, v) {
-                (ParamKind::Bool, toml::Value::Boolean(b)) => Value::Bool(*b),
-                (ParamKind::Int { .. }, toml::Value::Integer(i)) => Value::Int(*i),
-                (ParamKind::Float { .. }, toml::Value::Integer(i)) => {
-                    Value::Float(angle(desc, *i as f64))
-                }
-                (ParamKind::Float { .. }, toml::Value::Float(f)) => Value::Float(angle(desc, *f)),
-                (ParamKind::Enum { .. }, toml::Value::String(s)) => Value::Enum(s.clone()),
-                other => panic!("{type_id}.{k}: unexpected value {other:?}"),
-            };
-            (k.clone(), desc.validate(value).expect("valid case value"))
-        })
-        .collect()
-}
-
 #[test]
 fn primitives_match_the_reference() {
     let reg = registry();
@@ -75,7 +42,7 @@ fn primitives_match_the_reference() {
         let key = format!("{}/{}", case.feature, case.name);
         let manifest = case.manifest().unwrap();
         let type_id = format!("forge.{}", case.feature);
-        let p = params(&reg, &type_id, &manifest.params);
+        let p = typed_params(&reg, &type_id, &resolved_params(&case, &manifest));
         match build(&type_id, &p) {
             Err(BuildError::Unsupported(what)) => {
                 println!("{key}: unsupported ({what})");

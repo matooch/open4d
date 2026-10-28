@@ -3,7 +3,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use forge_generators::{BuildError, build, subdivide_with_creases};
+mod common;
+
+use common::{Table, typed_params, with_defaults};
+use forge_core::Registry;
+use forge_generators::{BuildError, Primitives, build, subdivide_with_creases};
 use forge_geometry::Edge;
 use forge_geometry::PolyMesh;
 use forge_geometry::normals::poly_normal;
@@ -43,6 +47,8 @@ fn to_poly(m: &Mesh) -> PolyMesh {
 
 #[test]
 fn subdivision_matches_the_reference() {
+    let mut reg = Registry::with_builtins();
+    reg.install(&Primitives).unwrap();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
     let mut unsupported = BTreeSet::new();
     let mut matched = Vec::new();
@@ -55,8 +61,11 @@ fn subdivision_matches_the_reference() {
         let m = case.manifest().unwrap();
         let input_kind = m.params["input"].as_str().unwrap().to_string();
         let input = match input_kind.as_str() {
-            "cube" => build("forge.cube", &BTreeMap::new()).unwrap(),
-            "plane" => build("forge.plane", &BTreeMap::new()).unwrap(),
+            "cube" | "plane" => {
+                let ty = format!("forge.{input_kind}");
+                let table = with_defaults(&case, &m, &input_kind, &Table::new());
+                build(&ty, &typed_params(&reg, &ty, &table)).unwrap()
+            }
             _ => {
                 let src = std::fs::read_to_string(case.dir.join("input.obj")).unwrap();
                 to_poly(&parse_obj(&src).unwrap())

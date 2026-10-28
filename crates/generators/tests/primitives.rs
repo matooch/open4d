@@ -24,18 +24,19 @@ fn plugin_registers_generators_with_transform_params() {
     let sphere = r.get("forge.sphere").unwrap();
     assert_eq!(
         sphere.find_param("segments").unwrap().default,
-        Value::Int(24)
+        Value::Int(16),
+        "R25 default (R20: 24)"
     );
 }
 
 #[test]
 fn missing_params_use_defaults() {
     let plane = build("forge.plane", &BTreeMap::new()).unwrap();
-    assert_eq!((plane.points.len(), plane.polys.len()), (441, 400));
+    assert_eq!((plane.points.len(), plane.polys.len()), (121, 100)); // R25: 10 x 10 segments (R20: 20 x 20)
     let cube = build("forge.cube", &BTreeMap::new()).unwrap();
     assert_eq!((cube.points.len(), cube.polys.len()), (8, 6));
     let sphere = build("forge.sphere", &BTreeMap::new()).unwrap();
-    assert_eq!((sphere.points.len(), sphere.polys.len()), (266, 288));
+    assert_eq!((sphere.points.len(), sphere.polys.len()), (114, 128)); // R25: 16 segments (R20: 24)
     for m in [&plane, &cube, &sphere] {
         m.validate().unwrap();
     }
@@ -154,7 +155,7 @@ fn primitives_ii_are_valid_and_closed() {
     // the default cone keeps its degenerate apex quads, as exported
     let cone = build("forge.cone", &p(&[])).unwrap();
     let apex = cone.polys.iter().filter(|f| f[1] == f[2]).count();
-    assert_eq!(apex, 36);
+    assert_eq!(apex, 16, "R25: 16 rotation segments (R20: 36)");
     check("forge.pyramid", &[("segments", Value::Int(4))], true);
     assert!(matches!(
         build(

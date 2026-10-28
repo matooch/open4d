@@ -76,6 +76,8 @@ fn boole_consumes_its_first_two_mesh_children() {
             let b = tx.create("forge.cube", Some(boole), None)?;
             let c = tx.create("forge.cube", Some(boole), None)?; // third: ignored
             tx.set_param(b, "transform.pos", Value::Vec3([50.0, 50.0, 50.0]))?;
+            // R25 hides the new edges by default (R20: off); the counts below are the quads
+            tx.set_param(boole, "hide_new_edges", Value::Bool(false))?;
             Ok((boole, a, b, c))
         })
         .unwrap();

@@ -24,7 +24,7 @@ pub(crate) fn node_type() -> NodeType {
             ],
         ))
         .param(ParamDesc::bool("high_quality", "High Quality", true))
-        .param(ParamDesc::bool("hide_new_edges", "Hide new edges", false))
+        .param(ParamDesc::bool("hide_new_edges", "Hide new edges", true))
         .param(ParamDesc::bool(
             "single_object",
             "Create single object",
@@ -42,7 +42,7 @@ pub(crate) fn node_type() -> NodeType {
         ))
         .param(
             ParamDesc::float("optimize_points", "Optimize Points", 0.01)
-                .range(0.0, f64::MAX)
+                .range(0.0001, f64::MAX)
                 .unit(Unit::Distance),
         )
 }

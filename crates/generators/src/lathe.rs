@@ -51,11 +51,11 @@ pub(crate) fn slice_params() -> [ParamDesc; 5] {
     [
         ParamDesc::bool("slice", "Slice", false),
         ParamDesc::float("slice_from", "Slice from", 0.0).unit(forge_core::Unit::Angle),
-        ParamDesc::float("slice_to", "Slice to", std::f64::consts::TAU)
+        ParamDesc::float("slice_to", "Slice to", std::f64::consts::PI)
             .unit(forge_core::Unit::Angle),
         ParamDesc::bool("regular_grid", "Regular grid", false),
         ParamDesc::float("regular_grid_width", "Grid width", 10.0)
-            .range(0.0, f64::MAX)
+            .range(0.01, f64::MAX)
             .unit(forge_core::Unit::Distance),
     ]
 }

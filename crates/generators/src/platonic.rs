@@ -5,13 +5,14 @@
 use forge_geometry::PolyMesh;
 use glam::DVec3;
 
-/// The type's subdivision frequency for a Segments value (observed at 8 and 24).
+/// The type's subdivision frequency for a Segments value (observed at 8 and 24, and for
+/// the icosahedron also at 16: `r25-drift/sphere-type-icosahedron`).
 pub(crate) fn frequency(kind: &str, segments: usize) -> usize {
     let per = match kind {
         "tetrahedron" => 2,
         "hexahedron" => 3,
         "octahedron" => 4,
-        _ => 6, // icosahedron
+        _ => 5, // icosahedron: 6 would give n = 2 at 16, observed 3
     };
     (segments / per).max(1)
 }

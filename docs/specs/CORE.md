@@ -190,6 +190,9 @@ RON text, deterministic (same scene → byte-identical output):
     unknown type (node kept as-is), unknown param on a known type (dropped), invalid
     value (type mismatch → default; out of range → clamped).
   - Missing params on known types are filled with defaults, silently.
+  - A saved scene keeps its values when a type's descriptor defaults change (the R25 switch,
+    docs/parity/r25-defaults.md): every param is written, so only a param missing from the
+    file takes the new default. A saved value outside a changed range is clamped on load.
   - The id counter resumes at max id + 1.
 - `save(load(save(s)))` equals `save(s)`.
 - **Version 2** added `Value::Mesh` (written as `Mesh((points: [...], polys: [...]))`, points

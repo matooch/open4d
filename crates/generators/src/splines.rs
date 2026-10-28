@@ -131,15 +131,15 @@ fn common(t: NodeType) -> NodeType {
                 ("subdivided", "Subdivided"),
             ],
         ))
-        .param(ParamDesc::int("intermediate_number", "Number", 8).range(0, 1000))
+        .param(ParamDesc::int("intermediate_number", "Number", 8).range(0, 5000))
         .param(
             ParamDesc::float("intermediate_angle", "Angle", 5f64.to_radians())
-                .range(0.0, std::f64::consts::PI)
+                .range(0.0, std::f64::consts::FRAC_PI_2)
                 .unit(Unit::Angle),
         )
         .param(
             ParamDesc::float("intermediate_max_length", "Maximum length", 5.0)
-                .range(0.0, f64::MAX)
+                .range(0.01, f64::MAX)
                 .unit(Unit::Distance),
         )
 }
@@ -180,9 +180,21 @@ pub(crate) fn helix_type() -> NodeType {
             .param(
                 ParamDesc::float("end_angle", "End angle", 720f64.to_radians()).unit(Unit::Angle),
             )
-            .param(ParamDesc::float("radial_bias", "Radial bias", 50.0).unit(Unit::Percent))
-            .param(ParamDesc::float("height", "Height", 200.0).unit(Unit::Distance))
-            .param(ParamDesc::float("height_bias", "Height bias", 50.0).unit(Unit::Percent))
+            .param(
+                ParamDesc::float("radial_bias", "Radial bias", 50.0)
+                    .range(0.0, 100.0)
+                    .unit(Unit::Percent),
+            )
+            .param(
+                ParamDesc::float("height", "Height", 200.0)
+                    .range(0.0, f64::MAX)
+                    .unit(Unit::Distance),
+            )
+            .param(
+                ParamDesc::float("height_bias", "Height bias", 50.0)
+                    .range(0.0, 100.0)
+                    .unit(Unit::Percent),
+            )
             .param(ParamDesc::int("subdivision", "Subdivision", 100).range(3, 100_000)),
     )
 }

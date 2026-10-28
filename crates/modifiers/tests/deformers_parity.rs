@@ -5,6 +5,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
+mod common;
+
+use common::resolved_params;
 use forge_core::{Document, NodeId, ParamKind, Registry, Value};
 use forge_generators::{Primitives, evaluate};
 use forge_modifiers::Deformers;
@@ -193,7 +196,7 @@ fn deformers_match_the_reference() {
         }
         let key = format!("{}/{}", case.feature, case.name);
         let m = case.manifest().unwrap();
-        let params: toml::map::Map<String, toml::Value> = m.params.clone().into_iter().collect();
+        let params = resolved_params(&case, &m);
 
         let mut doc = Document::new(reg.clone());
         let target = build_case(&mut doc, &reg, &case.feature, &params);

@@ -8,6 +8,9 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::Arc;
 
+mod common;
+
+use common::resolved_params;
 use forge_core::{Document, NodeId, ParamKind, Registry, Value};
 use forge_generators::{BuildError, Primitives, evaluate};
 use forge_io::obj::{ReadOptions, WriteOptions, read, write};
@@ -185,7 +188,7 @@ fn golden_scenes_through_the_writer_match_the_reference() {
         }
         let key = format!("{}/{}", case.feature, case.name);
         let m = case.manifest().unwrap();
-        let params: Table = m.params.clone().into_iter().collect();
+        let params: Table = resolved_params(&case, &m);
         let (doc, id) = build_scene(&reg, feature, &params);
         match evaluate(doc.scene(), id) {
             Err(BuildError::Unsupported(what)) => {

@@ -10,6 +10,10 @@ and vertex maps index into them). Coordinates follow docs/specs/TRANSFORM.md
 
 Labels are our own wording; parameter ids are the observation forms' keys.
 
+Defaults are the **R25** ones ([docs/parity/r25-defaults.md](../parity/r25-defaults.md), O4);
+where R20 differed the old value follows as "(R20: x)". Golden cases from R20 observations
+are built with the R20 values from `tests/defaults/r20.toml` (INFRA.md §3.1).
+
 ## 0. Plugin and evaluation
 
 `forge_generators::Primitives` is a `forge_core::Plugin` registering
@@ -25,8 +29,8 @@ options not implemented yet. Generators never return approximate geometry.
 |---|---|---|---|---|
 | `width` | Width | Float, Distance | 400 | ≥ 0 |
 | `height` | Height | Float, Distance | 400 | ≥ 0 |
-| `segments_w` | Width segments | Int | 20 | 1–1000 |
-| `segments_h` | Height segments | Int | 20 | 1–1000 |
+| `segments_w` | Width segments | Int | 10 (R20: 20) | 1–1000 |
+| `segments_h` | Height segments | Int | 10 (R20: 20) | 1–1000 |
 | `orientation` | Orientation | Enum `pos_x, neg_x, pos_y, neg_y, pos_z, neg_z` | `pos_y` | – |
 
 - Grid `(u, v)`: `u_i = −w/2 + i·w/sw` (i = 0..sw), `v_j = −h/2 + j·h/sh` (j = 0..sh);
@@ -44,8 +48,8 @@ options not implemented yet. Generators never return approximate geometry.
 | `segments_x`, `segments_y`, `segments_z` | Segments X/Y/Z | Int | 1 | 1–1000 |
 | `separate_surfaces` | Separate surfaces | Bool | false | – |
 | `fillet` | Fillet | Bool | false | – |
-| `fillet_radius` | Fillet radius | Float, Distance | 40 | ≥ 0 (app clamps to half the smallest size) |
-| `fillet_segments` | Fillet segments | Int | 5 | 1–1000 |
+| `fillet_radius` | Fillet radius | Float, Distance | 3 (R20: 40) | ≥ 0 (app clamps to half the smallest size) |
+| `fillet_segments` | Fillet segments | Int | 3 (R20: 5) | 1–1000 |
 
 `separate_surfaces = true` (without fillet) → `Unsupported` (not yet derived). With
 `fillet = true` it is ignored (observed: disabled in the app while Fillet is on), and
@@ -104,7 +108,7 @@ inner half-sizes `(ix, iy, iz) = (hx − f, hy − f, hz − f)`, quarter step `
 | id | label | kind | default | range |
 |---|---|---|---|---|
 | `radius` | Radius | Float, Distance | 100 | ≥ 0 |
-| `segments` | Segments | Int | 24 | 3–1000 |
+| `segments` | Segments | Int | 16 (R20: 24) | 3–1000 |
 | `type` | Type | Enum `standard, tetrahedron, hexahedron, octahedron, icosahedron, hemisphere` | `standard` | – |
 | `render_perfect` | Render perfect | Bool | true | – (no effect on the mesh) |
 
@@ -128,8 +132,11 @@ The platonic types follow §3.1.
 A platonic solid of circumradius R, each face cut flat into `n` steps per edge, every
 new point projected onto the sphere (`normalize(p)·R`).
 - **Frequency** `n = max(1, ⌊segments / d⌋)` with d = 2 (tetrahedron), 3 (hexahedron),
-  4 (octahedron), 6 (icosahedron). Observed at segments 24 (n = 12, 8, 6, 4) and
-  8 (n = 4, 2, 2, 1); other values follow the same rule (**parity-pending**).
+  4 (octahedron), 5 (icosahedron). Observed at segments 24 (n = 12, 8, 6, 4) and
+  8 (n = 4, 2, 2, 1); the icosahedron also at 16 (n = 3, 92 points,
+  `r25-drift/sphere-type-icosahedron`), which d = 6 (the first reading, from 24 and 8
+  only) gets wrong (n = 2); the three icosahedron samples allow d in (4.8, 5.33], so d = 5.
+  Other values follow the same rule (**parity-pending**).
 - **Triangle types** (base vertices and faces `(A, B, C)`, 0-based, unit radius):
   - tetrahedron: `(−s·sin60°, −1/3, −s·cos60°)`, `(s·sin60°, −1/3, −s·cos60°)`,
     `(0, −1/3, s)`, `(0, 1, 0)` with `s = √8/3`; faces (0,1,2), (0,3,1), (1,3,2), (2,3,0).
