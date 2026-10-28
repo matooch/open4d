@@ -90,4 +90,4 @@ so it isn't a parity item. Revisit after P6.
 | O3 | [parity/make-editable.md](parity/make-editable.md) | brief 03 parity-pendings | todo |
 
 Owner action still open: confirm the reference app's licence allows scripted use
-(OBSERVER.md §1 step 6) and note it in r25-drift.md §0.
+(OBSERVER.md §1 step 6) and note it in r25-drift.md §0 (add a row).
