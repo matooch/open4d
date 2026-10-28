@@ -41,20 +41,69 @@ observation file *what* a probe set and read, in plain words.
 **Never commit:** app scene files, screenshots, renders of the app's UI, preset or
 library content, parameter IDs or symbol names.
 
-Check the app's EULA allows scripted observation before the first run; stop if not.
+Check the app's EULA allows scripted observation before the first run (§1 step 6); stop if not.
 
-## 1. Setup on the Mac (once)
+## 1. Setup on the Mac (once, done by the owner, not by a session)
 
 Keep observer and implementer separate even though they share a machine: the
 implementer must never be able to reach the app.
 
-1. Make an observer workspace outside the repo: `~/forge-observer/` with `probes/`.
-2. Register the MCP server **only for that workspace** (project scope, a `.mcp.json`
-   in `~/forge-observer/`), not at user scope. Set `MCP_AUTH_TOKEN`; leave
-   `MCP_SAFE_MODE` unset (Python execution needs it off).
-3. Start observer sessions from `~/forge-observer/` with the repo added
-   (`claude --add-dir ~/path/to/open4d`). Start implementer sessions from the repo
-   folder; `/mcp` there must not list the bridge.
+**Security first.** The bridge's plugin listens on **all network interfaces**
+(`0.0.0.0:5555`) and `execute_python_script` runs arbitrary code on the Mac. Without a
+token, anyone on your network can run commands. The plugin reads `MCP_AUTH_TOKEN` from
+**the app's own environment** when the app starts, so the token must reach the app, not
+only the MCP server.
+
+1. **Token into the app's environment.** Apps started from the Dock don't see shell
+   variables. Make a token once, put it in your shell profile, and hand it to the app
+   via `launchctl` (lasts until reboot; repeat after a restart, or add it to a login
+   item):
+   ```bash
+   echo "export MCP_AUTH_TOKEN=$(openssl rand -hex 24)" >> ~/.zshrc && source ~/.zshrc
+   launchctl setenv MCP_AUTH_TOKEN "$MCP_AUTH_TOKEN"
+   ```
+   Quit and restart the app. Its console should log
+   `MCP_AUTH_TOKEN is set — commands must include auth_token field`. Allow the
+   incoming connection only if macOS asks; you can also deny it in the firewall
+   (the bridge only needs localhost).
+2. **Plugin loaded?** With the app running:
+   `lsof -nP -iTCP:5555 -sTCP:LISTEN` must show the app. If not, the plugin
+   isn't in the R25 plugins folder or failed to load on R25 (Python 3.9): check the
+   app's Python console for the error and report it.
+3. **MCP server** (needs Python ≥ 3.10 on the Mac, separate from the app's Python):
+   ```bash
+   cd ~/cinema4d-mcp && python3 -m venv .venv && .venv/bin/pip install -e .
+   ```
+4. **Register it only in the observer workspace.** Create
+   `~/forge-observer/.mcp.json` (the token is expanded from your shell, never written
+   into the file):
+   ```json
+   {
+     "mcpServers": {
+       "refapp": {
+         "command": "/Users/<you>/cinema4d-mcp/.venv/bin/cinema4d-mcp-wrapper",
+         "args": [],
+         "env": {
+           "MCP_AUTH_TOKEN": "${MCP_AUTH_TOKEN}",
+           "C4D_HOST": "127.0.0.1",
+           "C4D_PORT": "5555"
+         }
+       }
+     }
+   }
+   ```
+   Leave `MCP_SAFE_MODE` unset (Python execution needs it off).
+5. **Start observer sessions** from that folder with the repo added, and approve the
+   project server when asked:
+   ```bash
+   cd ~/forge-observer && claude --add-dir ~/Github/open4d
+   ```
+   `/mcp` must list `refapp` as connected. Implementer sessions start from the repo
+   folder; `/mcp` there must **not** list it.
+6. **EULA.** The owner confirms the reference app's licence allows scripted use through
+   its own Python API before O0 runs, and notes it in r25-drift.md §0.
+
+The repo's paths are relative to the repo (`docs/parity/…`), wherever the clone lives.
 
 ## 2. O0 · Smoke test (do this before any other observation)
 
@@ -69,7 +118,8 @@ The bridge's README lists R25 as unsupported (it targets 2024+). Find out what w
    OBJ with the settings in [parity/export-settings.md](../parity/export-settings.md)
    (scale 1 cm, normals Vertices, UVs on, No Material, **Flip Z off**, everything else
    default) to a scratch path. Compare it with `tests/golden/cube/defaults/mesh.obj`
-   (`cmp`, then `golden info` on both). Record the R25 exporter's option list in
+   (`golden info` on both, then compare parsed numbers: R25 writes six decimals and a
+   different header line, so `cmp` always fails). Record the R25 exporter's option list in
    r25-drift.md §1: new options, changed defaults, and how you set them from the probe.
 4. A probe that sets a key on a cube's position X at frame 0 and 30 and reads back the
    evaluated value at frame 15. Record whether this works (O2 needs it).
@@ -79,16 +129,24 @@ Write down which tools failed and with what message. The planner adjusts the for
 ## 3. The loop per case (scripted)
 
 1. New, empty document (`execute_python_script`).
-2. Build exactly what the case row says; set only the listed parameters.
-3. Read back every parameter you set (`get_parameter` or the probe) and write the value
+2. Build exactly what the case row says; set only the listed parameters. **Create every
+   object through the app's own menu command** (the command the Create menu runs), not
+   by constructing it directly in the script: directly constructed objects start with
+   different default values and export without normals (found in O0). Then set the
+   case's values.
+3. **Write every parameter of the object into `case.toml`, not only the changed
+   ones.** R25's defaults differ from R20's for several objects (O1); a case that
+   relies on a default becomes ambiguous when defaults move. Read them back after
+   building (step 4).
+4. Read back every parameter you set (`get_parameter` or the probe) and write the value
    the app **shows** into the case row. Clamped values are findings.
-4. Export or sample:
+5. Export or sample:
    - Mesh cases: OBJ export as above → `tests/golden/<feature>/<case>/mesh.obj`.
    - Numeric cases (keys, fields, clones): the probe prints JSON; save it as
      `tests/golden/<feature>/<case>/samples.json` in the format the form gives.
-5. Write `case.toml` (parity/README.md §2); run `golden info` (mesh cases) and paste the
+6. Write `case.toml` (parity/README.md §2); run `golden info` (mesh cases) and paste the
    output into the row.
-6. When the feature is done: `cargo run -q -p forge-parity-harness --bin golden -- check`
+7. When the feature is done: `cargo run -q -p forge-parity-harness --bin golden -- check`
    prints `ok: N cases`. Commit locally on the batch branch, one commit per feature:
    `Observation: <feature> (N cases)`.
 

@@ -2,7 +2,7 @@
 
 Status: not observed · App version: TODO · OS: TODO · Observer: TODO · Date: TODO
 Method: scripted ([agents/OBSERVER.md](../agents/OBSERVER.md)); level B parity (numeric
-samples, [PLAN.md](../PLAN.md)). Unblocks: brief 08 (keyframe tracks + interpolation).
+samples, [PLAN.md](../PLAN.md)). Unblocks: brief 09 (keyframe tracks + interpolation).
 
 Every case: new document at **30 fps**, project range 0–90, a default cube, keys on its
 **position X** only (one track). The probe sets the keys listed, then reads the evaluated
@@ -22,6 +22,12 @@ time can be set), and saves `samples.json`:
 `samples` = `[frame, value]` pairs in frame order. Folder:
 `tests/golden/keyframes/<case>/` with `samples.json` and a `case.toml` whose `[params]`
 lists the keys as `keys = [[frame, value], ...]` plus the options set.
+
+**Keep the default interpolation** unless a row says otherwise: the default curve is what
+we need. O0 already saw it isn't linear (keys 0 → 0 and 30 → 300 gave 150.0004 at frame
+15, where a symmetric ease would give exactly 150): record full precision (repr of the
+float, no rounding) so that small asymmetry is visible. The app version lives in this file's
+header (fill it in), not in `case.toml`.
 
 ## 1. Defaults (GUI or probe read-back)
 
