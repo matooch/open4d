@@ -41,20 +41,69 @@ observation file *what* a probe set and read, in plain words.
 **Never commit:** app scene files, screenshots, renders of the app's UI, preset or
 library content, parameter IDs or symbol names.
 
-Check the app's EULA allows scripted observation before the first run; stop if not.
+Check the app's EULA allows scripted observation before the first run (§1 step 6); stop if not.
 
-## 1. Setup on the Mac (once)
+## 1. Setup on the Mac (once, done by the owner, not by a session)
 
 Keep observer and implementer separate even though they share a machine: the
 implementer must never be able to reach the app.
 
-1. Make an observer workspace outside the repo: `~/forge-observer/` with `probes/`.
-2. Register the MCP server **only for that workspace** (project scope, a `.mcp.json`
-   in `~/forge-observer/`), not at user scope. Set `MCP_AUTH_TOKEN`; leave
-   `MCP_SAFE_MODE` unset (Python execution needs it off).
-3. Start observer sessions from `~/forge-observer/` with the repo added
-   (`claude --add-dir ~/path/to/open4d`). Start implementer sessions from the repo
-   folder; `/mcp` there must not list the bridge.
+**Security first.** The bridge's plugin listens on **all network interfaces**
+(`0.0.0.0:5555`) and `execute_python_script` runs arbitrary code on the Mac. Without a
+token, anyone on your network can run commands. The plugin reads `MCP_AUTH_TOKEN` from
+**the app's own environment** when the app starts, so the token must reach the app, not
+only the MCP server.
+
+1. **Token into the app's environment.** Apps started from the Dock don't see shell
+   variables. Make a token once, put it in your shell profile, and hand it to the app
+   via `launchctl` (lasts until reboot; repeat after a restart, or add it to a login
+   item):
+   ```bash
+   echo "export MCP_AUTH_TOKEN=$(openssl rand -hex 24)" >> ~/.zshrc && source ~/.zshrc
+   launchctl setenv MCP_AUTH_TOKEN "$MCP_AUTH_TOKEN"
+   ```
+   Quit and restart the app. Its console should log
+   `MCP_AUTH_TOKEN is set — commands must include auth_token field`. Allow the
+   incoming connection only if macOS asks; you can also deny it in the firewall
+   (the bridge only needs localhost).
+2. **Plugin loaded?** With the app running:
+   `lsof -nP -iTCP:5555 -sTCP:LISTEN` must show the app. If not, the plugin
+   isn't in the R25 plugins folder or failed to load on R25 (Python 3.9): check the
+   app's Python console for the error and report it.
+3. **MCP server** (needs Python ≥ 3.10 on the Mac, separate from the app's Python):
+   ```bash
+   cd ~/Github/cinema4d-mcp && python3 -m venv .venv && .venv/bin/pip install -e .
+   ```
+4. **Register it only in the observer workspace.** Create
+   `~/forge-observer/.mcp.json` (the token is expanded from your shell, never written
+   into the file):
+   ```json
+   {
+     "mcpServers": {
+       "refapp": {
+         "command": "/Users/<you>/Github/cinema4d-mcp/.venv/bin/cinema4d-mcp-wrapper",
+         "args": [],
+         "env": {
+           "MCP_AUTH_TOKEN": "${MCP_AUTH_TOKEN}",
+           "C4D_HOST": "127.0.0.1",
+           "C4D_PORT": "5555"
+         }
+       }
+     }
+   }
+   ```
+   Leave `MCP_SAFE_MODE` unset (Python execution needs it off).
+5. **Start observer sessions** from that folder with the repo added, and approve the
+   project server when asked:
+   ```bash
+   cd ~/forge-observer && claude --add-dir ~/Github/open4d
+   ```
+   `/mcp` must list `refapp` as connected. Implementer sessions start from the repo
+   folder; `/mcp` there must **not** list it.
+6. **EULA.** The owner confirms the reference app's licence allows scripted use through
+   its own Python API before O0 runs, and notes it in r25-drift.md §0.
+
+The repo's paths are relative to the repo (`docs/parity/…`), wherever the clone lives.
 
 ## 2. O0 · Smoke test (do this before any other observation)
 
