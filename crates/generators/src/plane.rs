@@ -18,8 +18,8 @@ pub(crate) fn node_type() -> NodeType {
                 .range(0.0, f64::MAX)
                 .unit(Unit::Distance),
         )
-        .param(ParamDesc::int("segments_w", "Width segments", 20).range(1, 1000))
-        .param(ParamDesc::int("segments_h", "Height segments", 20).range(1, 1000))
+        .param(ParamDesc::int("segments_w", "Width segments", 10).range(1, 1000))
+        .param(ParamDesc::int("segments_h", "Height segments", 10).range(1, 1000))
         .param(ParamDesc::enumeration(
             "orientation",
             "Orientation",

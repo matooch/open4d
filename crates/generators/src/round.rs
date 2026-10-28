@@ -1,6 +1,6 @@
 //! Cylinder, cone, disc, torus, tube and capsule (docs/specs/PRIMITIVES2.md §3–8).
 
-use std::f64::consts::{FRAC_PI_2, TAU};
+use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
 use forge_core::{Category, NodeType, ParamDesc, Unit};
 use forge_geometry::PolyMesh;
@@ -31,14 +31,14 @@ pub(crate) fn cylinder_type() -> NodeType {
         NodeType::new("forge.cylinder", "Cylinder", Category::Generator)
             .param(distance("radius", "Radius", 50.0))
             .param(distance("height", "Height", 200.0))
-            .param(count("height_segments", "Height segments", 1, 1))
-            .param(count("rotation_segments", "Rotation segments", 36, 3))
+            .param(count("height_segments", "Height segments", 4, 1))
+            .param(count("rotation_segments", "Rotation segments", 16, 3))
             .param(orientation_param())
             .param(ParamDesc::bool("caps", "Caps", true))
             .param(count("cap_segments", "Cap segments", 1, 1))
             .param(ParamDesc::bool("fillet", "Fillet", false))
-            .param(count("fillet_segments", "Fillet segments", 5, 1))
-            .param(distance("fillet_radius", "Fillet radius", 20.0)),
+            .param(count("fillet_segments", "Fillet segments", 3, 1))
+            .param(distance("fillet_radius", "Fillet radius", 3.0)),
     )
 }
 
@@ -48,12 +48,12 @@ pub(crate) fn cone_type() -> NodeType {
             .param(distance("top_radius", "Top radius", 0.0))
             .param(distance("bottom_radius", "Bottom radius", 100.0))
             .param(distance("height", "Height", 200.0))
-            .param(count("height_segments", "Height segments", 8, 1))
-            .param(count("rotation_segments", "Rotation segments", 36, 3))
+            .param(count("height_segments", "Height segments", 4, 1))
+            .param(count("rotation_segments", "Rotation segments", 16, 3))
             .param(orientation_param())
             .param(ParamDesc::bool("caps", "Caps", true))
-            .param(count("cap_segments", "Cap segments", 3, 1))
-            .param(count("fillet_segments", "Fillet segments", 5, 1))
+            .param(count("cap_segments", "Cap segments", 1, 1))
+            .param(count("fillet_segments", "Fillet segments", 3, 1))
             .param(ParamDesc::bool("fillet_top", "Top fillet", false))
             .param(distance("fillet_top_radius", "Top fillet radius", 50.0))
             .param(distance("fillet_top_height", "Top fillet height", 50.0))
@@ -75,21 +75,21 @@ pub(crate) fn disc_type() -> NodeType {
     NodeType::new("forge.disc", "Disc", Category::Generator)
         .param(distance("inner_radius", "Inner radius", 0.0))
         .param(distance("outer_radius", "Outer radius", 100.0))
-        .param(count("disc_segments", "Disc segments", 4, 1))
-        .param(count("rotation_segments", "Rotation segments", 36, 3))
+        .param(count("disc_segments", "Disc segments", 1, 1))
+        .param(count("rotation_segments", "Rotation segments", 16, 3))
         .param(orientation_param())
         .param(ParamDesc::bool("slice", "Slice", false))
         .param(ParamDesc::float("slice_from", "Slice from", 0.0).unit(Unit::Angle))
-        .param(ParamDesc::float("slice_to", "Slice to", TAU).unit(Unit::Angle))
+        .param(ParamDesc::float("slice_to", "Slice to", PI).unit(Unit::Angle))
 }
 
 pub(crate) fn torus_type() -> NodeType {
     with_slice(
         NodeType::new("forge.torus", "Torus", Category::Generator)
-            .param(distance("ring_radius", "Ring radius", 200.0))
-            .param(count("ring_segments", "Ring segments", 36, 3))
+            .param(distance("ring_radius", "Ring radius", 100.0))
+            .param(count("ring_segments", "Ring segments", 32, 3))
             .param(distance("pipe_radius", "Pipe radius", 50.0))
-            .param(count("pipe_segments", "Pipe segments", 18, 3))
+            .param(count("pipe_segments", "Pipe segments", 16, 3))
             .param(orientation_param()),
     )
 }
@@ -98,11 +98,11 @@ pub(crate) fn tube_type() -> NodeType {
     with_slice(
         NodeType::new("forge.tube", "Tube", Category::Generator)
             .param(distance("inner_radius", "Inner radius", 50.0))
-            .param(distance("outer_radius", "Outer radius", 200.0))
-            .param(count("rotation_segments", "Rotation segments", 36, 3))
+            .param(distance("outer_radius", "Outer radius", 100.0))
+            .param(count("rotation_segments", "Rotation segments", 16, 3))
             .param(count("cap_segments", "Cap segments", 1, 1))
             .param(distance("height", "Height", 100.0))
-            .param(count("height_segments", "Height segments", 1, 1))
+            .param(count("height_segments", "Height segments", 4, 1))
             .param(orientation_param())
             .param(ParamDesc::bool("fillet", "Fillet", false))
             .param(count("fillet_segments", "Fillet segments", 8, 1))
@@ -115,9 +115,9 @@ pub(crate) fn capsule_type() -> NodeType {
         NodeType::new("forge.capsule", "Capsule", Category::Generator)
             .param(distance("radius", "Radius", 50.0))
             .param(distance("height", "Height", 200.0))
-            .param(count("height_segments", "Height segments", 8, 1))
-            .param(count("cap_segments", "Cap segments", 8, 1))
-            .param(count("rotation_segments", "Rotation segments", 36, 3))
+            .param(count("height_segments", "Height segments", 4, 1))
+            .param(count("cap_segments", "Cap segments", 4, 1))
+            .param(count("rotation_segments", "Rotation segments", 16, 3))
             .param(orientation_param()),
     )
 }

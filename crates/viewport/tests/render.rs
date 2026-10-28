@@ -297,3 +297,79 @@ fn rotate_gizmo_draws_rings() {
         .unwrap();
     assert!(bluest[2] as i32 > bluest[0] as i32 + 80, "{bluest:?}");
 }
+
+#[test]
+fn sized_points_are_squares_and_depth_tested() {
+    let Some((_lock, gpu)) = gpu() else { return };
+    let cam = Camera::default();
+    let selected = |i: u32| Selection {
+        points: [i].into_iter().collect(),
+        ..Selection::default()
+    };
+    let sel = u8c(Palette::default().selection, 1.0);
+    let bg = u8c(Palette::default().background, 1.0);
+    let at = |img: &Image, p: DVec3, dx: f64, dy: f64| {
+        let s = cam.project(p, W as f64, H as f64).unwrap();
+        img.at((s.x + dx) as u32, (s.y + dy) as u32)
+    };
+    let pts = |shading, point_size| Settings {
+        shading,
+        show_points: true,
+        point_size,
+        ..Settings::default()
+    };
+
+    // front corner (1, 1, 1), index 7: a 9 px square reaches 3 px up and right of the
+    // projected point, where there is only background; 1 px points do not
+    let front = MeshBuffers::new(gpu, &unit_box(), &selected(7));
+    let items = [DrawMesh {
+        mesh: &front,
+        color: [0.7; 3],
+    }];
+    let corner = DVec3::new(1.0, 1.0, 1.0);
+    let sized = render(gpu, &cam, &items, pts(Shading::Wire, 9.0));
+    assert!(close(at(&sized, corner, 3.0, -3.0), sel));
+    assert!(close(at(&sized, corner, -3.0, 3.0), sel));
+    assert!(
+        close(at(&sized, corner, 7.0, -7.0), bg),
+        "outside the square"
+    );
+    let thin = render(gpu, &cam, &items, pts(Shading::Wire, 0.0));
+    assert!(close(at(&thin, corner, 3.0, -3.0), bg));
+    // unselected points use the wire colour
+    let plain = MeshBuffers::new(gpu, &unit_box(), &Selection::default());
+    let items = [DrawMesh {
+        mesh: &plain,
+        color: [0.7; 3],
+    }];
+    let img = render(gpu, &cam, &items, pts(Shading::Wire, 9.0));
+    assert!(close(
+        at(&img, corner, 3.0, -3.0),
+        u8c(Palette::default().wire, 1.0)
+    ));
+
+    // the far corner (-1, -1, -1), index 0, lies behind the front face: its square shows
+    // in wireframe (no depth from faces) and not with filled faces
+    let back = MeshBuffers::new(gpu, &unit_box(), &selected(0));
+    let items = [DrawMesh {
+        mesh: &back,
+        color: [0.7; 3],
+    }];
+    let far = DVec3::new(-1.0, -1.0, -1.0);
+    let wire = render(gpu, &cam, &items, pts(Shading::Wire, 9.0));
+    assert!(close(at(&wire, far, 3.0, 0.0), sel));
+    let filled = render(gpu, &cam, &items, pts(Shading::FlatWire, 9.0));
+    assert!(
+        !close(at(&filled, far, 3.0, 0.0), sel),
+        "hidden by the face"
+    );
+
+    // no point buffers: nothing is drawn
+    let none = MeshBuffers::with_device_no_points(&gpu.device, &unit_box(), &selected(7), None);
+    let items = [DrawMesh {
+        mesh: &none,
+        color: [0.7; 3],
+    }];
+    let img = render(gpu, &cam, &items, pts(Shading::Wire, 9.0));
+    assert!(close(at(&img, corner, 3.0, -3.0), bg));
+}

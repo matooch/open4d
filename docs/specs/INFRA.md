@@ -102,6 +102,26 @@ Unknown keys are an error (catches typos). `observation` must not contain `..`. 
 `mesh` is set, the file must exist and parse as OBJ. Validation problems are reported
 as a list; a valid case has none. An empty `tests/golden/` is valid.
 
+### 3.1 App version and the R20 defaults overlay
+
+Golden cases come from two app versions; the case file does not say which (the manifest
+denies unknown keys and golden files are read-only). The version is read from the case's
+observation file: its header line starting `Status:` has `App version: <name> R<nn>…`, and
+the first `R2` + digit token after `App version:` is the version (`R20` or `R25`). Anything
+else (no `Status:` line, no `App version:`, another version, unreadable file) is an error
+naming the observation file. `docs/parity/r25-defaults.md` and `docs/parity/r25-drift.md`
+are R25; every other observation is R20.
+
+Our node descriptors use the **R25** defaults (`docs/parity/r25-defaults.md`). A parity test
+that builds a case from `[params]` must give an R20 case the R20 defaults: they live in
+`tests/defaults/r20.toml`, one table per node type (our type id without `forge.`, e.g.
+`[cylinder]`, `[circle_spline]`), holding **only** the params whose R20 default differs from
+R25 (the `!` rows of that observation) in case-file units (degrees as shown, percent as
+shown). A case's params are `overlay ∪ case.params`, the case winning; the overlay applies
+to the case's own `[params]` (type = the case feature) and to each `[params.input*]` /
+`[params.generator]` table (type = its `type` key). R25 cases get no overlay. Params of the
+reference app that we have no key for (the isoparm subdivisions) are not in the file.
+
 ## 4. Parity harness (`crates/parity-harness`, package `forge-parity-harness`)
 
 - `parse_obj(&str) -> Result<Mesh, ObjError>`: reads `v` (x y z; extra w ignored) and
@@ -126,6 +146,11 @@ as a list; a valid case has none. An empty `tests/golden/` is valid.
   `<feature>/<case>/` directory, sorted; a case dir without `case.toml` still appears
   (so validation can flag it).
 - `validate_case(repo_root, &GoldenCase) -> Vec<String>`: rules in §3.
+- `AppVersion { R20, R25 }` and `app_version(repo_root, &CaseManifest) -> Result<AppVersion,
+  String>`: the version rule of §3.1. `defaults_overlay(repo_root, AppVersion, node_type) ->
+  BTreeMap<String, toml::Value>`: the `[node_type]` table of `tests/defaults/r20.toml` for
+  R20 (empty if the table is missing), always empty for R25; panics with the file name if
+  `r20.toml` is missing or malformed (it is test data).
 - Integration test validates every case under the real `tests/golden/`.
 - `mesh_info(&Mesh) -> MeshInfo { vertices, unused_vertices, faces, face_sizes:
   BTreeMap<usize, usize>, bbox: Option<([f64; 3], [f64; 3])> }`; `obj_extras(&str)

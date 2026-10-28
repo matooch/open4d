@@ -27,11 +27,11 @@ pub(crate) fn node_type() -> NodeType {
         ))
         .param(ParamDesc::bool("fillet", "Fillet", false))
         .param(
-            ParamDesc::float("fillet_radius", "Fillet radius", 40.0)
+            ParamDesc::float("fillet_radius", "Fillet radius", 3.0)
                 .range(0.0, f64::MAX)
                 .unit(Unit::Distance),
         )
-        .param(ParamDesc::int("fillet_segments", "Fillet segments", 5).range(1, 1000))
+        .param(ParamDesc::int("fillet_segments", "Fillet segments", 3).range(1, 1000))
 }
 
 pub(crate) fn build(p: &Params) -> Result<PolyMesh, BuildError> {

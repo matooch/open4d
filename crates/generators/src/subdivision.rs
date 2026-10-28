@@ -14,7 +14,7 @@ pub const TYPE: &str = "forge.subdivision";
 pub(crate) fn node_type() -> NodeType {
     NodeType::new(TYPE, "Subdivision", Category::Generator)
         .param(ParamDesc::int("level_view", "Viewport level", 2).range(0, 6))
-        .param(ParamDesc::int("level_render", "Render level", 3).range(0, 6))
+        .param(ParamDesc::int("level_render", "Render level", 2).range(0, 6))
         .param(ParamDesc::enumeration(
             "scheme",
             "Scheme",
@@ -34,7 +34,7 @@ pub(crate) fn node_type() -> NodeType {
         .param(ParamDesc::enumeration(
             "subdivide_uvs",
             "Subdivide UVs",
-            "standard",
+            "edge",
             &[
                 ("standard", "Standard"),
                 ("boundary", "Boundary"),

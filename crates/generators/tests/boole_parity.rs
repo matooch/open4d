@@ -3,6 +3,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+mod common;
+
+use common::resolved_params;
 use forge_core::Value;
 use forge_generators::{BuildError, boole, build};
 use forge_parity_harness::{Compare, Mesh, compare_geometric, discover_cases};
@@ -34,7 +37,7 @@ fn boole_matches_the_reference_geometrically() {
             *p += offset;
         }
         let mut values = BTreeMap::new();
-        for (k, v) in &m.params {
+        for (k, v) in &resolved_params(&case, &m) {
             let v = match v {
                 toml::Value::String(s) => Value::Enum(s.clone()),
                 toml::Value::Boolean(b) => Value::Bool(*b),

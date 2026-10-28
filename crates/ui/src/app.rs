@@ -1,6 +1,8 @@
 //! The egui shell: menus, dock areas, panels and shortcuts (docs/specs/UI.md §9).
 //! All state changes go through `commands::execute` or `attributes::apply_edit`.
 
+use std::path::PathBuf;
+
 use eframe::egui_wgpu;
 use egui::{Key, KeyboardShortcut, Modifiers, RichText, Sense, Ui};
 use forge_core::transform::{Transform, rotation_part};
@@ -13,13 +15,21 @@ use crate::attributes::{
     Gesture, Widget, apply_edit, attribute_rows, from_display, to_display, unit_suffix,
 };
 use crate::commands::{Command, category_label, create_menu, execute};
+use crate::component_edit::{ComponentDrag, pivot_view, pivot_world};
+use crate::components::{
+    ClickModifiers, EditMode, SelectCmd, target as component_target, viewport_click, viewport_rect,
+};
 use crate::coordinates::{Row, Space, Third, coord_view, set_coord};
 use crate::dock::{Area, Dock, Panel};
-use crate::manipulate::{apply_drag, pick_node};
+use crate::manipulate::apply_drag;
 use crate::state::EditorState;
 use crate::theme::Theme;
 use crate::tree::tree_rows;
 use crate::viewport_panel::{NavInput, SceneView, ViewportPanel, apply_nav, nav_action};
+
+mod files;
+
+pub use files::{Dialogs, FileKind, NativeDialogs, Unsaved};
 
 const SHADINGS: [(Shading, &str); 5] = [
     (Shading::Smooth, "Smooth"),
@@ -28,6 +38,25 @@ const SHADINGS: [(Shading, &str); 5] = [
     (Shading::SmoothWire, "Smooth + wire"),
     (Shading::FlatWire, "Flat + wire"),
 ];
+
+const OPEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
+const SAVE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
+const SAVE_AS: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S);
+const SELECT_ALL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::A);
+const DESELECT_ALL: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::A);
+
+#[derive(Clone, Copy)]
+enum FileAction {
+    New,
+    Open,
+    Save,
+    SaveAs,
+    ImportObj,
+    ExportObj,
+    ExportSelectedObj,
+}
 
 pub struct Editor {
     pub state: EditorState,
@@ -46,6 +75,16 @@ pub struct Editor {
     coord_third: Third,
     /// The gizmo drag in progress: drag state, node, its transform at the start, gesture.
     gizmo_drag: Option<(Drag, NodeId, Transform, u64)>,
+    /// The gizmo drag on components in progress: drag state, component drag, gesture.
+    component_drag: Option<(Drag, ComponentDrag, u64)>,
+    /// The rectangle select in progress, `[x0, y0, x1, y1]` in render pixels.
+    rect_drag: Option<[f64; 4]>,
+    /// File menu (docs/specs/IO.md §2): dialogs, current file, revision at the last
+    /// save or load, and the last window title sent.
+    dialogs: Box<dyn Dialogs>,
+    file_path: Option<PathBuf>,
+    saved_revision: u64,
+    sent_title: String,
 }
 
 impl eframe::App for Editor {
@@ -57,6 +96,7 @@ impl eframe::App for Editor {
 impl Editor {
     pub fn new(state: EditorState) -> Editor {
         Editor {
+            saved_revision: state.doc.scene().revision(),
             state,
             viewport: ViewportPanel::default(),
             renaming: None,
@@ -69,6 +109,11 @@ impl Editor {
             coord_space: Space::Local,
             coord_third: Third::Scale,
             gizmo_drag: None,
+            component_drag: None,
+            rect_drag: None,
+            dialogs: Box::new(NativeDialogs),
+            file_path: None,
+            sent_title: String::new(),
         }
     }
 
@@ -99,6 +144,12 @@ impl Editor {
     /// Draws the whole editor. `rs` is `None` without a GPU (tests).
     pub fn show(&mut self, ui: &mut Ui, rs: Option<&egui_wgpu::RenderState>) {
         self.shortcuts(ui.ctx());
+        let title = self.window_title();
+        if title != self.sent_title {
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
+            self.sent_title = title;
+        }
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
         if !self.state.dock.tabs(Area::Bottom).is_empty() {
@@ -147,7 +198,22 @@ impl Editor {
         let redo_y = KeyboardShortcut::new(Modifiers::COMMAND, Key::Y);
         let undo = KeyboardShortcut::new(Modifiers::COMMAND, Key::Z);
         let mut cmds = Vec::new();
+        let mut file_action = None;
         ctx.input_mut(|i| {
+            // Save As first: Ctrl+S would also match with Shift held
+            if i.consume_shortcut(&SAVE_AS) {
+                file_action = Some(FileAction::SaveAs);
+            } else if i.consume_shortcut(&SAVE) {
+                file_action = Some(FileAction::Save);
+            } else if i.consume_shortcut(&OPEN) {
+                file_action = Some(FileAction::Open);
+            }
+            // Deselect All first: Ctrl+A would also match with Shift held
+            if i.consume_shortcut(&DESELECT_ALL) {
+                cmds.push(Command::Select(SelectCmd::None));
+            } else if i.consume_shortcut(&SELECT_ALL) {
+                cmds.push(Command::Select(SelectCmd::All));
+            }
             if i.consume_shortcut(&redo) || i.consume_shortcut(&redo_y) {
                 cmds.push(Command::Redo);
             } else if i.consume_shortcut(&undo) {
@@ -192,17 +258,57 @@ impl Editor {
         for c in cmds {
             self.run(c);
         }
+        if let Some(a) = file_action {
+            self.file_action(a);
+        }
+    }
+
+    fn file_action(&mut self, action: FileAction) {
+        match action {
+            FileAction::New => self.new_scene(),
+            FileAction::Open => self.open_scene(),
+            FileAction::Save => {
+                self.save();
+            }
+            FileAction::SaveAs => {
+                self.save_as();
+            }
+            FileAction::ImportObj => self.import_obj(),
+            FileAction::ExportObj => self.export_obj(false),
+            FileAction::ExportSelectedObj => self.export_obj(true),
+        }
     }
 
     fn menu_bar(&mut self, ui: &mut Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button("File", |ui| {
-                if ui.button("New").clicked() {
-                    let registry = self.state.doc.scene().registry().clone();
-                    let dock = self.state.dock.clone();
-                    self.state = EditorState::new(registry);
-                    self.state.dock = dock;
-                    ui.close();
+                let has_selection = !self.state.selection.nodes.is_empty();
+                let items = [
+                    ("New", None, FileAction::New, true),
+                    ("Open\u{2026}", Some(OPEN), FileAction::Open, true),
+                    ("Save", Some(SAVE), FileAction::Save, true),
+                    ("Save As\u{2026}", Some(SAVE_AS), FileAction::SaveAs, true),
+                    ("Import OBJ\u{2026}", None, FileAction::ImportObj, true),
+                    ("Export OBJ\u{2026}", None, FileAction::ExportObj, true),
+                    (
+                        "Export Selected as OBJ\u{2026}",
+                        None,
+                        FileAction::ExportSelectedObj,
+                        has_selection,
+                    ),
+                ];
+                for (label, shortcut, action, enabled) in items {
+                    if matches!(action, FileAction::ImportObj) {
+                        ui.separator();
+                    }
+                    let mut button = egui::Button::new(label);
+                    if let Some(sc) = shortcut {
+                        button = button.shortcut_text(ui.ctx().format_shortcut(&sc));
+                    }
+                    if ui.add_enabled(enabled, button).clicked() {
+                        ui.close();
+                        self.file_action(action);
+                    }
                 }
             });
             ui.menu_button("Edit", |ui| {
@@ -219,12 +325,38 @@ impl Editor {
                     ui.close();
                 }
                 ui.separator();
+                let select_items = [
+                    ("Select All", Some(SELECT_ALL), SelectCmd::All),
+                    ("Deselect All", Some(DESELECT_ALL), SelectCmd::None),
+                    ("Invert Selection", None, SelectCmd::Invert),
+                ];
+                for (label, shortcut, cmd) in select_items {
+                    let mut button = egui::Button::new(label);
+                    if let Some(sc) = shortcut {
+                        button = button.shortcut_text(ui.ctx().format_shortcut(&sc));
+                    }
+                    if ui.add(button).clicked() {
+                        self.run(Command::Select(cmd));
+                        ui.close();
+                    }
+                }
+                ui.separator();
                 if ui.button("Make Editable").clicked() {
                     self.run(Command::MakeEditable);
                     ui.close();
                 }
                 if ui.button("Current State to Object").clicked() {
                     self.run(Command::CurrentStateToObject);
+                    ui.close();
+                }
+            });
+            ui.menu_button("Select", |ui| {
+                if ui.button("Grow Selection").clicked() {
+                    self.run(Command::Select(SelectCmd::Grow));
+                    ui.close();
+                }
+                if ui.button("Shrink Selection").clicked() {
+                    self.run(Command::Select(SelectCmd::Shrink));
                     ui.close();
                 }
             });
@@ -342,6 +474,18 @@ impl Editor {
     }
 
     fn viewport_ui(&mut self, ui: &mut Ui, rs: Option<&egui_wgpu::RenderState>) {
+        // header: what a click selects (EDITABLE.md §2.6)
+        ui.horizontal(|ui| {
+            for mode in EditMode::ALL {
+                let on = self.state.mode == mode;
+                if ui
+                    .add(egui::Button::new(mode.label()).selected(on))
+                    .clicked()
+                {
+                    self.run(Command::SetMode(mode));
+                }
+            }
+        });
         let rect = ui.available_rect_before_wrap();
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         let Some(rs) = rs else {
@@ -372,7 +516,9 @@ impl Editor {
             (rect.width() * ppp).round() as u32,
             (rect.height() * ppp).round() as u32,
         ];
-        if !input.alt {
+        if input.alt {
+            self.rect_drag = None;
+        } else {
             self.viewport_interaction(ui, &response, rect, ppp, size);
         }
         let gizmo = self.current_gizmo();
@@ -385,10 +531,25 @@ impl Editor {
                 scene: self.state.doc.scene(),
                 selected: &self.state.selection.nodes,
                 gizmo: gizmo.as_ref(),
+                component: component_target(&self.state).map(|id| (id, self.state.mode)),
             },
         );
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
         ui.painter().image(tex, rect, uv, egui::Color32::WHITE);
+        if let Some([x0, y0, x1, y1]) = self.rect_drag
+            && response.dragged()
+        {
+            let to_points = |x: f64, y: f64| {
+                rect.min + egui::vec2((x / ppp as f64) as f32, (y / ppp as f64) as f32)
+            };
+            let colour = Theme::default().component_selection;
+            ui.painter().rect_stroke(
+                egui::Rect::from_two_pos(to_points(x0, y0), to_points(x1, y1)),
+                0.0,
+                egui::Stroke::new(1.0, colour),
+                egui::StrokeKind::Inside,
+            );
+        }
         let label = SHADINGS
             .iter()
             .find(|(s, _)| *s == self.state.shading)
@@ -396,7 +557,10 @@ impl Editor {
         ui.painter().text(
             rect.left_top() + egui::vec2(8.0, 6.0),
             egui::Align2::LEFT_TOP,
-            format!("Perspective · {label}"),
+            match self.state.mode {
+                EditMode::Model => format!("Perspective · {label}"),
+                mode => format!("Perspective · {label} · {} mode", mode.label()),
+            },
             egui::FontId::proportional(12.0),
             Theme::default().weak_text,
         );
@@ -406,6 +570,12 @@ impl Editor {
     fn current_gizmo(&self) -> Option<Gizmo> {
         let id = self.state.selection.active?;
         let m = self.state.doc.scene().world_matrix(id)?;
+        // component modes: the gizmo sits on the selected components (EDITABLE.md §3.6)
+        let origin = if component_target(&self.state).is_some() {
+            pivot_world(&self.state)?
+        } else {
+            m.w_axis.truncate()
+        };
         let object = self.gizmo_space == GizmoSpace::Object || self.gizmo_mode == GizmoMode::Scale;
         let axes = if object {
             let r = rotation_part(&m);
@@ -414,7 +584,7 @@ impl Editor {
             [DVec3::X, DVec3::Y, DVec3::Z]
         };
         Some(Gizmo {
-            origin: m.w_axis.truncate(),
+            origin,
             mode: self.gizmo_mode,
             axes,
             ..Gizmo::default()
@@ -431,32 +601,75 @@ impl Editor {
         size: [u32; 2],
     ) {
         let (w, h) = (size[0].max(1) as f64, size[1].max(1) as f64);
+        let to_pixels = |pos: egui::Pos2| {
+            (
+                ((pos.x - rect.min.x) * ppp) as f64,
+                ((pos.y - rect.min.y) * ppp) as f64,
+            )
+        };
+        let modifiers = ui.input(|i| i.modifiers);
+        let mods = ClickModifiers {
+            shift: modifiers.shift,
+            command: modifiers.command,
+        };
+        // End of a rectangle select: the release may not report a pointer position
+        if response.drag_stopped_by(egui::PointerButton::Primary)
+            && let Some(mut r) = self.rect_drag.take()
+        {
+            if let Some(pos) = response.interact_pointer_pos() {
+                (r[2], r[3]) = to_pixels(pos);
+            }
+            if let Err(e) = viewport_rect(&mut self.state, r, [w, h], mods) {
+                self.state.status = e;
+            }
+            return;
+        }
         let Some(pos) = response.interact_pointer_pos() else {
             return;
         };
-        let (x, y) = (
-            ((pos.x - rect.min.x) * ppp) as f64,
-            ((pos.y - rect.min.y) * ppp) as f64,
-        );
+        let (x, y) = to_pixels(pos);
         let cam = self.state.camera;
-        let modifiers = ui.input(|i| i.modifiers);
+        let snap_step = |mode: GizmoMode| {
+            modifiers.command.then_some(match mode {
+                GizmoMode::Translate => 10.0,
+                GizmoMode::Rotate => 15f64.to_radians(),
+                GizmoMode::Scale => 0.1,
+            })
+        };
         if response.drag_started_by(egui::PointerButton::Primary)
-            && let (Some(g), Some(id)) = (self.current_gizmo(), self.state.selection.active)
+            && let Some(g) = self.current_gizmo()
             && let Some(handle) = g.hit_test(&cam, x, y, w, h)
             && let Some(drag) = Drag::begin(&g, handle, &cam, x, y, w, h)
-            && let Some(start) = self.state.doc.scene().local_transform(id)
         {
-            self.gesture_seq += 1;
-            self.gizmo_drag = Some((drag, id, start, self.gesture_seq));
+            if component_target(&self.state).is_some() {
+                // a gizmo drag in a component mode edits the components (EDITABLE.md §3.5)
+                if let Some(cd) = ComponentDrag::begin(&self.state) {
+                    self.gesture_seq += 1;
+                    self.component_drag = Some((drag, cd, self.gesture_seq));
+                }
+            } else if let Some(id) = self.state.selection.active
+                && let Some(start) = self.state.doc.scene().local_transform(id)
+            {
+                self.gesture_seq += 1;
+                self.gizmo_drag = Some((drag, id, start, self.gesture_seq));
+            }
+        }
+        if let Some((drag, cd, n)) = &mut self.component_drag {
+            if response.dragged_by(egui::PointerButton::Primary) {
+                let delta = drag.update(&cam, x, y, w, h, snap_step(self.gizmo_mode));
+                self.state.status = match cd.apply(&mut self.state.doc, delta, Gesture::Drag(*n)) {
+                    Ok(()) => String::new(),
+                    Err(e) => e.to_string(),
+                };
+            }
+            if response.drag_stopped() {
+                self.component_drag = None;
+            }
+            return;
         }
         if let Some((drag, id, start, n)) = &mut self.gizmo_drag {
             if response.dragged_by(egui::PointerButton::Primary) {
-                let snap = modifiers.command.then_some(match self.gizmo_mode {
-                    GizmoMode::Translate => 10.0,
-                    GizmoMode::Rotate => 15f64.to_radians(),
-                    GizmoMode::Scale => 0.1,
-                });
-                let delta = drag.update(&cam, x, y, w, h, snap);
+                let delta = drag.update(&cam, x, y, w, h, snap_step(self.gizmo_mode));
                 let (id, start, n) = (*id, *start, *n);
                 self.state.status =
                     match apply_drag(&mut self.state.doc, id, &start, delta, Gesture::Drag(n)) {
@@ -469,13 +682,21 @@ impl Editor {
             }
             return;
         }
-        if response.clicked() {
-            match pick_node(self.state.doc.scene(), &cam, x, y, w, h) {
-                Some(id) if modifiers.command => self.state.selection.toggle(id),
-                Some(id) => self.state.selection.click(id),
-                None if !modifiers.command => self.state.selection.clear(),
-                None => {}
+        // a primary drag that is not on a gizmo handle selects components by rectangle
+        if component_target(&self.state).is_some() {
+            if response.drag_started_by(egui::PointerButton::Primary) {
+                self.rect_drag = Some([x, y, x, y]);
             }
+            if let Some(r) = &mut self.rect_drag
+                && response.dragged_by(egui::PointerButton::Primary)
+            {
+                (r[2], r[3]) = (x, y);
+            }
+        }
+        if response.clicked()
+            && let Err(e) = viewport_click(&mut self.state, [x, y], [w, h], mods)
+        {
+            self.state.status = e;
         }
     }
 
@@ -575,6 +796,21 @@ impl Editor {
                             Ok(()) => String::new(),
                             Err(e) => e.to_string(),
                         };
+                    }
+                    ui.end_row();
+                }
+                // component modes: the pivot of the selected components (EDITABLE.md §3.6)
+                if component_target(&self.state).is_some() {
+                    ui.label("Pivot");
+                    match pivot_view(&self.state, self.coord_space == Space::World) {
+                        Some(p) => {
+                            for (k, axis) in ["X", "Y", "Z"].iter().enumerate() {
+                                ui.label(format!("{axis} {:.3}", p[k]));
+                            }
+                        }
+                        None => {
+                            ui.weak("no selection");
+                        }
                     }
                     ui.end_row();
                 }

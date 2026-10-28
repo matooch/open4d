@@ -70,8 +70,8 @@ fn caps(t: NodeType, cap_type: &str) -> NodeType {
 pub(crate) fn extrude_type() -> NodeType {
     caps(
         NodeType::new(EXTRUDE, "Extrude", Category::Generator)
-            .param(ParamDesc::vec3("movement", "Movement", [0.0, 0.0, 20.0]).unit(Unit::Distance))
-            .param(ParamDesc::int("subdivision", "Subdivision", 1).range(1, 1000)),
+            .param(ParamDesc::vec3("movement", "Movement", [0.0, 0.0, 100.0]).unit(Unit::Distance))
+            .param(ParamDesc::int("subdivision", "Subdivision", 1).range(1, 4000)),
         "ngons",
     )
 }
@@ -80,9 +80,13 @@ pub(crate) fn lathe_type() -> NodeType {
     caps(
         NodeType::new(LATHE, "Lathe", Category::Generator)
             .param(ParamDesc::float("angle", "Angle", std::f64::consts::TAU).unit(Unit::Angle))
-            .param(ParamDesc::int("subdivision", "Subdivision", 24).range(3, 1000))
+            .param(ParamDesc::int("subdivision", "Subdivision", 32).range(1, 4000))
             .param(ParamDesc::float("movement", "Movement", 0.0).unit(Unit::Distance))
-            .param(ParamDesc::float("scaling", "Scaling", 100.0).unit(Unit::Percent)),
+            .param(
+                ParamDesc::float("scaling", "Scaling", 100.0)
+                    .range(0.0, f64::MAX)
+                    .unit(Unit::Percent),
+            ),
         "triangles",
     )
 }
@@ -90,8 +94,8 @@ pub(crate) fn lathe_type() -> NodeType {
 pub(crate) fn loft_type() -> NodeType {
     caps(
         NodeType::new(LOFT, "Loft", Category::Generator)
-            .param(ParamDesc::int("mesh_subdivision_u", "Mesh subdivision U", 30).range(3, 1000))
-            .param(ParamDesc::int("mesh_subdivision_v", "Mesh subdivision V", 10).range(1, 1000))
+            .param(ParamDesc::int("mesh_subdivision_u", "Mesh subdivision U", 16).range(2, 4000))
+            .param(ParamDesc::int("mesh_subdivision_v", "Mesh subdivision V", 4).range(2, 4000))
             .param(ParamDesc::bool("organic_form", "Organic form", false))
             .param(ParamDesc::bool("loop", "Loop", false))
             .param(ParamDesc::bool(
@@ -111,7 +115,11 @@ pub(crate) fn loft_type() -> NodeType {
 pub(crate) fn sweep_type() -> NodeType {
     caps(
         NodeType::new(SWEEP, "Sweep", Category::Generator)
-            .param(ParamDesc::float("end_scale", "End scale", 100.0).unit(Unit::Percent))
+            .param(
+                ParamDesc::float("end_scale", "End scale", 100.0)
+                    .range(0.0, f64::MAX)
+                    .unit(Unit::Percent),
+            )
             .param(ParamDesc::float("end_rotation", "End rotation", 0.0).unit(Unit::Angle))
             .param(ParamDesc::bool("banking", "Banking", true))
             .param(ParamDesc::bool(

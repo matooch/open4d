@@ -2,6 +2,19 @@
 name = "forge-io"
 version.workspace = true
 edition.workspace = true
+description = "File formats: Wavefront OBJ import and export (docs/specs/IO.md)."
+
+[dependencies]
+forge-core = { path = "../core" }
+forge-generators = { path = "../generators" }
+forge-geometry = { path = "../geometry" }
+glam = "0.34"
+thiserror = "2"
+
+[dev-dependencies]
+forge-modifiers = { path = "../modifiers" }
+forge-parity-harness = { path = "../parity-harness" }
+toml = "1"
 
 [lints]
 workspace = true

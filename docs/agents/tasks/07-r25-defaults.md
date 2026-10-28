@@ -1,6 +1,6 @@
 # 07 · R25 defaults with version-aware parity tests
 
-Status: blocked (needs O4 `docs/parity/r25-defaults.md` and the committed O1 cases) · Branch: `batch-08` · Planner: main session · Implementer: Claude Sonnet 5.5 (local, macOS)
+Status: done · Branch: `batch-08` · Planner: main session · Implementer: Claude Sonnet 5.5 (local, macOS)
 
 ## Goal
 Our node types use the **R25** defaults and ranges, and every parity test still passes:
@@ -48,11 +48,25 @@ defaults. The O1 drift cases run as parity cases.
 - Do 1 and 2 first and run the whole gate **before** touching any default: everything
   must still pass (the overlay is a no-op while defaults are still R20). Then change the
   defaults; any R20 case that now fails means an overlay row is missing.
-- O1 already lists the expected differences: sphere segments 16 (R20 24); cylinder
-  height segments 4, rotation segments 16, fillet segments 3, fillet radius 3; torus ring
-  radius 100, ring segments 32, pipe segments 16; extrude offset 100 (R20 20, the field
-  is now called Offset and has a new Direction option, default Auto); boole type union
-  (R20 A subtract B), hide new edges on. O4 is the authority for exact values.
+- O4 (`docs/parity/r25-defaults.md`) is the authority: 73 `!` rows across the primitives,
+  splines, generators. The deformers and the smoothing tag have none. Planner rulings on its
+  open points:
+  - **Slice To = 180** in R25 (machine readback of π). R20's 360 was "reading uncertain".
+    Every golden slice case sets `slice_to` explicitly, so the overlay entry only matters
+    for completeness: put `slice_to = 360` in the R20 overlay as the R20 file states.
+  - **Boole type stays A subtract B** (O4 readback, same as R20). O1's "union" was the drift
+    case's explicit `mode = "union"`. Only `hide_new_edges` moves (off → on).
+  - **Extrude**: R25 replaced Movement (x, y, z) by one Offset number plus a Direction
+    list. Map it to our existing key: `movement_z` default 20 → 100. Direction is a new
+    R25-only parameter (out of scope).
+  - **Enum defaults that name an option we don't have** (e.g. loft `cap_type` N-gon,
+    `subdivide_uvs` Edge, spline `intermediate` Uniform): if our enum has the option, switch
+    the default. If not, keep the R20 default, list it in the spec as "R25 default not
+    supported yet", and don't add the option in this brief.
+  - Rows marked "reading uncertain" or "from the mesh" in the R20 column (cone
+    `fillet_segments`, capsule segments) are R20 values: put them in the overlay as written.
+  - "none (±999999999 accepted)" means no clamp: don't add a range for it. Only add or
+    change a range where O4 shows a finite clamp that differs from ours.
 - **Vertex order may have changed in R25 for torus and extrude** (O1: with the R20
   values typed in, the same vertex set and counts but a different order). So
   `r25-drift/torus-slice` and `r25-drift/extrude-rectangle-caps-quadrangles` may fail
@@ -89,3 +103,10 @@ R25-only parameters (O4 "New-object parameters"), any golden or observation edit
 exporter text format (we compare parsed numbers).
 
 ## Report (implementer fills in)
+- Result: drift 6/7 exact or by the original feature's comparison (sphere-defaults, sphere-type-icosahedron, cylinder-fillet, torus-slice cut-geometric, boole x2 geometric). Known mismatch: extrude-rectangle-caps-quadrangles ("R25 vertex order": the 4-point caps start at another corner; GENERATORS2.md §11.1). None unsupported. All R20 parity counts unchanged.
+- Rules derived: icosahedron frequency d = 5 (floor(segments/5); 8->1, 16->3, 24->4; `r25-drift/sphere-type-icosahedron`). R25 extrude 4-point caps: start `[3,2,1,0]`, end `[4,5,6,7]` (one case, parity-pending, not implemented).
+- 37 of the 42 `!` rows applied. Not applied: circle and helix `intermediate` Uniform (build only supports Adaptive 5°), loft `cap_type` N-gon (loft ignores cap type, always triangles), lathe and sweep `isoparm_subdivision` (no param). All kept R20 values are still in the overlay.
+- Ranges changed to O4's finite clamps (regular_grid_width >= 0.01, optimize_points >= 0.0001, array copies 1-1000 etc., see GENERATORS2.md §0a).
+- Deviations: loft/spline defaults kept as above; icosahedron rule changed (finding); lathe/sweep `cap_type` default left Triangles although O4 lists N-gon for R25 (no `!`; R20 meshes show Triangles) - needs re-observation; tube/cone R25 fillet defaults (3) not applied (not `!`).
+- Files changed: harness lib.rs, tests/defaults/r20.toml, crates/{generators,modifiers,io}/tests/common, parity tests, r25_drift.rs, r25_defaults.rs, version.rs, descriptors in crates/generators/src, specs, STATUS.md.
+- Gate: GATE: 362 tests passed, 0 failed / cleanroom: ok / ok: 202 cases / GATE: all passed

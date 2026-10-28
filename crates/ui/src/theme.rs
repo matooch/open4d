@@ -12,6 +12,8 @@ pub struct Theme {
     pub accent: Color32,
     pub accent_text: Color32,
     pub error: Color32,
+    /// Selected points, edges and polygons of the component target (EDITABLE.md §2.6).
+    pub component_selection: Color32,
 }
 
 impl Default for Theme {
@@ -25,6 +27,7 @@ impl Default for Theme {
             accent: Color32::from_rgb(0xE0, 0x8A, 0x2E),
             accent_text: Color32::from_rgb(0x1A, 0x1A, 0x1A),
             error: Color32::from_rgb(0xE5, 0x53, 0x4B),
+            component_selection: Color32::from_rgb(0x38, 0xC6, 0xE8),
         }
     }
 }

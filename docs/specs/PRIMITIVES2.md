@@ -49,20 +49,31 @@ and optionally **closed** (the last point connects back to the first).
 
 ## 3. Cylinder (`forge.cylinder`)
 
-Params: `radius` 50, `height` 200, `height_segments` 1 (1–1000), `rotation_segments`
-36 (3–1000), `orientation`, `caps` true, `cap_segments` 1 (1–1000), `fillet` false,
-`fillet_segments` 5 (1–1000), `fillet_radius` 20, `slice` false, `slice_from` 0,
-`slice_to` 360, `regular_grid` false, `regular_grid_width` 10.
+Defaults are the **R25** ones ([docs/parity/r25-defaults.md](../parity/r25-defaults.md), O4);
+where R20 differed the old value follows as "(R20: x)". Golden cases from R20 observations
+are built with the R20 values from `tests/defaults/r20.toml` (INFRA.md §3.1).
+
+Every primitive's `slice_to` is 180° in R25 (R20: 360°; the raw readback was π,
+r25-defaults.md notes) and `regular_grid_width` has a minimum of 0.01 (R25 clamp).
+
+Params: `radius` 50, `height` 200, `height_segments` 4 (R20: 1; 1–1000),
+`rotation_segments` 16 (R20: 36; 3–1000), `orientation`, `caps` true, `cap_segments` 1
+(1–1000), `fillet` false, `fillet_segments` 3 (R20: 5; 1–1000), `fillet_radius` 3 (R20:
+20), `slice` false, `slice_from` 0, `slice_to` 180 (R20: 360), `regular_grid` false,
+`regular_grid_width` 10 (≥ 0.01).
 The cone profile (§4) with `R_b = R_t = radius`, both fillets on when `fillet`, each
 with radius = height = `clamp(fillet_radius, 0, min(radius, height/2))` (observed:
 clamped to the radius).
 
 ## 4. Cone (`forge.cone`)
 
-Params: `top_radius` 0, `bottom_radius` 100, `height` 200, `height_segments` 8,
-`rotation_segments` 36, `orientation`, `caps` true, `cap_segments` **3**,
-`fillet_segments` 5, `fillet_top` / `fillet_bottom` false, `fillet_top_radius`,
-`fillet_top_height`, `fillet_bottom_radius`, `fillet_bottom_height` 50, slice params.
+Params: `top_radius` 0, `bottom_radius` 100, `height` 200, `height_segments` 4 (R20: 8),
+`rotation_segments` 16 (R20: 36), `orientation`, `caps` true, `cap_segments` 1 (R20: **3**),
+`fillet_segments` 3 (R20: 5, reading uncertain), `fillet_top` / `fillet_bottom` false, `fillet_top_radius`,
+`fillet_top_height`, `fillet_bottom_radius`, `fillet_bottom_height` 50, slice params
+(`slice_to` 180, R20: 360). R25's fillet radius / height default of the cone is 3 (r25-defaults.md
+"New-object parameters"); ours stay 50: **R25 default not applied** (those rows are not
+`!` rows, and no case depends on it).
 With `H = height/2`, `cs` cap segments, `fs` fillet segments, `hs` height segments,
 `s = (R_t − R_b)/height` (side slope dr/dy), bottom fillet `(f_b, g_b)` = (radius
 clamped to `R_b`, height clamped to `H`), top `(f_t, g_t)` likewise with `R_t`
@@ -80,22 +91,25 @@ clamped to `R_b`, height clamped to `H`), top `(f_t, g_t)` likewise with `R_t`
 
 ## 5. Disc (`forge.disc`)
 
-Params: `inner_radius` 0, `outer_radius` 100, `disc_segments` 4, `rotation_segments`
-36, `orientation`, `slice`, `slice_from`, `slice_to` (no regular grid). Profile at y = 0
+Params: `inner_radius` 0, `outer_radius` 100, `disc_segments` 1 (R20: 4), `rotation_segments`
+16 (R20: 36), `orientation`, `slice`, `slice_from`, `slice_to` 180 (R20: 360) (no regular grid). Profile at y = 0
 from outside in: `r_i = R_o − (R_o − R_i)·i/ds`, i = 0..ds; with `R_i = 0` the last point
 is the **north** centre instead (triangle fan). No cut faces.
 
 ## 6. Torus (`forge.torus`)
 
-Params: `ring_radius` 200, `ring_segments` 36 (the rotation segments), `pipe_radius`
-50, `pipe_segments` 18, `orientation`, slice params. Closed profile
+Params: `ring_radius` 100 (R20: 200), `ring_segments` 32 (R20: 36; the rotation segments),
+`pipe_radius` 50, `pipe_segments` 16 (R20: 18), `orientation`, slice params (`slice_to` 180,
+R20: 360). Closed profile
 `(R + r cos θ, r sin θ)`, `θ = 360°·j/ps`, j = 0..ps−1 (outer equator first, then up).
 
 ## 7. Tube (`forge.tube`)
 
-Params: `inner_radius` 50, `outer_radius` 200, `rotation_segments` 36, `cap_segments`
-1, `height` 100, `height_segments` 1, `orientation`, `fillet` false, `fillet_segments`
-**8** (from `tube/fillet`: 36 profile points = 4 × 9), `fillet_radius` 20, slice params.
+Params: `inner_radius` 50, `outer_radius` 100 (R20: 200), `rotation_segments` 16 (R20: 36),
+`cap_segments` 1, `height` 100, `height_segments` 4 (R20: 1), `orientation`, `fillet` false, `fillet_segments`
+**8** (from `tube/fillet`: 36 profile points = 4 × 9), `fillet_radius` 20, slice params (`slice_to` 180, R20: 360). R25's tube fillet defaults
+(segments 3, radius 3, r25-defaults.md "New-object parameters") are **not applied**: not `!`
+rows.
 Closed profile, sides in order bottom (inner → outer, `cap_segments` steps), outer
 (bottom → top, `height_segments`), top (outer → inner), inner (top → bottom), each
 shortened by the fillet `f = clamp(fillet_radius, 0, min((R_o − R_i)/2, height/2))`
@@ -107,8 +121,9 @@ PRIMITIVES.md §2.1).
 
 ## 8. Capsule (`forge.capsule`)
 
-Params: `radius` 50, `height` 200 (total), `height_segments` 8, `cap_segments` 8,
-`rotation_segments` 36, `orientation`, slice params. With `c = height/2 − radius`:
+Params: `radius` 50, `height` 200 (total), `height_segments` 4 (R20: 8), `cap_segments` 4
+(R20: 8), `rotation_segments` 16 (R20: 36), `orientation`, slice params (`slice_to` 180,
+R20: 360). With `c = height/2 − radius`:
 south `(0, −height/2)`, north `(0, height/2)`; profile: `(r sin θ, −c − r cos θ)` for
 `θ = k·90°/cs`, k = 1..cs; `(r, −c + 2c·j/hs)` for j = 1..hs−1; `(r sin θ, c + r cos θ)`
 for k = cs..1.

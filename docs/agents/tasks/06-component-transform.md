@@ -1,6 +1,6 @@
 # 06 · Move, rotate and scale components
 
-Status: ready (after 05) · Branch: `batch-08` · Planner: main session · Implementer: Claude Sonnet 5.5 (local, macOS)
+Status: done · Branch: `batch-08` · Planner: main session · Implementer: Claude Sonnet 5.5 (local, macOS)
 
 ## Goal
 In Points, Edges or Polygons mode the gizmo sits on the selected components and the move,
@@ -54,3 +54,22 @@ Modeling tools that change topology (batch 11), soft selection, numeric entry in
 Coordinates panel for components, axis/pivot editing.
 
 ## Report (implementer fills in)
+- Result: no golden data exists, so everything is own design and **parity-pending** (EDITABLE.md section 3). 8 tests in
+  `crates/ui/tests/component_edit.rs`: top polygon +50 y (exact 150), scale 2 about the centroid, rotate 90 degrees about y,
+  empty set / out-of-range indices, world-axis move/rotate/object-frame scale on a rotated (h30 p20 b15), non-uniformly
+  scaled (2,1,3) object, points/edges/polygons modes, no drag without target/selection/in Model mode, one undo step per
+  drag (+ redo, no accumulation, pivot follows), Bend child after an edit.
+- Core location: `crates/ui/src/component_edit.rs` (not `forge-generators`): it needs `DragDelta` from the viewport crate, the
+  editor mode and the stored selection sets, none of which the generators crate depends on; it stays free of egui and GPU.
+- Rules: `m = W^-1 * M * W` with `M` the world-space delta about the world pivot `W*c` (scale along the object axes);
+  covers non-uniform scale. Snapping is the gizmo's own (`Drag::update`, `snap.rs`), same Ctrl/Cmd steps as objects.
+- Deviations / choices: (1) with a target but an empty affected set no gizmo is drawn, so a press there is a rectangle
+  select (not "nothing"); (2) the gizmo's axes follow the existing object/world setting, Scale always object frame as before;
+  (3) the Coordinates "Pivot" row is read-only text, Local = object space, World = world space; (4) in a component mode
+  without a polygon target the object gizmo still moves the object as before.
+- Files: crates/ui/src/{component_edit,app,lib}.rs, crates/ui/tests/component_edit.rs, docs/specs/EDITABLE.md,
+  docs/parity/STATUS.md, this brief.
+- Not verified without a display: the live gizmo drag in the egui viewport (hit test at the pivot, drag_started/stopped
+  handling, the Pivot row layout). Only the pure logic and `ComponentDrag` were tested; `app.rs` wiring compiles and passes
+  clippy but has no kittest because the viewport needs a GPU render state.
+- Gate: `GATE: 351 tests passed, 0 failed` / `cleanroom: ok` / `ok: 202 cases` / `GATE: all passed`

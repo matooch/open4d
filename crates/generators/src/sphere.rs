@@ -15,7 +15,7 @@ pub(crate) fn node_type() -> NodeType {
                 .range(0.0, f64::MAX)
                 .unit(Unit::Distance),
         )
-        .param(ParamDesc::int("segments", "Segments", 24).range(3, 1000))
+        .param(ParamDesc::int("segments", "Segments", 16).range(3, 1000))
         .param(ParamDesc::enumeration(
             "type",
             "Type",

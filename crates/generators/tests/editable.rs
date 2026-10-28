@@ -1,10 +1,12 @@
 //! docs/specs/EDITABLE.md §1: polygon object, Make Editable, Current State to Object.
 
-use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use forge_core::{Document, NodeId, ParamKind, Registry, Value, file};
+mod common;
+
+use common::{resolved_params, typed_params};
+use forge_core::{Document, NodeId, Registry, Value, file};
 use forge_generators::{
     EditableError, POLYGON, Primitives, current_state_to_object, evaluate, make_editable,
 };
@@ -27,38 +29,6 @@ fn registry() -> Arc<Registry> {
 
 fn doc() -> Document {
     Document::new(registry())
-}
-
-fn angle(desc: &forge_core::ParamDesc, v: f64) -> f64 {
-    if desc.ui.unit == forge_core::Unit::Angle {
-        v.to_radians()
-    } else {
-        v
-    }
-}
-
-fn params(
-    reg: &Registry,
-    type_id: &str,
-    raw: &BTreeMap<String, toml::Value>,
-) -> BTreeMap<String, Value> {
-    let ty = reg.get(type_id).unwrap();
-    raw.iter()
-        .map(|(k, v)| {
-            let desc = ty.find_param(k).unwrap();
-            let value = match (&desc.kind, v) {
-                (ParamKind::Bool, toml::Value::Boolean(b)) => Value::Bool(*b),
-                (ParamKind::Int { .. }, toml::Value::Integer(i)) => Value::Int(*i),
-                (ParamKind::Float { .. }, toml::Value::Integer(i)) => {
-                    Value::Float(angle(desc, *i as f64))
-                }
-                (ParamKind::Float { .. }, toml::Value::Float(f)) => Value::Float(angle(desc, *f)),
-                (ParamKind::Enum { .. }, toml::Value::String(s)) => Value::Enum(s.clone()),
-                other => panic!("{type_id}.{k}: unexpected value {other:?}"),
-            };
-            (k.clone(), desc.validate(value).expect("valid case value"))
-        })
-        .collect()
 }
 
 fn as_mesh(m: &forge_geometry::PolyMesh) -> Mesh {
@@ -111,7 +81,7 @@ fn every_primitive_golden_case_survives_make_editable() {
         let key = format!("{}/{}", case.feature, case.name);
         let manifest = case.manifest().unwrap();
         let type_id = format!("forge.{}", case.feature);
-        let values = params(&reg, &type_id, &manifest.params);
+        let values = typed_params(&reg, &type_id, &resolved_params(&case, &manifest));
         let mut d = Document::new(reg.clone());
         let src = d
             .transact("create", |tx| {

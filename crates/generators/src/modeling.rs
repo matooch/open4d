@@ -35,10 +35,10 @@ pub(crate) fn symmetry_type() -> NodeType {
 pub(crate) fn array_type() -> NodeType {
     NodeType::new(ARRAY, "Array", Category::Generator)
         .param(distance("radius", "Radius", 250.0))
-        .param(ParamDesc::int("copies", "Copies", 7).range(0, 100_000))
+        .param(ParamDesc::int("copies", "Copies", 7).range(1, 1000))
         .param(ParamDesc::float("amplitude", "Amplitude", 0.0).unit(Unit::Distance))
-        .param(ParamDesc::float("frequency", "Frequency", 0.0))
-        .param(ParamDesc::float("array_frequency", "Array frequency", 10.0))
+        .param(ParamDesc::float("frequency", "Frequency", 0.0).range(0.0, f64::MAX))
+        .param(ParamDesc::float("array_frequency", "Array frequency", 10.0).range(0.0, f64::MAX))
         .param(ParamDesc::bool("render_instance", "Render instance", false))
 }
 

@@ -208,3 +208,38 @@ fn mesh_and_other_kinds_do_not_mix() {
         Err(ParamError::TypeMismatch)
     );
 }
+
+#[test]
+fn index_list_builder_is_hidden_not_animatable_and_empty_by_default() {
+    let d = ParamDesc::index_list("selection.points", "Selected points");
+    assert_eq!(d.kind, ParamKind::IndexList);
+    assert!(d.ui.hidden);
+    assert!(!d.animatable);
+    assert_eq!(d.default, Value::IndexList(vec![]));
+    assert_eq!(d.validate(d.default.clone()), Ok(d.default.clone()));
+}
+
+#[test]
+fn index_list_validation_sorts_and_dedupes() {
+    let d = ParamDesc::index_list("selection.edges", "Selected edges");
+    assert_eq!(
+        d.validate(Value::IndexList(vec![9, 2, 9, 0, 2])),
+        Ok(Value::IndexList(vec![0, 2, 9]))
+    );
+    let sorted = Value::IndexList(vec![1, 4, 7]);
+    assert_eq!(d.validate(sorted.clone()), Ok(sorted));
+    // other variants are not index lists
+    for v in [
+        Value::Int(3),
+        Value::Mesh(Arc::new(MeshData::default())),
+        Value::String("1,2".into()),
+    ] {
+        assert_eq!(d.validate(v), Err(ParamError::TypeMismatch));
+    }
+    // and an index list is not accepted where another kind is declared
+    let mesh = ParamDesc::mesh("mesh", "Mesh");
+    assert_eq!(
+        mesh.validate(Value::IndexList(vec![0])),
+        Err(ParamError::TypeMismatch)
+    );
+}

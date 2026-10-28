@@ -18,8 +18,8 @@ mod subdivision;
 pub use boole::{boole, inputs_of as boole_inputs_of};
 pub use modeling::{array, connect, inputs_of as modeling_inputs_of, symmetry};
 pub use polygon::{
-    EditableError, TYPE as POLYGON, current_state_to_object, from_poly_mesh, make_editable,
-    to_poly_mesh,
+    EditableError, SELECTION_EDGES, SELECTION_POINTS, SELECTION_POLYS, TYPE as POLYGON,
+    current_state_to_object, from_poly_mesh, make_editable, to_poly_mesh,
 };
 pub use spline_gens::{extrude, lathe, loft, spline_inputs_of, sweep};
 pub use subdivision::{input_of, subdivide, subdivide_with_creases};

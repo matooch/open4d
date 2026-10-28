@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use crate::{Category, Node, NodeId, Registry, Scene, Value};
 
 pub const FORMAT: &str = "forge3d-scene";
-/// Version 2 added `Value::Mesh`; version 1 files still load.
-pub const VERSION: u32 = 2;
+/// Version 2 added `Value::Mesh`, version 3 `Value::IndexList`; older files still load.
+pub const VERSION: u32 = 3;
 
 #[derive(Serialize, Deserialize)]
 struct SceneFile {

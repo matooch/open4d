@@ -12,6 +12,9 @@ use forge_viewport::gizmo::Gizmo;
 use forge_viewport::grid::grid_lines;
 use forge_viewport::render::{DrawMesh, Frame, MeshBuffers, Palette, Renderer, Settings, Shading};
 
+use crate::components::{EditMode, display_selection, stored_selection};
+use crate::theme::Theme;
+
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct NavInput {
     pub primary: bool,
@@ -53,10 +56,29 @@ pub struct SceneView<'a> {
     pub scene: &'a Scene,
     pub selected: &'a BTreeSet<NodeId>,
     pub gizmo: Option<&'a Gizmo>,
+    /// The component target and the mode being edited (EDITABLE.md §2.6).
+    pub component: Option<(NodeId, EditMode)>,
 }
 
 /// Base colour of selected objects (our palette).
 const SELECTED_TINT: [f32; 3] = [0.95, 0.62, 0.30];
+
+/// Side of a drawn point in component mode, in pixels.
+const POINT_SIZE: f32 = 7.0;
+
+/// In a component mode edges must show: a shading without wire is drawn as its wire twin.
+pub fn component_shading(shading: Shading) -> Shading {
+    match shading {
+        Shading::Smooth => Shading::SmoothWire,
+        Shading::Flat => Shading::FlatWire,
+        other => other,
+    }
+}
+
+/// An sRGB theme colour as the renderer's palette value (written unchanged to the target).
+fn palette_color(c: egui::Color32) -> [f32; 3] {
+    [c.r(), c.g(), c.b()].map(|v| v as f32 / 255.0)
+}
 
 pub fn apply_nav(cam: &mut Camera, action: NavAction, viewport_h: f64) {
     match action {
@@ -86,6 +108,7 @@ pub struct ViewportPanel {
 struct SceneMeshes {
     revision: u64,
     selection: BTreeSet<NodeId>,
+    component: Option<(NodeId, EditMode)>,
     items: Vec<(MeshBuffers, [f32; 3])>,
 }
 
@@ -132,6 +155,7 @@ impl ViewportPanel {
             scene,
             selected,
             gizmo,
+            component,
         } = view;
         let device = &rs.device;
         let renderer = self
@@ -193,25 +217,45 @@ impl ViewportPanel {
                 texture_id,
             });
         }
-        let palette = Palette::default();
-        if self
-            .meshes
-            .as_ref()
-            .is_none_or(|m| m.revision != scene.revision() || m.selection != *selected)
-        {
+        let mut palette = Palette::default();
+        if component.is_some() {
+            palette.selection = palette_color(Theme::default().component_selection);
+        }
+        if self.meshes.as_ref().is_none_or(|m| {
+            m.revision != scene.revision() || m.selection != *selected || m.component != component
+        }) {
             let items = scene_meshes(scene, selected)
                 .into_iter()
-                .map(|(_, mesh, sel, smoothing)| {
-                    let color = if sel { SELECTED_TINT } else { palette.object };
-                    (
-                        MeshBuffers::with_device(device, &mesh, &Selection::default(), smoothing),
-                        color,
-                    )
+                .map(|(id, mesh, sel, smoothing)| {
+                    match component.filter(|(target, _)| *target == id) {
+                        // the component target: plain colour, its components highlighted
+                        Some((_, mode)) => {
+                            let shown =
+                                display_selection(&mesh, &stored_selection(scene, id), mode);
+                            let build = if mode == EditMode::Points {
+                                MeshBuffers::with_device
+                            } else {
+                                MeshBuffers::with_device_no_points
+                            };
+                            (build(device, &mesh, &shown, smoothing), palette.object)
+                        }
+                        None => {
+                            let color = if sel { SELECTED_TINT } else { palette.object };
+                            let buffers = MeshBuffers::with_device_no_points(
+                                device,
+                                &mesh,
+                                &Selection::default(),
+                                smoothing,
+                            );
+                            (buffers, color)
+                        }
+                    }
                 })
                 .collect();
             self.meshes = Some(SceneMeshes {
                 revision: scene.revision(),
                 selection: selected.clone(),
+                component,
                 items,
             });
         }
@@ -233,8 +277,13 @@ impl ViewportPanel {
             grid: Some(&grid),
             gizmo,
             settings: Settings {
-                shading,
-                show_points: false,
+                shading: if component.is_some() {
+                    component_shading(shading)
+                } else {
+                    shading
+                },
+                show_points: component.is_some_and(|(_, m)| m == EditMode::Points),
+                point_size: POINT_SIZE,
                 palette,
             },
         };

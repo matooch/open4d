@@ -78,6 +78,16 @@ struct EdgeVertex {
     selected: f32,
 }
 
+/// One corner of a screen-space point quad: `corner` is (+-1, +-1), scaled to pixels in
+/// the vertex shader.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct PointVertex {
+    pos: [f32; 3],
+    selected: f32,
+    corner: [f32; 2],
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct ColorVertex {
@@ -122,6 +132,8 @@ pub struct MeshBuffers {
     tris: Vertices,
     edges: Vertices,
     points: Vertices,
+    /// Two triangles per point, for `Settings::point_size`.
+    point_quads: Vertices,
 }
 
 impl MeshBuffers {
@@ -137,6 +149,26 @@ impl MeshBuffers {
         mesh: &PolyMesh,
         selection: &Selection,
         smoothing: Option<f64>,
+    ) -> MeshBuffers {
+        Self::build(d, mesh, selection, smoothing, true)
+    }
+
+    /// As [`MeshBuffers::with_device`] without point buffers (the points are never drawn).
+    pub fn with_device_no_points(
+        d: &wgpu::Device,
+        mesh: &PolyMesh,
+        selection: &Selection,
+        smoothing: Option<f64>,
+    ) -> MeshBuffers {
+        Self::build(d, mesh, selection, smoothing, false)
+    }
+
+    fn build(
+        d: &wgpu::Device,
+        mesh: &PolyMesh,
+        selection: &Selection,
+        smoothing: Option<f64>,
+        with_points: bool,
     ) -> MeshBuffers {
         let smooth = match smoothing {
             Some(angle) => corner_normals(mesh, angle, Weighting::Angle),
@@ -180,19 +212,31 @@ impl MeshBuffers {
                 })
             })
             .collect();
-        let points: Vec<EdgeVertex> = mesh
-            .points
-            .iter()
-            .enumerate()
-            .map(|(i, p)| EdgeVertex {
-                pos: f3(*p),
-                selected: flag(selection.points.contains(i as u32)),
-            })
-            .collect();
+        let (mut points, mut quads) = (Vec::new(), Vec::new());
+        if with_points {
+            const CORNERS: [[f32; 2]; 6] = [
+                [-1.0, -1.0],
+                [1.0, -1.0],
+                [1.0, 1.0],
+                [-1.0, -1.0],
+                [1.0, 1.0],
+                [-1.0, 1.0],
+            ];
+            for (i, p) in mesh.points.iter().enumerate() {
+                let (pos, selected) = (f3(*p), flag(selection.points.contains(i as u32)));
+                points.push(EdgeVertex { pos, selected });
+                quads.extend(CORNERS.map(|corner| PointVertex {
+                    pos,
+                    selected,
+                    corner,
+                }));
+            }
+        }
         MeshBuffers {
             tris: Vertices::new(d, "mesh tris", &tris),
             edges: Vertices::new(d, "mesh edges", &edges),
             points: Vertices::new(d, "mesh points", &points),
+            point_quads: Vertices::new(d, "mesh point quads", &quads),
         }
     }
 }
@@ -251,6 +295,8 @@ impl Default for Palette {
 pub struct Settings {
     pub shading: Shading,
     pub show_points: bool,
+    /// Side of a point in pixels; 0 draws 1 px points (docs/specs/VIEWPORT.md §6).
+    pub point_size: f32,
     pub palette: Palette,
 }
 
@@ -280,6 +326,8 @@ struct Uniforms {
     wire: [f32; 4],
     light: [f32; 4],
     params: [f32; 4],
+    /// x: half point size in pixels, y/z: NDC units per pixel (2/width, 2/height).
+    point: [f32; 4],
 }
 
 fn rgba(c: [f32; 3]) -> [f32; 4] {
@@ -292,6 +340,7 @@ pub struct Renderer {
     tri: wgpu::RenderPipeline,
     edge: wgpu::RenderPipeline,
     point: wgpu::RenderPipeline,
+    point_quad: wgpu::RenderPipeline,
     grid: wgpu::RenderPipeline,
     gizmo: wgpu::RenderPipeline,
 }
@@ -333,6 +382,7 @@ impl Renderer {
         let tri_attrs =
             wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x3, 3 => Float32];
         let edge_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32];
+        let quad_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32, 2 => Float32x2];
         let color_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
         let tri_buf = [Some(wgpu::VertexBufferLayout {
             array_stride: size_of::<TriVertex>() as u64,
@@ -343,6 +393,11 @@ impl Renderer {
             array_stride: size_of::<EdgeVertex>() as u64,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &edge_attrs,
+        })];
+        let quad_buf = [Some(wgpu::VertexBufferLayout {
+            array_stride: size_of::<PointVertex>() as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &quad_attrs,
         })];
         let color_buf = [Some(wgpu::VertexBufferLayout {
             array_stride: size_of::<ColorVertex>() as u64,
@@ -413,6 +468,15 @@ impl Renderer {
             point: make(spec(
                 "points", "vs_edge", "fs_edge", &edge_buf, PointList, true, LessEqual,
             )),
+            point_quad: make(spec(
+                "point quads",
+                "vs_point",
+                "fs_edge",
+                &quad_buf,
+                TriangleList,
+                false,
+                LessEqual,
+            )),
             grid: make(spec(
                 "grid", "vs_color", "fs_color", &color_buf, LineList, false, LessEqual,
             )),
@@ -466,6 +530,12 @@ impl Renderer {
             wire: rgba(pal.wire),
             light: [light[0], light[1], light[2], 0.0],
             params: [flag(smooth), bias, 0.0, 0.0],
+            point: [
+                s.point_size / 2.0,
+                2.0 / width.max(1) as f32,
+                2.0 / height.max(1) as f32,
+                0.0,
+            ],
         };
         let (fill, smooth, wire) = match s.shading {
             Shading::Smooth => (true, true, false),
@@ -526,7 +596,10 @@ impl Renderer {
                     pass.set_pipeline(&self.edge);
                     m.mesh.edges.draw(&mut pass);
                 }
-                if s.show_points {
+                if s.show_points && s.point_size > 0.0 {
+                    pass.set_pipeline(&self.point_quad);
+                    m.mesh.point_quads.draw(&mut pass);
+                } else if s.show_points {
                     pass.set_pipeline(&self.point);
                     m.mesh.points.draw(&mut pass);
                 }

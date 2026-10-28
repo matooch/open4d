@@ -1,6 +1,6 @@
 # 04 · OBJ import/export and the File menu
 
-Status: ready (after 03) · Branch: `batch-08` · Planner: main session · Implementer: Claude Sonnet 5.5 (local, macOS)
+Status: done · Branch: `batch-08` · Planner: main session · Implementer: Claude Sonnet 5.5 (local, macOS)
 
 ## Goal
 From the File menu you can Open, Save, Save As a native scene, export the scene (or the
@@ -74,3 +74,32 @@ Commit trailer: `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`
 glTF/FBX/Alembic/USD (P7), materials and UVs, recent-files list, autosave (U7).
 
 ## Report (implementer fills in)
+- Result: 106/108 primitive and generator golden cases match through `export_scene` ->
+  `write` -> harness `parse_obj` (75 primitives, 31 generators; same comparison modes as
+  `parity.rs` / `generators_parity.rs`, including the geometric cut/cap cases). The 2 others
+  are the known mismatches `loft/mesh-subdivision` and `sweep/helix`, pinned in
+  `KNOWN_MISMATCH` and asserted to still differ. `UNSUPPORTED` is empty. `calibration/offset-cube`
+  exact (non-zero position, same winding); the 5 smoothing cases match `parse_obj_corner_normals`
+  within 1e-5 (via import_into -> smoothing tag -> export_scene -> write).
+- Rules derived: the writer needs no special rule beyond export-settings.md (no axis flip, weld
+  of bit-equal points, world space). The exporter weld = exact equality was enough: primitives
+  pass the strict `compare_meshes` without the harness's tolerant weld (generators use it on both
+  sides, as in the existing test).
+- Parity-pending: everything about the File menu (IO.md §2), the object layout of the file
+  (`o` per object, own `v`/`vn`/`f` sections), reader point-set rule, selection export includes
+  descendants.
+- Deviations: (1) `ObjObject` has a fourth field `smoothing_angle: Option<f64>` (the writer needs
+  the tag angle for corner normals). (2) `read(text, &ReadOptions)` takes the options as second
+  argument; `import_into` returns `Result<Vec<NodeId>, EditError>`. (3) Branch: the current cloud
+  branch, not `batch-08`. (4) Status messages: only errors are shown (the status bar draws
+  everything in the error colour), so no "Exported N objects". (5) Header written is our own
+  `# Forge3D OBJ export`; no `usemtl`.
+- Files changed: Cargo.lock; crates/io/{Cargo.toml,src/{lib,obj,scene}.rs,tests/{obj,export_parity}.rs};
+  crates/ui/{Cargo.toml,src/app.rs,src/app/files.rs,tests/files.rs}; docs/specs/{IO,UI}.md;
+  docs/parity/STATUS.md; this brief.
+- Open questions for the planner: `rfd` message dialogs (the Save / Don't Save / Cancel prompt) on
+  Linux are not served by the XDG file-chooser portal; rfd falls back to zenity/kdialog, which I
+  could not test here (no display). File dialogs use the portal. Does the reference export the
+  children of a selected group? (we do). Dirty compares revisions, so undo back to the saved state
+  still shows `*`.
+- Gate output: `GATE: 321 tests passed, 0 failed` ... `cleanroom: ok` / `ok: 202 cases` / `GATE: all passed`

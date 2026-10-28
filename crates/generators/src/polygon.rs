@@ -11,6 +11,11 @@ use crate::{BuildError, evaluate, evaluate_geometry, is_consumed};
 
 pub const TYPE: &str = "forge.polygon";
 
+/// Component selection params of a polygon object (docs/specs/EDITABLE.md §2.1).
+pub const SELECTION_POINTS: &str = "selection.points";
+pub const SELECTION_EDGES: &str = "selection.edges";
+pub const SELECTION_POLYS: &str = "selection.polys";
+
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum EditableError {
     /// The node makes no mesh (Null, spline, deformer, tag, missing node).
@@ -25,6 +30,9 @@ pub enum EditableError {
 pub(crate) fn node_type() -> NodeType {
     NodeType::new(TYPE, "Polygon Object", Category::Object)
         .param(ParamDesc::mesh("mesh", "Mesh"))
+        .param(ParamDesc::index_list(SELECTION_POINTS, "Selected points"))
+        .param(ParamDesc::index_list(SELECTION_EDGES, "Selected edges"))
+        .param(ParamDesc::index_list(SELECTION_POLYS, "Selected polygons"))
         .not_in_create_menu()
 }
 

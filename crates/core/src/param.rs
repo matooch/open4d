@@ -48,6 +48,9 @@ pub enum Value {
     String(String),
     Link(Option<NodeId>),
     Mesh(Arc<MeshData>),
+    /// Element indices (a component selection), sorted ascending without duplicates once
+    /// validated.
+    IndexList(Vec<u32>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,6 +85,7 @@ pub enum ParamKind {
         accepts: Vec<Category>,
     },
     Mesh,
+    IndexList,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -238,6 +242,19 @@ impl ParamDesc {
         d
     }
 
+    /// A hidden, non-animatable index list parameter whose default is empty.
+    pub fn index_list(id: &str, label: &str) -> ParamDesc {
+        let mut d = Self::new(
+            id,
+            label,
+            ParamKind::IndexList,
+            Value::IndexList(Vec::new()),
+        );
+        d.ui.hidden = true;
+        d.animatable = false;
+        d
+    }
+
     /// Hard range for `Int`, `Float` and `Vec3` parameters.
     ///
     /// # Panics
@@ -329,6 +346,11 @@ impl ParamDesc {
             (ParamKind::String, v @ Value::String(_)) => Ok(v),
             (ParamKind::Link { .. }, v @ Value::Link(_)) => Ok(v),
             (ParamKind::Mesh, Value::Mesh(m)) => m.validate().map(|()| Value::Mesh(m)),
+            (ParamKind::IndexList, Value::IndexList(mut list)) => {
+                list.sort_unstable();
+                list.dedup();
+                Ok(Value::IndexList(list))
+            }
             _ => Err(ParamError::TypeMismatch),
         }
     }

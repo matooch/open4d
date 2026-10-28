@@ -1,0 +1,79 @@
+# R20 defaults that differ from the R25 defaults our node descriptors use.
+# Source: the `!` rows of docs/parity/r25-defaults.md (column "R20 default").
+# One table per node type (our type id without `forge.`), keys are our param ids, values are in
+# case-file units (degrees and percent as shown in the app). A golden case from an R20
+# observation is built from these plus its own [params] (the case wins);
+# docs/specs/INFRA.md §3.1. Rows without a param of ours (the isoparm subdivisions of
+# extrude, lathe, loft and sweep) are not listed.
+
+[plane]
+segments_w = 20
+segments_h = 20
+
+[cube]
+fillet_radius = 40.0
+fillet_segments = 5
+
+[sphere]
+segments = 24
+
+[cylinder]
+height_segments = 1
+rotation_segments = 36
+fillet_segments = 5
+fillet_radius = 20.0
+slice_to = 360.0
+
+[cone]
+height_segments = 8
+rotation_segments = 36
+cap_segments = 3
+fillet_segments = 5  # R20 reading uncertain, used as written
+slice_to = 360.0
+
+[disc]
+disc_segments = 4
+rotation_segments = 36
+slice_to = 360.0
+
+[torus]
+ring_radius = 200.0
+ring_segments = 36
+pipe_segments = 18
+slice_to = 360.0
+
+[tube]
+outer_radius = 200.0
+rotation_segments = 36
+height_segments = 1
+slice_to = 360.0
+
+[capsule]
+height_segments = 8  # from the R20 mesh
+cap_segments = 8     # from the R20 mesh
+rotation_segments = 36
+slice_to = 360.0
+
+[circle_spline]
+intermediate = "adaptive"
+
+[helix_spline]
+intermediate = "adaptive"
+
+[subdivision]
+level_render = 3
+subdivide_uvs = "standard"
+
+[boole]
+hide_new_edges = false
+
+[extrude]
+movement = [0.0, 0.0, 20.0]  # O4 row `movement_z`; R25 has one Offset number instead
+
+[lathe]
+subdivision = 24
+
+[loft]
+mesh_subdivision_u = 30
+mesh_subdivision_v = 10
+cap_type = "triangles"

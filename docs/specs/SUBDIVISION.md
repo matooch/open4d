@@ -7,14 +7,16 @@ Sources: parity observation [docs/parity/subdivision.md](../parity/subdivision.m
 
 ## 1. Node
 
-Category `Generator`, label "Subdivision". Parameters (ids from the observation form):
+Category `Generator`, label "Subdivision". Parameters (ids from the observation form).
+Defaults are the **R25** ones ([docs/parity/r25-defaults.md](../parity/r25-defaults.md)); R20
+cases get the R20 values from `tests/defaults/r20.toml` (INFRA.md §3.1).
 
 | id | label | kind | default | range |
 |---|---|---|---|---|
 | `level_view` | Viewport level | Int | 2 | 0–6 (**used for evaluation and export**, observed) |
-| `level_render` | Render level | Int | 3 | 0–6 (stored; no renderer yet) |
+| `level_render` | Render level | Int | 2 (R20: 3) | 0–6 (stored; no renderer yet) |
 | `scheme` | Scheme | Enum `catmull_clark, catmull_clark_ngons, osd_catmull_clark, osd_catmull_clark_adaptive, osd_loop, osd_bilinear` | `catmull_clark_ngons` | – |
-| `subdivide_uvs` | Subdivide UVs | Enum `standard, boundary, edge` | `standard` | – (no UVs yet) |
+| `subdivide_uvs` | Subdivide UVs | Enum `standard, boundary, edge` | `edge` (R20: `standard`) | – (no UVs yet, so no effect on the mesh) |
 
 Input: the generator's **first hierarchy child** that evaluates to a mesh, placed by the
 child's local transform. The input child is *consumed*: the viewport draws only the
