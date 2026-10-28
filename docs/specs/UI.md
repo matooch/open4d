@@ -146,7 +146,7 @@ and on window has WCAG contrast ≥ 7, weak text ≥ 4.5, accent text on accent 
 ## 9. App (`app`, `apps/studio`)
 
 `forge_ui::run()` opens a window titled "Forge3D" (eframe, wgpu backend) with a menu
-bar (File: New; Edit: Undo/Redo/Delete/Make Editable/Current State to Object; Create: §5 menu; View: shading; Window:
+bar (File: New, Open, Save, Save As, Import OBJ, Export OBJ, Export Selected as OBJ (IO.md §2); Edit: Undo/Redo/Delete/Make Editable/Current State to Object; Create: §5 menu; View: shading; Window:
 open/move panels, reset layout), the dock (§2) and a status bar. `apps/studio`
 calls it with `Registry::with_builtins()`. Window menu: one toggle per panel labelled
 "<Panel> panel", a "Move <Panel>" submenu per panel with "<Panel> to <area>" items,

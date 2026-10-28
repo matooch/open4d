@@ -1,6 +1,8 @@
 //! The egui shell: menus, dock areas, panels and shortcuts (docs/specs/UI.md §9).
 //! All state changes go through `commands::execute` or `attributes::apply_edit`.
 
+use std::path::PathBuf;
+
 use eframe::egui_wgpu;
 use egui::{Key, KeyboardShortcut, Modifiers, RichText, Sense, Ui};
 use forge_core::transform::{Transform, rotation_part};
@@ -21,6 +23,10 @@ use crate::theme::Theme;
 use crate::tree::tree_rows;
 use crate::viewport_panel::{NavInput, SceneView, ViewportPanel, apply_nav, nav_action};
 
+mod files;
+
+pub use files::{Dialogs, FileKind, NativeDialogs, Unsaved};
+
 const SHADINGS: [(Shading, &str); 5] = [
     (Shading::Smooth, "Smooth"),
     (Shading::Flat, "Flat"),
@@ -28,6 +34,22 @@ const SHADINGS: [(Shading, &str); 5] = [
     (Shading::SmoothWire, "Smooth + wire"),
     (Shading::FlatWire, "Flat + wire"),
 ];
+
+const OPEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
+const SAVE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
+const SAVE_AS: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S);
+
+#[derive(Clone, Copy)]
+enum FileAction {
+    New,
+    Open,
+    Save,
+    SaveAs,
+    ImportObj,
+    ExportObj,
+    ExportSelectedObj,
+}
 
 pub struct Editor {
     pub state: EditorState,
@@ -46,6 +68,12 @@ pub struct Editor {
     coord_third: Third,
     /// The gizmo drag in progress: drag state, node, its transform at the start, gesture.
     gizmo_drag: Option<(Drag, NodeId, Transform, u64)>,
+    /// File menu (docs/specs/IO.md §2): dialogs, current file, revision at the last
+    /// save or load, and the last window title sent.
+    dialogs: Box<dyn Dialogs>,
+    file_path: Option<PathBuf>,
+    saved_revision: u64,
+    sent_title: String,
 }
 
 impl eframe::App for Editor {
@@ -57,6 +85,7 @@ impl eframe::App for Editor {
 impl Editor {
     pub fn new(state: EditorState) -> Editor {
         Editor {
+            saved_revision: state.doc.scene().revision(),
             state,
             viewport: ViewportPanel::default(),
             renaming: None,
@@ -69,6 +98,9 @@ impl Editor {
             coord_space: Space::Local,
             coord_third: Third::Scale,
             gizmo_drag: None,
+            dialogs: Box::new(NativeDialogs),
+            file_path: None,
+            sent_title: String::new(),
         }
     }
 
@@ -99,6 +131,12 @@ impl Editor {
     /// Draws the whole editor. `rs` is `None` without a GPU (tests).
     pub fn show(&mut self, ui: &mut Ui, rs: Option<&egui_wgpu::RenderState>) {
         self.shortcuts(ui.ctx());
+        let title = self.window_title();
+        if title != self.sent_title {
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
+            self.sent_title = title;
+        }
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
         if !self.state.dock.tabs(Area::Bottom).is_empty() {
@@ -147,7 +185,16 @@ impl Editor {
         let redo_y = KeyboardShortcut::new(Modifiers::COMMAND, Key::Y);
         let undo = KeyboardShortcut::new(Modifiers::COMMAND, Key::Z);
         let mut cmds = Vec::new();
+        let mut file_action = None;
         ctx.input_mut(|i| {
+            // Save As first: Ctrl+S would also match with Shift held
+            if i.consume_shortcut(&SAVE_AS) {
+                file_action = Some(FileAction::SaveAs);
+            } else if i.consume_shortcut(&SAVE) {
+                file_action = Some(FileAction::Save);
+            } else if i.consume_shortcut(&OPEN) {
+                file_action = Some(FileAction::Open);
+            }
             if i.consume_shortcut(&redo) || i.consume_shortcut(&redo_y) {
                 cmds.push(Command::Redo);
             } else if i.consume_shortcut(&undo) {
@@ -192,17 +239,57 @@ impl Editor {
         for c in cmds {
             self.run(c);
         }
+        if let Some(a) = file_action {
+            self.file_action(a);
+        }
+    }
+
+    fn file_action(&mut self, action: FileAction) {
+        match action {
+            FileAction::New => self.new_scene(),
+            FileAction::Open => self.open_scene(),
+            FileAction::Save => {
+                self.save();
+            }
+            FileAction::SaveAs => {
+                self.save_as();
+            }
+            FileAction::ImportObj => self.import_obj(),
+            FileAction::ExportObj => self.export_obj(false),
+            FileAction::ExportSelectedObj => self.export_obj(true),
+        }
     }
 
     fn menu_bar(&mut self, ui: &mut Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button("File", |ui| {
-                if ui.button("New").clicked() {
-                    let registry = self.state.doc.scene().registry().clone();
-                    let dock = self.state.dock.clone();
-                    self.state = EditorState::new(registry);
-                    self.state.dock = dock;
-                    ui.close();
+                let has_selection = !self.state.selection.nodes.is_empty();
+                let items = [
+                    ("New", None, FileAction::New, true),
+                    ("Open\u{2026}", Some(OPEN), FileAction::Open, true),
+                    ("Save", Some(SAVE), FileAction::Save, true),
+                    ("Save As\u{2026}", Some(SAVE_AS), FileAction::SaveAs, true),
+                    ("Import OBJ\u{2026}", None, FileAction::ImportObj, true),
+                    ("Export OBJ\u{2026}", None, FileAction::ExportObj, true),
+                    (
+                        "Export Selected as OBJ\u{2026}",
+                        None,
+                        FileAction::ExportSelectedObj,
+                        has_selection,
+                    ),
+                ];
+                for (label, shortcut, action, enabled) in items {
+                    if matches!(action, FileAction::ImportObj) {
+                        ui.separator();
+                    }
+                    let mut button = egui::Button::new(label);
+                    if let Some(sc) = shortcut {
+                        button = button.shortcut_text(ui.ctx().format_shortcut(&sc));
+                    }
+                    if ui.add_enabled(enabled, button).clicked() {
+                        ui.close();
+                        self.file_action(action);
+                    }
                 }
             });
             ui.menu_button("Edit", |ui| {
