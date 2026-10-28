@@ -27,6 +27,7 @@ evaluation of real node types (Phases 5+).
 | `String` | `String` | |
 | `Link` | `Option<NodeId>` | reference to another node |
 | `Mesh` | `Arc<MeshData>` | an editable polygon mesh (see below) |
+| `IndexList` | `Vec<u32>` | a sorted set of element indices (component selections) |
 
 `ParamDesc { id, label, kind, default, ui, animatable }`:
 - `id`: non-empty, chars `[a-z0-9_.]`, unique within its node type. Stable forever:
@@ -34,7 +35,7 @@ evaluation of real node types (Phases 5+).
 - `kind: ParamKind`: `Bool`, `Int { min, max }`, `Float { min, max }`,
   `Vec3 { min, max }` (per component), `Color`, `Enum { options }` (each option
   `{ id, label }`, ids unique, at least one), `String`, `Link { accepts }` (list of
-  categories; empty = any), `Mesh`.
+  categories; empty = any), `Mesh`, `IndexList`.
 - `ui: UiHint { group, unit, soft_min, soft_max, step, hidden }`. `unit` ∈
   `None | Distance | Angle | Percent | Time`. UI-only; never affects validation.
 - `animatable`: defaults to true for `Int/Float/Vec3/Color/Bool`, false otherwise.
@@ -44,9 +45,12 @@ evaluation of real node types (Phases 5+).
   holds it in an `Arc` (cheap clones for undo; `PartialEq` compares contents).
   `ParamDesc::mesh(id, label)` has an empty mesh as default, is `hidden()` and
   `animatable(false)`.
+- `Value::IndexList(Vec<u32>)`: element indices (point, edge or polygon numbers) for the component
+  selections of EDITABLE.md §2. `ParamDesc::index_list(id, label)` has the empty list as
+  default, is `hidden()` and `animatable(false)`. Core does not know what the indices refer to.
 - Builders: `ParamDesc::float(id, label, default)`, `.int`, `.bool`, `.vec3`,
   `.color`, `.enumeration(id, label, default_id, &[(id, label)])`, `.string`,
-  `.link(id, label, accepts)`, `.mesh(id, label)`, then `.range(min, max)`, `.unit(u)`, `.group(g)`,
+  `.link(id, label, accepts)`, `.mesh(id, label)`, `.index_list(id, label)`, then `.range(min, max)`, `.unit(u)`, `.group(g)`,
   `.soft_range(a, b)`, `.step(s)`, `.hidden()`, `.animatable(bool)`.
 
 `ParamDesc::validate(Value) -> Result<Value, ParamError>`:
@@ -62,6 +66,8 @@ evaluation of real node types (Phases 5+).
    (`ParamError::OutOfRange`). No clamping. A repeated index is allowed on purpose: the
    cone primitive's side quads at the apex repeat it (`[10, 11, 11, 21]`,
    tests/golden/cone), and Make Editable must keep the face lists exactly.
+7. `IndexList`: the list is **sorted ascending and deduplicated** (not an error). No range
+   check (the kind does not know the element count).
 
 ## 2. Node types and the plugin registry (`registry`)
 
@@ -167,7 +173,7 @@ RON text, deterministic (same scene → byte-identical output):
 ```ron
 (
     format: "forge3d-scene",
-    version: 2,
+    version: 3,
     roots: [
         (id: 1, type_id: "forge.null", name: "Null", params: {}, tags: [], children: []),
     ],
@@ -178,7 +184,7 @@ RON text, deterministic (same scene → byte-identical output):
   param is written, defaults included.
 - `load(Arc<Registry>, &str) -> Result<(Scene, LoadReport), LoadError>`.
   - `LoadError`: `Parse` (with message), `WrongFormat`, `UnsupportedVersion`
-    (> 2), `DuplicateId`, `Structure` (known Tag type in `children`, or known
+    (> 3), `DuplicateId`, `Structure` (known Tag type in `children`, or known
     non-Tag type in `tags`).
   - Recoverable issues go to `LoadReport.warnings` (strings naming the node id):
     unknown type (node kept as-is), unknown param on a known type (dropped), invalid
@@ -188,4 +194,9 @@ RON text, deterministic (same scene → byte-identical output):
 - `save(load(save(s)))` equals `save(s)`.
 - **Version 2** added `Value::Mesh` (written as `Mesh((points: [...], polys: [...]))`, points
   in order, so output stays deterministic). Version 1 files have no mesh values and still
-  load unchanged; `save` always writes version 2.
+  load unchanged; version 2 ended here.
+- **Version 3** added `Value::IndexList` (written as `IndexList([0, 3, 5])` in RON, ascending; the pretty
+  printer puts one index per line). A
+  version 1 or 2 file has no such values and loads unchanged (missing params get their
+  defaults); `save` always writes version 3. The bump is for older builds: they reject a
+  version 3 file with `UnsupportedVersion` instead of a parse error on the unknown variant.

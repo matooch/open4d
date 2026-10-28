@@ -17,8 +17,10 @@ input into the same commands.
 ## 1. Editor state (`state`)
 
 `EditorState { doc: Document, selection: NodeSelection, expanded: BTreeSet<NodeId>,
-dock: Dock, camera: Camera, shading: Shading, timeline: Timeline, status: String }`,
-built with `EditorState::new(Arc<Registry>)`.
+dock: Dock, camera: Camera, shading: Shading, timeline: Timeline, status: String,
+mode: EditMode }`,
+built with `EditorState::new(Arc<Registry>)`. `mode` is `EditMode::Model` at start
+(`Model`, `Points`, `Edges`, `Polys`; EDITABLE.md §2.2).
 
 `NodeSelection { nodes: BTreeSet<NodeId>, active: Option<NodeId>, anchor: Option<NodeId> }`:
 - `click(id)`: select only `id` (active and anchor = id).
@@ -83,7 +85,8 @@ errors are returned (and shown in `status`) and change nothing. Name edits go th
 
 `Command::{Create(type_id), DeleteSelected, Undo, Redo, Rename(id, name),
 Reparent(id, Option<NodeId>), ToggleExpanded(id), SetShading(Shading),
-FrameAll, MakeEditable, CurrentStateToObject}`; `execute(&mut EditorState, Command) -> Result<(), String>`.
+FrameAll, MakeEditable, CurrentStateToObject, SetMode(EditMode), Select(SelectCmd)}`
+(`SelectCmd`: `All`, `None`, `Invert`, `Grow`, `Shrink`; EDITABLE.md §2.5); `execute(&mut EditorState, Command) -> Result<(), String>`.
 - `Create`: new node at the end of the root list, selected alone; a new Generator node
   also gets one `forge.smoothing` tag in the same undo step (SMOOTHING.md §2); a `Tag` type is
   attached to the active node instead (error without one).
@@ -95,6 +98,9 @@ FrameAll, MakeEditable, CurrentStateToObject}`; `execute(&mut EditorState, Comma
   the whole selection; rules in EDITABLE.md §1. Nodes that make no mesh are skipped with a
   message in `EditorState.status`. The selection becomes the new objects. Edit menu items
   "Make Editable" and "Current State to Object".
+- `SetMode(mode)`: sets `EditorState.mode`; nothing else changes.
+- `Select(cmd)`: Select All / Deselect All / Invert / Grow / Shrink on the current mode's
+  set (EDITABLE.md §2.5); one "Select" transaction for a component set.
 - `FrameAll`: no geometry yet → resets the camera to default (placeholder until
   Phase 5).
 
@@ -103,6 +109,7 @@ categories only (hierarchy + Tag), in `Category` order, types sorted by label; t
 with `in_create_menu == false` (the polygon object) are left out.
 
 Key bindings (**parity-pending**, ours): Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo,
+Ctrl+A select all, Ctrl+Shift+A deselect all (Cmd on macOS),
 Delete delete selected, F2 rename active, 1–5 shading (Smooth, Flat, Wire,
 SmoothWire, FlatWire).
 
@@ -128,6 +135,13 @@ Navigation `nav_action(input) -> NavAction` (**parity-pending**, ours):
 
 Wheel takes precedence over drags in the same frame.
 
+Component modes (EDITABLE.md §2): the header of the viewport holds four toggle buttons
+"Model", "Points", "Edges", "Polygons" (`EditorState.mode`). With a component target, left
+click and left drag (not on a gizmo handle) select components instead of objects, and the
+target is drawn with its points / edges / polygon outlines and selected components in the
+component selection colour (§8); the panel rebuilds its GPU meshes when the revision, the
+node selection, the mode or the target changes.
+
 ## 7. Timeline placeholder (`timeline`)
 
 `Timeline { start: 0, end: 90, current: 0, fps: 30, playing: false }`
@@ -140,13 +154,15 @@ a frame slider and the range; nothing is animated yet (Phase 11).
 
 Our own dark palette (sRGB): window `#1E2024`, panel `#25282D`, faint
 `#2E3238`, text `#D6D9DE`, weak text `#9AA0A8`, accent `#E08A2E` (selection), accent
-text `#1A1A1A`, error `#E5534B`. `apply(&egui::Context)`. Requirement: text on panel
+text `#1A1A1A`, error `#E5534B`, component selection `#38C6E8` (selected points, edges
+and polygons of the component target, EDITABLE.md §2.6). `apply(&egui::Context)`. Requirement: text on panel
 and on window has WCAG contrast ≥ 7, weak text ≥ 4.5, accent text on accent ≥ 4.5.
 
 ## 9. App (`app`, `apps/studio`)
 
 `forge_ui::run()` opens a window titled "Forge3D" (eframe, wgpu backend) with a menu
-bar (File: New, Open, Save, Save As, Import OBJ, Export OBJ, Export Selected as OBJ (IO.md §2); Edit: Undo/Redo/Delete/Make Editable/Current State to Object; Create: §5 menu; View: shading; Window:
+bar (File: New, Open, Save, Save As, Import OBJ, Export OBJ, Export Selected as OBJ (IO.md §2); Edit: Undo/Redo/Delete/Make Editable/Current State to Object, Select All/Deselect All/Invert
+Selection (EDITABLE.md §2.5); Select: Grow Selection, Shrink Selection; Create: §5 menu; View: shading; Window:
 open/move panels, reset layout), the dock (§2) and a status bar. `apps/studio`
 calls it with `Registry::with_builtins()`. Window menu: one toggle per panel labelled
 "<Panel> panel", a "Move <Panel>" submenu per panel with "<Panel> to <area>" items,

@@ -74,3 +74,120 @@ a `forge.polygon`, the polygon itself).
 - Deformer child kept and still applied; Current State to Object bakes the deformer and
   leaves the source; one undo restores the original; consumed children removed.
 - Save and load keep the mesh (CORE.md §6).
+
+## 2. Component modes and selection (`crates/ui/src/components.rs`)
+
+Sources: own design (brief docs/agents/tasks/05-component-modes-selection.md). No
+observation of the reference app exists yet for modes or selection, so **every rule in
+this section is parity-pending** (brief 10 observes them). Geometry used: picking and
+rectangle selection in VIEWPORT.md §2, selection sets and conversions in GEOMETRY.md §4,
+edge ids in GEOMETRY.md §1.
+
+### 2.1 Storage
+Three params on `forge.polygon`, all `ParamKind::IndexList`, hidden and not animatable,
+default empty:
+
+| id | holds |
+|---|---|
+| `selection.points` | point indices of the stored mesh |
+| `selection.edges` | edge ids, as numbered by `PolyMesh::edges()` of the stored mesh (GEOMETRY.md §1) |
+| `selection.polys` | polygon indices of the stored mesh |
+
+`Value::IndexList(Vec<u32>)`: validation sorts ascending and removes duplicates (CORE.md
+§1). The three sets are independent: changing one never changes another, and switching the
+mode converts nothing. Indices refer to the **stored** mesh. Deformers do not change
+topology (MODIFIERS.md §0), so the same indices address the evaluated mesh. An index at or
+past the element count (the mesh was edited later) is ignored everywhere it is read.
+
+Every change is one `doc.transact("Select", ...)` writing the one set of the current mode,
+so it undoes, redoes and saves like any other edit. A change that would leave the set equal
+to the stored one writes nothing (no empty undo step; an empty click on an empty selection
+is a no-op). One rectangle drag is one transaction, written when the button is released.
+The file keeps the sets (CORE.md §6: version 3; older files load with empty sets).
+
+### 2.2 Mode
+`EditMode { Model, Points, Edges, Polys }`, `EditorState.mode`, default `Model`. New and Open
+reset it to `Model`. The mode is editor state, not document state: it is not saved and not
+undoable.
+
+The **component target** is the active node when `mode != Model` and the active node is a
+`forge.polygon`. Otherwise (Model mode, nothing active, or an active node of another type)
+there is no target and viewport clicks pick objects exactly as in Model mode (MANIPULATE.md
+§5). Component modes never touch other objects' selections.
+
+### 2.3 Picking space
+The pick mesh is `forge_generators::evaluate` of the target (deformers applied) with every
+point taken to world space by the node's world matrix. If the evaluated mesh has another
+point or polygon count than the stored mesh (not expected), the stored mesh is used.
+Cursor and rectangles are in render pixels, as for object picking.
+
+### 2.4 Interaction
+`SelectOp` from the modifiers: Ctrl/Cmd held gives `Remove`; else Shift held gives `Add`;
+else `Replace`.
+
+| Gesture | Result |
+|---|---|
+| click on an element | `Replace`: selection = {element}; `Add`: union; `Remove`: difference |
+| click on nothing | `Replace`: selection cleared; `Add` and `Remove`: unchanged |
+| drag on empty space, release | the rectangle's elements combined like a click's single element |
+
+Picking per mode (`pick_component`): Points `pick_point`, radius 8 px; Edges `pick_edge`,
+radius 6 px; Polys `pick_poly` along the cursor ray. Points and edges use `visible_only =
+true`. A drag starts a rectangle when it starts on no gizmo handle of the active object.
+`rect_components`: `rect_select` with `visible_only = true` and `Mode::All`, so an edge or
+polygon is taken only when all its points are in the rectangle and visible. While dragging
+the viewport draws the rectangle outline; nothing is stored until release.
+
+### 2.5 Menus and shortcuts
+Edit menu: "Select All" (Ctrl/Cmd+A), "Deselect All" (Ctrl/Cmd+Shift+A), "Invert
+Selection". Select menu: "Grow Selection", "Shrink Selection". They act on the current
+mode's set of the target (one "Select" transaction each):
+
+- Points, Edges, Polys: all = every element `0..count`; none = empty; invert = complement
+  within `0..count`.
+- Grow, shrink: Points `grow_points`/`shrink_points`; Polys `grow_polys`/`shrink_polys`
+  (GEOMETRY.md §4). Edges: the neighbours of an edge are the edges that share a point with
+  it; grow adds all neighbours of selected edges; shrink keeps the selected edges whose
+  neighbours are all selected.
+- With no target in a component mode, they do nothing and the status bar says why
+  ("select a polygon object").
+- Model mode: the set is the object selection. All = every node of the hierarchy (not
+  tags), none = clear, invert = the other nodes; grow and shrink do nothing. The active node
+  becomes the last selected one.
+
+Ctrl/Cmd+A and Ctrl/Cmd+Shift+A were unbound before this section (shortcuts: UI.md §5), so
+nothing clashes. Like the other shortcuts they are ignored while a text field has focus.
+Keys for switching modes are out of scope (brief 10).
+
+### 2.6 Display (UI.md §6, VIEWPORT.md §6)
+In a component mode with a target, the target is drawn in the plain object colour (no
+object tint) with its wire visible (a shading without wire is drawn as its wire twin:
+Smooth as Smooth + wire, Flat as Flat + wire), and:
+
+| Mode | Drawn |
+|---|---|
+| Points | the points as 7 px squares, depth tested (hidden points stay hidden); selected ones in the component selection colour |
+| Edges | all edges; selected edges in the component selection colour |
+| Polys | all polygon outlines; selected polygons filled and outlined in the component selection colour |
+
+Other objects draw as usual (their points are not drawn). The component selection colour is
+new: `Theme.component_selection`, `#38C6E8`, passed to the renderer as `Palette.selection`
+(object selection stays the orange tint). It differs from the object selection colour so a
+selected object and selected components can be told apart.
+The mode buttons are four toggle buttons in the viewport header labelled "Model", "Points",
+"Edges", "Polygons" (text only; icons and the tool palette come with brief 10); the header
+label also names the mode.
+
+### 2.7 Checks (`crates/ui/tests/components.rs`)
+- Picking: on a made-editable cube seen from a known camera, each element type is picked at
+  the pixel of a corner, an edge midpoint and a face centre; a hidden element is not picked.
+- Click, Shift and Ctrl rules; empty click; rectangle select; one transaction per
+  operation; no-op writes nothing.
+- Undo restores the previous selection; the selection survives save and load (and a
+  version 2 file loads with empty sets).
+- With a non-polygon active object, clicks pick objects.
+- Picking uses the deformed mesh and stores base indices; select all / none / invert / grow /
+  shrink; header buttons, Ctrl/Cmd+A and the Edit and Select menus (egui_kittest, no GPU).
+- Display: `display_selection` per mode, `component_shading`; the renderer's sized points
+  (`crates/viewport/tests/render.rs`, GPU) draw a square in the wire or selection colour and
+  are hidden behind filled faces.

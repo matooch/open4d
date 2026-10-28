@@ -9,6 +9,8 @@ struct Uniforms {
     light: vec4<f32>,
     // x: 1 = smooth normals, y: depth bias in NDC (toward the camera)
     params: vec4<f32>,
+    // x: half point size in pixels, y/z: NDC units per pixel (2/width, 2/height)
+    point: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -66,6 +68,25 @@ fn vs_edge(v: EdgeIn) -> EdgeOut {
 @fragment
 fn fs_edge(i: EdgeOut) -> @location(0) vec4<f32> {
     return vec4<f32>(select(u.wire.rgb, u.selection.rgb, i.selected > 0.5), 1.0);
+}
+
+struct PointIn {
+    @location(0) pos: vec3<f32>,
+    @location(1) selected: f32,
+    @location(2) corner: vec2<f32>,
+};
+
+// A screen-space square of `u.point.x * 2` pixels round the point; drawn with fs_edge.
+@vertex
+fn vs_point(v: PointIn) -> EdgeOut {
+    var o: EdgeOut;
+    var c = u.view_proj * vec4<f32>(v.pos, 1.0);
+    c.z = c.z - u.params.y * c.w;
+    c.x = c.x + v.corner.x * u.point.x * u.point.y * c.w;
+    c.y = c.y + v.corner.y * u.point.x * u.point.z * c.w;
+    o.clip = c;
+    o.selected = v.selected;
+    return o;
 }
 
 struct ColorIn {

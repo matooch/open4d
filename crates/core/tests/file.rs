@@ -38,7 +38,7 @@ fn save_is_tagged_and_deterministic() {
     let b = file::save(rich_doc().scene());
     assert_eq!(a, b);
     assert!(a.contains("format: \"forge3d-scene\""), "{a}");
-    assert!(a.contains("version: 2"), "{a}");
+    assert!(a.contains("version: 3"), "{a}");
 }
 
 #[test]
@@ -81,8 +81,8 @@ fn structural_problems_are_errors() {
         LoadError::WrongFormat(_)
     ));
     assert!(matches!(
-        load_err(r#"(format: "forge3d-scene", version: 3, roots: [])"#),
-        LoadError::UnsupportedVersion(3)
+        load_err(r#"(format: "forge3d-scene", version: 4, roots: [])"#),
+        LoadError::UnsupportedVersion(4)
     ));
     assert!(matches!(
         load_err(
@@ -187,7 +187,9 @@ fn unknown_types_are_kept_verbatim_but_not_editable() {
 fn mesh_registry() -> Arc<Registry> {
     let mut r = (*common::registry()).clone();
     r.register(
-        NodeType::new("test.poly", "Poly", Category::Object).param(ParamDesc::mesh("mesh", "Mesh")),
+        NodeType::new("test.poly", "Poly", Category::Object)
+            .param(ParamDesc::mesh("mesh", "Mesh"))
+            .param(ParamDesc::index_list("selection.points", "Selected points")),
     )
     .unwrap();
     Arc::new(r)
@@ -206,7 +208,7 @@ fn quad_mesh() -> MeshData {
 }
 
 #[test]
-fn v2_round_trips_a_mesh_deterministically() {
+fn v3_round_trips_a_mesh_deterministically() {
     let mut doc = Document::new(mesh_registry());
     let id = doc
         .transact("poly", |tx| {
@@ -217,7 +219,7 @@ fn v2_round_trips_a_mesh_deterministically() {
         .unwrap();
     let text = file::save(doc.scene());
     assert_eq!(text, file::save(doc.scene()));
-    assert!(text.contains("version: 2"), "{text}");
+    assert!(text.contains("version: 3"), "{text}");
     let (scene, report) = file::load(mesh_registry(), &text).unwrap();
     assert!(report.warnings.is_empty(), "{:?}", report.warnings);
     assert_eq!(file::save(&scene), text);
@@ -256,5 +258,60 @@ fn version_1_files_still_load() {
         "missing mesh is filled with the empty default"
     );
     assert_eq!(scene.param(NodeId(2), "size"), Some(&Value::Float(3.0)));
-    assert!(file::save(&scene).contains("version: 2"));
+    assert!(file::save(&scene).contains("version: 3"));
+}
+
+#[test]
+fn v3_round_trips_an_index_list_and_old_files_get_the_default() {
+    let mut doc = Document::new(mesh_registry());
+    let id = doc
+        .transact("poly", |tx| {
+            let id = tx.create("test.poly", None, None)?;
+            // stored sorted and unique whatever the input order
+            tx.set_param(id, "selection.points", Value::IndexList(vec![5, 1, 5, 3]))?;
+            Ok(id)
+        })
+        .unwrap();
+    let text = file::save(doc.scene());
+    assert!(text.contains("version: 3"), "{text}");
+    let compact: String = text.split_whitespace().collect();
+    assert!(compact.contains("IndexList([1,3,5,])"), "{text}");
+    let (scene, report) = file::load(mesh_registry(), &text).unwrap();
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    assert_eq!(file::save(&scene), text);
+    assert_eq!(
+        scene.param(id, "selection.points"),
+        Some(&Value::IndexList(vec![1, 3, 5]))
+    );
+
+    // a version 2 file without the param loads silently with the empty default
+    let v2 = r#"(format: "forge3d-scene", version: 2, roots: [
+        (id: 1, type_id: "test.poly", name: "p", tags: [], children: [], params: {}),
+    ])"#;
+    let (scene, report) = file::load(mesh_registry(), v2).unwrap();
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    assert_eq!(
+        scene.param(NodeId(1), "selection.points"),
+        Some(&Value::IndexList(vec![]))
+    );
+}
+
+#[test]
+fn a_wrongly_typed_index_list_resets_with_a_warning_and_newer_versions_are_refused() {
+    let text = r#"(format: "forge3d-scene", version: 3, roots: [
+        (id: 1, type_id: "test.poly", name: "p", tags: [], children: [], params: {
+            "selection.points": Int(4),
+        }),
+    ])"#;
+    let (scene, report) = file::load(mesh_registry(), text).unwrap();
+    assert_eq!(
+        scene.param(NodeId(1), "selection.points"),
+        Some(&Value::IndexList(vec![]))
+    );
+    assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
+    let future = text.replace("version: 3", "version: 4");
+    assert_eq!(
+        file::load(mesh_registry(), &future).err(),
+        Some(LoadError::UnsupportedVersion(4))
+    );
 }

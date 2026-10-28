@@ -137,7 +137,12 @@ Drags: `Drag::begin(gizmo, handle, cam, x, y, w, h) -> Option<Drag>`, then
 - `MeshBuffers::new(&Gpu, &PolyMesh, &Selection)`: triangulated polygons (geometry §6)
   with per-corner flat normal, smooth normal (`corner_normals`, smoothing angle π,
   i.e. fully smooth), and selected flag; edge line list (selected flag per edge);
-  point list.
+  point list, and one screen-space quad (two triangles) per point for sized points.
+  `MeshBuffers::with_device_no_points` leaves the point buffers out.
+- `Settings.point_size` (pixels, default 0): with `show_points`, 0 draws 1 px points (as
+  before); above 0 every point is a depth-tested square of that side length centred on the
+  projected point, with the same depth bias as edges, in the wire colour (selected points:
+  the selection colour). Used by the component modes (EDITABLE.md §2.6).
 - `Shading`: `Smooth`, `Flat`, `Wire`, `SmoothWire`, `FlatWire`.
 - `Scene` to draw: meshes with base colours, optional grid, optional gizmo, settings
   (background, shading, show points). Colours are linear RGB written unchanged to an

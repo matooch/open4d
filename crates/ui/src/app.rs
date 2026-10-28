@@ -15,9 +15,12 @@ use crate::attributes::{
     Gesture, Widget, apply_edit, attribute_rows, from_display, to_display, unit_suffix,
 };
 use crate::commands::{Command, category_label, create_menu, execute};
+use crate::components::{
+    ClickModifiers, EditMode, SelectCmd, target as component_target, viewport_click, viewport_rect,
+};
 use crate::coordinates::{Row, Space, Third, coord_view, set_coord};
 use crate::dock::{Area, Dock, Panel};
-use crate::manipulate::{apply_drag, pick_node};
+use crate::manipulate::apply_drag;
 use crate::state::EditorState;
 use crate::theme::Theme;
 use crate::tree::tree_rows;
@@ -39,6 +42,9 @@ const OPEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O)
 const SAVE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
 const SAVE_AS: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S);
+const SELECT_ALL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::A);
+const DESELECT_ALL: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::A);
 
 #[derive(Clone, Copy)]
 enum FileAction {
@@ -68,6 +74,8 @@ pub struct Editor {
     coord_third: Third,
     /// The gizmo drag in progress: drag state, node, its transform at the start, gesture.
     gizmo_drag: Option<(Drag, NodeId, Transform, u64)>,
+    /// The rectangle select in progress, `[x0, y0, x1, y1]` in render pixels.
+    rect_drag: Option<[f64; 4]>,
     /// File menu (docs/specs/IO.md §2): dialogs, current file, revision at the last
     /// save or load, and the last window title sent.
     dialogs: Box<dyn Dialogs>,
@@ -98,6 +106,7 @@ impl Editor {
             coord_space: Space::Local,
             coord_third: Third::Scale,
             gizmo_drag: None,
+            rect_drag: None,
             dialogs: Box::new(NativeDialogs),
             file_path: None,
             sent_title: String::new(),
@@ -194,6 +203,12 @@ impl Editor {
                 file_action = Some(FileAction::Save);
             } else if i.consume_shortcut(&OPEN) {
                 file_action = Some(FileAction::Open);
+            }
+            // Deselect All first: Ctrl+A would also match with Shift held
+            if i.consume_shortcut(&DESELECT_ALL) {
+                cmds.push(Command::Select(SelectCmd::None));
+            } else if i.consume_shortcut(&SELECT_ALL) {
+                cmds.push(Command::Select(SelectCmd::All));
             }
             if i.consume_shortcut(&redo) || i.consume_shortcut(&redo_y) {
                 cmds.push(Command::Redo);
@@ -306,12 +321,38 @@ impl Editor {
                     ui.close();
                 }
                 ui.separator();
+                let select_items = [
+                    ("Select All", Some(SELECT_ALL), SelectCmd::All),
+                    ("Deselect All", Some(DESELECT_ALL), SelectCmd::None),
+                    ("Invert Selection", None, SelectCmd::Invert),
+                ];
+                for (label, shortcut, cmd) in select_items {
+                    let mut button = egui::Button::new(label);
+                    if let Some(sc) = shortcut {
+                        button = button.shortcut_text(ui.ctx().format_shortcut(&sc));
+                    }
+                    if ui.add(button).clicked() {
+                        self.run(Command::Select(cmd));
+                        ui.close();
+                    }
+                }
+                ui.separator();
                 if ui.button("Make Editable").clicked() {
                     self.run(Command::MakeEditable);
                     ui.close();
                 }
                 if ui.button("Current State to Object").clicked() {
                     self.run(Command::CurrentStateToObject);
+                    ui.close();
+                }
+            });
+            ui.menu_button("Select", |ui| {
+                if ui.button("Grow Selection").clicked() {
+                    self.run(Command::Select(SelectCmd::Grow));
+                    ui.close();
+                }
+                if ui.button("Shrink Selection").clicked() {
+                    self.run(Command::Select(SelectCmd::Shrink));
                     ui.close();
                 }
             });
@@ -429,6 +470,18 @@ impl Editor {
     }
 
     fn viewport_ui(&mut self, ui: &mut Ui, rs: Option<&egui_wgpu::RenderState>) {
+        // header: what a click selects (EDITABLE.md §2.6)
+        ui.horizontal(|ui| {
+            for mode in EditMode::ALL {
+                let on = self.state.mode == mode;
+                if ui
+                    .add(egui::Button::new(mode.label()).selected(on))
+                    .clicked()
+                {
+                    self.run(Command::SetMode(mode));
+                }
+            }
+        });
         let rect = ui.available_rect_before_wrap();
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         let Some(rs) = rs else {
@@ -459,7 +512,9 @@ impl Editor {
             (rect.width() * ppp).round() as u32,
             (rect.height() * ppp).round() as u32,
         ];
-        if !input.alt {
+        if input.alt {
+            self.rect_drag = None;
+        } else {
             self.viewport_interaction(ui, &response, rect, ppp, size);
         }
         let gizmo = self.current_gizmo();
@@ -472,10 +527,25 @@ impl Editor {
                 scene: self.state.doc.scene(),
                 selected: &self.state.selection.nodes,
                 gizmo: gizmo.as_ref(),
+                component: component_target(&self.state).map(|id| (id, self.state.mode)),
             },
         );
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
         ui.painter().image(tex, rect, uv, egui::Color32::WHITE);
+        if let Some([x0, y0, x1, y1]) = self.rect_drag
+            && response.dragged()
+        {
+            let to_points = |x: f64, y: f64| {
+                rect.min + egui::vec2((x / ppp as f64) as f32, (y / ppp as f64) as f32)
+            };
+            let colour = Theme::default().component_selection;
+            ui.painter().rect_stroke(
+                egui::Rect::from_two_pos(to_points(x0, y0), to_points(x1, y1)),
+                0.0,
+                egui::Stroke::new(1.0, colour),
+                egui::StrokeKind::Inside,
+            );
+        }
         let label = SHADINGS
             .iter()
             .find(|(s, _)| *s == self.state.shading)
@@ -483,7 +553,10 @@ impl Editor {
         ui.painter().text(
             rect.left_top() + egui::vec2(8.0, 6.0),
             egui::Align2::LEFT_TOP,
-            format!("Perspective · {label}"),
+            match self.state.mode {
+                EditMode::Model => format!("Perspective · {label}"),
+                mode => format!("Perspective · {label} · {} mode", mode.label()),
+            },
             egui::FontId::proportional(12.0),
             Theme::default().weak_text,
         );
@@ -518,15 +591,34 @@ impl Editor {
         size: [u32; 2],
     ) {
         let (w, h) = (size[0].max(1) as f64, size[1].max(1) as f64);
+        let to_pixels = |pos: egui::Pos2| {
+            (
+                ((pos.x - rect.min.x) * ppp) as f64,
+                ((pos.y - rect.min.y) * ppp) as f64,
+            )
+        };
+        let modifiers = ui.input(|i| i.modifiers);
+        let mods = ClickModifiers {
+            shift: modifiers.shift,
+            command: modifiers.command,
+        };
+        // End of a rectangle select: the release may not report a pointer position
+        if response.drag_stopped_by(egui::PointerButton::Primary)
+            && let Some(mut r) = self.rect_drag.take()
+        {
+            if let Some(pos) = response.interact_pointer_pos() {
+                (r[2], r[3]) = to_pixels(pos);
+            }
+            if let Err(e) = viewport_rect(&mut self.state, r, [w, h], mods) {
+                self.state.status = e;
+            }
+            return;
+        }
         let Some(pos) = response.interact_pointer_pos() else {
             return;
         };
-        let (x, y) = (
-            ((pos.x - rect.min.x) * ppp) as f64,
-            ((pos.y - rect.min.y) * ppp) as f64,
-        );
+        let (x, y) = to_pixels(pos);
         let cam = self.state.camera;
-        let modifiers = ui.input(|i| i.modifiers);
         if response.drag_started_by(egui::PointerButton::Primary)
             && let (Some(g), Some(id)) = (self.current_gizmo(), self.state.selection.active)
             && let Some(handle) = g.hit_test(&cam, x, y, w, h)
@@ -556,13 +648,21 @@ impl Editor {
             }
             return;
         }
-        if response.clicked() {
-            match pick_node(self.state.doc.scene(), &cam, x, y, w, h) {
-                Some(id) if modifiers.command => self.state.selection.toggle(id),
-                Some(id) => self.state.selection.click(id),
-                None if !modifiers.command => self.state.selection.clear(),
-                None => {}
+        // a primary drag that is not on a gizmo handle selects components by rectangle
+        if component_target(&self.state).is_some() {
+            if response.drag_started_by(egui::PointerButton::Primary) {
+                self.rect_drag = Some([x, y, x, y]);
             }
+            if let Some(r) = &mut self.rect_drag
+                && response.dragged_by(egui::PointerButton::Primary)
+            {
+                (r[2], r[3]) = (x, y);
+            }
+        }
+        if response.clicked()
+            && let Err(e) = viewport_click(&mut self.state, [x, y], [w, h], mods)
+        {
+            self.state.status = e;
         }
     }
 

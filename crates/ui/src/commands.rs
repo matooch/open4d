@@ -4,6 +4,7 @@ use forge_core::{Category, EditError, NodeId, Registry, Tx};
 use forge_generators::EditableError;
 use forge_viewport::render::Shading;
 
+use crate::components::{EditMode, SelectCmd, run_select};
 use crate::state::EditorState;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -21,6 +22,10 @@ pub enum Command {
     MakeEditable,
     /// Add a polygon object with the deformed result after each selected node (§1.3).
     CurrentStateToObject,
+    /// Switch what viewport clicks select (docs/specs/EDITABLE.md §2.2).
+    SetMode(EditMode),
+    /// Select All / Deselect All / Invert / Grow / Shrink on the current mode's set (§2.5).
+    Select(SelectCmd),
 }
 
 fn err(e: impl std::fmt::Display) -> String {
@@ -129,6 +134,8 @@ pub fn execute(s: &mut EditorState, cmd: Command) -> Result<(), String> {
                 forge_generators::current_state_to_object,
             )?;
         }
+        Command::SetMode(mode) => s.mode = mode,
+        Command::Select(cmd) => run_select(s, cmd)?,
         Command::SetShading(shading) => s.shading = shading,
         Command::FrameAll => {
             // No geometry yet (Phase 5): reset to the default view.

@@ -7,6 +7,7 @@ use forge_core::{Document, NodeId, Registry, Scene};
 use forge_viewport::camera::{Camera, Handedness};
 use forge_viewport::render::Shading;
 
+use crate::components::EditMode;
 use crate::dock::Dock;
 use crate::timeline::Timeline;
 
@@ -79,6 +80,8 @@ pub struct EditorState {
     pub timeline: Timeline,
     /// Last message for the status bar (errors from failed edits).
     pub status: String,
+    /// What viewport clicks select (docs/specs/EDITABLE.md §2.2). Not saved, not undoable.
+    pub mode: EditMode,
 }
 
 impl EditorState {
@@ -105,6 +108,7 @@ impl EditorState {
             shading: Shading::SmoothWire,
             timeline: Timeline::default(),
             status: String::new(),
+            mode: EditMode::default(),
         }
     }
 }

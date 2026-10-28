@@ -178,6 +178,7 @@ impl Editor {
             Ok((scene, report)) => {
                 self.state.doc = Document::from_scene(scene);
                 self.state.selection.clear();
+                self.state.mode = crate::components::EditMode::Model;
                 self.state.expanded.clear();
                 self.state.status = report.warnings.join("; ");
                 self.file_path = Some(path.to_path_buf());

@@ -6,6 +6,7 @@
 pub mod app;
 pub mod attributes;
 pub mod commands;
+pub mod components;
 pub mod coordinates;
 pub mod dock;
 pub mod manipulate;
