@@ -1,0 +1,9 @@
+feature = "make-editable"
+observation = "docs/parity/make-editable.md"
+description = "Circle spline (defaults), Make Editable. Tree only: splines do not export, so there is no mesh"
+
+[params]
+command = "make_editable"
+
+[params.input]
+type = "circle"

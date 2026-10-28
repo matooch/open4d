@@ -1,0 +1,16 @@
+feature = "make-editable"
+observation = "docs/parity/make-editable.md"
+description = "Default sphere (R25 default Segments 16) at position (10, 20, 30), rotation H 45 degrees, Make Editable. Position and rotation stay on the object"
+mesh = "mesh.obj"
+
+[params]
+command = "make_editable"
+
+[params.input]
+type = "sphere"
+position = [10.0, 20.0, 30.0]
+rotation_hpb_deg = [45.0, 0.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false

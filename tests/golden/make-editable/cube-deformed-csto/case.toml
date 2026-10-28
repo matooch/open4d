@@ -1,0 +1,23 @@
+feature = "make-editable"
+observation = "docs/parity/make-editable.md"
+description = "Same scene as cube-deformed, Current State to Object on the cube. The whole scene is exported: the original cube (bent live by its Bend child, group Cube) and the new baked copy (group Cube_1), identical geometry"
+mesh = "mesh.obj"
+
+[params]
+command = "current_state_to_object"
+
+[params.input]
+type = "cube"
+size = [200.0, 400.0, 200.0]
+segments = [4, 8, 4]
+
+[params.input.child]
+type = "bend"
+strength_deg = 90.0
+
+[import]
+scale = 1.0
+flip_z = false
+
+[tolerance]
+compare = "geometric"
