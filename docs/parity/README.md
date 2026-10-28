@@ -102,6 +102,10 @@ Do these in order; each unblocks code that is waiting on it.
 | 32 | [shear.md](shear.md) | deformers | 6 |
 | 33 | [spherify.md](spherify.md) | deformers | 5 |
 
+Rows 1–33 were observed in R20 on Windows by GUI. From batch 08 on, the queue lives in
+[../PLAN.md](../PLAN.md) ("Observations queue") and observations run in R25 through the
+MCP bridge: [../agents/OBSERVER.md](../agents/OBSERVER.md).
+
 [TEMPLATE.md](TEMPLATE.md) is the blank form for any other feature.
 
 ## 4. What "good" observations look like
