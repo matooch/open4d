@@ -1,0 +1,7 @@
+feature = "keyframes"
+observation = "docs/parity/keyframes.md"
+description = "peak at the middle key"
+
+[params]
+param = "pos_x"
+keys = [[0, 0], [30, 100], [60, 0]]
