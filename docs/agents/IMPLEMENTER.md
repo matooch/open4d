@@ -23,15 +23,22 @@ names. Do not push, merge, or open PRs: the planner does that.
 
 ## 1. Environment
 
-- Windows, Git Bash. Use `sh`, `awk`, `sed`, `grep`; **there is no usable Python** (the
-  `python3` on PATH is a store stub that hangs: never call it).
-- For non-trivial numeric experiments write a throwaway Rust test (§3.3), never Python.
-- Edit files with your editor/edit tool. Avoid `perl -pi` or `sed -i` for multi-line or
-  code edits: delimiter characters (`|`, `/`) inside the text have silently corrupted files
-  before. If you must, check the result with `git diff` immediately.
-- The full test suite takes minutes and needs the GPU (`FORGE_REQUIRE_GPU=1`); use
-  `scripts/gate.sh`, which sets everything up. For quick loops run one test file:
+- macOS (the owner's Mac), Claude Code in the repo folder. The reference app and its
+  MCP bridge run on the same machine: **you must not use them** (your session must not
+  list the bridge under `/mcp`; see [OBSERVER.md](OBSERVER.md) §1). If a task seems to
+  need an observation, report `status: blocked` and say which.
+- Shell tools are BSD flavoured: `sed -i ''` (not `sed -i`), no GNU `timeout`
+  (`scripts/gate.sh` handles that). Prefer your edit tool over `sed -i` / `perl -pi` for
+  code: delimiter characters inside the text have silently corrupted files before. Check
+  with `git diff` after any scripted edit.
+- For numeric experiments write a throwaway Rust test (§3.3) so the result is
+  reproducible by the next implementer.
+- The full test suite takes minutes and runs the GPU tests on Metal
+  (`FORGE_REQUIRE_GPU=1`); use `sh scripts/gate.sh`, which sets everything up. For quick
+  loops run one test file:
   `cargo test -p forge-generators --test generators_parity -- --nocapture`.
+- Briefs say which branch to use (`batch-NN`). Commit there; never push, merge or open
+  PRs (the planner or the owner does).
 
 ## 2. Codebase map (what goes where)
 
@@ -40,7 +47,8 @@ names. Do not push, merge, or open PRs: the planner does that.
 | `core` | scene graph (`Scene`, `NodeId`, `Node`), documents and transactions (`Document`, `Tx`, undo), param descriptors (`ParamDesc`, `ParamKind`, `Value`, `Unit`), registry (`NodeType`, `Category`, `Plugin`), transforms (`scene.local_transform(id).matrix()`) |
 | `geometry` | `PolyMesh { points: Vec<DVec3>, polys: Vec<Vec<u32>> }`, `Edge`, half-edge (`HalfEdgeMesh::build`, `is_closed`), normals, subdivision, triangulation (`triangulate_poly`), booleans, splines |
 | `generators` | every object that produces geometry: primitives (`src/<name>.rs`, `round.rs`), modeling generators (`modeling.rs`), splines (`splines.rs`), spline generators (`spline_gens.rs`), subdivision, boole. `lib.rs` has `types()` + `build()` for parametric primitives, `Primitives::register` for all node types, `evaluate(scene, id)` (dispatch by type) and `is_consumed` |
-| `modifiers` | deformers (Phase 7): empty stub so far; the first brief sets it up |
+| `modifiers` | deformers: `common.rs` (box, modes, placement), one file per deformer, `apply_deformer` (MODIFIERS.md) |
+| `io` | file formats (OBJ from brief 04) |
 | `parity-harness` | golden-case discovery (`discover_cases`, `case.manifest()`, `case.expected_mesh()`), `compare_meshes` (strict: same counts, identical face lists, positions within 1e-4), `compare_geometric`, `export_weld`, `parse_obj`, the `golden` CLI |
 | `viewport`, `ui`, `apps/studio` | wgpu viewport, egui shell; new node types appear in the UI automatically via the registry |
 
