@@ -1,0 +1,13 @@
+feature = "r25-drift"
+observation = "docs/parity/r25-drift.md"
+description = "R25 re-export of torus/slice: R25 torus defaults differ (ring radius 100, ring segments 32, pipe segments 16)"
+mesh = "mesh.obj"
+
+[params]
+slice = true
+slice_from = 0.0
+slice_to = 270.0
+
+[import]
+scale = 1.0
+flip_z = false

@@ -1,0 +1,11 @@
+feature = "r25-drift"
+observation = "docs/parity/r25-drift.md"
+description = "R25 re-export of cylinder/fillet: R25 cylinder defaults differ (height segments 4, rotation segments 16, fillet segments 3, fillet radius 3)"
+mesh = "mesh.obj"
+
+[params]
+fillet = true
+
+[import]
+scale = 1.0
+flip_z = false

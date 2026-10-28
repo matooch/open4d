@@ -1,0 +1,15 @@
+feature = "r25-drift"
+observation = "docs/parity/r25-drift.md"
+description = "R25 re-export of boole/mode-union: R25 Boolean defaults differ (Hide new edges on); same outline, different topology"
+mesh = "mesh.obj"
+
+[params]
+mode = "union"
+b_pos = [50.0, 50.0, 50.0]
+
+[import]
+scale = 1.0
+flip_z = false
+
+[tolerance]
+compare = "geometric"

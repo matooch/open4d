@@ -1,0 +1,11 @@
+feature = "r25-drift"
+observation = "docs/parity/r25-drift.md"
+description = "R25 re-export of sphere/type-icosahedron: R25 default segments 16 (R20: 24); also the icosahedron is smaller (bbox 97.94, not 100)"
+mesh = "mesh.obj"
+
+[params]
+type = "icosahedron"
+
+[import]
+scale = 1.0
+flip_z = false
