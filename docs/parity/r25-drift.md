@@ -13,7 +13,7 @@ each file is identical. Nothing in `tests/golden/<feature>/` is changed by this 
 | Step | Result (ok / error text) |
 |---|---|
 | `ping` | ok (plugin 0.2.0) |
-| `get_capabilities`: app version string, plugin version | ok: app 25010 (R25.010), plugin 0.2.0, Python 3.9.1+, platform darwin, safe mode off, no auth token required |
+| `get_capabilities`: app version string, plugin version | ok: app 25010 (R25.010), plugin 0.2.0 ("cinema4d-mcp (sdimaging fork)"), Python 3.9.1+, platform darwin, safe mode off, **auth token now required** (`auth_token_required: true`, host 127.0.0.1, port 5555); renderer Standard; 108 commands, 46 marked safe |
 | `execute_python_script` returns version and `1 + 1` | ok: `{'version': 25010, 'sum': 2}` |
 | probe: default cube → OBJ export | ok, but **not identical** to the R20 file with the §1 settings: no normals at all (see below) |
 | probe: key position X at 0 and 30, read the value at 15 | ok: keys 0 and 300 gave 150.00043 at frame 15 (default key interpolation is not exactly linear; set linear on both keys if O2 needs exact values) |
