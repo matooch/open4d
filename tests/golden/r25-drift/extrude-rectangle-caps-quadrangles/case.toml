@@ -1,0 +1,18 @@
+feature = "r25-drift"
+observation = "docs/parity/r25-drift.md"
+description = "R25 re-export of extrude/rectangle-caps-quadrangles: R25 extrude default Offset is 100 (R20: 20)"
+mesh = "mesh.obj"
+
+[params]
+cap_type = "quadrangles"
+[params.input]
+type = "rectangle_spline"
+width = 400.0
+height = 400.0
+plane = "xy"
+intermediate = "adaptive"
+intermediate_angle = 5.0
+
+[import]
+scale = 1.0
+flip_z = false

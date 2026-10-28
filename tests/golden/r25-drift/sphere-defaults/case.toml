@@ -1,0 +1,10 @@
+feature = "r25-drift"
+observation = "docs/parity/r25-drift.md"
+description = "R25 re-export of sphere/defaults: R25 default sphere has 16 segments (R20: 24), so fewer vertices"
+mesh = "mesh.obj"
+
+[params]
+
+[import]
+scale = 1.0
+flip_z = false
