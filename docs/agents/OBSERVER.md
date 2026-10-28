@@ -72,7 +72,7 @@ only the MCP server.
    app's Python console for the error and report it.
 3. **MCP server** (needs Python ≥ 3.10 on the Mac, separate from the app's Python):
    ```bash
-   cd ~/Github/cinema4d-mcp && python3 -m venv .venv && .venv/bin/pip install -e .
+   cd ~/cinema4d-mcp && python3 -m venv .venv && .venv/bin/pip install -e .
    ```
 4. **Register it only in the observer workspace.** Create
    `~/forge-observer/.mcp.json` (the token is expanded from your shell, never written
@@ -81,7 +81,7 @@ only the MCP server.
    {
      "mcpServers": {
        "refapp": {
-         "command": "/Users/<you>/Github/cinema4d-mcp/.venv/bin/cinema4d-mcp-wrapper",
+         "command": "/Users/<you>/cinema4d-mcp/.venv/bin/cinema4d-mcp-wrapper",
          "args": [],
          "env": {
            "MCP_AUTH_TOKEN": "${MCP_AUTH_TOKEN}",
@@ -118,7 +118,8 @@ The bridge's README lists R25 as unsupported (it targets 2024+). Find out what w
    OBJ with the settings in [parity/export-settings.md](../parity/export-settings.md)
    (scale 1 cm, normals Vertices, UVs on, No Material, **Flip Z off**, everything else
    default) to a scratch path. Compare it with `tests/golden/cube/defaults/mesh.obj`
-   (`cmp`, then `golden info` on both). Record the R25 exporter's option list in
+   (`golden info` on both, then compare parsed numbers: R25 writes six decimals and a
+   different header line, so `cmp` always fails). Record the R25 exporter's option list in
    r25-drift.md §1: new options, changed defaults, and how you set them from the probe.
 4. A probe that sets a key on a cube's position X at frame 0 and 30 and reads back the
    evaluated value at frame 15. Record whether this works (O2 needs it).
@@ -128,16 +129,24 @@ Write down which tools failed and with what message. The planner adjusts the for
 ## 3. The loop per case (scripted)
 
 1. New, empty document (`execute_python_script`).
-2. Build exactly what the case row says; set only the listed parameters.
-3. Read back every parameter you set (`get_parameter` or the probe) and write the value
+2. Build exactly what the case row says; set only the listed parameters. **Create every
+   object through the app's own menu command** (the command the Create menu runs), not
+   by constructing it directly in the script: directly constructed objects start with
+   different default values and export without normals (found in O0). Then set the
+   case's values.
+3. **Write every parameter of the object into `case.toml`, not only the changed
+   ones.** R25's defaults differ from R20's for several objects (O1); a case that
+   relies on a default becomes ambiguous when defaults move. Read them back after
+   building (step 4).
+4. Read back every parameter you set (`get_parameter` or the probe) and write the value
    the app **shows** into the case row. Clamped values are findings.
-4. Export or sample:
+5. Export or sample:
    - Mesh cases: OBJ export as above → `tests/golden/<feature>/<case>/mesh.obj`.
    - Numeric cases (keys, fields, clones): the probe prints JSON; save it as
      `tests/golden/<feature>/<case>/samples.json` in the format the form gives.
-5. Write `case.toml` (parity/README.md §2); run `golden info` (mesh cases) and paste the
+6. Write `case.toml` (parity/README.md §2); run `golden info` (mesh cases) and paste the
    output into the row.
-6. When the feature is done: `cargo run -q -p forge-parity-harness --bin golden -- check`
+7. When the feature is done: `cargo run -q -p forge-parity-harness --bin golden -- check`
    prints `ok: N cases`. Commit locally on the batch branch, one commit per feature:
    `Observation: <feature> (N cases)`.
 

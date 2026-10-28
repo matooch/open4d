@@ -1,8 +1,11 @@
 # Plan
 
-Parity target: the reference app **R25** (macOS, observed through the MCP bridge:
-[agents/OBSERVER.md](agents/OBSERVER.md)). Golden data before batch 08 came from R20 on
-Windows; observation O1 checks whether it still holds for R25.
+Parity target: the reference app **R25** (R25.010, macOS, observed through the MCP
+bridge: [agents/OBSERVER.md](agents/OBSERVER.md)). Golden data before batch 08 came from
+R20 on Windows. O1 showed R25 builds the **same geometry** (9/13 byte-equivalent after
+parsing; the rest differ only by changed defaults), so the R20 cases stay. Tests read the
+app version from each case's observation file and apply that version's defaults (brief
+07).
 
 Work runs on two tracks. **Usability first** (milestone M1), then parity breadth. Tick a
 box only when its tests pass (parity items: when their parity test passes).
@@ -37,12 +40,12 @@ elsewhere, marked **parity-pending** for later observation.
 - [ ] U1 Editable meshes (batch 08): polygon object, Make Editable / Current State to
       Object (03); OBJ import/export + File menu (04); point/edge/polygon modes and
       selection (05); component move/rotate/scale (06).
-- [ ] U2 Animation basics (batch 09): `samples.json` level-B golden format (07); keyframe
-      tracks + interpolation, checked against observation O2 (08); timeline with keys,
-      record, autokey, playback (09).
+- [ ] U2 Animation basics (batch 09): `samples.json` level-B golden format (08); keyframe
+      tracks + interpolation, checked against observation O2 (09); timeline with keys,
+      record, autokey, playback (10).
 - [ ] U3 Familiar layout (batch 10): reference-like arrangement (tool palette left,
       Object manager top right, Attribute manager below it, Coordinates/Materials
-      bottom), own icons, shortcut map (10).
+      bottom), own icons, shortcut map (11).
 - [ ] U4 Modeling tools (batch 11): extrude, inset, bevel, loop cut, knife, bridge,
       weld/merge, delete, optimize, normals flip/align; selection grow/shrink/loop/ring.
 - [ ] U5 Look-dev (batch 12): camera + light objects, basic PBR material + material tag,
@@ -80,7 +83,11 @@ so it isn't a parity item. Revisit after P6.
 
 | # | Form | Unblocks | Status |
 |---|---|---|---|
-| O0 | MCP smoke test (OBSERVER.md §2) | every MCP observation | todo |
-| O1 | [parity/r25-drift.md](parity/r25-drift.md) | trust in the R20 golden data | todo |
-| O2 | [parity/keyframes.md](parity/keyframes.md) | brief 08 (level B interpolation) | todo |
+| O0 | MCP smoke test (OBSERVER.md §2) | every MCP observation | done (R25.010, plugin 0.2.0) |
+| O1 | [parity/r25-drift.md](parity/r25-drift.md) | trust in the R20 golden data | done, commit pending on `batch-08` |
+| O4 | [parity/r25-defaults.md](parity/r25-defaults.md) | brief 07 (R25 defaults) | todo, **next** |
+| O2 | [parity/keyframes.md](parity/keyframes.md) | brief 09 (level B interpolation) | todo |
 | O3 | [parity/make-editable.md](parity/make-editable.md) | brief 03 parity-pendings | todo |
+
+Owner action still open: confirm the reference app's licence allows scripted use
+(OBSERVER.md §1 step 6) and note it in r25-drift.md §0.
