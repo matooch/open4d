@@ -1,6 +1,6 @@
 # 07 · R25 defaults with version-aware parity tests
 
-Status: ready · Branch: `batch-08` · Planner: main session · Implementer: Claude Sonnet 5.5 (local, macOS)
+Status: done · Branch: `batch-08` · Planner: main session · Implementer: Claude Sonnet 5.5 (local, macOS)
 
 ## Goal
 Our node types use the **R25** defaults and ranges, and every parity test still passes:
@@ -103,3 +103,10 @@ R25-only parameters (O4 "New-object parameters"), any golden or observation edit
 exporter text format (we compare parsed numbers).
 
 ## Report (implementer fills in)
+- Result: drift 6/7 exact or by the original feature's comparison (sphere-defaults, sphere-type-icosahedron, cylinder-fillet, torus-slice cut-geometric, boole x2 geometric). Known mismatch: extrude-rectangle-caps-quadrangles ("R25 vertex order": the 4-point caps start at another corner; GENERATORS2.md §11.1). None unsupported. All R20 parity counts unchanged.
+- Rules derived: icosahedron frequency d = 5 (floor(segments/5); 8->1, 16->3, 24->4; `r25-drift/sphere-type-icosahedron`). R25 extrude 4-point caps: start `[3,2,1,0]`, end `[4,5,6,7]` (one case, parity-pending, not implemented).
+- 37 of the 42 `!` rows applied. Not applied: circle and helix `intermediate` Uniform (build only supports Adaptive 5°), loft `cap_type` N-gon (loft ignores cap type, always triangles), lathe and sweep `isoparm_subdivision` (no param). All kept R20 values are still in the overlay.
+- Ranges changed to O4's finite clamps (regular_grid_width >= 0.01, optimize_points >= 0.0001, array copies 1-1000 etc., see GENERATORS2.md §0a).
+- Deviations: loft/spline defaults kept as above; icosahedron rule changed (finding); lathe/sweep `cap_type` default left Triangles although O4 lists N-gon for R25 (no `!`; R20 meshes show Triangles) - needs re-observation; tube/cone R25 fillet defaults (3) not applied (not `!`).
+- Files changed: harness lib.rs, tests/defaults/r20.toml, crates/{generators,modifiers,io}/tests/common, parity tests, r25_drift.rs, r25_defaults.rs, version.rs, descriptors in crates/generators/src, specs, STATUS.md.
+- Gate: GATE: 362 tests passed, 0 failed / cleanroom: ok / ok: 202 cases / GATE: all passed
