@@ -66,18 +66,22 @@ fn index_of(scene: &Scene, id: NodeId) -> Option<(Option<NodeId>, usize)> {
     Some((parent, list.iter().position(|c| *c == id)?))
 }
 
-/// Creates a polygon object at `parent[index]` named and transformed like `src`, with
-/// copies of its tags and the given mesh.
+/// Creates a polygon object at `parent[index]` named like `src`, with copies of its tags,
+/// the `transform.*` params of `xform_src` and the given mesh.
 fn spawn_like(
     tx: &mut Tx,
     src: NodeId,
+    xform_src: NodeId,
     parent: Option<NodeId>,
     index: usize,
     mesh: &PolyMesh,
 ) -> Result<NodeId, EditError> {
     let (name, params, tags) = {
         let n = tx.scene().node(src).ok_or(EditError::UnknownNode(src))?;
-        let params: Vec<(String, Value)> = n
+        let params: Vec<(String, Value)> = tx
+            .scene()
+            .node(xform_src)
+            .ok_or(EditError::UnknownNode(xform_src))?
             .params
             .iter()
             .filter(|(k, _)| k.starts_with(PREFIX))
@@ -106,6 +110,32 @@ fn spawn_like(
     Ok(id)
 }
 
+/// Points every `Link` param of any other node (tags included) that targets `old` to `new`.
+fn redirect_links(tx: &mut Tx, old: NodeId, new: NodeId) -> Result<(), EditError> {
+    let scene = tx.scene();
+    let mut found = Vec::new();
+    for root in scene.roots() {
+        for id in std::iter::once(*root).chain(scene.descendants(*root)) {
+            let Some(node) = scene.node(id) else { continue };
+            for owner in std::iter::once(id).chain(node.tags.iter().copied()) {
+                if owner == new {
+                    continue;
+                }
+                let params = scene.node(owner).map(|n| &n.params);
+                for (k, v) in params.into_iter().flatten() {
+                    if *v == Value::Link(Some(old)) {
+                        found.push((owner, k.clone()));
+                    }
+                }
+            }
+        }
+    }
+    for (owner, k) in found {
+        tx.set_param(owner, &k, Value::Link(Some(new)))?;
+    }
+    Ok(())
+}
+
 /// Make Editable (EDITABLE.md §1.2): replaces `id` by a polygon object holding its mesh
 /// without deformers; consumed children are deleted, other children move to the new
 /// object. Returns the new id (`id` itself if it already is a polygon object).
@@ -123,7 +153,8 @@ pub fn make_editable(tx: &mut Tx, id: NodeId) -> Result<NodeId, EditableError> {
     let (parent, index) = index_of(scene, id).ok_or(EditError::UnknownNode(id))?;
     let (consumed, kept): (Vec<NodeId>, Vec<NodeId>) =
         node.children.iter().partition(|c| is_consumed(scene, **c));
-    let new = spawn_like(tx, id, parent, index, &mesh)?;
+    let new = spawn_like(tx, id, id, parent, index, &mesh)?;
+    redirect_links(tx, id, new)?;
     for c in kept {
         tx.move_node(c, Some(new), None)?;
     }
@@ -141,7 +172,20 @@ pub fn current_state_to_object(tx: &mut Tx, id: NodeId) -> Result<NodeId, Editab
     if scene.node(id).is_none_or(|n| n.is_tag()) {
         return Err(EditableError::NoMesh(name_of(scene, id)));
     }
-    let mesh = evaluate(scene, id)?.ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?;
+    let mut mesh = evaluate(scene, id)?.ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?;
     let (parent, index) = index_of(scene, id).ok_or(EditError::UnknownNode(id))?;
-    Ok(spawn_like(tx, id, parent, index + 1, &mesh)?)
+    // Deformers inherited from a geometry-less parent would deform the copy again under
+    // that parent: put it after the parent instead, in the parent's space (§1.3).
+    if let Some(p) = crate::sibling_deformer_parent(scene, id) {
+        let m = scene
+            .local_transform(id)
+            .ok_or(EditError::UnknownNode(id))?
+            .matrix();
+        for pt in &mut mesh.points {
+            *pt = m.transform_point3(*pt);
+        }
+        let (gp, pi) = index_of(scene, p).ok_or(EditError::UnknownNode(p))?;
+        return Ok(spawn_like(tx, id, p, gp, pi + 1, &mesh)?);
+    }
+    Ok(spawn_like(tx, id, id, parent, index + 1, &mesh)?)
 }

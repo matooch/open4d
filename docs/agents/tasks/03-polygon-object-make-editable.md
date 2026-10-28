@@ -99,9 +99,10 @@ to golden data or observation files.
 - Parity-pending: every command rule in `docs/specs/EDITABLE.md` §1.2 to §1.4 (placement,
   name, tags copied, transform copied, deformers kept as children and not applied for Make
   Editable / applied for Current State to Object, consumed children deleted, status
-  message for mesh-less nodes, polygon left alone, selection after the command). Links
-  from other nodes to a replaced node are not rewritten. A sibling deformer (under a Null
-  parent) is applied twice to a Current State to Object result (documented in §1.3).
+  message for mesh-less nodes, polygon left alone, selection after the command). Rework
+  (planner review): Make Editable redirects links to the replaced node (§1.2); Current State
+  to Object with a sibling deformer places the result after the parent in the parent's
+  space (§1.3).
 - Deviation: `Mesh` validation allows a repeated index inside a polygon (still needs >= 3
   corners, >= 3 distinct indices, all `< points.len()`). The brief said "no repeated
   index", but the cone primitive (golden `tests/golden/cone`) has side quads
@@ -117,6 +118,6 @@ to golden data or observation files.
   docs/specs/{EDITABLE,CORE,UI}.md; docs/parity/STATUS.md; this brief.
 - Open questions for the planner: the observation O3 (does Make Editable keep or bake
   deformers, name/tag handling, selection, Current State placement and naming, what
-  happens to consumed children). Should links to a replaced node be redirected?
+  happens to consumed children). A link whose `accepts` excludes Object makes Make Editable fail and revert.
 - Gate output: `GATE: 296 tests passed, 0 failed` ... `GATE: all passed`
 

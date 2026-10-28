@@ -35,7 +35,10 @@ For a node for which `evaluate_geometry` builds a mesh:
   `EditableError::NoMesh(name)` before anything is edited. A tag gives `NoMesh` too.
   Editable splines are out of scope.
 - A generator whose build returns `BuildError::Unsupported` gives `EditableError::Build`.
-- Links from other nodes to the replaced node are not rewritten (**parity-pending**).
+- Every `Link` param of any other node (tags included, e.g. an Instance's `reference`)
+  that points to the replaced node is set to the new polygon object in the same step
+  (**parity-pending**). A link whose `accepts` list excludes the `Object` category makes
+  the whole step fail and revert.
 
 ### 1.3 Current State to Object (`current_state_to_object(tx, id) -> Result<NodeId, EditableError>`) — parity-pending
 - A new `forge.polygon` is inserted directly after the source (same parent, index + 1),
@@ -44,9 +47,16 @@ For a node for which `evaluate_geometry` builds a mesh:
   and its children are untouched; the new object has no children.
 - The mesh generators produce exactly one mesh each, so there is nothing to merge; if a
   generator with several outputs appears, the outputs must be merged into one mesh.
-- Same errors as §1.2. Known limit: a deformer that deforms the source as a *sibling*
-  (a deformer under a Null parent) also deforms the new object, because it sits under
-  the same parent: the baked deformation is applied twice (**parity-pending**).
+- Same errors as §1.2.
+- **Sibling deformers (parity-pending).** If the source gets deformers from its parent
+  (the parent has no geometry of its own and has deformer children, MODIFIERS.md §0, e.g.
+  Null > [Cube, Bend]), the new object would be deformed a second time under that parent.
+  So it is placed directly after the **parent**, under the grandparent (or at root level),
+  gets the **parent's** local `transform.*` params (name and tags still come from the
+  source), and its mesh is the deformed points taken into the parent's space with the
+  source's local matrix: `M_src · p`. World points are then identical to the source's
+  deformed world points. (A deformer-carrying, geometry-less grandparent would again
+  deform it; not handled.)
 
 ### 1.4 Commands (UI.md §5)
 `Command::MakeEditable` and `Command::CurrentStateToObject` act on the selected nodes in

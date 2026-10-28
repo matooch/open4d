@@ -227,6 +227,18 @@ fn deformer_children(scene: &Scene, id: NodeId) -> Vec<NodeId> {
     out
 }
 
+/// The parent whose deformers also deform `id` (it has no geometry of its own and has
+/// deformer children), if any.
+pub(crate) fn sibling_deformer_parent(scene: &Scene, id: NodeId) -> Option<NodeId> {
+    let parent = scene.node(scene.node(id)?.parent?)?;
+    (!produces_geometry(&parent.type_id)
+        && parent
+            .children
+            .iter()
+            .any(|c| forge_modifiers::is_deformer(scene, *c)))
+    .then_some(parent.id)
+}
+
 /// True for the node types that build a mesh of their own, so a parent that only
 /// groups objects (a Null) passes its deformers on to them (MODIFIERS.md §0).
 fn produces_geometry(type_id: &str) -> bool {

@@ -391,3 +391,92 @@ fn a_parent_null_passes_its_deformer_to_a_polygon_object() {
         .unwrap();
     assert_eq!(evaluate(d.scene(), poly).unwrap().unwrap(), deformed);
 }
+
+#[test]
+fn current_state_to_object_with_a_sibling_deformer_is_not_deformed_twice() {
+    let mut d = doc();
+    let (null, cube, bend) = d
+        .transact("build", |tx| {
+            let null = tx.create("forge.null", None, None)?;
+            tx.set_param(null, "transform.pos", Value::Vec3([0.0, 100.0, 0.0]))?;
+            let cube = tx.create("forge.cube", Some(null), None)?;
+            tx.set_param(cube, "transform.pos", Value::Vec3([50.0, 0.0, 0.0]))?;
+            tx.set_param(cube, "size_y", Value::Float(400.0))?;
+            tx.set_param(cube, "segments_x", Value::Int(4))?;
+            tx.set_param(cube, "segments_y", Value::Int(8))?;
+            tx.set_param(cube, "segments_z", Value::Int(4))?;
+            let bend = tx.create("forge.bend", Some(null), None)?;
+            tx.set_param(bend, "strength", Value::Float(90f64.to_radians()))?;
+            Ok((null, cube, bend))
+        })
+        .unwrap();
+    let tail = d
+        .transact("tail", |tx| tx.create("forge.null", None, None))
+        .unwrap();
+    let world = |d: &Document, id: NodeId| {
+        let m = d.scene().world_matrix(id).unwrap();
+        let mesh = evaluate(d.scene(), id).unwrap().unwrap();
+        mesh.points
+            .iter()
+            .map(|p| m.transform_point3(*p))
+            .collect::<Vec<_>>()
+    };
+    let expected = world(&d, cube);
+    let before = file::save(d.scene());
+
+    let new = d
+        .transact("csto", |tx| Ok(current_state_to_object(tx, cube).unwrap()))
+        .unwrap();
+    let s = d.scene();
+    assert_eq!(s.roots(), [null, new, tail], "directly after the parent");
+    assert_eq!(s.node(null).unwrap().children, [cube, bend], "untouched");
+    assert_eq!(s.node(new).unwrap().name, "Cube");
+    assert_eq!(
+        s.param(new, "transform.pos"),
+        Some(&Value::Vec3([0.0, 100.0, 0.0])),
+        "the parent's transform"
+    );
+    let got = world(&d, new);
+    assert_eq!(got.len(), expected.len());
+    for (a, b) in got.iter().zip(&expected) {
+        assert!(a.distance(*b) < 1e-9, "{a:?} vs {b:?}");
+    }
+    // evaluating the new object applies no deformer: stored points are what it yields
+    let Some(Value::Mesh(stored)) = s.param(new, "mesh") else {
+        panic!("mesh param")
+    };
+    assert_eq!(
+        forge_generators::to_poly_mesh(stored),
+        evaluate(s, new).unwrap().unwrap()
+    );
+    d.undo();
+    assert_eq!(file::save(d.scene()), before);
+}
+
+#[test]
+fn make_editable_redirects_links_to_the_new_object() {
+    let mut d = doc();
+    let (cube, inst) = d
+        .transact("build", |tx| {
+            let cube = tx.create("forge.cube", None, None)?;
+            let inst = tx.create("forge.instance", None, None)?;
+            tx.set_param(inst, "reference", Value::Link(Some(cube)))?;
+            Ok((cube, inst))
+        })
+        .unwrap();
+    let before = evaluate(d.scene(), inst).unwrap().unwrap();
+    assert!(!before.points.is_empty());
+    let new = d
+        .transact("m", |tx| Ok(make_editable(tx, cube).unwrap()))
+        .unwrap();
+    assert_eq!(
+        d.scene().param(inst, "reference"),
+        Some(&Value::Link(Some(new)))
+    );
+    assert_eq!(evaluate(d.scene(), inst).unwrap().unwrap(), before);
+    d.undo();
+    assert_eq!(
+        d.scene().param(inst, "reference"),
+        Some(&Value::Link(Some(cube)))
+    );
+}
