@@ -73,10 +73,11 @@ impl Editor {
     }
 
     fn run(&mut self, cmd: Command) {
-        self.state.status = match execute(&mut self.state, cmd) {
-            Ok(()) => String::new(),
-            Err(e) => e,
-        };
+        // A command may leave a message of its own (e.g. skipped nodes) in the status.
+        self.state.status.clear();
+        if let Err(e) = execute(&mut self.state, cmd) {
+            self.state.status = e;
+        }
     }
 
     fn edit(&mut self, id: NodeId, param: &str, value: Value, gesture: Gesture) {
@@ -215,6 +216,15 @@ impl Editor {
                 }
                 if ui.button("Delete").clicked() {
                     self.run(Command::DeleteSelected);
+                    ui.close();
+                }
+                ui.separator();
+                if ui.button("Make Editable").clicked() {
+                    self.run(Command::MakeEditable);
+                    ui.close();
+                }
+                if ui.button("Current State to Object").clicked() {
+                    self.run(Command::CurrentStateToObject);
                     ui.close();
                 }
             });

@@ -1,6 +1,6 @@
 # 03 · Polygon object, Make Editable, Current State to Object
 
-Status: ready · Branch: `batch-08` · Planner: main session · Implementer: Claude Sonnet 5.5 (local, macOS)
+Status: done · Branch: `batch-08` · Planner: main session · Implementer: Claude Sonnet 5.5 (local, macOS)
 
 ## Goal
 An editable polygon object exists: it stores its own mesh, saves and loads, takes
@@ -91,3 +91,33 @@ Component selection and editing (05, 06), editable splines, OBJ import (04), any
 to golden data or observation files.
 
 ## Report (implementer fills in)
+- Result: 75/75 primitive golden cases keep their exact mesh through Make Editable (same
+  comparison mode as `parity.rs`; the three cut cases stay geometric). Nothing unsupported,
+  no known mismatch. Plus unit/UI tests for the commands (see below).
+- Rules derived: none from observation (`docs/parity/make-editable.md` is empty); the mesh
+  rule "Make Editable keeps `evaluate_geometry`'s mesh exactly" is proven by the 75 cases.
+- Parity-pending: every command rule in `docs/specs/EDITABLE.md` §1.2 to §1.4 (placement,
+  name, tags copied, transform copied, deformers kept as children and not applied for Make
+  Editable / applied for Current State to Object, consumed children deleted, status
+  message for mesh-less nodes, polygon left alone, selection after the command). Rework
+  (planner review): Make Editable redirects links to the replaced node (§1.2); Current State
+  to Object with a sibling deformer places the result after the parent in the parent's
+  space (§1.3).
+- Deviation: `Mesh` validation allows a repeated index inside a polygon (still needs >= 3
+  corners, >= 3 distinct indices, all `< points.len()`). The brief said "no repeated
+  index", but the cone primitive (golden `tests/golden/cone`) has side quads
+  `[10, 11, 11, 21]` and Make Editable must keep face lists exactly. CORE.md §1 explains.
+- Other choices: `NodeType.in_create_menu` flag (+ `.not_in_create_menu()`) added to hide
+  `forge.polygon` from the Create menu (no such flag existed). `Widget::ReadOnly` is used
+  for the (hidden) mesh param. `app.rs` `run` no longer overwrites a status message that a
+  command set itself. Existing file tests changed from version 1/2 to 2/3 as the brief
+  requires. New `EditableError { NoMesh, Build, Edit }` in forge-generators.
+- Files changed: crates/core/{Cargo.toml,src/{param,lib,file,registry}.rs,tests/{params,file}.rs};
+  crates/generators/{src/{polygon,lib}.rs,tests/editable.rs};
+  crates/ui/{src/{commands,app,attributes}.rs,tests/editing.rs};
+  docs/specs/{EDITABLE,CORE,UI}.md; docs/parity/STATUS.md; this brief.
+- Open questions for the planner: the observation O3 (does Make Editable keep or bake
+  deformers, name/tag handling, selection, Current State placement and naming, what
+  happens to consumed children). A link whose `accepts` excludes Object makes Make Editable fail and revert.
+- Gate output: `GATE: 296 tests passed, 0 failed` ... `GATE: all passed`
+

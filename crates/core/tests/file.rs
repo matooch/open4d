@@ -2,7 +2,12 @@
 
 mod common;
 
-use forge_core::{Document, EditError, LoadError, NodeId, Value, file};
+use std::sync::Arc;
+
+use forge_core::{
+    Category, Document, EditError, LoadError, MeshData, NodeId, NodeType, ParamDesc, Registry,
+    Value, file,
+};
 
 fn rich_doc() -> Document {
     let mut doc = common::doc();
@@ -33,7 +38,7 @@ fn save_is_tagged_and_deterministic() {
     let b = file::save(rich_doc().scene());
     assert_eq!(a, b);
     assert!(a.contains("format: \"forge3d-scene\""), "{a}");
-    assert!(a.contains("version: 1"), "{a}");
+    assert!(a.contains("version: 2"), "{a}");
 }
 
 #[test]
@@ -76,8 +81,8 @@ fn structural_problems_are_errors() {
         LoadError::WrongFormat(_)
     ));
     assert!(matches!(
-        load_err(r#"(format: "forge3d-scene", version: 2, roots: [])"#),
-        LoadError::UnsupportedVersion(2)
+        load_err(r#"(format: "forge3d-scene", version: 3, roots: [])"#),
+        LoadError::UnsupportedVersion(3)
     ));
     assert!(matches!(
         load_err(
@@ -176,4 +181,80 @@ fn unknown_types_are_kept_verbatim_but_not_editable() {
         .unwrap();
     doc.transact("rn", |tx| tx.rename(NodeId(4), "renamed"))
         .unwrap();
+}
+
+/// The common registry plus an object type that carries a mesh parameter.
+fn mesh_registry() -> Arc<Registry> {
+    let mut r = (*common::registry()).clone();
+    r.register(
+        NodeType::new("test.poly", "Poly", Category::Object).param(ParamDesc::mesh("mesh", "Mesh")),
+    )
+    .unwrap();
+    Arc::new(r)
+}
+
+fn quad_mesh() -> MeshData {
+    MeshData {
+        points: vec![
+            [0.0, 0.0, 0.0],
+            [1.5, 0.0, 0.0],
+            [1.5, 0.1, 1e-9],
+            [0.0, 2.0, 0.0],
+        ],
+        polys: vec![vec![0, 1, 2, 3], vec![0, 1, 2]],
+    }
+}
+
+#[test]
+fn v2_round_trips_a_mesh_deterministically() {
+    let mut doc = Document::new(mesh_registry());
+    let id = doc
+        .transact("poly", |tx| {
+            let id = tx.create("test.poly", None, None)?;
+            tx.set_param(id, "mesh", Value::Mesh(Arc::new(quad_mesh())))?;
+            Ok(id)
+        })
+        .unwrap();
+    let text = file::save(doc.scene());
+    assert_eq!(text, file::save(doc.scene()));
+    assert!(text.contains("version: 2"), "{text}");
+    let (scene, report) = file::load(mesh_registry(), &text).unwrap();
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    assert_eq!(file::save(&scene), text);
+    assert_eq!(
+        scene.param(id, "mesh"),
+        Some(&Value::Mesh(Arc::new(quad_mesh())))
+    );
+}
+
+#[test]
+fn invalid_stored_mesh_resets_to_default_with_a_warning() {
+    let text = r#"(format: "forge3d-scene", version: 2, roots: [
+        (id: 1, type_id: "test.poly", name: "p", tags: [], children: [], params: {
+            "mesh": Mesh((points: [(0.0, 0.0, 0.0)], polys: [[0, 1, 2]])),
+        }),
+    ])"#;
+    let (scene, report) = file::load(mesh_registry(), text).unwrap();
+    assert_eq!(
+        scene.param(NodeId(1), "mesh"),
+        Some(&Value::Mesh(Arc::new(MeshData::default())))
+    );
+    assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
+}
+
+#[test]
+fn version_1_files_still_load() {
+    let text = r#"(format: "forge3d-scene", version: 1, roots: [
+        (id: 1, type_id: "test.poly", name: "p", tags: [], children: [], params: {}),
+        (id: 2, type_id: "test.box", name: "b", tags: [], children: [], params: {"size": Float(3.0)}),
+    ])"#;
+    let (scene, report) = file::load(mesh_registry(), text).unwrap();
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    assert_eq!(
+        scene.param(NodeId(1), "mesh"),
+        Some(&Value::Mesh(Arc::new(MeshData::default()))),
+        "missing mesh is filled with the empty default"
+    );
+    assert_eq!(scene.param(NodeId(2), "size"), Some(&Value::Float(3.0)));
+    assert!(file::save(&scene).contains("version: 2"));
 }

@@ -38,6 +38,8 @@ pub struct NodeType {
     pub label: String,
     pub category: Category,
     pub params: Vec<ParamDesc>,
+    /// Whether the UI's Create menu offers this type (docs/specs/CORE.md §2).
+    pub in_create_menu: bool,
 }
 
 impl NodeType {
@@ -47,7 +49,14 @@ impl NodeType {
             label: label.to_string(),
             category,
             params: Vec::new(),
+            in_create_menu: true,
         }
+    }
+
+    /// Keeps the type out of the Create menu.
+    pub fn not_in_create_menu(mut self) -> NodeType {
+        self.in_create_menu = false;
+        self
     }
 
     pub fn param(mut self, desc: ParamDesc) -> NodeType {

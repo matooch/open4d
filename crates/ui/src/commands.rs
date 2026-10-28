@@ -1,6 +1,7 @@
 //! Editor commands shared by menus, shortcuts and panels (docs/specs/UI.md §5).
 
-use forge_core::{Category, NodeId, Registry};
+use forge_core::{Category, EditError, NodeId, Registry, Tx};
+use forge_generators::EditableError;
 use forge_viewport::render::Shading;
 
 use crate::state::EditorState;
@@ -16,6 +17,10 @@ pub enum Command {
     ToggleExpanded(NodeId),
     SetShading(Shading),
     FrameAll,
+    /// Replace each selected generator by a polygon object (docs/specs/EDITABLE.md §1.2).
+    MakeEditable,
+    /// Add a polygon object with the deformed result after each selected node (§1.3).
+    CurrentStateToObject,
 }
 
 fn err(e: impl std::fmt::Display) -> String {
@@ -114,6 +119,16 @@ pub fn execute(s: &mut EditorState, cmd: Command) -> Result<(), String> {
                 s.expanded.insert(id);
             }
         }
+        Command::MakeEditable => {
+            convert_selection(s, "Make Editable", forge_generators::make_editable)?;
+        }
+        Command::CurrentStateToObject => {
+            convert_selection(
+                s,
+                "Current State to Object",
+                forge_generators::current_state_to_object,
+            )?;
+        }
         Command::SetShading(shading) => s.shading = shading,
         Command::FrameAll => {
             // No geometry yet (Phase 5): reset to the default view.
@@ -123,11 +138,62 @@ pub fn execute(s: &mut EditorState, cmd: Command) -> Result<(), String> {
     Ok(())
 }
 
+type Convert = fn(&mut Tx, NodeId) -> Result<NodeId, EditableError>;
+
+/// Runs `convert` on every selected node as one undo step. Nodes without a mesh are
+/// skipped with a status message; the selection becomes the new objects.
+fn convert_selection(s: &mut EditorState, label: &str, convert: Convert) -> Result<(), String> {
+    let ids: Vec<NodeId> = s.selection.nodes.iter().copied().collect();
+    if ids.is_empty() {
+        return Err(format!("{label}: select an object first"));
+    }
+    let mut made = Vec::new();
+    let mut skipped = Vec::new();
+    // A build failure is not an `EditError`: it is parked here and aborts the step with a
+    // placeholder error, so the transaction reverts every edit made so far.
+    let mut failure = None;
+    let result = s.doc.transact(label, |tx| {
+        for id in ids {
+            // consumed children of an earlier selected node are gone already
+            if !tx.scene().contains(id) {
+                continue;
+            }
+            match convert(tx, id) {
+                Ok(new) => made.push(new),
+                Err(EditableError::NoMesh(name)) => skipped.push(name),
+                Err(EditableError::Edit(e)) => return Err(e),
+                Err(e @ EditableError::Build(_)) => {
+                    failure = Some(e.to_string());
+                    return Err(EditError::UnknownNode(id));
+                }
+            }
+        }
+        Ok(())
+    });
+    if let Some(msg) = failure {
+        return Err(format!("{label}: {msg}"));
+    }
+    result.map_err(err)?;
+    s.status = skipped
+        .iter()
+        .map(|name| format!("{label}: {name} has no mesh"))
+        .collect::<Vec<_>>()
+        .join("; ");
+    if let Some((first, rest)) = made.split_first() {
+        s.selection.click(*first);
+        for id in rest {
+            s.selection.toggle(*id);
+        }
+    }
+    s.selection.retain_existing(s.doc.scene());
+    Ok(())
+}
+
 /// Placeable categories in `Category` order, each with `(type id, label)` sorted by label.
 pub fn create_menu(registry: &Registry) -> Vec<(Category, Vec<(String, String)>)> {
     let mut out: Vec<(Category, Vec<(String, String)>)> = Vec::new();
     for t in registry.types() {
-        if !(t.category.is_hierarchy() || t.category == Category::Tag) {
+        if !(t.category.is_hierarchy() || t.category == Category::Tag) || !t.in_create_menu {
             continue;
         }
         let item = (t.id.clone(), t.label.clone());

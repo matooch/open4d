@@ -13,6 +13,8 @@ pub mod transform;
 pub use cache::EvalCache;
 pub use document::{Document, EditError, History, Tx};
 pub use file::{LoadError, LoadReport};
-pub use param::{EnumOption, ParamDesc, ParamError, ParamKind, RangeValue, UiHint, Unit, Value};
+pub use param::{
+    EnumOption, MeshData, ParamDesc, ParamError, ParamKind, RangeValue, UiHint, Unit, Value,
+};
 pub use registry::{Category, NodeType, Plugin, Registry, RegistryError};
 pub use scene::{Node, NodeId, Scene};

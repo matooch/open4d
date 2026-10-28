@@ -1,6 +1,8 @@
 //! docs/specs/CORE.md §1.
 
-use forge_core::{Category, ParamDesc, ParamError, ParamKind, Unit, Value};
+use std::sync::Arc;
+
+use forge_core::{Category, MeshData, ParamDesc, ParamError, ParamKind, Unit, Value};
 
 #[test]
 fn builders_set_kind_default_and_ui() {
@@ -144,5 +146,65 @@ fn links_validate_shape_only() {
     assert_eq!(
         l.validate(Value::Link(Some(any))),
         Ok(Value::Link(Some(any)))
+    );
+}
+
+fn mesh(points: Vec<[f64; 3]>, polys: Vec<Vec<u32>>) -> Value {
+    Value::Mesh(Arc::new(MeshData { points, polys }))
+}
+
+#[test]
+fn mesh_builder_is_hidden_not_animatable_and_empty_by_default() {
+    let d = ParamDesc::mesh("mesh", "Mesh");
+    assert_eq!(d.kind, ParamKind::Mesh);
+    assert!(d.ui.hidden);
+    assert!(!d.animatable);
+    assert_eq!(d.default, Value::Mesh(Arc::new(MeshData::default())));
+    assert_eq!(d.validate(d.default.clone()), Ok(d.default.clone()));
+}
+
+#[test]
+fn mesh_validation_checks_indices_corners_and_coordinates() {
+    let d = ParamDesc::mesh("mesh", "Mesh");
+    let tri = vec![[0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
+    let ok = mesh(tri.clone(), vec![vec![0, 1, 2]]);
+    assert_eq!(d.validate(ok.clone()), Ok(ok));
+    // points without polygons are fine
+    let loose = mesh(tri.clone(), vec![]);
+    assert_eq!(d.validate(loose.clone()), Ok(loose));
+    // a repeated index is kept (the cone apex quads), as long as 3 are distinct
+    let apex = mesh(tri.clone(), vec![vec![0, 1, 1, 2]]);
+    assert_eq!(d.validate(apex.clone()), Ok(apex));
+    for (polys, label) in [
+        (vec![vec![0, 1, 3]], "index past the points"),
+        (vec![vec![0, 1]], "two corners"),
+        (vec![vec![]], "no corners"),
+        (vec![vec![0, 1, 1]], "only two distinct indices"),
+        (vec![vec![2, 2, 2, 2]], "one distinct index"),
+    ] {
+        assert_eq!(
+            d.validate(mesh(tri.clone(), polys)),
+            Err(ParamError::OutOfRange),
+            "{label}"
+        );
+    }
+    let mut bad = tri;
+    bad[1][2] = f64::NAN;
+    assert_eq!(
+        d.validate(mesh(bad.clone(), vec![vec![0, 1, 2]])),
+        Err(ParamError::NotFinite)
+    );
+    bad[1][2] = f64::INFINITY;
+    assert_eq!(d.validate(mesh(bad, vec![])), Err(ParamError::NotFinite));
+}
+
+#[test]
+fn mesh_and_other_kinds_do_not_mix() {
+    let d = ParamDesc::mesh("mesh", "Mesh");
+    assert_eq!(d.validate(Value::Bool(true)), Err(ParamError::TypeMismatch));
+    let f = ParamDesc::float("f", "F", 0.0);
+    assert_eq!(
+        f.validate(mesh(vec![], vec![])),
+        Err(ParamError::TypeMismatch)
     );
 }

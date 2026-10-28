@@ -26,6 +26,7 @@ evaluation of real node types (Phases 5+).
 | `Enum` | `String` | an option id, not an index (stable across versions) |
 | `String` | `String` | |
 | `Link` | `Option<NodeId>` | reference to another node |
+| `Mesh` | `Arc<MeshData>` | an editable polygon mesh (see below) |
 
 `ParamDesc { id, label, kind, default, ui, animatable }`:
 - `id`: non-empty, chars `[a-z0-9_.]`, unique within its node type. Stable forever:
@@ -33,13 +34,19 @@ evaluation of real node types (Phases 5+).
 - `kind: ParamKind`: `Bool`, `Int { min, max }`, `Float { min, max }`,
   `Vec3 { min, max }` (per component), `Color`, `Enum { options }` (each option
   `{ id, label }`, ids unique, at least one), `String`, `Link { accepts }` (list of
-  categories; empty = any).
+  categories; empty = any), `Mesh`.
 - `ui: UiHint { group, unit, soft_min, soft_max, step, hidden }`. `unit` ∈
   `None | Distance | Angle | Percent | Time`. UI-only; never affects validation.
 - `animatable`: defaults to true for `Int/Float/Vec3/Color/Bool`, false otherwise.
+- `MeshData { points: Vec<[f64; 3]>, polys: Vec<Vec<u32>> }` (serde, `PartialEq`): points
+  and polygons as corner-index lists. core does not depend on forge-geometry; the
+  conversion to `PolyMesh` lives in forge-generators (EDITABLE.md §1). `Value::Mesh`
+  holds it in an `Arc` (cheap clones for undo; `PartialEq` compares contents).
+  `ParamDesc::mesh(id, label)` has an empty mesh as default, is `hidden()` and
+  `animatable(false)`.
 - Builders: `ParamDesc::float(id, label, default)`, `.int`, `.bool`, `.vec3`,
   `.color`, `.enumeration(id, label, default_id, &[(id, label)])`, `.string`,
-  `.link(id, label, accepts)`, then `.range(min, max)`, `.unit(u)`, `.group(g)`,
+  `.link(id, label, accepts)`, `.mesh(id, label)`, then `.range(min, max)`, `.unit(u)`, `.group(g)`,
   `.soft_range(a, b)`, `.step(s)`, `.hidden()`, `.animatable(bool)`.
 
 `ParamDesc::validate(Value) -> Result<Value, ParamError>`:
@@ -50,6 +57,11 @@ evaluation of real node types (Phases 5+).
 3. `Int`/`Float`/`Vec3` are **clamped** into `[min, max]` (hard range).
 4. `Enum` id must be one of the options → else `ParamError::UnknownOption`.
 5. `Link` targets are checked by the scene (needs the node), not here.
+6. `Mesh`: every coordinate finite (`ParamError::NotFinite`); every polygon has at least 3
+   corners with at least 3 distinct indices, and every index `< points.len()`
+   (`ParamError::OutOfRange`). No clamping. A repeated index is allowed on purpose: the
+   cone primitive's side quads at the apex repeat it (`[10, 11, 11, 21]`,
+   tests/golden/cone), and Make Editable must keep the face lists exactly.
 
 ## 2. Node types and the plugin registry (`registry`)
 
@@ -59,7 +71,9 @@ Deformer, Effector, Field`. `Tag` nodes attach to a hierarchy node. The other
 categories can be registered but not yet placed in a scene (`NotPlaceable`).
 
 `NodeType { id, label, category, params: Vec<ParamDesc> }`, built with
-`NodeType::new(id, label, category).param(desc)…`.
+`NodeType::new(id, label, category).param(desc)…`. `NodeType.in_create_menu` (default
+true; `.not_in_create_menu()` clears it) says whether the UI's Create menu offers the type;
+it has no other effect (such nodes can still be created by code and loaded from files).
 - Type id: `namespace.name`, at least one `.`, chars `[a-z0-9_.-]`, no empty
   segments. Built-ins use namespace `forge`.
 
@@ -153,7 +167,7 @@ RON text, deterministic (same scene → byte-identical output):
 ```ron
 (
     format: "forge3d-scene",
-    version: 1,
+    version: 2,
     roots: [
         (id: 1, type_id: "forge.null", name: "Null", params: {}, tags: [], children: []),
     ],
@@ -164,7 +178,7 @@ RON text, deterministic (same scene → byte-identical output):
   param is written, defaults included.
 - `load(Arc<Registry>, &str) -> Result<(Scene, LoadReport), LoadError>`.
   - `LoadError`: `Parse` (with message), `WrongFormat`, `UnsupportedVersion`
-    (> 1), `DuplicateId`, `Structure` (known Tag type in `children`, or known
+    (> 2), `DuplicateId`, `Structure` (known Tag type in `children`, or known
     non-Tag type in `tags`).
   - Recoverable issues go to `LoadReport.warnings` (strings naming the node id):
     unknown type (node kept as-is), unknown param on a known type (dropped), invalid
@@ -172,3 +186,6 @@ RON text, deterministic (same scene → byte-identical output):
   - Missing params on known types are filled with defaults, silently.
   - The id counter resumes at max id + 1.
 - `save(load(save(s)))` equals `save(s)`.
+- **Version 2** added `Value::Mesh` (written as `Mesh((points: [...], polys: [...]))`, points
+  in order, so output stays deterministic). Version 1 files have no mesh values and still
+  load unchanged; `save` always writes version 2.

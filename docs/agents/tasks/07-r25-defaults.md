@@ -48,9 +48,25 @@ defaults. The O1 drift cases run as parity cases.
 - Do 1 and 2 first and run the whole gate **before** touching any default: everything
   must still pass (the overlay is a no-op while defaults are still R20). Then change the
   defaults; any R20 case that now fails means an overlay row is missing.
-- O1 already lists the expected differences: sphere segments 16 (R20 24), cylinder and
-  torus segments and radii, extrude offset 100 (R20 20), boole type union and hide new
-  edges on. O4 is the authority for exact values.
+- O1 already lists the expected differences: sphere segments 16 (R20 24); cylinder
+  height segments 4, rotation segments 16, fillet segments 3, fillet radius 3; torus ring
+  radius 100, ring segments 32, pipe segments 16; extrude offset 100 (R20 20, the field
+  is now called Offset and has a new Direction option, default Auto); boole type union
+  (R20 A subtract B), hide new edges on. O4 is the authority for exact values.
+- **Vertex order may have changed in R25 for torus and extrude** (O1: with the R20
+  values typed in, the same vertex set and counts but a different order). So
+  `r25-drift/torus-slice` and `r25-drift/extrude-rectangle-caps-quadrangles` may fail
+  the exact comparison even with correct defaults. Check them geometrically first
+  (`compare_geometric`); if that passes, try to derive the R25 order (three hypotheses,
+  IMPLEMENTER.md §3.7). Otherwise pin them in `KNOWN_MISMATCH` as "R25 vertex order" and
+  say so in the spec. Don't change the R20 order: the R20 cases must keep passing.
+- `r25-drift/sphere-type-icosahedron` is the first icosahedron case at segments 16
+  (bbox 97.94, not 100): it tests the frequency rule PRIMITIVES.md §3.1 saw at 8 and 24
+  only. A mismatch there is a finding about that rule, not about defaults.
+- Cylinder and torus have a new R25 switch "use new version" (default on); O1 saw the
+  same geometry either way. Not a param for this brief (out of scope, list it).
+- The drift cases' `[tolerance] compare = "geometric"` (both boole cases) already
+  selects the geometric comparison.
 - The UI and file loading use descriptor defaults: a saved scene keeps its values
   (every param is written), so old files don't change. Say so in CORE.md §6 if it isn't
   there already.

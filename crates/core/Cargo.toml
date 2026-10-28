@@ -7,7 +7,7 @@ description = "Scene graph, parameter descriptors, transforms, undo, dirty/cache
 [dependencies]
 glam = "0.34"
 ron = "0.12"
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive", "rc"] }
 thiserror = "2"
 
 [dev-dependencies]
