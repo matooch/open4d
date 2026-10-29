@@ -1,6 +1,6 @@
 # Modeling tools II — observation (O25)
 
-Status: not observed · App version: TODO · OS: TODO · Observer: TODO · Date: TODO
+Status: partial (0 cases run) · App version: TODO · OS: TODO · Observer: TODO · Date: TODO
 Method: exactly as [modeling-tools.md](modeling-tools.md) (O6):
 - A default cube made editable, with the segments given.
 - The tool's **Reset Values** before each case.
@@ -43,4 +43,4 @@ Unblocks: batch 11 (U4 modeling tools).
 | bevel-mitering-uniform | 1/1/1 | the top 4 edges | Bevel, offset 20, subdivision 2, Mitering Uniform | |
 
 ## Notes
-TODO
+- 2026-10-29: no case run. `ping` answered, but `execute_python_script` (even `1 + 1`) failed twice, 30 s apart, with "Execution on main thread timed out after 30s". The app's main thread was probably blocked (modal dialog?). All cases stay TODO.
