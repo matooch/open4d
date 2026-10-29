@@ -9,6 +9,11 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+pub mod samples;
+pub use samples::{
+    Samples, SamplesReport, compare_samples, parse_samples, samples_info, validate_samples,
+};
+
 // ---------------------------------------------------------------------------
 // Mesh + OBJ
 // ---------------------------------------------------------------------------
@@ -657,6 +662,35 @@ impl GoldenCase {
         let mesh = parse_obj(&src).map_err(|e| format!("mesh {rel:?}: {e}"))?;
         Ok(Some(apply_import(mesh, &manifest.import)))
     }
+
+    /// File names in the case directory that belong to the case as level-B samples:
+    /// `samples.json` and `samples-*.json`, sorted.
+    pub fn samples_files(&self) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(&self.dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n == "samples.json" || (n.starts_with("samples-") && n.ends_with(".json")))
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// Every samples file of the case, parsed, as `(file name, samples)` sorted by file
+    /// name. The first file that cannot be read or parsed is an error naming it.
+    pub fn samples(&self) -> Result<Vec<(String, Samples)>, String> {
+        self.samples_files()
+            .into_iter()
+            .map(|name| {
+                let src =
+                    fs::read_to_string(self.dir.join(&name)).map_err(|e| format!("{name}: {e}"))?;
+                let s = parse_samples(&src).map_err(|e| format!("{name}: {e}"))?;
+                Ok((name, s))
+            })
+            .collect()
+    }
 }
 
 fn subdirs(dir: &Path) -> io::Result<Vec<(String, PathBuf)>> {
@@ -751,6 +785,21 @@ pub fn defaults_overlay(
     }
 }
 
+/// True if the case has a valid-looking manifest and neither a mesh nor a samples file
+/// (a tree-only or form-only case; docs/specs/INFRA.md §5.2). Not a problem.
+pub fn has_no_output(case: &GoldenCase) -> bool {
+    case.manifest().is_ok_and(|m| m.mesh.is_none()) && case.samples_files().is_empty()
+}
+
+/// `<feature>/<case>` of every case for which [`has_no_output`] holds, in discovery order.
+pub fn cases_without_output(cases: &[GoldenCase]) -> Vec<String> {
+    cases
+        .iter()
+        .filter(|c| has_no_output(c))
+        .map(|c| format!("{}/{}", c.feature, c.name))
+        .collect()
+}
+
 /// Problems with a case; empty means valid.
 pub fn validate_case(repo_root: &Path, case: &GoldenCase) -> Vec<String> {
     let manifest = match case.manifest() {
@@ -770,8 +819,23 @@ pub fn validate_case(repo_root: &Path, case: &GoldenCase) -> Vec<String> {
     } else if !repo_root.join(obs).is_file() {
         problems.push(format!("observation {obs:?} does not exist"));
     }
-    if let Err(e) = case.expected_mesh() {
+    let mesh = case.expected_mesh();
+    if let Err(e) = mesh {
         problems.push(e);
+    }
+    let files = case.samples_files();
+    for name in &files {
+        let parsed = fs::read_to_string(case.dir.join(name))
+            .map_err(|e| e.to_string())
+            .and_then(|src| parse_samples(&src));
+        match parsed {
+            Ok(s) => problems.extend(
+                validate_samples(&s)
+                    .into_iter()
+                    .map(|p| format!("{name}: {p}")),
+            ),
+            Err(e) => problems.push(format!("{name}: {e}")),
+        }
     }
     problems
 }

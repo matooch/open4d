@@ -1,6 +1,6 @@
 # 08 · `samples.json`: numeric golden cases in the harness
 
-Status: ready · Branch: the planner's session branch · Planner: main session · Implementer: Claude Sonnet 5.5
+Status: done · Branch: the planner's session branch · Planner: main session · Implementer: Claude Sonnet 5.5
 
 ## Goal
 The parity harness understands level-B golden cases. It parses a case's `samples.json`
@@ -91,3 +91,19 @@ Building anything that produces samples (keyframes, fields and clones are later 
 and editing golden data.
 
 ## Report (implementer fills in)
+- Blocker found: the brief's rule "a case needs a mesh or a samples file" failed on the tree-only
+  case `make-editable/spline` (its case.toml: splines do not export). Planner ruling: not an
+  error. `golden check` prints a `note:` line per such case after the ok line and exits 0;
+  `cases_without_output` exposes the list and `repo_golden.rs` pins it to
+  `["make-editable/spline"]`. The ruling also added: `compare_samples` for tracks requires equal
+  `param` and `fps` (1e-9).
+- Implemented: `crates/parity-harness/src/samples.rs` (types, `parse_samples`,
+  `validate_samples`, `samples_info`, `compare_samples`), `GoldenCase::samples_files()` and
+  `samples()`, `validate_case` samples rules, `has_no_output`/`cases_without_output`,
+  `golden info <dir|file>`, INFRA.md new §5 (CI is now §6), `tests/samples.rs`, `serde_json`.
+- Real samples files pinned: 11 track, 24 field, 16 clones; all parse and validate.
+- Accepted deviations: `validate_samples` holds finite/order/tolerance rules while
+  `parse_samples` is structural; track tolerance not checked > 0; synthetic test
+  `minimal_manifest_is_valid` rewritten; `SamplesReport { failure_count, failures, max_error }`;
+  `golden info` directory headers `== <file>`.
+- Gate: see the final gate lines in the commit/hand-off message.
