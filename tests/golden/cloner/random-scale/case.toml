@@ -1,0 +1,68 @@
+feature = "cloner"
+observation = "docs/parity/effectors-3.md"
+description = "Linear cloner Count 5 P step (0,50,0), 20 cm cube child, Random effector, Position off, Scale on, Uniform Scale on, Scale 1"
+mesh = "mesh.obj"
+
+[params]
+mode = "linear"
+clones_mode = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = 5
+offset = 0
+linear_mode = "Per Step"
+amount_percent = 100.0
+transform_position = [0.0, 50.0, 0.0]
+transform_scale_percent = [100.0, 100.0, 100.0]
+transform_rotation_deg = [0.0, 0.0, 0.0]
+step_mode = "Single Value"
+step_size_percent = 100.0
+step_rotation_deg = [0.0, 0.0, 0.0]
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+animation_mode = "Play"
+random_percent = 100.0
+effector_count = 1
+document_frame = 0
+
+[params.effector]
+type = "random"
+name = "Random"
+strength_percent = 100.0
+selection = ""
+maximum_percent = 100.0
+minimum_percent = -100.0
+random_mode = "Random"
+synchronized = false
+indexed = false
+seed = 12345.0
+space = "Global"
+animation_speed_percent = 100.0
+scale_percent = 100.0
+transform_mode = "Relative"
+transform_space = "Node"
+position = false
+rotation = false
+scale = true
+uniform_scale = true
+absolute_scale = false
+scale_1018 = 1.0
+color_mode = "Off"
+use_alpha_strength = false
+use_alpha_strength_1071 = true
+weight_transform_percent = 0.0
+u_transform_percent = 0.0
+v_transform_percent = 0.0
+modify_clone_percent = 0.0
+visibility = false
+deformation = "Off"
+
+[import]
+scale = 1.0
+flip_z = false

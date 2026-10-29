@@ -1,0 +1,75 @@
+feature = "cloner"
+observation = "docs/parity/effectors-3.md"
+description = "Linear cloner Count 5 P step (0,50,0), 20 cm cube child, Spline effector with a default Helix spline, Mode Falloff (the second option; Step is the default)"
+mesh = "mesh.obj"
+
+[params]
+mode = "linear"
+clones_mode = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = 5
+offset = 0
+linear_mode = "Per Step"
+amount_percent = 100.0
+transform_position = [0.0, 50.0, 0.0]
+transform_scale_percent = [100.0, 100.0, 100.0]
+transform_rotation_deg = [0.0, 0.0, 0.0]
+step_mode = "Single Value"
+step_size_percent = 100.0
+step_rotation_deg = [0.0, 0.0, 0.0]
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+animation_mode = "Play"
+spline_percent = 100.0
+effector_count = 1
+document_frame = 0
+
+[params.effector]
+type = "spline"
+name = "Spline"
+strength_percent = 100.0
+mode = "Falloff"
+falloff_modifier_percent = 1.0
+spline = "Helix"
+up_vector = [0.0, 0.0, 0.0]
+rail = ""
+target_rail = true
+offset_percent = 0.0
+start_percent = 0.0
+end_percent = 100.0
+clamp = false
+segment_mode = "Use Index"
+segment = 0
+transform_mode = "Absolute"
+position = true
+rotation = true
+r_deg = [0.0, 0.0, 0.0]
+deformation = "Off"
+
+[params.effector.spline_object]
+type = "helix"
+start_radius = 200.0
+start_angle_deg = 0.0
+end_radius = 200.0
+end_angle_deg = 720.0
+radial_bias_percent = 50.0
+height = 200.0
+height_bias_percent = 50.0
+subdivision = 100
+plane = "XY"
+reverse = false
+intermediate_points = "Uniform"
+number = 8
+angle_deg = 5.0
+maximum_length = 5.0
+
+[import]
+scale = 1.0
+flip_z = false
