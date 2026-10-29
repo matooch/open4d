@@ -20,6 +20,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O13 | Fields II (more types, layers) | [fields-2.md](fields-2.md) | `tests/golden/fields/` samples | todo |
 | O14 | Effectors II | [effectors-2.md](effectors-2.md) | `tests/golden/cloner/` samples | todo |
 | O15 | Re-checks II (sweep caps, extrude bevel) | [rechecks-2.md](rechecks-2.md) | `tests/golden/rechecks/` meshes | todo |
+| O16 | Keyframes III (confirm brief 09's fitted rules) | [keyframes-3.md](keyframes-3.md) | `tests/golden/keyframes/` samples | todo |
 | O10 | Selection and tool behaviour in the GUI | (form comes with batch 10) | form only | gui-only |
 
 ## Rules for the unattended loop
