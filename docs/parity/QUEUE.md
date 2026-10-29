@@ -14,7 +14,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O6 | Modeling tools (U4) | [modeling-tools.md](modeling-tools.md) | `tests/golden/modeling-tools/` meshes | done |
 | O7 | Fields: values in space (P2) | [fields.md](fields.md) | `tests/golden/fields/` samples | done |
 | O8 | Cloner + basic effectors (P3) | [cloner.md](cloner.md) | `tests/golden/cloner/` samples | done |
-| O9 | Deformers II (P1) | [deformers-2.md](deformers-2.md) | `tests/golden/<deformer>/` meshes | todo |
+| O9 | Deformers II (P1) | [deformers-2.md](deformers-2.md) | `tests/golden/<deformer>/` meshes | done |
 | O10 | Selection and tool behaviour in the GUI | (form comes with batch 10) | form only | gui-only |
 
 ## Rules for the unattended loop

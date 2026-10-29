@@ -1,0 +1,23 @@
+feature = "ffd"
+observation = "docs/parity/deformers-2.md"
+description = "FFD, default grid; grid point 8 (top-front-right, x +150, y +150, z -150) moved by (0, 100, 0)"
+mesh = "mesh.obj"
+
+[params]
+grid_size = [300.0, 300.0, 300.0]
+grid_points_x = 3
+grid_points_y = 3
+grid_points_z = 3
+moved_point_index = 8
+moved_point_delta = [0.0, 100.0, 0.0]
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false
