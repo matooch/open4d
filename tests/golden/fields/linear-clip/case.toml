@@ -1,0 +1,37 @@
+feature = "fields"
+observation = "docs/parity/fields-3.md"
+description = "Linear field, Clip to Shape on"
+
+[params]
+type = "linear"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+length = 100.0
+direction = "X+"
+clip_to_shape = true
+enable_remapping = true
+mirror_graph = false
+strength_percent = 100.0
+invert = false
+inner_offset_percent = 0.0
+min_percent = 0.0
+clamp_min = true
+max_percent = 100.0
+clamp_max = true
+multiplier_percent = 100.0
+contour_mode = "None"
+curve_percent = 0.0
+steps = 1
+spline_offset_percent = 0.0
+spline_range_percent = 100.0
+color_mode = "Color"
+length_mode = "Use Value"
+length_scale_percent = 100.0
+invert_direction = true
+strength_mode = "No Remap"
+strength_scale_percent = 100.0
+invert_rotations = false
+
+[import]
+scale = 1.0
+flip_z = false

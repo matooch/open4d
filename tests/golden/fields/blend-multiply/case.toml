@@ -1,0 +1,16 @@
+feature = "fields"
+observation = "docs/parity/fields-3.md"
+description = "Two Spherical layers (Size 200) A at (-75,0,0), B at (75,0,0); B is the top layer; top blend mode Multiply"
+
+[params]
+type = "spherical"
+layers_top_to_bottom = ["B", "A"]
+layer_blend_modes_top_to_bottom = ["Multiply", "Normal"]
+layer_strength_percent_top_to_bottom = [100.0, 100.0]
+A_position = [-75.0, 0.0, 0.0]
+B_position = [75.0, 0.0, 0.0]
+size = 200.0
+
+[import]
+scale = 1.0
+flip_z = false

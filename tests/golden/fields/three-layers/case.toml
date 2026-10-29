@@ -1,0 +1,17 @@
+feature = "fields"
+observation = "docs/parity/fields-3.md"
+description = "Three Spherical layers (Size 200) A (-75,0,0), B (75,0,0), C (0,75,0); C on top, all Normal"
+
+[params]
+type = "spherical"
+layers_top_to_bottom = ["C", "B", "A"]
+layer_blend_modes_top_to_bottom = ["Normal", "Normal", "Normal"]
+layer_strength_percent_top_to_bottom = [100.0, 100.0, 100.0]
+A_position = [-75.0, 0.0, 0.0]
+B_position = [75.0, 0.0, 0.0]
+C_position = [0.0, 75.0, 0.0]
+size = 200.0
+
+[import]
+scale = 1.0
+flip_z = false
