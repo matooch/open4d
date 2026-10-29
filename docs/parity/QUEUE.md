@@ -21,8 +21,8 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O14 | Effectors II | [effectors-2.md](effectors-2.md) | `tests/golden/cloner/` samples | done |
 | O15 | Re-checks II (sweep caps, extrude bevel) | [rechecks-2.md](rechecks-2.md) | `tests/golden/rechecks/` meshes | done |
 | O16 | Keyframes III (confirm brief 09's fitted rules) | [keyframes-3.md](keyframes-3.md) | `tests/golden/keyframes/` samples | done |
-| O25 | Modeling tools II (U4) | [modeling-tools-2.md](modeling-tools-2.md) | `tests/golden/modeling-tools/` meshes | partial (0 cases: bridge `ping` ok but `execute_python_script` timed out twice; app main thread busy, maybe a modal dialog. Re-run after the owner checks the app) |
-| O26 | Selection commands (U4) | [selection-ops.md](selection-ops.md) | `tests/golden/selection-ops/` meshes + selection.json | partial (0 cases: bridge `ping` ok but `execute_python_script` timed out twice, even for `1 + 1`; app main thread busy, maybe a modal dialog. Re-run after the owner checks the app) |
+| O25 | Modeling tools II (U4) | [modeling-tools-2.md](modeling-tools-2.md) | `tests/golden/modeling-tools/` meshes | todo |
+| O26 | Selection commands (U4) | [selection-ops.md](selection-ops.md) | `tests/golden/selection-ops/` meshes + selection.json | todo |
 | O24 | Deformer falloff through fields | [deformer-falloff.md](deformer-falloff.md) | `tests/golden/deformer-falloff/` meshes | todo |
 | O23 | Fields III (blend modes, more types) | [fields-3.md](fields-3.md) | `tests/golden/fields/` samples | todo |
 | O22 | Effectors III | [effectors-3.md](effectors-3.md) | `tests/golden/cloner/` samples + meshes | todo |
@@ -50,8 +50,14 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 5. **Commit and push after every job** (only `docs/parity/` and `tests/golden/`):
    `Observation: <job name> (<O#>, N cases)`, then `git push origin HEAD`. Data is safe the
    moment it is pushed; a stopped run loses at most one job.
-6. If the bridge stops answering (`ping` fails twice, 30 s apart): commit and push what is
-   finished, mark the current row `partial` with the reason, and stop.
+6. **Bridge health first.** Before starting a job, run `ping` **and** an
+   `execute_python_script` probe of `1 + 1`. If either fails twice, 30 s apart, the app is
+   stuck (often a modal dialog). Then do NOT mark the job partial: leave its row `todo`,
+   change nothing in the repo, create the file `/Users/bigman/forge-observer/STOP`
+   containing the error text, and stop. The overnight loop checks for that file and ends
+   the run, so one stuck app doesn't burn through the whole queue. If the bridge fails in
+   the middle of a job, commit and push what is finished, mark the row `partial` with the
+   reason, create the STOP file, and stop.
 7. **Every case writes output**: a `mesh.obj` or a `samples*.json` (or both). A case with
    neither breaks a test that pins the list of output-less cases. Information without
    output (defaults, tree notes) goes into the form, not into `tests/golden/`. O29 is a

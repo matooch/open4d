@@ -39,7 +39,4 @@ Folder `tests/golden/selection-ops/<case>/` holds:
 | invert-poly | 2/2/2 | the top 4 polygons | Invert |
 
 ## Notes
-No case observed (2026-10-29). `ping` answered, but `execute_python_script` returned
-"Execution on main thread timed out after 30s" twice, for a version probe and for `1 + 1`.
-The app's main thread is not serving scripts, possibly a modal dialog. All 11 cases stay
-TODO until the owner checks the app and the job is re-run.
+TODO
