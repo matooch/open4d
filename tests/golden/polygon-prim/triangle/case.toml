@@ -1,0 +1,15 @@
+feature = "polygon-prim"
+observation = "docs/parity/primitives-3.md"
+description = "Polygon with Triangle on"
+mesh = "mesh.obj"
+
+[params]
+width = 100.0
+height = 100.0
+segments = 1
+triangle = true
+orientation = "plus_y"
+
+[import]
+scale = 1.0
+flip_z = false

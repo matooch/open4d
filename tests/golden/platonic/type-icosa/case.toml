@@ -1,0 +1,13 @@
+feature = "platonic"
+observation = "docs/parity/primitives-3.md"
+description = "Platonic with Type icosa"
+mesh = "mesh.obj"
+
+[params]
+radius = 100.0
+segments = 1
+type = "icosa"
+
+[import]
+scale = 1.0
+flip_z = false

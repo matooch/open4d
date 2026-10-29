@@ -1,0 +1,15 @@
+feature = "polygon-prim"
+observation = "docs/parity/primitives-3.md"
+description = "Polygon, all parameters at their R25 defaults"
+mesh = "mesh.obj"
+
+[params]
+width = 100.0
+height = 100.0
+segments = 1
+triangle = false
+orientation = "plus_y"
+
+[import]
+scale = 1.0
+flip_z = false

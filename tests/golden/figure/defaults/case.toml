@@ -1,0 +1,12 @@
+feature = "figure"
+observation = "docs/parity/primitives-3.md"
+description = "Figure, all parameters at their R25 defaults"
+mesh = "mesh.obj"
+
+[params]
+height = 180.0
+segments = 14
+
+[import]
+scale = 1.0
+flip_z = false
