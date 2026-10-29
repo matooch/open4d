@@ -21,6 +21,21 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O14 | Effectors II | [effectors-2.md](effectors-2.md) | `tests/golden/cloner/` samples | done |
 | O15 | Re-checks II (sweep caps, extrude bevel) | [rechecks-2.md](rechecks-2.md) | `tests/golden/rechecks/` meshes | done |
 | O16 | Keyframes III (confirm brief 09's fitted rules) | [keyframes-3.md](keyframes-3.md) | `tests/golden/keyframes/` samples | todo |
+| O25 | Modeling tools II (U4) | [modeling-tools-2.md](modeling-tools-2.md) | `tests/golden/modeling-tools/` meshes | todo |
+| O26 | Selection commands (U4) | [selection-ops.md](selection-ops.md) | `tests/golden/selection-ops/` meshes + selection.json | todo |
+| O24 | Deformer falloff through fields | [deformer-falloff.md](deformer-falloff.md) | `tests/golden/deformer-falloff/` meshes | todo |
+| O23 | Fields III (blend modes, more types) | [fields-3.md](fields-3.md) | `tests/golden/fields/` samples | todo |
+| O22 | Effectors III | [effectors-3.md](effectors-3.md) | `tests/golden/cloner/` samples + meshes | todo |
+| O21 | Cloner III | [cloner-3.md](cloner-3.md) | `tests/golden/cloner/` samples + meshes | todo |
+| O17 | Spline primitives II | [splines-2.md](splines-2.md) | `tests/golden/splines-2/` meshes | todo |
+| O18 | Primitives III | [primitives-3.md](primitives-3.md) | `tests/golden/<object>/` meshes | todo |
+| O19 | Deformers III | [deformers-3.md](deformers-3.md) | `tests/golden/<deformer>/` meshes | todo |
+| O20 | Generators III | [generators-3.md](generators-3.md) | `tests/golden/<generator>/` meshes | todo |
+| O27 | Animation II (tracks, tags) | [animation-2.md](animation-2.md) | `tests/golden/animation-2/` samples | todo |
+| O28 | UV coordinates and projection | [uv-projection.md](uv-projection.md) | `tests/golden/uv/` meshes | todo |
+| O29 | Scene, camera, light, material, render defaults | [scene-defaults.md](scene-defaults.md) | form only | todo |
+| O30 | Render references | [render-reference.md](render-reference.md) | `tests/golden/render/` PNG + meshes | todo |
+| O31 | Clone-toolset generators II | [clone-generators-2.md](clone-generators-2.md) | meshes + samples | todo |
 | O10 | Selection and tool behaviour in the GUI | (form comes with batch 10) | form only | gui-only |
 
 ## Rules for the unattended loop
@@ -37,5 +52,14 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
    moment it is pushed; a stopped run loses at most one job.
 6. If the bridge stops answering (`ping` fails twice, 30 s apart): commit and push what is
    finished, mark the current row `partial` with the reason, and stop.
-7. When no `todo` row is left: print a summary (jobs done, cases per job, everything marked
+7. **Every case writes output**: a `mesh.obj` or a `samples*.json` (or both). A case with
+   neither breaks a test that pins the list of output-less cases. Information without
+   output (defaults, tree notes) goes into the form, not into `tests/golden/`. O29 is a
+   form-only job and writes no case folders.
+8. **A case that can't be done** (the tool can't be driven by script, an option doesn't
+   exist): write the reason in the form's Notes, skip it, and carry on. Never stop the
+   whole run for one case. A job where most cases fail is `partial`.
+9. Folder and key names must stay clear of the reference app's and its maker's names
+   (the cleanroom check fails on them). Use the feature names the forms give.
+10. When no `todo` row is left: print a summary (jobs done, cases per job, everything marked
    `TODO`, `partial` or `blocked`) and stop.
