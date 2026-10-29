@@ -1,0 +1,18 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-2.md"
+description = "Default cube made editable; all polygons selected and the Mirror command run across the plane x = 0 (plane point (0, 0, 0), plane normal (1, 0, 0), no duplicate)"
+mesh = "mesh.obj"
+
+[params]
+tool = "mirror"
+segments = [1, 1, 1]
+select_polys = [0, 1, 2, 3, 4, 5]
+
+[params.settings]
+plane_point = [0, 0, 0]
+plane_normal = [1, 0, 0]
+duplicate = false
+
+[import]
+scale = 1.0
+flip_z = false

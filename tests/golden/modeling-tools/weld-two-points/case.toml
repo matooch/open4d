@@ -1,0 +1,13 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-2.md"
+description = "Default cube made editable; points 0 and 1 selected and welded with the Weld command at its defaults"
+mesh = "mesh.obj"
+
+[params]
+tool = "weld"
+segments = [1, 1, 1]
+select_points = [0, 1]
+
+[import]
+scale = 1.0
+flip_z = false
