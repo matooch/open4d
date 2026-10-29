@@ -8,8 +8,8 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 
 | # | Job | Form | Output | Status |
 |---|---|---|---|---|
-| O2 | Keyframe interpolation | [keyframes.md](keyframes.md) | `tests/golden/keyframes/` samples | todo |
-| O3 | Make Editable / Current State to Object | [make-editable.md](make-editable.md) | `tests/golden/make-editable/` meshes + tree notes | todo |
+| O2 | Keyframe interpolation | [keyframes.md](keyframes.md) | `tests/golden/keyframes/` samples | done |
+| O3 | Make Editable / Current State to Object | [make-editable.md](make-editable.md) | `tests/golden/make-editable/` meshes + tree notes | done |
 | O5 | Re-checks from O1/O4 | [rechecks.md](rechecks.md) | form only (+ 2 meshes) | todo |
 | O6 | Modeling tools (U4) | [modeling-tools.md](modeling-tools.md) | `tests/golden/modeling-tools/` meshes | todo |
 | O7 | Fields: values in space (P2) | [fields.md](fields.md) | `tests/golden/fields/` samples | todo |

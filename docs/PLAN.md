@@ -82,7 +82,7 @@ so it isn't a parity item. Revisit after P6.
 ## Observations queue
 
 The live queue, with statuses, is [parity/QUEUE.md](parity/QUEUE.md): the observer runs
-it unattended (OBSERVER.md §6). Done so far: O0 smoke test, O1 R25 drift, O4 R25 defaults.
+it unattended (OBSERVER.md §6). Done so far: O0 smoke test, O1 R25 drift, O2 keyframes, O3 make editable, O4 R25 defaults.
 
 Owner action still open: confirm the reference app's licence allows scripted use
 (OBSERVER.md §1 step 6) and note it in r25-drift.md §0 (add a row).
