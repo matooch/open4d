@@ -1,0 +1,27 @@
+feature = "splines-2"
+observation = "docs/parity/splines-2.md"
+description = "Cycloid spline, all parameters at their R25 defaults"
+mesh = "mesh.obj"
+
+[params]
+extrude_offset = 20.0
+caps = false
+
+[params.input]
+type = "cycloid_spline"
+cycloid_type = "cycloid"
+radius = 25.0
+r = 50.0
+a = 75.0
+start_angle = 0.0
+end_angle = 360.0
+plane = "xy"
+reverse = false
+intermediate = "adaptive"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+[import]
+scale = 1.0
+flip_z = false

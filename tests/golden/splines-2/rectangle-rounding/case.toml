@@ -1,0 +1,25 @@
+feature = "splines-2"
+observation = "docs/parity/splines-2.md"
+description = "Rectangle with Rounding on, radius 50"
+mesh = "mesh.obj"
+
+[params]
+extrude_offset = 20.0
+caps = false
+
+[params.input]
+type = "rectangle_spline"
+width = 400.0
+height = 400.0
+rounding = true
+rounding_radius = 50.0
+plane = "xy"
+reverse = false
+intermediate = "adaptive"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+[import]
+scale = 1.0
+flip_z = false
