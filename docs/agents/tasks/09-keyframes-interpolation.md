@@ -1,6 +1,6 @@
 # 09 · Keyframe tracks and interpolation
 
-Status: ready (after 08) · Branch: the planner's session branch · Planner: main session · Implementer: Claude Sonnet 5.5
+Status: done · Branch: the planner's session branch · Planner: main session · Implementer: Claude Sonnet 5.5
 
 ## Goal
 Any animatable float parameter, and each component of a vector parameter, can carry a
@@ -100,4 +100,57 @@ Claude-Session: https://claude.ai/code/session_01AF8235TxjbnG4zHfXN22Nb
 UI, recording and the timeline (brief 10), the F-curve editor, tangent editing,
 non-float tracks (bool, enum, colour), and time remapping.
 
-## Report (implementer fills in)
+## Report
+- Result: 17/17 cases (19 sample files) exact within 1e-4; max error per case 2.7e-10 or
+  less (before-after 1.4e-14, four-keys 1.4e-10, linear 1.4e-14, long-span 4.3e-14,
+  mixed-interp 2.7e-10, negative 2.8e-14, plateau 2.7e-10, rotation 5.7e-14, scale-1000
+  2.3e-13, step 0, step-first 1.4e-14, three-keys 2.7e-10, three-keys-monotone 2.8e-14,
+  two-keys 2.8e-14, uneven 2.7e-10, vector x3 2.8e-14, zigzag-uneven 2.7e-10). No
+  UNSUPPORTED, no KNOWN_MISMATCH.
+- Rules derived (ANIM.md §1):
+  - Evaluation time is rounded to 1 ms (`two-keys`, `long-span`, `scale-1000`: the value
+    error is a +-0.01 frame time error with period 3 frames, exactly round(t*1000)/1000).
+  - A rounded time just before a key it rounds to counts as that key (`uneven` f10);
+    just after stays after (`zigzag-uneven` f5, `before-after` f20); exactly on a key the
+    key's value (`three-keys-monotone` f30).
+  - Spline = cubic Bezier in a curve parameter, control x at a third of the span, flat
+    y handles (`two-keys`); the curve parameter is found by 19 bisection halvings, result
+    = middle of the final interval (`two-keys`: 18/20 halvings leave 1.4e-4/7e-5). This is
+    the "asymmetry" 50.00014 at frame 15 (the brief's hint, a Bezier in a parameter, was
+    right, but the residual is the solver's grid, not the control points).
+  - Handle length at a middle key = harmonic mean of the two spans / 3, same both sides
+    (`uneven` fit 5.556 = 50/9; `zigzag-uneven`); first/last key: own span / 3.
+  - Slope: 0 at ends and local extremes / plateau edges (`three-keys`, `plateau`,
+    `four-keys`); central difference (v_next - v_prev)/(t_next - t_prev) at monotone keys
+    (`three-keys-monotone`, 2.5/frame), clamped to the segment rise.
+  - Step/Linear/per-key interpolation (the key governs the segment after it), constant
+    extension, rotation unwrapped.
+- Rejected hypotheses: plain smoothstep / Bezier with exact thirds and no time rounding
+  (0.05 value error); handles of 10 vs 9.999996 from `tangents.json` (changes ~1e-6 only);
+  other halving counts (17..22); round-to-nearest vs floor/ceil time (only nearest fits);
+  quantising key times too (errors up to 0.2); handle length = a third of the shorter /
+  longer span or 50/9 independent of spacing (do not fit `uneven`/`zigzag-uneven`); key
+  snapping both sides (zigzag f5 needs the right segment); the four tie formulations
+  (Bernstein seconds / normalised / power basis, `<` vs `<=`) could not reproduce
+  four-keys f15 and f45 together, so ties use "up iff mid >= 0.5" (see below).
+- Parity-pending: stored tangents and tangent modes (the read-back in `tangents.json` shows
+  a non-zero slope on local extremes, so it is not what is evaluated); clamp option;
+  monotone-key slope and handle weighting for uneven spacing; the clamp itself (never
+  triggers in the data); tie breaking (3 samples); keys < 1 ms apart; fps other than 30.
+- Deviations from the brief: (1) the brief says 9 cases; there are 17 (O12 merged), all
+  covered. (2) `with_params` returns `(Scene, Vec<skipped>)` instead of `Result`, so one
+  stale track cannot abort an evaluation; changed nodes get globally unique revisions so
+  copies for different times can share one EvalCache. (3) the parity test lives in
+  `crates/anim/tests/keyframes_parity.rs` and compares in degrees for `rot_*`.
+  (4) pinned count in `crates/parity-harness/tests/samples.rs` changed (11,24,16) ->
+  (19,24,16) as the planner asked. (5) existing core file tests moved from version 3 to 4.
+- Open questions: why the reference rounds time to ms and breaks ties as it does (handle
+  read-back lengths 9.999996 / 6.666672 hint at slightly longer handles); a case with a
+  monotone middle key at uneven spacing, and one with a steep/shallow neighbour pair
+  (clamp), would settle the slope rule; a 24 fps case would confirm the ms rounding is
+  independent of fps.
+- Gate output (last lines):
+  ```
+  note: make-editable/spline has no mesh or samples file (tree or form only)
+  GATE: all passed
+  ```
