@@ -22,6 +22,13 @@ Folder `tests/golden/selection-ops/<case>/` holds:
   `[params]` holds the segments, `start_points` / `start_edges` / `start_polys`, and
   `command`.
 
+Previous attempt (2026-10-29): seven selection commands run in one probe, including
+"Grow Selection…" (a dialog), crashed the app. Follow QUEUE.md rule 11: one command per probe,
+a `ping` after each. Loop and Ring Selection are interactive tools that wait for mouse clicks:
+mark `loop-edge`, `loop-poly` and `ring-edge` as "needs the GUI" and skip them. For grow,
+shrink and convert, use the command **without** a dialog: the plain menu entry, not the one
+ending in `…`. If only the dialog version exists, skip the case with that reason.
+
 ## Cases
 
 | Case | Segments | Start | Command |

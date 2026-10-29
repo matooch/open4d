@@ -75,5 +75,11 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
     previous run: record "crashed the app" for that case in its form's Notes, skip it for
     good, delete `CURRENT_CASE`, and continue the job from the next case. Cases already in
     `tests/golden/` from the previous run are kept; don't redo them.
-11. When no `todo` row is left: print a summary (jobs done, cases per job, everything marked
+11. **One command per probe; no dialogs.** Run a single modeling or selection command per
+    `execute_python_script` call, then `ping` before the next one. Never run a command
+    whose menu name ends in `…` (it opens a dialog and blocks or crashes the app). Never
+    start an interactive tool that waits for mouse input (Loop/Path Cut, Knife, Loop and
+    Ring Selection, sculpt brushes). Write those cases off in Notes as "needs the GUI"
+    (O10 territory) and move on.
+12. When no `todo` row is left: print a summary (jobs done, cases per job, everything marked
    `TODO`, `partial` or `blocked`) and stop.
