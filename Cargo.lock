@@ -1203,6 +1203,7 @@ dependencies = [
  "eframe",
  "egui",
  "egui_kittest",
+ "forge-anim",
  "forge-core",
  "forge-generators",
  "forge-geometry",

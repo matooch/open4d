@@ -115,7 +115,104 @@ per node, sorted by key; versions 1–3 still load without tracks. A track that 
 validate against its node's type is dropped with a warning on load (kept as-is on unknown
 types).
 
-## 2. Parity status
+## 2. Timeline, record and autokey (`crates/ui/src/{animate,timeline}.rs`)
+
+Sources: docs/parity/keyframes.md §3 (one record makes 9 tracks, a recorded key is a
+Spline key; autokey, shortcuts and the timeline's look were **not observed**). Everything
+below that is not from that file is our own design and **parity-pending** until an
+observation (O10 in the queue) shows the reference.
+
+### 2.1 Scene settings (`forge-core::SceneSettings`, file version 5)
+`Scene::settings() -> SceneSettings { fps: u32, start: i64, end: i64 }`, default
+`30, 0, 90` (parity-pending defaults; the keyframe cases used 30 fps and 0-90).
+- Valid when `1 <= fps <= 240` and `start <= end`; `Tx::set_settings` rejects anything
+  else with `EditError::Settings` and is one undoable edit (it raises the scene revision,
+  so the document is dirty; it stamps no node).
+- Chosen over a root-less settings node because the scene graph has no node without a
+  parent/tag slot and a fake node would show up in the tree, in exports and in `len()`.
+- `file::save` always writes `settings: (fps: .., start: .., end: ..)` and version 5.
+  Versions 1-4 load with the defaults. Invalid saved settings load as the defaults with a
+  warning. The current frame and the playing flag are editor state and are not saved.
+- Frame to time: `time = frame / fps` seconds; time to frame: `time * fps`.
+
+### 2.2 Current time and the displayed scene
+`EditorState.timeline.current` (frame, `i64`) is the only current time; it is clamped to
+`[start, end]` by every command that sets it. The viewport, the Attributes panel, the
+Coordinates panel, picking and the gizmo all read `scene_at(scene, current / fps)`. The
+evaluated scene is cached per (scene revision, node count, frame, fps) and is the stored
+scene itself in effect when nothing is animated (`scene_at` copies it unchanged).
+Editing always targets the stored scene (`Document`); gizmo and Coordinates drags start
+from the evaluated transform, so an animated object does not jump.
+
+### 2.3 Record (`Command::RecordKeys`, K)
+For every selected node (tags skipped, nodes of a type without the `transform.*`
+params skipped) the current evaluated value of the 9 tracks is written as a key at the
+current frame, in this order (keyframes.md §3):
+`transform.pos.x|y|z`, `transform.scale.x|y|z`, `transform.rot.x|y|z` (rotation H, P, B).
+- A new key is `Interp::Spline`. A key that already sits on that frame keeps its
+  interpolation and gets the new value.
+- One undo step, label "Record". With no selected recordable node: an error in the status
+  bar, no edit.
+
+### 2.4 Autokey and editing animated parameters
+`EditorState.autokey` (Shift+K, Animate menu, timeline toggle). The animatable parameters
+are Float and Vec3 parameters with `animatable` set; a Vec3 component is one track.
+A parameter edit (Attributes panel, Coordinates panel, gizmo) with value `v` at frame `f`:
+1. **Autokey on:** a Float writes a key `(f/fps, v)` on its track; a Vec3 writes keys on
+   **all three** components (`v[0..3]`), as record does. Existing keys at `f` keep their
+   interpolation; new keys are Spline. The stored value is not changed for components that
+   have (or get) a track. One undo step per edit; the steps of one drag merge into one.
+2. **Autokey off, parameter animated (rule 5, own design, parity-pending until O10):**
+   a track of the edited parameter (or component) exists, so the edit **updates or
+   creates the key at the current frame** on that track. Components of a Vec3 whose value
+   did not change (within `1e-9` relative to the shown value) are left alone; components
+   without a track change the stored value.
+3. **Autokey off, parameter not animated:** the stored value changes, as before.
+A gizmo or Coordinates edit writes `transform.pos|rot|scale` and skips a Vec3 whose value
+did not change, so a move with autokey on keys only Position.
+Values go through the parameter's range clamp first (`ParamDesc::validate`), like
+`set_param`.
+
+### 2.5 Keys, navigation, delete
+- Key frames of the selected nodes: the key times of all their tracks times `fps`, sorted,
+  de-duplicated within `1e-6`.
+- Previous key: the largest key frame `< current` (rounded down); next key: the smallest
+  `> current` (rounded up); none: no move. They are limited to the project range.
+- **Delete Keys** removes, for each selected node, the key at the current frame from every
+  track (a track loses itself with its last key). One undo step, label "Delete Keys";
+  nothing to delete: no step.
+- Marker state of a parameter row: *keyed* when any of its tracks has a key on the
+  current frame, *animated* when it has a track but no key here, otherwise none.
+
+### 2.6 Playback (`timeline::Timeline`)
+`Timeline { current, playing }` plus an anchor `(clock time, frame)` set when playing
+starts or the frame is set by hand. `update(now, settings)`: the frame is
+`start + (anchor_frame - start + floor((now - anchor_time) * fps)) mod (end - start + 1)`.
+- It follows the clock, so a slow frame drops frames instead of slowing down; at the end
+  it loops to the start. 1 s at 30 fps advances 30 frames.
+- `now` is `ctx.input(|i| i.time)`; the stepper itself takes it as an argument.
+- Stopping keeps the current frame. Changing fps or range while playing re-anchors.
+
+### 2.7 Shortcuts (own design, parity-pending; none clashes with the existing ones)
+Existing: Ctrl/Cmd+O, S, Shift+S, A, Shift+A, Z, Shift+Z, Y, Delete, 1-5 (shading),
+W/E/R/Q (gizmo), F2 (rename). New, all inactive while a text field has the keyboard:
+
+| Key | Command |
+|---|---|
+| K | Record |
+| Shift+K | Autokey toggle |
+| Space | Play / Stop, when the pointer is over the viewport |
+| `,` / `.` | previous / next frame |
+| Shift+`,` / Shift+`.` | previous / next key |
+
+### 2.8 Make Editable and Current State to Object
+Both copy the source's `transform.*` **tracks** along with its `transform.*` params
+(EDITABLE.md §1.2), so an animated object stays animated after the conversion. Tracks of
+other (generator) parameters have no counterpart on a polygon object and are dropped. The
+baked mesh uses the stored parameter values, not the values at the current frame
+(**parity-pending**).
+
+## 3. Parity status
 
 17/17 cases (19 sample files) match within 1·10⁻⁴; the largest error is 2.7·10⁻¹⁰
 (float noise of the recorded values). No `UNSUPPORTED`, no `KNOWN_MISMATCH`.
@@ -124,6 +221,6 @@ types).
 reads them back, `tangents.json`, but their labels and the clamp option were not read; the
 read-back key at 20 in `four-keys` shows a non-zero slope on a local maximum, i.e. the
 stored tangent is not what is evaluated), the monotone-key rule for uneven spacing and
-the overshoot clamp, tie breaking, behaviour of two keys closer than 1 ms, autokey, sub-
+the overshoot clamp, tie breaking, behaviour of two keys closer than 1 ms, autokey (§2.4 is our own design), sub-
 frame fps other than 30 (the millisecond rounding is assumed independent of fps), Bool/Int/
 Enum/Colour tracks, time remapping.

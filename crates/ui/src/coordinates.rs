@@ -4,6 +4,7 @@ use forge_core::transform::{Transform, hpb_from_rotation, rotation_part};
 use forge_core::{Document, EditError, NodeId, Scene};
 use glam::{DMat4, DVec3};
 
+use crate::animate::AnimEdit;
 use crate::attributes::Gesture;
 use crate::manipulate::write_transform;
 
@@ -84,7 +85,21 @@ pub fn set_coord(
     value: DVec3,
     gesture: Gesture,
 ) -> Result<(), EditError> {
-    let scene = doc.scene();
+    set_coord_anim(doc, id, space, row, value, gesture, None)
+}
+
+/// [`set_coord`] on an animated scene: the values shown come from the evaluated scene and
+/// the result is keyed per autokey / rule 5 (docs/specs/ANIM.md §2.4).
+pub fn set_coord_anim(
+    doc: &mut Document,
+    id: NodeId,
+    space: Space,
+    row: Row,
+    value: DVec3,
+    gesture: Gesture,
+    anim: Option<&AnimEdit>,
+) -> Result<(), EditError> {
+    let scene = anim.map_or(doc.scene(), |a| a.eval);
     let start = scene
         .local_transform(id)
         .ok_or(EditError::UnknownNode(id))?;
@@ -145,7 +160,7 @@ pub fn set_coord(
             Transform { scale, ..start }
         }
     };
-    let edit = |tx: &mut forge_core::Tx| write_transform(tx, id, &next);
+    let edit = |tx: &mut forge_core::Tx| write_transform(tx, id, &next, anim);
     match gesture {
         Gesture::Commit => doc.transact("Set coordinates", edit),
         Gesture::Drag(n) => {

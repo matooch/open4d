@@ -38,7 +38,7 @@ fn save_is_tagged_and_deterministic() {
     let b = file::save(rich_doc().scene());
     assert_eq!(a, b);
     assert!(a.contains("format: \"forge3d-scene\""), "{a}");
-    assert!(a.contains("version: 4"), "{a}");
+    assert!(a.contains("version: 5"), "{a}");
 }
 
 #[test]
@@ -81,8 +81,8 @@ fn structural_problems_are_errors() {
         LoadError::WrongFormat(_)
     ));
     assert!(matches!(
-        load_err(r#"(format: "forge3d-scene", version: 5, roots: [])"#),
-        LoadError::UnsupportedVersion(5)
+        load_err(r#"(format: "forge3d-scene", version: 6, roots: [])"#),
+        LoadError::UnsupportedVersion(6)
     ));
     assert!(matches!(
         load_err(
@@ -219,7 +219,7 @@ fn v3_round_trips_a_mesh_deterministically() {
         .unwrap();
     let text = file::save(doc.scene());
     assert_eq!(text, file::save(doc.scene()));
-    assert!(text.contains("version: 4"), "{text}");
+    assert!(text.contains("version: 5"), "{text}");
     let (scene, report) = file::load(mesh_registry(), &text).unwrap();
     assert!(report.warnings.is_empty(), "{:?}", report.warnings);
     assert_eq!(file::save(&scene), text);
@@ -258,7 +258,7 @@ fn version_1_files_still_load() {
         "missing mesh is filled with the empty default"
     );
     assert_eq!(scene.param(NodeId(2), "size"), Some(&Value::Float(3.0)));
-    assert!(file::save(&scene).contains("version: 4"));
+    assert!(file::save(&scene).contains("version: 5"));
 }
 
 #[test]
@@ -273,7 +273,7 @@ fn v3_round_trips_an_index_list_and_old_files_get_the_default() {
         })
         .unwrap();
     let text = file::save(doc.scene());
-    assert!(text.contains("version: 4"), "{text}");
+    assert!(text.contains("version: 5"), "{text}");
     let compact: String = text.split_whitespace().collect();
     assert!(compact.contains("IndexList([1,3,5,])"), "{text}");
     let (scene, report) = file::load(mesh_registry(), &text).unwrap();
@@ -309,9 +309,67 @@ fn a_wrongly_typed_index_list_resets_with_a_warning_and_newer_versions_are_refus
         Some(&Value::IndexList(vec![]))
     );
     assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
-    let future = text.replace("version: 3", "version: 5");
+    let future = text.replace("version: 3", "version: 6");
     assert_eq!(
         file::load(mesh_registry(), &future).err(),
-        Some(LoadError::UnsupportedVersion(5))
+        Some(LoadError::UnsupportedVersion(6))
     );
+}
+
+#[test]
+fn scene_settings_round_trip_default_for_old_files_and_invalid_ones_reset() {
+    use forge_core::SceneSettings;
+    let mut doc = common::doc();
+    doc.transact("settings", |tx| {
+        tx.set_settings(SceneSettings {
+            fps: 24,
+            start: 5,
+            end: 120,
+        })
+    })
+    .unwrap();
+    let text = file::save(doc.scene());
+    assert!(text.contains("settings: (fps: 24, start: 5, end: 120)") || text.contains("fps: 24"));
+    let (back, report) = file::load(common::registry(), &text).unwrap();
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    assert_eq!(back.settings(), doc.scene().settings());
+    assert_eq!(file::save(&back), text);
+
+    let old = r#"(format: "forge3d-scene", version: 4, roots: [])"#;
+    let (scene, _) = file::load(common::registry(), old).unwrap();
+    assert_eq!(scene.settings(), SceneSettings::default());
+
+    let bad = r#"(format: "forge3d-scene", version: 5,
+        settings: (fps: 0, start: 3, end: 1), roots: [])"#;
+    let (scene, report) = file::load(common::registry(), bad).unwrap();
+    assert_eq!(scene.settings(), SceneSettings::default());
+    assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
+}
+
+#[test]
+fn set_settings_validates_and_undoes() {
+    use forge_core::SceneSettings;
+    let mut doc = common::doc();
+    let rev = doc.scene().revision();
+    let bad = |fps, start, end| {
+        let mut d = common::doc();
+        d.transact("x", |tx| tx.set_settings(SceneSettings { fps, start, end }))
+    };
+    assert!(matches!(bad(0, 0, 10), Err(EditError::Settings(_))));
+    assert!(matches!(bad(241, 0, 10), Err(EditError::Settings(_))));
+    assert!(matches!(bad(30, 11, 10), Err(EditError::Settings(_))));
+    doc.transact("x", |tx| {
+        tx.set_settings(SceneSettings {
+            fps: 60,
+            start: -10,
+            end: 10,
+        })
+    })
+    .unwrap();
+    assert_eq!(doc.scene().settings().fps, 60);
+    assert!(doc.scene().revision() > rev);
+    assert!(doc.undo());
+    assert_eq!(doc.scene().settings(), SceneSettings::default());
+    assert!(doc.redo());
+    assert_eq!(doc.scene().settings().start, -10);
 }

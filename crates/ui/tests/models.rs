@@ -143,22 +143,21 @@ fn tree_rows_follow_hierarchy_and_expansion() {
 }
 
 #[test]
-fn timeline_placeholder() {
+fn timeline_current_frame_clamps_to_the_scene_range() {
+    let settings = forge_core::SceneSettings::default();
     let mut t = Timeline::default();
-    assert_eq!(
-        (t.start, t.end, t.current, t.fps, t.playing),
-        (0, 90, 0, 30, false)
-    );
-    t.tick();
-    assert_eq!(t.current, 0, "paused");
-    t.playing = true;
-    t.set_current(90);
-    t.tick();
-    assert_eq!(t.current, 0, "wraps");
-    t.set_current(500);
+    assert_eq!((t.current, t.playing), (0, false));
+    t.set_current(500, &settings);
     assert_eq!(t.current, 90);
-    t.set_range(40, 10);
-    assert_eq!((t.start, t.end, t.current), (10, 40, 40));
+    t.set_current(-4, &settings);
+    assert_eq!(t.current, 0);
+    t.set_current(80, &settings);
+    let shorter = forge_core::SceneSettings {
+        end: 40,
+        ..settings
+    };
+    t.clamp_to(&shorter);
+    assert_eq!(t.current, 40);
 }
 
 fn nav(

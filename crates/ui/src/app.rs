@@ -11,17 +11,18 @@ use forge_viewport::gizmo::{Drag, Gizmo, GizmoMode, Space as GizmoSpace};
 use forge_viewport::render::Shading;
 use glam::DVec3;
 
+use crate::animate::{AnimEdit, KeyState, key_frames, key_states};
 use crate::attributes::{
-    Gesture, Widget, apply_edit, attribute_rows, from_display, to_display, unit_suffix,
+    Gesture, Widget, apply_edit_anim, attribute_rows, from_display, to_display, unit_suffix,
 };
 use crate::commands::{Command, category_label, create_menu, execute};
 use crate::component_edit::{ComponentDrag, pivot_view, pivot_world};
 use crate::components::{
     ClickModifiers, EditMode, SelectCmd, target as component_target, viewport_click, viewport_rect,
 };
-use crate::coordinates::{Row, Space, Third, coord_view, set_coord};
+use crate::coordinates::{Row, Space, Third, coord_view, set_coord_anim};
 use crate::dock::{Area, Dock, Panel};
-use crate::manipulate::apply_drag;
+use crate::manipulate::apply_drag_anim;
 use crate::state::EditorState;
 use crate::theme::Theme;
 use crate::tree::tree_rows;
@@ -68,7 +69,8 @@ pub struct Editor {
     /// Counter for drag/typing gestures (each is one undo step).
     gesture_seq: u64,
     gesture: Option<u64>,
-    play_accum: f32,
+    /// The pointer was over the viewport last frame (Space plays only then).
+    viewport_hot: bool,
     gizmo_mode: GizmoMode,
     gizmo_space: GizmoSpace,
     coord_space: Space,
@@ -103,7 +105,7 @@ impl Editor {
             name_edit: None,
             gesture_seq: 0,
             gesture: None,
-            play_accum: 0.0,
+            viewport_hot: false,
             gizmo_mode: GizmoMode::Translate,
             gizmo_space: GizmoSpace::Object,
             coord_space: Space::Local,
@@ -126,10 +128,12 @@ impl Editor {
     }
 
     fn edit(&mut self, id: NodeId, param: &str, value: Value, gesture: Gesture) {
-        self.state.status = match apply_edit(&mut self.state.doc, id, param, value, gesture) {
-            Ok(()) => String::new(),
-            Err(e) => e.to_string(),
-        };
+        let ctx = self.state.anim_ctx();
+        self.state.status =
+            match apply_edit_anim(&mut self.state.doc, id, param, value, gesture, Some(&ctx)) {
+                Ok(()) => String::new(),
+                Err(e) => e.to_string(),
+            };
     }
 
     /// A gesture id for a continuous interaction: new on start, reused while it lasts.
@@ -143,6 +147,7 @@ impl Editor {
 
     /// Draws the whole editor. `rs` is `None` without a GPU (tests).
     pub fn show(&mut self, ui: &mut Ui, rs: Option<&egui_wgpu::RenderState>) {
+        self.update_playback(ui.ctx());
         self.shortcuts(ui.ctx());
         let title = self.window_title();
         if title != self.sent_title {
@@ -190,6 +195,18 @@ impl Editor {
         egui::CentralPanel::no_frame().show(ui, |ui| self.area(ui, Area::Center, rs));
     }
 
+    /// Advances the current frame from the frame clock while playing (ANIM.md §2.6).
+    fn update_playback(&mut self, ctx: &egui::Context) {
+        self.state.sync_timeline();
+        if !self.state.timeline.playing {
+            return;
+        }
+        let now = ctx.input(|i| i.time);
+        let settings = self.state.settings();
+        self.state.timeline.update(now, &settings);
+        ctx.request_repaint();
+    }
+
     fn shortcuts(&mut self, ctx: &egui::Context) {
         if ctx.egui_wants_keyboard_input() {
             return;
@@ -221,6 +238,25 @@ impl Editor {
             }
             if i.key_pressed(Key::Delete) {
                 cmds.push(Command::DeleteSelected);
+            }
+            // Animation (ours, parity-pending; ANIM.md §2.7). Shift variants first.
+            if i.consume_key(Modifiers::SHIFT, Key::K) {
+                cmds.push(Command::ToggleAutokey);
+            } else if i.consume_key(Modifiers::NONE, Key::K) {
+                cmds.push(Command::RecordKeys);
+            }
+            if i.consume_key(Modifiers::SHIFT, Key::Comma) {
+                cmds.push(Command::JumpKey(false));
+            } else if i.consume_key(Modifiers::NONE, Key::Comma) {
+                cmds.push(Command::StepFrame(-1));
+            }
+            if i.consume_key(Modifiers::SHIFT, Key::Period) {
+                cmds.push(Command::JumpKey(true));
+            } else if i.consume_key(Modifiers::NONE, Key::Period) {
+                cmds.push(Command::StepFrame(1));
+            }
+            if self.viewport_hot && i.consume_key(Modifiers::NONE, Key::Space) {
+                cmds.push(Command::TogglePlay);
             }
             let keys = [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5];
             for (k, (shading, _)) in keys.iter().zip(SHADINGS) {
@@ -372,6 +408,61 @@ impl Editor {
                     });
                 }
             });
+            ui.menu_button("Animate", |ui| {
+                let fmt_ctx = ui.ctx().clone();
+                let k = move |m: Modifiers, key: Key| {
+                    fmt_ctx.format_shortcut(&KeyboardShortcut::new(m, key))
+                };
+                let items = [
+                    (
+                        "Record Active Objects",
+                        k(Modifiers::NONE, Key::K),
+                        Command::RecordKeys,
+                    ),
+                    ("Delete Keys", String::new(), Command::DeleteKeys),
+                    ("Play / Stop", "Space".to_string(), Command::TogglePlay),
+                    (
+                        "Previous Frame",
+                        k(Modifiers::NONE, Key::Comma),
+                        Command::StepFrame(-1),
+                    ),
+                    (
+                        "Next Frame",
+                        k(Modifiers::NONE, Key::Period),
+                        Command::StepFrame(1),
+                    ),
+                    (
+                        "Previous Key",
+                        k(Modifiers::SHIFT, Key::Comma),
+                        Command::JumpKey(false),
+                    ),
+                    (
+                        "Next Key",
+                        k(Modifiers::SHIFT, Key::Period),
+                        Command::JumpKey(true),
+                    ),
+                ];
+                for (label, shortcut, cmd) in items {
+                    let mut button = egui::Button::new(label);
+                    if !shortcut.is_empty() {
+                        button = button.shortcut_text(shortcut);
+                    }
+                    if ui.add(button).clicked() {
+                        self.run(cmd);
+                        ui.close();
+                    }
+                }
+                ui.separator();
+                let mut auto = self.state.autokey;
+                let sc = k(Modifiers::SHIFT, Key::K);
+                if ui
+                    .checkbox(&mut auto, format!("Auto-Key  ({sc})"))
+                    .clicked()
+                {
+                    self.run(Command::ToggleAutokey);
+                    ui.close();
+                }
+            });
             ui.menu_button("View", |ui| {
                 for (shading, label) in SHADINGS {
                     if ui.radio(self.state.shading == shading, label).clicked() {
@@ -488,6 +579,7 @@ impl Editor {
         });
         let rect = ui.available_rect_before_wrap();
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
+        self.viewport_hot = response.hovered() || response.has_focus();
         let Some(rs) = rs else {
             ui.put(rect, egui::Label::new("Viewport unavailable"));
             return;
@@ -522,13 +614,14 @@ impl Editor {
             self.viewport_interaction(ui, &response, rect, ppp, size);
         }
         let gizmo = self.current_gizmo();
+        let shown = self.state.evaluated();
         let tex = self.viewport.render(
             rs,
             size,
             &self.state.camera,
             self.state.shading,
             SceneView {
-                scene: self.state.doc.scene(),
+                scene: &shown,
                 selected: &self.state.selection.nodes,
                 gizmo: gizmo.as_ref(),
                 component: component_target(&self.state).map(|id| (id, self.state.mode)),
@@ -569,7 +662,7 @@ impl Editor {
     /// Gizmo at the active node, in its object frame or world axes (MANIPULATE.md §2, §5).
     fn current_gizmo(&self) -> Option<Gizmo> {
         let id = self.state.selection.active?;
-        let m = self.state.doc.scene().world_matrix(id)?;
+        let m = self.state.evaluated().world_matrix(id)?;
         // component modes: the gizmo sits on the selected components (EDITABLE.md §3.6)
         let origin = if component_target(&self.state).is_some() {
             pivot_world(&self.state)?
@@ -648,7 +741,7 @@ impl Editor {
                     self.component_drag = Some((drag, cd, self.gesture_seq));
                 }
             } else if let Some(id) = self.state.selection.active
-                && let Some(start) = self.state.doc.scene().local_transform(id)
+                && let Some(start) = self.state.evaluated().local_transform(id)
             {
                 self.gesture_seq += 1;
                 self.gizmo_drag = Some((drag, id, start, self.gesture_seq));
@@ -671,11 +764,19 @@ impl Editor {
             if response.dragged_by(egui::PointerButton::Primary) {
                 let delta = drag.update(&cam, x, y, w, h, snap_step(self.gizmo_mode));
                 let (id, start, n) = (*id, *start, *n);
-                self.state.status =
-                    match apply_drag(&mut self.state.doc, id, &start, delta, Gesture::Drag(n)) {
-                        Ok(()) => String::new(),
-                        Err(e) => e.to_string(),
-                    };
+                let (ctx, eval) = (self.state.anim_ctx(), self.state.evaluated());
+                let anim = AnimEdit { ctx, eval: &eval };
+                self.state.status = match apply_drag_anim(
+                    &mut self.state.doc,
+                    id,
+                    &start,
+                    delta,
+                    Gesture::Drag(n),
+                    Some(&anim),
+                ) {
+                    Ok(()) => String::new(),
+                    Err(e) => e.to_string(),
+                };
             }
             if response.drag_stopped() {
                 self.gizmo_drag = None;
@@ -712,12 +813,8 @@ impl Editor {
             ui.radio_value(&mut self.coord_third, Third::Scale, "Scale");
             ui.radio_value(&mut self.coord_third, Third::Size, "Size");
         });
-        let Some(view) = coord_view(
-            self.state.doc.scene(),
-            id,
-            self.coord_space,
-            self.coord_third,
-        ) else {
+        let eval_scene = self.state.evaluated();
+        let Some(view) = coord_view(&eval_scene, id, self.coord_space, self.coord_third) else {
             return;
         };
         let third_label = match self.coord_third {
@@ -785,13 +882,18 @@ impl Editor {
                         } else {
                             shown
                         };
-                        self.state.status = match set_coord(
+                        let anim = AnimEdit {
+                            ctx: self.state.anim_ctx(),
+                            eval: &eval_scene,
+                        };
+                        self.state.status = match set_coord_anim(
                             &mut self.state.doc,
                             id,
                             self.coord_space,
                             row,
                             value,
                             g,
+                            Some(&anim),
                         ) {
                             Ok(()) => String::new(),
                             Err(e) => e.to_string(),
@@ -912,10 +1014,12 @@ impl Editor {
             ui.weak("Nothing selected");
             return;
         };
-        let Some(view) = attribute_rows(self.state.doc.scene(), id) else {
+        let shown = self.state.evaluated();
+        let Some(view) = attribute_rows(&shown, id) else {
             ui.weak("Nothing selected");
             return;
         };
+        let marks = key_states(&shown, id, self.state.timeline.current);
         let theme = Theme::default();
         let mut rename = None;
         ui.horizontal(|ui| {
@@ -948,7 +1052,7 @@ impl Editor {
                                     .spacing([12.0, 4.0])
                                     .show(ui, |ui| {
                                         for row in rows {
-                                            self.attribute_row(ui, id, row);
+                                            self.attribute_row(ui, id, row, &marks);
                                             ui.end_row();
                                         }
                                     });
@@ -958,7 +1062,13 @@ impl Editor {
             });
     }
 
-    fn attribute_row(&mut self, ui: &mut Ui, id: NodeId, row: &crate::attributes::AttrRow) {
+    fn attribute_row(
+        &mut self,
+        ui: &mut Ui,
+        id: NodeId,
+        row: &crate::attributes::AttrRow,
+        marks: &std::collections::BTreeMap<String, KeyState>,
+    ) {
         if row.widget == Widget::Checkbox {
             ui.label("");
             let mut b = row.value == Value::Bool(true);
@@ -967,7 +1077,18 @@ impl Editor {
             }
             return;
         }
-        let label = ui.label(&row.label);
+        let animatable = matches!(
+            row.widget,
+            Widget::FloatDrag { .. } | Widget::Vec3Drag { .. }
+        );
+        let label = ui
+            .horizontal(|ui| {
+                if animatable {
+                    key_marker(ui, marks.get(&row.param).copied(), &row.label);
+                }
+                ui.label(&row.label)
+            })
+            .inner;
         let mut edited: Option<(Value, Gesture)> = None;
         match (&row.widget, &row.value) {
             (Widget::IntDrag { min, max }, Value::Int(v)) => {
@@ -1107,39 +1228,151 @@ impl Editor {
     }
 
     fn timeline_ui(&mut self, ui: &mut Ui) {
-        let t = &mut self.state.timeline;
-        if t.playing {
-            self.play_accum += ui.input(|i| i.stable_dt);
-            let step = 1.0 / t.fps as f32;
-            while self.play_accum >= step {
-                self.play_accum -= step;
-                t.tick();
+        let settings = self.state.settings();
+        let theme = Theme::default();
+        let ids: Vec<NodeId> = self.state.selection.nodes.iter().copied().collect();
+        let mut cmds = Vec::new();
+        ui.horizontal_wrapped(|ui| {
+            let playing = self.state.timeline.playing;
+            if ui.button(if playing { "Stop" } else { "Play" }).clicked() {
+                cmds.push(Command::TogglePlay);
             }
-            ui.ctx().request_repaint();
-        }
-        ui.horizontal(|ui| {
-            let label = if t.playing { "Pause" } else { "Play" };
-            if ui.button(label).clicked() {
-                t.playing = !t.playing;
-                self.play_accum = 0.0;
+            if ui.button("Record").clicked() {
+                cmds.push(Command::RecordKeys);
             }
-            let (mut start, mut end) = (t.start, t.end);
-            let l = ui.label("Start");
-            ui.add(egui::DragValue::new(&mut start)).labelled_by(l.id);
-            let l = ui.label("End");
-            ui.add(egui::DragValue::new(&mut end)).labelled_by(l.id);
-            if (start, end) != (t.start, t.end) {
-                t.set_range(start, end);
+            let mut auto = self.state.autokey;
+            if ui.checkbox(&mut auto, "Auto-Key").clicked() {
+                cmds.push(Command::ToggleAutokey);
             }
-            ui.weak(format!("{} fps", t.fps));
+            ui.separator();
+            if ui.button("Previous Key").clicked() {
+                cmds.push(Command::JumpKey(false));
+            }
+            if ui.button("Next Key").clicked() {
+                cmds.push(Command::JumpKey(true));
+            }
+            if ui.button("Delete Keys").clicked() {
+                cmds.push(Command::DeleteKeys);
+            }
         });
-        let mut current = t.current;
-        let slider = egui::Slider::new(&mut current, t.start..=t.end).text("Frame");
-        ui.spacing_mut().slider_width = (ui.available_width() - 140.0).max(60.0);
-        if ui.add(slider).changed() {
-            t.set_current(current);
+        ui.horizontal(|ui| {
+            let mut next = settings;
+            let l = ui.label("Start");
+            ui.add(egui::DragValue::new(&mut next.start).range(i64::MIN..=settings.end))
+                .labelled_by(l.id);
+            let l = ui.label("End");
+            ui.add(egui::DragValue::new(&mut next.end).range(settings.start..=i64::MAX))
+                .labelled_by(l.id);
+            let l = ui.label("FPS");
+            ui.add(egui::DragValue::new(&mut next.fps).range(1..=240))
+                .labelled_by(l.id);
+            if next != settings {
+                cmds.push(Command::SetSettings(next));
+            }
+            ui.separator();
+            let mut frame = self.state.timeline.current;
+            let l = ui.label("Frame");
+            let r = ui
+                .add(egui::DragValue::new(&mut frame).range(settings.start..=settings.end))
+                .labelled_by(l.id);
+            if r.changed() {
+                cmds.push(Command::SetFrame(frame));
+            }
+            ui.weak(format!(
+                "{:.3} s",
+                crate::animate::frame_time(frame, settings.fps)
+            ));
+        });
+        // frame strip: click or drag scrubs; ticks mark the selected objects' keys
+        let width = ui.available_width().max(60.0);
+        let (rect, response) =
+            ui.allocate_exact_size(egui::vec2(width, 30.0), Sense::click_and_drag());
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Slider, true, "Frame strip"));
+        let span = (settings.end - settings.start).max(1) as f32;
+        let (x0, x1) = (rect.left() + 8.0, rect.right() - 8.0);
+        let to_x = |f: f64| x0 + (f as f32 - settings.start as f32) / span * (x1 - x0);
+        if (response.dragged() || response.clicked())
+            && let Some(pos) = response.interact_pointer_pos()
+        {
+            let f = settings.start as f32 + (pos.x - x0) / (x1 - x0) * span;
+            cmds.push(Command::SetFrame(f.round() as i64));
+        }
+        let painter = ui.painter_at(rect);
+        painter.rect_filled(rect, 2.0, theme.faint);
+        let step = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 5000]
+            .into_iter()
+            .find(|s| (*s as f32 / span) * (x1 - x0) >= 40.0)
+            .unwrap_or(10000);
+        let first = settings.start.div_euclid(step) * step;
+        for f in (first..=settings.end).step_by(step as usize) {
+            if f < settings.start {
+                continue;
+            }
+            let x = to_x(f as f64);
+            painter.line_segment(
+                [
+                    egui::pos2(x, rect.bottom() - 6.0),
+                    egui::pos2(x, rect.bottom()),
+                ],
+                egui::Stroke::new(1.0, theme.weak_text),
+            );
+            painter.text(
+                egui::pos2(x + 2.0, rect.bottom() - 7.0),
+                egui::Align2::LEFT_BOTTOM,
+                f.to_string(),
+                egui::FontId::proportional(10.0),
+                theme.weak_text,
+            );
+        }
+        for f in key_frames(self.state.doc.scene(), &ids) {
+            if f < settings.start as f64 - 1e-6 || f > settings.end as f64 + 1e-6 {
+                continue;
+            }
+            let x = to_x(f);
+            painter.line_segment(
+                [
+                    egui::pos2(x, rect.top() + 2.0),
+                    egui::pos2(x, rect.top() + 12.0),
+                ],
+                egui::Stroke::new(2.0, theme.accent),
+            );
+        }
+        let x = to_x(self.state.timeline.current as f64);
+        painter.line_segment(
+            [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+            egui::Stroke::new(1.5, theme.component_selection),
+        );
+        for c in cmds {
+            self.run(c);
         }
     }
+}
+
+/// A diamond left of an animatable parameter: filled = key on this frame, outline =
+/// animated without a key here (ANIM.md §2.5). Drawn by us.
+fn key_marker(ui: &mut Ui, state: Option<KeyState>, name: &str) {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), Sense::hover());
+    let Some(state) = state else { return };
+    let (text, fill) = match state {
+        KeyState::Keyed => ("keyed", Theme::default().accent),
+        KeyState::Animated => ("animated", egui::Color32::TRANSPARENT),
+    };
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::Role::Label, true, format!("{name} {text}"))
+    });
+    let c = rect.center();
+    let r = 4.5;
+    let points = vec![
+        egui::pos2(c.x, c.y - r),
+        egui::pos2(c.x + r, c.y),
+        egui::pos2(c.x, c.y + r),
+        egui::pos2(c.x - r, c.y),
+    ];
+    ui.painter().add(egui::Shape::convex_polygon(
+        points,
+        fill,
+        egui::Stroke::new(1.5, Theme::default().accent),
+    ));
 }
 
 /// Every node expanded, for listing link candidates.

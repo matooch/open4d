@@ -70,6 +70,48 @@ pub(crate) struct Subtree {
     pub nodes: Vec<Node>,
 }
 
+/// Document-wide animation settings (docs/specs/ANIM.md §2.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SceneSettings {
+    /// Frames per second, `1..=240`.
+    pub fps: u32,
+    /// First and last frame of the project range, `start <= end`.
+    pub start: i64,
+    pub end: i64,
+}
+
+impl Default for SceneSettings {
+    fn default() -> Self {
+        SceneSettings {
+            fps: 30,
+            start: 0,
+            end: 90,
+        }
+    }
+}
+
+impl SceneSettings {
+    pub const MAX_FPS: u32 = 240;
+
+    /// Why these settings are not valid, if they are not.
+    pub fn check(&self) -> Result<(), String> {
+        if !(1..=Self::MAX_FPS).contains(&self.fps) {
+            return Err(format!(
+                "fps must be 1..={}, got {}",
+                Self::MAX_FPS,
+                self.fps
+            ));
+        }
+        if self.start > self.end {
+            return Err(format!(
+                "start frame {} is after end frame {}",
+                self.start, self.end
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Scene {
     registry: Arc<Registry>,
@@ -77,6 +119,7 @@ pub struct Scene {
     roots: Vec<NodeId>,
     next_id: u64,
     revision: u64,
+    settings: SceneSettings,
 }
 
 impl Scene {
@@ -87,7 +130,13 @@ impl Scene {
             roots: Vec::new(),
             next_id: 1,
             revision: 0,
+            settings: SceneSettings::default(),
         }
+    }
+
+    /// Animation settings: fps and project range.
+    pub fn settings(&self) -> SceneSettings {
+        self.settings
     }
 
     pub fn registry(&self) -> &Arc<Registry> {
@@ -256,6 +305,17 @@ impl Scene {
     }
 
     // --- crate-internal mutation primitives (used by Document and file) ---
+
+    /// Replaces the settings (already validated), raises the revision, returns the old ones.
+    pub(crate) fn replace_settings(&mut self, settings: SceneSettings) -> SceneSettings {
+        self.revision += 1;
+        std::mem::replace(&mut self.settings, settings)
+    }
+
+    /// Sets the settings of a freshly loaded scene without touching the revision.
+    pub(crate) fn init_settings(&mut self, settings: SceneSettings) {
+        self.settings = settings;
+    }
 
     pub(crate) fn alloc_id(&mut self) -> NodeId {
         let id = NodeId(self.next_id);

@@ -95,14 +95,14 @@ pub fn edit_set(s: &EditorState) -> Option<(NodeId, Arc<MeshData>, IndexSet, DVe
 /// World position of the pivot (where the gizmo is drawn), if there is one.
 pub fn pivot_world(s: &EditorState) -> Option<DVec3> {
     let (id, _, _, c) = edit_set(s)?;
-    Some(s.doc.scene().world_matrix(id)?.transform_point3(c))
+    Some(s.evaluated().world_matrix(id)?.transform_point3(c))
 }
 
 /// The pivot in object space (`world = false`) or world space, for the Coordinates panel.
 pub fn pivot_view(s: &EditorState, world: bool) -> Option<DVec3> {
     let (id, _, _, c) = edit_set(s)?;
     if world {
-        Some(s.doc.scene().world_matrix(id)?.transform_point3(c))
+        Some(s.evaluated().world_matrix(id)?.transform_point3(c))
     } else {
         Some(c)
     }

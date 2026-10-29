@@ -183,7 +183,8 @@ RON text, deterministic (same scene → byte-identical output):
 ```ron
 (
     format: "forge3d-scene",
-    version: 4,
+    version: 5,
+    settings: (fps: 30, start: 0, end: 90),
     roots: [
         (id: 1, type_id: "forge.null", name: "Null", params: {}, tracks: {}, tags: [], children: []),
     ],
@@ -194,7 +195,7 @@ RON text, deterministic (same scene → byte-identical output):
   param is written, defaults included.
 - `load(Arc<Registry>, &str) -> Result<(Scene, LoadReport), LoadError>`.
   - `LoadError`: `Parse` (with message), `WrongFormat`, `UnsupportedVersion`
-    (> 4), `DuplicateId`, `Structure` (known Tag type in `children`, or known
+    (> 5), `DuplicateId`, `Structure` (known Tag type in `children`, or known
     non-Tag type in `tags`).
   - Recoverable issues go to `LoadReport.warnings` (strings naming the node id):
     unknown type (node kept as-is), unknown param on a known type (dropped), invalid
@@ -221,3 +222,8 @@ RON text, deterministic (same scene → byte-identical output):
   param / Vec3 component of the node's (known) type, or that does not validate, is dropped
   with a warning naming the node and the key; tracks of unknown types are kept as-is.
   Older builds reject a version 4 file with `UnsupportedVersion`.
+- **Version 5** added scene settings: `settings: (fps: 30, start: 0, end: 90)` at the top
+  level (ANIM.md §2.1). `save` always writes it; a version 1-4 file has none and loads with
+  the defaults; saved settings that do not validate (`fps` outside 1..=240, `start > end`)
+  load as the defaults with a warning. Older builds reject a version 5 file with
+  `UnsupportedVersion`.

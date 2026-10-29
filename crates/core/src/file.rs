@@ -5,17 +5,19 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Category, Node, NodeId, Registry, Scene, Track, Value, parse_target};
+use crate::{Category, Node, NodeId, Registry, Scene, SceneSettings, Track, Value, parse_target};
 
 pub const FORMAT: &str = "forge3d-scene";
 /// Version 2 added `Value::Mesh`, version 3 `Value::IndexList`, version 4 keyframe
-/// tracks; older files still load.
-pub const VERSION: u32 = 4;
+/// tracks, version 5 the scene settings; older files still load.
+pub const VERSION: u32 = 5;
 
 #[derive(Serialize, Deserialize)]
 struct SceneFile {
     format: String,
     version: u32,
+    #[serde(default)]
+    settings: SceneSettings,
     roots: Vec<NodeRecord>,
 }
 
@@ -67,6 +69,7 @@ pub fn save(scene: &Scene) -> String {
     let file = SceneFile {
         format: FORMAT.to_string(),
         version: VERSION,
+        settings: scene.settings(),
         roots: scene.roots().iter().map(|r| record(scene, *r)).collect(),
     };
     ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default())
@@ -88,6 +91,13 @@ pub fn load(registry: Arc<Registry>, text: &str) -> Result<(Scene, LoadReport), 
     };
     for r in file.roots {
         loader.node(r, Place::Child(None))?;
+    }
+    match file.settings.check() {
+        Ok(()) => loader.scene.init_settings(file.settings),
+        Err(e) => loader
+            .report
+            .warnings
+            .push(format!("scene settings: {e}; reset to the defaults")),
     }
     let next = loader.seen.last().map_or(1, |id| id.0 + 1);
     loader.scene.set_next_id(next);

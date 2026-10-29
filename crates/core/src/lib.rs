@@ -18,5 +18,5 @@ pub use param::{
     EnumOption, MeshData, ParamDesc, ParamError, ParamKind, RangeValue, UiHint, Unit, Value,
 };
 pub use registry::{Category, NodeType, Plugin, Registry, RegistryError};
-pub use scene::{Node, NodeId, Scene};
+pub use scene::{Node, NodeId, Scene, SceneSettings};
 pub use track::{Interp, Key, Target, Track, TrackError, parse_target};

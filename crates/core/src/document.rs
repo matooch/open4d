@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use crate::scene::{Slot, SlotOwner, Subtree};
 use crate::{
-    Category, Key, NodeId, ParamError, ParamKind, Registry, Scene, Track, TrackError, Value,
-    parse_target,
+    Category, Key, NodeId, ParamError, ParamKind, Registry, Scene, SceneSettings, Track,
+    TrackError, Value, parse_target,
 };
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -31,6 +31,8 @@ pub enum EditError {
     Param(#[from] ParamError),
     #[error("invalid track: {0}")]
     Track(#[from] TrackError),
+    #[error("invalid scene settings: {0}")]
+    Settings(String),
 }
 
 /// One primitive, invertible change.
@@ -61,6 +63,7 @@ enum Edit {
         key: String,
         track: Option<Track>,
     },
+    SetSettings(SceneSettings),
 }
 
 /// Applies `edit` (already validated) and returns its inverse.
@@ -104,6 +107,7 @@ fn apply(scene: &mut Scene, edit: Edit) -> Edit {
                 track: old,
             }
         }
+        Edit::SetSettings(settings) => Edit::SetSettings(scene.replace_settings(settings)),
     }
 }
 
@@ -349,6 +353,13 @@ impl Tx<'_> {
         }
         let track = (!track.keys.is_empty()).then_some(track);
         self.set_track(id, track_key, track)
+    }
+
+    /// Sets fps and the project range (docs/specs/ANIM.md §2.1).
+    pub fn set_settings(&mut self, settings: SceneSettings) -> Result<(), EditError> {
+        settings.check().map_err(EditError::Settings)?;
+        self.push(Edit::SetSettings(settings));
+        Ok(())
     }
 
     pub fn rename(&mut self, id: NodeId, name: &str) -> Result<(), EditError> {

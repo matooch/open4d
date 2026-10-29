@@ -269,3 +269,8 @@ components is out of scope.
 - A drag over several frames is one undo step; undo restores the mesh; redo reapplies it.
   Frames are computed from the start mesh (no accumulation).
 - A Bend child above an edited polygon object: `evaluate` reflects both the edit and the bend.
+
+## 4. Animation tracks (brief 10)
+Make Editable and Current State to Object also copy the source's `transform.*` keyframe
+tracks to the new polygon object (ANIM.md §2.8); other tracks are dropped. The mesh is
+baked from the stored parameter values (parity-pending).

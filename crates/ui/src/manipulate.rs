@@ -7,14 +7,31 @@ use forge_viewport::gizmo::DragDelta;
 use forge_viewport::picking::pick_poly;
 use glam::DMat3;
 
+use crate::animate::{AnimEdit, unchanged, write_param};
 use crate::attributes::Gesture;
 use crate::viewport_panel::scene_meshes;
 
-/// Writes all three transform params.
-pub(crate) fn write_transform(tx: &mut Tx, id: NodeId, t: &Transform) -> Result<(), EditError> {
-    tx.set_param(id, transform::POS, Value::Vec3(t.pos.to_array()))?;
-    tx.set_param(id, transform::ROT, Value::Vec3(t.rot.to_array()))?;
-    tx.set_param(id, transform::SCALE, Value::Vec3(t.scale.to_array()))
+/// Writes the three transform params. With `anim` the params that already hold the
+/// shown value are skipped and animated ones get keys (docs/specs/ANIM.md §2.4); without
+/// it all three are set.
+pub(crate) fn write_transform(
+    tx: &mut Tx,
+    id: NodeId,
+    t: &Transform,
+    anim: Option<&AnimEdit>,
+) -> Result<(), EditError> {
+    for (param, v) in [
+        (transform::POS, t.pos),
+        (transform::ROT, t.rot),
+        (transform::SCALE, t.scale),
+    ] {
+        let value = Value::Vec3(v.to_array());
+        if unchanged(anim, id, param, &value) {
+            continue;
+        }
+        write_param(tx, id, param, value, anim.map(|a| &a.ctx))?;
+    }
+    Ok(())
 }
 
 /// Sets the node's transform to `start` changed by `delta` (one undo step per drag).
@@ -25,8 +42,21 @@ pub fn apply_drag(
     delta: DragDelta,
     gesture: Gesture,
 ) -> Result<(), EditError> {
-    let parent = doc
-        .scene()
+    apply_drag_anim(doc, id, start, delta, gesture, None)
+}
+
+/// [`apply_drag`] on an animated scene: `start` and the parent matrix come from the
+/// evaluated scene and the result is keyed per autokey / rule 5.
+pub fn apply_drag_anim(
+    doc: &mut Document,
+    id: NodeId,
+    start: &Transform,
+    delta: DragDelta,
+    gesture: Gesture,
+    anim: Option<&AnimEdit>,
+) -> Result<(), EditError> {
+    let parent = anim
+        .map_or(doc.scene(), |a| a.eval)
         .parent_world_matrix(id)
         .ok_or(EditError::UnknownNode(id))?;
     let rp = rotation_part(&parent);
@@ -56,7 +86,7 @@ pub fn apply_drag(
             },
         ),
     };
-    let edit = |tx: &mut Tx| write_transform(tx, id, &next);
+    let edit = |tx: &mut Tx| write_transform(tx, id, &next, anim);
     match gesture {
         Gesture::Commit => doc.transact(label, edit),
         Gesture::Drag(n) => doc.transact_merged(label, &format!("gizmo:{id}:{n}"), edit),
