@@ -67,5 +67,13 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
    whole run for one case. A job where most cases fail is `partial`.
 9. Folder and key names must stay clear of the reference app's and its maker's names
    (the cleanroom check fails on them). Use the feature names the forms give.
-10. When no `todo` row is left: print a summary (jobs done, cases per job, everything marked
+10. **Crash safety.** Before each case, write its name to
+    `/Users/bigman/forge-observer/CURRENT_CASE`. After the case's files are written, delete
+    that file. Commit and push after every **5 cases** within a job, not only at its end,
+    so a crash loses at most a few cases.
+    At the start of a run, if `CURRENT_CASE` exists, the app crashed during that case in the
+    previous run: record "crashed the app" for that case in its form's Notes, skip it for
+    good, delete `CURRENT_CASE`, and continue the job from the next case. Cases already in
+    `tests/golden/` from the previous run are kept; don't redo them.
+11. When no `todo` row is left: print a summary (jobs done, cases per job, everything marked
    `TODO`, `partial` or `blocked`) and stop.
