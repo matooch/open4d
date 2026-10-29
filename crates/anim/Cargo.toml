@@ -2,6 +2,15 @@
 name = "forge-anim"
 version.workspace = true
 edition.workspace = true
+description = "Keyframe track evaluation: interpolation and animated scenes (docs/specs/ANIM.md)."
+
+[dependencies]
+forge-core = { path = "../core" }
+
+[dev-dependencies]
+forge-parity-harness = { path = "../parity-harness" }
+toml = "1"
+forge-generators = { path = "../generators" }
 
 [lints]
 workspace = true

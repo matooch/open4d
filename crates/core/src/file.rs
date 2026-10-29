@@ -5,11 +5,12 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Category, Node, NodeId, Registry, Scene, Value};
+use crate::{Category, Node, NodeId, Registry, Scene, Track, Value, parse_target};
 
 pub const FORMAT: &str = "forge3d-scene";
-/// Version 2 added `Value::Mesh`, version 3 `Value::IndexList`; older files still load.
-pub const VERSION: u32 = 3;
+/// Version 2 added `Value::Mesh`, version 3 `Value::IndexList`, version 4 keyframe
+/// tracks; older files still load.
+pub const VERSION: u32 = 4;
 
 #[derive(Serialize, Deserialize)]
 struct SceneFile {
@@ -24,6 +25,8 @@ struct NodeRecord {
     type_id: String,
     name: String,
     params: BTreeMap<String, Value>,
+    #[serde(default)]
+    tracks: BTreeMap<String, Track>,
     tags: Vec<NodeRecord>,
     children: Vec<NodeRecord>,
 }
@@ -56,6 +59,7 @@ pub fn save(scene: &Scene) -> String {
             type_id: n.type_id.clone(),
             name: n.name.clone(),
             params: n.params.clone(),
+            tracks: n.tracks.clone(),
             tags: n.tags.iter().map(|t| record(scene, *t)).collect(),
             children: n.children.iter().map(|c| record(scene, *c)).collect(),
         }
@@ -158,6 +162,21 @@ impl Loader {
                 params
             }
         };
+        let mut tracks = BTreeMap::new();
+        for (key, track) in r.tracks {
+            let verdict = match &ty {
+                None => Ok(()),
+                Some(ty) => parse_target(&key, |p| ty.find_param(p))
+                    .map(|_| ())
+                    .and_then(|()| track.validate()),
+            };
+            match verdict {
+                Ok(()) => {
+                    tracks.insert(key, track);
+                }
+                Err(e) => self.warn(id, format!("track {key:?}: {e}; dropped")),
+            }
+        }
         let (parent, host) = match place {
             Place::Child(p) => (p, None),
             Place::Tag(h) => (None, Some(h)),
@@ -171,6 +190,7 @@ impl Loader {
             children: r.children.iter().map(|c| c.id).collect(),
             tags: r.tags.iter().map(|t| t.id).collect(),
             host,
+            tracks,
             rev: 0,
         });
         for t in r.tags {

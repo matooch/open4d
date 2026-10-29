@@ -38,7 +38,7 @@ fn save_is_tagged_and_deterministic() {
     let b = file::save(rich_doc().scene());
     assert_eq!(a, b);
     assert!(a.contains("format: \"forge3d-scene\""), "{a}");
-    assert!(a.contains("version: 3"), "{a}");
+    assert!(a.contains("version: 4"), "{a}");
 }
 
 #[test]
@@ -81,8 +81,8 @@ fn structural_problems_are_errors() {
         LoadError::WrongFormat(_)
     ));
     assert!(matches!(
-        load_err(r#"(format: "forge3d-scene", version: 4, roots: [])"#),
-        LoadError::UnsupportedVersion(4)
+        load_err(r#"(format: "forge3d-scene", version: 5, roots: [])"#),
+        LoadError::UnsupportedVersion(5)
     ));
     assert!(matches!(
         load_err(
@@ -219,7 +219,7 @@ fn v3_round_trips_a_mesh_deterministically() {
         .unwrap();
     let text = file::save(doc.scene());
     assert_eq!(text, file::save(doc.scene()));
-    assert!(text.contains("version: 3"), "{text}");
+    assert!(text.contains("version: 4"), "{text}");
     let (scene, report) = file::load(mesh_registry(), &text).unwrap();
     assert!(report.warnings.is_empty(), "{:?}", report.warnings);
     assert_eq!(file::save(&scene), text);
@@ -258,7 +258,7 @@ fn version_1_files_still_load() {
         "missing mesh is filled with the empty default"
     );
     assert_eq!(scene.param(NodeId(2), "size"), Some(&Value::Float(3.0)));
-    assert!(file::save(&scene).contains("version: 3"));
+    assert!(file::save(&scene).contains("version: 4"));
 }
 
 #[test]
@@ -273,7 +273,7 @@ fn v3_round_trips_an_index_list_and_old_files_get_the_default() {
         })
         .unwrap();
     let text = file::save(doc.scene());
-    assert!(text.contains("version: 3"), "{text}");
+    assert!(text.contains("version: 4"), "{text}");
     let compact: String = text.split_whitespace().collect();
     assert!(compact.contains("IndexList([1,3,5,])"), "{text}");
     let (scene, report) = file::load(mesh_registry(), &text).unwrap();
@@ -309,9 +309,9 @@ fn a_wrongly_typed_index_list_resets_with_a_warning_and_newer_versions_are_refus
         Some(&Value::IndexList(vec![]))
     );
     assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
-    let future = text.replace("version: 3", "version: 4");
+    let future = text.replace("version: 3", "version: 5");
     assert_eq!(
         file::load(mesh_registry(), &future).err(),
-        Some(LoadError::UnsupportedVersion(4))
+        Some(LoadError::UnsupportedVersion(5))
     );
 }

@@ -228,7 +228,8 @@ fn all_repo_samples_files_parse() {
             }
         }
     }
-    assert_eq!((tracks, fields, clones), (11, 24, 16));
+    // 11 files from O2 (keyframes.md) + 8 from O12 (keyframes-2.md).
+    assert_eq!((tracks, fields, clones), (19, 24, 16));
 }
 
 #[test]

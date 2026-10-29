@@ -8,6 +8,7 @@ mod param;
 mod registry;
 mod scene;
 pub mod smoothing;
+mod track;
 pub mod transform;
 
 pub use cache::EvalCache;
@@ -18,3 +19,4 @@ pub use param::{
 };
 pub use registry::{Category, NodeType, Plugin, Registry, RegistryError};
 pub use scene::{Node, NodeId, Scene};
+pub use track::{Interp, Key, Target, Track, TrackError, parse_target};
