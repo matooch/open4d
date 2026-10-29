@@ -292,11 +292,17 @@ impl Scene {
     /// Stamps with a revision above this scene's and above every one handed out so far.
     fn stamp_unique(&mut self, id: NodeId) {
         let local = self.revision;
-        let prev = LAST_UNIQUE_REV
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |g| {
-                Some(g.max(local) + 1)
-            })
-            .expect("closure always returns Some");
+        // A compare-exchange loop rather than `fetch_update`, which newer toolchains
+        // deprecate (renamed `try_update`) while older ones lack the new name.
+        let mut prev = LAST_UNIQUE_REV.load(Ordering::Relaxed);
+        while let Err(seen) = LAST_UNIQUE_REV.compare_exchange_weak(
+            prev,
+            prev.max(local) + 1,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            prev = seen;
+        }
         self.revision = prev.max(local) + 1;
         let rev = self.revision;
         if let Some(n) = self.nodes.get_mut(&id) {
