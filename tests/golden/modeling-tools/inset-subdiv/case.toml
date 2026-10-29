@@ -1,0 +1,22 @@
+feature = "modeling-tools"
+observation = "docs/parity/followups-1.md"
+description = "Default cube made editable; Extrude Inner on the top polygon, offset 20, Subdivision 1"
+mesh = "mesh.obj"
+
+[params]
+tool = "inset"
+segments = [1, 1, 1]
+select_polys = [4]
+
+[params.settings]
+offset = 20.0
+offset_variation = 0.0
+subdivision = 1
+create_ngons = false
+preserve_groups = true
+maximum_angle_deg = 89.0
+realtime_update = true
+
+[import]
+scale = 1.0
+flip_z = false

@@ -1,0 +1,68 @@
+feature = "rechecks"
+observation = "docs/parity/followups-1.md"
+description = "Sweep (all parameters at their R25 defaults) with a default Circle as the profile (first child) and a default Rectangle as the path (second child)"
+mesh = "mesh.obj"
+
+[params]
+type = "sweep"
+isoparm_subdivision = 10
+end_scale_percent = 100.0
+end_rotation_deg = 0.0
+start_growth_percent = 0.0
+end_growth_percent = 100.0
+parallel_movement = false
+constant_cross_section = true
+banking = true
+keep_segments = false
+use_rail_direction = true
+2_rail = true
+use_rail_scale = true
+flip_normals = false
+stick_uvs = false
+rotation_from_deg = -180.0
+rotation_to_deg = 180.0
+start_cap = true
+end_cap = true
+separate_bevel_controls = false
+bevel_shape = "Round"
+size = 0.0
+extended_shape = false
+height = 0.0
+shape_depth_percent = 100.0
+segments = 3
+bevel_shape_3031 = "Round"
+size_3035 = 0.0
+extended_shape_3030 = false
+height_3033 = 0.0
+shape_depth_percent_3032 = 100.0
+extended_shape_3037 = false
+use_absolute_value = false
+max_shape_height = 5.0
+segments_3036 = 3
+bevel_outside = false
+avoid_self_intersections = true
+caps_type = "N-gon"
+break_phong_rounding = true
+shell = false
+start_cap_4002 = false
+end_cap_4003 = false
+start_bevel = false
+end_bevel = false
+start_shell = false
+end_shell = false
+start_cap_4013 = false
+end_cap_4014 = false
+start_step = false
+end_step = false
+
+[[params.children]]
+type = "circle"
+position = [0.0, 0.0, 0.0]
+
+[[params.children]]
+type = "rectangle"
+position = [0.0, 0.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false
