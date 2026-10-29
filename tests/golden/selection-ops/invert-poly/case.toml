@@ -1,0 +1,15 @@
+feature = "selection-ops"
+observation = "docs/parity/selection-ops.md"
+description = "Cube made editable with 2 x 2 x 2 segments; the 4 top polygons selected, then the Invert selection menu command run once"
+mesh = "mesh.obj"
+
+[params]
+segments = [2, 2, 2]
+command = "Invert"
+start_points = []
+start_edges = []
+start_polys = [16, 17, 18, 19]
+
+[import]
+scale = 1.0
+flip_z = false
