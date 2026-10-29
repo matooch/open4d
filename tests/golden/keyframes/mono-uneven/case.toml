@@ -1,0 +1,8 @@
+feature = "keyframes"
+observation = "docs/parity/keyframes-3.md"
+description = "Slope and handle at a monotone middle key with uneven spans"
+
+[params]
+param = "pos_x"
+fps = 30
+keys = [[0, 0], [10, 100], [60, 150]]

@@ -1,0 +1,8 @@
+feature = "keyframes"
+observation = "docs/parity/keyframes-3.md"
+description = "Overshoot clamp, the other way round"
+
+[params]
+param = "pos_x"
+fps = 30
+keys = [[0, 0], [30, 290], [60, 300]]

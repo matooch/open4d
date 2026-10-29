@@ -1,0 +1,8 @@
+feature = "keyframes"
+observation = "docs/parity/keyframes-3.md"
+description = "Millisecond rounding at 24 fps"
+
+[params]
+param = "pos_x"
+fps = 24
+keys = [[0, 0], [24, 100]]
