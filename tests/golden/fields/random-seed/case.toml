@@ -1,0 +1,51 @@
+feature = "fields"
+observation = "docs/parity/fields-2.md"
+description = "Random field, Seed 12345"
+
+[params]
+type = "random"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+random_mode = "Noise"
+seed = 12345.0
+noise_type = "Perlin"
+space = "Field"
+scale_percent = 100.0
+relative_scale_percent = [100.0, 100.0, 100.0]
+animation_speed_percent = 0.0
+randomized_sample_positions = false
+sample_position_seed = 123456
+color_shift_percent = 10.0
+color_alpha = "None"
+enable_remapping = true
+mirror_graph = false
+strength_percent = 100.0
+invert = false
+inner_offset_percent = 0.0
+min_percent = 0.0
+clamp_min = true
+max_percent = 100.0
+clamp_max = true
+multiplier_percent = 100.0
+contour_mode = "None"
+curve_percent = 0.0
+steps = 1
+spline_offset_percent = 0.0
+spline_range_percent = 100.0
+color_mode = "No Remap"
+length_mode = "Use Value"
+length_scale_percent = 100.0
+invert_direction = true
+strength_mode = "No Remap"
+strength_scale_percent = 100.0
+invert_rotations = false
+viewplane_preview = false
+show_x = true
+show_y = true
+show_z = true
+viewplane_resolution = 100
+display_box = [100.0, 100.0, 100.0]
+
+[import]
+scale = 1.0
+flip_z = false

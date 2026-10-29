@@ -1,0 +1,49 @@
+feature = "cloner"
+observation = "docs/parity/effectors-2.md"
+description = "Linear cloner Count 5 P step (0,50,0), Target effector with a Null at (0,0,300) as Target Object, other values default"
+mesh = "mesh.obj"
+
+[params]
+mode = "linear"
+clones_mode = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = 5
+offset = 0
+linear_mode = "Per Step"
+amount_percent = 100.0
+transform_position = [0.0, 50.0, 0.0]
+transform_scale_percent = [100.0, 100.0, 100.0]
+transform_rotation_deg = [0.0, 0.0, 0.0]
+step_mode = "Single Value"
+step_size_percent = 100.0
+step_rotation_deg = [0.0, 0.0, 0.0]
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+animation_mode = "Play"
+target_percent = 100.0
+effector_count = 1
+document_frame = 0
+
+[params.effector]
+type = "target"
+name = "Target"
+strength_percent = 100.0
+selection = ""
+target_mode = "Object Target"
+target_object = "Null"
+use_pitch = true
+reverse_heading = false
+up_vector = "None"
+repel = false
+deformation = "Off"
+
+[import]
+scale = 1.0
+flip_z = false
