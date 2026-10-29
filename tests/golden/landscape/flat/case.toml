@@ -1,0 +1,25 @@
+feature = "landscape"
+observation = "docs/parity/primitives-3.md"
+description = "Landscape with Multifractal off, Rough and Fine Furrows 50 percent"
+mesh = "mesh.obj"
+
+[params]
+size_x = 600.0
+size_y = 100.0
+size_z = 600.0
+width_segments = 100
+depth_segments = 100
+rough_furrows = 50.0
+fine_furrows = 50.0
+scale = 1.0
+sea_level = 0.0
+plateau_level = 100.0
+orientation = "plus_y"
+multifractal = false
+seed = 0
+borders_at_sea_level = true
+spherical = false
+
+[import]
+scale = 1.0
+flip_z = false
