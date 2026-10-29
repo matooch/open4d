@@ -3,6 +3,7 @@
 //! UI-free models (`state`, `dock`, `tree`, `attributes`, `commands`, `timeline`,
 //! `theme`, navigation in `viewport_panel`) are unit-tested; `app` draws them with egui.
 
+pub mod animate;
 pub mod app;
 pub mod attributes;
 pub mod commands;

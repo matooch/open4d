@@ -3,7 +3,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use forge_parity_harness::{Mesh, compare_meshes, discover_cases, validate_case};
+use forge_parity_harness::{
+    Mesh, cases_without_output, compare_meshes, discover_cases, validate_case,
+};
 
 fn fixture_repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/repo")
@@ -75,9 +77,29 @@ fn assert_problem(manifest: Option<&str>, needle: &str) {
 const OK: &str = "feature = \"cube\"\nobservation = \"docs/parity/cube.md\"\n";
 
 #[test]
-fn minimal_manifest_is_valid() {
-    let p = problems_for(Some(OK));
-    assert!(p.is_empty(), "{p:?}");
+fn minimal_manifest_without_output_is_valid_but_listed() {
+    assert!(problems_for(Some(OK)).is_empty());
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+    write(repo, "docs/parity/cube.md", "obs\n");
+    write(repo, "tests/golden/cube/default/case.toml", OK);
+    write(
+        repo,
+        "tests/golden/cube/default/samples-a.json",
+        r#"{"kind":"field","tolerance":1e-5,"samples":[[[0,0,0],1.0]]}"#,
+    );
+    let cases = discover_cases(&repo.join("tests/golden")).unwrap();
+    assert!(validate_case(repo, &cases[0]).is_empty());
+    assert_eq!(cases[0].samples_files(), vec!["samples-a.json"]);
+    assert!(cases_without_output(&cases).is_empty());
+    // a broken samples file is reported with its name
+    write(
+        repo,
+        "tests/golden/cube/default/samples.json",
+        r#"{"kind":"x"}"#,
+    );
+    let p = validate_case(repo, &cases[0]);
+    assert!(p.iter().any(|s| s.starts_with("samples.json: ")), "{p:?}");
 }
 
 #[test]

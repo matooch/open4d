@@ -1,0 +1,28 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools.md"
+description = "Cube 2/1/1 made editable; the 2 top polygons extruded by 50 with Preserve Groups off"
+mesh = "mesh.obj"
+
+[params]
+tool = "extrude"
+segments = [2, 1, 1]
+select_polys = [6, 7]
+
+[params.settings]
+offset = 50.0
+offset_variation = 0.0
+subdivision = 0
+create_ngons = false
+preserve_groups = false
+create_caps = false
+maximum_angle_deg = 91.0
+rotation_deg = 0.0
+quantize_rotation = true
+quantize_angle_deg = 5.0
+bevel = 5.0
+bevel_variation = 0.0
+realtime_update = true
+
+[import]
+scale = 1.0
+flip_z = false

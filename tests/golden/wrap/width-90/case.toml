@@ -1,0 +1,28 @@
+feature = "wrap"
+observation = "docs/parity/followups-1.md"
+description = "Wrap, Longitude span 90 degrees: Longitude Start 180 (default), Longitude End 270; the Wrap has no separate width angle field"
+mesh = "mesh.obj"
+
+[params]
+width = 400.0
+height = 400.0
+radius = 200.0
+wrap = "Cylindrical"
+longitude_start_deg = 180.0
+longitude_end_deg = 270.0
+latitude_start_deg = -45.0
+latitude_end_deg = 45.0
+movement = 0.0
+scale_z_percent = 100.0
+tension_percent = 100.0
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false

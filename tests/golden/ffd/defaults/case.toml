@@ -1,0 +1,21 @@
+feature = "ffd"
+observation = "docs/parity/deformers-2.md"
+description = "FFD child of the cube, default 3 x 3 x 3 grid of size 300"
+mesh = "mesh.obj"
+
+[params]
+grid_size = [300.0, 300.0, 300.0]
+grid_points_x = 3
+grid_points_y = 3
+grid_points_z = 3
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false

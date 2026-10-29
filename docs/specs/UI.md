@@ -142,13 +142,19 @@ target is drawn with its points / edges / polygon outlines and selected componen
 component selection colour (§8); the panel rebuilds its GPU meshes when the revision, the
 node selection, the mode or the target changes.
 
-## 7. Timeline placeholder (`timeline`)
+## 7. Timeline (`timeline`, `animate`)
 
-`Timeline { start: 0, end: 90, current: 0, fps: 30, playing: false }`
-(**parity-pending** defaults). `tick()` advances `current` by one frame when playing,
-wrapping from `end` to `start`; `set_current(f)` clamps to `[start, end]`;
-`set_range(a, b)` orders the pair and clamps `current`. The panel shows play/pause,
-a frame slider and the range; nothing is animated yet (Phase 11).
+Behaviour, data and rules: docs/specs/ANIM.md §2. Panel summary (own design,
+**parity-pending**):
+- Row 1: Play / Stop, Record, Auto-Key toggle, Previous / Next key, Delete Keys.
+- Row 2: Start, End and FPS fields (edit the scene settings, undoable), the current frame
+  field, and the label of the current time.
+- Row 3: a frame strip. Click or drag scrubs the current frame; the playhead and one tick
+  per key frame of the selected objects are drawn by us.
+- `Timeline { current: 0, playing: false }` is editor state; start, end and fps live in
+  the scene (`SceneSettings`, default 0, 90, 30). `set_current` clamps to the range.
+- The Attributes panel draws a marker left of every animatable row: filled diamond =
+  key on this frame, hollow = animated without a key here (ANIM.md §2.5).
 
 ## 8. Theme (`theme`)
 

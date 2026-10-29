@@ -1,0 +1,23 @@
+feature = "melt"
+observation = "docs/parity/deformers-2.md"
+description = "Melt child of the cube, all parameters at their R25 defaults"
+mesh = "mesh.obj"
+
+[params]
+strength_percent = 25.0
+radius = 100.0
+vertical_randomness_percent = 100.0
+radial_randomness_percent = 100.0
+melted_size_percent = 400.0
+noise_scale_percent = 10.0
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false

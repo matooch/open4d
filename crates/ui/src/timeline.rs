@@ -1,44 +1,74 @@
-//! Timeline placeholder (docs/specs/UI.md §7). Animation arrives in Phase 11.
+//! Current frame and playback (docs/specs/ANIM.md §2.6, UI.md §7). The frame rate and the
+//! project range live in the scene (`SceneSettings`); this holds only editor state.
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use forge_core::SceneSettings;
+
+/// The current frame and the playback clock anchor.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Timeline {
-    pub start: i64,
-    pub end: i64,
     pub current: i64,
-    pub fps: u32,
     pub playing: bool,
-}
-
-impl Default for Timeline {
-    fn default() -> Self {
-        Timeline {
-            start: 0,
-            end: 90,
-            current: 0,
-            fps: 30,
-            playing: false,
-        }
-    }
+    /// `(clock time, frame)` when playback (re)started; `None` until the next `update`.
+    anchor: Option<(f64, i64)>,
 }
 
 impl Timeline {
-    /// Advances one frame while playing, wrapping at the end.
-    pub fn tick(&mut self) {
-        if self.playing {
-            self.current = if self.current >= self.end {
-                self.start
-            } else {
-                self.current + 1
-            };
+    /// Sets the frame, clamped to the project range. While playing, playback continues
+    /// from the new frame.
+    pub fn set_current(&mut self, frame: i64, settings: &SceneSettings) {
+        self.current = frame.clamp(settings.start, settings.end);
+        self.anchor = None;
+    }
+
+    /// Pulls the frame back into the range (after the range changed).
+    pub fn clamp_to(&mut self, settings: &SceneSettings) {
+        let clamped = self.current.clamp(settings.start, settings.end);
+        if clamped != self.current {
+            self.set_current(clamped, settings);
         }
     }
 
-    pub fn set_current(&mut self, frame: i64) {
-        self.current = frame.clamp(self.start, self.end);
+    pub fn play(&mut self) {
+        self.playing = true;
+        self.anchor = None;
     }
 
-    pub fn set_range(&mut self, a: i64, b: i64) {
-        (self.start, self.end) = (a.min(b), a.max(b));
-        self.set_current(self.current);
+    pub fn stop(&mut self) {
+        self.playing = false;
+        self.anchor = None;
+    }
+
+    pub fn toggle(&mut self) {
+        if self.playing {
+            self.stop();
+        } else {
+            self.play();
+        }
+    }
+
+    /// Forgets the clock anchor (fps or range changed): playback continues from `current`.
+    pub fn reanchor(&mut self) {
+        self.anchor = None;
+    }
+
+    /// Moves the frame to where the clock `now` (seconds) says it is. Frames are dropped,
+    /// never delayed, and the range loops. True if the frame changed.
+    pub fn update(&mut self, now: f64, settings: &SceneSettings) -> bool {
+        if !self.playing {
+            return false;
+        }
+        self.clamp_to(settings);
+        let Some((t0, f0)) = self.anchor else {
+            self.anchor = Some((now, self.current));
+            return false;
+        };
+        let elapsed = ((now - t0) * f64::from(settings.fps) + 1e-9)
+            .floor()
+            .max(0.0) as i64;
+        let len = settings.end - settings.start + 1;
+        let next = settings.start + (f0 - settings.start + elapsed).rem_euclid(len);
+        let changed = next != self.current;
+        self.current = next;
+        changed
     }
 }

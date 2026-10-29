@@ -1,0 +1,60 @@
+feature = "cloner"
+observation = "docs/parity/cloner.md"
+description = "Grid Array mode (defaults) with a Random effector: Seed 12345, Position (50, 50, 50)"
+mesh = "mesh.obj"
+
+[params]
+mode = "grid"
+clones_mode = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = [3.0, 1.0, 3.0]
+grid_mode = "Per-Step"
+size = [200.0, 200.0, 200.0]
+form = "Cubic"
+fill_percent = 100.0
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+uv_orientation = "Z+"
+weight_percent = 0.0
+animation_mode = "Play"
+random = 100.0
+effector_count = 1
+
+[params.effector]
+type = "random"
+strength = 100.0
+selection = ""
+maximum = 100.0
+minimum = -100.0
+random_mode = "Random"
+synchronized = false
+indexed = false
+seed = 12345.0
+space = "Global"
+animation_speed = 100.0
+scale = 100.0
+transform_mode = "Relative"
+transform_space = "Node"
+position = true
+p = [50.0, 50.0, 50.0]
+rotation = false
+scale_1061 = false
+color_mode = "Off"
+use_alpha_strength = false
+use_alpha_strength_1071 = true
+weight_transform = 0.0
+u_transform = 0.0
+v_transform = 0.0
+modify_clone = 0.0
+visibility = false
+deformation = "Off"
+
+[import]
+scale = 1.0
+flip_z = false

@@ -4,7 +4,10 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::scene::{Slot, SlotOwner, Subtree};
-use crate::{Category, NodeId, ParamError, ParamKind, Registry, Scene, Value};
+use crate::{
+    Category, Key, NodeId, ParamError, ParamKind, Registry, Scene, SceneSettings, Track,
+    TrackError, Value, parse_target,
+};
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum EditError {
@@ -26,6 +29,10 @@ pub enum EditError {
     InvalidLink(String),
     #[error(transparent)]
     Param(#[from] ParamError),
+    #[error("invalid track: {0}")]
+    Track(#[from] TrackError),
+    #[error("invalid scene settings: {0}")]
+    Settings(String),
 }
 
 /// One primitive, invertible change.
@@ -51,6 +58,12 @@ enum Edit {
         id: NodeId,
         slot: Slot,
     },
+    SetTrack {
+        id: NodeId,
+        key: String,
+        track: Option<Track>,
+    },
+    SetSettings(SceneSettings),
 }
 
 /// Applies `edit` (already validated) and returns its inverse.
@@ -86,6 +99,15 @@ fn apply(scene: &mut Scene, edit: Edit) -> Edit {
             id,
             slot: scene.move_to(id, slot),
         },
+        Edit::SetTrack { id, key, track } => {
+            let old = scene.replace_track(id, &key, track);
+            Edit::SetTrack {
+                id,
+                key,
+                track: old,
+            }
+        }
+        Edit::SetSettings(settings) => Edit::SetSettings(scene.replace_settings(settings)),
     }
 }
 
@@ -180,6 +202,7 @@ impl Tx<'_> {
             children: Vec::new(),
             tags: Vec::new(),
             host: None,
+            tracks: BTreeMap::new(),
             rev: 0,
         }
     }
@@ -277,6 +300,65 @@ impl Tx<'_> {
             param: param.to_string(),
             value,
         });
+        Ok(())
+    }
+
+    /// Sets (`Some`) or removes (`None`) the track `key` of a node (docs/specs/ANIM.md §1.2).
+    /// The key must address an animatable Float parameter or a component of an animatable
+    /// Vec3 parameter of the node's type, and the track must validate.
+    pub fn set_track(
+        &mut self,
+        id: NodeId,
+        key: &str,
+        track: Option<Track>,
+    ) -> Result<(), EditError> {
+        let node = self.require(id)?;
+        if let Some(t) = &track {
+            let ty = self
+                .scene
+                .registry()
+                .get(&node.type_id)
+                .ok_or_else(|| EditError::UnknownType(node.type_id.clone()))?;
+            parse_target(key, |p| ty.find_param(p))?;
+            t.validate()?;
+        }
+        self.push(Edit::SetTrack {
+            id,
+            key: key.to_string(),
+            track,
+        });
+        Ok(())
+    }
+
+    /// Adds `key` to a track (creating it), replacing a key at exactly the same time.
+    pub fn set_key(&mut self, id: NodeId, track_key: &str, key: Key) -> Result<(), EditError> {
+        let mut track = self
+            .require(id)?
+            .tracks
+            .get(track_key)
+            .cloned()
+            .unwrap_or_default();
+        track.set_key(key);
+        self.set_track(id, track_key, Some(track))
+    }
+
+    /// Removes the key at exactly `time`; the track disappears with its last key. Missing
+    /// track or key: no change.
+    pub fn remove_key(&mut self, id: NodeId, track_key: &str, time: f64) -> Result<(), EditError> {
+        let Some(mut track) = self.require(id)?.tracks.get(track_key).cloned() else {
+            return Ok(());
+        };
+        if !track.remove_key(time) {
+            return Ok(());
+        }
+        let track = (!track.keys.is_empty()).then_some(track);
+        self.set_track(id, track_key, track)
+    }
+
+    /// Sets fps and the project range (docs/specs/ANIM.md §2.1).
+    pub fn set_settings(&mut self, settings: SceneSettings) -> Result<(), EditError> {
+        settings.check().map_err(EditError::Settings)?;
+        self.push(Edit::SetSettings(settings));
         Ok(())
     }
 

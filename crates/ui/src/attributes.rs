@@ -4,6 +4,7 @@ use forge_core::{
     Category, Document, EditError, EnumOption, NodeId, ParamKind, Scene, Unit, Value,
 };
 
+use crate::animate::{AnimCtx, write_param};
 use crate::tree::type_label;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -179,13 +180,25 @@ pub fn apply_edit(
     value: Value,
     gesture: Gesture,
 ) -> Result<(), EditError> {
+    apply_edit_anim(doc, id, param, value, gesture, None)
+}
+
+/// [`apply_edit`] with animation: autokey and rule 5 write keys (docs/specs/ANIM.md §2.4).
+pub fn apply_edit_anim(
+    doc: &mut Document,
+    id: NodeId,
+    param: &str,
+    value: Value,
+    gesture: Gesture,
+    ctx: Option<&AnimCtx>,
+) -> Result<(), EditError> {
     let label = doc
         .scene()
         .node_type(id)
         .and_then(|t| t.find_param(param))
         .map_or_else(|| param.to_string(), |d| d.label.clone());
     let label = format!("Set {label}");
-    let edit = |tx: &mut forge_core::Tx| tx.set_param(id, param, value);
+    let edit = |tx: &mut forge_core::Tx| write_param(tx, id, param, value, ctx);
     match gesture {
         Gesture::Commit => doc.transact(&label, edit),
         Gesture::Drag(n) => doc.transact_merged(&label, &format!("drag:{id}:{param}:{n}"), edit),

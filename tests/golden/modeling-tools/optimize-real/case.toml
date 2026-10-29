@@ -1,0 +1,20 @@
+feature = "modeling-tools"
+observation = "docs/parity/followups-1.md"
+description = "Default cube made editable (8 points, 6 polygons); top polygon selected and the Disconnect command run on it (12 points, 6 polygons); then the Optimize command on everything with Tolerance 0.01, Optimize Points, Optimize Polygons and Delete Unused Points all on, set by the probe (an empty settings container merged nothing: 12 points stayed 12) giving 8 points, 6 polygons"
+mesh = "mesh.obj"
+
+[params]
+tool = "optimize"
+segments = [1, 1, 1]
+select_polys = [4]
+disconnect_first = true
+
+[params.settings]
+tolerance = 0.01
+optimize_points = true
+optimize_polygons = true
+delete_unused_points = true
+
+[import]
+scale = 1.0
+flip_z = false

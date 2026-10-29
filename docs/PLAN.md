@@ -41,8 +41,8 @@ elsewhere, marked **parity-pending** for later observation.
       Object (03); OBJ import/export + File menu (04); point/edge/polygon modes and
       selection (05); component move/rotate/scale (06).
 - [ ] U2 Animation basics (batch 09): `samples.json` level-B golden format (08); keyframe
-      tracks + interpolation, checked against observation O2 (09); timeline with keys,
-      record, autokey, playback (10).
+      tracks + interpolation, checked against O2/O12 (09); timeline with keys,
+      record, autokey, playback (10). Briefs written; 08 running.
 - [ ] U3 Familiar layout (batch 10): reference-like arrangement (tool palette left,
       Object manager top right, Attribute manager below it, Coordinates/Materials
       bottom), own icons, shortcut map (11).
@@ -79,15 +79,10 @@ elsewhere, marked **parity-pending** for later observation.
 Parked: external renderer bridge ([REDSHIFT.md](REDSHIFT.md)). R25 doesn't bundle it,
 so it isn't a parity item. Revisit after P6.
 
-## Observations queue (for the observer, see agents/OBSERVER.md)
+## Observations queue
 
-| # | Form | Unblocks | Status |
-|---|---|---|---|
-| O0 | MCP smoke test (OBSERVER.md §2) | every MCP observation | done (R25.010, plugin 0.2.0) |
-| O1 | [parity/r25-drift.md](parity/r25-drift.md) | trust in the R20 golden data | done, commit pending on `batch-08` |
-| O4 | [parity/r25-defaults.md](parity/r25-defaults.md) | brief 07 (R25 defaults) | todo, **next** |
-| O2 | [parity/keyframes.md](parity/keyframes.md) | brief 09 (level B interpolation) | todo |
-| O3 | [parity/make-editable.md](parity/make-editable.md) | brief 03 parity-pendings | todo |
+The live queue, with statuses, is [parity/QUEUE.md](parity/QUEUE.md): the observer runs
+it unattended (OBSERVER.md §6). Done so far: O0–O9, O11. Next: O12–O15.
 
 Owner action still open: confirm the reference app's licence allows scripted use
 (OBSERVER.md §1 step 6) and note it in r25-drift.md §0 (add a row).

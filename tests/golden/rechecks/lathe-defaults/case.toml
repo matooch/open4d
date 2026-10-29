@@ -1,0 +1,33 @@
+feature = "rechecks"
+observation = "docs/parity/rechecks.md"
+description = "Lathe (all parameters at their R25 defaults) with a default Rectangle spline as its only child. Closed revolution, so no cap faces are written"
+mesh = "mesh.obj"
+
+[params]
+type = "lathe"
+angle_deg = 360.0
+subdivision = 32
+isoparm_subdivision = 10
+movement = 0.0
+scaling = 1.0
+flip_normals = false
+start_cap = true
+end_cap = true
+caps_type = "ngon"
+separate_bevel_controls = false
+bevel_shape = "round"
+bevel_size = 0.0
+bevel_extended_shape = false
+bevel_height = 0.0
+bevel_shape_depth = 1.0
+bevel_segments = 3
+bevel_outside = false
+avoid_self_intersections = true
+break_phong_rounding = true
+
+[params.child]
+type = "rectangle"
+
+[import]
+scale = 1.0
+flip_z = false

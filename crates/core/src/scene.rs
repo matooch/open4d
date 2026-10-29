@@ -5,13 +5,17 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
 use glam::DMat4;
 
 use crate::transform::Transform;
-use crate::{NodeType, Registry, Value};
+use crate::{EditError, NodeType, Registry, Track, Value};
+
+/// Highest revision handed out by [`Scene::with_params`] in this process.
+static LAST_UNIQUE_REV: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -35,6 +39,8 @@ pub struct Node {
     pub tags: Vec<NodeId>,
     /// Set for tag nodes only.
     pub host: Option<NodeId>,
+    /// Keyframe tracks by track key (`"<param>"` or `"<param>.<x|y|z>"`).
+    pub tracks: BTreeMap<String, Track>,
     /// Revision of the last edit that touched this node.
     pub rev: u64,
 }
@@ -64,6 +70,48 @@ pub(crate) struct Subtree {
     pub nodes: Vec<Node>,
 }
 
+/// Document-wide animation settings (docs/specs/ANIM.md §2.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SceneSettings {
+    /// Frames per second, `1..=240`.
+    pub fps: u32,
+    /// First and last frame of the project range, `start <= end`.
+    pub start: i64,
+    pub end: i64,
+}
+
+impl Default for SceneSettings {
+    fn default() -> Self {
+        SceneSettings {
+            fps: 30,
+            start: 0,
+            end: 90,
+        }
+    }
+}
+
+impl SceneSettings {
+    pub const MAX_FPS: u32 = 240;
+
+    /// Why these settings are not valid, if they are not.
+    pub fn check(&self) -> Result<(), String> {
+        if !(1..=Self::MAX_FPS).contains(&self.fps) {
+            return Err(format!(
+                "fps must be 1..={}, got {}",
+                Self::MAX_FPS,
+                self.fps
+            ));
+        }
+        if self.start > self.end {
+            return Err(format!(
+                "start frame {} is after end frame {}",
+                self.start, self.end
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Scene {
     registry: Arc<Registry>,
@@ -71,6 +119,7 @@ pub struct Scene {
     roots: Vec<NodeId>,
     next_id: u64,
     revision: u64,
+    settings: SceneSettings,
 }
 
 impl Scene {
@@ -81,7 +130,13 @@ impl Scene {
             roots: Vec::new(),
             next_id: 1,
             revision: 0,
+            settings: SceneSettings::default(),
         }
+    }
+
+    /// Animation settings: fps and project range.
+    pub fn settings(&self) -> SceneSettings {
+        self.settings
     }
 
     pub fn registry(&self) -> &Arc<Registry> {
@@ -195,7 +250,78 @@ impl Scene {
             .fold(n.rev, u64::max)
     }
 
+    /// A copy of the scene with some parameter values replaced, for evaluating animation
+    /// at a time (docs/specs/ANIM.md §1.5). Each override is validated like `set_param`
+    /// (type, range clamp); one that fails is skipped and returned with its error. The
+    /// copy is not an undoable edit. Every node whose value changes gets a revision no
+    /// scene copy has used before, so one [`crate::EvalCache`] can serve copies made for
+    /// different times.
+    pub fn with_params(
+        &self,
+        overrides: impl IntoIterator<Item = (NodeId, String, Value)>,
+    ) -> (Scene, Vec<(NodeId, String, EditError)>) {
+        let mut scene = self.clone();
+        let mut skipped = Vec::new();
+        for (id, param, value) in overrides {
+            match scene.check_override(id, &param, value) {
+                Ok(value) => {
+                    let n = scene.nodes.get_mut(&id).expect("checked node");
+                    if n.params.get(&param) != Some(&value) {
+                        n.params.insert(param, value);
+                        scene.stamp_unique(id);
+                    }
+                }
+                Err(e) => skipped.push((id, param, e)),
+            }
+        }
+        (scene, skipped)
+    }
+
+    fn check_override(&self, id: NodeId, param: &str, value: Value) -> Result<Value, EditError> {
+        let node = self.node(id).ok_or(EditError::UnknownNode(id))?;
+        let ty = self
+            .registry
+            .get(&node.type_id)
+            .ok_or_else(|| EditError::UnknownType(node.type_id.clone()))?;
+        let desc = ty
+            .find_param(param)
+            .ok_or_else(|| EditError::UnknownParam(param.to_string()))?;
+        Ok(desc.validate(value)?)
+    }
+
+    /// Stamps with a revision above this scene's and above every one handed out so far.
+    fn stamp_unique(&mut self, id: NodeId) {
+        let local = self.revision;
+        // A compare-exchange loop rather than `fetch_update`, which newer toolchains
+        // deprecate (renamed `try_update`) while older ones lack the new name.
+        let mut prev = LAST_UNIQUE_REV.load(Ordering::Relaxed);
+        while let Err(seen) = LAST_UNIQUE_REV.compare_exchange_weak(
+            prev,
+            prev.max(local) + 1,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            prev = seen;
+        }
+        self.revision = prev.max(local) + 1;
+        let rev = self.revision;
+        if let Some(n) = self.nodes.get_mut(&id) {
+            n.rev = rev;
+        }
+    }
+
     // --- crate-internal mutation primitives (used by Document and file) ---
+
+    /// Replaces the settings (already validated), raises the revision, returns the old ones.
+    pub(crate) fn replace_settings(&mut self, settings: SceneSettings) -> SceneSettings {
+        self.revision += 1;
+        std::mem::replace(&mut self.settings, settings)
+    }
+
+    /// Sets the settings of a freshly loaded scene without touching the revision.
+    pub(crate) fn init_settings(&mut self, settings: SceneSettings) {
+        self.settings = settings;
+    }
 
     pub(crate) fn alloc_id(&mut self) -> NodeId {
         let id = NodeId(self.next_id);
@@ -213,6 +339,22 @@ impl Scene {
         if let Some(n) = self.nodes.get_mut(&id) {
             n.rev = rev;
         }
+    }
+
+    /// Replaces (or removes) a track and returns the old one.
+    pub(crate) fn replace_track(
+        &mut self,
+        id: NodeId,
+        key: &str,
+        track: Option<Track>,
+    ) -> Option<Track> {
+        let n = self.nodes.get_mut(&id).expect("validated node");
+        let old = match track {
+            Some(t) => n.tracks.insert(key.to_string(), t),
+            None => n.tracks.remove(key),
+        };
+        self.stamp(id);
+        old
     }
 
     pub(crate) fn node_mut(&mut self, id: NodeId) -> Option<&mut Node> {

@@ -1,9 +1,10 @@
 //! Editor commands shared by menus, shortcuts and panels (docs/specs/UI.md §5).
 
-use forge_core::{Category, EditError, NodeId, Registry, Tx};
+use forge_core::{Category, EditError, NodeId, Registry, SceneSettings, Tx};
 use forge_generators::EditableError;
 use forge_viewport::render::Shading;
 
+use crate::animate::{delete_keys, key_frames, next_key, prev_key, record_keys};
 use crate::components::{EditMode, SelectCmd, run_select};
 use crate::state::EditorState;
 
@@ -26,6 +27,20 @@ pub enum Command {
     SetMode(EditMode),
     /// Select All / Deselect All / Invert / Grow / Shrink on the current mode's set (§2.5).
     Select(SelectCmd),
+    /// Key the 9 transform tracks of the selected objects at the current frame (ANIM.md §2.3).
+    RecordKeys,
+    /// Remove the selected objects' keys on the current frame.
+    DeleteKeys,
+    ToggleAutokey,
+    /// Go to a frame (clamped to the project range).
+    SetFrame(i64),
+    /// Move the current frame by this many frames.
+    StepFrame(i64),
+    /// Jump to the previous (`false`) or next (`true`) key of the selected objects.
+    JumpKey(bool),
+    TogglePlay,
+    /// Change fps and the project range (undoable).
+    SetSettings(SceneSettings),
 }
 
 fn err(e: impl std::fmt::Display) -> String {
@@ -104,10 +119,56 @@ pub fn execute(s: &mut EditorState, cmd: Command) -> Result<(), String> {
         Command::Undo => {
             s.doc.undo();
             s.selection.retain_existing(s.doc.scene());
+            s.sync_timeline();
         }
         Command::Redo => {
             s.doc.redo();
             s.selection.retain_existing(s.doc.scene());
+            s.sync_timeline();
+        }
+        Command::RecordKeys => {
+            let ids: Vec<NodeId> = s.selection.nodes.iter().copied().collect();
+            let ctx = s.anim_ctx();
+            record_keys(&mut s.doc, &ids, &ctx)?;
+        }
+        Command::DeleteKeys => {
+            let ids: Vec<NodeId> = s.selection.nodes.iter().copied().collect();
+            let ctx = s.anim_ctx();
+            delete_keys(&mut s.doc, &ids, &ctx)?;
+        }
+        Command::ToggleAutokey => s.autokey = !s.autokey,
+        Command::SetFrame(f) => {
+            let settings = s.settings();
+            s.timeline.set_current(f, &settings);
+        }
+        Command::StepFrame(d) => {
+            let settings = s.settings();
+            s.timeline
+                .set_current(s.timeline.current.saturating_add(d), &settings);
+        }
+        Command::JumpKey(forward) => {
+            let ids: Vec<NodeId> = s.selection.nodes.iter().copied().collect();
+            let frames = key_frames(s.doc.scene(), &ids);
+            let current = s.timeline.current;
+            let target = if forward {
+                next_key(&frames, current)
+            } else {
+                prev_key(&frames, current)
+            };
+            if let Some(f) = target {
+                let settings = s.settings();
+                s.timeline.set_current(f, &settings);
+            }
+        }
+        Command::TogglePlay => s.timeline.toggle(),
+        Command::SetSettings(settings) => {
+            s.doc
+                .transact_merged("Set Timeline", "timeline-settings", |tx| {
+                    tx.set_settings(settings)
+                })
+                .map_err(err)?;
+            s.timeline.reanchor();
+            s.sync_timeline();
         }
         Command::Rename(id, name) => {
             s.doc

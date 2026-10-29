@@ -1,0 +1,42 @@
+feature = "fields"
+observation = "docs/parity/fields-2.md"
+description = "Radial field, all parameters at their R25 defaults"
+
+[params]
+type = "radial"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+start_angle_deg = 0.0
+start_transition_deg = 0.0
+end_angle_deg = 360.0
+end_transition_deg = 0.0
+iterations = 1.0
+offset_deg = 0.0
+axis = "Y"
+clip_to_shape = false
+enable_remapping = true
+mirror_graph = true
+strength_percent = 100.0
+invert = false
+inner_offset_percent = 0.0
+min_percent = 0.0
+clamp_min = true
+max_percent = 100.0
+clamp_max = true
+multiplier_percent = 100.0
+contour_mode = "None"
+curve_percent = 0.0
+steps = 1
+spline_offset_percent = 0.0
+spline_range_percent = 100.0
+color_mode = "Color"
+length_mode = "Use Value"
+length_scale_percent = 100.0
+invert_direction = true
+strength_mode = "No Remap"
+strength_scale_percent = 100.0
+invert_rotations = false
+
+[import]
+scale = 1.0
+flip_z = false

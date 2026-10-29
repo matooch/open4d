@@ -1,0 +1,36 @@
+feature = "fields"
+observation = "docs/parity/followups-1.md"
+description = "Spherical field, Contour Mode Step, Steps 4"
+
+[params]
+type = "spherical"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+radius = 100.0
+clip_to_shape = false
+enable_remapping = true
+mirror_graph = true
+strength_percent = 100.0
+invert = false
+inner_offset_percent = 50.0
+min_percent = 0.0
+clamp_min = true
+max_percent = 100.0
+clamp_max = true
+multiplier_percent = 100.0
+contour_mode = "Step"
+curve_percent = 0.0
+steps = 4
+spline_offset_percent = 0.0
+spline_range_percent = 100.0
+color_mode = "Color"
+length_mode = "Use Value"
+length_scale_percent = 100.0
+invert_direction = true
+strength_mode = "No Remap"
+strength_scale_percent = 100.0
+invert_rotations = false
+
+[import]
+scale = 1.0
+flip_z = false

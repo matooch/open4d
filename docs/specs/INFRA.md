@@ -213,7 +213,70 @@ order. `compare_meshes` is unchanged; `Tolerance::compare` (`Compare::Strict` de
 bool), volume: Option<(f64, f64)>, face_counts: (usize, usize), failures }` —
 `face_counts` is informational (never a failure); `passed()` iff no failures.
 
-## 5. CI (`.github/workflows/ci.yml`, ubuntu-latest)
+## 5. Level-B samples (`samples.json`)
+
+Sources: the observation forms `docs/parity/keyframes.md` (kind `track`),
+`docs/parity/fields.md` (kind `field`) and `docs/parity/cloner.md` (kind `clones`),
+and docs/PLAN.md "Parity levels" (level B: numeric samples instead of a mesh).
+
+### 5.1 Files and formats
+A case directory may hold `samples.json` and any number of `samples-*.json` files (the
+keyframe `vector` case has `samples-pos_x.json`, `-pos_y`, `-pos_z` and no
+`samples.json`). All belong to the case, sorted by file name. A file is one JSON object
+whose `kind` selects the form; other keys are ignored.
+
+| kind | Fields | Rust |
+|---|---|---|
+| `track` | `param` (string), `fps`, `tolerance`, `samples`: `[[frame, value], ...]` | `Samples::Track` |
+| `field` | `tolerance`, `samples`: `[[[x, y, z], value], ...]` | `Samples::Field` |
+| `clones` | `tolerance`, `clones`: `[{pos, x, y, z, color: [3 numbers], weight, visible: bool}, ...]` | `Samples::Clones` with `Clone` |
+
+`parse_samples(&str) -> Result<Samples, String>`: unknown `kind`, a missing field or a
+wrongly typed one is an error that names the field (`missing field "tolerance"`,
+`samples[3]: expected 2 items, got 3`, `clones[0]: missing field "weight"`).
+`GoldenCase::samples_files()` lists the file names; `GoldenCase::samples()` parses them
+all into `(file name, Samples)`; the first bad file is an error prefixed with its name.
+
+### 5.2 `golden check` rules
+In addition to §3, per case:
+- every samples file parses;
+- a case without a mesh and without samples files is **not** a problem (tree-only or
+  form-only cases, e.g. `make-editable/spline`, whose observation says splines do not
+  export). `cases_without_output(&cases)` lists them as `<feature>/<case>`; `golden check`
+  prints `note: <feature>/<case> has no mesh or samples file (tree or form only)` per case
+  after the `ok: N cases` line and still exits 0; the repo golden test pins the exact list
+  (`["make-editable/spline"]`), so a new output-less case is a deliberate test change;
+- all numbers are finite;
+- track frames strictly increase;
+- field and clone tolerances are > 0.
+`validate_samples(&Samples) -> Vec<String>` holds the semantic rules (parsing is
+structural only); problems are printed as `<feature>/<case>: <file>: <problem>`.
+
+### 5.3 `golden info <dir-or-file>`
+- A `.obj` file: as §4.1. A `.json` file: `samples_info`, one `key: value` per line:
+  `kind`, then for `track` `param`, `fps`, `samples` (count), `frames: first .. last`,
+  `value min`, `value max`; for `field` `samples`, `value min`, `value max`; for `clones`
+  `clones` (count), `invisible`, `position min`, `position max` (bbox of clone
+  positions); finally `tolerance`.
+- A directory: for every `*.obj` and samples file in it, sorted by name, a `== <file>`
+  header line and that file's info, separated by a blank line.
+
+### 5.4 Comparison
+`compare_samples(expected, actual) -> SamplesReport { failure_count, failures (first 10),
+max_error }`, `passed()` iff `failure_count == 0`.
+- Kinds must be equal (`kind: expected track, got field`).
+- Tracks: `param` equal and `fps` equal within 1e-9 (`param: expected "pos_x", got ...`,
+  `fps: expected 30, got 24`).
+- Track and field: equal sample counts; frames (or points, max abs component) equal
+  within 1e-9 at every index, else the failure names the index and the two positions.
+- Values: absolute error ≤ the **expected** file's `tolerance`. A failure names the
+  frame or point, expected, actual and the error.
+- Clones: equal clone count; per clone, `pos`, `x`, `y`, `z`, `color` (max abs component)
+  and `weight` within the tolerance; `visible` exactly.
+- Tolerances are never loosened here or in the files; the actual file's tolerance is
+  ignored.
+
+## 6. CI (`.github/workflows/ci.yml`, ubuntu-latest)
 
 1. `cleanroom` job: `cargo run -p forge-cleanroom -- .` (fails fast on violations).
 2. `check` job: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,

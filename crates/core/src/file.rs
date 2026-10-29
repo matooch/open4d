@@ -5,16 +5,19 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Category, Node, NodeId, Registry, Scene, Value};
+use crate::{Category, Node, NodeId, Registry, Scene, SceneSettings, Track, Value, parse_target};
 
 pub const FORMAT: &str = "forge3d-scene";
-/// Version 2 added `Value::Mesh`, version 3 `Value::IndexList`; older files still load.
-pub const VERSION: u32 = 3;
+/// Version 2 added `Value::Mesh`, version 3 `Value::IndexList`, version 4 keyframe
+/// tracks, version 5 the scene settings; older files still load.
+pub const VERSION: u32 = 5;
 
 #[derive(Serialize, Deserialize)]
 struct SceneFile {
     format: String,
     version: u32,
+    #[serde(default)]
+    settings: SceneSettings,
     roots: Vec<NodeRecord>,
 }
 
@@ -24,6 +27,8 @@ struct NodeRecord {
     type_id: String,
     name: String,
     params: BTreeMap<String, Value>,
+    #[serde(default)]
+    tracks: BTreeMap<String, Track>,
     tags: Vec<NodeRecord>,
     children: Vec<NodeRecord>,
 }
@@ -56,6 +61,7 @@ pub fn save(scene: &Scene) -> String {
             type_id: n.type_id.clone(),
             name: n.name.clone(),
             params: n.params.clone(),
+            tracks: n.tracks.clone(),
             tags: n.tags.iter().map(|t| record(scene, *t)).collect(),
             children: n.children.iter().map(|c| record(scene, *c)).collect(),
         }
@@ -63,6 +69,7 @@ pub fn save(scene: &Scene) -> String {
     let file = SceneFile {
         format: FORMAT.to_string(),
         version: VERSION,
+        settings: scene.settings(),
         roots: scene.roots().iter().map(|r| record(scene, *r)).collect(),
     };
     ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default())
@@ -84,6 +91,13 @@ pub fn load(registry: Arc<Registry>, text: &str) -> Result<(Scene, LoadReport), 
     };
     for r in file.roots {
         loader.node(r, Place::Child(None))?;
+    }
+    match file.settings.check() {
+        Ok(()) => loader.scene.init_settings(file.settings),
+        Err(e) => loader
+            .report
+            .warnings
+            .push(format!("scene settings: {e}; reset to the defaults")),
     }
     let next = loader.seen.last().map_or(1, |id| id.0 + 1);
     loader.scene.set_next_id(next);
@@ -158,6 +172,21 @@ impl Loader {
                 params
             }
         };
+        let mut tracks = BTreeMap::new();
+        for (key, track) in r.tracks {
+            let verdict = match &ty {
+                None => Ok(()),
+                Some(ty) => parse_target(&key, |p| ty.find_param(p))
+                    .map(|_| ())
+                    .and_then(|()| track.validate()),
+            };
+            match verdict {
+                Ok(()) => {
+                    tracks.insert(key, track);
+                }
+                Err(e) => self.warn(id, format!("track {key:?}: {e}; dropped")),
+            }
+        }
         let (parent, host) = match place {
             Place::Child(p) => (p, None),
             Place::Tag(h) => (None, Some(h)),
@@ -171,6 +200,7 @@ impl Loader {
             children: r.children.iter().map(|c| c.id).collect(),
             tags: r.tags.iter().map(|t| t.id).collect(),
             host,
+            tracks,
             rev: 0,
         });
         for t in r.tags {

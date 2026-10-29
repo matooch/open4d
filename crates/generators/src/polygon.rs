@@ -75,7 +75,7 @@ fn index_of(scene: &Scene, id: NodeId) -> Option<(Option<NodeId>, usize)> {
 }
 
 /// Creates a polygon object at `parent[index]` named like `src`, with copies of its tags,
-/// the `transform.*` params of `xform_src` and the given mesh.
+/// the `transform.*` params and tracks of `xform_src` and the given mesh.
 fn spawn_like(
     tx: &mut Tx,
     src: NodeId,
@@ -84,7 +84,7 @@ fn spawn_like(
     index: usize,
     mesh: &PolyMesh,
 ) -> Result<NodeId, EditError> {
-    let (name, params, tags) = {
+    let (name, params, tracks, tags) = {
         let n = tx.scene().node(src).ok_or(EditError::UnknownNode(src))?;
         let params: Vec<(String, Value)> = tx
             .scene()
@@ -95,17 +95,30 @@ fn spawn_like(
             .filter(|(k, _)| k.starts_with(PREFIX))
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
+        // transform animation is copied with the transform (docs/specs/ANIM.md §2.8)
+        let tracks: Vec<(String, forge_core::Track)> = tx
+            .scene()
+            .node(xform_src)
+            .ok_or(EditError::UnknownNode(xform_src))?
+            .tracks
+            .iter()
+            .filter(|(k, _)| k.starts_with(PREFIX))
+            .map(|(k, t)| (k.clone(), t.clone()))
+            .collect();
         let tags: Vec<_> = n
             .tags
             .iter()
             .filter_map(|t| tx.scene().node(*t).cloned())
             .collect();
-        (n.name.clone(), params, tags)
+        (n.name.clone(), params, tracks, tags)
     };
     let id = tx.create(TYPE, parent, Some(index))?;
     tx.rename(id, &name)?;
     for (k, v) in params {
         tx.set_param(id, &k, v)?;
+    }
+    for (k, t) in tracks {
+        tx.set_track(id, &k, Some(t))?;
     }
     for tag in tags {
         let t = tx.attach_tag(&tag.type_id, id, None)?;

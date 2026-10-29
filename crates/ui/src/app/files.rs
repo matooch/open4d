@@ -177,6 +177,9 @@ impl Editor {
             Err(e) => self.state.status = format!("Open failed: {e}"),
             Ok((scene, report)) => {
                 self.state.doc = Document::from_scene(scene);
+                self.state.eval.clear();
+                self.state.timeline = Default::default();
+                self.state.sync_timeline();
                 self.state.selection.clear();
                 self.state.mode = crate::components::EditMode::Model;
                 self.state.expanded.clear();

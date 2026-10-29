@@ -3,10 +3,11 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use forge_core::{Document, NodeId, Registry, Scene};
+use forge_core::{Document, NodeId, Registry, Scene, SceneSettings};
 use forge_viewport::camera::{Camera, Handedness};
 use forge_viewport::render::Shading;
 
+use crate::animate::{AnimCtx, Evaluated};
 use crate::components::EditMode;
 use crate::dock::Dock;
 use crate::timeline::Timeline;
@@ -77,7 +78,12 @@ pub struct EditorState {
     pub dock: Dock,
     pub camera: Camera,
     pub shading: Shading,
+    /// Current frame and playback; fps and range are scene settings.
     pub timeline: Timeline,
+    /// Autokey: edits of animatable parameters write keys (docs/specs/ANIM.md §2.4).
+    pub autokey: bool,
+    /// The scene at the current frame, cached.
+    pub eval: Evaluated,
     /// Last message for the status bar (errors from failed edits).
     pub status: String,
     /// What viewport clicks select (docs/specs/EDITABLE.md §2.2). Not saved, not undoable.
@@ -97,6 +103,31 @@ impl EditorState {
         }
     }
 
+    /// fps and range of the document.
+    pub fn settings(&self) -> SceneSettings {
+        self.doc.scene().settings()
+    }
+
+    /// Time context for animation edits.
+    pub fn anim_ctx(&self) -> AnimCtx {
+        AnimCtx {
+            frame: self.timeline.current,
+            fps: self.settings().fps,
+            autokey: self.autokey,
+        }
+    }
+
+    /// The scene at the current frame: what the viewport and the panels show.
+    pub fn evaluated(&self) -> Arc<Scene> {
+        self.eval.get(self.doc.scene(), self.timeline.current)
+    }
+
+    /// Keeps the current frame inside the project range (after undo, load, range edits).
+    pub fn sync_timeline(&mut self) {
+        let settings = self.settings();
+        self.timeline.clamp_to(&settings);
+    }
+
     pub fn new(registry: Arc<Registry>) -> EditorState {
         let camera = Self::default_camera();
         EditorState {
@@ -107,6 +138,8 @@ impl EditorState {
             camera,
             shading: Shading::SmoothWire,
             timeline: Timeline::default(),
+            autokey: false,
+            eval: Evaluated::default(),
             status: String::new(),
             mode: EditMode::default(),
         }

@@ -7,6 +7,7 @@ description = "Editor shell: docking layout, object tree, attribute panel, timel
 [dependencies]
 eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "accesskit", "x11", "wayland"] }
 egui = "0.37"
+forge-anim = { path = "../anim" }
 forge-core = { path = "../core" }
 forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }

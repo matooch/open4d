@@ -1,0 +1,12 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools.md"
+description = "Two default cubes at the same place under a Connect (Weld on, tolerance 0.1: the default), made editable; Optimize command on everything with the default (empty) settings. Connect had already welded the cubes, so the input had 8 points and 6 polygons"
+mesh = "mesh.obj"
+
+[params]
+tool = "optimize"
+segments = [1, 1, 1]
+
+[import]
+scale = 1.0
+flip_z = false

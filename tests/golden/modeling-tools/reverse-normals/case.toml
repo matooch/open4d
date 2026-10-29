@@ -1,0 +1,13 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools.md"
+description = "Default cube made editable; Reverse Normals command on the top polygon only. The command has no settings that were read"
+mesh = "mesh.obj"
+
+[params]
+tool = "reverse_normals"
+segments = [1, 1, 1]
+select_polys = [4]
+
+[import]
+scale = 1.0
+flip_z = false

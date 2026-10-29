@@ -164,3 +164,12 @@ understand; never commit them. The GUI doctrine in [../../MEMORY.md](../../MEMOR
 
 Report to the planner: forms filled, cases exported, failures with their error text,
 anything surprising (clamping, hidden parameters, version differences).
+
+## 6. Unattended runs
+
+[../parity/QUEUE.md](../parity/QUEUE.md) is the job list. The planner appends forms to it,
+and an unattended session works through it top to bottom under that file's rules: one job
+at a time, never inventing data, and a commit and push after every job. Cases with
+numbers instead of meshes (`samples.json`) have no `mesh` line in `case.toml`. Cases with
+both have `mesh = "mesh.obj"`. The owner starts these runs with the tool allowlist from
+the planner, so the forbidden tools in §0 can't be called at all.

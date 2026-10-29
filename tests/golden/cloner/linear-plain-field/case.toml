@@ -1,0 +1,58 @@
+feature = "cloner"
+observation = "docs/parity/cloner.md"
+description = "Linear mode with Count 10; Plain effector (Position (0, 100, 0), its default) with a Linear field (defaults) as the only layer of its field list"
+mesh = "mesh.obj"
+
+[params]
+mode = "linear"
+clones_mode = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = 10
+offset = 0
+linear_mode = "Per Step"
+amount_percent = 100.0
+transform_position = [0.0, 50.0, 0.0]
+transform_scale_percent = [100.0, 100.0, 100.0]
+transform_rotation_deg = [0.0, 0.0, 0.0]
+step_mode = "Single Value"
+step_size_percent = 100.0
+step_rotation_deg = [0.0, 0.0, 0.0]
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+animation_mode = "Play"
+plain = 100.0
+effector_count = 1
+
+[params.effector]
+type = "plain"
+strength = 100.0
+selection = ""
+maximum = 100.0
+minimum = 0.0
+transform_mode = "Relative"
+transform_space = "Node"
+position = true
+p = [0.0, 100.0, 0.0]
+rotation = false
+scale = false
+color_mode = "Fields Color"
+use_alpha_strength = false
+blending_mode = "Default"
+use_alpha_strength_1071 = false
+weight_transform = 0.0
+u_transform = 0.0
+v_transform = 0.0
+modify_clone = 0.0
+visibility = false
+deformation = "Off"
+
+[import]
+scale = 1.0
+flip_z = false

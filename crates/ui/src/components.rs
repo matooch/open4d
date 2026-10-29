@@ -268,7 +268,7 @@ pub fn viewport_click(
 ) -> Result<(), String> {
     let ([x, y], [w, h]) = (cursor, size);
     let Some(id) = target(s) else {
-        match pick_node(s.doc.scene(), &s.camera, x, y, w, h) {
+        match pick_node(&s.evaluated(), &s.camera, x, y, w, h) {
             Some(id) if mods.command => s.selection.toggle(id),
             Some(id) => s.selection.click(id),
             None if !mods.command => s.selection.clear(),

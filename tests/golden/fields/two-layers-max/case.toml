@@ -1,0 +1,16 @@
+feature = "fields"
+observation = "docs/parity/fields-2.md"
+description = "Two Spherical layers at (-100,0,0) and (100,0,0), top layer blend mode Max"
+
+[params]
+type = "spherical"
+radius = 100.0
+layers_top_to_bottom = ["B", "A"]
+top_layer_field = "B"
+top_layer_blend_mode = "Max"
+A_position = [-100.0, 0.0, 0.0]
+B_position = [100.0, 0.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false

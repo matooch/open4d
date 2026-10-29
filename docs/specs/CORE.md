@@ -9,7 +9,7 @@ reference-app observation is involved. Behaviour that must match the reference a
 needs its own docs/parity/ observation first.
 
 Out of scope for Phase 1: transforms/matrices (need docs/parity/transform.md;
-Phase 2), materials and shader graphs (Phase 9), animation tracks (Phase 11),
+Phase 2), materials and shader graphs (Phase 9), animation tracks (data model and defaults: docs/specs/ANIM.md; UI Phase 11),
 evaluation of real node types (Phases 5+).
 
 ## 1. Values and parameter descriptors (`param`)
@@ -39,6 +39,7 @@ evaluation of real node types (Phases 5+).
 - `ui: UiHint { group, unit, soft_min, soft_max, step, hidden }`. `unit` ∈
   `None | Distance | Angle | Percent | Time`. UI-only; never affects validation.
 - `animatable`: defaults to true for `Int/Float/Vec3/Color/Bool`, false otherwise.
+  A Float or Vec3 parameter with `animatable` can carry keyframe tracks (§3, ANIM.md §1.2).
 - `MeshData { points: Vec<[f64; 3]>, polys: Vec<Vec<u32>> }` (serde, `PartialEq`): points
   and polygons as corner-index lists. core does not depend on forge-geometry; the
   conversion to `PolyMesh` lives in forge-generators (EDITABLE.md §1). `Value::Mesh`
@@ -102,8 +103,15 @@ it has no other effect (such nodes can still be created by code and loaded from 
 - `NodeId(u64)`: allocated from a per-scene counter, never reused within a scene's
   life (undo restores the original ids).
 - `Node { id, type_id, name, params: BTreeMap<String, Value>, parent, children, tags,
-  host, rev }`. A new node gets every declared param at its default and the type's
+  host, tracks: BTreeMap<String, Track>, rev }`. A new node gets every declared param at its default and the type's
   label as name.
+- `Track { keys: Vec<Key> }`, `Key { time (seconds), value, interp: Spline|Linear|Step }`:
+  the keyframe data of one Float parameter or one Vec3 component, addressed by a track
+  key (`"<param>"` or `"<param>.<x|y|z>"`). Keys are sorted with unique times; values are
+  in parameter units. Evaluation lives in forge-anim (ANIM.md §1).
+- `Scene::with_params(overrides) -> (Scene, skipped)`: a copy with parameter values replaced,
+  validated like `set_param` (an override that fails is skipped and returned); changed nodes
+  get globally fresh revisions. Used by `forge_anim::scene_at`.
 - Hierarchy nodes: `parent: Option<NodeId>` (None = scene root), ordered `children`.
   Tag nodes: `host: Some(id)`, listed in the host's ordered `tags`, never in the
   hierarchy.
@@ -132,10 +140,12 @@ doc.transact("Add null", |tx| { let id = tx.create("forge.null", None, None)?; O
 | `delete(id)` | removes the node with its whole subtree and all their tags |
 | `set_param(id, pid, value)` | known type, declared param, `validate` passes; `Link` target must exist, not be the node itself, and match `accepts` |
 | `rename(id, name)` | |
+| `set_track(id, key, Option<Track>)` | node exists; if `Some`, `key` names an animatable Float param or a component (`.x|.y|.z`) of an animatable Vec3 param of the node's type, and the track validates (non-empty, finite, strictly increasing times); `None` removes. Stamps the node |
+| `set_key(id, key, Key)` / `remove_key(id, key, time)` | add or replace the key at exactly that time / remove it (the track vanishes with its last key; a missing track or key is a no-op) |
 | `move_node(id, parent, index)` | hierarchy nodes only; new parent must not be the node or a descendant; index is into the list *after* removal |
 
 Errors: `EditError` (`UnknownType`, `UnknownNode`, `UnknownParam`, `NotPlaceable`,
-`WrongCategory`, `IndexOutOfRange`, `Cycle`, `InvalidLink`, `Param(ParamError)`).
+`WrongCategory`, `IndexOutOfRange`, `Cycle`, `InvalidLink`, `Param(ParamError)`, `Track(TrackError)`).
 
 Transactions:
 - If the closure returns `Err`, every edit it applied is reverted and history is
@@ -173,9 +183,10 @@ RON text, deterministic (same scene → byte-identical output):
 ```ron
 (
     format: "forge3d-scene",
-    version: 3,
+    version: 5,
+    settings: (fps: 30, start: 0, end: 90),
     roots: [
-        (id: 1, type_id: "forge.null", name: "Null", params: {}, tags: [], children: []),
+        (id: 1, type_id: "forge.null", name: "Null", params: {}, tracks: {}, tags: [], children: []),
     ],
 )
 ```
@@ -184,7 +195,7 @@ RON text, deterministic (same scene → byte-identical output):
   param is written, defaults included.
 - `load(Arc<Registry>, &str) -> Result<(Scene, LoadReport), LoadError>`.
   - `LoadError`: `Parse` (with message), `WrongFormat`, `UnsupportedVersion`
-    (> 3), `DuplicateId`, `Structure` (known Tag type in `children`, or known
+    (> 5), `DuplicateId`, `Structure` (known Tag type in `children`, or known
     non-Tag type in `tags`).
   - Recoverable issues go to `LoadReport.warnings` (strings naming the node id):
     unknown type (node kept as-is), unknown param on a known type (dropped), invalid
@@ -201,5 +212,18 @@ RON text, deterministic (same scene → byte-identical output):
 - **Version 3** added `Value::IndexList` (written as `IndexList([0, 3, 5])` in RON, ascending; the pretty
   printer puts one index per line). A
   version 1 or 2 file has no such values and loads unchanged (missing params get their
-  defaults); `save` always writes version 3. The bump is for older builds: they reject a
+  defaults); `save` wrote version 3 until version 4. The bump is for older builds: they reject a
   version 3 file with `UnsupportedVersion` instead of a parse error on the unknown variant.
+- **Version 4** added keyframe tracks: each node record has `tracks: { "<track key>": (keys:
+  [(time: 0.0, value: 1.0, interp: Spline), ...]) }` (sorted by track key, keys in time
+  order; `Interp` is `Spline | Linear | Step`). `save` always writes version 4 with
+  `tracks` on every node (empty `{}` included); a version 1–3 file has no `tracks` field
+  and loads unchanged. On load a track whose key does not address an animatable Float
+  param / Vec3 component of the node's (known) type, or that does not validate, is dropped
+  with a warning naming the node and the key; tracks of unknown types are kept as-is.
+  Older builds reject a version 4 file with `UnsupportedVersion`.
+- **Version 5** added scene settings: `settings: (fps: 30, start: 0, end: 90)` at the top
+  level (ANIM.md §2.1). `save` always writes it; a version 1-4 file has none and loads with
+  the defaults; saved settings that do not validate (`fps` outside 1..=240, `start > end`)
+  load as the defaults with a warning. Older builds reject a version 5 file with
+  `UnsupportedVersion`.

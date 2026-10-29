@@ -1,0 +1,32 @@
+feature = "modeling-tools"
+observation = "docs/parity/followups-1.md"
+description = "Default cube made editable; Bevel in polygon mode on the top polygon, offset 20, Extrusion 0 (the field the tool hides in this mode)"
+mesh = "mesh.obj"
+
+[params]
+tool = "bevel"
+segments = [1, 1, 1]
+select_polys = [4]
+
+[params.settings]
+bevel_mode = "chamfer"
+offset_mode = "fixed_distance"
+offset = 20.0
+subdivision = 0
+depth = 1.0
+limit = true
+shape = "round"
+tension = 1.0
+mitering = "default"
+ending = "default"
+partial_rounding = "none"
+corner_ngons = false
+rounding_ngons = false
+phong_break_rounding = false
+phong_break_miters = false
+realtime_update = true
+extrusion = 0.0
+
+[import]
+scale = 1.0
+flip_z = false

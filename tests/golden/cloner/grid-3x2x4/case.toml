@@ -1,0 +1,30 @@
+feature = "cloner"
+observation = "docs/parity/cloner.md"
+description = "Grid Array mode: Count (3, 2, 4), Size (300, 200, 400)"
+mesh = "mesh.obj"
+
+[params]
+mode = "grid"
+clones_mode = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = [3.0, 2.0, 4.0]
+grid_mode = "Per-Step"
+size = [300.0, 200.0, 400.0]
+form = "Cubic"
+fill_percent = 100.0
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+uv_orientation = "Z+"
+weight_percent = 0.0
+animation_mode = "Play"
+effector_count = 0
+
+[import]
+scale = 1.0
+flip_z = false
