@@ -41,8 +41,8 @@ elsewhere, marked **parity-pending** for later observation.
       Object (03); OBJ import/export + File menu (04); point/edge/polygon modes and
       selection (05); component move/rotate/scale (06).
 - [ ] U2 Animation basics (batch 09): `samples.json` level-B golden format (08); keyframe
-      tracks + interpolation, checked against observation O2 (09); timeline with keys,
-      record, autokey, playback (10).
+      tracks + interpolation, checked against O2/O12 (09); timeline with keys,
+      record, autokey, playback (10). Briefs written; 08 running.
 - [ ] U3 Familiar layout (batch 10): reference-like arrangement (tool palette left,
       Object manager top right, Attribute manager below it, Coordinates/Materials
       bottom), own icons, shortcut map (11).
@@ -82,7 +82,7 @@ so it isn't a parity item. Revisit after P6.
 ## Observations queue
 
 The live queue, with statuses, is [parity/QUEUE.md](parity/QUEUE.md): the observer runs
-it unattended (OBSERVER.md §6). Done so far: O0 smoke test, O1 R25 drift, O2 keyframes, O3 make editable, O4 R25 defaults.
+it unattended (OBSERVER.md §6). Done so far: O0–O9, O11. Next: O12–O15.
 
 Owner action still open: confirm the reference app's licence allows scripted use
 (OBSERVER.md §1 step 6) and note it in r25-drift.md §0 (add a row).
