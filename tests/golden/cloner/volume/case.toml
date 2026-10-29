@@ -1,0 +1,75 @@
+feature = "cloner"
+observation = "docs/parity/effectors-3.md"
+description = "Linear cloner Count 5 P step (0,50,0), 20 cm cube child, Volume effector with a cube of size 100 as its Volume Object, Position on, P (0,100,0). The mesh also holds the cube"
+mesh = "mesh.obj"
+
+[params]
+mode = "linear"
+clones_mode = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = 5
+offset = 0
+linear_mode = "Per Step"
+amount_percent = 100.0
+transform_position = [0.0, 50.0, 0.0]
+transform_scale_percent = [100.0, 100.0, 100.0]
+transform_rotation_deg = [0.0, 0.0, 0.0]
+step_mode = "Single Value"
+step_size_percent = 100.0
+step_rotation_deg = [0.0, 0.0, 0.0]
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+animation_mode = "Play"
+volume_percent = 100.0
+effector_count = 1
+document_frame = 0
+
+[params.effector]
+type = "volume"
+name = "Volume"
+strength_percent = 100.0
+selection = ""
+maximum_percent = 100.0
+minimum_percent = 0.0
+volume_object = "Cube"
+transform_mode = "Relative"
+transform_space = "Node"
+position = true
+p = [0.0, 100.0, 0.0]
+rotation = false
+scale = true
+uniform_scale = true
+absolute_scale = false
+scale_1018 = -1.0
+color_mode = "Off"
+use_alpha_strength = false
+use_alpha_strength_1071 = true
+weight_transform_percent = 0.0
+u_transform_percent = 0.0
+v_transform_percent = 0.0
+modify_clone_percent = 0.0
+visibility = false
+deformation = "Off"
+
+[params.effector.volume_cube]
+type = "cube"
+position = [0.0, 0.0, 0.0]
+size = [100.0, 100.0, 100.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = false
+fillet = false
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[import]
+scale = 1.0
+flip_z = false
