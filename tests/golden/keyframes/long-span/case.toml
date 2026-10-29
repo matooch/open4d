@@ -1,0 +1,7 @@
+feature = "keyframes"
+observation = "docs/parity/keyframes-2.md"
+description = "Does the shape depend on the span? Keys 0 -> 0, 90 -> 100"
+
+[params]
+param = "pos_x"
+keys = [[0, 0], [90, 100]]
