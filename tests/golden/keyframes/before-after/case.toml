@@ -1,0 +1,7 @@
+feature = "keyframes"
+observation = "docs/parity/keyframes.md"
+description = "out-of-range behaviour before the first and after the last key"
+
+[params]
+param = "pos_x"
+keys = [[20, 50], [40, 80]]

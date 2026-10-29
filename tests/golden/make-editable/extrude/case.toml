@@ -1,0 +1,20 @@
+feature = "make-editable"
+observation = "docs/parity/make-editable.md"
+description = "Extrude (defaults: Offset 100, caps on) over a default Rectangle spline (400 x 400), Make Editable on the generator. Groups: Extrude (sides, 4 faces), Cap_1 and Cap_2 (1 face each)"
+mesh = "mesh.obj"
+
+[params]
+command = "make_editable"
+
+[params.input]
+type = "extrude"
+
+[params.input.child]
+type = "rectangle"
+
+[import]
+scale = 1.0
+flip_z = false
+
+[tolerance]
+compare = "geometric"

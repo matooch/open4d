@@ -1,0 +1,7 @@
+feature = "keyframes"
+observation = "docs/parity/keyframes.md"
+description = "uneven key spacing"
+
+[params]
+param = "pos_x"
+keys = [[0, 0], [10, 100], [60, 0]]

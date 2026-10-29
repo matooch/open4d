@@ -1,0 +1,20 @@
+feature = "make-editable"
+observation = "docs/parity/make-editable.md"
+description = "Same as subdivision, Current State to Object. The whole scene is exported: the cube under the generator (group Cube, subdivided live) and the new polygon object (group Subdivision_Surface), identical geometry"
+mesh = "mesh.obj"
+
+[params]
+command = "current_state_to_object"
+
+[params.input]
+type = "subdivision"
+
+[params.input.child]
+type = "cube"
+
+[import]
+scale = 1.0
+flip_z = false
+
+[tolerance]
+compare = "geometric"

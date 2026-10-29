@@ -1,0 +1,16 @@
+feature = "make-editable"
+observation = "docs/parity/make-editable.md"
+description = "Default cube (with its Phong tag), Make Editable"
+mesh = "mesh.obj"
+
+[params]
+command = "make_editable"
+
+[params.input]
+type = "cube"
+size = [200.0, 200.0, 200.0]
+segments = [1, 1, 1]
+
+[import]
+scale = 1.0
+flip_z = false

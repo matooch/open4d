@@ -1,0 +1,17 @@
+feature = "make-editable"
+observation = "docs/parity/make-editable.md"
+description = "Subdivision Surface (defaults) over a default cube, Make Editable on the generator"
+mesh = "mesh.obj"
+
+[params]
+command = "make_editable"
+
+[params.input]
+type = "subdivision"
+
+[params.input.child]
+type = "cube"
+
+[import]
+scale = 1.0
+flip_z = false

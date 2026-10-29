@@ -1,0 +1,21 @@
+feature = "make-editable"
+observation = "docs/parity/make-editable.md"
+description = "Array (defaults: Radius 250, Copies 7) over a default 200 cm cube, Make Editable on the generator. Eight cube groups Cube.8 down to Cube.1 (their parametric cubes: this command does not make them polygon objects)"
+mesh = "mesh.obj"
+
+[params]
+command = "make_editable"
+
+[params.input]
+type = "array"
+
+[params.input.child]
+type = "cube"
+size = [200.0, 200.0, 200.0]
+
+[import]
+scale = 1.0
+flip_z = false
+
+[tolerance]
+compare = "geometric"

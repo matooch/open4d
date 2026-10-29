@@ -1,0 +1,20 @@
+feature = "make-editable"
+observation = "docs/parity/make-editable.md"
+description = "Cube size (200, 400, 200), segments (4, 8, 4), Bend child strength 90 degrees (other Bend values default); Make Editable on the cube. The Bend stays as a child and the exported mesh is the live bent result"
+mesh = "mesh.obj"
+
+[params]
+command = "make_editable"
+
+[params.input]
+type = "cube"
+size = [200.0, 400.0, 200.0]
+segments = [4, 8, 4]
+
+[params.input.child]
+type = "bend"
+strength_deg = 90.0
+
+[import]
+scale = 1.0
+flip_z = false

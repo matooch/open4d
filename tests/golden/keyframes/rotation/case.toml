@@ -1,0 +1,7 @@
+feature = "keyframes"
+observation = "docs/parity/keyframes.md"
+description = "rotation H keyed in degrees"
+
+[params]
+param = "rot_h"
+keys = [[0, 0], [30, 270]]
