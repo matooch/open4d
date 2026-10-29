@@ -26,7 +26,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O24 | Deformer falloff through fields | [deformer-falloff.md](deformer-falloff.md) | `tests/golden/deformer-falloff/` meshes | done |
 | O23 | Fields III (blend modes, more types) | [fields-3.md](fields-3.md) | `tests/golden/fields/` samples | done |
 | O22 | Effectors III | [effectors-3.md](effectors-3.md) | `tests/golden/cloner/` samples + meshes | done |
-| O21 | Cloner III | [cloner-3.md](cloner-3.md) | `tests/golden/cloner/` samples + meshes | todo |
+| O21 | Cloner III | [cloner-3.md](cloner-3.md) | `tests/golden/cloner/` samples + meshes | in-progress |
 | O17 | Spline primitives II | [splines-2.md](splines-2.md) | `tests/golden/splines-2/` meshes | todo |
 | O18 | Primitives III | [primitives-3.md](primitives-3.md) | `tests/golden/<object>/` meshes | todo |
 | O19 | Deformers III | [deformers-3.md](deformers-3.md) | `tests/golden/<deformer>/` meshes | todo |
