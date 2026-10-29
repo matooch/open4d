@@ -1,0 +1,31 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-2.md"
+description = "Default cube made editable; top-front edge (points 1 and 3) beveled in edge mode with Bevel Mode Solid, offset 20 (other settings at their Reset Values defaults)"
+mesh = "mesh.obj"
+
+[params]
+tool = "bevel"
+segments = [1, 1, 1]
+select_edges = [[1, 3]]
+
+[params.settings]
+bevel_mode = "solid"
+offset_mode = "fixed_distance"
+offset = 20.0
+subdivision = 0
+depth = 1.0
+limit = true
+shape = "round"
+tension = 1.0
+mitering = "default"
+ending = "default"
+partial_rounding = "none"
+corner_ngons = false
+rounding_ngons = false
+phong_break_rounding = false
+phong_break_miters = false
+realtime_update = true
+
+[import]
+scale = 1.0
+flip_z = false

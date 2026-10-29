@@ -1,0 +1,13 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-2.md"
+description = "Default cube made editable with 2 x 1 x 1 segments; the 2 top polygons (6, 7) selected and the Melt command run"
+mesh = "mesh.obj"
+
+[params]
+tool = "melt"
+segments = [2, 1, 1]
+select_polys = [6, 7]
+
+[import]
+scale = 1.0
+flip_z = false
