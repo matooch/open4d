@@ -13,7 +13,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O5 | Re-checks from O1/O4 | [rechecks.md](rechecks.md) | form only (+ 2 meshes) | done |
 | O6 | Modeling tools (U4) | [modeling-tools.md](modeling-tools.md) | `tests/golden/modeling-tools/` meshes | done |
 | O7 | Fields: values in space (P2) | [fields.md](fields.md) | `tests/golden/fields/` samples | done |
-| O8 | Cloner + basic effectors (P3) | [cloner.md](cloner.md) | `tests/golden/cloner/` samples | todo |
+| O8 | Cloner + basic effectors (P3) | [cloner.md](cloner.md) | `tests/golden/cloner/` samples | done |
 | O9 | Deformers II (P1) | [deformers-2.md](deformers-2.md) | `tests/golden/<deformer>/` meshes | todo |
 | O10 | Selection and tool behaviour in the GUI | (form comes with batch 10) | form only | gui-only |
 
