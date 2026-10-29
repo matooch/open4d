@@ -1,0 +1,30 @@
+feature = "cloner"
+observation = "docs/parity/cloner-3.md"
+description = "Grid Array cloner, Mode Endpoint, Size (300,300,300), 20 cm cube child"
+mesh = "mesh.obj"
+
+[params]
+mode = "grid"
+clones_mode = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = [3.0, 1.0, 3.0]
+grid_mode = "Endpoint"
+size = [300.0, 300.0, 300.0]
+form = "Cubic"
+fill_percent = 100.0
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+uv_orientation = "Z+"
+weight_percent = 0.0
+animation_mode = "Play"
+effector_count = 0
+
+[import]
+scale = 1.0
+flip_z = false
