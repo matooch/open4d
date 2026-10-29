@@ -1,0 +1,22 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools.md"
+description = "Cube 2/1/1 made editable; the 2 top polygons inset by 20 with Preserve Groups on"
+mesh = "mesh.obj"
+
+[params]
+tool = "extrude_inner"
+segments = [2, 1, 1]
+select_polys = [6, 7]
+
+[params.settings]
+offset = 20.0
+offset_variation = 0.0
+subdivision = 0
+create_ngons = false
+preserve_groups = true
+maximum_angle_deg = 89.0
+realtime_update = true
+
+[import]
+scale = 1.0
+flip_z = false

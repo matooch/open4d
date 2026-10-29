@@ -1,0 +1,31 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools.md"
+description = "Default cube made editable; Bevel in edge mode on the 4 top edges, offset 20, subdivision 1"
+mesh = "mesh.obj"
+
+[params]
+tool = "bevel"
+segments = [1, 1, 1]
+select_edges = [[1, 7], [1, 3], [3, 5], [5, 7]]
+
+[params.settings]
+bevel_mode = "chamfer"
+offset_mode = "fixed_distance"
+offset = 20.0
+subdivision = 1
+depth = 1.0
+limit = true
+shape = "round"
+tension = 1.0
+mitering = "default"
+ending = "default"
+partial_rounding = "none"
+corner_ngons = false
+rounding_ngons = false
+phong_break_rounding = false
+phong_break_miters = false
+realtime_update = true
+
+[import]
+scale = 1.0
+flip_z = false

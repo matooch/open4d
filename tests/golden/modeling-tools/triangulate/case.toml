@@ -1,0 +1,13 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools.md"
+description = "Cube 2/2/2 made editable; Triangulate command on all 24 polygons. The command has no settings that were read"
+mesh = "mesh.obj"
+
+[params]
+tool = "triangulate"
+segments = [2, 2, 2]
+select_polys = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+
+[import]
+scale = 1.0
+flip_z = false

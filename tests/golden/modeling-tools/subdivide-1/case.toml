@@ -1,0 +1,13 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools.md"
+description = "Default cube made editable; Subdivide command on all polygons, 1 subdivision, smoothing off. Other settings of the command were not readable"
+mesh = "mesh.obj"
+
+[params]
+tool = "subdivide"
+segments = [1, 1, 1]
+select_polys = [0, 1, 2, 3, 4, 5]
+
+[import]
+scale = 1.0
+flip_z = false
