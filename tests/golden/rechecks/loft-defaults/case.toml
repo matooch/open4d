@@ -1,0 +1,41 @@
+feature = "rechecks"
+observation = "docs/parity/rechecks.md"
+description = "Loft (all parameters at their R25 defaults) with two default Circle splines as children; the second circle at position y 200. Start and end cap are N-gons"
+mesh = "mesh.obj"
+
+[params]
+type = "loft"
+mesh_subdivision_u = 16
+mesh_subdivision_v = 4
+isoparm_subdivision_u = 10
+organic_form = false
+subdivision_per_segment = true
+loop = false
+linear_interpolation = false
+adapt_uv = true
+flip_normals = false
+start_cap = true
+end_cap = true
+caps_type = "ngon"
+separate_bevel_controls = false
+bevel_shape = "round"
+bevel_size = 0.0
+bevel_extended_shape = false
+bevel_height = 0.0
+bevel_shape_depth = 1.0
+bevel_segments = 3
+bevel_outside = false
+avoid_self_intersections = true
+break_phong_rounding = true
+
+[[params.children]]
+type = "circle"
+position = [0.0, 0.0, 0.0]
+
+[[params.children]]
+type = "circle"
+position = [0.0, 200.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false
