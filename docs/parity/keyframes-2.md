@@ -1,6 +1,6 @@
 # Keyframes II — observation (O12)
 
-Status: not observed · App version: TODO · OS: TODO · Observer: TODO · Date: TODO
+Status: observed · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-10-29
 Method: scripted, the same as [keyframes.md](keyframes.md) (O2): keys made with the
 **record** command, 30 fps, sampled at every frame 0–90 plus the half frames listed, at
 full precision. Folder: `tests/golden/keyframes/<case>/`, with
@@ -32,4 +32,10 @@ Use frames for the dt values, if that is how they read. If the tangents can't be
 write that here.
 
 ## Notes
-TODO
+- All 8 cases observed, no failures. Keys were made with the Record Active Objects command, as in O2. Each record made 9 tracks; only position X is sampled. Samples are at frames 0–90 plus the listed half frames, full float precision, `tolerance` 1e-4.
+- **Tangents are readable** (each key has a left and a right tangent, time and value offsets). They are in `tangents.json` in `two-keys/` and `four-keys/`, as `[frame, value, left_dt, left_dv, right_dt, right_dv]`, dt in frames. Read-back: the first key has all-zero tangents. In `two-keys` the last key has dt ±9.999996 (a third of the 30-frame span, with a small float error) and dv ±33.333…, which is a third of the 100 rise. In `four-keys` the three later keys all have dt ±6.666672 (a third of the 20-frame spacing); dv is ±33.333… at the keys at 20 and 60 and ±16.666… at the key at 40 (a decrease of 50, so the right dv is negative). The left and right values of a key are mirror images. Whether the last key of `two-keys` really has non-zero tangents while the first has zero ones is as read; no rule is inferred here.
+- `mixed-interp`: the middle key set to Linear. The segment **after** that key (30 → 60) became linear; the segment before it (0 → 30) kept the spline shape (frame 15 reads 50.00014, frame 29.5 reads 99.914). So a key's interpolation governs the segment that starts at that key. The linear segment reads 98.3 at 30.5 and 96.7 at 31 (a straight line from 100 at 30 to 0 at 60 would read 98.333 and 96.667); 50.0 at frame 45. The values are as the app returned them.
+- `step-first`: only the first key set to Step. The first segment holds 0 up to frame 29.5 and jumps to 100 at frame 30; the second segment (30 → 60) stays a spline (99.914 at 30.5, 49.99986 at 45, 0.0857 at 59.5).
+- `plateau`: the two equal keys (30 and 60, value 100) give exactly 100 at every frame between them; the curve does not overshoot.
+- `negative`: the decreasing segment is the mirror of `two-keys` (−0.000286 at frame 15, the same tiny asymmetry as O2); −100 from frame 30 on.
+- Not checked: the other tracks the record made (scale, rotation, position Y/Z); the sample JSON for `scale-1000` etc. was not compared by hand with a scaled `two-keys`; that comparison is for the implementer.

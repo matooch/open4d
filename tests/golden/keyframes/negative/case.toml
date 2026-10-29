@@ -1,0 +1,7 @@
+feature = "keyframes"
+observation = "docs/parity/keyframes-2.md"
+description = "Decreasing segment"
+
+[params]
+param = "pos_x"
+keys = [[0, 100], [30, -100]]

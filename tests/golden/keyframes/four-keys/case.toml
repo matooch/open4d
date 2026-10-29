@@ -1,0 +1,7 @@
+feature = "keyframes"
+observation = "docs/parity/keyframes-2.md"
+description = "Mixed extreme and middle keys"
+
+[params]
+param = "pos_x"
+keys = [[0, 0], [20, 100], [40, 50], [60, 150]]

@@ -1,0 +1,8 @@
+feature = "keyframes"
+observation = "docs/parity/keyframes-2.md"
+description = "Only the first key set to Step after recording"
+
+[params]
+param = "pos_x"
+keys = [[0, 0], [30, 100], [60, 0]]
+interpolation_by_key = ["step", "spline", "spline"]
