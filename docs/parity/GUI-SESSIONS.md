@@ -60,6 +60,8 @@ You can also do a sitting **with an observer session's help**:
    - Grow and Shrink with the …-dialog: which settings it shows.
 5. When switching points ↔ polygons mode, is the selection converted?
 6. Soft selection: where it lives and its modes.
+7. Extrude drag: how far the offset changes per screen pixel at the default camera
+   (drag 100 px and read the offset).
 
 ## G4 · Attribute manager widgets and field lists
 1. Number fields: drag to scrub? With which modifier for fine/coarse steps? What arrow
