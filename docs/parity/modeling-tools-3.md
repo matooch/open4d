@@ -1,4 +1,4 @@
-# Modeling tools III: follow-ups from briefs 020, 021 and 022 — observation (O58)
+# Modeling tools III: follow-ups from briefs 020–023 — observation (O58)
 
 Status: not observed · App version: TODO · OS: TODO · Observer: TODO · Date: TODO
 Method: exactly as [modeling-tools-2.md](modeling-tools-2.md) (O25): a default cube made
@@ -51,6 +51,12 @@ Unblocks: confirms 020/021; no brief waits on it.
 | subdivide-subset | 1/1/1 | the top polygon | Subdivide, Subdivisions 1 |
 | triangulate-ngon | a default Disc (Disc segments 1, rotation segments 6) made editable | – | Triangulate |
 | untriangulate-ngons | 1/1/1 triangulated | – | Untriangulate, N-gons on (record the angle) |
+| sel/grow-poly | 4/4/4 | one middle front polygon | Grow Selection (defaults; record its settings). Output `selection.json` |
+| sel/grow-point | 4/4/4 | one middle front point (point mode) | Grow Selection. Output `selection.json` |
+| sel/grow-edge | 4/4/4 | one middle front edge (edge mode) | Grow Selection. Output `selection.json` |
+| sel/convert-tolerant-p2poly | 2/2/2 | the start of O26 convert-point-to-poly | Convert Selection points → polygons, Tolerant on. Output `selection.json` and the edit mode afterwards |
+| sel/convert-tolerant-e2poly | 2/2/2 | the start of O26 convert-edge-to-poly | Convert Selection edges → polygons, Tolerant on. Output `selection.json` |
+| sel/connected-point-only | two default cubes made editable, Connect (Weld off), then Optimize so they share only one corner point (second cube at (200, 200, 0)) | one polygon of the first cube | Select Connected. Output `selection.json` |
 
 GUI read (add to G3): the default of every setting in the Subdivide, Optimize, Weld, Melt,
 Dissolve, Disconnect, Mirror and Triangulate dialogs.
