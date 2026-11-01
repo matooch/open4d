@@ -1430,6 +1430,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-noise"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "serde_json",
+]
+
+[[package]]
 name = "forge-parity-harness"
 version = "0.1.0"
 dependencies = [

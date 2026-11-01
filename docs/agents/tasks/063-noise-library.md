@@ -1,6 +1,6 @@
 # 063 · Noise library `forge-noise`
 
-Status: ready (planner decision: implement now from O13 data and the public noise literature; shader-noise parity stays pending until O42) · Area: D · Depends on: – · Observations: O13, O42 · Touches: noise (new)
+Status: done (parity-pending O42) · Area: D · Depends on: – · Observations: O13, O42 · Touches: noise (new)
 
 ## Goal
 A seeded 3D/4D noise library with the reference's noise types. Exact where derivable, statistically close otherwise.
@@ -18,8 +18,8 @@ A seeded 3D/4D noise library with the reference's noise types. Exact where deriv
 - Parity: compare the O42 noise samples statistically (mean, std, range, spatial autocorrelation at lag 1). Mark exact matching parity-pending. A Perlin case may match exactly if the reference uses the classic permutation; try it.
 
 ## Done when
-- [ ] NOISE.md spec; statistical parity tests for every O42 noise case once it is observed (until then, unit tests only).
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] [NOISE.md](../../specs/NOISE.md) spec; statistical parity tests for every O42 noise case once it is observed (until then, unit tests only).
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -29,9 +29,9 @@ A seeded 3D/4D noise library with the reference's noise types. Exact where deriv
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: new crate `crates/noise` (`forge-noise`), spec `docs/specs/NOISE.md`. 14 unit tests (`tests/noise.rs`: determinism, pinned values, range, continuity, moments, seed independence, scale, time axis, lattice, warp, octaves) and 2 statistical tests (`tests/o13_statistics.rs`). No O42 golden exists yet, so no parity count: exact parity is pending O42.
+- Rules derived: improved Perlin, value, simplex (3D/4D), Worley (F1/F2/id), fBm, turbulence, ridged multifractal, domain warp, plus 10 composite kinds from the O13 list defined by our own formulas (NOISE.md N4). All from public literature; SplitMix64 hash. Statistical comparison with the O13 Random field samples (random-defaults, random-seed) and the shader-noise sample: reference mean about 0.5, std 0.12 to 0.15, lag-1 correlation about 0 at step 75; our Perlin at scale 50-100 matches (NOISE.md N7). Parity-pending: all exact values, seed mapping, feature size, unit mapping, remaining invented-name types (Buya, Cranal, Dents, Hama, Luka, Mod. Noise, Naki, Nutous, Ober, Pezo, Poxo, Sema, Stupl, VL Noise, Zada).
+- Deviations: Billow dropped (identical to Turbulence); `Box` and `Cell` are our own definitions; Worley F2 can rarely be inexact (3^n search).
+- Files changed: Cargo.lock, crates/noise/**, docs/specs/NOISE.md, this brief, docs/roadmap/BACKLOG.md.
+- Open questions: O42 per-type samples (several scales and seeds) to fix exact Perlin/FBM matching and the unit mapping; feature size of the Random field.
+- Gate (last lines): `GATE: 814 tests passed, 0 failed`; python `OK` (38 tests); `cleanroom: ok`; `ok: 471 cases`; `GATE: all passed`.
