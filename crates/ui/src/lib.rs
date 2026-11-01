@@ -67,26 +67,35 @@ fn write_png(path: &str, img: &egui::ColorImage) -> Result<(), Box<dyn std::erro
 }
 
 fn sample_hierarchy(state: &mut state::EditorState) {
-    use commands::{Command, execute};
+    use commands::execute;
+    use serde_json::json;
     let make = |s: &mut state::EditorState, name: &str| {
-        let _ = execute(s, Command::Create("forge.null".into()));
+        let _ = execute(s, "object.create", json!({"type": "forge.null"}));
         let id = s.selection.active.expect("just created");
-        let _ = execute(s, Command::Rename(id, name.into()));
+        let _ = execute(s, "object.rename", json!({"node": id.0, "name": name}));
         id
     };
     let rig = make(state, "Rig");
     let arm = make(state, "Arm");
     let hand = make(state, "Hand");
     make(state, "Camera target");
-    let _ = execute(state, Command::Reparent(arm, Some(rig)));
-    let _ = execute(state, Command::Reparent(hand, Some(arm)));
+    let _ = execute(
+        state,
+        "object.reparent",
+        json!({"node": arm.0, "parent": rig.0}),
+    );
+    let _ = execute(
+        state,
+        "object.reparent",
+        json!({"node": hand.0, "parent": arm.0}),
+    );
     state.expanded.extend([rig, arm]);
     state.selection.click(arm);
 
     // Primitives, when the registry has them: a floor plane and two objects on it.
     let place = |s: &mut state::EditorState, ty: &str, pos: [f64; 3]| {
         s.doc.scene().registry().get(ty)?;
-        let _ = execute(s, Command::Create(ty.into()));
+        let _ = execute(s, "object.create", json!({"type": ty}));
         let id = s.selection.active?;
         let _ = attributes::apply_edit(
             &mut s.doc,

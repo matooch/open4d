@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
+use forge_command::CommandRegistry;
 use forge_core::{Document, NodeId, Registry, Scene, SceneSettings};
 use forge_viewport::camera::{Camera, Handedness};
 use forge_viewport::render::Shading;
@@ -12,64 +13,7 @@ use crate::components::EditMode;
 use crate::dock::Dock;
 use crate::timeline::Timeline;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct NodeSelection {
-    pub nodes: BTreeSet<NodeId>,
-    pub active: Option<NodeId>,
-    pub anchor: Option<NodeId>,
-}
-
-impl NodeSelection {
-    pub fn clear(&mut self) {
-        *self = NodeSelection::default();
-    }
-
-    /// Selects only `id`.
-    pub fn click(&mut self, id: NodeId) {
-        self.nodes = BTreeSet::from([id]);
-        self.active = Some(id);
-        self.anchor = Some(id);
-    }
-
-    /// Adds or removes `id` (Ctrl-click).
-    pub fn toggle(&mut self, id: NodeId) {
-        if self.nodes.remove(&id) {
-            self.active = self.nodes.last().copied();
-        } else {
-            self.nodes.insert(id);
-            self.active = Some(id);
-        }
-        self.anchor = Some(id);
-    }
-
-    /// Selects the visible rows from the anchor to `id` (Shift-click).
-    pub fn range(&mut self, id: NodeId, rows: &[NodeId]) {
-        let (Some(anchor), Some(to)) = (self.anchor, rows.iter().position(|r| *r == id)) else {
-            return self.click(id);
-        };
-        let Some(from) = rows.iter().position(|r| *r == anchor) else {
-            return self.click(id);
-        };
-        let (lo, hi) = (from.min(to), from.max(to));
-        self.nodes = rows[lo..=hi].iter().copied().collect();
-        self.active = Some(id);
-    }
-
-    /// Drops nodes that no longer exist.
-    pub fn retain_existing(&mut self, scene: &Scene) {
-        self.nodes.retain(|id| scene.contains(*id));
-        let gone = |id: &mut Option<NodeId>| {
-            if id.is_some_and(|i| !scene.contains(i)) {
-                *id = None;
-            }
-        };
-        gone(&mut self.active);
-        gone(&mut self.anchor);
-        if self.active.is_none() {
-            self.active = self.nodes.last().copied();
-        }
-    }
-}
+pub use forge_command::NodeSelection;
 
 pub struct EditorState {
     pub doc: Document,
@@ -88,6 +32,12 @@ pub struct EditorState {
     pub status: String,
     /// What viewport clicks select (docs/specs/EDITABLE.md §2.2). Not saved, not undoable.
     pub mode: EditMode,
+    /// The command registry every action goes through (docs/specs/COMMANDS.md).
+    pub commands: Arc<CommandRegistry>,
+    /// The file the scene was last saved to or loaded from.
+    pub file_path: Option<String>,
+    /// Scene revision at the last save or load (the dirty marker).
+    pub saved_revision: u64,
 }
 
 impl EditorState {
@@ -130,8 +80,13 @@ impl EditorState {
 
     pub fn new(registry: Arc<Registry>) -> EditorState {
         let camera = Self::default_camera();
+        let doc = Document::new(registry);
+        let mut commands = CommandRegistry::new();
+        forge_command::register_editor_commands(&mut commands)
+            .expect("built-in command ids are unique");
         EditorState {
-            doc: Document::new(registry),
+            saved_revision: doc.scene().revision(),
+            doc,
             selection: NodeSelection::default(),
             expanded: BTreeSet::new(),
             dock: Dock::default(),
@@ -142,6 +97,8 @@ impl EditorState {
             eval: Evaluated::default(),
             status: String::new(),
             mode: EditMode::default(),
+            commands: Arc::new(commands),
+            file_path: None,
         }
     }
 }

@@ -1,7 +1,6 @@
 //! The egui shell: menus, dock areas, panels and shortcuts (docs/specs/UI.md §9).
-//! All state changes go through `commands::execute` or `attributes::apply_edit`.
-
-use std::path::PathBuf;
+//! All state changes go through registry commands (`commands::execute`) or
+//! `attributes::apply_edit`.
 
 use eframe::egui_wgpu;
 use egui::{Key, KeyboardShortcut, Modifiers, RichText, Sense, Ui};
@@ -10,12 +9,13 @@ use forge_core::{NodeId, Value};
 use forge_viewport::gizmo::{Drag, Gizmo, GizmoMode, Space as GizmoSpace};
 use forge_viewport::render::Shading;
 use glam::DVec3;
+use serde_json::{Value as Json, json};
 
 use crate::animate::{AnimEdit, KeyState, key_frames, key_states};
 use crate::attributes::{
     Gesture, Widget, apply_edit_anim, attribute_rows, from_display, to_display, unit_suffix,
 };
-use crate::commands::{Command, category_label, create_menu, execute};
+use crate::commands::{category_label, create_menu, execute};
 use crate::component_edit::{ComponentDrag, pivot_view, pivot_world};
 use crate::components::{
     ClickModifiers, EditMode, SelectCmd, target as component_target, viewport_click, viewport_rect,
@@ -47,6 +47,39 @@ const SAVE_AS: KeyboardShortcut =
 const SELECT_ALL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::A);
 const DESELECT_ALL: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::A);
+
+/// A command to run: registry id and JSON arguments (docs/specs/COMMANDS.md).
+type Cmd = (&'static str, Json);
+
+fn cmd(id: &'static str) -> Cmd {
+    (id, json!({}))
+}
+
+fn select_cmd(op: SelectCmd) -> Cmd {
+    cmd(match op {
+        SelectCmd::All => "select.all",
+        SelectCmd::None => "select.none",
+        SelectCmd::Invert => "select.invert",
+        SelectCmd::Grow => "select.grow",
+        SelectCmd::Shrink => "select.shrink",
+    })
+}
+
+/// Play or stop, whichever the current state calls for.
+fn play_stop(state: &EditorState) -> Cmd {
+    cmd(if state.timeline.playing {
+        "timeline.stop"
+    } else {
+        "timeline.play"
+    })
+}
+
+fn shading_cmd(shading: Shading) -> Cmd {
+    (
+        "view.shading",
+        json!({"mode": crate::commands::shading_mode_of(shading)}),
+    )
+}
 
 #[derive(Clone, Copy)]
 enum FileAction {
@@ -84,8 +117,6 @@ pub struct Editor {
     /// File menu (docs/specs/IO.md §2): dialogs, current file, revision at the last
     /// save or load, and the last window title sent.
     dialogs: Box<dyn Dialogs>,
-    file_path: Option<PathBuf>,
-    saved_revision: u64,
     sent_title: String,
 }
 
@@ -98,7 +129,6 @@ impl eframe::App for Editor {
 impl Editor {
     pub fn new(state: EditorState) -> Editor {
         Editor {
-            saved_revision: state.doc.scene().revision(),
             state,
             viewport: ViewportPanel::default(),
             renaming: None,
@@ -114,16 +144,20 @@ impl Editor {
             component_drag: None,
             rect_drag: None,
             dialogs: Box::new(NativeDialogs),
-            file_path: None,
             sent_title: String::new(),
         }
     }
 
-    fn run(&mut self, cmd: Command) {
+    /// Runs a command; an error goes to the status bar. True if it succeeded.
+    fn run(&mut self, (id, args): Cmd) -> bool {
         // A command may leave a message of its own (e.g. skipped nodes) in the status.
         self.state.status.clear();
-        if let Err(e) = execute(&mut self.state, cmd) {
-            self.state.status = e;
+        match execute(&mut self.state, id, args) {
+            Ok(_) => true,
+            Err(e) => {
+                self.state.status = e;
+                false
+            }
         }
     }
 
@@ -214,7 +248,7 @@ impl Editor {
         let redo = KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::SHIFT, Key::Z);
         let redo_y = KeyboardShortcut::new(Modifiers::COMMAND, Key::Y);
         let undo = KeyboardShortcut::new(Modifiers::COMMAND, Key::Z);
-        let mut cmds = Vec::new();
+        let mut cmds: Vec<Cmd> = Vec::new();
         let mut file_action = None;
         ctx.input_mut(|i| {
             // Save As first: Ctrl+S would also match with Shift held
@@ -227,41 +261,41 @@ impl Editor {
             }
             // Deselect All first: Ctrl+A would also match with Shift held
             if i.consume_shortcut(&DESELECT_ALL) {
-                cmds.push(Command::Select(SelectCmd::None));
+                cmds.push(select_cmd(SelectCmd::None));
             } else if i.consume_shortcut(&SELECT_ALL) {
-                cmds.push(Command::Select(SelectCmd::All));
+                cmds.push(select_cmd(SelectCmd::All));
             }
             if i.consume_shortcut(&redo) || i.consume_shortcut(&redo_y) {
-                cmds.push(Command::Redo);
+                cmds.push(cmd("edit.redo"));
             } else if i.consume_shortcut(&undo) {
-                cmds.push(Command::Undo);
+                cmds.push(cmd("edit.undo"));
             }
             if i.key_pressed(Key::Delete) {
-                cmds.push(Command::DeleteSelected);
+                cmds.push(cmd("object.delete"));
             }
             // Animation (ours, parity-pending; ANIM.md §2.7). Shift variants first.
             if i.consume_key(Modifiers::SHIFT, Key::K) {
-                cmds.push(Command::ToggleAutokey);
+                cmds.push(cmd("key.autokey"));
             } else if i.consume_key(Modifiers::NONE, Key::K) {
-                cmds.push(Command::RecordKeys);
+                cmds.push(cmd("key.record"));
             }
             if i.consume_key(Modifiers::SHIFT, Key::Comma) {
-                cmds.push(Command::JumpKey(false));
+                cmds.push(("key.jump", json!({"forward": false})));
             } else if i.consume_key(Modifiers::NONE, Key::Comma) {
-                cmds.push(Command::StepFrame(-1));
+                cmds.push(("timeline.step", json!({"delta": -1})));
             }
             if i.consume_key(Modifiers::SHIFT, Key::Period) {
-                cmds.push(Command::JumpKey(true));
+                cmds.push(("key.jump", json!({"forward": true})));
             } else if i.consume_key(Modifiers::NONE, Key::Period) {
-                cmds.push(Command::StepFrame(1));
+                cmds.push(("timeline.step", json!({"delta": 1})));
             }
             if self.viewport_hot && i.consume_key(Modifiers::NONE, Key::Space) {
-                cmds.push(Command::TogglePlay);
+                cmds.push(play_stop(&self.state));
             }
             let keys = [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5];
             for (k, (shading, _)) in keys.iter().zip(SHADINGS) {
                 if i.key_pressed(*k) && i.modifiers.is_none() {
-                    cmds.push(Command::SetShading(shading));
+                    cmds.push(shading_cmd(shading));
                 }
             }
         });
@@ -349,15 +383,15 @@ impl Editor {
             });
             ui.menu_button("Edit", |ui| {
                 if ui.button("Undo").clicked() {
-                    self.run(Command::Undo);
+                    self.run(cmd("edit.undo"));
                     ui.close();
                 }
                 if ui.button("Redo").clicked() {
-                    self.run(Command::Redo);
+                    self.run(cmd("edit.redo"));
                     ui.close();
                 }
                 if ui.button("Delete").clicked() {
-                    self.run(Command::DeleteSelected);
+                    self.run(cmd("object.delete"));
                     ui.close();
                 }
                 ui.separator();
@@ -372,27 +406,27 @@ impl Editor {
                         button = button.shortcut_text(ui.ctx().format_shortcut(&sc));
                     }
                     if ui.add(button).clicked() {
-                        self.run(Command::Select(cmd));
+                        self.run(select_cmd(cmd));
                         ui.close();
                     }
                 }
                 ui.separator();
                 if ui.button("Make Editable").clicked() {
-                    self.run(Command::MakeEditable);
+                    self.run(cmd("mesh.make_editable"));
                     ui.close();
                 }
                 if ui.button("Current State to Object").clicked() {
-                    self.run(Command::CurrentStateToObject);
+                    self.run(cmd("mesh.current_state_to_object"));
                     ui.close();
                 }
             });
             ui.menu_button("Select", |ui| {
                 if ui.button("Grow Selection").clicked() {
-                    self.run(Command::Select(SelectCmd::Grow));
+                    self.run(select_cmd(SelectCmd::Grow));
                     ui.close();
                 }
                 if ui.button("Shrink Selection").clicked() {
-                    self.run(Command::Select(SelectCmd::Shrink));
+                    self.run(select_cmd(SelectCmd::Shrink));
                     ui.close();
                 }
             });
@@ -401,7 +435,7 @@ impl Editor {
                     ui.menu_button(category_label(cat), |ui| {
                         for (type_id, label) in items {
                             if ui.button(label).clicked() {
-                                self.run(Command::Create(type_id));
+                                self.run(("object.create", json!({"type": type_id})));
                                 ui.close();
                             }
                         }
@@ -417,29 +451,29 @@ impl Editor {
                     (
                         "Record Active Objects",
                         k(Modifiers::NONE, Key::K),
-                        Command::RecordKeys,
+                        cmd("key.record"),
                     ),
-                    ("Delete Keys", String::new(), Command::DeleteKeys),
-                    ("Play / Stop", "Space".to_string(), Command::TogglePlay),
+                    ("Delete Keys", String::new(), cmd("key.delete_at_frame")),
+                    ("Play / Stop", "Space".to_string(), play_stop(&self.state)),
                     (
                         "Previous Frame",
                         k(Modifiers::NONE, Key::Comma),
-                        Command::StepFrame(-1),
+                        ("timeline.step", json!({"delta": -1})),
                     ),
                     (
                         "Next Frame",
                         k(Modifiers::NONE, Key::Period),
-                        Command::StepFrame(1),
+                        ("timeline.step", json!({"delta": 1})),
                     ),
                     (
                         "Previous Key",
                         k(Modifiers::SHIFT, Key::Comma),
-                        Command::JumpKey(false),
+                        ("key.jump", json!({"forward": false})),
                     ),
                     (
                         "Next Key",
                         k(Modifiers::SHIFT, Key::Period),
-                        Command::JumpKey(true),
+                        ("key.jump", json!({"forward": true})),
                     ),
                 ];
                 for (label, shortcut, cmd) in items {
@@ -459,14 +493,14 @@ impl Editor {
                     .checkbox(&mut auto, format!("Auto-Key  ({sc})"))
                     .clicked()
                 {
-                    self.run(Command::ToggleAutokey);
+                    self.run(cmd("key.autokey"));
                     ui.close();
                 }
             });
             ui.menu_button("View", |ui| {
                 for (shading, label) in SHADINGS {
                     if ui.radio(self.state.shading == shading, label).clicked() {
-                        self.run(Command::SetShading(shading));
+                        self.run(shading_cmd(shading));
                         ui.close();
                     }
                 }
@@ -483,7 +517,7 @@ impl Editor {
                 );
                 ui.separator();
                 if ui.button("Frame all").clicked() {
-                    self.run(Command::FrameAll);
+                    self.run(cmd("view.frame_all"));
                     ui.close();
                 }
             });
@@ -573,7 +607,10 @@ impl Editor {
                     .add(egui::Button::new(mode.label()).selected(on))
                     .clicked()
                 {
-                    self.run(Command::SetMode(mode));
+                    self.run((
+                        "select.mode",
+                        json!({"mode": forge_command::ModeArg::from(mode)}),
+                    ));
                 }
             }
         });
@@ -922,7 +959,7 @@ impl Editor {
     fn tree_ui(&mut self, ui: &mut Ui) {
         let rows = tree_rows(self.state.doc.scene(), &self.state.expanded);
         let order: Vec<NodeId> = rows.iter().map(|r| r.id).collect();
-        let mut cmds = Vec::new();
+        let mut cmds: Vec<Cmd> = Vec::new();
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
@@ -932,7 +969,7 @@ impl Editor {
                         if row.has_children {
                             let arrow = if row.expanded { "-" } else { "+" };
                             if ui.small_button(arrow).clicked() {
-                                cmds.push(Command::ToggleExpanded(row.id));
+                                cmds.push(("view.toggle_expanded", json!({"node": row.id.0})));
                             }
                         } else {
                             ui.add_space(18.0);
@@ -945,7 +982,10 @@ impl Editor {
                             if ui.input(|i| i.key_pressed(Key::Escape)) {
                                 self.renaming = None;
                             } else if r.lost_focus() {
-                                cmds.push(Command::Rename(row.id, buf.clone()));
+                                cmds.push((
+                                    "object.rename",
+                                    json!({"node": row.id.0, "name": buf}),
+                                ));
                                 self.renaming = None;
                             }
                             return;
@@ -962,7 +1002,10 @@ impl Editor {
                         if let Some(dragged) = r.dnd_release_payload::<NodeId>()
                             && *dragged != row.id
                         {
-                            cmds.push(Command::Reparent(*dragged, Some(row.id)));
+                            cmds.push((
+                                "object.reparent",
+                                json!({"node": dragged.0, "parent": row.id.0}),
+                            ));
                         }
                         if r.double_clicked() {
                             self.renaming = Some((row.id, row.name.clone()));
@@ -983,11 +1026,14 @@ impl Editor {
                             }
                             if ui.button("Delete").clicked() {
                                 self.state.selection.click(row.id);
-                                cmds.push(Command::DeleteSelected);
+                                cmds.push(cmd("object.delete"));
                                 ui.close();
                             }
                             if ui.button("Move to root").clicked() {
-                                cmds.push(Command::Reparent(row.id, None));
+                                cmds.push((
+                                    "object.reparent",
+                                    json!({"node": row.id.0, "parent": null}),
+                                ));
                                 ui.close();
                             }
                         });
@@ -1001,7 +1047,10 @@ impl Editor {
                 let size = egui::vec2(ui.available_width(), ui.available_height().max(40.0));
                 let rest = ui.allocate_response(size, Sense::hover());
                 if let Some(dragged) = rest.dnd_release_payload::<NodeId>() {
-                    cmds.push(Command::Reparent(*dragged, None));
+                    cmds.push((
+                        "object.reparent",
+                        json!({"node": dragged.0, "parent": null}),
+                    ));
                 }
             });
         for c in cmds {
@@ -1036,7 +1085,7 @@ impl Editor {
             }
         });
         if let Some(name) = rename {
-            self.run(Command::Rename(id, name));
+            self.run(("object.rename", json!({"node": id.0, "name": name})));
         }
         ui.separator();
         egui::ScrollArea::vertical()
@@ -1231,28 +1280,28 @@ impl Editor {
         let settings = self.state.settings();
         let theme = Theme::default();
         let ids: Vec<NodeId> = self.state.selection.nodes.iter().copied().collect();
-        let mut cmds = Vec::new();
+        let mut cmds: Vec<Cmd> = Vec::new();
         ui.horizontal_wrapped(|ui| {
             let playing = self.state.timeline.playing;
             if ui.button(if playing { "Stop" } else { "Play" }).clicked() {
-                cmds.push(Command::TogglePlay);
+                cmds.push(play_stop(&self.state));
             }
             if ui.button("Record").clicked() {
-                cmds.push(Command::RecordKeys);
+                cmds.push(cmd("key.record"));
             }
             let mut auto = self.state.autokey;
             if ui.checkbox(&mut auto, "Auto-Key").clicked() {
-                cmds.push(Command::ToggleAutokey);
+                cmds.push(cmd("key.autokey"));
             }
             ui.separator();
             if ui.button("Previous Key").clicked() {
-                cmds.push(Command::JumpKey(false));
+                cmds.push(("key.jump", json!({"forward": false})));
             }
             if ui.button("Next Key").clicked() {
-                cmds.push(Command::JumpKey(true));
+                cmds.push(("key.jump", json!({"forward": true})));
             }
             if ui.button("Delete Keys").clicked() {
-                cmds.push(Command::DeleteKeys);
+                cmds.push(cmd("key.delete_at_frame"));
             }
         });
         ui.horizontal(|ui| {
@@ -1267,7 +1316,10 @@ impl Editor {
             ui.add(egui::DragValue::new(&mut next.fps).range(1..=240))
                 .labelled_by(l.id);
             if next != settings {
-                cmds.push(Command::SetSettings(next));
+                cmds.push((
+                    "timeline.settings",
+                    json!({"fps": next.fps, "start": next.start, "end": next.end}),
+                ));
             }
             ui.separator();
             let mut frame = self.state.timeline.current;
@@ -1276,7 +1328,7 @@ impl Editor {
                 .add(egui::DragValue::new(&mut frame).range(settings.start..=settings.end))
                 .labelled_by(l.id);
             if r.changed() {
-                cmds.push(Command::SetFrame(frame));
+                cmds.push(("timeline.set_frame", json!({"frame": frame})));
             }
             ui.weak(format!(
                 "{:.3} s",
@@ -1295,7 +1347,7 @@ impl Editor {
             && let Some(pos) = response.interact_pointer_pos()
         {
             let f = settings.start as f32 + (pos.x - x0) / (x1 - x0) * span;
-            cmds.push(Command::SetFrame(f.round() as i64));
+            cmds.push(("timeline.set_frame", json!({"frame": f.round() as i64})));
         }
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 2.0, theme.faint);

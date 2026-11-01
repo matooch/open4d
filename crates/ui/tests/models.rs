@@ -2,11 +2,12 @@
 
 mod common;
 
+use serde_json::json;
 use std::collections::BTreeSet;
 
 use common::{create, state};
 use forge_core::NodeId;
-use forge_ui::commands::{Command, execute};
+use forge_ui::commands::execute;
 use forge_ui::dock::{Area, Dock, Panel};
 use forge_ui::state::NodeSelection;
 use forge_ui::theme::{Theme, contrast};
@@ -48,11 +49,11 @@ fn selection_drops_deleted_nodes() {
     let b = create(&mut st, "forge.null");
     st.selection.click(a);
     st.selection.toggle(b);
-    execute(&mut st, Command::DeleteSelected).unwrap();
+    execute(&mut st, "object.delete", json!({})).unwrap();
     assert!(st.selection.nodes.is_empty());
-    execute(&mut st, Command::Undo).unwrap();
+    execute(&mut st, "edit.undo", json!({})).unwrap();
     st.selection.click(b);
-    execute(&mut st, Command::Undo).unwrap(); // removes b's creation
+    execute(&mut st, "edit.undo", json!({})).unwrap(); // removes b's creation
     assert!(st.selection.nodes.is_empty() && st.selection.active.is_none());
 }
 
@@ -117,9 +118,14 @@ fn tree_rows_follow_hierarchy_and_expansion() {
     let mut st = state();
     let a = create(&mut st, "forge.null");
     let b = create(&mut st, "test.box");
-    execute(&mut st, Command::Reparent(b, Some(a))).unwrap();
+    execute(
+        &mut st,
+        "object.reparent",
+        json!({"node": b.0, "parent": a.0}),
+    )
+    .unwrap();
     st.selection.click(b);
-    execute(&mut st, Command::Create("test.sel".into())).unwrap(); // tag on b
+    execute(&mut st, "object.create", json!({"type": "test.sel"})).unwrap(); // tag on b
     let c = create(&mut st, "test.bend");
 
     let collapsed = tree_rows(st.doc.scene(), &BTreeSet::new());

@@ -2,6 +2,7 @@
 
 mod common;
 
+use serde_json::json;
 use std::sync::Arc;
 
 use common::{create, state};
@@ -9,7 +10,7 @@ use forge_core::{MeshData, NodeId, Registry, Value};
 use forge_generators::{SELECTION_EDGES, SELECTION_POINTS, SELECTION_POLYS, evaluate};
 use forge_geometry::selection::{IndexSet, Selection};
 use forge_ui::attributes::Gesture;
-use forge_ui::commands::{Command, execute};
+use forge_ui::commands::execute;
 use forge_ui::component_edit::{
     ComponentDrag, affected_points, local_matrix, pivot, pivot_view, pivot_world, transform_points,
 };
@@ -34,9 +35,14 @@ fn set(items: &[u32]) -> IndexSet {
 fn setup(mode: EditMode) -> (EditorState, NodeId) {
     let mut st = state();
     create(&mut st, "forge.cube");
-    execute(&mut st, Command::MakeEditable).unwrap();
+    execute(&mut st, "mesh.make_editable", json!({})).unwrap();
     let id = st.selection.active.unwrap();
-    execute(&mut st, Command::SetMode(mode)).unwrap();
+    execute(
+        &mut st,
+        "select.mode",
+        json!({"mode": forge_command::ModeArg::from(mode)}),
+    )
+    .unwrap();
     (st, id)
 }
 
@@ -278,7 +284,7 @@ fn points_edges_and_polygons_modes_move_the_right_points() {
     assert_eq!(out.points[2][2], m.points[2][2] + 7.0);
 
     // Edges: the two end points of each selected edge (edge 0 and the last edge)
-    execute(&mut st, Command::SetMode(EditMode::Edges)).unwrap();
+    execute(&mut st, "select.mode", json!({"mode": "edges"})).unwrap();
     let edges = poly.edges();
     let last = edges.len() as u32 - 1;
     select(&mut st, id, SELECTION_EDGES, &[0, last]);
@@ -292,7 +298,7 @@ fn points_edges_and_polygons_modes_move_the_right_points() {
     assert_only_moved(&m, &out, &want);
 
     // Polygons: the points of the selected polygon
-    execute(&mut st, Command::SetMode(EditMode::Polys)).unwrap();
+    execute(&mut st, "select.mode", json!({"mode": "polys"})).unwrap();
     let (pi, ring) = top_poly(&m);
     select(&mut st, id, SELECTION_POLYS, &[pi]);
     let out = run(&mut st);
@@ -316,11 +322,11 @@ fn nothing_to_drag_without_a_selection_or_target() {
     select(&mut st, id, SELECTION_POINTS, &[0]);
     assert!(ComponentDrag::begin(&st).is_some());
     // Model mode: no component drag even with a stored selection
-    execute(&mut st, Command::SetMode(EditMode::Model)).unwrap();
+    execute(&mut st, "select.mode", json!({"mode": "model"})).unwrap();
     assert!(ComponentDrag::begin(&st).is_none());
     // a non-polygon active object
     let cube = create(&mut st, "forge.cube");
-    execute(&mut st, Command::SetMode(EditMode::Points)).unwrap();
+    execute(&mut st, "select.mode", json!({"mode": "points"})).unwrap();
     assert_eq!(st.selection.active, Some(cube));
     assert!(ComponentDrag::begin(&st).is_none());
 }
@@ -370,7 +376,7 @@ fn a_bend_child_deforms_the_edited_mesh() {
     r.install(&forge_modifiers::Deformers).unwrap();
     let mut st = EditorState::new(Arc::new(r));
     create(&mut st, "forge.cube");
-    execute(&mut st, Command::MakeEditable).unwrap();
+    execute(&mut st, "mesh.make_editable", json!({})).unwrap();
     let id = st.selection.active.unwrap();
     st.doc
         .transact("bend", |tx| {
@@ -378,7 +384,7 @@ fn a_bend_child_deforms_the_edited_mesh() {
             tx.set_param(b, "strength", Value::Float(1.0))
         })
         .unwrap();
-    execute(&mut st, Command::SetMode(EditMode::Polys)).unwrap();
+    execute(&mut st, "select.mode", json!({"mode": "polys"})).unwrap();
     let m = stored(&st, id);
     let (pi, ring) = top_poly(&m);
     let before = evaluate(st.doc.scene(), id).unwrap().unwrap();

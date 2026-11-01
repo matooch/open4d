@@ -1,6 +1,6 @@
 # 011 · Command registry and migration of the editor commands
 
-Status: ready · Area: A · Depends on: – · Observations: – · Touches: command (new), ui, core
+Status: done · Area: A · Depends on: – · Observations: – · Touches: command (new), ui, core
 
 ## Goal
 Every user action becomes a named, typed, undoable command in one registry, and the editor runs all its actions through it. This is the base for the CLI, RPC, MCP and scripting (DECISIONS D3).
@@ -34,9 +34,16 @@ The CLI, RPC and scripting front ends (briefs 013–016).
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: tests added: `crates/command/tests/registry.rs` (7: id/label/schema/sample invariants, brief ids present, duplicate and malformed ids rejected, insertion order, unknown command and bad args, ten commands headless with one undo step each, file round trip) and `crates/ui/tests/commands.rs` (6, through `EditorState`). All former ui tests were migrated from `Command` to `execute(state, id, json)` unchanged in what they assert. No parity data involved (N/A).
+- Rules: behaviour of every former `Command` variant is unchanged (spec docs/specs/COMMANDS.md §6, UI.md §5). Command ids: object.create, object.delete, object.rename, object.reparent, edit.undo, edit.redo, view.shading, view.frame_all, view.toggle_expanded, mesh.make_editable, mesh.current_state_to_object, select.mode, select.all, select.none, select.invert, select.grow, select.shrink, file.new, file.open, file.save, file.save_as, file.import_obj, file.export_obj, key.record, key.delete_at_frame, key.jump, key.autokey, timeline.set_frame, timeline.step, timeline.play, timeline.stop, timeline.settings, transform.set, param.set (34).
+- Deviations from the design decisions:
+  - `Plugin::register_commands` is `CommandPlugin::register_commands` in `forge-command`: `forge-core::Plugin` cannot name `CommandRegistry` because `forge-command` depends on `forge-core` (cycle).
+  - Added `CommandHandler::sample_args` (default `{}`) so the registry test has a valid sample per command, and `Send + Sync` on handlers.
+  - Extra commands beyond the brief's list, needed to migrate the enum: `view.toggle_expanded`, `key.jump`, `key.autokey`, `timeline.step`, `select.*` kept as five commands; `TogglePlay` became `timeline.play` / `timeline.stop` (the UI picks by state).
+  - Schema validation is a small in-crate checker (`forge_command::schema::validate`) plus typed parsing, not a full JSON Schema library (no new heavy dependency). New dependency: `schemars` 1.2.3 (and serde_json in ui).
+  - Context trait: `NodeSelection` and `Timeline` moved into `forge-command` (re-exported by `forge-ui`); `EditMode`/`SelectCmd`/`Shading` stay in ui and are mirrored by `ModeArg`/`SelectOp`/`ShadingMode`. Key record/delete/jump and component selection stay in ui behind four trait methods (`select_components`, `record_keys`, `delete_keys`, `key_frame_near`). `file_path` and the saved-revision marker moved from `Editor` into `EditorState`. File dialogs and "save changes?" prompts stay in the editor, which then runs the file commands with explicit paths.
+  - `transform.set` and `param.set` do not write animation keys (autokey stays a gizmo / attribute-panel feature); gizmo drags are not yet recorded as `transform.set` (out of scope here).
+  - Transaction labels stay the specific ones ("Create Cube", "Move", ...), the handler `label()` is the menu text.
+- Files changed: crates/command/** (new), crates/ui/src/{app.rs,app/files.rs,commands.rs,lib.rs,state.rs,timeline.rs}, crates/ui/Cargo.toml, crates/ui/tests/*.rs, Cargo.lock, docs/specs/COMMANDS.md (new), docs/specs/UI.md §5, this brief, docs/roadmap/BACKLOG.md.
+- Open questions: where `record_keys`/component selection should live once `forge-app` (brief 012) needs them headless; whether `param.set` should honour autokey.
+- Gate: `GATE: 437 tests passed, 0 failed` / `cleanroom: ok` / `ok: 471 cases` / `GATE: all passed`.

@@ -83,10 +83,15 @@ errors are returned (and shown in `status`) and change nothing. Name edits go th
 
 ## 5. Commands (`commands`)
 
-`Command::{Create(type_id), DeleteSelected, Undo, Redo, Rename(id, name),
-Reparent(id, Option<NodeId>), ToggleExpanded(id), SetShading(Shading),
-FrameAll, MakeEditable, CurrentStateToObject, SetMode(EditMode), Select(SelectCmd)}`
-(`SelectCmd`: `All`, `None`, `Invert`, `Grow`, `Shrink`; EDITABLE.md §2.5); `execute(&mut EditorState, Command) -> Result<(), String>`.
+Every action is a registry command (COMMANDS.md); the former `Command` enum is gone.
+`execute(&mut EditorState, id, args: serde_json::Value) -> Result<Value, String>` runs the
+command `id` through `EditorState.commands`. Menus, shortcuts and panels call it with the
+ids `object.create`, `object.delete`, `edit.undo`, `select.all`, `mesh.make_editable` ... (the
+bullets below keep the old names for the same behaviour: Create = `object.create`,
+DeleteSelected = `object.delete`, Undo/Redo = `edit.undo`/`edit.redo`, Reparent =
+`object.reparent`, MakeEditable = `mesh.make_editable`, CurrentStateToObject =
+`mesh.current_state_to_object`, SetMode = `select.mode`, Select = `select.*`,
+FrameAll = `view.frame_all`).
 - `Create`: new node at the end of the root list, selected alone; a new Generator node
   also gets one `forge.smoothing` tag in the same undo step (SMOOTHING.md §2); a `Tag` type is
   attached to the active node instead (error without one).

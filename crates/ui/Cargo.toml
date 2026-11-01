@@ -8,6 +8,7 @@ description = "Editor shell: docking layout, object tree, attribute panel, timel
 eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "accesskit", "x11", "wayland"] }
 egui = "0.37"
 forge-anim = { path = "../anim" }
+forge-command = { path = "../command" }
 forge-core = { path = "../core" }
 forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }
@@ -15,6 +16,7 @@ forge-io = { path = "../io" }
 forge-viewport = { path = "../viewport" }
 glam = "0.34"
 png = "0.18"
+serde_json = "1"
 # Native file dialogs; the default backend is the XDG desktop portal on Linux (no GTK).
 rfd = "0.17"
 wgpu = "30"

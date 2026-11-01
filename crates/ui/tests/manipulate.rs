@@ -12,6 +12,7 @@ use forge_ui::state::EditorState;
 use forge_viewport::camera::Camera;
 use forge_viewport::gizmo::DragDelta;
 use glam::{DMat3, DMat4, DVec3};
+use serde_json::json;
 
 fn close(a: DVec3, b: DVec3) {
     assert!((a - b).abs().max_element() < 1e-9, "{a} != {b}");
@@ -234,7 +235,8 @@ fn subdivision_inputs_are_drawn_only_through_their_generator() {
     let cube = create(&mut st, "forge.cube");
     forge_ui::commands::execute(
         &mut st,
-        forge_ui::commands::Command::Reparent(cube, Some(sub)),
+        "object.reparent",
+        json!({"node": cube.0, "parent": sub.0}),
     )
     .unwrap();
     let drawn: Vec<NodeId> = scene_meshes(st.doc.scene(), &Default::default())
@@ -248,14 +250,24 @@ fn subdivision_inputs_are_drawn_only_through_their_generator() {
 
 #[test]
 fn boole_inputs_are_drawn_only_through_their_generator() {
-    use forge_ui::commands::{Command, execute};
+    use forge_ui::commands::execute;
     use forge_ui::viewport_panel::scene_meshes;
     let mut st = state();
     let boole = create(&mut st, "forge.boole");
     let a = create(&mut st, "forge.cube");
     let b = create(&mut st, "forge.cube");
-    execute(&mut st, Command::Reparent(a, Some(boole))).unwrap();
-    execute(&mut st, Command::Reparent(b, Some(boole))).unwrap();
+    execute(
+        &mut st,
+        "object.reparent",
+        json!({"node": a.0, "parent": boole.0}),
+    )
+    .unwrap();
+    execute(
+        &mut st,
+        "object.reparent",
+        json!({"node": b.0, "parent": boole.0}),
+    )
+    .unwrap();
     st.doc
         .transact("move", |tx| {
             tx.set_param(b, "transform.pos", Value::Vec3([50.0, 50.0, 50.0]))

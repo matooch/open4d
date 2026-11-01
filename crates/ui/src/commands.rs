@@ -1,260 +1,199 @@
-//! Editor commands shared by menus, shortcuts and panels (docs/specs/UI.md §5).
+//! Editor actions are registry commands (docs/specs/COMMANDS.md, UI.md §5). This module runs
+//! them against the editor state and implements the command context for it.
 
-use forge_core::{Category, EditError, NodeId, Registry, SceneSettings, Tx};
-use forge_generators::EditableError;
+use forge_command::{CommandContext, ModeArg, NodeSelection, SelectOp, ShadingMode, Timeline};
+use forge_core::{Category, Document, NodeId, Registry};
 use forge_viewport::render::Shading;
+use serde_json::Value;
 
 use crate::animate::{delete_keys, key_frames, next_key, prev_key, record_keys};
 use crate::components::{EditMode, SelectCmd, run_select};
 use crate::state::EditorState;
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Command {
-    Create(String),
-    DeleteSelected,
-    Undo,
-    Redo,
-    Rename(NodeId, String),
-    Reparent(NodeId, Option<NodeId>),
-    ToggleExpanded(NodeId),
-    SetShading(Shading),
-    FrameAll,
-    /// Replace each selected generator by a polygon object (docs/specs/EDITABLE.md §1.2).
-    MakeEditable,
-    /// Add a polygon object with the deformed result after each selected node (§1.3).
-    CurrentStateToObject,
-    /// Switch what viewport clicks select (docs/specs/EDITABLE.md §2.2).
-    SetMode(EditMode),
-    /// Select All / Deselect All / Invert / Grow / Shrink on the current mode's set (§2.5).
-    Select(SelectCmd),
-    /// Key the 9 transform tracks of the selected objects at the current frame (ANIM.md §2.3).
-    RecordKeys,
-    /// Remove the selected objects' keys on the current frame.
-    DeleteKeys,
-    ToggleAutokey,
-    /// Go to a frame (clamped to the project range).
-    SetFrame(i64),
-    /// Move the current frame by this many frames.
-    StepFrame(i64),
-    /// Jump to the previous (`false`) or next (`true`) key of the selected objects.
-    JumpKey(bool),
-    TogglePlay,
-    /// Change fps and the project range (undoable).
-    SetSettings(SceneSettings),
+/// Runs the command `id` with JSON `args` through the state's registry. The error is the
+/// message for the status bar.
+pub fn execute(s: &mut EditorState, id: &str, args: Value) -> Result<Value, String> {
+    let registry = s.commands.clone();
+    registry.run(s, id, args).map_err(|e| e.to_string())
 }
 
-fn err(e: impl std::fmt::Display) -> String {
-    e.to_string()
+impl From<ModeArg> for EditMode {
+    fn from(m: ModeArg) -> EditMode {
+        match m {
+            ModeArg::Model => EditMode::Model,
+            ModeArg::Points => EditMode::Points,
+            ModeArg::Edges => EditMode::Edges,
+            ModeArg::Polys => EditMode::Polys,
+        }
+    }
 }
 
-pub fn execute(s: &mut EditorState, cmd: Command) -> Result<(), String> {
-    match cmd {
-        Command::Create(type_id) => {
-            let ty = s
-                .doc
-                .scene()
-                .registry()
-                .get(&type_id)
-                .cloned()
-                .ok_or_else(|| format!("unknown type {type_id}"))?;
-            if ty.category == Category::Tag {
-                let host = s
-                    .selection
-                    .active
-                    .ok_or("select an object to add a tag to")?;
-                s.doc
-                    .transact(&format!("Add {}", ty.label), |tx| {
-                        tx.attach_tag(&type_id, host, None)
-                    })
-                    .map_err(err)?;
-            } else {
-                // New generators come with a smoothing tag (docs/specs/SMOOTHING.md §2).
-                let smooth = ty.category == Category::Generator
-                    && s.doc
-                        .scene()
-                        .registry()
-                        .get(forge_core::smoothing::TAG)
-                        .is_some();
-                let id = s
-                    .doc
-                    .transact(&format!("Create {}", ty.label), |tx| {
-                        let id = tx.create(&type_id, None, None)?;
-                        if smooth {
-                            tx.attach_tag(forge_core::smoothing::TAG, id, None)?;
-                        }
-                        Ok(id)
-                    })
-                    .map_err(err)?;
-                s.selection.click(id);
-            }
-        }
-        Command::DeleteSelected => {
-            let scene = s.doc.scene();
-            // Skip nodes inside another selected node's subtree: they go with it.
-            let roots: Vec<NodeId> = s
-                .selection
-                .nodes
-                .iter()
-                .copied()
-                .filter(|id| {
-                    let mut p = scene.node(*id).and_then(|n| n.parent.or(n.host));
-                    while let Some(pid) = p {
-                        if s.selection.nodes.contains(&pid) {
-                            return false;
-                        }
-                        p = scene.node(pid).and_then(|n| n.parent.or(n.host));
-                    }
-                    scene.contains(*id)
-                })
-                .collect();
-            if !roots.is_empty() {
-                s.doc
-                    .transact("Delete", |tx| {
-                        roots.iter().try_for_each(|id| tx.delete(*id))
-                    })
-                    .map_err(err)?;
-            }
-            s.selection.clear();
-        }
-        Command::Undo => {
-            s.doc.undo();
-            s.selection.retain_existing(s.doc.scene());
-            s.sync_timeline();
-        }
-        Command::Redo => {
-            s.doc.redo();
-            s.selection.retain_existing(s.doc.scene());
-            s.sync_timeline();
-        }
-        Command::RecordKeys => {
-            let ids: Vec<NodeId> = s.selection.nodes.iter().copied().collect();
-            let ctx = s.anim_ctx();
-            record_keys(&mut s.doc, &ids, &ctx)?;
-        }
-        Command::DeleteKeys => {
-            let ids: Vec<NodeId> = s.selection.nodes.iter().copied().collect();
-            let ctx = s.anim_ctx();
-            delete_keys(&mut s.doc, &ids, &ctx)?;
-        }
-        Command::ToggleAutokey => s.autokey = !s.autokey,
-        Command::SetFrame(f) => {
-            let settings = s.settings();
-            s.timeline.set_current(f, &settings);
-        }
-        Command::StepFrame(d) => {
-            let settings = s.settings();
-            s.timeline
-                .set_current(s.timeline.current.saturating_add(d), &settings);
-        }
-        Command::JumpKey(forward) => {
-            let ids: Vec<NodeId> = s.selection.nodes.iter().copied().collect();
-            let frames = key_frames(s.doc.scene(), &ids);
-            let current = s.timeline.current;
-            let target = if forward {
-                next_key(&frames, current)
-            } else {
-                prev_key(&frames, current)
-            };
-            if let Some(f) = target {
-                let settings = s.settings();
-                s.timeline.set_current(f, &settings);
-            }
-        }
-        Command::TogglePlay => s.timeline.toggle(),
-        Command::SetSettings(settings) => {
-            s.doc
-                .transact_merged("Set Timeline", "timeline-settings", |tx| {
-                    tx.set_settings(settings)
-                })
-                .map_err(err)?;
-            s.timeline.reanchor();
-            s.sync_timeline();
-        }
-        Command::Rename(id, name) => {
-            s.doc
-                .transact("Rename", |tx| tx.rename(id, &name))
-                .map_err(err)?;
-        }
-        Command::Reparent(id, parent) => {
-            s.doc
-                .transact("Move", |tx| tx.move_node(id, parent, None))
-                .map_err(err)?;
-        }
-        Command::ToggleExpanded(id) => {
-            if !s.expanded.remove(&id) {
-                s.expanded.insert(id);
-            }
-        }
-        Command::MakeEditable => {
-            convert_selection(s, "Make Editable", forge_generators::make_editable)?;
-        }
-        Command::CurrentStateToObject => {
-            convert_selection(
-                s,
-                "Current State to Object",
-                forge_generators::current_state_to_object,
-            )?;
-        }
-        Command::SetMode(mode) => s.mode = mode,
-        Command::Select(cmd) => run_select(s, cmd)?,
-        Command::SetShading(shading) => s.shading = shading,
-        Command::FrameAll => {
-            // No geometry yet (Phase 5): reset to the default view.
-            s.camera = EditorState::default_camera();
+impl From<EditMode> for ModeArg {
+    fn from(m: EditMode) -> ModeArg {
+        match m {
+            EditMode::Model => ModeArg::Model,
+            EditMode::Points => ModeArg::Points,
+            EditMode::Edges => ModeArg::Edges,
+            EditMode::Polys => ModeArg::Polys,
         }
     }
-    Ok(())
 }
 
-type Convert = fn(&mut Tx, NodeId) -> Result<NodeId, EditableError>;
+impl From<SelectOp> for SelectCmd {
+    fn from(o: SelectOp) -> SelectCmd {
+        match o {
+            SelectOp::All => SelectCmd::All,
+            SelectOp::None => SelectCmd::None,
+            SelectOp::Invert => SelectCmd::Invert,
+            SelectOp::Grow => SelectCmd::Grow,
+            SelectOp::Shrink => SelectCmd::Shrink,
+        }
+    }
+}
 
-/// Runs `convert` on every selected node as one undo step. Nodes without a mesh are
-/// skipped with a status message; the selection becomes the new objects.
-fn convert_selection(s: &mut EditorState, label: &str, convert: Convert) -> Result<(), String> {
-    let ids: Vec<NodeId> = s.selection.nodes.iter().copied().collect();
-    if ids.is_empty() {
-        return Err(format!("{label}: select an object first"));
+/// The viewport shading for a command argument.
+pub fn shading_of(m: ShadingMode) -> Shading {
+    match m {
+        ShadingMode::Smooth => Shading::Smooth,
+        ShadingMode::Flat => Shading::Flat,
+        ShadingMode::Wire => Shading::Wire,
+        ShadingMode::SmoothWire => Shading::SmoothWire,
+        ShadingMode::FlatWire => Shading::FlatWire,
     }
-    let mut made = Vec::new();
-    let mut skipped = Vec::new();
-    // A build failure is not an `EditError`: it is parked here and aborts the step with a
-    // placeholder error, so the transaction reverts every edit made so far.
-    let mut failure = None;
-    let result = s.doc.transact(label, |tx| {
-        for id in ids {
-            // consumed children of an earlier selected node are gone already
-            if !tx.scene().contains(id) {
-                continue;
-            }
-            match convert(tx, id) {
-                Ok(new) => made.push(new),
-                Err(EditableError::NoMesh(name)) => skipped.push(name),
-                Err(EditableError::Edit(e)) => return Err(e),
-                Err(e @ EditableError::Build(_)) => {
-                    failure = Some(e.to_string());
-                    return Err(EditError::UnknownNode(id));
-                }
-            }
+}
+
+/// The command argument for a viewport shading.
+pub fn shading_mode_of(m: Shading) -> ShadingMode {
+    match m {
+        Shading::Smooth => ShadingMode::Smooth,
+        Shading::Flat => ShadingMode::Flat,
+        Shading::Wire => ShadingMode::Wire,
+        Shading::SmoothWire => ShadingMode::SmoothWire,
+        Shading::FlatWire => ShadingMode::FlatWire,
+    }
+}
+
+impl EditorState {
+    fn selected_ids(&self) -> Vec<NodeId> {
+        self.selection.nodes.iter().copied().collect()
+    }
+}
+
+impl CommandContext for EditorState {
+    fn doc(&self) -> &Document {
+        &self.doc
+    }
+
+    fn doc_mut(&mut self) -> &mut Document {
+        &mut self.doc
+    }
+
+    fn selection(&self) -> &NodeSelection {
+        &self.selection
+    }
+
+    fn selection_mut(&mut self) -> &mut NodeSelection {
+        &mut self.selection
+    }
+
+    fn edit_mode(&self) -> ModeArg {
+        self.mode.into()
+    }
+
+    fn set_edit_mode(&mut self, mode: ModeArg) {
+        self.mode = mode.into();
+    }
+
+    fn timeline(&self) -> &Timeline {
+        &self.timeline
+    }
+
+    fn timeline_mut(&mut self) -> &mut Timeline {
+        &mut self.timeline
+    }
+
+    fn autokey(&self) -> bool {
+        self.autokey
+    }
+
+    fn set_autokey(&mut self, on: bool) {
+        self.autokey = on;
+    }
+
+    fn set_status(&mut self, text: String) {
+        self.status = text;
+    }
+
+    fn select_components(&mut self, op: SelectOp) -> Result<(), String> {
+        run_select(self, op.into())
+    }
+
+    fn record_keys(&mut self) -> Result<usize, String> {
+        let ids = self.selected_ids();
+        let ctx = self.anim_ctx();
+        record_keys(&mut self.doc, &ids, &ctx)
+    }
+
+    fn delete_keys(&mut self) -> Result<usize, String> {
+        let ids = self.selected_ids();
+        let ctx = self.anim_ctx();
+        delete_keys(&mut self.doc, &ids, &ctx)
+    }
+
+    fn key_frame_near(&self, forward: bool) -> Option<i64> {
+        let frames = key_frames(self.doc.scene(), &self.selected_ids());
+        let current = self.timeline.current;
+        if forward {
+            next_key(&frames, current)
+        } else {
+            prev_key(&frames, current)
         }
-        Ok(())
-    });
-    if let Some(msg) = failure {
-        return Err(format!("{label}: {msg}"));
     }
-    result.map_err(err)?;
-    s.status = skipped
-        .iter()
-        .map(|name| format!("{label}: {name} has no mesh"))
-        .collect::<Vec<_>>()
-        .join("; ");
-    if let Some((first, rest)) = made.split_first() {
-        s.selection.click(*first);
-        for id in rest {
-            s.selection.toggle(*id);
+
+    fn reset_document(&mut self, doc: Document, path: Option<String>, full: bool) {
+        if full {
+            // File > New: everything but the dock layout and the command set starts over.
+            let dock = self.dock.clone();
+            let commands = self.commands.clone();
+            *self = EditorState::new(doc.scene().registry().clone());
+            self.dock = dock;
+            self.commands = commands;
+        }
+        self.doc = doc;
+        self.eval.clear();
+        self.timeline = Timeline::default();
+        self.sync_timeline();
+        self.selection.clear();
+        self.mode = EditMode::Model;
+        self.expanded.clear();
+        self.status.clear();
+        self.file_path = path;
+        self.saved_revision = self.doc.scene().revision();
+    }
+
+    fn file_path(&self) -> Option<String> {
+        self.file_path.clone()
+    }
+
+    fn mark_saved(&mut self, path: String) {
+        self.file_path = Some(path);
+        self.saved_revision = self.doc.scene().revision();
+    }
+
+    fn set_shading(&mut self, shading: ShadingMode) {
+        self.shading = shading_of(shading);
+    }
+
+    fn frame_all(&mut self) {
+        // No geometry yet (Phase 5): reset to the default view.
+        self.camera = EditorState::default_camera();
+    }
+
+    fn toggle_expanded(&mut self, node: NodeId) {
+        if !self.expanded.remove(&node) {
+            self.expanded.insert(node);
         }
     }
-    s.selection.retain_existing(s.doc.scene());
-    Ok(())
 }
 
 /// Placeable categories in `Category` order, each with `(type id, label)` sorted by label.

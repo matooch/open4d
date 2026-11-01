@@ -2,6 +2,7 @@
 
 mod common;
 
+use serde_json::json;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -13,7 +14,7 @@ use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use forge_core::Value;
 use forge_ui::app::{Dialogs, Editor, FileKind, Unsaved};
-use forge_ui::commands::{Command, execute};
+use forge_ui::commands::execute;
 
 #[derive(Default)]
 struct Script {
@@ -81,7 +82,12 @@ fn save_then_open_with_injected_paths_and_dirty_marker() {
     assert!(!e.is_dirty());
     assert_eq!(e.window_title(), "Untitled - Forge3D");
     let id = add_box(&mut e);
-    execute(&mut e.state, Command::Rename(id, "My box".into())).unwrap();
+    execute(
+        &mut e.state,
+        "object.rename",
+        json!({"node": id.0, "name": "My box"}),
+    )
+    .unwrap();
     assert!(e.is_dirty());
     assert_eq!(e.window_title(), "Untitled* - Forge3D");
 
@@ -94,7 +100,12 @@ fn save_then_open_with_injected_paths_and_dirty_marker() {
     assert_eq!(script.borrow().log, ["save Scene Untitled.forge"]);
 
     // a further edit marks it dirty, Save writes without asking and clears the marker
-    execute(&mut e.state, Command::Rename(id, "Renamed".into())).unwrap();
+    execute(
+        &mut e.state,
+        "object.rename",
+        json!({"node": id.0, "name": "Renamed"}),
+    )
+    .unwrap();
     assert_eq!(e.window_title(), "scene.forge* - Forge3D");
     assert!(e.save());
     assert!(!e.is_dirty());
@@ -358,9 +369,14 @@ fn export_obj_whole_scene_and_selection_then_import_back() {
     assert_eq!(e.state.status, "Nothing to export");
     assert!(script.borrow().log.is_empty());
 
-    execute(&mut e.state, Command::Create("forge.cube".into())).unwrap();
+    execute(&mut e.state, "object.create", json!({"type": "forge.cube"})).unwrap();
     let cube = e.state.selection.active.unwrap();
-    execute(&mut e.state, Command::Create("forge.plane".into())).unwrap();
+    execute(
+        &mut e.state,
+        "object.create",
+        json!({"type": "forge.plane"}),
+    )
+    .unwrap();
     let all = dir.join("all");
     script.borrow_mut().save.push_back(Some(all.clone()));
     e.export_obj(false);

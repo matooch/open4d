@@ -5,7 +5,8 @@ mod common;
 use common::{create, state};
 use forge_core::{Category, NodeId, ParamKind, Unit, Value};
 use forge_ui::attributes::{Gesture, Widget, apply_edit, attribute_rows, from_display, to_display};
-use forge_ui::commands::{Command, create_menu, execute};
+use forge_ui::commands::{create_menu, execute};
+use serde_json::json;
 
 #[test]
 fn rows_follow_descriptors_and_groups() {
@@ -100,8 +101,8 @@ fn drag_is_one_undo_step_commit_is_another() {
     apply_edit(&mut st.doc, b, "segments", Value::Int(7), Gesture::Commit).unwrap();
     let labels = st.doc.history().undo_labels();
     assert_eq!(labels[labels.len() - 2..], ["Set Size", "Set Segments"]);
-    execute(&mut st, Command::Undo).unwrap();
-    execute(&mut st, Command::Undo).unwrap();
+    execute(&mut st, "edit.undo", json!({})).unwrap();
+    execute(&mut st, "edit.undo", json!({})).unwrap();
     assert_eq!(st.doc.scene().param(b, "size"), Some(&Value::Float(2.0)));
 
     // a new drag gesture is a separate step
@@ -153,9 +154,9 @@ fn create_menu_lists_placeable_types() {
 #[test]
 fn create_tag_needs_an_active_node() {
     let mut st = state();
-    assert!(execute(&mut st, Command::Create("test.sel".into())).is_err());
+    assert!(execute(&mut st, "object.create", json!({"type": "test.sel"})).is_err());
     let b = create(&mut st, "test.box");
-    execute(&mut st, Command::Create("test.sel".into())).unwrap();
+    execute(&mut st, "object.create", json!({"type": "test.sel"})).unwrap();
     let tags = &st.doc.scene().node(b).unwrap().tags;
     assert_eq!(tags.len(), 2, "smoothing tag from creation + the new tag");
     assert_eq!(
@@ -171,15 +172,20 @@ fn delete_selected_skips_nested_and_is_one_step() {
     let a = create(&mut st, "forge.null");
     let b = create(&mut st, "forge.null");
     let c = create(&mut st, "forge.null");
-    execute(&mut st, Command::Reparent(b, Some(a))).unwrap();
+    execute(
+        &mut st,
+        "object.reparent",
+        json!({"node": b.0, "parent": a.0}),
+    )
+    .unwrap();
     st.selection.click(a);
     st.selection.toggle(b);
     st.selection.toggle(c);
     let steps = st.doc.history().undo_labels().len();
-    execute(&mut st, Command::DeleteSelected).unwrap();
+    execute(&mut st, "object.delete", json!({})).unwrap();
     assert!(st.doc.scene().is_empty());
     assert_eq!(st.doc.history().undo_labels().len(), steps + 1);
-    execute(&mut st, Command::Undo).unwrap();
+    execute(&mut st, "edit.undo", json!({})).unwrap();
     assert_eq!(st.doc.scene().len(), 3);
 }
 
@@ -188,13 +194,35 @@ fn reparent_cycles_are_reported() {
     let mut st = state();
     let a = create(&mut st, "forge.null");
     let b = create(&mut st, "forge.null");
-    execute(&mut st, Command::Reparent(b, Some(a))).unwrap();
-    assert!(execute(&mut st, Command::Reparent(a, Some(b))).is_err());
-    execute(&mut st, Command::Reparent(b, None)).unwrap();
+    execute(
+        &mut st,
+        "object.reparent",
+        json!({"node": b.0, "parent": a.0}),
+    )
+    .unwrap();
+    assert!(
+        execute(
+            &mut st,
+            "object.reparent",
+            json!({"node": a.0, "parent": b.0})
+        )
+        .is_err()
+    );
+    execute(
+        &mut st,
+        "object.reparent",
+        json!({"node": b.0, "parent": null}),
+    )
+    .unwrap();
     assert_eq!(st.doc.scene().roots(), [a, b]);
-    execute(&mut st, Command::Rename(a, "Rig".into())).unwrap();
+    execute(
+        &mut st,
+        "object.rename",
+        json!({"node": a.0, "name": "Rig"}),
+    )
+    .unwrap();
     assert_eq!(st.doc.scene().node(a).unwrap().name, "Rig");
-    execute(&mut st, Command::ToggleExpanded(a)).unwrap();
+    execute(&mut st, "view.toggle_expanded", json!({"node": a.0})).unwrap();
     assert!(st.expanded.contains(&a));
 }
 
@@ -215,8 +243,8 @@ fn creating_a_generator_attaches_a_smoothing_tag_in_one_step() {
         st.doc.scene().node(n).unwrap().tags.is_empty(),
         "objects get none"
     );
-    execute(&mut st, Command::Undo).unwrap();
-    execute(&mut st, Command::Undo).unwrap();
+    execute(&mut st, "edit.undo", json!({})).unwrap();
+    execute(&mut st, "edit.undo", json!({})).unwrap();
     assert!(
         st.doc.scene().is_empty(),
         "tag removed with the same undo step"
@@ -227,7 +255,7 @@ fn creating_a_generator_attaches_a_smoothing_tag_in_one_step() {
 fn make_editable_and_current_state_to_object_are_one_undo_step_each() {
     let mut st = state();
     assert!(
-        execute(&mut st, Command::MakeEditable).is_err(),
+        execute(&mut st, "mesh.make_editable", json!({})).is_err(),
         "needs a selection"
     );
     let cube = create(&mut st, "forge.cube");
@@ -239,7 +267,7 @@ fn make_editable_and_current_state_to_object_are_one_undo_step_each() {
     let before = forge_core::file::save(st.doc.scene());
     let steps = st.doc.history().undo_labels().len();
 
-    execute(&mut st, Command::MakeEditable).unwrap();
+    execute(&mut st, "mesh.make_editable", json!({})).unwrap();
     let scene = st.doc.scene();
     assert_eq!(st.doc.history().undo_labels().len(), steps + 1, "one step");
     assert!(!scene.contains(cube) && !scene.contains(sphere));
@@ -269,14 +297,14 @@ fn make_editable_and_current_state_to_object_are_one_undo_step_each() {
         assert_eq!(scene.node(*p).unwrap().tags.len(), 1);
     }
 
-    execute(&mut st, Command::Undo).unwrap();
+    execute(&mut st, "edit.undo", json!({})).unwrap();
     assert_eq!(forge_core::file::save(st.doc.scene()), before);
 
     // Current State to Object: sources stay, a copy follows each of them
     st.selection.click(cube);
     st.selection.toggle(sphere);
     let steps = st.doc.history().undo_labels().len();
-    execute(&mut st, Command::CurrentStateToObject).unwrap();
+    execute(&mut st, "mesh.current_state_to_object", json!({})).unwrap();
     let scene = st.doc.scene();
     assert_eq!(st.doc.history().undo_labels().len(), steps + 1, "one step");
     assert_eq!(scene.roots().len(), 5);
@@ -292,7 +320,7 @@ fn make_editable_and_current_state_to_object_are_one_undo_step_each() {
     );
     assert_eq!(st.selection.nodes.len(), 2);
     assert!(st.status.is_empty());
-    execute(&mut st, Command::Undo).unwrap();
+    execute(&mut st, "edit.undo", json!({})).unwrap();
     assert_eq!(forge_core::file::save(st.doc.scene()), before);
 }
 
