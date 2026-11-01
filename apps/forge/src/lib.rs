@@ -5,6 +5,7 @@
 //! 3 internal error). The editor forwards `--headless <args>` to the same function.
 
 use std::ffi::OsString;
+use std::io::Write;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::process::ExitCode;
 
@@ -159,27 +160,49 @@ where
     });
     match outcome {
         Ok(out) => {
-            if json {
+            let written = if json {
                 let mut object = Map::new();
                 object.insert("ok".into(), Json::Bool(true));
                 if let Json::Object(fields) = out.json {
                     object.extend(fields);
                 }
-                println!("{}", Json::Object(object));
+                emit(&Json::Object(object).to_string())
             } else if !out.text.is_empty() {
-                println!("{}", out.text.trim_end());
-            }
-            ExitCode::SUCCESS
+                emit(out.text.trim_end())
+            } else {
+                Ok(())
+            };
+            finish_write(written)
         }
         Err(fail) => {
             eprintln!("error: {}", fail.message);
             if json {
-                println!(
-                    "{}",
-                    json!({"ok": false, "error": {"code": fail.code, "message": fail.message}})
-                );
+                let body =
+                    json!({"ok": false, "error": {"code": fail.code, "message": fail.message}});
+                // The exit code reports the failure; a closed pipe changes nothing.
+                let _ = emit(&body.to_string());
             }
             ExitCode::from(fail.code)
+        }
+    }
+}
+
+/// Writes one line to stdout through a locked handle (no `println!` panic on errors).
+fn emit(line: &str) -> std::io::Result<()> {
+    let mut out = std::io::stdout().lock();
+    out.write_all(line.as_bytes())?;
+    out.write_all(b"\n")?;
+    out.flush()
+}
+
+/// A reader that closed the pipe early (`forge ... | head`) is a quiet success.
+fn finish_write(result: std::io::Result<()>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("error: cannot write to stdout: {e}");
+            ExitCode::from(EXIT_INTERNAL)
         }
     }
 }

@@ -209,3 +209,32 @@ fn exit_codes() {
     // help is ok
     forge().arg("--help").assert().success();
 }
+
+/// `forge --json commands | head -c N`: a reader that closes the pipe early is not an error
+/// (no panic, no backtrace, exit code 0). Run once with the reader gone before the tool
+/// writes (the case that used to panic) and once after it read a few bytes.
+#[test]
+fn closed_stdout_pipe_is_a_quiet_success() {
+    use std::io::Read;
+    use std::process::Stdio;
+
+    for read_first in [false, true] {
+        let bin = forge().get_program().to_owned();
+        let mut child = std::process::Command::new(bin)
+            .args(["--json", "commands"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut stdout = child.stdout.take().unwrap();
+        if read_first {
+            let mut head = [0u8; 16];
+            stdout.read_exact(&mut head).unwrap();
+        }
+        drop(stdout);
+        let out = child.wait_with_output().unwrap();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(!stderr.contains("panicked"), "{stderr}");
+        assert_eq!(out.status.code(), Some(0), "{stderr}");
+    }
+}
