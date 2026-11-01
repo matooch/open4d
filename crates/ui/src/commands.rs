@@ -6,49 +6,13 @@ use forge_core::{Category, Document, NodeId, Registry};
 use forge_viewport::render::Shading;
 use serde_json::Value;
 
-use crate::animate::{delete_keys, key_frames, next_key, prev_key, record_keys};
-use crate::components::{EditMode, SelectCmd, run_select};
 use crate::state::EditorState;
 
 /// Runs the command `id` with JSON `args` through the state's registry. The error is the
 /// message for the status bar.
 pub fn execute(s: &mut EditorState, id: &str, args: Value) -> Result<Value, String> {
-    let registry = s.commands.clone();
+    let registry = s.app.commands.clone();
     registry.run(s, id, args).map_err(|e| e.to_string())
-}
-
-impl From<ModeArg> for EditMode {
-    fn from(m: ModeArg) -> EditMode {
-        match m {
-            ModeArg::Model => EditMode::Model,
-            ModeArg::Points => EditMode::Points,
-            ModeArg::Edges => EditMode::Edges,
-            ModeArg::Polys => EditMode::Polys,
-        }
-    }
-}
-
-impl From<EditMode> for ModeArg {
-    fn from(m: EditMode) -> ModeArg {
-        match m {
-            EditMode::Model => ModeArg::Model,
-            EditMode::Points => ModeArg::Points,
-            EditMode::Edges => ModeArg::Edges,
-            EditMode::Polys => ModeArg::Polys,
-        }
-    }
-}
-
-impl From<SelectOp> for SelectCmd {
-    fn from(o: SelectOp) -> SelectCmd {
-        match o {
-            SelectOp::All => SelectCmd::All,
-            SelectOp::None => SelectCmd::None,
-            SelectOp::Invert => SelectCmd::Invert,
-            SelectOp::Grow => SelectCmd::Grow,
-            SelectOp::Shrink => SelectCmd::Shrink,
-        }
-    }
 }
 
 /// The viewport shading for a command argument.
@@ -73,111 +37,83 @@ pub fn shading_mode_of(m: Shading) -> ShadingMode {
     }
 }
 
-impl EditorState {
-    fn selected_ids(&self) -> Vec<NodeId> {
-        self.selection.nodes.iter().copied().collect()
-    }
-}
-
 impl CommandContext for EditorState {
     fn doc(&self) -> &Document {
-        &self.doc
+        self.app.doc()
     }
 
     fn doc_mut(&mut self) -> &mut Document {
-        &mut self.doc
+        self.app.doc_mut()
     }
 
     fn selection(&self) -> &NodeSelection {
-        &self.selection
+        self.app.selection()
     }
 
     fn selection_mut(&mut self) -> &mut NodeSelection {
-        &mut self.selection
+        self.app.selection_mut()
     }
 
     fn edit_mode(&self) -> ModeArg {
-        self.mode.into()
+        self.app.edit_mode()
     }
 
     fn set_edit_mode(&mut self, mode: ModeArg) {
-        self.mode = mode.into();
+        self.app.set_edit_mode(mode);
     }
 
     fn timeline(&self) -> &Timeline {
-        &self.timeline
+        self.app.timeline()
     }
 
     fn timeline_mut(&mut self) -> &mut Timeline {
-        &mut self.timeline
+        self.app.timeline_mut()
     }
 
     fn autokey(&self) -> bool {
-        self.autokey
+        self.app.autokey()
     }
 
     fn set_autokey(&mut self, on: bool) {
-        self.autokey = on;
+        self.app.set_autokey(on);
     }
 
     fn set_status(&mut self, text: String) {
-        self.status = text;
+        self.app.set_status(text);
     }
 
     fn select_components(&mut self, op: SelectOp) -> Result<(), String> {
-        run_select(self, op.into())
+        self.app.select_components(op)
     }
 
     fn record_keys(&mut self) -> Result<usize, String> {
-        let ids = self.selected_ids();
-        let ctx = self.anim_ctx();
-        record_keys(&mut self.doc, &ids, &ctx)
+        self.app.record_keys()
     }
 
     fn delete_keys(&mut self) -> Result<usize, String> {
-        let ids = self.selected_ids();
-        let ctx = self.anim_ctx();
-        delete_keys(&mut self.doc, &ids, &ctx)
+        self.app.delete_keys()
     }
 
     fn key_frame_near(&self, forward: bool) -> Option<i64> {
-        let frames = key_frames(self.doc.scene(), &self.selected_ids());
-        let current = self.timeline.current;
-        if forward {
-            next_key(&frames, current)
-        } else {
-            prev_key(&frames, current)
-        }
+        self.app.key_frame_near(forward)
     }
 
     fn reset_document(&mut self, doc: Document, path: Option<String>, full: bool) {
-        if full {
-            // File > New: everything but the dock layout and the command set starts over.
-            let dock = self.dock.clone();
-            let commands = self.commands.clone();
-            *self = EditorState::new(doc.scene().registry().clone());
-            self.dock = dock;
-            self.commands = commands;
-        }
-        self.doc = doc;
-        self.eval.clear();
-        self.timeline = Timeline::default();
-        self.sync_timeline();
-        self.selection.clear();
-        self.mode = EditMode::Model;
+        self.app.reset(doc, path, full);
         self.expanded.clear();
-        self.status.clear();
-        self.file_path = path;
-        self.saved_revision = self.doc.scene().revision();
+        if full {
+            // File > New: everything but the dock layout starts over.
+            self.camera = EditorState::default_camera();
+            self.shading = Shading::SmoothWire;
+        }
     }
 
     fn file_path(&self) -> Option<String> {
-        self.file_path.clone()
+        self.app.file_path()
     }
 
     fn mark_saved(&mut self, path: String) {
-        self.file_path = Some(path);
-        self.saved_revision = self.doc.scene().revision();
+        self.app.mark_saved(path);
     }
 
     fn set_shading(&mut self, shading: ShadingMode) {

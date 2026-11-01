@@ -9,7 +9,7 @@ implementers can avoid collisions.
 | # | Brief | Area | Depends on | Status | Touches |
 |---|---|---|---|---|---|
 | 011 | [Command registry and migration of the editor commands](../agents/tasks/011-command-registry-and-migration-of-the-editor-commands.md) | A | – | done | command (new), ui, core |
-| 012 | [Headless application core `forge-app`](../agents/tasks/012-headless-application-core-forge-app.md) | A | 011 | ready | app (new), ui |
+| 012 | [Headless application core `forge-app`](../agents/tasks/012-headless-application-core-forge-app.md) | A | 011 | done | app (new), ui |
 | 013 | [`forge` command-line tool](../agents/tasks/013-forge-command-line-tool.md) | A | 012 | ready | apps/forge (new), app |
 | 014 | [JSON-RPC server in the editor, plus a Rust client](../agents/tasks/014-json-rpc-server-in-the-editor-plus-a-rust-client.md) | A | 012 | ready | rpc (new), ui, app |
 | 015 | [MCP server `forge-mcp`](../agents/tasks/015-mcp-server-forge-mcp.md) | A | 014 | ready | mcp (new) |

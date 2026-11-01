@@ -1088,6 +1088,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-app"
+version = "0.1.0"
+dependencies = [
+ "forge-anim",
+ "forge-command",
+ "forge-core",
+ "forge-generators",
+ "forge-geometry",
+ "forge-io",
+ "forge-modifiers",
+ "forge-parity-harness",
+ "glam",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "forge-cleanroom"
 version = "0.1.0"
 dependencies = [
@@ -1210,9 +1227,7 @@ version = "0.1.0"
 name = "forge-studio"
 version = "0.1.0"
 dependencies = [
- "forge-core",
- "forge-generators",
- "forge-modifiers",
+ "forge-app",
  "forge-ui",
 ]
 
@@ -1224,6 +1239,7 @@ dependencies = [
  "egui",
  "egui_kittest",
  "forge-anim",
+ "forge-app",
  "forge-command",
  "forge-core",
  "forge-generators",
