@@ -1,0 +1,33 @@
+# 173 · CI matrix: Linux, macOS, Windows; per-OS GPU policy
+
+Status: ready · Area: N · Depends on: – · Observations: – · Touches: .github
+
+## Goal
+fmt, clippy and tests on ubuntu, macos (arm64) and windows; GPU tests on software adapters where available.
+
+## Inputs
+- Area design: [../../roadmap/areas/N-platform.md](../../roadmap/areas/N-platform.md)
+- .github/workflows/
+
+## Design decisions (planner)
+- `FORGE_REQUIRE_GPU=1` on Linux (lavapipe) and Windows (WARP); macOS may skip GPU tests.
+- Cache cargo; keep total CI under 20 min.
+
+## Done when
+- [ ] CI green on all three OS.
+- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+
+## Finish (every brief)
+1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
+2. `rustup update stable`, so you use the toolchain CI uses. Then `cargo fmt --all`, then `sh scripts/gate.sh` until it prints `GATE: all passed`.
+3. Update `docs/parity/STATUS.md`, if this brief adds or changes parity results, and set this brief's row in [../../roadmap/BACKLOG.md](../../roadmap/BACKLOG.md) to `done`.
+4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
+5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
+
+## Report (implementer fills in)
+- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
+- Rules derived, with the case that proves each; parity-pending rules.
+- Deviations from the design decisions, and why.
+- Files changed.
+- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
+- The last lines of the gate output.
