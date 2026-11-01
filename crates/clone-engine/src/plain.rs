@@ -19,15 +19,43 @@ const PAR: &str = "Parameter";
 const COL: &str = "Color";
 const WEIGHT: &str = "Weight";
 
+/// The defaults that differ between the effectors sharing the Plain parameter set
+/// (spec E2, E11).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CommonDefaults {
+    pub minimum: f64,
+    pub p: [f64; 3],
+    pub color_mode: &'static str,
+    pub uniform_scale: bool,
+    pub scale_value: f64,
+    pub s: [f64; 3],
+}
+
+impl CommonDefaults {
+    const PLAIN: CommonDefaults = CommonDefaults {
+        minimum: 0.0,
+        p: [0.0, 100.0, 0.0],
+        color_mode: "fields_color",
+        uniform_scale: false,
+        scale_value: 0.0,
+        s: [0.0; 3],
+    };
+}
+
 /// The Plain effector's node type.
 pub fn plain_type() -> NodeType {
+    common_type(PLAIN, "Plain", &CommonDefaults::PLAIN)
+}
+
+/// A node type with the parameters every transforming effector shares (spec E2).
+pub(crate) fn common_type(id: &str, name: &str, d: &CommonDefaults) -> NodeType {
     let pct = |id: &str, label: &str, default: f64, group: &str| {
         ParamDesc::float(id, label, default)
             .range(-BIG, BIG)
             .unit(Unit::Percent)
             .group(group)
     };
-    NodeType::new(PLAIN, "Plain", Category::Effector)
+    NodeType::new(id, name, Category::Effector)
         .param(ParamDesc::bool("enabled", "Enabled", true).group(EFF))
         .param(pct("strength", "Strength", 1.0, EFF))
         .param(ParamDesc::string("selection", "Selection", "").group(EFF))
@@ -47,7 +75,7 @@ pub fn plain_type() -> NodeType {
         )
         .param(ParamDesc::link_list("fields", "Fields", &[Category::Field]).group(EFF))
         .param(pct("maximum", "Maximum", 1.0, EFF))
-        .param(pct("minimum", "Minimum", 0.0, EFF))
+        .param(pct("minimum", "Minimum", d.minimum, EFF))
         .param(
             ParamDesc::enumeration(
                 "transform_mode",
@@ -76,7 +104,7 @@ pub fn plain_type() -> NodeType {
         )
         .param(ParamDesc::bool("position", "Position", true).group(PAR))
         .param(
-            ParamDesc::vec3("p", "P", [0.0, 100.0, 0.0])
+            ParamDesc::vec3("p", "P", d.p)
                 .range(-BIG, BIG)
                 .unit(Unit::Distance)
                 .group(PAR),
@@ -89,15 +117,11 @@ pub fn plain_type() -> NodeType {
                 .group(PAR),
         )
         .param(ParamDesc::bool("scale", "Scale", false).group(PAR))
-        .param(ParamDesc::bool("uniform_scale", "Uniform Scale", false).group(PAR))
+        .param(ParamDesc::bool("uniform_scale", "Uniform Scale", d.uniform_scale).group(PAR))
         .param(ParamDesc::bool("absolute_scale", "Absolute Scale", false).group(PAR))
+        .param(ParamDesc::vec3("s", "S", d.s).range(-BIG, BIG).group(PAR))
         .param(
-            ParamDesc::vec3("s", "S", [0.0; 3])
-                .range(-BIG, BIG)
-                .group(PAR),
-        )
-        .param(
-            ParamDesc::float("scale_value", "Scale", 0.0)
+            ParamDesc::float("scale_value", "Scale", d.scale_value)
                 .range(-BIG, BIG)
                 .group(PAR),
         )
@@ -105,7 +129,7 @@ pub fn plain_type() -> NodeType {
             ParamDesc::enumeration(
                 "color_mode",
                 "Color Mode",
-                "fields_color",
+                d.color_mode,
                 &[
                     ("off", "Off"),
                     ("effector_color", "Effector Color"),
@@ -173,6 +197,8 @@ pub struct Plain {
     pub rotation: Option<DVec3>,
     /// Per-axis scale value; `uniform_scale` already expanded.
     pub scale: Option<DVec3>,
+    /// One value for the three axes (the Random effector draws one value then).
+    pub uniform_scale: bool,
     pub absolute_scale: bool,
     pub color_mode: ColorMode,
     pub color: [f64; 3],
@@ -199,6 +225,7 @@ impl Default for Plain {
             position: Some(DVec3::new(0.0, 100.0, 0.0)),
             rotation: None,
             scale: None,
+            uniform_scale: false,
             absolute_scale: false,
             color_mode: ColorMode::FieldsColor,
             color: [1.0; 3],
@@ -220,7 +247,7 @@ pub(crate) fn from_node(scene: &Scene, id: NodeId) -> Option<Plain> {
     settings_from_params(&ty, &node.params, scene.world_matrix(id)?)
 }
 
-fn settings_from_params(
+pub(crate) fn settings_from_params(
     ty: &NodeType,
     values: &BTreeMap<String, forge_core::Value>,
     world: DMat4,
@@ -269,6 +296,7 @@ fn settings_from_params(
         position: on("position", p.vec3("p")),
         rotation: on("rotation", p.vec3("r")),
         scale: on("scale", scale_value),
+        uniform_scale: uniform,
         absolute_scale: p.bool("absolute_scale"),
         color_mode,
         color: p.color("color"),
@@ -304,12 +332,64 @@ impl Plain {
     }
 }
 
+/// The effect weight of one clone per channel (spec E12): Plain uses the same weight for
+/// all of them, the Random effector draws each.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Weights {
+    pub pos: DVec3,
+    pub rot: DVec3,
+    pub scale: DVec3,
+    /// Weight, U, V and Visibility.
+    pub scalar: f64,
+}
+
+impl Weights {
+    pub(crate) fn uniform(w: f64) -> Weights {
+        Weights {
+            pos: DVec3::splat(w),
+            rot: DVec3::splat(w),
+            scale: DVec3::splat(w),
+            scalar: w,
+        }
+    }
+}
+
+/// What a per-clone weight source may look at.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ClonePoint {
+    /// Position in the clone list.
+    pub position: usize,
+    /// The clone's index property.
+    pub index: u32,
+    /// World position of the clone.
+    pub world: DVec3,
+    pub uvw: DVec3,
+    /// The falloff value at the clone.
+    pub value: f64,
+}
+
 impl Effector for Plain {
     fn apply(
         &self,
         data: &mut CloneData,
         falloff: &FieldList,
         ctx: &EffectorCtx,
+    ) -> Result<(), CloneError> {
+        self.apply_weighted(data, falloff, ctx, &mut |c| {
+            Weights::uniform(self.amount(c.value))
+        })
+    }
+}
+
+impl Plain {
+    /// The shared body of the Plain and Random effectors: `weights` gives each clone's
+    /// weights, everything else is the Plain rule (spec E3-E8, E12).
+    pub(crate) fn apply_weighted(
+        &self,
+        data: &mut CloneData,
+        falloff: &FieldList,
+        ctx: &EffectorCtx,
+        weights: &mut dyn FnMut(&ClonePoint) -> Weights,
     ) -> Result<(), CloneError> {
         if let Some(what) = self.unsupported {
             return Err(CloneError::Unsupported(what));
@@ -320,9 +400,16 @@ impl Effector for Plain {
         for i in 0..data.len() {
             let m = data.matrices[i];
             let at = m.w_axis.truncate();
-            let sample = falloff.sample(object_to_world.transform_point3(at), ctx.eval);
+            let world = object_to_world.transform_point3(at);
+            let sample = falloff.sample(world, ctx.eval);
             let value = sample.value;
-            let w = self.amount(value);
+            let w = weights(&ClonePoint {
+                position: i,
+                index: data.index[i],
+                world,
+                uvw: data.uvw[i],
+                value,
+            });
             let node_frame = frame(&m);
             let space = match self.space {
                 Space::Node => node_frame,
@@ -336,7 +423,7 @@ impl Effector for Plain {
             );
             // Rotation: the delta turns about the space's axes (E4).
             if let Some(r) = self.rotation {
-                let d = DMat3::from_mat4(hpb(r * w));
+                let d = DMat3::from_mat4(hpb(r * w.rot));
                 m3 = space * d * space.transpose() * m3;
             }
             // Scale: along the clone's own axes (E5).
@@ -346,9 +433,9 @@ impl Effector for Plain {
                 for k in 0..3 {
                     if lens[k] > 1e-12 {
                         let target = if absolute {
-                            lens[k] + (s[k] - lens[k]) * w
+                            lens[k] + (s[k] - lens[k]) * w.scale[k]
                         } else {
-                            lens[k] + s[k] * w
+                            lens[k] + s[k] * w.scale[k]
                         };
                         cols[k] *= target / lens[k];
                     }
@@ -358,7 +445,7 @@ impl Effector for Plain {
             // Position: the delta in the space's axes (E4).
             let mut pos = at;
             if let Some(p) = self.position {
-                pos += space * (p * w);
+                pos += space * (p * w.pos);
             }
             data.matrices[i] = DMat4::from_cols(
                 m3.x_axis.extend(0.0),
@@ -384,18 +471,19 @@ impl Effector for Plain {
                 data.colors[i] = std::array::from_fn(|k| c[k] + (t[k] - c[k]) * wc);
             }
             // Weight, U, V (E7).
+            let w_s = w.scalar;
             let set = |old: f64, value: f64| {
                 if self.mode == TransformMode::Absolute {
-                    old + (value - old) * w
+                    old + (value - old) * w_s
                 } else {
-                    old + value * w
+                    old + value * w_s
                 }
             };
             data.weights[i] = set(data.weights[i], self.weight);
             data.uvw[i].x = set(data.uvw[i].x, self.u);
             data.uvw[i].y = set(data.uvw[i].y, self.v);
             // Visibility (E7).
-            if self.visibility && w < 0.5 {
+            if self.visibility && w_s < 0.5 {
                 data.visible[i] = false;
             }
         }

@@ -3,7 +3,7 @@
 - [ ] Cloner (brief 065: clone data, Linear, Radial, Grid Array, Honeycomb and instance modes done, see the clone-toolset sections below; Object, order modes, effectors pending): modes Linear, Radial, Grid Array, Honeycomb, Object (vertex/edge/polygon/surface/volume/axis), Blend; Iterate/Random/Blend/Sort clone order; fix clone, fix texture, instance modes (Instance/Render Instance/Multi-Instance), effectors list, per-clone transforms, scale/rotation/color/weight, MoData output
 - [ ] Matrix, Fracture (modes + connectors), Voronoi Fracture (sources, distribution, shape, details), MoSpline (Spline/Turtle/Simple modes), MoText, MoInstance, Tracer (trace links/vertices, interval, spline types)
 ## Effectors
-- [ ] Plain (brief 068: framework + Plain done, see section E below), Delay, Formula, Inheritance, Python, Random, Shader, Sound, Spline, Step, Target, Time, Volume, Push Apart, Reeffector, Group
+- [ ] Plain (brief 068: framework + Plain done, see section E below), Random (brief 069, sections E11-E17), Delay, Formula, Inheritance, Python, Shader, Sound, Spline, Step, Target, Time, Volume, Push Apart, Reeffector, Group
 - [ ] Common: strength, selection, transform (P/S/R), color, weight, UV, visibility, falloff (shapes/directions/field list), min/max, mode (Add/Subtract/Multiply/etc.)
 ## Fields
 - [ ] Solid, Spherical, Box, Cylinder, Capsule, Cone, Torus, Formula, Linear, Radial, Random, Shader, Sound, Step, Delay, Object, Group, Python
@@ -360,7 +360,7 @@ Wording as above ("effector", "clone data", "clone toolset"). Sources: parity ob
 O8 [cloner.md](../parity/cloner.md), O14 [effectors-2.md](../parity/effectors-2.md),
 O22 [effectors-3.md](../parity/effectors-3.md), design [E-clone-toolset.md](../roadmap/areas/E-clone-toolset.md),
 fields [FIELDS.md](FIELDS.md). Golden data: the 14 Plain cases of `tests/golden/cloner/`
-(`samples.json` level B, tolerance 1e-4; `mesh.obj` level A). Out of scope: Random (069), Step, Formula,
+(`samples.json` level B, tolerance 1e-4; `mesh.obj` level A). Out of scope (Random is E11-E17): Step, Formula,
 Time, Delay, Target (070), the other effectors (071), field-list falloff beyond what the Plain cases
 need (072: layer blend modes, groups, direction channel).
 
@@ -539,3 +539,142 @@ One small cloner case each (Linear, count 5, step (0, 50, 0), 20 cm cube):
 - The Linear field of `linear-plain-field`: its case file holds no `[params.effector.field]` table; re-observe it with the field's Color recorded (the colour of the app's new field is not white).
 - Two effectors where the order changes the result: Plain Absolute Scale 2 then Plain Relative Scale 1.
 - The per-effector strength on the cloner (the "Plain" field of the cloner) at 50 %.
+
+## E11. Random effector (`forge.effector.random`)
+
+Sources: O22 [effectors-3.md](../parity/effectors-3.md) (parameter table, cases `random-gaussian`, `random-noise`,
+`random-indexed`, `random-scale`), O8 [cloner.md](../parity/cloner.md) (`grid-random`, `grid-random-seed`: Seed 12345 and P
+(50, 50, 50) are the defaults), O11 [followups-1.md](../parity/followups-1.md) (`grid-random-seed-7`, `grid-random-rot`),
+noise from [NOISE.md](NOISE.md). The Random effector is the Plain effector (E2-E8) with a different source of the per-clone
+value: everything that is not listed here (Strength, Transform Mode, Transform Space, P / R / S, Color Mode, Weight, U, V,
+Visibility, Selection, Deformation, the `fields` falloff, Enabled) is **shared code and the same parameters** as Plain.
+
+### Parameters
+
+Only the differences from the Plain table (E2) and the new parameters:
+
+| id | label | kind | default | notes |
+|---|---|---|---|---|
+| `maximum`, `minimum` | Maximum, Minimum | float, percent | 100 %, **-100 %** | the range of the random value (E12), in every Transform Mode |
+| `position` | Position | bool | on | |
+| `p` | P | vec3 | **(50, 50, 50)** | |
+| `color_mode` | Color Mode | enum | **`off`** | |
+| `uniform_scale`, `scale_value`, `s` | | | on, 1, (1, 1, 1) | the O22 probe set Uniform Scale on and Scale 1; the hidden defaults were not read (**parity-pending**) |
+| `random_mode` | Random Mode | enum | `random` | `random`, `gaussian`, `noise`, `turbulence`, `sorted`; `sorted` is `Unsupported` (listed in O22, nothing observed) |
+| `synchronized` | Synchronized | bool | off | one value per clone for all channels (E12) |
+| `indexed` | Indexed | bool | off | a switch next to Random Mode, not a list entry (`random-indexed`) |
+| `seed` | Seed | int | 12345 | 0 .. 1e9 |
+| `space` | Space | enum | `global` | `global`, `uv` (E13) |
+| `animation_speed` | Animation Speed | float, percent | 100 % | noise modes only (E13) |
+| `noise_scale` | Scale | float, percent | 100 % | noise modes only (E13); the case files call it `scale_percent` |
+
+`use_alpha_strength_1071` is not stored (as E2).
+
+### E12. The random value
+
+Each clone gets a **value** `v = minimum + r (maximum - minimum)` with `r` in `[0, 1]`, per channel, from the mode below.
+With the defaults `v` is in `[-1, 1]`. The effect weight of a channel is `w_c = strength · falloff · v_c` (the Plain `w`
+with `v_c` in place of 1; falloff as E1; **Remap does not remap again**: Minimum and Maximum are the range of `v`
+in every mode). Then, per channel, exactly the Plain rules:
+
+- Position: `pos += F (P ∘ w_pos)` (`∘` is the per-axis product: every axis has its own draw); `grid-random`: the offset of
+  an axis is `50 v` cm.
+- Rotation: `Rot(R ∘ w_rot)` in the space `F`. Scale: axis `k` gets `l + S_k w_scale,k`; Uniform Scale uses **one** draw for the
+  three axes (`random-scale`: x, y, z lengths equal, `1 + v` in `[0, 2]`). Weight, U, V and Visibility use a seventh draw.
+- Colour (E6) does not use the random value; it is the falloff's (Random Color Mode default is Off).
+
+Draws per clone, in this order: position (3), rotation (3), scale (3, or 1 if Uniform Scale is on), weight (1); each is drawn
+whether its channel is on or not, so switching a channel never changes the others (own design). Synchronized uses the first
+draw of the clone for all channels.
+
+`random` (uniform) and `gaussian` use a counter-based generator: `u(seed, key, k)` is the SplitMix64 finaliser of
+`seed · 0x9E3779B97F4A7C15 + key · 0xD1B54A32D192ED03 + k · 0x94D049BB133111EB`, mapped to `[0, 1)` with 53 bits. The `key` of a
+clone is its **list position** `i` (Random) or its **clone index** `data.index[i]` (Indexed): with Indexed a clone keeps
+its value when the list is permuted or other clones are hidden or added, which the plain Random does not promise
+(own design; the observed Indexed data does not reveal the rule, E15).
+
+- `random`: `r = u`.
+- `gaussian`: `r = clamp(0.5 + g / 12, 0, 1)` with `g` the standard normal from Box-Muller of two draws `u(.., k)` and
+  `u(.., k + 32)`. The standard deviation of `v` is `1/6 (max - min)/2`: O22 `random-gaussian` has 15 values, `var(v)` 0.024,
+  `|v| <= 0.27`, mean 0.025; a standard deviation of 1/6 gives `var` 0.0278.
+- `noise`, `turbulence`: E13. `sorted`: `Unsupported`.
+
+### E13. Noise and Turbulence, Space, animation
+
+`noise` samples forge-noise Perlin (`NoiseKind::Perlin`, 1 octave), `turbulence` samples `NoiseKind::Turbulence`
+(1 octave, NOISE.md N4), both 4D: `n = noise.sample4(q, t)` with `q = point / L`, feature size `L = 300 cm · noise_scale`, the
+point in **world** space (the world position of the clone, like a field) for Space Global and `uvw · 4 L` (clone UVW times four feature sizes) for Space UV
+(**parity-pending**: no UV sample). `t = time · animation_speed` (seconds, speed as a fraction), so frame 0 is static.
+`r = (n + 1) / 2`. The three channel groups use three noises of seeds `octave_seed(seed, 1 + k)`, `k` = 0 position,
+1 rotation, 2 scale and weight; component `k` of a channel samples its noise at
+`point + k (71.3, 37.7, 19.9)` cm (own design, decorrelates x, y, z; weight is component 3 of the scale noise). Synchronized uses the position noise at the point
+for everything. Continuity in position is the rule the cases show: neighbouring clones have close values.
+
+Choice of `L = 300`: O22 `random-noise` has clones 50 cm apart along Y and a root-mean-square step between neighbours of
+0.119 per channel; our Perlin gives 0.115 at `L = 300` (0.168 at 200, 0.087 at 400), measured over 4800 pairs
+(scratch experiment, `crates/clone-engine/tests/random.rs::the_feature_size_reproduces_the_observed_smoothness` repeats it).
+
+### E14. Pending
+
+Parity-pending: all exact random values (E15), Turbulence mode (no sample), Synchronized, Space UV, Animation Speed, Sorted, the
+hidden Scale defaults, Absolute/Remap with random channels, the Scale checkbox with several draws, the channel decorrelation of the noise
+(at the first clone the three observed channels are within 0.01, at the second within 0.26: no model of ours reproduces both).
+
+### E15. The reference's random sequence (three hypotheses)
+
+The cases give 59 values in `[-1, 1]` for Random mode (the 27 position offsets of `grid-random` / `grid-random-seed` with
+Seed 12345, the 27 of `grid-random-seed-7` with Seed 7, the 5 uniform scales of `random-scale`), the position offsets
+divided by P (50); values have 1e-12 precision. Hypotheses, each checked against every observed value (a value matches if
+some output equals it within 1e-9, as `r`, `2r - 1` or `1 - 2r`):
+
+1. **One sequential stream** of a standard generator started at the Seed (any order of use and any number of skipped
+   outputs: the first 20 000 outputs are searched): MT19937 (32 bit and 53 bit), minstd (16807 and 48271), the LCGs
+   of glibc, ANSI C, MSVC, Numerical Recipes and Java, xorshift32, xorshift64, SplitMix64, PCG32, Python's `random`.
+   No value matches.
+2. **A generator re-seeded per clone** with `seed + i`, `seed xor i`, `seed (i + 1)`, `i`, `seed 65537 + i`, `seed + i + 1`
+   (first 8 outputs, same generators). No value matches. The same for `random-indexed` with the seeds `i`, `i + 1`,
+   `seed + i`, `seed xor i`, `seed (i + 1)`, `seed`. No match.
+3. **A counter-based hash** of `(seed, clone, channel)`: murmur3 `fmix32` / `fmix64`, Wang, PCG and Jenkins hashes,
+   with the combinations `seed + 3i + c`, `seed (3i + c + 1)`, `(seed << 8) xor (3i + c)`, `seed xor (3i + c)`,
+   `(3i + c) + seed · 0x9E3779B1`, and a chained hash. No match.
+
+The budget is spent: Random, Gaussian and Indexed are compared **statistically** (E16), and the reference's sequence is
+not reproduced. (Our own generator above is deterministic and platform independent, C9.)
+
+### E16. Parity
+
+Test: `crates/generators/tests/cloner_parity.rs::random_effector_cases_match_the_reference` rebuilds the 8 cloner cases with a
+Random effector (`random-gaussian`, `random-noise`, `random-indexed`, `random-scale`, `grid-random`, `grid-random-seed`,
+`grid-random-seed-7`, `grid-random-rot`) from their `case.toml`, with the effector linked through `effectors`, and compares:
+
+- **exact (clone data, 1e-4)**: the clone count, every `visible` flag, colour and weight, and every channel the effector does not
+  randomise (the position of `random-scale` and `grid-random-rot`, scale and rotation of the position cases) 8 of 8 cases;
+  the expanded mesh keeps the reference's vertex and face counts (level A counts) 8 of 8;
+- **statistical (randomised channel)**: the observed values `v` (offset / P, angle / R, scale - 1) must lie in `[-1, 1]` (all
+  cases), and
+  - Random mode (`grid-random`, `grid-random-seed`, `grid-random-seed-7`, `random-scale`, `grid-random-rot`): the pooled mean of
+    the observed values and variance against the model `U[-1, 1]` (mean 0, variance 1/3): `|mean| <= 3 sqrt(1/3 / n)` and
+    `|var - 1/3| <= 3 · 0.298 / sqrt(n)` (the standard deviation of the sample variance of a uniform, `sqrt((1/5 - 1/9) / n)`,
+    is `0.298 / sqrt(n)`); the position and scale values pooled: n = 59, observed mean 0.047, variance 0.337 (inside the band); the rotation values of `grid-random-rot`
+    (angle / R, n = 27, mean 0.195, variance 0.268) are checked against the same band separately;
+  - Gaussian (`random-gaussian`, n = 15): `|mean| <= 3 · (1/6) / sqrt(n)`, `|var - 1/36| <= 3 · (1/36) sqrt(2 / n)`;
+  - Noise (`random-noise`, n = 15): every value in `[-1, 1]`, and the root-mean-square step between consecutive clones within a
+    factor of 2 of ours on the same five clone positions (observed 0.119, ours 0.157; 0.115 averaged over 40 seeds);
+  - Indexed (`random-indexed`, n = 15): range only. **Not matched**: the observed mean is -0.555 and the variance 0.117, more than 3.7
+    standard errors from a uniform's mean (0): the reference's Indexed values are not uniform in `[-1, 1]`. 15 values cannot fit another
+    distribution, so the mean and variance are listed in the test as `KNOWN_MISMATCH` (asserted to stay outside the uniform band)
+    and Indexed is checked for determinism per index in `crates/clone-engine/tests/random.rs`.
+  The tolerances are 3 standard errors of the model distribution; they were chosen from the model, not from the observed
+  values, and are never used for an exact channel.
+
+Other tests: `crates/clone-engine/tests/random.rs` (large-sample moments of each mode, seed sensitivity, Indexed stable under
+permutation, Synchronized, channels independent, noise continuity, Minimum / Maximum range, Unsupported Sorted).
+
+### E17. Open data that would settle the pending rules
+
+- Random Mode Random with Count 50 and Seed 12345, Position only (distribution, and one more seed to look for a hash structure);
+  the same with Seed 0 and Seed 1 (are small seeds special?) and with Strength 50 %.
+- Indexed with Count 50 (the distribution; the observed mean is -0.555), and Indexed with Count 5 and 8 (does clone 0 keep its value?).
+- Gaussian with Count 50 (the standard deviation and clipping), Noise with Count 20 along Y at 10 cm steps, Scale 50 % and 200 %
+  (feature size), Animation Speed 0 % and frame 30 (time axis), Space UV, Turbulence, Synchronized, Sorted.
+- Random with Rotation (R.H only, other axes 0): are the three position axes independent draws from the same stream as the rotation?

@@ -5,8 +5,8 @@ use forge_core::{Category, EvalCtx, NodeId, Scene, Value};
 use forge_fields::FieldList;
 use glam::DMat4;
 
-use crate::plain;
 use crate::{CloneData, CloneError};
+use crate::{plain, random};
 
 /// What an effector may read besides the clone data.
 #[derive(Debug, Clone, Copy)]
@@ -48,6 +48,9 @@ pub fn effector_from_node(
     }
     match node.type_id.as_str() {
         plain::PLAIN => Ok(plain::from_node(scene, id).map(|p| Box::new(p) as Box<dyn Effector>)),
+        random::RANDOM => {
+            Ok(random::from_node(scene, id).map(|r| Box::new(r) as Box<dyn Effector>))
+        }
         _ => Err(CloneError::Unsupported("this effector type")),
     }
 }

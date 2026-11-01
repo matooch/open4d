@@ -370,6 +370,8 @@ fn node_param(
     let value = match (&desc.kind, raw) {
         (ParamKind::Bool, toml::Value::Boolean(b)) => Value::Bool(*b),
         (ParamKind::Int { .. }, toml::Value::Integer(i)) => Value::Int(*i),
+        // The Random effector's Seed is a whole number the case files write as a float.
+        (ParamKind::Int { .. }, toml::Value::Float(f)) => Value::Int(f.round() as i64),
         (ParamKind::Float { .. }, v) => Value::Float(
             v.as_float()
                 .unwrap_or_else(|| v.as_integer().expect("number") as f64)
@@ -439,14 +441,17 @@ fn build_with_effectors(
     doc.transact("effectors", |tx: &mut Tx| {
         let mut ids = Vec::new();
         for e in effectors {
-            let eff = create_node(
-                tx,
-                reg,
-                "forge.effector.plain",
-                e,
-                &["type", "use_alpha_strength_1071"],
-                &[],
-            );
+            let ty = match e.get("type").and_then(|t| t.as_str()) {
+                Some("random") => "forge.effector.random",
+                _ => "forge.effector.plain",
+            };
+            let normalised = normalise_random(e);
+            let e = if ty == "forge.effector.random" {
+                &normalised
+            } else {
+                *e
+            };
+            let eff = create_node(tx, reg, ty, e, &["type", "use_alpha_strength_1071"], &[]);
             if let Some(toml::Value::Table(f)) = e.get("field") {
                 let field = create_node(
                     tx,
@@ -691,4 +696,280 @@ fn linear_plain_field_matches_with_the_default_linear_field() {
     let want = export_weld(&case.expected_mesh().unwrap().unwrap());
     let geo = compare_meshes(&want, &ours, &m.tolerance);
     assert!(geo.passed(), "{:?}", geo.failures);
+}
+
+// ---------------------------------------------------------------------------------------
+// Random effector (spec E11-E16)
+
+/// A Random effector table in one spelling: the older case files write the percent keys
+/// without the suffix, and call the noise Scale `scale` / `scale_percent` and the Scale
+/// checkbox `scale_1061` / `scale`.
+fn normalise_random(e: &Table) -> Table {
+    let mut out = Table::new();
+    for (k, v) in e {
+        let key = match (k.as_str(), v) {
+            ("animation_speed", _) => "animation_speed_percent",
+            ("scale", toml::Value::Float(_)) | ("scale_percent", _) => "noise_scale_percent",
+            ("scale_1061", _) => "scale",
+            (other, _) => other,
+        };
+        out.insert(key.to_string(), v.clone());
+    }
+    out
+}
+
+fn random_effector(m: &forge_parity_harness::CaseManifest) -> Option<Table> {
+    let e = effector_tables(&m.params);
+    match e.as_slice() {
+        [t] if t.get("type").and_then(|t| t.as_str()) == Some("random") => Some((*t).clone()),
+        _ => None,
+    }
+}
+
+/// The values the effector drew, per randomised channel, read back from clone data: the
+/// offset divided by P, the angle divided by R, the axis length minus 1.
+#[derive(Default, Debug)]
+struct Drawn {
+    position: Vec<f64>,
+    rotation: Vec<f64>,
+    scale: Vec<f64>,
+}
+
+/// Compares `data` with the unaffected `base` clone by clone. Channels the effector does not
+/// touch must be equal within `tol` (the exact part); the others are read back as values.
+fn read_back(
+    data: &forge_clone_engine::CloneData,
+    base: &forge_clone_engine::CloneData,
+    e: &Table,
+    tol: f64,
+    what: &str,
+) -> Drawn {
+    let on = |k: &str| e.get(k).and_then(|v| v.as_bool()).unwrap_or(false);
+    let vec3 = |k: &str, scale: f64| -> glam::DVec3 {
+        let f = floats(&e[k]);
+        glam::DVec3::new(f[0], f[1], f[2]) * scale
+    };
+    let mut out = Drawn::default();
+    assert_eq!(data.len(), base.len(), "{what}: clone count");
+    for i in 0..data.len() {
+        let (a, b) = (data.matrices[i], base.matrices[i]);
+        let close = |x: glam::DVec3, y: glam::DVec3, name: &str| {
+            assert!(
+                (x - y).length() < tol,
+                "{what}: clone {i} {name}: {x:?} != {y:?}"
+            );
+        };
+        assert_eq!(data.visible[i], base.visible[i], "{what}: visible {i}");
+        assert!(
+            (data.weights[i] - base.weights[i]).abs() < tol,
+            "{what}: weight {i}"
+        );
+        for k in 0..3 {
+            assert!(
+                (data.colors[i][k] - base.colors[i][k]).abs() < tol,
+                "{what}: colour {i}"
+            );
+        }
+        if on("position") {
+            let p = vec3("p", 1.0);
+            let d = (a.w_axis - b.w_axis).truncate();
+            out.position.extend((0..3).map(|k| d[k] / p[k]));
+        } else {
+            close(a.w_axis.truncate(), b.w_axis.truncate(), "position");
+        }
+        if on("rotation") {
+            let r = vec3("r_deg", std::f64::consts::PI / 180.0);
+            let h = forge_core::transform::hpb_from_rotation(glam::DMat3::from_mat4(a));
+            out.rotation.extend((0..3).map(|k| h[k] / r[k]));
+        } else {
+            // Directions (the lengths change when Scale is on).
+            let dir = |v: glam::DVec4| v.truncate().normalize();
+            close(dir(a.x_axis), dir(b.x_axis), "x axis");
+            close(dir(a.y_axis), dir(b.y_axis), "y axis");
+            close(dir(a.z_axis), dir(b.z_axis), "z axis");
+            if !on("scale") {
+                close(a.x_axis.truncate(), b.x_axis.truncate(), "x axis length");
+            }
+        }
+        if on("scale") {
+            let (lx, ly, lz) = (a.x_axis.length(), a.y_axis.length(), a.z_axis.length());
+            let base_len = b.x_axis.length();
+            out.scale
+                .extend([lx - base_len, ly - base_len, lz - base_len]);
+        }
+    }
+    out
+}
+
+fn mean_var(v: &[f64]) -> (f64, f64) {
+    let n = v.len() as f64;
+    let mean = v.iter().sum::<f64>() / n;
+    (mean, v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n)
+}
+
+/// Spec E16: mean and variance of `n` values against `U[-1, 1]` within 3 standard errors
+/// of the model (the standard deviation of the sample variance is `0.298 / sqrt(n)`).
+fn uniform_band(v: &[f64]) -> Result<(), String> {
+    let n = v.len() as f64;
+    let (mean, var) = mean_var(v);
+    let mean_tol = 3.0 * (1.0 / 3.0_f64 / n).sqrt();
+    let var_tol = 3.0 * 0.298 / n.sqrt();
+    if mean.abs() > mean_tol || (var - 1.0 / 3.0).abs() > var_tol {
+        return Err(format!(
+            "n {n}: mean {mean:.3} (tolerance {mean_tol:.3}), variance {var:.3} (1/3 +- {var_tol:.3})"
+        ));
+    }
+    Ok(())
+}
+
+fn rms_step(v: &[f64]) -> f64 {
+    let steps: Vec<f64> = v
+        .chunks(3)
+        .collect::<Vec<_>>()
+        .windows(2)
+        .flat_map(|w| (0..3).map(|k| w[1][k] - w[0][k]).collect::<Vec<_>>())
+        .collect();
+    (steps.iter().map(|s| s * s).sum::<f64>() / steps.len() as f64).sqrt()
+}
+
+/// Cases whose exact part matches but whose statistics do not fit the model, with the
+/// reason (spec E16): Indexed.
+const RANDOM_KNOWN_MISMATCH: &[&str] = &["random-indexed"];
+
+#[test]
+fn random_effector_cases_match_the_reference() {
+    let reg = registry();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
+    let ctx = EvalCtx::default();
+    let mut exact = Vec::new();
+    let mut drawn_ref: std::collections::BTreeMap<String, Drawn> = Default::default();
+    let mut drawn_ours: std::collections::BTreeMap<String, Drawn> = Default::default();
+    for case in discover_cases(&root).unwrap() {
+        if case.feature != "cloner" {
+            continue;
+        }
+        let m = case.manifest().unwrap();
+        let Some(e) = random_effector(&m) else {
+            continue;
+        };
+        let mode = m.params["mode"].as_str().unwrap().to_string();
+        let table: Table = m
+            .params
+            .iter()
+            .filter(|(k, v)| {
+                !v.is_table()
+                    && !k.starts_with("plain")
+                    && !k.starts_with("random")
+                    && k.as_str() != "document_frame"
+            })
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        let normalised = normalise_random(&e);
+        let mut doc = Document::new(reg.clone());
+        let cloner = build_with_effectors(&mut doc, &reg, &mode, &table, &[&e]);
+        let mut base_doc = Document::new(reg.clone());
+        let base_cloner = build(&mut base_doc, &reg, &mode, &table);
+        let ours = clone_data(doc.scene(), cloner, &ctx).unwrap().unwrap();
+        let base = clone_data(base_doc.scene(), base_cloner, &ctx)
+            .unwrap()
+            .unwrap();
+        assert!(ours.is_consistent(), "{}", case.name);
+
+        // The reference, as clone data.
+        let (_, expected) = case.samples().unwrap().remove(0);
+        let Samples::Clones { clones, .. } = &expected else {
+            panic!("{}: not clone samples", case.name);
+        };
+        let mut reference = base.clone();
+        for (i, c) in clones.iter().enumerate() {
+            reference.matrices[i] = glam::DMat4::from_cols(
+                glam::DVec3::from(c.x).extend(0.0),
+                glam::DVec3::from(c.y).extend(0.0),
+                glam::DVec3::from(c.z).extend(0.0),
+                glam::DVec3::from(c.pos).extend(1.0),
+            );
+            reference.colors[i] = c.color;
+            reference.weights[i] = c.weight;
+            reference.visible[i] = c.visible;
+        }
+        assert_eq!(clones.len(), base.len(), "{}: clone count", case.name);
+        // Exact part: counts, visibility, colour, weight, and every channel that is not
+        // randomised, for the reference and for us.
+        let r = read_back(&reference, &base, &normalised, 1e-4, &case.name);
+        let o = read_back(&ours, &base, &normalised, 1e-9, &case.name);
+        // Level A counts of the expanded mesh.
+        let mesh = evaluate(doc.scene(), cloner, &ctx)
+            .unwrap()
+            .expect("geometry");
+        let ours_mesh = export_weld(&Mesh {
+            positions: mesh.points.iter().map(|p| p.to_array()).collect(),
+            faces: mesh.polys.clone(),
+        });
+        let want = export_weld(&case.expected_mesh().unwrap().unwrap());
+        assert_eq!(
+            want.positions.len(),
+            ours_mesh.positions.len(),
+            "{}",
+            case.name
+        );
+        assert_eq!(want.faces.len(), ours_mesh.faces.len(), "{}", case.name);
+        exact.push(case.name.clone());
+        drawn_ref.insert(case.name.clone(), r);
+        drawn_ours.insert(case.name.clone(), o);
+    }
+    exact.sort();
+    assert_eq!(exact.len(), 8, "{exact:?}");
+
+    // Statistical part (spec E16). Every value inside the range, ours and the reference.
+    for (name, d) in drawn_ref.iter().chain(drawn_ours.iter()) {
+        for v in d.position.iter().chain(&d.rotation).chain(&d.scale) {
+            assert!((-1.0 - 1e-6..=1.0 + 1e-6).contains(v), "{name}: {v}");
+        }
+    }
+    // The two files with the same seed hold the same values.
+    let a = &drawn_ref["grid-random"].position;
+    let b = &drawn_ref["grid-random-seed"].position;
+    assert!(a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-6));
+    // Random mode: 27 + 27 position values and the 5 uniform scales (n = 59).
+    let mut pooled = drawn_ref["grid-random-seed"].position.clone();
+    pooled.extend(&drawn_ref["grid-random-seed-7"].position);
+    pooled.extend(drawn_ref["random-scale"].scale.iter().step_by(3));
+    assert_eq!(pooled.len(), 59);
+    uniform_band(&pooled).unwrap();
+    uniform_band(&drawn_ref["grid-random-rot"].rotation).unwrap();
+    println!("random pooled {:?}", mean_var(&pooled));
+    println!(
+        "rotation {:?}",
+        mean_var(&drawn_ref["grid-random-rot"].rotation)
+    );
+    println!(
+        "gaussian {:?}",
+        mean_var(&drawn_ref["random-gaussian"].position)
+    );
+    println!(
+        "indexed {:?}",
+        mean_var(&drawn_ref["random-indexed"].position)
+    );
+    // Gaussian (n = 15).
+    let g = &drawn_ref["random-gaussian"].position;
+    let (mean, var) = mean_var(g);
+    let n = g.len() as f64;
+    assert!(mean.abs() <= 3.0 / 6.0 / n.sqrt(), "gaussian mean {mean}");
+    assert!(
+        (var - 1.0 / 36.0).abs() <= 3.0 / 36.0 * (2.0 / n).sqrt(),
+        "gaussian variance {var}"
+    );
+    // Noise: smoothness of the clones along Y within a factor 2 of ours.
+    let (rs, os) = (
+        rms_step(&drawn_ref["random-noise"].position),
+        rms_step(&drawn_ours["random-noise"].position),
+    );
+    println!("noise rms step: reference {rs:.4}, ours {os:.4}");
+    assert!(
+        rs > os / 2.0 && rs < os * 2.0,
+        "noise steps {rs} vs ours {os}"
+    );
+    // Indexed: range only (checked above); the reference is not a uniform (known mismatch).
+    assert!(uniform_band(&drawn_ref["random-indexed"].position).is_err());
+    assert_eq!(RANDOM_KNOWN_MISMATCH, ["random-indexed"]);
 }

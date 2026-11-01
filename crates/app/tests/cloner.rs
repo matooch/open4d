@@ -170,3 +170,24 @@ fn an_effector_is_created_and_linked_by_commands() {
         app.eval_mesh(cloner, 0).unwrap()
     );
 }
+
+/// Brief 069: a Random effector made by `object.create` moves the clones deterministically;
+/// the seed changes the values, the Random Mode is an option set by its id.
+#[test]
+fn a_random_effector_is_created_and_seeded_by_commands() {
+    let mut app = App::new_default();
+    let (cloner, _) = scene(&mut app);
+    let random = create(&mut app, "forge.effector.random");
+    set(&mut app, cloner, "effectors", json!([random.0]));
+    let a = app.eval_mesh(cloner, 0).unwrap();
+    assert_eq!(app.eval_mesh(cloner, 0).unwrap(), a);
+    set(&mut app, random, "seed", json!(7));
+    let b = app.eval_mesh(cloner, 0).unwrap();
+    assert_ne!(a, b);
+    set(&mut app, random, "random_mode", json!("gaussian"));
+    let g = app.eval_mesh(cloner, 0).unwrap();
+    assert_ne!(g, b);
+    // Sorted has no derived rules: the cloner reports it instead of guessing.
+    set(&mut app, random, "random_mode", json!("sorted"));
+    assert!(app.eval_mesh(cloner, 0).is_err());
+}

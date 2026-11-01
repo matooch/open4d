@@ -406,7 +406,8 @@ impl Plugin for CloneToolset {
 
     fn register(&self, r: &mut Registry) -> Result<(), RegistryError> {
         r.register(cloner_type())?;
-        r.register(crate::plain::plain_type())
+        r.register(crate::plain::plain_type())?;
+        r.register(crate::random::random_type())
     }
 }
 
@@ -432,7 +433,7 @@ impl Params<'_> {
         }
     }
 
-    fn int(&self, id: &str) -> i64 {
+    pub(crate) fn int(&self, id: &str) -> i64 {
         match self.get(id) {
             Value::Int(i) => i,
             other => unreachable!("{id} is not an int: {other:?}"),
