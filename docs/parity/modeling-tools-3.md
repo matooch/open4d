@@ -1,4 +1,4 @@
-# Modeling tools III: follow-ups from briefs 020 and 021 — observation (O58)
+# Modeling tools III: follow-ups from briefs 020, 021 and 022 — observation (O58)
 
 Status: not observed · App version: TODO · OS: TODO · Observer: TODO · Date: TODO
 Method: exactly as [modeling-tools-2.md](modeling-tools-2.md) (O25): a default cube made
@@ -34,6 +34,26 @@ Unblocks: confirms 020/021; no brief waits on it.
 | bevel-limit-off | 1/1/1 | one top edge | Bevel, offset 150, Limit off |
 | bevel-poly-multi | 2/2/2 | the 4 top polygons | Bevel in polygon mode, offset 20, extrusion 10 |
 | bevel-point | 1/1/1 | point 3 (100, 100, −100) | Bevel in point mode, offset 20 |
+| melt-patch | 3/1/3 | all 9 top polygons | Melt |
+| melt-ring | 3/1/3 | the 8 top polygons around the centre one | Melt |
+| melt-single | 1/1/1 | the top polygon | Melt |
+| dissolve-edge | 2/2/2 | the top edge between the two +x top polygons | Dissolve |
+| dissolve-point | 2/2/2 | the top centre point (0, 100, 0) | Dissolve |
+| dissolve-poly | 2/2/2 | one top polygon | Dissolve |
+| disconnect-groups-on | 2/1/1 | both top polygons | Disconnect, Preserve Groups on |
+| disconnect-groups-off | 2/1/1 | both top polygons | Disconnect, Preserve Groups off |
+| disconnect-all | 1/1/1 | all polygons | Disconnect |
+| optimize-two-cubes | two default cubes made editable and joined with Connect (Weld off), the second moved to x = 200 | – | Optimize, tolerance 0.01 |
+| mirror-duplicate | 1/1/1 cube moved to x = 50 | all polygons | Mirror, plane x = 0, Duplicate on, Weld on |
+| mirror-subset | 1/1/1 | the top polygon | Mirror, plane x = 0 |
+| subdivide-3 | 1/1/1 | – | Subdivide, Subdivisions 3, Hyper off |
+| subdivide-tri | a default Pyramid made editable | – | Subdivide, Subdivisions 1 |
+| subdivide-subset | 1/1/1 | the top polygon | Subdivide, Subdivisions 1 |
+| triangulate-ngon | a default Disc (Disc segments 1, rotation segments 6) made editable | – | Triangulate |
+| untriangulate-ngons | 1/1/1 triangulated | – | Untriangulate, N-gons on (record the angle) |
+
+GUI read (add to G3): the default of every setting in the Subdivide, Optimize, Weld, Melt,
+Dissolve, Disconnect, Mirror and Triangulate dialogs.
 
 GUI-only: the drag scale (how many units the Extrude offset changes per screen pixel at the
 default camera). Add it to [GUI-SESSIONS.md](GUI-SESSIONS.md) G3 when someone sits at the app.
