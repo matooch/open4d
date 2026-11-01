@@ -3,7 +3,7 @@
 - Common: Mode (limited/unlimited/within box), Size, Strength, Fit to Parent, Axis, Falloff/Fields, Order of evaluation (parent-child deformer stack), Deformer on generators vs editable mesh
 - Each: parameter list, defaults, math, golden mesh comparison.
 
-Bend, Twist, Taper, Bulge, Shear and Spherify are specified below (§0–6, §9). Sources:
+Bend, Twist, Taper, Bulge, Shear and Spherify are specified below (§0–6, §9); falloff is §10. Sources:
 docs/parity/{bend,twist,deformer-common,taper,bulge,shear,spherify}.md and their golden
 cases. Everything else is still a checklist item.
 
@@ -83,8 +83,8 @@ Percent params (`strength`, `curvature`) carry `Unit::Percent` and store **the n
 the app shows** — 50 = 50 %, the convention of `end_scale` (GENERATORS2 §10) — and are
 divided by 100 in the maths.
 
-Fit to Parent (a button in the app) and the Falloff/Fields tab are **not implemented**
-(task: out of scope; no observation uses them).
+Fit to Parent (a button in the app) is **not implemented** (no observation uses it). The
+Falloff/Fields list is §10.
 
 ## 1. Bend (`forge.bend`)
 
@@ -390,15 +390,19 @@ change. Source: own design (docs/roadmap/areas/D-deformers-fields.md).
 
 ## 9. Parity
 
-Test: `crates/modifiers/tests/deformers_parity.rs` — features `bend` (15 cases),
+Test: `crates/modifiers/tests/deformers_parity.rs` — features `deformer-falloff` (9) and `bend` (15 cases),
 `twist` (7), `deformer-common` (6), `taper` (8), `bulge` (7), `shear` (7) and
-`spherify` (5) — 55 in all — are rebuilt from their `case.toml` (`parent`, `hierarchy`,
+`spherify` (5) — 64 in all — are rebuilt from their `case.toml` (`parent`, `hierarchy`,
 `rot` degrees HPB, vec3 `size` are the keys the batch added; `level` maps to
 `level_view`) and compared with `export_weld` on both sides (GENERATORS2 §0).
 
 - `UNSUPPORTED`: none.
 - `KNOWN_MISMATCH`: none (the three `bend/mode-box-narrow*` cases matched once §0's
   per-axis gate and suppression landed).
+- Feature `deformer-falloff` (9 cases, §10) is built as: the cube, a deformer child with
+  the case's parameters (`strength_deg` is `strength` in degrees, `keep_length` is
+  `keep_y_axis_length`, `alignment` is the fixed Y axis), the `[params.field]` field node
+  linked into `fields` (its `layer_strength_percent` is the node's `layer_strength`).
 - Evaluation order and placement rules are §0; the modifier maths are §1–§6.
 - Parity-pending (implemented, seen in one configuration only): sibling deformers below
   the object (§0), `fillet` together with
@@ -407,3 +411,66 @@ Test: `crates/modifiers/tests/deformers_parity.rs` — features `bend` (15 cases
   blend extrapolated *below* the box in `unlimited` (§3–§5 — every unlimited case has
   curvature 100, so only the quadratic term was seen outside the box), and Spherify at
   the origin / `radius` 0 (§6).
+
+## 10. Falloff through field lists (brief 061)
+
+Source: O24 [deformer-falloff.md](../parity/deformer-falloff.md), golden `tests/golden/deformer-falloff`
+(9 cases, level A); the field maths is [FIELDS.md](FIELDS.md).
+
+### Parameter
+
+Every deformer (Bend, Twist, Taper, Bulge, Shear, Spherify) has a `fields` param:
+`ParamKind::LinkList` accepting `Category::Field` nodes, **top to bottom**, default empty
+(label "Fields", group "Falloff"). The O24 deformer's list parameter is labelled "Field"
+on its Fields tab. The list row's *layer strength* (O24 `layer_strength_percent`) is the
+field node's `layer_strength` param (percent, default 100 %, see FIELDS.md F1): one field
+node is one row, which is all the data covers; real list rows (a field in several lists)
+come with brief 059.
+
+### Rule
+
+`FieldList::from_nodes` over the live field links of the list (a link to a deleted or
+non-field node is skipped). **An empty list means full effect** (`bend-empty-list`, no
+extra switch exists on the deformer, the list is simply empty).
+
+For a non-empty list, each point is deformed as usual and then blended with its undeformed
+position:
+
+```
+w  = FieldList::sample(world(p)).value       p = the point before this deformer, in the object's space
+p' = p + w · (deform(p) − p)
+```
+
+`world(p)` is the point taken with the **world matrix of the deformed object** (the
+parent of the deformer); the deformer's own position does not move the field. `w` is not
+clamped (a field value outside 0..1 extrapolates; fields clamp at their own Min/Max
+unless switched off). The weight is read at the point's position *before* the deformer,
+not after. A field that cannot be built (an option without derived rules, FIELDS.md) leaves
+the points unchanged. The rule applies to every deformer, after the mode rules of §0 (the
+blend sees the deformer's final per-point result, including `limited` carry-along and the
+`within_box` gates), and the stack order of §0 is unchanged (each deformer blends on its
+own list).
+
+### Cases
+
+| Case | Deformer | Field (list) | Rule it shows |
+|---|---|---|---|
+| `bend-empty-list` | Bend 90° | none | empty list = the full bend |
+| `bend-spherical` | Bend 90° | Spherical 200 at (0, 200, 0) | weight by position, inner offset 50 % |
+| `bend-spherical-inner` | the same | inner offset 0 % | the field's remapping drives the weight |
+| `bend-linear` | the same | Linear Y+ length 200 | |
+| `bend-box` | the same | Box (400, 200, 400) | |
+| `bend-field-strength-50` | the same | Spherical, layer strength 50 % | the layer strength scales the weight |
+| `twist-linear`, `taper-spherical`, `bulge-linear` | | | other deformers share the rule |
+
+### Parity-pending
+
+- Weight sampled at the point before the deformation (matched on all 8 field cases, whose
+  weights vary strongly across the displaced points): proven by the data, no alternative
+  open for the object-at-origin setup. With the deformed object **moved or rotated** away
+  from the origin, "world position" vs. "object-local position" is untested (all cases have the
+  cube at the origin): a Bend with the cube at (0, 100, 0) and the same Spherical field.
+- Rows beyond one layer (blend modes, FIELDS.md): brief 059.
+- A negative or >1 weight (Strength 200 % on the field) extrapolating vs. clamping: a Bend
+  with Strength 200 % and Clamp Max off.
+- Spherify's `p/|p|` with falloff at the origin (no data).

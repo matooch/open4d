@@ -18,6 +18,11 @@ const BIG: f64 = 1e20;
 const STEPS_MAX: i64 = 2_147_483_647;
 const FIELD: &str = "Field";
 const REMAP: &str = "Remapping";
+const LIST: &str = "List Row";
+
+/// Id of the list-row parameter: the strength of this field's layer in a field list
+/// (FIELDS.md F1; O24 `layer_strength_percent`).
+pub const LAYER_STRENGTH: &str = "layer_strength";
 
 /// The Remapping tab parameters; `inner` and `mirror` are the per-type defaults.
 fn remap_params(inner: f64, mirror: bool) -> Vec<ParamDesc> {
@@ -70,6 +75,12 @@ fn field_type(id: &str, label: &str, shape: Vec<ParamDesc>, inner: f64, mirror: 
     for p in remap_params(inner, mirror) {
         ty = ty.param(p);
     }
+    ty = ty.param(
+        ParamDesc::float(LAYER_STRENGTH, "Layer Strength", 1.0)
+            .range(-BIG, BIG)
+            .unit(Unit::Percent)
+            .group(LIST),
+    );
     ty
 }
 

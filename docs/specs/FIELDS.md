@@ -9,7 +9,7 @@ O24 [deformer-falloff.md](../parity/deformer-falloff.md); design
 `field`, level B, 729 points on the grid `{-300, -225, ..., 300}^3`, x fastest, tolerance 1e-5).
 Out of scope here: Cylinder, Cone, Torus, Capsule, Radial, Random (058); blend modes other
 than Normal, groups, Formula and Shader fields (059); modifier layers (060); wiring fields into
-deformer falloff (061) and effectors (072); the colour and direction channels (not observed).
+effectors (072); deformer falloff is wired by 061 (MODIFIERS.md §10); the colour and direction channels (not observed).
 
 ## F1. API (`forge-fields`)
 
@@ -40,7 +40,7 @@ pub struct FieldSample { pub value: f64, pub color: [f64; 3], pub direction: DVe
   `is_empty()` lets a deformer skip the evaluation.
 - `field_from_node(scene, id) -> Result<Box<dyn Field>, FieldError>` builds the field of a
   `Category::Field` node from its parameters and world matrix. `FieldList::from_nodes(scene,
-  ids_top_to_bottom)` builds a list with every layer at strength 100 %; `with_strength` sets one.
+  ids_top_to_bottom)` builds a list whose layer strengths are the nodes' `layer_strength` (100 % default); `with_strength` sets one.
   `FieldError::Unsupported` names an observed option without derived rules.
 - Types are registered by the `FieldToolset` plugin (installed by `forge_app::default_registry`),
   so `object.create`, `param.set`, undo, save/load and the CLI, RPC, MCP and script front ends work
@@ -59,6 +59,7 @@ Type ids `forge.field.linear`, `forge.field.spherical`, `forge.field.box`; categ
 | `radius` (Spherical) | Size | float, distance | 100 | 0 .. 1e20 |
 | `size` (Box) | Size | vec3, distance | (100, 100, 100) | 0 .. 1e20 |
 | `clip_to_shape` | Clip to Shape | bool | off | |
+| `layer_strength` | Layer Strength | float, percent | 100 % | the node's row in a field list (F1; deformer falloff, brief 061) |
 | `color` | Color | colour | white | the constant colour channel (brief 068, MOGRAPH.md E6, E8) |
 | `enable_remapping` | Enable Remapping | bool | on | |
 | `strength` | Strength | float, percent | 100 % | -1e20 .. 1e20 |

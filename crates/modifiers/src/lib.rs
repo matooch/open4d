@@ -12,7 +12,9 @@ pub mod twist;
 
 use forge_core::{
     Category, EvalCtx, NodeId, NodeType, ParamDesc, Plugin, Registry, RegistryError, Scene, Unit,
+    Value,
 };
+use forge_fields::FieldList;
 use glam::{DMat4, DVec3};
 
 use crate::bend::bend;
@@ -55,6 +57,7 @@ impl Deformers {
                 "Keep Y-Axis Length",
                 false,
             ))
+            .param(fields_param())
             .param(enabled_param())
     }
 
@@ -64,6 +67,7 @@ impl Deformers {
             .param(box_param())
             .param(mode_param())
             .param(ParamDesc::float("angle", "Angle", 0.0).unit(Unit::Angle))
+            .param(fields_param())
             .param(enabled_param())
     }
 
@@ -75,6 +79,7 @@ impl Deformers {
             .param(strength_param())
             .param(curvature_param())
             .param(fillet_param())
+            .param(fields_param())
             .param(enabled_param())
     }
 
@@ -86,6 +91,7 @@ impl Deformers {
             .param(strength_param())
             .param(curvature_param())
             .param(fillet_param())
+            .param(fields_param())
             .param(enabled_param())
     }
 
@@ -99,6 +105,7 @@ impl Deformers {
             .param(ParamDesc::float("angle", "Angle", 0.0).unit(Unit::Angle))
             .param(curvature_param())
             .param(fillet_param())
+            .param(fields_param())
             .param(enabled_param())
     }
 
@@ -111,6 +118,7 @@ impl Deformers {
                     .unit(Unit::Percent)
                     .range(0.0, 100.0),
             )
+            .param(fields_param())
             .param(enabled_param())
     }
 }
@@ -139,6 +147,11 @@ fn curvature_param() -> ParamDesc {
 /// The Fillet option: `smoothstep` instead of the curvature blend (MODIFIERS.md §3).
 fn fillet_param() -> ParamDesc {
     ParamDesc::bool("fillet", "Fillet", false)
+}
+
+/// The deformer's field list (falloff, MODIFIERS.md §10): top to bottom, empty = full effect.
+fn fields_param() -> ParamDesc {
+    ParamDesc::link_list("fields", "Fields", &[Category::Field]).group("Falloff")
 }
 
 /// The object's green tick in the reference app, as a param so it survives
@@ -189,7 +202,9 @@ enum Job {
 /// (MODIFIERS.md §0): the points are taken into the deformer's space with the inverse
 /// of the deformer's transform relative to `target`, deformed, and put back.
 ///
-/// `_ctx` (time, fps, seed; MODIFIERS.md §8) is read by no deformer yet.
+/// A non-empty `fields` list weights each point (MODIFIERS.md §10):
+/// `p' = p + w·(deform(p) − p)` with `w` the list value at the point's world position
+/// before the deformer. `ctx` (time, fps, seed; MODIFIERS.md §8) goes to the fields.
 ///
 /// Does nothing for a disabled deformer, a missing node or an unknown type.
 pub fn apply_deformer(
@@ -197,7 +212,7 @@ pub fn apply_deformer(
     deformer: NodeId,
     target: NodeId,
     points: &mut [DVec3],
-    _ctx: &EvalCtx,
+    ctx: &EvalCtx,
 ) {
     let (Some(node), Some(ty)) = (scene.node(deformer), scene.node_type(deformer)) else {
         return;
@@ -260,6 +275,12 @@ pub fn apply_deformer(
     if !to_deformer.is_finite() {
         return; // A degenerate transform (zero scale) would destroy the mesh.
     }
+    // Falloff: the weights come from the points as they are now, in world space.
+    let weights = match falloff(scene, deformer, tw, points, ctx) {
+        Ok(w) => w,
+        Err(()) => return, // A field that cannot be built leaves the points alone.
+    };
+    let before: Option<Vec<DVec3>> = weights.as_ref().map(|_| points.to_vec());
     if to_target != DMat4::IDENTITY {
         for p in points.iter_mut() {
             *p = to_deformer.transform_point3(*p);
@@ -278,4 +299,48 @@ pub fn apply_deformer(
             *p = to_target.transform_point3(*p);
         }
     }
+    if let (Some(w), Some(before)) = (weights, before) {
+        for ((p, p0), w) in points.iter_mut().zip(before).zip(w) {
+            *p = p0 + (*p - p0) * w;
+        }
+    }
+}
+
+/// The weights of `points` (in `target`'s space, `target_world` its world matrix) from the
+/// deformer's `fields` list: `Ok(None)` for an empty list (full effect), `Err` when a field
+/// cannot be built.
+fn falloff(
+    scene: &Scene,
+    deformer: NodeId,
+    target_world: DMat4,
+    points: &[DVec3],
+    ctx: &EvalCtx,
+) -> Result<Option<Vec<f64>>, ()> {
+    let Some(Value::LinkList(links)) = scene.param(deformer, "fields") else {
+        return Ok(None);
+    };
+    // A link to a deleted or non-field node is skipped, like an empty slot.
+    let ids: Vec<NodeId> = links
+        .iter()
+        .copied()
+        .filter(|f| {
+            scene
+                .node_type(*f)
+                .is_some_and(|t| t.category == Category::Field)
+        })
+        .collect();
+    let list = FieldList::from_nodes(scene, &ids).map_err(|_| ())?;
+    if list.is_empty() {
+        return Ok(None);
+    }
+    let world: Vec<DVec3> = points
+        .iter()
+        .map(|p| target_world.transform_point3(*p))
+        .collect();
+    Ok(Some(
+        list.sample_many(&world, ctx)
+            .into_iter()
+            .map(|s| s.value)
+            .collect(),
+    ))
 }

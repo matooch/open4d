@@ -9,10 +9,12 @@ mod node;
 mod remap;
 mod shape;
 
-use forge_core::{EvalCtx, NodeId, Scene};
+use forge_core::{EvalCtx, NodeId, Scene, Value};
 use glam::{DMat4, DVec3};
 
-pub use node::{BOX, FieldToolset, LINEAR, SPHERICAL, box_type, linear_type, spherical_type};
+pub use node::{
+    BOX, FieldToolset, LAYER_STRENGTH, LINEAR, SPHERICAL, box_type, linear_type, spherical_type,
+};
 pub use remap::{Contour, Remap};
 pub use shape::{Direction, Shape};
 
@@ -157,14 +159,23 @@ impl FieldList {
         FieldList::default()
     }
 
-    /// A list of the given field nodes, top to bottom, every layer at strength 100 %.
+    /// A list of the given field nodes, top to bottom; each layer's strength is the
+    /// node's `layer_strength` (100 % by default).
     pub fn from_nodes(
         scene: &Scene,
         ids_top_to_bottom: &[NodeId],
     ) -> Result<FieldList, FieldError> {
         let layers = ids_top_to_bottom
             .iter()
-            .map(|id| field_from_node(scene, *id).map(Layer::new))
+            .map(|id| {
+                field_from_node(scene, *id).map(|field| {
+                    let mut layer = Layer::new(field);
+                    if let Some(Value::Float(s)) = scene.param(*id, LAYER_STRENGTH) {
+                        layer.strength = *s;
+                    }
+                    layer
+                })
+            })
             .collect::<Result<_, _>>()?;
         Ok(FieldList { layers })
     }

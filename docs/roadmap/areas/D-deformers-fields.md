@@ -22,7 +22,7 @@
     Clip), strength and order;
   - folders and groups;
   - modifier layers (Freeze, Decay, Delay, Remap, Curve, Colorize, Step).
-- [ ] **Falloff everywhere:** every deformer and effector takes a field list. An empty
+- [ ] **Falloff everywhere:** every deformer (061, done) and effector takes a field list. An empty
   list means full effect (O24).
 - [ ] **Vertex maps from fields;** restriction by vertex map.
 - [ ] **Noise library:** the noise types listed in O13 (31 types), seeded, 3D/4D (time),
