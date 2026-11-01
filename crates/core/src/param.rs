@@ -114,6 +114,9 @@ pub struct UiHint {
     pub soft_max: Option<f64>,
     pub step: Option<f64>,
     pub hidden: bool,
+    /// The value is a path to an external file (a `Value::String`); the scene file stores
+    /// it relative to its own folder (CORE.md §6.5).
+    pub file_ref: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -233,6 +236,13 @@ impl ParamDesc {
             ParamKind::String,
             Value::String(default.to_string()),
         )
+    }
+
+    /// A string param holding a path to an external file (empty: none).
+    pub fn file_path(id: &str, label: &str, default: &str) -> ParamDesc {
+        let mut d = Self::string(id, label, default);
+        d.ui.file_ref = true;
+        d
     }
 
     pub fn link(id: &str, label: &str, accepts: &[Category]) -> ParamDesc {

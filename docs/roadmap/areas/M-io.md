@@ -5,7 +5,8 @@
 - [x] Native `.forge` (RON, versioned) and OBJ import/export (brief 04).
 - [ ] **Native format hardening:**
   - a migration test per version;
-  - an optional compressed binary encoding (MessagePack + zstd) for big scenes;
+  - binary chunks for large arrays inside the file (CORE.md §6.2; done in brief 163, no
+    MessagePack/zstd: a compression layer can wrap the file later);
   - external references (textures) with relative paths;
   - autosave files.
 - [ ] **glTF 2.0** import and export:

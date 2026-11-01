@@ -101,11 +101,21 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
     )
 }
 
+/// The absolute folder of a scene file, the base of its external references.
+fn scene_dir(path: &str) -> Option<std::path::PathBuf> {
+    let abs = std::path::absolute(path).ok()?;
+    abs.parent().map(std::path::Path::to_path_buf)
+}
+
 fn open(ctx: &mut dyn CommandContext, a: PathArgs) -> Result<Value, CommandError> {
     let registry = ctx.doc().scene().registry().clone();
-    let loaded = std::fs::read_to_string(&a.path)
+    let opts = file::LoadOptions {
+        base_dir: scene_dir(&a.path),
+        check_external: true,
+    };
+    let loaded = std::fs::read(&a.path)
         .map_err(|e| e.to_string())
-        .and_then(|text| file::load(registry, &text).map_err(|e| e.to_string()));
+        .and_then(|bytes| file::load_with(registry, &bytes, &opts).map_err(|e| e.to_string()));
     let (scene, report) = loaded.map_err(|e| CommandError::Failed(format!("Open failed: {e}")))?;
     ctx.reset_document(Document::from_scene(scene), Some(a.path), false);
     ctx.set_status(report.warnings.join("; "));
@@ -113,8 +123,12 @@ fn open(ctx: &mut dyn CommandContext, a: PathArgs) -> Result<Value, CommandError
 }
 
 fn save_to(ctx: &mut dyn CommandContext, path: String) -> Result<Value, CommandError> {
-    let text = file::save(ctx.doc().scene());
-    std::fs::write(&path, text).map_err(|e| CommandError::Failed(format!("Save failed: {e}")))?;
+    let opts = file::SaveOptions {
+        base_dir: scene_dir(&path),
+        ..file::SaveOptions::default()
+    };
+    let bytes = file::save_with(ctx.doc().scene(), &opts);
+    std::fs::write(&path, bytes).map_err(|e| CommandError::Failed(format!("Save failed: {e}")))?;
     ctx.mark_saved(path.clone());
     ctx.set_status(String::new());
     Ok(json!({"path": path}))
