@@ -1,0 +1,28 @@
+feature = "splines-2"
+observation = "docs/parity/splines-2.md"
+description = "Formula spline, all parameters at their R25 defaults"
+mesh = "mesh.obj"
+
+[params]
+extrude_offset = 20.0
+caps = false
+
+[params.input]
+type = "formula_spline"
+x_t = "100.0*t"
+y_t = "100.0*Sin(t*PI)"
+z_t = "0.0"
+t_min = -1.0
+t_max = 1.0
+samples = 20
+cubic_interpolation = false
+plane = "xy"
+reverse = false
+intermediate = "adaptive"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+[import]
+scale = 1.0
+flip_z = false

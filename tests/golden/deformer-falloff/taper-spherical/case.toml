@@ -1,0 +1,58 @@
+feature = "deformer-falloff"
+observation = "docs/parity/deformer-falloff.md"
+description = "Taper strength 50 percent, Spherical field Size 200 at (0,200,0)"
+mesh = "mesh.obj"
+
+[params]
+deformer = "taper"
+size = [250.0, 250.0, 250.0]
+alignment = "Y+"
+mode = "Limited"
+strength_percent = 50.0
+curvature_percent = 100.0
+fillet = false
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+field_layers = 1
+
+[params.field]
+type = "spherical"
+position = [0.0, 200.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+size = 200.0
+clip_to_shape = false
+enable_remapping = true
+mirror_graph = true
+strength_percent = 100.0
+invert = false
+inner_offset_percent = 50.0
+min_percent = 0.0
+clamp_min = true
+max_percent = 100.0
+clamp_max = true
+multiplier_percent = 100.0
+contour_mode = "None"
+curve_percent = 0.0
+steps = 1
+spline_offset_percent = 0.0
+spline_range_percent = 100.0
+color_mode = "Color"
+length_mode = "Use Value"
+length_scale_percent = 100.0
+invert_direction = true
+strength_mode = "No Remap"
+strength_scale_percent = 100.0
+invert_rotations = false
+layer_strength_percent = 100.0
+layer_blend_mode = "Normal"
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false

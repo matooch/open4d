@@ -1,0 +1,33 @@
+feature = "cloner"
+observation = "docs/parity/cloner-3.md"
+description = "Radial cloner, Align off, 20 cm cube child"
+mesh = "mesh.obj"
+
+[params]
+mode = "radial"
+clones_mode = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = 5
+radius = 50.0
+plane = "XZ"
+align = false
+start_angle_deg = 0.0
+end_angle_deg = 360.0
+offset_deg = 0.0
+offset_variation_percent = 0.0
+offset_seed = 1234567
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+animation_mode = "Play"
+effector_count = 0
+
+[import]
+scale = 1.0
+flip_z = false

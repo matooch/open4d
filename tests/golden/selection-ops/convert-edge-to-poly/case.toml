@@ -1,0 +1,18 @@
+feature = "selection-ops"
+observation = "docs/parity/selection-ops.md"
+description = "Cube made editable with 2 x 2 x 2 segments; the 8 edge segments forming the outer border of the top face (4 sides, 2 segments each) selected, then the Convert Selection command run from edges to polygons (tolerant off). No polygon has all 4 of its edges selected, so none is chosen"
+mesh = "mesh.obj"
+
+[params]
+segments = [2, 2, 2]
+command = "Convert Selection"
+start_points = []
+start_edges = [[2, 5], [2, 23], [5, 8], [8, 11], [11, 14], [14, 17], [17, 20], [20, 23]]
+start_polys = []
+from = "edges"
+to = "polygons"
+tolerant = false
+
+[import]
+scale = 1.0
+flip_z = false

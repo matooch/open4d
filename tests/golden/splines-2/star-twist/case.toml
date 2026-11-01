@@ -1,0 +1,25 @@
+feature = "splines-2"
+observation = "docs/parity/splines-2.md"
+description = "Star with Twist 30 percent and Points 5"
+mesh = "mesh.obj"
+
+[params]
+extrude_offset = 20.0
+caps = false
+
+[params.input]
+type = "star_spline"
+inner_radius = 100.0
+outer_radius = 200.0
+twist = 30.0
+points = 5
+plane = "xy"
+reverse = false
+intermediate = "adaptive"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+[import]
+scale = 1.0
+flip_z = false
