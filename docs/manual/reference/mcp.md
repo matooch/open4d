@@ -97,6 +97,9 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `mesh_connect_points` | Connect Points/Edges. Undoable editing command. Runs command `mesh.connect_points`. |
 | `mesh_mirror` | Mirror. Undoable editing command. Runs command `mesh.mirror`. |
 | `mesh_center_axis` | Center Axis to. Undoable editing command. Runs command `mesh.center_axis`. |
+| `mesh_slide` | Slide. Undoable editing command. Runs command `mesh.slide`. |
+| `mesh_loop_cut` | Loop Cut. Undoable editing command. Runs command `mesh.loop_cut`. |
+| `mesh_knife` | Knife. Undoable editing command. Runs command `mesh.knife`. |
 | `param_set` | Set Parameter. Undoable editing command. Runs command `param.set`. |
 | `key_record` | Record. Undoable editing command. Runs command `key.record`. |
 | `key_delete_at_frame` | Delete Keys. Undoable editing command. Runs command `key.delete_at_frame`. |

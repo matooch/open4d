@@ -7,7 +7,8 @@ use forge_geometry::Edge;
 use forge_geometry::selection::Mode;
 use forge_viewport::camera::{Camera, Ray};
 use forge_viewport::picking::{
-    Element, pick_edge, pick_point, pick_poly, ray_triangle, rect_select,
+    Element, closest_on_edge, pick_edge, pick_edge_param, pick_point, pick_poly, ray_triangle,
+    rect_select,
 };
 use glam::DVec3;
 
@@ -75,6 +76,28 @@ fn pick_edge_by_distance_to_projected_segment() {
     let (x, y) = px(&c, DVec3::new(0.3, 1., 1.));
     assert_eq!(pick_edge(&m, &c, x, y + 2.0, W, H, 4.0, true), Some(id));
     assert_eq!(pick_edge(&m, &c, W / 2.0, H / 2.0, W, H, 4.0, true), None);
+}
+
+#[test]
+fn pick_edge_param_gives_the_position_along_the_edge() {
+    let m = unit_box();
+    let c = Camera::default();
+    let id = m.edges().iter().position(|e| *e == Edge(6, 7)).unwrap() as u32;
+    let e = m.edges()[id as usize];
+    let (a, b) = (m.points[e.0 as usize], m.points[e.1 as usize]);
+    for t in [0.2, 0.5, 0.8] {
+        let (x, y) = px(&c, a + (b - a) * t);
+        let hit = pick_edge_param(&m, &c, x, y, W, H, 4.0, true).unwrap();
+        assert_eq!(hit.edge, id);
+        assert!((hit.t - t).abs() < 1e-6, "{} != {t}", hit.t);
+    }
+    // a ray from beside the segment's end clamps
+    let ray = Ray {
+        origin: DVec3::new(5.0, 0.0, 0.0),
+        dir: DVec3::NEG_Z,
+    };
+    assert_eq!(closest_on_edge(&ray, DVec3::ZERO, DVec3::X), 1.0);
+    assert_eq!(closest_on_edge(&ray, DVec3::NEG_X, DVec3::ZERO), 1.0);
 }
 
 #[test]

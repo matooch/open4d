@@ -2,7 +2,7 @@
 
 # Command reference
 
-55 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+58 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -44,6 +44,9 @@
 | [`mesh.connect_points`](#meshconnect_points) | Connect Points/Edges | yes | `mesh_connect_points` |
 | [`mesh.mirror`](#meshmirror) | Mirror | yes | `mesh_mirror` |
 | [`mesh.center_axis`](#meshcenter_axis) | Center Axis to | yes | `mesh_center_axis` |
+| [`mesh.slide`](#meshslide) | Slide | yes | `mesh_slide` |
+| [`mesh.loop_cut`](#meshloop_cut) | Loop Cut | yes | `mesh_loop_cut` |
+| [`mesh.knife`](#meshknife) | Knife | yes | `mesh_knife` |
 | [`param.set`](#paramset) | Set Parameter | yes | `param_set` |
 | [`key.record`](#keyrecord) | Record | yes | `key_record` |
 | [`key.delete_at_frame`](#keydelete_at_frame) | Delete Keys | yes | `key_delete_at_frame` |
@@ -486,6 +489,54 @@ Center Axis to. One undo step.
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
 Example: `forge cmd scene.forge mesh.center_axis --args '{"polys":[0]}'`
+
+### `mesh.slide`
+
+Slide. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `edges` | array of integer \| array of integer (length 2) or null | no | Edges (edge mode): edge ids of the mesh, or point pairs [a, b]. |
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `points` | array of integer or null | no | Point indices (point mode). |
+| `polys` | array of integer or null | no | Polygon indices (polygon mode). When none of polys, edges, points is given the stored selection is used. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.slide --args '{"edges":[0],"settings":{"amount":0.5}}'`
+
+### `mesh.loop_cut`
+
+Loop Cut. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `edge` | integer \| array of integer (length 2) | yes | Edge id of the mesh, or a point pair [a, b] of an existing edge. |
+| `count` | integer or null | no | Evenly spaced cuts instead of offsets (default 1 when neither is given). |
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `offsets` | array of number or null | no | Cut positions as fractions (0..1, exclusive) along the edge, which runs from its lower to its higher point. |
+
+Example: `forge cmd scene.forge mesh.loop_cut --args '{"edge":0,"offsets":[0.5]}'`
+
+### `mesh.knife`
+
+Knife. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `mode` | `"line"` \| `"plane"` \| `"loop"` | yes |  |
+| `direction` | array of number (length 3) | no | line mode: the view direction (parallel view); or eye |
+| `edge` | integer \| array of integer (length 2) | no | Edge id of the mesh, or a point pair [a, b] of an existing edge. |
+| `eye` | array of number (length 3) | no | line mode: the viewer's position (perspective); or direction |
+| `from` | array of number (length 3) | no | line mode: start of the drawn segment (object space) |
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `normal` | array of number (length 3) | no | plane mode: the plane normal |
+| `offset` | number | no | loop mode: position along the edge (default 0.5). |
+| `point` | array of number (length 3) | no | plane mode: a point of the plane (object space) |
+| `polys` | array of integer or null | no | Polygons to cut (plane and line modes); all when absent. |
+| `to` | array of number (length 3) | no | line mode: end of the drawn segment |
+| `visible_only` | boolean | no | line mode: skip polygons facing away (default true). |
+
+Example: `forge cmd scene.forge mesh.knife --args '{"mode":"plane","normal":[1.0,0.0,0.0],"point":[0.0,0.0,0.0]}'`
 
 
 ## `param`

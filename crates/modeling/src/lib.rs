@@ -2,22 +2,28 @@
 //! docs/specs/MODELING.md.
 
 mod bevel;
+mod cut;
 mod desc;
 mod extrude;
 mod merge;
 mod points;
 mod settings;
+mod slide;
 mod surface;
 mod util;
 
 pub use bevel::bevel;
-pub use desc::{ToolDesc, tool_desc, tool_descs};
+pub use cut::{
+    CutOutput, KnifeLine, MAX_CUTS, Plane, View, even_offsets, knife_line, knife_plane, loop_cut,
+};
+pub use desc::{ToolDesc, cutting_descs, interactive_cut_descs, tool_desc, tool_descs};
 pub use extrude::{extrude, extrude_inner};
 pub use merge::{dissolve, melt};
 pub use points::{
     center_axis, center_axis_tool, connect_points, disconnect, mirror, split, split_copy, weld,
 };
 pub use settings::{Settings, SettingsError};
+pub use slide::slide;
 pub use surface::{optimize, reverse_normals, subdivide, triangulate, untriangulate};
 
 /// The pure function of a tool (docs/specs/MODELING.md §0). It reads the part of the
@@ -99,6 +105,7 @@ pub fn tool_fn(id: &str) -> Option<ToolFn> {
         "connect_points" => Some(connect_points),
         "mirror" => Some(mirror),
         "center_axis" => Some(center_axis_tool),
+        "slide" => Some(slide),
         _ => None,
     }
 }

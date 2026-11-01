@@ -10,6 +10,7 @@ pub mod commands;
 pub mod component_edit;
 pub mod components;
 pub mod coordinates;
+pub mod cutting;
 pub mod dock;
 pub mod manipulate;
 pub mod screenshot;

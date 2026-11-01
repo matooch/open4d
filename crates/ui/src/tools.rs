@@ -10,7 +10,9 @@ use forge_generators::{
 };
 use forge_geometry::PolyMesh;
 use forge_geometry::selection::{IndexSet, Selection};
-use forge_modeling::{Settings, ToolDesc, tool_descs, tool_fn};
+use forge_modeling::{
+    Settings, ToolDesc, cutting_descs, interactive_cut_descs, tool_descs, tool_fn,
+};
 use serde_json::{Value as Json, json};
 
 use crate::commands::execute;
@@ -64,6 +66,20 @@ impl Tool for ModelingTool {
     }
 }
 
+/// The cutting tools of brief 024 (docs/specs/MODELING.md §5): Loop/Path Cut, the three Knife
+/// modes and Slide. They are listed apart from [`tools`] (the tools of briefs 020-022).
+pub fn cutting_tools() -> Vec<Box<dyn Tool>> {
+    let mut all: Vec<Box<dyn Tool>> = interactive_cut_descs()
+        .into_iter()
+        .map(|desc| Box::new(crate::cutting::CutTool { desc }) as Box<dyn Tool>)
+        .collect();
+    all.extend(cutting_descs().into_iter().filter_map(|desc| {
+        let apply = tool_fn(desc.id)?;
+        Some(Box::new(ModelingTool { desc, apply }) as Box<dyn Tool>)
+    }));
+    all
+}
+
 /// Every tool, in menu order.
 pub fn tools() -> Vec<Box<dyn Tool>> {
     tool_descs()
@@ -80,6 +96,8 @@ pub struct ToolState {
     tool: Box<dyn Tool>,
     desc: ToolDesc,
     values: Settings,
+    /// Hover and drag of the interactive cutting tools (docs/specs/MODELING.md §5.5).
+    pub interaction: crate::cutting::Interaction,
 }
 
 impl ToolState {
@@ -111,14 +129,23 @@ impl ToolState {
 
 /// Makes `id` the active tool with its factory defaults. False for an unknown id.
 pub fn activate_tool(state: &mut EditorState, id: &str) -> bool {
-    let Some(tool) = tools().into_iter().find(|t| t.id() == id) else {
+    let Some(tool) = tools()
+        .into_iter()
+        .chain(cutting_tools())
+        .find(|t| t.id() == id)
+    else {
         return false;
     };
     let Some(desc) = forge_modeling::tool_desc(id) else {
         return false;
     };
     let values = Settings::defaults(&desc);
-    state.tool = Some(ToolState { tool, desc, values });
+    state.tool = Some(ToolState {
+        tool,
+        desc,
+        values,
+        interaction: Default::default(),
+    });
     true
 }
 
@@ -156,6 +183,9 @@ pub fn tool_target(state: &EditorState) -> Option<(NodeId, PolyMesh, Selection)>
 /// when the tool refuses the current values.
 pub fn tool_preview(state: &EditorState) -> Option<(NodeId, PolyMesh)> {
     let ts = state.tool.as_ref()?;
+    if crate::cutting::is_cut_tool(ts.tool.id()) {
+        return crate::cutting::cut_preview(state);
+    }
     let (id, mesh, sel) = tool_target(state)?;
     let out = ts.tool.preview(&mesh, &sel, &ts.values).ok()?;
     Some((id, out))
@@ -173,6 +203,9 @@ pub fn with_preview(state: &EditorState, scene: &Scene) -> Option<Arc<Scene>> {
 /// active with its values.
 pub fn apply_tool(state: &mut EditorState) -> Result<Json, String> {
     let ts = state.tool.as_ref().ok_or("no tool is active")?;
+    if crate::cutting::is_cut_tool(ts.tool.id()) {
+        return crate::cutting::apply_cut(state);
+    }
     let (command, args) = (ts.tool.command_id(), ts.command_args());
     execute(state, command, args)
 }
@@ -216,7 +249,12 @@ impl ToolDrag {
         Some(ToolDrag {
             start_value: ts.values.float(ts.tool.drag_param()),
             start_y: y,
-            diagonal: target_diagonal(&mesh),
+            // Slide's amount is a fraction in [-1, 1]: one viewport height is 2.0 (MODELING.md §5.5)
+            diagonal: if ts.tool.drag_param() == "amount" {
+                2.0
+            } else {
+                target_diagonal(&mesh)
+            },
             height,
         })
     }

@@ -8,7 +8,7 @@ use forge_generators::{
 };
 use forge_geometry::selection::{IndexSet, Selection};
 use forge_geometry::{Edge, PolyMesh};
-use forge_modeling::{Settings, ToolDesc, tool_descs, tool_fn};
+use forge_modeling::{Settings, ToolDesc, cutting_descs, tool_descs, tool_fn};
 use serde_json::{Map, Value as Json, json};
 
 use crate::context::CommandContext;
@@ -23,7 +23,7 @@ struct ToolCommand {
 }
 
 pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
-    for desc in tool_descs() {
+    for desc in tool_descs().into_iter().chain(cutting_descs()) {
         let apply: forge_modeling::ToolFn = tool_fn(desc.id)
             .ok_or_else(|| CommandError::Failed(format!("tool {} has no function", desc.id)))?;
         r.register(Box::new(ToolCommand {
@@ -283,12 +283,21 @@ impl CommandHandler for ToolCommand {
             ),
             _ => None,
         };
+        let keeps_selection = self.desc.id == "slide";
+        let kept_points: Vec<u32> = selection.points.iter().collect();
+        let kept_edges: Vec<u32> = selection.edges.iter().collect();
         let mut created = None;
         ctx.doc_mut().transact(self.desc.label, |tx| {
             tx.set_param(node, "mesh", Value::Mesh(data))?;
             tx.set_param(node, SELECTION_POLYS, Value::IndexList(sel))?;
-            tx.set_param(node, SELECTION_POINTS, Value::IndexList(Vec::new()))?;
-            tx.set_param(node, SELECTION_EDGES, Value::IndexList(Vec::new()))?;
+            // Slide moves points only: the stored edge and point selection stay valid
+            let (keep_points, keep_edges) = if keeps_selection {
+                (kept_points, kept_edges)
+            } else {
+                (Vec::new(), Vec::new())
+            };
+            tx.set_param(node, SELECTION_POINTS, Value::IndexList(keep_points))?;
+            tx.set_param(node, SELECTION_EDGES, Value::IndexList(keep_edges))?;
             if let Some(copy) = &split {
                 created = Some(forge_generators::spawn_split(tx, node, copy).map_err(
                     |e| match e {
@@ -322,7 +331,9 @@ impl CommandHandler for ToolCommand {
     }
 
     fn sample_args(&self) -> Json {
-        if self.desc.params.iter().any(|p| p.id == "offset") {
+        if self.desc.id == "slide" {
+            json!({"edges": [0], "settings": {"amount": 0.5}})
+        } else if self.desc.params.iter().any(|p| p.id == "offset") {
             json!({"polys": [0], "settings": {"offset": 10.0}})
         } else {
             json!({"polys": [0]})

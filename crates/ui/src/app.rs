@@ -487,6 +487,14 @@ impl Editor {
                         ui.close();
                     }
                 }
+                // Loop/Path Cut, the Knife modes and Slide (MODELING.md §5)
+                ui.separator();
+                for tool in crate::tools::cutting_tools() {
+                    if ui.button(tool.label()).clicked() {
+                        crate::tools::activate_tool(&mut self.state, tool.id());
+                        ui.close();
+                    }
+                }
             });
             ui.menu_button("Create", |ui| {
                 for (cat, items) in create_menu(self.state.doc.scene().registry()) {
@@ -761,6 +769,71 @@ impl Editor {
             egui::FontId::proportional(12.0),
             Theme::default().weak_text,
         );
+        // cutting tools: the knife line being dragged and the heads-up line (MODELING.md §5.5)
+        if let Some(hud) = crate::cutting::hud(&self.state) {
+            ui.painter().text(
+                rect.left_bottom() + egui::vec2(8.0, -6.0),
+                egui::Align2::LEFT_BOTTOM,
+                hud,
+                egui::FontId::proportional(12.0),
+                Theme::default().component_selection,
+            );
+        }
+        if let Some(([x0, y0, x1, y1], _)) =
+            self.state.tool.as_ref().and_then(|t| t.interaction.drag)
+        {
+            let to_points = |x: f64, y: f64| {
+                rect.min + egui::vec2((x / ppp as f64) as f32, (y / ppp as f64) as f32)
+            };
+            ui.painter().line_segment(
+                [to_points(x0, y0), to_points(x1, y1)],
+                egui::Stroke::new(1.5, Theme::default().component_selection),
+            );
+        }
+    }
+
+    /// The pointer on an active cutting tool: hover previews, a click or a drag cuts.
+    fn cut_interaction(
+        &mut self,
+        response: &egui::Response,
+        rect: egui::Rect,
+        ppp: f32,
+        size: [u32; 2],
+    ) {
+        let (w, h) = (size[0].max(1) as f64, size[1].max(1) as f64);
+        let to_pixels = |pos: egui::Pos2| {
+            (
+                ((pos.x - rect.min.x) * ppp) as f64,
+                ((pos.y - rect.min.y) * ppp) as f64,
+            )
+        };
+        let Some(pos) = response.hover_pos().or(response.interact_pointer_pos()) else {
+            return;
+        };
+        let (x, y) = to_pixels(pos);
+        let id = self.state.tool.as_ref().map(|t| t.tool().id());
+        if matches!(id, Some("loop_cut" | "knife_loop")) {
+            crate::cutting::hover(&mut self.state, x, y, w, h);
+            if response.clicked_by(egui::PointerButton::Primary) {
+                self.state.status.clear();
+                if let Err(e) = crate::cutting::click(&mut self.state) {
+                    self.state.status = e;
+                }
+            }
+            return;
+        }
+        if response.drag_started_by(egui::PointerButton::Primary) {
+            crate::cutting::drag_begin(&mut self.state, x, y, [w, h]);
+        }
+        if response.dragged_by(egui::PointerButton::Primary) {
+            crate::cutting::drag_update(&mut self.state, x, y);
+        }
+        if response.drag_stopped_by(egui::PointerButton::Primary) {
+            self.state.status.clear();
+            if let Err(e) = crate::cutting::drag_finish(&mut self.state, x, y) {
+                self.state.status = e;
+            }
+        }
     }
 
     /// Gizmo at the active node, in its object frame or world axes (MANIPULATE.md §2, §5).
@@ -797,6 +870,14 @@ impl Editor {
         ppp: f32,
         size: [u32; 2],
     ) {
+        let cutting = self.state.tool.as_ref().is_some_and(|t| {
+            crate::cutting::is_cut_tool(t.tool().id())
+                && crate::cutting::cut_target(&self.state).is_some()
+        });
+        if cutting {
+            self.cut_interaction(response, rect, ppp, size);
+            return;
+        }
         let (w, h) = (size[0].max(1) as f64, size[1].max(1) as f64);
         let to_pixels = |pos: egui::Pos2| {
             (

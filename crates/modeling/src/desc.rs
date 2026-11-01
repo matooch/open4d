@@ -263,6 +263,71 @@ fn command_descs() -> Vec<ToolDesc> {
     ]
 }
 
+/// The cutting tools that run as plain tool commands (`mesh.slide`; MODELING.md §5.3). They are
+/// kept apart from [`tool_descs`] so the brief 020-022 tool list stays as it was.
+pub fn cutting_descs() -> Vec<ToolDesc> {
+    vec![ToolDesc {
+        id: "slide",
+        label: "Slide",
+        command: "mesh.slide",
+        drag_param: "amount",
+        params: vec![
+            ParamDesc::float("amount", "Amount", 0.0).range(-1.0, 1.0),
+            ParamDesc::int("toward", "Slide Toward Point", -1).range(-1, 1_000_000_000),
+        ],
+        components: true,
+    }]
+}
+
+/// The interactive cutting tools whose commands take their own arguments (`mesh.loop_cut`,
+/// `mesh.knife`; MODELING.md §5.1, §5.2, §5.5). Their params are the viewport tool's settings.
+pub fn interactive_cut_descs() -> Vec<ToolDesc> {
+    let tool = |id, label, command, params| ToolDesc {
+        id,
+        label,
+        command,
+        drag_param: "",
+        params,
+        components: false,
+    };
+    vec![
+        tool(
+            "loop_cut",
+            "Loop/Path Cut",
+            "mesh.loop_cut",
+            vec![
+                ParamDesc::int("count", "Number of Cuts", 1).range(1, 64),
+                ParamDesc::bool("lock_offset", "Fixed Offset", false),
+                ParamDesc::float("offset", "Offset", 0.5).range(0.001, 0.999),
+            ],
+        ),
+        tool(
+            "knife_line",
+            "Knife Line",
+            "mesh.knife",
+            vec![ParamDesc::bool("visible_only", "Visible Only", true)],
+        ),
+        tool(
+            "knife_plane",
+            "Knife Plane",
+            "mesh.knife",
+            vec![
+                ParamDesc::vec3("plane_point", "Plane Point", [0.0; 3]).range(-BIG, BIG),
+                ParamDesc::vec3("plane_normal", "Plane Normal", [1.0, 0.0, 0.0]).range(-BIG, BIG),
+            ],
+        ),
+        tool(
+            "knife_loop",
+            "Knife Loop",
+            "mesh.knife",
+            vec![
+                ParamDesc::bool("lock_offset", "Fixed Offset", false),
+                ParamDesc::float("offset", "Offset", 0.5).range(0.001, 0.999),
+            ],
+        ),
+    ]
+}
+
 /// Every tool, in menu order.
 pub fn tool_descs() -> Vec<ToolDesc> {
     let mut all = vec![extrude_desc(), extrude_inner_desc(), bevel_desc()];
@@ -273,5 +338,9 @@ pub fn tool_descs() -> Vec<ToolDesc> {
 /// The tool with this id (`inset` is accepted as a spelling of `extrude_inner`).
 pub fn tool_desc(id: &str) -> Option<ToolDesc> {
     let id = if id == "inset" { "extrude_inner" } else { id };
-    tool_descs().into_iter().find(|t| t.id == id)
+    tool_descs()
+        .into_iter()
+        .chain(cutting_descs())
+        .chain(interactive_cut_descs())
+        .find(|t| t.id == id)
 }

@@ -586,8 +586,138 @@ other targets of the "Center Axis to" dialog.
 `Unsupported`, with the data that would settle it: partial Subdivide; Dissolve and Melt of groups
 with holes; Connect on edges; Connect with three selected points in one polygon; Untriangulate
 and Triangulate of n-gons. Close Polygon Hole, Bridge, Stitch and Sew belong to brief 025,
-Loop/Path Cut and Knife to 024; the O25 cases that did not run (`loopcut-*`, `knife-line`,
+Loop/Path Cut, Knife and Slide are §5; the O25 cases that did not run (`loopcut-*`, `knife-line`,
 `bridge-two`, `stitch`, `dissolve-edge`, `close-hole`, `smooth`, `array-command`) have no data.
+
+## 5. Cutting tools (`mesh.loop_cut`, `mesh.knife`, `mesh.slide`; brief 024)
+
+Sources: no golden data. O25 (docs/parity/modeling-tools-2.md) could not run `loopcut-mid`,
+`loopcut-quarter` and `knife-line` (the scripted calls did nothing; the Knife needs a viewport
+line), so there are no cases under `tests/golden/modeling-tools/` for these tools, and no Slide
+case at all. Everything here is own design from the public meaning of the tools, and **all of it is
+parity-pending** until GUI session G3 (items 1 and 2: how a cut is placed, how many cuts, how the
+offset is set, the HUD, the knife modes) is answered. Parity: 0 of 0 cases; nothing is listed
+`UNSUPPORTED` or `KNOWN_MISMATCH`.
+
+The geometry is pure (`crates/modeling/src/cut.rs`, `slide.rs`); the commands take explicit
+numbers so a script or agent cuts without a mouse; the viewport tools (`crates/ui/src/cutting.rs`)
+only turn pointer positions into those numbers. One application is one `Document::transact`, one
+undo step.
+
+### 5.1 Loop cut (`loop_cut(mesh, start_edge, offsets)`)
+1. The **ring** of the start edge: the edge, the edge opposite it in each quad it borders,
+   and so on in both directions. The walk stops at a border edge, at a non-quad polygon, at a
+   non-manifold edge (more than two polygons), or when it returns to the start edge (closed
+   ring). The quads passed are the **strip**. A strip needs at least one quad, else `Invalid`.
+2. Every ring edge is oriented so that parallel edges of a quad agree: the start edge runs from
+   its lower to its higher point index; in a quad `[p0,p1,p2,p3]` the edge `p0 p1` is parallel to
+   `p3 p2` (`p0` matches `p3`, `p1` matches `p2`).
+3. `offsets` are fractions `t` in the open interval (0, 1) along that orientation
+   (`point = from + (to - from) * t`). They are sorted ascending; an empty list, a value outside
+   (0, 1) (or not finite) or a repeated value (within 1e-9) is `Invalid`. Up to 64 cuts.
+   The command also takes `count = n`: the offsets `i / (n + 1)` for `i = 1..=n`.
+4. New points are appended: ring edges in ring order (start edge first, then the walk forward
+   through the start edge's lowest-index face, then the walk backward reversed into place), for
+   each edge its offsets ascending.
+5. Each strip quad is replaced by `k + 1` quads `[a_j, a_{j+1}, b_{j+1}, b_j]` (`a` the points on
+   the first ring edge walked along the quad's winding, `b` the parallel points on its opposite
+   edge). The first quad keeps the polygon's index, the others are appended in strip order.
+6. A polygon next to a cut edge that is not in the strip (the neighbour across a ring end) gets
+   the new points inserted into its edge, so the mesh stays closed (no T-junctions).
+7. Result selection: the new edges (between the cut points), as edge ids of the new mesh; polygon
+   and point sets are cleared.
+Proof: unit tests on the 1/1/1 cube (one cut across the ring of four quads: 12 points, 10 polygons,
+all cut points on the plane, still closed), 2/2/2 cube (the ring of a middle edge), two cuts,
+a cylinder (a cut around the barrel), an open plane and a mesh with a triangle at the ring end.
+
+### 5.2 Knife (`knife_plane`, `knife_line`)
+Both cut polygons along the intersection with a plane and split them there.
+1. The plane has a point and a normal. Per polygon the signed distance of each corner is
+   computed; `|d| <= eps` (`eps = 1e-9 * (1 + bbox diagonal)`) counts as on the plane.
+2. **Cut vertices** of a polygon: a new point on every edge whose end distances have opposite
+   signs; and every corner on the plane where the polygon passes through (the nearest off-plane
+   corners before and after it lie on opposite sides). A corner that only touches the plane,
+   and a run of two or more on-plane corners, give no cut vertex.
+3. The cut vertices are ordered along the cut line and paired (0-1, 2-3, ...); each pair is a
+   chord. A chord whose ends are adjacent in the polygon is dropped. A convex polygon has one
+   chord. Polygons are split chord by chord as in Connect (§4.8): the first part keeps the index
+   (`p[0..=i] + p[j..]`), the second `p[i..=j]` is appended; polygons without a chord are
+   unchanged.
+4. New edge points are appended in ascending edge order, one per crossed edge; every polygon
+   sharing a crossed edge gets the point (also polygons that are not cut). Only edges used by a
+   chord that is carried out get a point.
+5. Result selection: the chord edges as edge ids of the new mesh.
+6. `polys` restricts the cut to those polygons (default: all).
+**Plane mode**: the plane is given directly (`point`, `normal`); a zero normal is `Invalid`.
+**Line mode**: `from` and `to` are the ends of the drawn segment in object space, and the surface
+cut is the plane through them and the viewer: with `eye` (perspective) the plane through `eye`,
+`from`, `to`; with `direction` (parallel view) the plane through `from` and `to` containing
+`direction`. Exactly one of `eye` and `direction` is required. Only the part of the cut inside
+the segment is made: a chord is carried out when both its ends project (from the eye, or along
+`direction`) onto the segment's line at `s` in `[0, 1]` (tolerance 1e-9). With `visible_only`
+(default on) polygons facing away from the viewer (`n . (centroid - eye) >= 0`, or `n . direction
+>= 0`) are not cut. Degenerate input (zero-length segment, the plane's normal vanishes) is
+`Invalid`.
+**Loop mode** (`mesh.knife` with `mode = loop`): a loop cut with a single offset through the
+edge under the cursor (`edge`, `offset`), the same function as §5.1.
+Proof: unit tests on the cube (plane x = 0: 12 points, 10 polygons, closed), plane through
+corners (no new points, polygons split along diagonals), a plane that misses the mesh (`Invalid`:
+nothing to cut), a concave polygon with four crossings (two chords), a plane through a triangle
+corner, `polys` restriction with a T-junction free neighbour, line mode extent (a chord is made only
+when both its ends project onto the segment: a segment ending inside the cube cuts only the faces
+whose whole chord it covers, otherwise `Invalid`), visible-only on a cube seen from a parallel view, a segment from the eye (perspective) matching the plane result.
+
+### 5.3 Slide (`slide(mesh, sel, amount, toward)`)
+1. **Edges** (the selected edges): each connected chain is oriented consistently (the lowest edge
+   id runs from its lower to its higher point; at a point where exactly two selected edges meet
+   the orientation continues). The polygon in which an edge runs `u -> w` is its **left** side,
+   the polygon in which it runs `w -> u` its **right** side.
+2. The **rail** of an end point on a side is the other edge of that side's polygon at the point:
+   on the left side at `u` the edge to the previous corner, at `w` to the next corner; on the right
+   side at `w` the previous, at `u` the next. A point reached by several edges uses the rail of the
+   lowest edge id.
+3. `amount` in [-1, 1]: positive slides toward the left side, negative toward the right. Every
+   point of the selected edges moves to `p + (q - p) * |amount|`, `q` the far end of its rail
+   (original positions). Topology, point count and the selection stay; `amount = 0` is `Invalid`,
+   a side that does not exist (border edge) is `Invalid`.
+4. **Points** (no edges selected): each selected point slides toward the point `toward` along the
+   edge between them by `amount` in [0, 1] (clamped); a point not joined to `toward` by an edge is
+   `Invalid`. `toward` is the setting `toward` (int, -1 = none).
+5. The command keeps the stored edge and point selection (indices do not change).
+Proof: unit tests on a 2/2/2 cube (a loop of four edges slides by 0.5 / -0.25 to the exact
+positions, volume stays closed, the topology is unchanged), a single edge, a border edge on one
+side only, point slide, errors.
+
+### 5.4 Commands
+| command | arguments | result |
+|---|---|---|
+| `mesh.loop_cut` | `node?`, `edge` (edge id, or a point pair `[a, b]`), `offsets?: [float]` or `count?: int` (exactly one; neither means `count = 1`) | `{node, points, polys, cut_edges: [id]}` |
+| `mesh.knife` | `node?`, `polys?`, `mode`: `line` / `plane` / `loop`; plane: `point`, `normal`; line: `from`, `to`, one of `eye` / `direction`, `visible_only?` (default true); loop: `edge`, `offset?` (default 0.5) | `{node, points, polys, cut_edges: [id]}` |
+| `mesh.slide` | `node?`, `edges?`, `points?`, `settings?: {amount, toward}` (as the other tool commands, §0.1) | `{node, points, polys, selected}` |
+Vectors are three-number arrays in object space. Errors are `Failed` and change nothing. Nodes that
+are not polygon objects are `Failed`. The stored selection after a cut holds the new edges.
+
+### 5.5 Viewport tools (`crates/ui/src/cutting.rs`; own design, parity-pending)
+Menu: Mesh > Loop/Path Cut, Knife Line, Knife Plane, Knife Loop, Slide (after the brief 020-022
+tools). The Attribute panel shows the tool (settings from `ToolDesc`, Reset Values, Apply, Done);
+Apply on Knife Plane cuts with the panel's `plane_point` and `plane_normal` (also previewed), on the
+loop tools at the hovered edge. The tools reuse `ToolState`; hover and drag live in its
+`interaction` field.
+- **Loop/Path Cut**: while hovering, the edge nearest the cursor (picking, `pick_edge_param`) and the
+  parameter along it (the closest point of the cursor ray on the edge) give the offset; with
+  `count` > 1 the offsets are `i / (count + 1)` and the hover edge only sets the ring and the
+  direction. The preview mesh (the result of the pure function) is drawn in place of the target
+  and the HUD (status line) reads `Loop Cut: 1 cut, offset 0.50`. A click runs `mesh.loop_cut`.
+  Settings: `count` (1..64, default 1), `lock_offset` (use `offset` instead of the cursor),
+  `offset` (default 0.5). Path Cut (a cut along a path of polygons) is the Knife line.
+- **Knife Line**: a drag draws the segment; the preview follows the pointer; the release runs
+  `mesh.knife` (line mode, `eye` or `direction` from the camera). A drag shorter than 3 pixels
+  does nothing. **Knife Plane**: the same drag, with an unbounded segment (plane mode: the plane
+  through the eye and the dragged line). **Knife Loop**: hover and click as the loop cut with one cut (settings `lock_offset`, `offset`).
+- **Slide**: the standard tool drag (§0.2) sets `amount` (one viewport height = 2.0); the release
+  applies.
+- Nothing is written during hover or drag; the target is the active polygon object; all three
+  need a polygon object (else the tool shows nothing).
 
 ## 7. Parity (`crates/modeling/tests/tools_parity.rs`)
 Each case of `tests/golden/modeling-tools/` whose `tool` is `extrude`, `extrude_inner`, `inset` or
@@ -643,3 +773,8 @@ Result: see docs/parity/STATUS.md.
   child, argument errors, Mirror duplicate, schemas.
 - `crates/ui/tests/tools.rs`: the Mesh menu lists the commands, no drag for setting-less
   commands, vector rows, Apply from the panel.
+- `crates/modeling/tests/cut.rs`: §5.1-5.3 as listed under each rule.
+- `crates/app/tests/cut_commands.rs`: `mesh.loop_cut`, `mesh.knife`, `mesh.slide` headless (one undo
+  step, stored selection, argument errors, schemas).
+- `crates/ui/tests/cutting.rs`: hover previews without touching the document, click commits one
+  undo step, knife drag, Slide drag, menu entries.
