@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Forge3D placeholder icon. Original artwork authored for this repo (a plain isometric
+     cube on a dark rounded square). Geometry is mirrored in scripts/release/gen-icons.py,
+     which rasterises the committed PNG/ICO/ICNS files. Replace with real artwork later. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect x="0" y="0" width="1024" height="1024" rx="224" ry="224" fill="#20242c"/>
+  <!-- top face -->
+  <polygon points="512,176 802,344 512,512 222,344" fill="#8fc7ff"/>
+  <!-- left face -->
+  <polygon points="222,344 512,512 512,848 222,680" fill="#3f7fd0"/>
+  <!-- right face -->
+  <polygon points="802,344 512,512 512,848 802,680" fill="#2a5799"/>
+</svg>
