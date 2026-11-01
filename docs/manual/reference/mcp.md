@@ -74,6 +74,10 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `select_invert` | Invert Selection. Undoable editing command. Runs command `select.invert`. |
 | `select_grow` | Grow Selection. Undoable editing command. Runs command `select.grow`. |
 | `select_shrink` | Shrink Selection. Undoable editing command. Runs command `select.shrink`. |
+| `select_connected` | Select Connected. Undoable editing command. Runs command `select.connected`. |
+| `select_convert` | Convert Selection. Undoable editing command. Runs command `select.convert`. |
+| `select_loop` | Loop Selection. Undoable editing command. Runs command `select.loop`. |
+| `select_ring` | Ring Selection. Undoable editing command. Runs command `select.ring`. |
 | `transform_set` | Set Transform. Undoable editing command. Runs command `transform.set`. |
 | `mesh_make_editable` | Make Editable. Undoable editing command. Runs command `mesh.make_editable`. |
 | `mesh_current_state_to_object` | Current State to Object. Undoable editing command. Runs command `mesh.current_state_to_object`. |

@@ -12,7 +12,7 @@ use super::{register_plain, spec, target_nodes};
 use crate::context::CommandContext;
 use crate::error::CommandError;
 use crate::registry::CommandRegistry;
-use crate::state::{ModeArg, SelectOp, ShadingMode};
+use crate::state::{ConvertMode, ModeArg, SelectExtra, SelectOp, ShadingMode};
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -60,6 +60,24 @@ struct NodeArgs {
 #[serde(deny_unknown_fields)]
 struct ModeArgs {
     mode: ModeArg,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ConvertArgs {
+    /// Element kind to convert to: points, edges or polys (not model).
+    to: ModeArg,
+    /// `strict` (default): all parts selected; `tolerant`: any part.
+    #[serde(default)]
+    mode: ConvertMode,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct AcrossArgs {
+    /// Polygons only: which edge pair of a quad the strip crosses (0 or 1, default 0).
+    #[serde(default)]
+    across: u8,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -163,6 +181,49 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
     register_plain(r, "select.shrink", "Shrink Selection", true, |c| {
         select(c, SelectOp::Shrink)
     })?;
+    register_plain(r, "select.connected", "Select Connected", true, |c| {
+        select_extra(c, SelectExtra::Connected)
+    })?;
+    r.register_fn(
+        spec(
+            "select.convert",
+            "Convert Selection",
+            true,
+            || json!({"to": "polys", "mode": "strict"}),
+        ),
+        |c, a: ConvertArgs| {
+            if a.to == ModeArg::Model {
+                return Err(CommandError::InvalidArgs(
+                    "select.convert needs `to` points, edges or polys".into(),
+                ));
+            }
+            select_extra(
+                c,
+                SelectExtra::Convert {
+                    to: a.to,
+                    mode: a.mode,
+                },
+            )
+        },
+    )?;
+    r.register_fn(
+        spec(
+            "select.loop",
+            "Loop Selection",
+            true,
+            || json!({"across": 0}),
+        ),
+        |c, a: AcrossArgs| select_extra(c, SelectExtra::Loop { across: a.across }),
+    )?;
+    r.register_fn(
+        spec(
+            "select.ring",
+            "Ring Selection",
+            true,
+            || json!({"across": 0}),
+        ),
+        |c, a: AcrossArgs| select_extra(c, SelectExtra::Ring { across: a.across }),
+    )?;
     r.register_fn(
         spec("transform.set", "Set Transform", true, || {
             json!({"node": 1, "pos": [0.0, 100.0, 0.0], "rot": [90.0, 0.0, 0.0], "scale": [1.0, 1.0, 1.0]})
@@ -265,6 +326,11 @@ fn undo_redo(ctx: &mut dyn CommandContext, undo: bool) -> Result<Value, CommandE
 
 fn select(ctx: &mut dyn CommandContext, op: SelectOp) -> Result<Value, CommandError> {
     ctx.select_components(op).map_err(CommandError::Failed)?;
+    Ok(Value::Null)
+}
+
+fn select_extra(ctx: &mut dyn CommandContext, cmd: SelectExtra) -> Result<Value, CommandError> {
+    ctx.select_extra(cmd).map_err(CommandError::Failed)?;
     Ok(Value::Null)
 }
 

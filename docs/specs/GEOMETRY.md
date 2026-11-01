@@ -103,7 +103,13 @@ input set, using edge ids from `PolyMesh::edges()`):
 | `grow_polys(mesh, polys)` | adds polygons sharing an **edge** with a selected one |
 | `shrink_polys(mesh, polys)` | keeps polygons whose edge-neighbours are all selected |
 
-Grow/shrink rules are **parity-pending**. Out-of-range input indices are ignored.
+Grow/shrink rules are **parity-pending**.
+
+`selection_ops` (EDITABLE.md §2.8, brief 023) adds: `Kind` (points, edges, polys),
+`grow_edges`/`shrink_edges`, `edges_to_polys(mesh, edges, Mode)`, `convert(mesh, sel, from,
+to, Mode)` (same kind is a no-op), `connected(mesh, kind, sel)` (pieces joined through shared
+points), `edge_loop`, `edge_ring`, `poly_strip(mesh, polys, across)`. Convert rules and
+`connected` come from O26; loop, ring and strips are own design (parity-pending). Out-of-range input indices are ignored.
 
 ## 5. Splines (`spline`)
 

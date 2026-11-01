@@ -2,12 +2,16 @@
 
 use std::collections::BTreeSet;
 
-use forge_command::{ModeArg, SelectOp};
+use forge_command::{ConvertMode, ModeArg, SelectExtra, SelectOp};
 use forge_core::{Document, EditError, NodeId, Scene, Value};
 use forge_generators::{POLYGON, SELECTION_EDGES, SELECTION_POINTS, SELECTION_POLYS, to_poly_mesh};
 use forge_geometry::PolyMesh;
+use forge_geometry::selection::Mode;
 use forge_geometry::selection::{
     IndexSet, Selection, grow_points, grow_polys, shrink_points, shrink_polys,
+};
+use forge_geometry::selection_ops::{
+    Kind, connected, convert, edge_loop, edge_ring, grow_edges, poly_strip, shrink_edges,
 };
 
 use crate::App;
@@ -154,48 +158,6 @@ pub fn write_selection(
     Ok(true)
 }
 
-/// Edges sharing a point with each edge.
-fn edge_neighbors(mesh: &PolyMesh) -> Vec<BTreeSet<u32>> {
-    let edges = mesh.edges();
-    let mut at_point: Vec<Vec<u32>> = vec![Vec::new(); mesh.points.len()];
-    for (i, e) in edges.iter().enumerate() {
-        at_point[e.0 as usize].push(i as u32);
-        at_point[e.1 as usize].push(i as u32);
-    }
-    edges
-        .iter()
-        .enumerate()
-        .map(|(i, e)| {
-            [e.0, e.1]
-                .iter()
-                .flat_map(|p| at_point[*p as usize].iter().copied())
-                .filter(|n| *n as usize != i)
-                .collect()
-        })
-        .collect()
-}
-
-fn grow_edges(mesh: &PolyMesh, sel: &IndexSet) -> IndexSet {
-    let n = edge_neighbors(mesh);
-    let mut out = sel.clone();
-    for i in sel.iter() {
-        for j in n.get(i as usize).into_iter().flatten() {
-            out.insert(*j);
-        }
-    }
-    out
-}
-
-fn shrink_edges(mesh: &PolyMesh, sel: &IndexSet) -> IndexSet {
-    let n = edge_neighbors(mesh);
-    sel.iter()
-        .filter(|i| {
-            n.get(*i as usize)
-                .is_some_and(|ns| ns.iter().all(|j| sel.contains(*j)))
-        })
-        .collect()
-}
-
 /// The new set for `cmd` given the current one and the stored mesh.
 fn component_result(
     mesh: &PolyMesh,
@@ -258,5 +220,56 @@ pub fn run_select(s: &mut App, cmd: SelectCmd) -> Result<(), String> {
     let current = selection_of(s.doc.scene(), id, s.mode);
     let next = component_result(&mesh, s.mode, &current, cmd);
     write_selection(&mut s.doc, id, s.mode, &next).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn kind_of(mode: EditMode) -> Option<Kind> {
+    match mode {
+        EditMode::Model => None,
+        EditMode::Points => Some(Kind::Points),
+        EditMode::Edges => Some(Kind::Edges),
+        EditMode::Polys => Some(Kind::Polys),
+    }
+}
+
+/// Connected, Convert, Loop and Ring on the current mode's set (EDITABLE.md §2.8). Model
+/// mode does nothing.
+pub fn run_select_extra(s: &mut App, cmd: SelectExtra) -> Result<(), String> {
+    let Some(from) = kind_of(s.mode) else {
+        return Ok(());
+    };
+    let id = target(s).ok_or("select a polygon object")?;
+    let mesh = base_mesh(s.doc.scene(), id).ok_or("select a polygon object")?;
+    let current = selection_of(s.doc.scene(), id, s.mode);
+    let (write_mode, next) = match cmd {
+        SelectExtra::Connected => (s.mode, connected(&mesh, from, &current)),
+        SelectExtra::Convert { to, mode } => {
+            let to_mode = EditMode::from(to);
+            let to_kind = kind_of(to_mode).ok_or("convert needs points, edges or polys")?;
+            let rule = match mode {
+                ConvertMode::Strict => Mode::All,
+                ConvertMode::Tolerant => Mode::Any,
+            };
+            (to_mode, convert(&mesh, &current, from, to_kind, rule))
+        }
+        SelectExtra::Loop { across } | SelectExtra::Ring { across } => {
+            let across = match cmd {
+                SelectExtra::Ring { .. } => across ^ 1,
+                _ => across,
+            };
+            let ring = matches!(cmd, SelectExtra::Ring { .. });
+            let set = match from {
+                Kind::Edges if ring => edge_ring(&mesh, &current),
+                Kind::Edges => edge_loop(&mesh, &current),
+                Kind::Polys => poly_strip(&mesh, &current, across),
+                Kind::Points => return Err("loop and ring need edges or polygons".into()),
+            };
+            (s.mode, set)
+        }
+    };
+    write_selection(&mut s.doc, id, write_mode, &next).map_err(|e| e.to_string())?;
+    if write_mode != s.mode {
+        s.mode = write_mode;
+    }
     Ok(())
 }

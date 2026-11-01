@@ -109,7 +109,9 @@ touch history.
 | `mesh.extrude` `mesh.extrude_inner` `mesh.bevel` | `node?`, `polys?`, `settings?`; bevel also `edges?`, `points?` (MODELING.md §0.1, §3) | `{node, points, polys, selected}` | yes |
 | `mesh.subdivide` `mesh.triangulate` `mesh.untriangulate` `mesh.reverse_normals` `mesh.optimize` `mesh.weld` `mesh.melt` `mesh.dissolve` `mesh.split` `mesh.disconnect` `mesh.connect_points` `mesh.mirror` `mesh.center_axis` | `node?`, `polys?`, `settings?`; weld, dissolve and connect_points also `edges?`, `points?` (MODELING.md §0.1, §4) | `{node, points, polys, selected}`; split adds `created`, center_axis adds `center` | yes |
 | `select.mode` | `mode` model, points, edges, polys | null | no |
-| `select.all` `select.none` `select.invert` `select.grow` `select.shrink` | - | null | yes |
+| `select.all` `select.none` `select.invert` `select.grow` `select.shrink` `select.connected` | - | null | yes |
+| `select.convert` | `to` points, edges, polys; `mode?` strict, tolerant (EDITABLE.md §2.8) | null | yes |
+| `select.loop` `select.ring` | `across?` 0 or 1 (EDITABLE.md §2.8) | null | yes |
 | `file.new` | - | null | no |
 | `file.open` | `path` | `{warnings}` | no |
 | `file.save` | `path?` (default: current file) | `{path}` | no |

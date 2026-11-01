@@ -1,7 +1,9 @@
 //! Editor actions are registry commands (docs/specs/COMMANDS.md, UI.md §5). This module runs
 //! them against the editor state and implements the command context for it.
 
-use forge_command::{CommandContext, ModeArg, NodeSelection, SelectOp, ShadingMode, Timeline};
+use forge_command::{
+    CommandContext, ModeArg, NodeSelection, SelectExtra, SelectOp, ShadingMode, Timeline,
+};
 use forge_core::{Category, Document, NodeId, Registry};
 use forge_viewport::render::Shading;
 use serde_json::Value;
@@ -101,6 +103,10 @@ impl CommandContext for EditorState {
 
     fn select_components(&mut self, op: SelectOp) -> Result<(), String> {
         self.app.select_components(op)
+    }
+
+    fn select_extra(&mut self, cmd: SelectExtra) -> Result<(), String> {
+        self.app.select_extra(cmd)
     }
 
     fn record_keys(&mut self) -> Result<usize, String> {

@@ -192,6 +192,76 @@ label also names the mode.
   (`crates/viewport/tests/render.rs`, GPU) draw a square in the wire or selection colour and
   are hidden behind filled faces.
 
+### 2.8 Selection commands (brief 023)
+
+Sources: observation O26 ([docs/parity/selection-ops.md](../parity/selection-ops.md), cases in
+`tests/golden/selection-ops/`, 6 observed); everything else is own design and
+**parity-pending** until GUI session G3 answers (GUI-SESSIONS.md §G3 item 4). Pure functions
+live in `forge_geometry::selection`; `forge_app::select` applies them to the target of
+§2.2 (a component mode and an active polygon object, else the command fails with "select a
+polygon object"). Every command works headless (CLI, RPC, MCP, Rhai) through the registry,
+reads the stored mesh, and writes with `write_selection`: **one "Select" step** (or none if
+nothing changes). Edge ids are those of `PolyMesh::edges()`.
+
+| Command | Args | Acts on | Result |
+|---|---|---|---|
+| `select.invert` | - | current mode's set | complement within `0..count` (`invert-poly`: 4 top polys give the other 20, points and edges untouched) |
+| `select.grow` | - | current mode's set | adds neighbours (below) |
+| `select.shrink` | - | current mode's set | keeps elements whose neighbours are all selected (`shrink-poly`: the 16 front polys of a 4x4x4 cube give 5, 6, 9, 10) |
+| `select.connected` | - | current mode's set | every element of the connected pieces that contain a selected element |
+| `select.convert` | `to` points, edges, polys; `mode` strict (default) or tolerant | current mode's set | writes the `to` set; **the source set stays selected**; the edit mode becomes `to` |
+| `select.loop` | `across?` 0 or 1 (polys only, default 0) | edges or polys | edge loops / polygon loops of the selected elements |
+| `select.ring` | `across?` | edges or polys | edge rings / the orthogonal polygon strips |
+
+Neighbours: points are neighbours along an edge; edges share a point; polygons share an
+**edge** (`grow-poly` and `grow-point` were not observed, the dialog "Grow Selection…" crashed
+the observer: **parity-pending**). Grow and shrink are exact inverses on the observed shrink
+case only.
+
+**Convert** (`convert(mesh, sel, from, to, mode)`). Same kind is a no-op. Strict needs all
+parts of the target element selected, tolerant any part:
+
+| from → to | strict | tolerant |
+|---|---|---|
+| polys → points, edges | every point / edge of the selected polys (no tolerance) | same |
+| points → edges | both end points selected | either |
+| points → polys | all corners selected (`convert-point-to-poly`: 9 top points give polys 16-19; side polys with 2 selected points are not chosen) | any corner (not observed) |
+| edges → points | end points of the selected edges | same |
+| edges → polys | all edges of the polygon selected (`convert-edge-to-poly`: the 8 border edges of the top give no polygon) | any edge (not observed) |
+
+`convert-poly-to-point`: the 4 top polys give the 9 top points, polys stay selected.
+
+**Connected** uses shared **points**: two polygons are in one piece if they share a point
+(union-find over polygon corners). Points mode: pieces of points; edges mode: edges of the
+pieces. `select-connected` (after Disconnect every top polygon owns its points): poly 16 stays
+alone. Spreading through shared points, versus through shared edges only, was not observed:
+**parity-pending** (the case cannot tell, see report).
+
+**Loop and ring** (own design, parity-pending; `loop-edge`, `loop-poly`, `ring-edge` need
+the GUI, O26).
+- Edge loop: from each end of a selected edge continue straight. At an interior point of
+  valence 4 whose faces around it are all quads, the next edge is the one sharing no face with
+  the incoming one. At a border point with exactly two border edges, a border edge continues
+  to the other one. Anything else (poles, N-gons, non-manifold) stops. A loop that returns to
+  its start closes. Edges mode only.
+- Edge ring: from an edge, for each quad that contains it, the opposite edge; continue from
+  that edge into its other quad. A non-quad or a border stops. Closed rings close.
+- Polygon loop (polys mode): a strip of quads. For a selected quad, the strip crosses the
+  edge pair `(p0p1, p2p3)` when `across` is 0, `(p1p2, p3p0)` when 1; it continues through
+  each crossed edge into the neighbour quad, which is entered through the edge shared and left
+  through the opposite one. Stops at borders, non-quads and when the strip closes. Polygon
+  ring is the strip with `across` flipped. Selected non-quads contribute only themselves.
+- Points mode: `select.loop` and `select.ring` fail ("needs edges or polygons").
+
+Model mode: `select.connected`, `select.convert`, `select.loop`, `select.ring` do nothing
+(like grow and shrink).
+
+Checks: `crates/geometry/tests/selection_ops_parity.rs` rebuilds each O26 case from its
+`mesh.obj` and `case.toml` start sets and compares with `selection.json` exactly; unit tests
+for loop, ring, connected, tolerant convert and edge grow/shrink (`selection.rs`); command
+tests in `crates/app/tests/select_commands.rs` (headless run, one undo step, no step when
+nothing changes).
+
 ## 3. Moving, rotating and scaling components (`crates/ui/src/component_edit.rs`)
 
 Sources: own design (brief docs/agents/tasks/06-component-transform.md); gizmo, axes, drag

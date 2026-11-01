@@ -447,6 +447,34 @@ impl Editor {
                     self.run(select_cmd(SelectCmd::Shrink));
                     ui.close();
                 }
+                ui.separator();
+                let extra: [(&str, Cmd); 7] = [
+                    ("Select Connected", cmd("select.connected")),
+                    ("Loop Selection", cmd("select.loop")),
+                    ("Ring Selection", cmd("select.ring")),
+                    (
+                        "Convert to Points",
+                        ("select.convert", json!({"to": "points"})),
+                    ),
+                    (
+                        "Convert to Edges",
+                        ("select.convert", json!({"to": "edges"})),
+                    ),
+                    (
+                        "Convert to Polygons",
+                        ("select.convert", json!({"to": "polys"})),
+                    ),
+                    (
+                        "Convert to Polygons (tolerant)",
+                        ("select.convert", json!({"to": "polys", "mode": "tolerant"})),
+                    ),
+                ];
+                for (label, command) in extra {
+                    if ui.button(label).clicked() {
+                        self.run(command);
+                        ui.close();
+                    }
+                }
             });
             ui.menu_button("Mesh", |ui| {
                 for (i, tool) in crate::tools::tools().into_iter().enumerate() {

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use forge_core::{Document, NodeId, Scene};
 
-use crate::state::{ModeArg, NodeSelection, SelectOp, ShadingMode};
+use crate::state::{ModeArg, NodeSelection, SelectExtra, SelectOp, ShadingMode};
 use crate::timeline::Timeline;
 
 pub trait CommandContext {
@@ -23,6 +23,10 @@ pub trait CommandContext {
 
     /// Select All / None / Invert / Grow / Shrink on the current mode's set (EDITABLE.md §2.5).
     fn select_components(&mut self, op: SelectOp) -> Result<(), String>;
+    /// Connected, Convert, Loop and Ring on the current mode's set (EDITABLE.md §2.8).
+    fn select_extra(&mut self, _cmd: SelectExtra) -> Result<(), String> {
+        Err("no components headless".into())
+    }
     /// Keys the selected objects' transform at the current frame; returns the key count.
     fn record_keys(&mut self) -> Result<usize, String>;
     /// Removes the selected objects' keys on the current frame; returns the key count.

@@ -87,6 +87,30 @@ pub enum SelectOp {
     Shrink,
 }
 
+/// Whether a converted selection needs all parts of an element or any part.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ConvertMode {
+    /// All parts selected (observed, EDITABLE.md §2.8).
+    #[default]
+    Strict,
+    /// Any part selected.
+    Tolerant,
+}
+
+/// Selection commands that need arguments or are not plain set operations (EDITABLE.md §2.8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelectExtra {
+    /// Whole connected pieces of the current mode's set.
+    Connected,
+    /// The current set converted to `to`; the source stays selected.
+    Convert { to: ModeArg, mode: ConvertMode },
+    /// Edge loops, or polygon strips crossing edge pair `across`.
+    Loop { across: u8 },
+    /// Edge rings, or the strips across the other pair.
+    Ring { across: u8 },
+}
+
 /// Viewport shading (mirrors the viewport's `Shading`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]

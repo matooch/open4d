@@ -10,8 +10,8 @@ pub mod select;
 use std::sync::Arc;
 
 use forge_command::{
-    CommandContext, CommandError, CommandRegistry, ModeArg, NodeSelection, SelectOp, Timeline,
-    register_editor_commands,
+    CommandContext, CommandError, CommandRegistry, ModeArg, NodeSelection, SelectExtra, SelectOp,
+    Timeline, register_editor_commands,
 };
 use forge_core::{Document, EvalCtx, NodeId, Registry, RegistryError, Scene, SceneSettings};
 use forge_generators::{Primitives, evaluate};
@@ -22,7 +22,7 @@ use forge_modifiers::Deformers;
 use serde_json::Value;
 
 use crate::animate::{AnimCtx, Evaluated, delete_keys, key_frames, next_key, prev_key};
-use crate::select::{EditMode, run_select};
+use crate::select::{EditMode, run_select, run_select_extra};
 
 /// The built-in node types plus every plugin the editor installs.
 pub fn default_registry() -> Result<Registry, RegistryError> {
@@ -269,6 +269,10 @@ impl CommandContext for App {
 
     fn select_components(&mut self, op: SelectOp) -> Result<(), String> {
         run_select(self, op.into())
+    }
+
+    fn select_extra(&mut self, cmd: SelectExtra) -> Result<(), String> {
+        run_select_extra(self, cmd)
     }
 
     fn record_keys(&mut self) -> Result<usize, String> {

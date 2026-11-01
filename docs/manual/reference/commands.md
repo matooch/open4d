@@ -2,7 +2,7 @@
 
 # Command reference
 
-51 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+55 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -21,6 +21,10 @@
 | [`select.invert`](#selectinvert) | Invert Selection | yes | `select_invert` |
 | [`select.grow`](#selectgrow) | Grow Selection | yes | `select_grow` |
 | [`select.shrink`](#selectshrink) | Shrink Selection | yes | `select_shrink` |
+| [`select.connected`](#selectconnected) | Select Connected | yes | `select_connected` |
+| [`select.convert`](#selectconvert) | Convert Selection | yes | `select_convert` |
+| [`select.loop`](#selectloop) | Loop Selection | yes | `select_loop` |
+| [`select.ring`](#selectring) | Ring Selection | yes | `select_ring` |
 | [`transform.set`](#transformset) | Set Transform | yes | `transform_set` |
 | [`mesh.make_editable`](#meshmake_editable) | Make Editable | yes | `mesh_make_editable` |
 | [`mesh.current_state_to_object`](#meshcurrent_state_to_object) | Current State to Object | yes | `mesh_current_state_to_object` |
@@ -204,6 +208,45 @@ Shrink Selection. One undo step.
 No arguments.
 
 Example: `forge cmd scene.forge select.shrink --args '{}'`
+
+### `select.connected`
+
+Select Connected. One undo step.
+
+No arguments.
+
+Example: `forge cmd scene.forge select.connected --args '{}'`
+
+### `select.convert`
+
+Convert Selection. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `to` | `"model"` \| `"points"` \| `"edges"` \| `"polys"` | yes | Element kind to convert to: points, edges or polys (not model). |
+| `mode` | string \| string | no | `strict` (default): all parts selected; `tolerant`: any part. Default: `"strict"`. |
+
+Example: `forge cmd scene.forge select.convert --args '{"mode":"strict","to":"polys"}'`
+
+### `select.loop`
+
+Loop Selection. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `across` | integer | no | Polygons only: which edge pair of a quad the strip crosses (0 or 1, default 0). Default: `0`. |
+
+Example: `forge cmd scene.forge select.loop --args '{"across":0}'`
+
+### `select.ring`
+
+Ring Selection. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `across` | integer | no | Polygons only: which edge pair of a quad the strip crosses (0 or 1, default 0). Default: `0`. |
+
+Example: `forge cmd scene.forge select.ring --args '{"across":0}'`
 
 
 ## `transform`
