@@ -2,6 +2,7 @@
 //! docs/specs/MODELING.md.
 
 mod bevel;
+mod build;
 mod cut;
 mod desc;
 mod extrude;
@@ -13,10 +14,16 @@ mod surface;
 mod util;
 
 pub use bevel::bevel;
+pub use build::{
+    BridgeEnd, BuildOutput, MAX_SEGMENTS, PenCorner, StitchTo, border_loop, bridge, close_hole,
+    pen, stitch, stitch_edges,
+};
 pub use cut::{
     CutOutput, KnifeLine, MAX_CUTS, Plane, View, even_offsets, knife_line, knife_plane, loop_cut,
 };
-pub use desc::{ToolDesc, cutting_descs, interactive_cut_descs, tool_desc, tool_descs};
+pub use desc::{
+    ToolDesc, building_descs, cutting_descs, interactive_cut_descs, tool_desc, tool_descs,
+};
 pub use extrude::{extrude, extrude_inner};
 pub use merge::{dissolve, melt};
 pub use points::{

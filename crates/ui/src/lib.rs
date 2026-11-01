@@ -6,6 +6,7 @@
 pub mod app;
 pub use forge_app::animate;
 pub mod attributes;
+pub mod building;
 pub mod commands;
 pub mod component_edit;
 pub mod components;

@@ -495,6 +495,14 @@ impl Editor {
                         ui.close();
                     }
                 }
+                // Bridge, Close Polygon Hole, Stitch and Sew, Polygon Pen (MODELING.md §6)
+                ui.separator();
+                for tool in crate::tools::building_tools() {
+                    if ui.button(tool.label()).clicked() {
+                        crate::tools::activate_tool(&mut self.state, tool.id());
+                        ui.close();
+                    }
+                }
             });
             ui.menu_button("Create", |ui| {
                 for (cat, items) in create_menu(self.state.doc.scene().registry()) {
@@ -770,7 +778,9 @@ impl Editor {
             Theme::default().weak_text,
         );
         // cutting tools: the knife line being dragged and the heads-up line (MODELING.md §5.5)
-        if let Some(hud) = crate::cutting::hud(&self.state) {
+        if let Some(hud) =
+            crate::cutting::hud(&self.state).or_else(|| crate::building::hud(&self.state))
+        {
             ui.painter().text(
                 rect.left_bottom() + egui::vec2(8.0, -6.0),
                 egui::Align2::LEFT_BOTTOM,
@@ -789,6 +799,39 @@ impl Editor {
                 [to_points(x0, y0), to_points(x1, y1)],
                 egui::Stroke::new(1.5, Theme::default().component_selection),
             );
+        }
+        // Polygon Pen: the corners placed so far (MODELING.md §6.7)
+        let size = rect.size() * ppp;
+        for [x, y] in crate::building::pen_corner_pixels(&self.state, size.x as f64, size.y as f64)
+        {
+            ui.painter().circle_filled(
+                rect.min + egui::vec2((x / ppp as f64) as f32, (y / ppp as f64) as f32),
+                4.0,
+                Theme::default().component_selection,
+            );
+        }
+    }
+
+    /// The pointer on an active topology tool: hover previews, a click picks or builds.
+    fn build_interaction(
+        &mut self,
+        response: &egui::Response,
+        rect: egui::Rect,
+        ppp: f32,
+        size: [u32; 2],
+    ) {
+        let Some(pos) = response.hover_pos().or(response.interact_pointer_pos()) else {
+            return;
+        };
+        let (w, h) = (size[0].max(1) as f64, size[1].max(1) as f64);
+        let x = ((pos.x - rect.min.x) * ppp) as f64;
+        let y = ((pos.y - rect.min.y) * ppp) as f64;
+        crate::building::hover(&mut self.state, x, y, w, h);
+        if response.clicked_by(egui::PointerButton::Primary) {
+            self.state.status.clear();
+            if let Err(e) = crate::building::click(&mut self.state) {
+                self.state.status = e;
+            }
         }
     }
 
@@ -876,6 +919,14 @@ impl Editor {
         });
         if cutting {
             self.cut_interaction(response, rect, ppp, size);
+            return;
+        }
+        let building = self.state.tool.as_ref().is_some_and(|t| {
+            crate::building::is_build_tool(t.tool().id())
+                && crate::cutting::cut_target(&self.state).is_some()
+        });
+        if building {
+            self.build_interaction(response, rect, ppp, size);
             return;
         }
         let (w, h) = (size[0].max(1) as f64, size[1].max(1) as f64);

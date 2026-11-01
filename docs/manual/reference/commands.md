@@ -2,7 +2,7 @@
 
 # Command reference
 
-58 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+62 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -47,6 +47,10 @@
 | [`mesh.slide`](#meshslide) | Slide | yes | `mesh_slide` |
 | [`mesh.loop_cut`](#meshloop_cut) | Loop Cut | yes | `mesh_loop_cut` |
 | [`mesh.knife`](#meshknife) | Knife | yes | `mesh_knife` |
+| [`mesh.bridge`](#meshbridge) | Bridge | yes | `mesh_bridge` |
+| [`mesh.close_hole`](#meshclose_hole) | Close Polygon Hole | yes | `mesh_close_hole` |
+| [`mesh.stitch`](#meshstitch) | Stitch and Sew | yes | `mesh_stitch` |
+| [`mesh.pen`](#meshpen) | Polygon Pen | yes | `mesh_pen` |
 | [`param.set`](#paramset) | Set Parameter | yes | `param_set` |
 | [`key.record`](#keyrecord) | Record | yes | `key_record` |
 | [`key.delete_at_frame`](#keydelete_at_frame) | Delete Keys | yes | `key_delete_at_frame` |
@@ -537,6 +541,54 @@ Knife. One undo step.
 | `visible_only` | boolean | no | line mode: skip polygons facing away (default true). |
 
 Example: `forge cmd scene.forge mesh.knife --args '{"mode":"plane","normal":[1.0,0.0,0.0],"point":[0.0,0.0,0.0]}'`
+
+### `mesh.bridge`
+
+Bridge. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `edges` | array of integer \| array of integer (length 2) (length 2) or null | no | Two border edges (id or point pair); each stands for its whole border loop. Give edges or polys. |
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `polys` | array of integer (length 2) or null | no | Two polygons of the same size: they are removed and their outlines bridged. Give edges or polys. |
+| `segments` | integer or null | no | Rows of quads between the loops (default 1). |
+
+Example: `forge cmd scene.forge mesh.bridge --args '{"polys":[0,1],"segments":1}'`
+
+### `mesh.close_hole`
+
+Close Polygon Hole. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `edge` | integer \| array of integer (length 2) | yes | Edge id of the mesh, or a point pair [a, b] of an existing edge. |
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+
+Example: `forge cmd scene.forge mesh.close_hole --args '{"edge":0}'`
+
+### `mesh.stitch`
+
+Stitch and Sew. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `edges` | array of array of integer \| array of integer (length 2) (length 2) or null | no | Pairs of border edges [e1, e2] (id or point pair) to sew together. Give points or edges. |
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `points` | array of array of integer (length 2) or null | no | Point pairs [a, b] to merge (into the lowest index of each set). Give points or edges. |
+| `position` | `"middle"` \| `"first"` \| `null` | no | Where merged points go (default middle). |
+
+Example: `forge cmd scene.forge mesh.stitch --args '{"points":[[0,1]],"position":"middle"}'`
+
+### `mesh.pen`
+
+Polygon Pen. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `corners` | array of object \| object | yes | One corner adds a point, three or more add a polygon. A corner is {point: index} (an existing point) or {pos: [x, y, z]} (a new point, object space). |
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+
+Example: `forge cmd scene.forge mesh.pen --args '{"corners":[{"pos":[0.0,0.0,0.0]},{"pos":[1.0,0.0,0.0]},{"pos":[0.0,1.0,0.0]}]}'`
 
 
 ## `param`

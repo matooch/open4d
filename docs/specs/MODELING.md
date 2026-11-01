@@ -585,7 +585,7 @@ other targets of the "Center Axis to" dialog.
 ### 4.12 Not covered
 `Unsupported`, with the data that would settle it: partial Subdivide; Dissolve and Melt of groups
 with holes; Connect on edges; Connect with three selected points in one polygon; Untriangulate
-and Triangulate of n-gons. Close Polygon Hole, Bridge, Stitch and Sew belong to brief 025,
+and Triangulate of n-gons. Close Polygon Hole, Bridge, Stitch and Sew are §6 (brief 025),
 Loop/Path Cut, Knife and Slide are §5; the O25 cases that did not run (`loopcut-*`, `knife-line`,
 `bridge-two`, `stitch`, `dissolve-edge`, `close-hole`, `smooth`, `array-command`) have no data.
 
@@ -719,6 +719,99 @@ loop tools at the hovered edge. The tools reuse `ToolState`; hover and drag live
 - Nothing is written during hover or drag; the target is the active polygon object; all three
   need a polygon object (else the tool shows nothing).
 
+## 6. Topology tools (`mesh.bridge`, `mesh.close_hole`, `mesh.stitch`, `mesh.pen`; brief 025)
+
+Sources: no golden data. O25 (docs/parity/modeling-tools-2.md) could not run `bridge-two`,
+`stitch` and `close-hole` (the scripted calls returned false; GUI only), so
+`tests/golden/modeling-tools/` has no case for these tools and nothing is listed `UNSUPPORTED` or
+`KNOWN_MISMATCH`. Parity: 0 of 0 cases. Everything here is own design from the public meaning of the
+tools and **parity-pending** until GUI session G3 answers it (the open data is in the brief 025 report).
+The geometry is pure (`crates/modeling/src/build.rs`); the commands take explicit indices and numbers
+(no mouse); the viewport tools (`crates/ui/src/building.rs`) only turn clicks into those arguments.
+One application is one `Document::transact`, one undo step.
+
+### 6.1 Border loops
+An edge used by exactly one polygon is a **border edge**. Its **direction** is the one it has in that
+polygon (`u -> v`). The border loop through it follows border edges in their direction: at each point
+exactly one border edge must start (else `Invalid`: the border is pinched). The loop is the list of its
+points `[u, v, ...]`. Existing polygons lie to the left of the loop, so a polygon that closes the hole
+has to run the other way (its edges are the reverse of the loop's).
+
+### 6.2 Bridge (`bridge(mesh, a, b, segments)`)
+`a` and `b` each name an end: `Edge(e)` (the border loop through border edge `e`) or `Poly(p)`
+(the polygon `p` is removed and its outline is the end; its loop is the polygon reversed, which is the
+direction its neighbours give the new border). Rules:
+1. Both loops must have the same number of points `n`, share no point and not be the same loop
+   (else `Invalid`). `segments` is 1..=64.
+2. **Matching**: loop `A` runs in its direction; loop `B` is paired in reverse, `P[i] = B_rev[(i + k) % n]`,
+   which is the only orientation whose new quads are wound like the rest of the mesh (a closed
+   tube stays an oriented surface). The rotation `k` is the one with the smallest total edge length
+   `sum |A[i] - P[i]|`; ties choose the smallest `k` (a rotation must be smaller by more than `1e-9 (1 + cost)` to win,
+   so rounding noise does not decide).
+3. **Rings**: with `segments = s`, rings `1..s-1` are new points appended ring by ring, each in loop
+   order: `A[i] + (P[i] - A[i]) * j / s`. Ring 0 is `A`, ring `s` is `P`.
+4. **Polygons**: appended, segment by segment (`j = 0..s`), then along the loop (`i = 0..n`):
+   `[r_j[i+1], r_j[i], r_{j+1}[i], r_{j+1}[i+1]]`. With `Poly` ends the two polygons are removed first
+   (swap-remove, §4), so the new polygons come after the survivors.
+5. Result selection: the new polygons; points and edges cleared.
+Proof: `bridge.rs` tests: two open cube ends (top and bottom polygons deleted) give a closed tube
+(the 4 side polygons plus 4 bridge quads: 8 polygons, every edge used twice), the same through
+`Poly` ends of a two-cube stack, rotation picked by length (loops offered in a rotated start),
+segments (ring positions, counts), errors (different sizes, same loop, interior edge, shared points).
+
+### 6.3 Close Polygon Hole (`close_hole(mesh, edge)`)
+The border loop through `edge` (§6.1) becomes one n-gon appended to the polygon list, wound as the
+reverse of the loop (the corner order starts at the start of the given border edge). Result selection:
+the new polygon. A non-border edge is `Invalid`. Proof: a cube with the top polygon deleted gets 6
+polygons back and is closed; the polygon equals the deleted one up to the start corner; a hole of 6.
+
+### 6.4 Stitch and Sew (`stitch(mesh, pairs, to)`, `stitch_edges(mesh, edge_pairs)`)
+`pairs` are point pairs `(a, b)`; the points of every connected set of pairs are merged into the
+lowest index of the set. `to` = `Middle` (default): the merged point sits at the average of the set's
+positions; `First`: the lowest index keeps its position. Polygons are rewritten with the merged point;
+a polygon left with fewer than three different corners is removed; the other merged points are removed
+(swap-remove, §4). `a == b`, a missing point, or no pair is `Invalid`/`BadPoint`. Result selection: the
+merged points (their new indices).
+`stitch_edges` turns pairs of border edges into point pairs: the border edge `u -> v` and the border
+edge `x -> y` face each other, so `u` joins `y` and `v` joins `x`; a join of a point with itself is dropped;
+interior edges, the same edge twice, or nothing left are `Invalid`.
+Proof: `bridge.rs`: a strip of two quads whose seam was opened (`disconnect`) is sewn back to the
+original (counts and positions), midpoint vs first, chains of pairs, a collapsing polygon.
+
+### 6.5 Polygon Pen (`pen(mesh, corners)`)
+`corners` are `Point(i)` (an existing point: the snap) or `New(position)`. New points are appended in
+corner order.
+- one corner, `New`: adds a lone point (result selection: that point);
+- three or more corners: adds the polygon with the corners in the given order (it is wound as given);
+  the result selection is the new polygon;
+- two corners, a repeated point, a missing point, a non-finite position, a zero-area outline
+  (`|normal| <= 1e-12`), or a single `Point` are `Invalid`/`BadPoint`.
+Proof: unit tests (snap reuses the point, new points appended, orientation, errors).
+
+### 6.6 Commands
+| command | arguments | result |
+|---|---|---|
+| `mesh.bridge` | `node?`, exactly one of `edges: [e, e]` (border edge ids or point pairs) and `polys: [p, q]`; `segments?` (1..64, default 1) | `{node, points, polys, new_polys: [id]}` |
+| `mesh.close_hole` | `node?`, `edge` (id or point pair of a border edge) | `{node, points, polys, new_polys: [id]}` |
+| `mesh.stitch` | `node?`, exactly one of `points: [[a, b], ...]` and `edges: [[e, e], ...]`; `position?`: `middle` / `first` | `{node, points, polys, merged: [id]}` |
+| `mesh.pen` | `node?`, `corners: [{point: i} or {pos: [x, y, z]}]` | `{node, points, polys, new_points: [id], new_polys: [id]}` |
+Positions are object space. Errors are `Failed` and change nothing. The stored selection afterwards
+is the one named in each rule (polygons, points; edges cleared).
+
+### 6.7 Viewport tools (`crates/ui/src/building.rs`; own design, parity-pending)
+Menu: Mesh > Bridge, Close Polygon Hole, Stitch and Sew, Polygon Pen. Hover finds the border edge under
+the cursor (`pick_edge_param`; a non-border edge is not accepted, the HUD says so); the target is the
+active polygon object.
+- **Close Polygon Hole**: hover shows the closed hole as preview, a click runs `mesh.close_hole`.
+- **Bridge** and **Stitch and Sew**: the first click picks a border edge, the second runs the command
+  (preview while the second is hovered). Apply runs the command with the two picked edges, or with
+  exactly two selected border edges. Bridge setting: `segments`; Stitch setting: `position`.
+- **Polygon Pen**: each click adds a corner, snapped to an existing point within the point pick radius
+  (else a point on the plane through the camera target facing the viewer); a click on the first
+  corner with three or more corners, or Apply, runs `mesh.pen`. Reset Values / Done discard the
+  corners. The preview shows the polygon once there are three corners.
+Nothing is written during hover.
+
 ## 7. Parity (`crates/modeling/tests/tools_parity.rs`)
 Each case of `tests/golden/modeling-tools/` whose `tool` is `extrude`, `extrude_inner`, `inset` or
 `bevel` is rebuilt: the default cube with `segments`, made editable (our generator's mesh has
@@ -778,3 +871,8 @@ Result: see docs/parity/STATUS.md.
   step, stored selection, argument errors, schemas).
 - `crates/ui/tests/cutting.rs`: hover previews without touching the document, click commits one
   undo step, knife drag, Slide drag, menu entries.
+- `crates/modeling/tests/build.rs`: §6.1-6.5 as listed under each rule.
+- `crates/app/tests/build_commands.rs`: `mesh.bridge`, `mesh.close_hole`, `mesh.stitch`, `mesh.pen`
+  headless (one undo step, stored selection, argument errors, schemas).
+- `crates/ui/tests/building.rs`: hover previews without touching the document, clicks commit one
+  undo step, pen corners and snapping, menu entries.

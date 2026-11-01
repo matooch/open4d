@@ -27,12 +27,12 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
 struct LoopCut;
 struct Knife;
 
-fn vec3_schema(what: &str) -> Json {
+pub(super) fn vec3_schema(what: &str) -> Json {
     json!({"description": what, "type": "array", "items": {"type": "number"},
            "minItems": 3, "maxItems": 3})
 }
 
-fn edge_schema() -> Json {
+pub(super) fn edge_schema() -> Json {
     json!({"description": "Edge id of the mesh, or a point pair [a, b] of an existing edge.",
            "anyOf": [
                {"type": "integer", "minimum": 0},
@@ -40,26 +40,34 @@ fn edge_schema() -> Json {
                 "minItems": 2, "maxItems": 2}]})
 }
 
-fn node_schema() -> Json {
+pub(super) fn node_schema() -> Json {
     json!({"description": "Polygon object; the active node when absent.",
            "type": ["integer", "null"]})
 }
 
 /// Checks the keys of `obj` against `allowed`.
-fn check_keys(id: &str, obj: &Map<String, Json>, allowed: &[&str]) -> Result<(), CommandError> {
+pub(super) fn check_keys(
+    id: &str,
+    obj: &Map<String, Json>,
+    allowed: &[&str],
+) -> Result<(), CommandError> {
     match obj.keys().find(|k| !allowed.contains(&k.as_str())) {
         Some(k) => Err(CommandError::InvalidArgs(format!("{id}: unknown key {k}"))),
         None => Ok(()),
     }
 }
 
-fn number(id: &str, v: &Json, what: &str) -> Result<f64, CommandError> {
+pub(super) fn number(id: &str, v: &Json, what: &str) -> Result<f64, CommandError> {
     v.as_f64()
         .filter(|f| f.is_finite())
         .ok_or_else(|| CommandError::InvalidArgs(format!("{id}: {what} must be a number")))
 }
 
-fn vec3(id: &str, obj: &Map<String, Json>, key: &str) -> Result<Option<DVec3>, CommandError> {
+pub(super) fn vec3(
+    id: &str,
+    obj: &Map<String, Json>,
+    key: &str,
+) -> Result<Option<DVec3>, CommandError> {
     match obj.get(key) {
         None | Some(Json::Null) => Ok(None),
         Some(Json::Array(a)) if a.len() == 3 => {
@@ -80,7 +88,7 @@ fn required(id: &str, v: Option<DVec3>, key: &str) -> Result<DVec3, CommandError
 }
 
 /// The polygon object and its mesh.
-fn target(
+pub(super) fn target(
     ctx: &dyn CommandContext,
     id: &str,
     obj: &Map<String, Json>,
@@ -107,11 +115,11 @@ fn target(
 }
 
 /// An edge id from an id or a point pair.
-fn edge_arg(id: &str, mesh: &PolyMesh, obj: &Map<String, Json>) -> Result<u32, CommandError> {
+pub(super) fn edge_value(id: &str, mesh: &PolyMesh, v: &Json) -> Result<u32, CommandError> {
     let index = |v: &Json| v.as_u64().and_then(|i| u32::try_from(i).ok());
     let bad = || CommandError::InvalidArgs(format!("{id}: edge must be an id or [a, b]"));
-    match obj.get("edge") {
-        Some(Json::Array(p)) if p.len() == 2 => {
+    match v {
+        Json::Array(p) if p.len() == 2 => {
             let (a, b) = (index(&p[0]).ok_or_else(bad)?, index(&p[1]).ok_or_else(bad)?);
             mesh.edge_ids()
                 .get(&Edge::new(a, b))
@@ -120,7 +128,14 @@ fn edge_arg(id: &str, mesh: &PolyMesh, obj: &Map<String, Json>) -> Result<u32, C
                     CommandError::Failed(format!("{id}: points {a} and {b} share no edge"))
                 })
         }
-        Some(v) => index(v).ok_or_else(bad),
+        v => index(v).ok_or_else(bad),
+    }
+}
+
+/// The `edge` argument.
+fn edge_arg(id: &str, mesh: &PolyMesh, obj: &Map<String, Json>) -> Result<u32, CommandError> {
+    match obj.get("edge") {
+        Some(v) => edge_value(id, mesh, v),
         None => Err(CommandError::InvalidArgs(format!("{id}: edge is required"))),
     }
 }

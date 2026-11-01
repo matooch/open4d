@@ -11,7 +11,7 @@ use forge_generators::{
 use forge_geometry::PolyMesh;
 use forge_geometry::selection::{IndexSet, Selection};
 use forge_modeling::{
-    Settings, ToolDesc, cutting_descs, interactive_cut_descs, tool_descs, tool_fn,
+    Settings, ToolDesc, building_descs, cutting_descs, interactive_cut_descs, tool_descs, tool_fn,
 };
 use serde_json::{Value as Json, json};
 
@@ -80,6 +80,15 @@ pub fn cutting_tools() -> Vec<Box<dyn Tool>> {
     all
 }
 
+/// The topology tools of brief 025 (docs/specs/MODELING.md §6): Bridge, Close Polygon Hole,
+/// Stitch and Sew, Polygon Pen. They are listed apart from [`tools`] and [`cutting_tools`].
+pub fn building_tools() -> Vec<Box<dyn Tool>> {
+    building_descs()
+        .into_iter()
+        .map(|desc| Box::new(crate::building::BuildTool { desc }) as Box<dyn Tool>)
+        .collect()
+}
+
 /// Every tool, in menu order.
 pub fn tools() -> Vec<Box<dyn Tool>> {
     tool_descs()
@@ -112,6 +121,7 @@ impl ToolState {
     /// Restores the factory defaults ("Reset Values").
     pub fn reset(&mut self) {
         self.values = Settings::defaults(&self.desc);
+        self.interaction.build = Default::default();
     }
 
     /// Sets one setting; numbers are clamped by the descriptor.
@@ -132,6 +142,7 @@ pub fn activate_tool(state: &mut EditorState, id: &str) -> bool {
     let Some(tool) = tools()
         .into_iter()
         .chain(cutting_tools())
+        .chain(building_tools())
         .find(|t| t.id() == id)
     else {
         return false;
@@ -186,6 +197,9 @@ pub fn tool_preview(state: &EditorState) -> Option<(NodeId, PolyMesh)> {
     if crate::cutting::is_cut_tool(ts.tool.id()) {
         return crate::cutting::cut_preview(state);
     }
+    if crate::building::is_build_tool(ts.tool.id()) {
+        return crate::building::build_preview(state);
+    }
     let (id, mesh, sel) = tool_target(state)?;
     let out = ts.tool.preview(&mesh, &sel, &ts.values).ok()?;
     Some((id, out))
@@ -205,6 +219,9 @@ pub fn apply_tool(state: &mut EditorState) -> Result<Json, String> {
     let ts = state.tool.as_ref().ok_or("no tool is active")?;
     if crate::cutting::is_cut_tool(ts.tool.id()) {
         return crate::cutting::apply_cut(state);
+    }
+    if crate::building::is_build_tool(ts.tool.id()) {
+        return crate::building::apply_build(state);
     }
     let (command, args) = (ts.tool.command_id(), ts.command_args());
     execute(state, command, args)

@@ -30,6 +30,8 @@ pub struct Interaction {
     pub hover: Option<EdgeHit>,
     /// The knife line being dragged, `[x0, y0, x1, y1]` in render pixels, and the viewport size.
     pub drag: Option<([f64; 4], [f64; 2])>,
+    /// Picks and pen corners of the topology tools (docs/specs/MODELING.md §6.7).
+    pub build: crate::building::BuildState,
 }
 
 /// An interactive cutting tool of `forge-modeling`'s descriptors.

@@ -328,6 +328,45 @@ pub fn interactive_cut_descs() -> Vec<ToolDesc> {
     ]
 }
 
+/// The topology tools (`mesh.bridge`, `mesh.close_hole`, `mesh.stitch`, `mesh.pen`; MODELING.md
+/// §6). Their params are the viewport tool's settings; the commands take explicit arguments.
+pub fn building_descs() -> Vec<ToolDesc> {
+    let tool = |id, label, command, params| ToolDesc {
+        id,
+        label,
+        command,
+        drag_param: "",
+        params,
+        components: false,
+    };
+    vec![
+        tool(
+            "bridge",
+            "Bridge",
+            "mesh.bridge",
+            vec![ParamDesc::int("segments", "Segments", 1).range(1, 64)],
+        ),
+        tool(
+            "close_hole",
+            "Close Polygon Hole",
+            "mesh.close_hole",
+            vec![],
+        ),
+        tool(
+            "stitch",
+            "Stitch and Sew",
+            "mesh.stitch",
+            vec![ParamDesc::enumeration(
+                "position",
+                "Merge At",
+                "middle",
+                &[("middle", "Middle"), ("first", "First Point")],
+            )],
+        ),
+        tool("polygon_pen", "Polygon Pen", "mesh.pen", vec![]),
+    ]
+}
+
 /// Every tool, in menu order.
 pub fn tool_descs() -> Vec<ToolDesc> {
     let mut all = vec![extrude_desc(), extrude_inner_desc(), bevel_desc()];
@@ -342,5 +381,6 @@ pub fn tool_desc(id: &str) -> Option<ToolDesc> {
         .into_iter()
         .chain(cutting_descs())
         .chain(interactive_cut_descs())
+        .chain(building_descs())
         .find(|t| t.id == id)
 }

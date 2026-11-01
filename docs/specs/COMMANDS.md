@@ -111,6 +111,10 @@ touch history.
 | `mesh.loop_cut` | `node?`, `edge` (id or point pair), `offsets?` or `count?` (MODELING.md §5.1) | `{node, points, polys, cut_edges}` | yes |
 | `mesh.knife` | `node?`, `mode` line / plane / loop, `polys?`, `point` `normal` / `from` `to` `eye`\|`direction` `visible_only?` / `edge` `offset?` (MODELING.md §5.2) | `{node, points, polys, cut_edges}` | yes |
 | `mesh.slide` | `node?`, `edges?`, `points?`, `settings?: {amount, toward}` (MODELING.md §5.3) | `{node, points, polys, selected}` | yes |
+| `mesh.bridge` | `node?`, `edges: [e, e]` or `polys: [p, q]`, `segments?` (MODELING.md §6.2) | `{node, points, polys, new_polys, new_points}` | yes |
+| `mesh.close_hole` | `node?`, `edge` (id or point pair of a border edge) (MODELING.md §6.3) | `{node, points, polys, new_polys, new_points}` | yes |
+| `mesh.stitch` | `node?`, `points: [[a, b]]` or `edges: [[e, e]]`, `position?` middle\|first (MODELING.md §6.4) | `{node, points, polys, merged}` | yes |
+| `mesh.pen` | `node?`, `corners: [{point} \| {pos}]` (MODELING.md §6.5) | `{node, points, polys, new_polys, new_points}` | yes |
 | `select.mode` | `mode` model, points, edges, polys | null | no |
 | `select.all` `select.none` `select.invert` `select.grow` `select.shrink` `select.connected` | - | null | yes |
 | `select.convert` | `to` points, edges, polys; `mode?` strict, tolerant (EDITABLE.md §2.8) | null | yes |

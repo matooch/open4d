@@ -100,6 +100,10 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `mesh_slide` | Slide. Undoable editing command. Runs command `mesh.slide`. |
 | `mesh_loop_cut` | Loop Cut. Undoable editing command. Runs command `mesh.loop_cut`. |
 | `mesh_knife` | Knife. Undoable editing command. Runs command `mesh.knife`. |
+| `mesh_bridge` | Bridge. Undoable editing command. Runs command `mesh.bridge`. |
+| `mesh_close_hole` | Close Polygon Hole. Undoable editing command. Runs command `mesh.close_hole`. |
+| `mesh_stitch` | Stitch and Sew. Undoable editing command. Runs command `mesh.stitch`. |
+| `mesh_pen` | Polygon Pen. Undoable editing command. Runs command `mesh.pen`. |
 | `param_set` | Set Parameter. Undoable editing command. Runs command `param.set`. |
 | `key_record` | Record. Undoable editing command. Runs command `key.record`. |
 | `key_delete_at_frame` | Delete Keys. Undoable editing command. Runs command `key.delete_at_frame`. |
