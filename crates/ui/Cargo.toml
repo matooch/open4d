@@ -12,6 +12,7 @@ forge-anim = { path = "../anim" }
 forge-app = { path = "../app" }
 forge-command = { path = "../command" }
 forge-core = { path = "../core" }
+forge-platform = { path = "../platform" }
 forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }
 forge-io = { path = "../io" }

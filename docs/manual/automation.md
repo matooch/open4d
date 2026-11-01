@@ -48,8 +48,9 @@ export FORGE_RPC_TOKEN="$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 forge-studio            # prints: rpc: listening on 127.0.0.1:7323 (token required)
 ```
 
-The token and port can also live in the settings file (`~/.config/forge3d/settings.json`, or
-`$FORGE_SETTINGS`; keep it readable by you only):
+The token and port can also live in the settings file (`~/.config/forge3d/settings.json` on Linux,
+`~/Library/Application Support/forge3d/settings.json` on macOS, `%APPDATA%\forge3d\settings.json`
+on Windows, or `$FORGE_SETTINGS`; keep it readable by you only):
 
 ```json
 {"rpc": {"port": 7323, "token": "change-me"}}

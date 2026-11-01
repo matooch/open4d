@@ -1,0 +1,15 @@
+[package]
+name = "forge-platform"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Per-OS config, data and cache directories and the settings file (docs/specs/PLATFORM.md)."
+
+[dependencies]
+directories = "6"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

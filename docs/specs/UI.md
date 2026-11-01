@@ -513,8 +513,8 @@ These are the old hard-coded keys of §5 and ANIM.md §2.7 unchanged, plus the r
 
 ### 14.3 User overrides (settings file)
 
-The shared settings file of RPC.md §2 (`forge_rpc::settings_path()`: `$FORGE_SETTINGS`, else
-`$XDG_CONFIG_HOME/forge3d/settings.json`, else `~/.config/forge3d/settings.json`) holds
+The shared settings file of RPC.md §2 (`forge_platform::settings_path()`: `$FORGE_SETTINGS`, else the per-OS config
+directory, PLATFORM.md §1-2) holds
 an optional object `keymap`, keyed by canonical or parseable chord text:
 
 ```json

@@ -9,6 +9,7 @@ description = "JSON-RPC 2.0 server for the running editor and a Rust client (doc
 forge-app = { path = "../app" }
 forge-command = { path = "../command" }
 forge-core = { path = "../core" }
+forge-platform = { path = "../platform" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

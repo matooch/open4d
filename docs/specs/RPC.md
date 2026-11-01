@@ -54,8 +54,10 @@ Error codes:
 - The token is never logged and never echoed in an error.
 
 ### Settings file
-JSON at `$FORGE_SETTINGS` if set, else `$XDG_CONFIG_HOME/forge3d/settings.json`, else
-`$HOME/.config/forge3d/settings.json`. Missing or unreadable is the same as empty.
+JSON at `$FORGE_SETTINGS` if set, else `settings.json` in the per-OS config directory
+(PLATFORM.md §1: `$XDG_CONFIG_HOME/forge3d` or `~/.config/forge3d` on Linux,
+`~/Library/Application Support/forge3d` on macOS, `%APPDATA%\forge3d` on Windows; a pre-175
+`~/.config/forge3d/settings.json` is copied over on first use, PLATFORM.md §3). Missing or unreadable is the same as empty.
 ```json
 {"rpc": {"port": 7323, "token": "..."}}
 ```

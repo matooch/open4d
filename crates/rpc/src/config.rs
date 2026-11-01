@@ -47,17 +47,10 @@ impl RpcSettings {
     }
 }
 
-/// `$FORGE_SETTINGS`, else `$XDG_CONFIG_HOME/forge3d/settings.json`, else
-/// `$HOME/.config/forge3d/settings.json`.
+/// The settings file (`forge_platform::settings_path`): `$FORGE_SETTINGS`, else the per-OS config
+/// directory (docs/specs/PLATFORM.md).
 pub fn settings_path() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("FORGE_SETTINGS") {
-        return Some(PathBuf::from(p));
-    }
-    let base = std::env::var_os("XDG_CONFIG_HOME")
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-    Some(base.join("forge3d").join("settings.json"))
+    forge_platform::settings_path()
 }
 
 /// Constant-time equality: the loop always runs over the longer input and has no early exit.

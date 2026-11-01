@@ -71,5 +71,32 @@ impl Theme {
 
     pub fn apply(&self, ctx: &egui::Context) {
         ctx.set_visuals(self.visuals());
+        install_fonts(ctx);
     }
+}
+
+/// Name of the bundled symbol font.
+pub const SYMBOL_FONT: &str = "forge-symbols";
+
+/// A subset of DejaVu Sans (arrows, maths, shapes, symbols; licence next to the file,
+/// docs/specs/PLATFORM.md §4).
+static SYMBOL_FONT_DATA: &[u8] = include_bytes!("../assets/fonts/ForgeSymbols.ttf");
+
+/// Registers the symbol font as the last fallback of the Proportional and Monospace
+/// families, so a character the default fonts lack (for example the Cmd sign) draws
+/// instead of tofu or a panic under `MissingGlyphPolicy::Panic`.
+pub fn install_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+    fonts.font_data.insert(
+        SYMBOL_FONT.to_owned(),
+        std::sync::Arc::new(egui::FontData::from_static(SYMBOL_FONT_DATA)),
+    );
+    for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+        fonts
+            .families
+            .entry(family)
+            .or_default()
+            .push(SYMBOL_FONT.to_owned());
+    }
+    ctx.set_fonts(fonts);
 }
