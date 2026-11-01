@@ -5,11 +5,14 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use forge_app::App;
+use forge_command::UiRequest;
 use forge_core::{NodeId, Registry};
 use forge_viewport::camera::{Camera, Handedness};
+use forge_viewport::gizmo::{GizmoMode, Space as GizmoSpace};
 use forge_viewport::render::Shading;
 
 use crate::dock::Dock;
+use crate::keymap::KeyMapState;
 use crate::screenshot::OffscreenGpu;
 use crate::script_panel::ScriptPanelState;
 use crate::tools::ToolState;
@@ -30,6 +33,13 @@ pub struct EditorState {
     pub offscreen: OffscreenGpu,
     /// The active modeling tool and its values (docs/specs/MODELING.md §0.2).
     pub tool: Option<ToolState>,
+    /// Key chords to commands, defaults and overrides (docs/specs/UI.md §14).
+    pub keys: KeyMapState,
+    /// The viewport gizmo's mode and axes (`view.gizmo_mode`, `view.gizmo_space`).
+    pub gizmo_mode: GizmoMode,
+    pub gizmo_space: GizmoSpace,
+    /// Window actions that commands asked for; the editor serves them after the command.
+    pub ui_requests: Vec<UiRequest>,
 }
 
 impl Deref for EditorState {
@@ -69,6 +79,10 @@ impl EditorState {
             script: ScriptPanelState::default(),
             offscreen: OffscreenGpu::default(),
             tool: None,
+            keys: KeyMapState::default(),
+            gizmo_mode: GizmoMode::Translate,
+            gizmo_space: GizmoSpace::Object,
+            ui_requests: Vec::new(),
         }
     }
 }

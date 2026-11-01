@@ -1,0 +1,156 @@
+# Default key map (docs/specs/UI.md §14). Our own design, parity-pending G2
+# (docs/parity/GUI-SESSIONS.md): common DCC conventions where they do not collide.
+# `Mod` is Cmd on macOS and Ctrl elsewhere. Users override chords in the settings file.
+version = 1
+
+# File
+[[bind]]
+chord = "Mod+O"
+command = "file.open_dialog"
+
+[[bind]]
+chord = "Mod+S"
+command = "file.save_dialog"
+
+[[bind]]
+chord = "Mod+Shift+S"
+command = "file.save_as_dialog"
+
+# Edit
+[[bind]]
+chord = "Mod+Z"
+command = "edit.undo"
+
+[[bind]]
+chord = "Mod+Shift+Z"
+command = "edit.redo"
+
+[[bind]]
+chord = "Mod+Y"
+command = "edit.redo"
+
+[[bind]]
+chord = "Delete"
+command = "object.delete"
+
+[[bind]]
+chord = "F2"
+command = "object.begin_rename"
+
+# Select
+[[bind]]
+chord = "Mod+A"
+command = "select.all"
+
+[[bind]]
+chord = "Mod+Shift+A"
+command = "select.none"
+
+[[bind]]
+chord = "Mod+I"
+command = "select.invert"
+
+[[bind]]
+chord = "Alt+1"
+command = "select.mode"
+args = { mode = "model" }
+
+[[bind]]
+chord = "Alt+2"
+command = "select.mode"
+args = { mode = "points" }
+
+[[bind]]
+chord = "Alt+3"
+command = "select.mode"
+args = { mode = "edges" }
+
+[[bind]]
+chord = "Alt+4"
+command = "select.mode"
+args = { mode = "polys" }
+
+# Mesh
+[[bind]]
+chord = "Mod+Shift+E"
+command = "mesh.make_editable"
+
+# View: shading
+[[bind]]
+chord = "1"
+command = "view.shading"
+args = { mode = "smooth" }
+
+[[bind]]
+chord = "2"
+command = "view.shading"
+args = { mode = "flat" }
+
+[[bind]]
+chord = "3"
+command = "view.shading"
+args = { mode = "wire" }
+
+[[bind]]
+chord = "4"
+command = "view.shading"
+args = { mode = "smooth_wire" }
+
+[[bind]]
+chord = "5"
+command = "view.shading"
+args = { mode = "flat_wire" }
+
+# Gizmo
+[[bind]]
+chord = "W"
+command = "view.gizmo_mode"
+args = { mode = "move" }
+
+[[bind]]
+chord = "E"
+command = "view.gizmo_mode"
+args = { mode = "rotate" }
+
+[[bind]]
+chord = "R"
+command = "view.gizmo_mode"
+args = { mode = "scale" }
+
+[[bind]]
+chord = "Q"
+command = "view.gizmo_space"
+
+# Animation
+[[bind]]
+chord = "K"
+command = "key.record"
+
+[[bind]]
+chord = "Shift+K"
+command = "key.autokey"
+
+[[bind]]
+chord = "Space"
+command = "timeline.toggle_play"
+scope = "viewport"
+
+[[bind]]
+chord = "Comma"
+command = "timeline.step"
+args = { delta = -1 }
+
+[[bind]]
+chord = "Period"
+command = "timeline.step"
+args = { delta = 1 }
+
+[[bind]]
+chord = "Shift+Comma"
+command = "key.jump"
+args = { forward = false }
+
+[[bind]]
+chord = "Shift+Period"
+command = "key.jump"
+args = { forward = true }

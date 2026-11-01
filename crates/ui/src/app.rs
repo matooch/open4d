@@ -3,7 +3,8 @@
 //! `attributes::apply_edit`.
 
 use eframe::egui_wgpu;
-use egui::{Key, KeyboardShortcut, Modifiers, RichText, Sense, Ui};
+use egui::{RichText, Sense, Ui};
+use forge_command::UiRequest;
 use forge_core::transform::{Transform, rotation_part};
 use forge_core::{NodeId, Value};
 use forge_viewport::gizmo::{Drag, Gizmo, GizmoMode, Space as GizmoSpace};
@@ -20,6 +21,7 @@ use crate::components::{
 };
 use crate::coordinates::{Row, Space, Third, coord_view, set_coord_anim};
 use crate::dock::{Area, Panel};
+use crate::keymap_editor::KeyMapEditor;
 use crate::layout::{ButtonGroup, Layout, Sizes, command_bar, tool_palette};
 use crate::manipulate::apply_drag_anim;
 use crate::object_manager::ObjectManager;
@@ -39,14 +41,6 @@ const SHADINGS: [(Shading, &str); 5] = [
     (Shading::FlatWire, "Flat + wire"),
 ];
 
-const OPEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
-const SAVE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
-const SAVE_AS: KeyboardShortcut =
-    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S);
-const SELECT_ALL: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::A);
-const DESELECT_ALL: KeyboardShortcut =
-    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::A);
-
 /// A command to run: registry id and JSON arguments (docs/specs/COMMANDS.md).
 type Cmd = (&'static str, Json);
 
@@ -61,15 +55,6 @@ fn select_cmd(op: SelectCmd) -> Cmd {
         SelectCmd::Invert => "select.invert",
         SelectCmd::Grow => "select.grow",
         SelectCmd::Shrink => "select.shrink",
-    })
-}
-
-/// Play or stop, whichever the current state calls for.
-fn play_stop(state: &EditorState) -> Cmd {
-    cmd(if state.timeline.playing {
-        "timeline.stop"
-    } else {
-        "timeline.play"
     })
 }
 
@@ -98,6 +83,8 @@ pub struct Editor {
     viewport: ViewportPanel,
     /// The object manager's panel state: rename buffer, search text (UI.md §13).
     objects: ObjectManager,
+    /// The key map editor window (UI.md §14.5).
+    keymap_editor: KeyMapEditor,
     /// Name field buffer in the attribute panel.
     name_edit: Option<(NodeId, String)>,
     /// The attribute manager tab shown (UI.md §12).
@@ -107,8 +94,6 @@ pub struct Editor {
     gesture: Option<u64>,
     /// The pointer was over the viewport last frame (Space plays only then).
     viewport_hot: bool,
-    gizmo_mode: GizmoMode,
-    gizmo_space: GizmoSpace,
     coord_space: Space,
     coord_third: Third,
     /// The gizmo drag in progress: drag state, node, its transform at the start, gesture.
@@ -134,6 +119,15 @@ impl eframe::App for Editor {
 }
 
 impl Editor {
+    /// The key map editor window's state.
+    pub fn keymap_editor(&self) -> &KeyMapEditor {
+        &self.keymap_editor
+    }
+
+    pub fn keymap_editor_mut(&mut self) -> &mut KeyMapEditor {
+        &mut self.keymap_editor
+    }
+
     /// The object manager's panel state.
     pub fn objects(&self) -> &ObjectManager {
         &self.objects
@@ -145,13 +139,12 @@ impl Editor {
             sizes: Sizes::default(),
             viewport: ViewportPanel::default(),
             objects: ObjectManager::default(),
+            keymap_editor: KeyMapEditor::default(),
             name_edit: None,
             attr_tab: String::new(),
             gesture_seq: 0,
             gesture: None,
             viewport_hot: false,
-            gizmo_mode: GizmoMode::Translate,
-            gizmo_space: GizmoSpace::Object,
             coord_space: Space::Local,
             coord_third: Third::Scale,
             gizmo_drag: None,
@@ -186,13 +179,38 @@ impl Editor {
 
     /// Runs a command; an error goes to the status bar. True if it succeeded.
     fn run(&mut self, (id, args): Cmd) -> bool {
+        self.run_id(id, args)
+    }
+
+    /// Like [`Editor::run`] for a command id that is not a literal (key map bindings).
+    fn run_id(&mut self, id: &str, args: Json) -> bool {
         // A command may leave a message of its own (e.g. skipped nodes) in the status.
         self.state.status.clear();
-        match execute(&mut self.state, id, args) {
+        let ok = match execute(&mut self.state, id, args) {
             Ok(_) => true,
             Err(e) => {
                 self.state.status = e;
                 false
+            }
+        };
+        self.serve_ui_requests();
+        ok
+    }
+
+    /// Does what commands asked of the window: dialogs and inline rename.
+    fn serve_ui_requests(&mut self) {
+        for request in std::mem::take(&mut self.state.ui_requests) {
+            match request {
+                UiRequest::Open => self.file_action(FileAction::Open),
+                UiRequest::Save => self.file_action(FileAction::Save),
+                UiRequest::SaveAs => self.file_action(FileAction::SaveAs),
+                UiRequest::RenameActive => {
+                    if let Some(id) = self.state.selection.active
+                        && let Some(n) = self.state.doc.scene().node(id)
+                    {
+                        self.objects.renaming = Some((id, n.name.clone()));
+                    }
+                }
             }
         }
     }
@@ -267,6 +285,7 @@ impl Editor {
                 });
         }
         egui::CentralPanel::no_frame().show(ui, |ui| self.area(ui, Area::Center, rs));
+        self.keymap_editor.show(ui.ctx(), &mut self.state);
     }
 
     /// Advances the current frame from the frame clock while playing (ANIM.md §2.6).
@@ -281,96 +300,32 @@ impl Editor {
         ctx.request_repaint();
     }
 
+    /// Key presses run the registry command their chord is bound to (UI.md §14). Nothing
+    /// is handled here but the lookup: the key map decides, `run_id` runs.
     fn shortcuts(&mut self, ctx: &egui::Context) {
+        if self.keymap_editor.is_capturing() {
+            if let Some(chord) = ctx.input_mut(crate::keymap_editor::take_captured) {
+                self.keymap_editor.captured(chord, &mut self.state.keys);
+            }
+            return;
+        }
         if ctx.egui_wants_keyboard_input() {
             return;
         }
-        let redo = KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::SHIFT, Key::Z);
-        let redo_y = KeyboardShortcut::new(Modifiers::COMMAND, Key::Y);
-        let undo = KeyboardShortcut::new(Modifiers::COMMAND, Key::Z);
-        let mut cmds: Vec<Cmd> = Vec::new();
-        let mut file_action = None;
-        ctx.input_mut(|i| {
-            // Save As first: Ctrl+S would also match with Shift held
-            if i.consume_shortcut(&SAVE_AS) {
-                file_action = Some(FileAction::SaveAs);
-            } else if i.consume_shortcut(&SAVE) {
-                file_action = Some(FileAction::Save);
-            } else if i.consume_shortcut(&OPEN) {
-                file_action = Some(FileAction::Open);
-            }
-            // Deselect All first: Ctrl+A would also match with Shift held
-            if i.consume_shortcut(&DESELECT_ALL) {
-                cmds.push(select_cmd(SelectCmd::None));
-            } else if i.consume_shortcut(&SELECT_ALL) {
-                cmds.push(select_cmd(SelectCmd::All));
-            }
-            if i.consume_shortcut(&redo) || i.consume_shortcut(&redo_y) {
-                cmds.push(cmd("edit.redo"));
-            } else if i.consume_shortcut(&undo) {
-                cmds.push(cmd("edit.undo"));
-            }
-            if i.key_pressed(Key::Delete) {
-                cmds.push(cmd("object.delete"));
-            }
-            // Animation (ours, parity-pending; ANIM.md §2.7). Shift variants first.
-            if i.consume_key(Modifiers::SHIFT, Key::K) {
-                cmds.push(cmd("key.autokey"));
-            } else if i.consume_key(Modifiers::NONE, Key::K) {
-                cmds.push(cmd("key.record"));
-            }
-            if i.consume_key(Modifiers::SHIFT, Key::Comma) {
-                cmds.push(("key.jump", json!({"forward": false})));
-            } else if i.consume_key(Modifiers::NONE, Key::Comma) {
-                cmds.push(("timeline.step", json!({"delta": -1})));
-            }
-            if i.consume_key(Modifiers::SHIFT, Key::Period) {
-                cmds.push(("key.jump", json!({"forward": true})));
-            } else if i.consume_key(Modifiers::NONE, Key::Period) {
-                cmds.push(("timeline.step", json!({"delta": 1})));
-            }
-            if self.viewport_hot && i.consume_key(Modifiers::NONE, Key::Space) {
-                cmds.push(play_stop(&self.state));
-            }
-            let keys = [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5];
-            for (k, (shading, _)) in keys.iter().zip(SHADINGS) {
-                if i.key_pressed(*k) && i.modifiers.is_none() {
-                    cmds.push(shading_cmd(shading));
-                }
-            }
-        });
-        // Gizmo modes and space (ours, parity-pending): W move, E rotate, R scale, Q axes.
-        ctx.input(|i| {
-            if i.modifiers.is_none() {
-                if i.key_pressed(Key::W) {
-                    self.gizmo_mode = GizmoMode::Translate;
-                }
-                if i.key_pressed(Key::E) {
-                    self.gizmo_mode = GizmoMode::Rotate;
-                }
-                if i.key_pressed(Key::R) {
-                    self.gizmo_mode = GizmoMode::Scale;
-                }
-                if i.key_pressed(Key::Q) {
-                    self.gizmo_space = match self.gizmo_space {
-                        GizmoSpace::Object => GizmoSpace::World,
-                        GizmoSpace::World => GizmoSpace::Object,
-                    };
-                }
-            }
-        });
-        if ctx.input(|i| i.key_pressed(Key::F2))
-            && let Some(id) = self.state.selection.active
-            && let Some(n) = self.state.doc.scene().node(id)
-        {
-            self.objects.renaming = Some((id, n.name.clone()));
+        let hot = self.viewport_hot;
+        let presses = ctx.input_mut(|i| self.state.keys.map.take_presses(i, hot));
+        for (id, args) in presses {
+            self.run_id(&id, args);
         }
-        for c in cmds {
-            self.run(c);
-        }
-        if let Some(a) = file_action {
-            self.file_action(a);
-        }
+    }
+
+    /// The platform spelling of the first chord bound to the command, for menus.
+    fn chord_text(&self, ctx: &egui::Context, (id, args): &Cmd) -> Option<String> {
+        self.state
+            .keys
+            .map
+            .chord_of(id, args)
+            .map(|c| c.display(ctx))
     }
 
     fn file_action(&mut self, action: FileAction) {
@@ -395,9 +350,19 @@ impl Editor {
                 let has_selection = !self.state.selection.nodes.is_empty();
                 let items = [
                     ("New", None, FileAction::New, true),
-                    ("Open\u{2026}", Some(OPEN), FileAction::Open, true),
-                    ("Save", Some(SAVE), FileAction::Save, true),
-                    ("Save As\u{2026}", Some(SAVE_AS), FileAction::SaveAs, true),
+                    (
+                        "Open\u{2026}",
+                        Some("file.open_dialog"),
+                        FileAction::Open,
+                        true,
+                    ),
+                    ("Save", Some("file.save_dialog"), FileAction::Save, true),
+                    (
+                        "Save As\u{2026}",
+                        Some("file.save_as_dialog"),
+                        FileAction::SaveAs,
+                        true,
+                    ),
                     ("Import OBJ\u{2026}", None, FileAction::ImportObj, true),
                     ("Export OBJ\u{2026}", None, FileAction::ExportObj, true),
                     (
@@ -412,8 +377,8 @@ impl Editor {
                         ui.separator();
                     }
                     let mut button = egui::Button::new(label);
-                    if let Some(sc) = shortcut {
-                        button = button.shortcut_text(ui.ctx().format_shortcut(&sc));
+                    if let Some(sc) = shortcut.and_then(|id| self.chord_text(ui.ctx(), &cmd(id))) {
+                        button = button.shortcut_text(sc);
                     }
                     if ui.add_enabled(enabled, button).clicked() {
                         ui.close();
@@ -422,31 +387,29 @@ impl Editor {
                 }
             });
             ui.menu_button("Edit", |ui| {
-                if ui.button("Undo").clicked() {
-                    self.run(cmd("edit.undo"));
-                    ui.close();
-                }
-                if ui.button("Redo").clicked() {
-                    self.run(cmd("edit.redo"));
-                    ui.close();
-                }
-                if ui.button("Delete").clicked() {
-                    self.run(cmd("object.delete"));
-                    ui.close();
+                for (label, command) in [
+                    ("Undo", cmd("edit.undo")),
+                    ("Redo", cmd("edit.redo")),
+                    ("Delete", cmd("object.delete")),
+                ] {
+                    if ui.button(label).clicked() {
+                        self.run(command);
+                        ui.close();
+                    }
                 }
                 ui.separator();
                 let select_items = [
-                    ("Select All", Some(SELECT_ALL), SelectCmd::All),
-                    ("Deselect All", Some(DESELECT_ALL), SelectCmd::None),
-                    ("Invert Selection", None, SelectCmd::Invert),
+                    ("Select All", select_cmd(SelectCmd::All)),
+                    ("Deselect All", select_cmd(SelectCmd::None)),
+                    ("Invert Selection", select_cmd(SelectCmd::Invert)),
                 ];
-                for (label, shortcut, cmd) in select_items {
+                for (label, command) in select_items {
                     let mut button = egui::Button::new(label);
-                    if let Some(sc) = shortcut {
-                        button = button.shortcut_text(ui.ctx().format_shortcut(&sc));
+                    if let Some(sc) = self.chord_text(ui.ctx(), &command) {
+                        button = button.shortcut_text(sc);
                     }
                     if ui.add(button).clicked() {
-                        self.run(select_cmd(cmd));
+                        self.run(command);
                         ui.close();
                     }
                 }
@@ -539,56 +502,32 @@ impl Editor {
                 }
             });
             ui.menu_button("Animate", |ui| {
-                let fmt_ctx = ui.ctx().clone();
-                let k = move |m: Modifiers, key: Key| {
-                    fmt_ctx.format_shortcut(&KeyboardShortcut::new(m, key))
-                };
                 let items = [
-                    (
-                        "Record Active Objects",
-                        k(Modifiers::NONE, Key::K),
-                        cmd("key.record"),
-                    ),
-                    ("Delete Keys", String::new(), cmd("key.delete_at_frame")),
-                    ("Play / Stop", "Space".to_string(), play_stop(&self.state)),
-                    (
-                        "Previous Frame",
-                        k(Modifiers::NONE, Key::Comma),
-                        ("timeline.step", json!({"delta": -1})),
-                    ),
-                    (
-                        "Next Frame",
-                        k(Modifiers::NONE, Key::Period),
-                        ("timeline.step", json!({"delta": 1})),
-                    ),
-                    (
-                        "Previous Key",
-                        k(Modifiers::SHIFT, Key::Comma),
-                        ("key.jump", json!({"forward": false})),
-                    ),
-                    (
-                        "Next Key",
-                        k(Modifiers::SHIFT, Key::Period),
-                        ("key.jump", json!({"forward": true})),
-                    ),
+                    ("Record Active Objects", cmd("key.record")),
+                    ("Delete Keys", cmd("key.delete_at_frame")),
+                    ("Play / Stop", cmd("timeline.toggle_play")),
+                    ("Previous Frame", ("timeline.step", json!({"delta": -1}))),
+                    ("Next Frame", ("timeline.step", json!({"delta": 1}))),
+                    ("Previous Key", ("key.jump", json!({"forward": false}))),
+                    ("Next Key", ("key.jump", json!({"forward": true}))),
                 ];
-                for (label, shortcut, cmd) in items {
+                for (label, command) in items {
                     let mut button = egui::Button::new(label);
-                    if !shortcut.is_empty() {
-                        button = button.shortcut_text(shortcut);
+                    if let Some(sc) = self.chord_text(ui.ctx(), &command) {
+                        button = button.shortcut_text(sc);
                     }
                     if ui.add(button).clicked() {
-                        self.run(cmd);
+                        self.run(command);
                         ui.close();
                     }
                 }
                 ui.separator();
                 let mut auto = self.state.autokey;
-                let sc = k(Modifiers::SHIFT, Key::K);
-                if ui
-                    .checkbox(&mut auto, format!("Auto-Key  ({sc})"))
-                    .clicked()
-                {
+                let label = match self.chord_text(ui.ctx(), &cmd("key.autokey")) {
+                    Some(sc) => format!("Auto-Key  ({sc})"),
+                    None => "Auto-Key".to_string(),
+                };
+                if ui.checkbox(&mut auto, label).clicked() {
                     self.run(cmd("key.autokey"));
                     ui.close();
                 }
@@ -602,12 +541,12 @@ impl Editor {
                 }
                 ui.separator();
                 ui.radio_value(
-                    &mut self.gizmo_space,
+                    &mut self.state.gizmo_space,
                     GizmoSpace::Object,
                     "Gizmo axes: object",
                 );
                 ui.radio_value(
-                    &mut self.gizmo_space,
+                    &mut self.state.gizmo_space,
                     GizmoSpace::World,
                     "Gizmo axes: world",
                 );
@@ -648,6 +587,10 @@ impl Editor {
                     });
                 }
                 ui.separator();
+                if ui.button("Key map\u{2026}").clicked() {
+                    self.keymap_editor.open = true;
+                    ui.close();
+                }
                 if ui.button("Reset layout").clicked() {
                     self.set_layout(Layout::standard());
                     ui.close();
@@ -1014,7 +957,8 @@ impl Editor {
         } else {
             m.w_axis.truncate()
         };
-        let object = self.gizmo_space == GizmoSpace::Object || self.gizmo_mode == GizmoMode::Scale;
+        let object = self.state.gizmo_space == GizmoSpace::Object
+            || self.state.gizmo_mode == GizmoMode::Scale;
         let axes = if object {
             let r = rotation_part(&m);
             [r.x_axis, r.y_axis, r.z_axis]
@@ -1023,7 +967,7 @@ impl Editor {
         };
         Some(Gizmo {
             origin,
-            mode: self.gizmo_mode,
+            mode: self.state.gizmo_mode,
             axes,
             ..Gizmo::default()
         })
@@ -1129,7 +1073,7 @@ impl Editor {
         }
         if let Some((drag, cd, n)) = &mut self.component_drag {
             if response.dragged_by(egui::PointerButton::Primary) {
-                let delta = drag.update(&cam, x, y, w, h, snap_step(self.gizmo_mode));
+                let delta = drag.update(&cam, x, y, w, h, snap_step(self.state.gizmo_mode));
                 self.state.status = match cd.apply(&mut self.state.doc, delta, Gesture::Drag(*n)) {
                     Ok(()) => String::new(),
                     Err(e) => e.to_string(),
@@ -1142,7 +1086,7 @@ impl Editor {
         }
         if let Some((drag, id, start, n)) = &mut self.gizmo_drag {
             if response.dragged_by(egui::PointerButton::Primary) {
-                let delta = drag.update(&cam, x, y, w, h, snap_step(self.gizmo_mode));
+                let delta = drag.update(&cam, x, y, w, h, snap_step(self.state.gizmo_mode));
                 let (id, start, n) = (*id, *start, *n);
                 let (ctx, eval) = (self.state.anim_ctx(), self.state.evaluated());
                 let anim = AnimEdit { ctx, eval: &eval };
@@ -1591,7 +1535,7 @@ impl Editor {
         ui.horizontal_wrapped(|ui| {
             let playing = self.state.timeline.playing;
             if ui.button(if playing { "Stop" } else { "Play" }).clicked() {
-                cmds.push(play_stop(&self.state));
+                cmds.push(cmd("timeline.toggle_play"));
             }
             if ui.button("Record").clicked() {
                 cmds.push(cmd("key.record"));

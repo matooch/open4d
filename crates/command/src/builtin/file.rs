@@ -10,7 +10,8 @@ use serde_json::{Value, json};
 use super::{register_plain, spec};
 use crate::context::CommandContext;
 use crate::error::CommandError;
-use crate::registry::CommandRegistry;
+use crate::registry::{CommandHandler, CommandRegistry, NoArgs};
+use crate::state::UiRequest;
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -73,6 +74,13 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
         ),
         |c, a: PathArgs| save_to(c, a.path),
     )?;
+    for (id, label, request) in [
+        ("file.open_dialog", "Open...", UiRequest::Open),
+        ("file.save_dialog", "Save", UiRequest::Save),
+        ("file.save_as_dialog", "Save As...", UiRequest::SaveAs),
+    ] {
+        r.register(Box::new(DialogCommand { id, label, request }))?;
+    }
     r.register_fn(
         spec(
             "file.import_obj",
@@ -145,4 +153,41 @@ fn export_obj(ctx: &mut dyn CommandContext, a: ExportArgs) -> Result<Value, Comm
         .map_err(|e| CommandError::Failed(format!("Export failed: {e}")))?;
     ctx.set_status(String::new());
     Ok(json!({"objects": objects.len()}))
+}
+
+/// `file.open_dialog`, `file.save_dialog`, `file.save_as_dialog`: the File menu items that
+/// ask for a file name, so a shortcut can run them (the window shows the dialog).
+struct DialogCommand {
+    id: &'static str,
+    label: &'static str,
+    request: UiRequest,
+}
+
+impl CommandHandler for DialogCommand {
+    fn id(&self) -> &str {
+        self.id
+    }
+
+    fn label(&self) -> &str {
+        self.label
+    }
+
+    fn args_schema(&self) -> Value {
+        serde_json::to_value(schemars::schema_for!(NoArgs)).unwrap_or(Value::Null)
+    }
+
+    fn run(&self, ctx: &mut dyn CommandContext, args: Value) -> Result<Value, CommandError> {
+        if !(args.is_null() || args.as_object().is_some_and(|o| o.is_empty())) {
+            return Err(CommandError::InvalidArgs(format!(
+                "{} takes no arguments",
+                self.id
+            )));
+        }
+        ctx.request_ui(self.request).map_err(CommandError::Failed)?;
+        Ok(Value::Null)
+    }
+
+    fn undoable(&self) -> bool {
+        false
+    }
 }

@@ -176,6 +176,13 @@ fn brief_command_ids_exist() {
         "key.set",
         "timeline.set_frame",
         "timeline.play",
+        "timeline.toggle_play",
+        "view.gizmo_mode",
+        "view.gizmo_space",
+        "object.begin_rename",
+        "file.open_dialog",
+        "file.save_dialog",
+        "file.save_as_dialog",
         "timeline.stop",
         "timeline.settings",
         "transform.set",
@@ -395,4 +402,41 @@ fn file_commands_round_trip() {
         .unwrap_err();
     assert!(err.to_string().starts_with("Open failed"), "{err}");
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn window_commands_toggle_play_and_refuse_headless() {
+    let r = registry();
+    let mut c = Headless::new();
+    r.run(&mut c, "timeline.toggle_play", json!({})).unwrap();
+    assert!(c.timeline.playing);
+    r.run(&mut c, "timeline.toggle_play", json!({})).unwrap();
+    assert!(!c.timeline.playing);
+    // view-only commands are no-ops without a window
+    r.run(&mut c, "view.gizmo_mode", json!({"mode": "rotate"}))
+        .unwrap();
+    r.run(&mut c, "view.gizmo_space", json!({})).unwrap();
+    r.run(&mut c, "view.gizmo_space", json!({"space": "world"}))
+        .unwrap();
+    assert!(matches!(
+        r.run(&mut c, "view.gizmo_mode", json!({"mode": "tilt"})),
+        Err(CommandError::InvalidArgs(_))
+    ));
+    // dialogs and inline rename need the editor window
+    for id in [
+        "file.open_dialog",
+        "file.save_dialog",
+        "file.save_as_dialog",
+        "object.begin_rename",
+    ] {
+        match r.run(&mut c, id, json!({})) {
+            Err(CommandError::Failed(m)) => assert_eq!(m, "needs the editor window", "{id}"),
+            other => panic!("{id}: {other:?}"),
+        }
+        assert!(matches!(
+            r.run(&mut c, id, json!({"x": 1})),
+            Err(CommandError::InvalidArgs(_))
+        ));
+    }
+    assert_eq!(steps(&c), 0);
 }

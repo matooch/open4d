@@ -2,7 +2,7 @@
 
 # Command reference
 
-70 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+77 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -17,6 +17,9 @@
 | [`edit.undo`](#editundo) | Undo | no | `edit_undo` |
 | [`edit.redo`](#editredo) | Redo | no | `edit_redo` |
 | [`view.shading`](#viewshading) | Shading | no | `view_shading` |
+| [`view.gizmo_mode`](#viewgizmo_mode) | Gizmo Mode | no | `view_gizmo_mode` |
+| [`view.gizmo_space`](#viewgizmo_space) | Gizmo Space | no | `view_gizmo_space` |
+| [`object.begin_rename`](#objectbegin_rename) | Rename Active | no | `object_begin_rename` |
 | [`view.frame_all`](#viewframe_all) | Frame All | no | `view_frame_all` |
 | [`view.toggle_expanded`](#viewtoggle_expanded) | Expand / Collapse | no | `view_toggle_expanded` |
 | [`select.mode`](#selectmode) | Selection Mode | no | `select_mode` |
@@ -67,12 +70,16 @@
 | [`timeline.set_frame`](#timelineset_frame) | Go to Frame | no | `timeline_set_frame` |
 | [`timeline.step`](#timelinestep) | Step Frames | no | `timeline_step` |
 | [`timeline.play`](#timelineplay) | Play | no | `timeline_play` |
+| [`timeline.toggle_play`](#timelinetoggle_play) | Play / Stop | no | `timeline_toggle_play` |
 | [`timeline.stop`](#timelinestop) | Stop | no | `timeline_stop` |
 | [`timeline.settings`](#timelinesettings) | Timeline Settings | yes | `timeline_settings` |
 | [`file.new`](#filenew) | New | no | `file_new` |
 | [`file.open`](#fileopen) | Open | no | `file_open` |
 | [`file.save`](#filesave) | Save | no | `file_save` |
 | [`file.save_as`](#filesave_as) | Save As | no | `file_save_as` |
+| [`file.open_dialog`](#fileopen_dialog) | Open... | no | `file_open_dialog` |
+| [`file.save_dialog`](#filesave_dialog) | Save | no | `file_save_dialog` |
+| [`file.save_as_dialog`](#filesave_as_dialog) | Save As... | no | `file_save_as_dialog` |
 | [`file.import_obj`](#fileimport_obj) | Import OBJ | yes | `file_import_obj` |
 | [`file.export_obj`](#fileexport_obj) | Export OBJ | no | `file_export_obj` |
 | [`param.edit`](#paramedit) | Edit Parameter | yes | `param_edit` |
@@ -167,6 +174,14 @@ Enable. One undo step.
 
 Example: `forge cmd scene.forge object.enable --args '{"enabled":false,"nodes":[1]}'`
 
+### `object.begin_rename`
+
+Rename Active. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge object.begin_rename --args '{}'`
+
 
 ## `edit`
 
@@ -225,6 +240,26 @@ Shading. Not an undoable edit.
 | `mode` | `"smooth"` \| `"flat"` \| `"wire"` \| `"smooth_wire"` \| `"flat_wire"` | yes | Viewport shading (mirrors the viewport's `Shading`). |
 
 Example: `forge cmd scene.forge view.shading --args '{"mode":"smooth_wire"}'`
+
+### `view.gizmo_mode`
+
+Gizmo Mode. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `mode` | `"move"` \| `"rotate"` \| `"scale"` | yes | The viewport gizmo's mode (mirrors the viewport's `GizmoMode`). |
+
+Example: `forge cmd scene.forge view.gizmo_mode --args '{"mode":"move"}'`
+
+### `view.gizmo_space`
+
+Gizmo Space. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `space` | `"object"` \| `"world"` \| null | no | `object` or `world`; absent toggles. |
+
+Example: `forge cmd scene.forge view.gizmo_space --args '{"space":"world"}'`
 
 ### `view.frame_all`
 
@@ -800,6 +835,14 @@ No arguments.
 
 Example: `forge cmd scene.forge timeline.play --args '{}'`
 
+### `timeline.toggle_play`
+
+Play / Stop. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge timeline.toggle_play --args '{}'`
+
 ### `timeline.stop`
 
 Stop. Not an undoable edit.
@@ -860,6 +903,30 @@ Save As. Not an undoable edit.
 | `path` | string | yes |  |
 
 Example: `forge cmd scene.forge file.save_as --args '{"path":"scene.forge"}'`
+
+### `file.open_dialog`
+
+Open.... Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge file.open_dialog --args '{}'`
+
+### `file.save_dialog`
+
+Save. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge file.save_dialog --args '{}'`
+
+### `file.save_as_dialog`
+
+Save As.... Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge file.save_as_dialog --args '{}'`
 
 ### `file.import_obj`
 

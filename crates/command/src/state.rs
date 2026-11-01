@@ -121,3 +121,34 @@ pub enum ShadingMode {
     SmoothWire,
     FlatWire,
 }
+
+/// The viewport gizmo's mode (mirrors the viewport's `GizmoMode`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GizmoModeArg {
+    Move,
+    Rotate,
+    Scale,
+}
+
+/// The frame the gizmo's axes follow (mirrors the viewport's `Space`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum GizmoSpaceArg {
+    Object,
+    World,
+}
+
+/// Something only the editor window can do (file dialogs, inline rename). A command asks
+/// for it through [`crate::CommandContext::request_ui`]; headless contexts refuse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UiRequest {
+    /// File > Open with a file dialog.
+    Open,
+    /// File > Save: to the current file, or asks for one.
+    Save,
+    /// File > Save As with a file dialog.
+    SaveAs,
+    /// Starts the inline rename of the active object.
+    RenameActive,
+}

@@ -5,7 +5,10 @@ use std::sync::Arc;
 use forge_core::{Document, NodeId, Scene};
 use forge_modeling::ComponentSettings;
 
-use crate::state::{ModeArg, NodeSelection, SelectExtra, SelectOp, ShadingMode};
+use crate::state::{
+    GizmoModeArg, GizmoSpaceArg, ModeArg, NodeSelection, SelectExtra, SelectOp, ShadingMode,
+    UiRequest,
+};
 use crate::timeline::Timeline;
 
 pub trait CommandContext {
@@ -55,6 +58,13 @@ pub trait CommandContext {
     fn set_shading(&mut self, _shading: ShadingMode) {}
     fn frame_all(&mut self) {}
     fn toggle_expanded(&mut self, _node: NodeId) {}
+    fn set_gizmo_mode(&mut self, _mode: GizmoModeArg) {}
+    /// Sets the gizmo space; `None` toggles between object and world.
+    fn set_gizmo_space(&mut self, _space: Option<GizmoSpaceArg>) {}
+    /// Asks the editor window for something only it can do.
+    fn request_ui(&mut self, _request: UiRequest) -> Result<(), String> {
+        Err("needs the editor window".into())
+    }
 
     /// Drops selected nodes that no longer exist (after undo, redo, delete).
     fn retain_selection(&mut self) {

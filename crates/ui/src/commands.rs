@@ -2,9 +2,11 @@
 //! them against the editor state and implements the command context for it.
 
 use forge_command::{
-    CommandContext, ModeArg, NodeSelection, SelectExtra, SelectOp, ShadingMode, Timeline,
+    CommandContext, GizmoModeArg, GizmoSpaceArg, ModeArg, NodeSelection, SelectExtra, SelectOp,
+    ShadingMode, Timeline, UiRequest,
 };
 use forge_core::{Category, Document, NodeId, Registry};
+use forge_viewport::gizmo::{GizmoMode, Space as GizmoSpace};
 use forge_viewport::render::Shading;
 use serde_json::Value;
 
@@ -26,7 +28,15 @@ impl forge_rpc::Host for EditorState {
 
     fn run_command(&mut self, id: &str, args: Value) -> Result<Value, forge_command::CommandError> {
         let registry = self.app.commands.clone();
-        registry.run(self, id, args)
+        let result = registry.run(self, id, args);
+        // Dialogs and inline rename belong to the window, not to a remote caller.
+        if !self.ui_requests.is_empty() {
+            self.ui_requests.clear();
+            return Err(forge_command::CommandError::Failed(
+                "needs the editor window".into(),
+            ));
+        }
+        result
     }
 
     fn screenshot(&mut self, width: u32, height: u32) -> Result<Vec<u8>, String> {
@@ -159,6 +169,30 @@ impl CommandContext for EditorState {
     fn frame_all(&mut self) {
         // No geometry yet (Phase 5): reset to the default view.
         self.camera = EditorState::default_camera();
+    }
+
+    fn set_gizmo_mode(&mut self, mode: GizmoModeArg) {
+        self.gizmo_mode = match mode {
+            GizmoModeArg::Move => GizmoMode::Translate,
+            GizmoModeArg::Rotate => GizmoMode::Rotate,
+            GizmoModeArg::Scale => GizmoMode::Scale,
+        };
+    }
+
+    fn set_gizmo_space(&mut self, space: Option<GizmoSpaceArg>) {
+        self.gizmo_space = match space {
+            Some(GizmoSpaceArg::Object) => GizmoSpace::Object,
+            Some(GizmoSpaceArg::World) => GizmoSpace::World,
+            None => match self.gizmo_space {
+                GizmoSpace::Object => GizmoSpace::World,
+                GizmoSpace::World => GizmoSpace::Object,
+            },
+        };
+    }
+
+    fn request_ui(&mut self, request: UiRequest) -> Result<(), String> {
+        self.ui_requests.push(request);
+        Ok(())
     }
 
     fn toggle_expanded(&mut self, node: NodeId) {

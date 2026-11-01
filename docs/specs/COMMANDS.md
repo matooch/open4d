@@ -107,6 +107,9 @@ touch history.
 | `edit.redo` | - | `{done}` | no |
 | `view.shading` | `mode` smooth, flat, wire, smooth_wire, flat_wire | null | no |
 | `view.frame_all` | - | null | no |
+| `view.gizmo_mode` | `mode` move, rotate, scale | null | no |
+| `view.gizmo_space` | `space?` object, world (absent toggles) | null | no |
+| `object.begin_rename` | - | null | no |
 | `view.toggle_expanded` | `node` | null | no |
 | `mesh.make_editable` | `nodes?` | `{made, skipped}` | yes |
 | `mesh.current_state_to_object` | `nodes?` | `{made, skipped}` | yes |
@@ -130,6 +133,7 @@ touch history.
 | `file.open` | `path` | `{warnings}` | no |
 | `file.save` | `path?` (default: current file) | `{path}` | no |
 | `file.save_as` | `path` | `{path}` | no |
+| `file.open_dialog` `file.save_dialog` `file.save_as_dialog` | - | null | no |
 | `file.import_obj` | `path` | `{nodes}` | yes |
 | `file.export_obj` | `path`, `selected?` | `{objects}` | no |
 | `key.record` | - | `{keys}` | yes |
@@ -139,7 +143,7 @@ touch history.
 | `key.autokey` | `enabled?` (absent toggles) | `{enabled}` | no |
 | `timeline.set_frame` | `frame` | `{frame}` | no |
 | `timeline.step` | `delta` | `{frame}` | no |
-| `timeline.play` / `timeline.stop` | - | null | no |
+| `timeline.play` / `timeline.stop` / `timeline.toggle_play` | - | null | no |
 | `timeline.settings` | `fps`, `start`, `end` | null | yes |
 | `transform.set` | `node`, `pos?`, `rot?` (degrees), `scale?` | null | yes |
 | `param.set` | `node`, `param`, `value` | null | yes |
@@ -172,6 +176,11 @@ Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and A
   the command. `file.export_obj` writes the scene **evaluated at the current frame**
   (`CommandContext::evaluated_scene`), like `App::export_obj`; an un-animated scene exports
   exactly its stored geometry.
+- `view.gizmo_*`, `object.begin_rename`, `file.*_dialog` (brief 152, UI.md §14): window actions
+  so that shortcuts are commands. The dialog ones and `begin_rename` call
+  `CommandContext::request_ui(UiRequest)`, which the editor window serves after the command
+  returns (file dialogs, unsaved-changes prompt, inline rename); headless contexts fail with
+  `needs the editor window`. `view.gizmo_*` are view-only no-ops headless.
 - `key.*`, `timeline.*`: ANIM.md §2; `timeline.set_frame` and `step` clamp to the project
   range. `timeline.settings` merges steps like before (`timeline-settings` key).
 - `key.set`: writes one Spline key (ANIM.md §1) on `track` (an animatable float parameter id

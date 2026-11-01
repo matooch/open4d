@@ -70,6 +70,9 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `edit_undo` | Undo. Not an undoable edit. Runs command `edit.undo`. |
 | `edit_redo` | Redo. Not an undoable edit. Runs command `edit.redo`. |
 | `view_shading` | Shading. Not an undoable edit. Runs command `view.shading`. |
+| `view_gizmo_mode` | Gizmo Mode. Not an undoable edit. Runs command `view.gizmo_mode`. |
+| `view_gizmo_space` | Gizmo Space. Not an undoable edit. Runs command `view.gizmo_space`. |
+| `object_begin_rename` | Rename Active. Not an undoable edit. Runs command `object.begin_rename`. |
 | `view_frame_all` | Frame All. Not an undoable edit. Runs command `view.frame_all`. |
 | `view_toggle_expanded` | Expand / Collapse. Not an undoable edit. Runs command `view.toggle_expanded`. |
 | `select_mode` | Selection Mode. Not an undoable edit. Runs command `select.mode`. |
@@ -120,12 +123,16 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `timeline_set_frame` | Go to Frame. Not an undoable edit. Runs command `timeline.set_frame`. |
 | `timeline_step` | Step Frames. Not an undoable edit. Runs command `timeline.step`. |
 | `timeline_play` | Play. Not an undoable edit. Runs command `timeline.play`. |
+| `timeline_toggle_play` | Play / Stop. Not an undoable edit. Runs command `timeline.toggle_play`. |
 | `timeline_stop` | Stop. Not an undoable edit. Runs command `timeline.stop`. |
 | `timeline_settings` | Timeline Settings. Undoable editing command. Runs command `timeline.settings`. |
 | `file_new` | New. Not an undoable edit. Runs command `file.new`. |
 | `file_open` | Open. Not an undoable edit. Runs command `file.open`. |
 | `file_save` | Save. Not an undoable edit. Runs command `file.save`. |
 | `file_save_as` | Save As. Not an undoable edit. Runs command `file.save_as`. |
+| `file_open_dialog` | Open.... Not an undoable edit. Runs command `file.open_dialog`. |
+| `file_save_dialog` | Save. Not an undoable edit. Runs command `file.save_dialog`. |
+| `file_save_as_dialog` | Save As.... Not an undoable edit. Runs command `file.save_as_dialog`. |
 | `file_import_obj` | Import OBJ. Undoable editing command. Runs command `file.import_obj`. |
 | `file_export_obj` | Export OBJ. Not an undoable edit. Runs command `file.export_obj`. |
 | `param_edit` | Edit Parameter. Undoable editing command. Runs command `param.edit`. |

@@ -12,7 +12,10 @@ use super::{register_plain, spec, target_nodes};
 use crate::context::CommandContext;
 use crate::error::CommandError;
 use crate::registry::CommandRegistry;
-use crate::state::{ConvertMode, ModeArg, SelectExtra, SelectOp, ShadingMode};
+use crate::state::{
+    ConvertMode, GizmoModeArg, GizmoSpaceArg, ModeArg, SelectExtra, SelectOp, ShadingMode,
+    UiRequest,
+};
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -97,6 +100,19 @@ struct EnableArgs {
 #[serde(deny_unknown_fields)]
 struct ShadingArgs {
     mode: ShadingMode,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct GizmoModeArgs {
+    mode: GizmoModeArg,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct GizmoSpaceArgs {
+    /// `object` or `world`; absent toggles.
+    space: Option<GizmoSpaceArg>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -223,6 +239,35 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
             Ok(Value::Null)
         },
     )?;
+    r.register_fn(
+        spec(
+            "view.gizmo_mode",
+            "Gizmo Mode",
+            false,
+            || json!({"mode": "move"}),
+        ),
+        |c, a: GizmoModeArgs| {
+            c.set_gizmo_mode(a.mode);
+            Ok(Value::Null)
+        },
+    )?;
+    r.register_fn(
+        spec(
+            "view.gizmo_space",
+            "Gizmo Space",
+            false,
+            || json!({"space": "world"}),
+        ),
+        |c, a: GizmoSpaceArgs| {
+            c.set_gizmo_space(a.space);
+            Ok(Value::Null)
+        },
+    )?;
+    register_plain(r, "object.begin_rename", "Rename Active", false, |c| {
+        c.request_ui(UiRequest::RenameActive)
+            .map_err(CommandError::Failed)?;
+        Ok(Value::Null)
+    })?;
     register_plain(r, "view.frame_all", "Frame All", false, |c| {
         c.frame_all();
         Ok(Value::Null)

@@ -119,7 +119,7 @@ FrameAll = `view.frame_all`).
 categories only (hierarchy + Tag), in `Category` order, types sorted by label; types
 with `in_create_menu == false` (the polygon object) are left out.
 
-Key bindings (**parity-pending**, ours): Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo,
+Key bindings (**parity-pending**, ours; now data in the key map, §14, these are its defaults): Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo,
 Ctrl+A select all, Ctrl+Shift+A deselect all (Cmd on macOS),
 Delete delete selected, F2 rename active, 1–5 shading (Smooth, Flat, Wire,
 SmoothWire, FlatWire).
@@ -367,3 +367,124 @@ cycles, ranges, filter, context items, visibility resolution (core). egui_kittes
 by drag, reorder by drag, dots and tick (each with undo), rename, search, context menu
 actions, a drag onto an attribute link field.
 
+
+## 14. Key map (`keymap`, `keymap_editor`; brief 152)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G2 (docs/parity/GUI-SESSIONS.md)
+is unanswered, so **every default binding is parity-pending**: they follow common DCC
+conventions where those do not collide with our other keys, and they are ours to change once
+G2 is answered. Nothing is taken from the reference app's key files or presets.
+
+### 14.1 Model
+
+A `Chord { command, alt, shift, key }` is one key press with modifiers. `command` means
+egui's `Modifiers::COMMAND`: Cmd on macOS, Ctrl elsewhere. A `Binding { chord, command,
+args, scope }` runs the registry command `command` with the JSON object `args`. `scope` is
+`global` (default) or `viewport` (only while the pointer was over the viewport; the Space
+rule of ANIM.md §2.7). `KeyMap { bindings }` is the resource, held by `EditorState.keymap`.
+Every shortcut runs a registry command through `commands::execute`; there is no key handling
+outside the map, so a key press is exactly as undoable as the same menu item. Window-only
+actions are commands too (`file.open_dialog`, `file.save_dialog`, `file.save_as_dialog`,
+`object.begin_rename`, `view.gizmo_mode`, `view.gizmo_space`, `timeline.toggle_play`;
+COMMANDS.md §6); headless contexts refuse the dialog ones.
+
+Text form of a chord: modifiers then key joined by `+`, canonical order `Mod`, `Alt`,
+`Shift`, key name = egui `Key::name()` (`Z`, `Num1`, `F2`, `Comma`, `Delete`). `Mod` is the
+platform command key; the parser also accepts `Ctrl`, `Cmd` and `Command` as `Mod`, any
+case, and a lone `+`-free key. Printing is canonical, so `parse(print(c)) == c`. Unknown key
+names, repeated modifiers and an empty text are errors. The menus and the editor show a
+chord in the platform's own spelling (`format_shortcut`).
+
+### 14.2 Defaults (`crates/ui/keymap/default.toml`, embedded with `include_str!`)
+
+```toml
+version = 1
+[[bind]]
+chord = "Mod+Z"          # required
+command = "edit.undo"    # required, a registry command id
+args = { }               # optional table, default empty
+scope = "global"         # optional, global | viewport
+```
+
+Several `[[bind]]` entries may name the same command (redo has two chords). Loading rejects
+a version other than 1, an unparsable chord, an unknown scope and `args` that is not a table.
+Default bindings (all parity-pending, ours):
+
+| Chord | Command (args) |
+|---|---|
+| Mod+O / Mod+S / Mod+Shift+S | `file.open_dialog` / `file.save_dialog` / `file.save_as_dialog` |
+| Mod+Z | `edit.undo` |
+| Mod+Shift+Z, Mod+Y | `edit.redo` |
+| Delete | `object.delete` |
+| F2 | `object.begin_rename` |
+| Mod+A / Mod+Shift+A / Mod+I | `select.all` / `select.none` / `select.invert` |
+| Alt+1 / Alt+2 / Alt+3 / Alt+4 | `select.mode` model / points / edges / polys |
+| Mod+Shift+E | `mesh.make_editable` |
+| 1 .. 5 | `view.shading` smooth, flat, wire, smooth_wire, flat_wire |
+| W / E / R | `view.gizmo_mode` move / rotate / scale |
+| Q | `view.gizmo_space` (toggle) |
+| K / Shift+K | `key.record` / `key.autokey` |
+| Space (viewport scope) | `timeline.toggle_play` |
+| Comma / Period | `timeline.step` delta -1 / +1 |
+| Shift+Comma / Shift+Period | `key.jump` forward false / true |
+
+These are the old hard-coded keys of §5 and ANIM.md §2.7 unchanged, plus the rows for
+`select.invert`, `select.mode` and `mesh.make_editable`.
+
+### 14.3 User overrides (settings file)
+
+The shared settings file of RPC.md §2 (`forge_rpc::settings_path()`: `$FORGE_SETTINGS`, else
+`$XDG_CONFIG_HOME/forge3d/settings.json`, else `~/.config/forge3d/settings.json`) holds
+an optional object `keymap`, keyed by canonical or parseable chord text:
+
+```json
+{"keymap": {"Mod+Shift+K": {"command": "key.autokey", "args": {}, "scope": "global"},
+            "Mod+Z": null}}
+```
+
+An object value binds that chord (replacing every default binding on the same chord); `null`
+unbinds the chord. Other keys of the file (rpc, scripts) are kept when the editor writes it.
+Merge (`KeyMap::apply_overrides`): start from the defaults; for each override chord remove
+the bindings on that chord, then add the new one unless `null`. An entry with an unparsable
+chord, no `command` or a non-object `args` is skipped with a warning (returned, shown in
+the editor), never an error: a hand-edited file cannot disable the editor. A command id
+unknown to the registry is kept (plugins may be missing) and listed in the editor as
+unknown; running it reports the registry's error in the status bar. `KeyMap::overrides()`
+is the inverse: the minimal JSON that, applied to the defaults, gives the current map.
+When it is empty the `keymap` key is removed. A missing or unreadable file means defaults.
+
+### 14.4 Conflicts
+
+Two bindings conflict when they have the same chord and their scopes overlap (`global`
+overlaps everything; `viewport` overlaps `viewport` and `global`). `KeyMap::conflicts()`
+lists them; the default map has none (tested). Dispatch with a conflict is deterministic:
+the first matching binding in map order runs, and exactly one command runs per key press.
+Dispatch is matched exactly on `Mod`, `Alt`, `Shift` (so Mod+A and Mod+Shift+A need no
+ordering) and the matching key event is consumed. Nothing runs while a text field has the
+keyboard or while the editor is capturing a chord.
+
+`bind` removes the bindings that conflict with the new one and returns them. The editor
+never does that silently: it shows the conflicting command and asks to Replace or Cancel.
+
+### 14.5 Key map editor (Window > Key map...)
+
+A floating window (state in `Editor`, not in the layout). Top: a search field (matches
+command id, label, or the chord text, case-insensitive), a "Reset all" button, a count of
+conflicts and unknown commands, and the warnings of the last load. Below, a scrolling list,
+one row per binding plus one row for each registry command that has no binding: command
+label, id (weak), args summary, the chord as a button. Clicking the chord button starts
+capture ("Press keys..."): the next key press with its modifiers becomes the chord; Escape
+cancels. If the chord is taken by another binding the window shows "<chord> is bound to
+<label>" with Replace and Cancel; Replace rebinds and removes the other. Each row has
+Clear (unbind) and, when it differs from the default, Reset. Every change is stored to the
+settings file at once (when the editor has one) and takes effect on the next key press.
+
+### 14.6 Tests
+
+Unit (crates/ui/tests/keymap.rs): chord parse/print round trip over every egui key, aliases
+and errors; the default map loads, has no conflicts, and every bound command (with args)
+runs against the registry's argument schema; conflict rules for scopes; override merge
+(replace, unbind, invalid entry skipped, round trip through `overrides()`); the settings
+file keeps unrelated keys. egui_kittest (no GPU): pressing each kind of default shortcut
+runs its command and Mod+Z undoes it; a rebind in the editor takes effect; a conflicting
+rebind asks first; Reset and Clear; a changed map is written to the settings file.

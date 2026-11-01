@@ -164,6 +164,14 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
         c.timeline_mut().play();
         Ok(Value::Null)
     })?;
+    register_plain(r, "timeline.toggle_play", "Play / Stop", false, |c| {
+        if c.timeline().playing {
+            c.timeline_mut().stop();
+        } else {
+            c.timeline_mut().play();
+        }
+        Ok(Value::Null)
+    })?;
     register_plain(r, "timeline.stop", "Stop", false, |c| {
         c.timeline_mut().stop();
         Ok(Value::Null)

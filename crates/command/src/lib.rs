@@ -15,5 +15,8 @@ pub use error::CommandError;
 pub use registry::{
     CommandHandler, CommandPlugin, CommandRegistry, CommandSpec, NoArgs, valid_command_id,
 };
-pub use state::{ConvertMode, ModeArg, NodeSelection, SelectExtra, SelectOp, ShadingMode};
+pub use state::{
+    ConvertMode, GizmoModeArg, GizmoSpaceArg, ModeArg, NodeSelection, SelectExtra, SelectOp,
+    ShadingMode, UiRequest,
+};
 pub use timeline::Timeline;
