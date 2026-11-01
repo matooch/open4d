@@ -49,7 +49,7 @@ headless commands need them; `forge-ui` re-exports them (`components`, `animate`
 - `export_obj(path, roots: Option<&[NodeId]>) -> Result<usize, AppError>`: writes the
   scene **evaluated at the current frame** (the whole scene, or the listed nodes and their
   descendants) as OBJ and returns the object count. `AppError::NothingToExport` if empty.
-  (The `file.export_obj` command exports the stored, un-animated scene.)
+  The `file.export_obj` command does the same.
 
 Frames are integers; time is `frame / fps` (ANIM.md §2). `eval_mesh` does not change the
 timeline.

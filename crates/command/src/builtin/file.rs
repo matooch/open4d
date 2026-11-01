@@ -135,7 +135,8 @@ fn import_obj(ctx: &mut dyn CommandContext, a: PathArgs) -> Result<Value, Comman
 
 fn export_obj(ctx: &mut dyn CommandContext, a: ExportArgs) -> Result<Value, CommandError> {
     let roots: Vec<NodeId> = ctx.selection().nodes.iter().copied().collect();
-    let objects = export_scene(ctx.doc().scene(), a.selected.then_some(&roots[..]));
+    let scene = ctx.evaluated_scene();
+    let objects = export_scene(&scene, a.selected.then_some(&roots[..]));
     if objects.is_empty() {
         return Err(CommandError::failed("Nothing to export"));
     }

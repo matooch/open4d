@@ -244,6 +244,10 @@ impl CommandContext for App {
         self.autokey = on;
     }
 
+    fn evaluated_scene(&self) -> Arc<Scene> {
+        self.evaluated()
+    }
+
     fn set_status(&mut self, text: String) {
         self.status = text;
     }

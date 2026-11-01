@@ -203,3 +203,27 @@ fn headless_component_selection_and_keys() {
         ModeArg::Model
     );
 }
+
+#[test]
+fn export_obj_command_writes_the_evaluated_frame() {
+    let path = temp("command-frame15.obj");
+    let mut app = App::new_default();
+    let cube = animated_cube(&mut app);
+    // Frame 0: the stored position (x = 0), identical to the stored scene.
+    app.run("file.export_obj", json!({"path": path})).unwrap();
+    let at0 = parse_obj(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    assert!(at0.positions.iter().all(|p| p[0].abs() <= 100.0 + 1e-9));
+    // Frame 15: the cube has moved to x = 150.
+    app.frame(15);
+    app.run("file.export_obj", json!({"path": path})).unwrap();
+    let at15 = parse_obj(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let want = app.eval_mesh(cube, 15).unwrap();
+    assert_eq!(at15.positions.len(), want.points.len());
+    for (got, w) in at15.positions.iter().zip(&want.points) {
+        for (g, w) in got.iter().zip(w.to_array()) {
+            assert!((g - w).abs() < 1e-4, "{got:?} vs {w:?}");
+        }
+    }
+    let min_x = at15.positions.iter().map(|p| p[0]).fold(f64::MAX, f64::min);
+    assert!((min_x - 50.0).abs() < 1e-4, "{min_x}");
+}

@@ -1,6 +1,6 @@
 # 013 · `forge` command-line tool
 
-Status: ready · Area: A · Depends on: 012 · Observations: – · Touches: apps/forge (new), app
+Status: done · Area: A · Depends on: 012 · Observations: – · Touches: apps/forge (new), app
 
 ## Goal
 A `forge` binary for headless work and agents: scene info, validation, evaluation, export, running commands and scripts, and talking to a running editor.
@@ -26,9 +26,9 @@ A `forge` binary for headless work and agents: scene info, validation, evaluatio
 - The studio binary also accepts `--headless <forge args>` and forwards to the same code, so one installed binary does both.
 
 ## Done when
-- [ ] Spec `docs/specs/CLI.md` covers every subcommand, its JSON output shape and exit codes.
-- [ ] Tests in `apps/forge/tests/cli.rs` with `assert_cmd`: new → cmd object.create cube → eval → export → the OBJ matches the cube golden.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Spec `docs/specs/CLI.md` covers every subcommand, its JSON output shape and exit codes.
+- [x] Tests in `apps/forge/tests/cli.rs` with `assert_cmd`: new → cmd object.create cube → eval → export → the OBJ matches the cube golden.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Out of scope
 RPC and script execution beyond stubs.
@@ -41,9 +41,14 @@ RPC and script execution beyond stubs.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: tests added: `apps/forge/tests/cli.rs` (5: new -> cmd object.create --save -> eval --export and `export`, both equal to `tests/golden/cube/defaults` under `compare_meshes`; info/validate/commands; animated cube exports the evaluated frame (x offset 0 vs 150 at frame 0 vs 15) and `info` lists the track; `cmd` without `--save` leaves the file unchanged; exit codes 1/2 incl. stubs, bad JSON, unknown node, missing/corrupt scene, `new` overwrite guard) and `crates/app/tests/app.rs::export_obj_command_writes_the_evaluated_frame`. No parity data of its own (N/A).
+- Rules: spec docs/specs/CLI.md. Subcommands: `new <path> [--force]`, `info <scene>`, `validate <scene>`, `eval <scene> [--frame N] [--node id] [--export out.obj]`, `export <scene> --format obj --out path [--selected ids] [--frame N]`, `cmd <scene> <id> [--args JSON] [--save]`, `commands`, stubs `run`, `rpc`, `render`; global `--json`. Library `forge_cli::run` is shared by the `forge` binary and `forge-studio --headless <args>`.
+- Planner decision applied: `file.export_obj` now exports the scene evaluated at the current frame, via a new `CommandContext::evaluated_scene()` (default: the stored scene; `App` and `EditorState` return the evaluated one). COMMANDS.md and APP.md updated; an un-animated scene exports exactly as before (all existing export tests pass unchanged).
+- Deviations from the design decisions:
+  - `validate`: a file that cannot be loaded is exit 2 (the load-error code); exit 1 is for a scene that loads but has a node whose generator rejects its parameters. Load warnings never fail.
+  - `cmd` without `--save` is a dry run (file untouched); the brief's "saves it" is the `--save` flag.
+  - `export`/`eval` take `--frame` (default 0, clamped); the brief's `export` had none. `new` refuses to overwrite without `--force` (addition).
+  - `--headless` forwarding is not covered by an automated test (the studio binary is GUI); checked by hand.
+  - Package is `forge-cli` (binary `forge`, library `forge_cli`) in `apps/forge`.
+- Files changed: apps/forge/** (new), apps/studio/{src/main.rs,Cargo.toml}, Cargo.toml, Cargo.lock, crates/command/src/{context.rs,builtin/file.rs}, crates/app/{src/lib.rs,tests/app.rs}, crates/ui/src/commands.rs, docs/specs/{CLI.md (new),COMMANDS.md,APP.md}, this brief, docs/roadmap/BACKLOG.md.
+- Open questions: none. Selection is not persisted in scene files, so `cmd` commands that default to the selection need explicit `nodes`.

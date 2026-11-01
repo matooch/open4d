@@ -1,0 +1,29 @@
+[package]
+name = "forge-cli"
+version.workspace = true
+edition.workspace = true
+description = "The forge command-line tool: headless scene work for people and agents (docs/specs/CLI.md)."
+
+[lib]
+name = "forge_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "forge"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+forge-app = { path = "../../crates/app" }
+forge-command = { path = "../../crates/command" }
+forge-core = { path = "../../crates/core" }
+forge-generators = { path = "../../crates/generators" }
+serde_json = "1"
+
+[dev-dependencies]
+assert_cmd = "2"
+forge-parity-harness = { path = "../../crates/parity-harness" }
+serde_json = "1"
+
+[lints]
+workspace = true

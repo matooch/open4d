@@ -58,6 +58,7 @@ implements it; `forge-app` will implement it headless.
 - `edit_mode()`, `set_edit_mode()`: `ModeArg` (`model|points|edges|polys`).
 - `timeline()`, `timeline_mut()`: `Timeline` (also moved to `forge-command`), `autokey()`,
   `set_autokey()`.
+- `evaluated_scene()`: the scene at the current frame (default: the stored scene).
 - `set_status(String)`, and no-op defaults for view-only state: `set_shading(ShadingMode)`,
   `frame_all()`, `toggle_expanded(NodeId)`.
 - Editor services that still live in `forge-ui` and are called through the trait:
@@ -140,7 +141,9 @@ Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and A
   `Save failed: ...`, `Import failed: ...`; an OBJ import without polygons fails with
   `Import: no polygons found`; an export of nothing fails with `Nothing to export`.
   Dialogs and "save changes?" prompts stay in the editor: it picks a path, then runs
-  the command.
+  the command. `file.export_obj` writes the scene **evaluated at the current frame**
+  (`CommandContext::evaluated_scene`), like `App::export_obj`; an un-animated scene exports
+  exactly its stored geometry.
 - `key.*`, `timeline.*`: ANIM.md §2; `timeline.set_frame` and `step` clamp to the project
   range. `timeline.settings` merges steps like before (`timeline-settings` key).
 - `transform.set`: sets only the given components of the object's pos/rot/scale in one step

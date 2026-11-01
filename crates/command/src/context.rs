@@ -1,6 +1,8 @@
 //! What a command may touch (docs/specs/COMMANDS.md §3). No egui, no GPU.
 
-use forge_core::{Document, NodeId};
+use std::sync::Arc;
+
+use forge_core::{Document, NodeId, Scene};
 
 use crate::state::{ModeArg, NodeSelection, SelectOp, ShadingMode};
 use crate::timeline::Timeline;
@@ -34,6 +36,12 @@ pub trait CommandContext {
     fn file_path(&self) -> Option<String>;
     /// Records that the scene was saved to `path` (clears the dirty state).
     fn mark_saved(&mut self, path: String);
+
+    /// The scene at the current frame (animation applied). Contexts without an animation
+    /// evaluator return the stored scene.
+    fn evaluated_scene(&self) -> Arc<Scene> {
+        Arc::new(self.doc().scene().clone())
+    }
 
     // View-only state; headless contexts ignore it.
     fn set_shading(&mut self, _shading: ShadingMode) {}

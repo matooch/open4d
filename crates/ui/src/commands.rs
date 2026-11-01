@@ -112,6 +112,10 @@ impl CommandContext for EditorState {
         self.app.file_path()
     }
 
+    fn evaluated_scene(&self) -> std::sync::Arc<forge_core::Scene> {
+        self.app.evaluated()
+    }
+
     fn mark_saved(&mut self, path: String) {
         self.app.mark_saved(path);
     }
