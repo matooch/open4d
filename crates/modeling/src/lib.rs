@@ -4,12 +4,21 @@
 mod bevel;
 mod desc;
 mod extrude;
+mod merge;
+mod points;
 mod settings;
+mod surface;
+mod util;
 
 pub use bevel::bevel;
 pub use desc::{ToolDesc, tool_desc, tool_descs};
 pub use extrude::{extrude, extrude_inner};
+pub use merge::{dissolve, melt};
+pub use points::{
+    center_axis, center_axis_tool, connect_points, disconnect, mirror, split, split_copy, weld,
+};
 pub use settings::{Settings, SettingsError};
+pub use surface::{optimize, reverse_normals, subdivide, triangulate, untriangulate};
 
 /// The pure function of a tool (docs/specs/MODELING.md §0). It reads the part of the
 /// selection it works on (polygons for Extrude, edges or polygons for Bevel).
@@ -36,6 +45,9 @@ pub enum ToolError {
     BadEdge(u32),
     #[error("point {0} does not exist")]
     BadPoint(u32),
+    /// The selection or settings do not allow the command to do anything.
+    #[error("{0}")]
+    Invalid(String),
     #[error("unsupported: {0}")]
     Unsupported(String),
 }
@@ -74,6 +86,19 @@ pub fn tool_fn(id: &str) -> Option<ToolFn> {
         "extrude" => Some(run_extrude),
         "extrude_inner" | "inset" => Some(run_extrude_inner),
         "bevel" => Some(bevel),
+        "subdivide" => Some(subdivide),
+        "triangulate" => Some(triangulate),
+        "untriangulate" => Some(untriangulate),
+        "reverse_normals" => Some(reverse_normals),
+        "optimize" => Some(optimize),
+        "weld" => Some(weld),
+        "melt" => Some(melt),
+        "dissolve" => Some(dissolve),
+        "split" => Some(split),
+        "disconnect" => Some(disconnect),
+        "connect_points" => Some(connect_points),
+        "mirror" => Some(mirror),
+        "center_axis" => Some(center_axis_tool),
         _ => None,
     }
 }

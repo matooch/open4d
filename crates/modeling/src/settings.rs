@@ -59,6 +59,13 @@ impl Settings {
                     Value::Float(n.as_f64().ok_or_else(|| bad("expected a number"))?)
                 }
                 (Value::Enum(_), Json::String(s)) => Value::Enum(s.clone()),
+                (Value::Vec3(_), Json::Array(a)) if a.len() == 3 => {
+                    let mut v = [0.0; 3];
+                    for (slot, item) in v.iter_mut().zip(a) {
+                        *slot = item.as_f64().ok_or_else(|| bad("expected three numbers"))?;
+                    }
+                    Value::Vec3(v)
+                }
                 _ => return Err(bad("wrong type")),
             };
             let value = p
@@ -79,6 +86,11 @@ impl Settings {
                     Value::Int(i) => Json::from(*i),
                     Value::Float(f) => Number::from_f64(*f).map(Json::Number)?,
                     Value::Enum(e) => Json::String(e.clone()),
+                    Value::Vec3(v) => Json::Array(
+                        v.iter()
+                            .map(|c| Number::from_f64(*c).map(Json::Number))
+                            .collect::<Option<Vec<_>>>()?,
+                    ),
                     _ => return None,
                 };
                 Some((k.clone(), j))
@@ -124,6 +136,13 @@ impl Settings {
         match self.values.get(id) {
             Some(Value::Enum(e)) => e,
             _ => "",
+        }
+    }
+
+    pub fn vec3(&self, id: &str) -> glam::DVec3 {
+        match self.values.get(id) {
+            Some(Value::Vec3(v)) => glam::DVec3::from_array(*v),
+            _ => glam::DVec3::ZERO,
         }
     }
 

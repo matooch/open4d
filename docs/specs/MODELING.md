@@ -371,7 +371,225 @@ the same order (8..11), no point is removed. Only one selected edge per vertex, 
   with `subdivision > 0` or in polygon mode, point mode, open or non-manifold edges, vertices
   that are not valence 3, three selected edges at a vertex.
 
-## 4. Parity (`crates/modeling/tests/tools_parity.rs`)
+## 4. Mesh commands (`mesh.subdivide` ... `mesh.center_axis`)
+
+Sources: the O6 cases `subdivide-1`, `triangulate`, `reverse-normals`, `optimize`
+(docs/parity/modeling-tools.md), `optimize-real` (docs/parity/followups-1.md) and the O25 cases
+`subdivide-smooth`, `subdivide-2`, `untriangulate`, `weld-two-points`, `melt-two`, `split-top`,
+`disconnect-top`, `connect-points`, `mirror-x`, `center-axis` (docs/parity/modeling-tools-2.md);
+where there is no case the rule is our own design, marked **parity-pending**. All commands use
+the framework of §0 (descriptor, pure function, one registry command, one undo step) and the
+command contract of §0.1 with these differences:
+
+- Where the table says "empty = all", a command given no polygons works on every polygon of the
+  mesh (the reference commands act on the whole object without a selection). Indices past the
+  polygon count are `Failed`.
+- `mesh.weld`, `mesh.connect_points` and `mesh.dissolve` also take `edges` and `points` (as
+  `mesh.bevel`, §0.1); the others take `polys` only.
+- Removal of points **and of polygons** is always the **swap-remove** of §3.4: the items to
+  remove are taken in ascending original index; each is replaced by the last item of the list
+  (`weld-two-points`: removing point 1 moves point 7 into slot 1; `melt-two`: removing polygon 7
+  moves the last polygon 9 into slot 7, so the bottom polygons come out as 9, 8). Polygons that
+  lose corners keep their index.
+- A polygon that has fewer than three distinct corners after a merge is dropped; consecutive
+  duplicate corners (also across the wrap) collapse.
+- Two commands do more than replace the mesh: `mesh.split` (a second object) and
+  `mesh.center_axis` (the object position). Their pure functions are `split_copy` and
+  `center_axis`; the registry function of the tool list (`tool_fn`) is the identity on the mesh
+  for `split` and the re-centred mesh for `center_axis`, so the preview and the UI stay uniform.
+
+Descriptors (id, label; the settings have no observed defaults unless stated):
+
+| command | tool id | settings (default, range) | works on |
+|---|---|---|---|
+| `mesh.subdivide` | `subdivide` | `subdivisions` int (1, 1..8), `hyper` bool (off) | polys, empty = all |
+| `mesh.triangulate` | `triangulate` | none | polys, empty = all |
+| `mesh.untriangulate` | `untriangulate` | `angle_deg` float (1, 0..90), `ngons` bool (off) | polys, empty = all |
+| `mesh.reverse_normals` | `reverse_normals` | none | polys, empty = all |
+| `mesh.optimize` | `optimize` | `tolerance` float (0.01, 0..1e20), `optimize_points` (on), `optimize_polygons` (on), `delete_unused_points` (on) | the whole mesh |
+| `mesh.weld` | `weld` | none | points |
+| `mesh.melt` | `melt` | none | polys |
+| `mesh.dissolve` | `dissolve` | none | edges, else points, else polys |
+| `mesh.split` | `split` | none | polys |
+| `mesh.disconnect` | `disconnect` | `preserve_groups` bool (on) | polys |
+| `mesh.connect_points` | `connect_points` | none | points |
+| `mesh.mirror` | `mirror` | `plane_point` vec3 (0,0,0), `plane_normal` vec3 (1,0,0), `duplicate` bool (off), `weld` bool (on), `tolerance` float (0.01, 0..1e20) | polys, empty = all |
+| `mesh.center_axis` | `center_axis` | `mode` enum `bounding_box` / `point_average` (bounding_box) | the object |
+
+The defaults of Triangulate, Untriangulate, Optimize, Weld, Melt, Split, Connect and Center Axis
+could not be read in O6/O25 ("TODO: not readable"). The values above are our own, except
+`optimize-real`'s Tolerance 0.01 with the three switches on, which is what the probe set (the
+reference's own defaults are unknown) and `preserve_groups`, `plane_point`, `plane_normal`,
+`duplicate` (off), `subdivisions`, `hyper` which the cases set. Hyper defaults to off because `subdivide-1` (O6) has no settings table and its description says smoothing off. **parity-pending** for all of
+them. `tool_descs()` lists them after Bevel in this order. These tools have no drag parameter
+(`drag_param` is empty), so a viewport drag does not apply them.
+
+### 4.1 Subdivide (cases `subdivide-1`, `subdivide-smooth`, `subdivide-2`)
+The command's order is **not** the Subdivision generator's (SUBDIVISION.md §2) for level 1 and
+differs again at level 2. For an all-quad mesh, each quad `[c0, c1, c2, c3]` is a lattice of
+`2^L x 2^L` cells (`L` = `subdivisions`): lattice point `(R, C)` with `R` along `c0 -> c3`,
+`C` along `c0 -> c1`, `0 <= R, C <= 2^L`, corners `c0 = (0,0)`, `c1 = (0, 2^L)`,
+`c2 = (2^L, 2^L)`, `c3 = (2^L, 0)`.
+- **Points**: the originals, same order; then the edge points: for every edge in
+  `PolyMesh::edges()` order, in the direction it is first met in a polygon walk (corner `k` to
+  `k+1`), its `2^L - 1` inner points from the first to the second end; then, polygon by
+  polygon, the inner lattice points `R = 1 .. 2^L-1` (outer), `C = 1 .. 2^L-1` (inner).
+  `subdivide-1`: points 8..19 are the 12 edge points, 20..25 the face points. `subdivide-2`:
+  8..43 are three points per edge (edge 3->2 gives y = 50, 0, -50), 44..97 nine per polygon
+  (polygon 0: x-major, (-50,-50), (-50,0), ...).
+- **Polygons**: the cells `[L(R,C), L(R,C+1), L(R+1,C+1), L(R+1,C)]`, row by row (`R` outer, `C`
+  inner). The **last cell** (`R = C = 2^L-1`, next to `c2`) **replaces the polygon in place**;
+  the other cells are appended, polygon after polygon, in that order. `subdivide-1`: face 0 =
+  `20 9 3 10` (cell next to `c2`), faces 6, 7, 8 = `0 8 20 11`, `8 1 9 20`, `11 20 10 2`.
+  `subdivide-2`: face 0 = `52 13 3 14`, faces 6.. = `0 8 44 19`, `8 9 45 44`, ... .
+- **Positions**: Hyper **off** is bilinear (edge points at equal fractions, face points the
+  bilinear patch); Hyper **on** is Catmull-Clark (SUBDIVISION.md §2) applied `L` times
+  (`subdivide-smooth`: corners (-55.56, ...) = 100 x 5/9, edge points (-75, 0, -75), face
+  points unchanged). The export is therefore rounded; its bounding box stays +-100 only because
+  the face points do not move (the observation's "not rounded" reading was wrong). Smoothing is
+  part of the mesh, not a display effect. The positions are those of the generator
+  (`subdivide_levels`), which is also how the lattice is read (each generator cell tells its
+  four lattice points).
+- Meshes with a polygon that is not a quad (**parity-pending**, no data): `L` single steps, each
+  with the points ordered originals, edge points (`edges()` order), face points, and the polygon
+  `[c0 .. c_(n-1)]` replaced in place by `[c_(n-1), E(n-1,0), F, E(n-2,n-1)]`, the quads of
+  corners `0 .. n-2` (`[c_k, E(k,k+1), F, E(k-1,k)]`) appended in order.
+- A polygon selection that is neither empty nor all polygons is `Unsupported` (no data for
+  partial subdivision). Result selection: all polygons.
+
+### 4.2 Triangulate (case `triangulate`)
+Every selected polygon with n > 3 corners becomes n-2 triangles, a fan from its first corner:
+`[p0, p_i, p_(i+1)]`. The **first triangle keeps the polygon's index**, the others are appended
+after all existing polygons, polygon after polygon (`triangulate`: quad `[0,1,4,3]` becomes
+face 0 `0 1 4` and face 24 `0 4 3`). Points are unchanged. A polygon whose fan has a triangle
+turned against the polygon normal (a concave polygon) uses `triangulate_poly` (ear clipping)
+instead, the first ear in place. **parity-pending** for n > 4 and concave polygons. Triangles
+stay triangles. Result selection: the resulting triangles.
+
+### 4.3 Untriangulate (case `untriangulate`)
+Pairs of triangles that share an edge and are coplanar (normals within `angle_deg`) are merged
+into a quad when the quad is strictly convex.
+- Triangles are visited in ascending index; an unmerged triangle takes the unmerged candidate
+  neighbour with the **lowest index** (`untriangulate`: triangle 0 `[0,1,4]` pairs with 24
+  `[0,4,3]` and not with 26 `[1,5,4]`, which would also be a convex coplanar quad).
+- The merged polygon takes the index of the lower triangle (the other is removed, later indices
+  close up) and is the boundary loop of the pair started at the first boundary half-edge of the
+  lower triangle (the `merge` rule of §4.5): `[0,1,4]` + `[0,4,3]` gives `[0,1,4,3]`.
+- `ngons` on: instead of pairs, every edge-connected coplanar group of triangles (same
+  tolerance) with one simple boundary loop becomes one polygon (loop rule of §4.5; groups with
+  holes or several loops stay as they are). **parity-pending**: the case has `ngons` off, the
+  reference defaults (angle, n-gons) are unknown.
+- Polygons that are not triangles are copied. Result selection: the merged polygons.
+
+### 4.4 Reverse Normals (case `reverse-normals`)
+Each selected polygon is reversed **keeping its first corner**: `[p0, p1, ..., p_(n-1)]`
+becomes `[p0, p_(n-1), ..., p1]` (`reverse-normals`: `[1,7,5,3]` becomes `[1,3,5,7]`). Result
+selection: the same polygons.
+
+### 4.5 Merging polygons: Melt, Dissolve (case `melt-two`)
+`merge(mesh, groups)` replaces each group of polygons by one polygon, its **boundary loop**:
+the directed edges `a -> b` of the group's polygons whose reverse `b -> a` is not in the group,
+chained `a -> b -> ...`. The loop starts at the origin of the first boundary edge met walking the
+group's polygons in ascending index and each polygon's corners in order (`melt-two`: polygons 6
+`[1,11,9,3]` and 7 `[3,9,7,5]` give `[1,11,9,7,5,3]`). The merged polygon replaces the lowest
+polygon of the group, the others are removed (swap-remove). Points left without a polygon are removed
+(swap-remove). A group whose boundary is not one simple loop (a hole, two loops, a vertex with
+two outgoing boundary edges, inconsistent winding) is `Unsupported`.
+- **Melt** (polys): groups are the edge-connected components of the selected polygons; a group
+  of one polygon is left unchanged, and no group of two or more is `Invalid`. `melt-two`: the two top polygons become one 6-gon, the two
+  inner points stay because the side polygons use them, so the point count stays 12.
+  **parity-pending**: removal of interior points, the one-polygon case (the reference might
+  delete it).
+- **Dissolve** (own design, **parity-pending**; the O25 case `dissolve-edge` did not run):
+  - edges selected: every selected edge used by exactly two polygons joins them; the groups are
+    the connected unions; merged as above. Edges with other counts are ignored; no usable edge is
+    `Invalid`.
+  - else points selected: all polygons around a point join into one group; the point itself is
+    dropped from the loop and removed. A point used by one polygon of at most three corners is
+    `Unsupported`.
+  - else polygons: the same as Melt.
+
+### 4.6 Weld (case `weld-two-points`)
+All selected points (at least two) become one point at their **average** (the case: points 0, 1
+become (-100, 0, -100)). The merged point keeps the **lowest index**, the other points are
+removed by swap-remove (point 7 moves to slot 1). Polygons are remapped (`[0,1,3,2]` becomes
+`[0,3,2]`, `[6,7,1,0]` becomes `[6,1,0]`), polygons with fewer than three distinct corners are
+dropped. No tolerance: the case welds points 200 apart. Selection of edges or polygons instead of
+points is not used (`EmptySelection`).
+
+### 4.7 Split and Disconnect (cases `split-top`, `disconnect-top`)
+- **Split** (`split_copy`): the selected polygons are copied into a new object; the source keeps
+  **all** of its polygons (`split-top`). The copy has the points of the selected polygons in
+  ascending original index (the top polygon `[1,7,5,3]` of the cube uses points 1, 3, 5, 7, which
+  become the copy's points 0..3, so the polygon is `[0,3,2,1]`; the file shows it as `9 12 11 10`). The command
+  adds a polygon object right after the source (same parent, transform params, tags and a copy
+  of the transform animation as Make Editable), named `<name>.1` (`.2`, ... if taken), and
+  selects it. One undo step. The parity test compares source + copy as one mesh (the second
+  object's indices offset by the source's point count), as the exporter writes the file.
+- **Disconnect** (`disconnect`): groups are the edge-connected components of the selected
+  polygons when `preserve_groups` is on, else each polygon is a group. For each group (ascending
+  smallest polygon) every point **that is also used by a polygon outside the group** gets a new
+  copy appended (ascending original index; one group before the next, as Extrude §1.3); the
+  group's polygons are replaced in place (`disconnect-top`: points 8..11 copy 1, 3, 5, 7, polygon
+  4 becomes `8 11 10 9`). Points not used outside the group are not copied (so disconnecting all
+  polygons changes nothing). **parity-pending** for that exception (the case cannot tell).
+  Result selection: the selected polygons.
+
+### 4.8 Connect Points (case `connect-points`)
+Each polygon that holds **exactly two** selected points that are not neighbours in it is cut
+along the diagonal. With the points at corner indices `i < j`: the part `p[0..=i] + p[j..]`
+keeps the polygon's index, the part `p[i..=j]` is appended (after all polygons, in polygon
+order). `connect-points`: points 0 and 3 in `[0,1,3,2]` (`i = 0`, `j = 2`) give `[0,3,2]` and
+the appended `[0,1,3]`. Polygons with more than two selected points are `Unsupported`
+(no data); no cuttable polygon is `Invalid`. **Unsupported**: edge selection (the reference
+connects edge midpoints, not observed). Result selection: the polygons that were cut (both
+parts).
+
+### 4.9 Optimize (cases `optimize`, `optimize-real`)
+1. `optimize_points`: points within `tolerance` (distance) of an earlier point are merged into
+   the lowest-index point of their cluster (a point is compared with the already chosen
+   representatives, ascending); polygons are remapped, collapsed corners removed, polygons left
+   with fewer than three corners dropped.
+2. `optimize_polygons`: polygons that are degenerate (a corner repeated) or that repeat an
+   earlier polygon (same corners, any start and direction) are dropped.
+3. `delete_unused_points`: points no polygon uses are removed (swap-remove).
+`optimize-real`: the 12 points after Disconnect merge back to the cube's 8, polygons and order
+as the cube. `optimize`: a clean cube is unchanged. The selection is ignored.
+**parity-pending**: the reference's defaults (the probe had to set all four), the survivor
+order after a removal (all removed points were the last ones in the case), whether merged points
+move to the cluster centre.
+
+### 4.10 Mirror (case `mirror-x`)
+Reflection across the plane through `plane_point` with unit normal `plane_normal`:
+`p' = p - 2 ((p - q) . n) n`. A zero normal is `Invalid`.
+- `duplicate` **off** (the case): the points of the selected polygons are reflected **in place**
+  (indices kept) and the selected polygons are reversed keeping their first corner (§4.4), which
+  restores the winding (`mirror-x`: `[0,1,3,2]` becomes `[0,2,3,1]`; a symmetric cube maps onto
+  itself, so only the order of the corners changes). **parity-pending**: unselected polygons that
+  share a reflected point move with it and keep their order.
+- `duplicate` on (own design, **parity-pending**): the points of the selected polygons are
+  reflected into new points appended in ascending original index; with `weld` on, a point within
+  `tolerance` of the plane is not copied (the original is used); the reversed copies of the
+  polygons are appended; the selection is the new polygons.
+
+### 4.11 Center Axis (case `center-axis`)
+`center_axis(mesh, mode)` returns the mesh with every point moved by `-c` and `c`: the centre of
+the bounding box (or the point average, `point_average`) in object space. The command adds `c`
+(transformed by the object's rotation and scale) to `transform.pos` and subtracts `c` from the
+`transform.pos` of each direct child so that nothing moves in the world, in one undo step. The
+file of `center-axis` holds world coordinates, which therefore do not change; the parity test
+checks `c + mesh'` equals the moved cube and that `c` is (50, 0, 0), the position the
+observation reports. An empty mesh is `EmptySelection`. **parity-pending**: the children rule,
+other targets of the "Center Axis to" dialog.
+
+### 4.12 Not covered
+`Unsupported`, with the data that would settle it: partial Subdivide; Dissolve and Melt of groups
+with holes; Connect on edges; Connect with three selected points in one polygon; Untriangulate
+and Triangulate of n-gons. Close Polygon Hole, Bridge, Stitch and Sew belong to brief 025,
+Loop/Path Cut and Knife to 024; the O25 cases that did not run (`loopcut-*`, `knife-line`,
+`bridge-two`, `stitch`, `dissolve-edge`, `close-hole`, `smooth`, `array-command`) have no data.
+
+## 7. Parity (`crates/modeling/tests/tools_parity.rs`)
 Each case of `tests/golden/modeling-tools/` whose `tool` is `extrude`, `extrude_inner`, `inset` or
 `bevel` is rebuilt: the default cube with `segments`, made editable (our generator's mesh has
 the reference's point and polygon order, so selection indices apply), `select_polys`, the
@@ -381,9 +599,18 @@ case tolerance), both raw and after `export_weld`. `UNSUPPORTED` and `KNOWN_MISM
 asserted exactly. The tool name `inset` is the same tool as `extrude_inner` (two spellings in
 the case files).
 
+The mesh commands (§4) have their own test, `mesh_commands_match_the_reference`, in the same
+file: the 15 cases whose `tool` is `subdivide`, `triangulate`, `untriangulate`,
+`reverse_normals`, `optimize`, `weld`, `melt`, `split`, `disconnect`, `connect_points`,
+`mirror` or `center_axis`. Set-up steps the case files name are replayed with our own commands
+(`triangulate_first`, `disconnect_first`, `move_points`); `split` is compared as source plus
+copy with the copy's indices offset (the file holds both objects), `center_axis` as world
+coordinates (centre + moved point) with the centre asserted to be (50, 0, 0). `UNSUPPORTED` and
+`KNOWN_MISMATCH` (`COMMAND_*`) are empty.
+
 Result: see docs/parity/STATUS.md.
 
-## 5. Checks
+## 8. Checks
 - `crates/modeling/tests/tools_parity.rs`: the 11 Extrude/Inset cases, the 8 Bevel cases and the
   `rechecks/extrude-bevel-subdiv` case (Extrude with Bevel 10, Subdivision 2 equals
   `extrude-subdiv`, so the Bevel value has no effect there either).
@@ -403,3 +630,16 @@ Result: see docs/parity/STATUS.md.
 - `crates/ui/tests/tools.rs`: activate Extrude, drag, apply; one undo step; Reset Values;
   preview does not touch the document; attribute rows come from the descriptors; Bevel on a
   stored edge selection (preview, drag, enum settings, unsupported option) and its panel.
+- `crates/modeling/tests/commands.rs`: Subdivide counts and closedness for 1..3 levels, Hyper
+  volume, triangle and n-gon fallbacks, partial selection; Triangulate of a pentagon, a
+  concave quad and a selected subset; Untriangulate round trip, N-gons, hinge, concave pair;
+  Reverse twice; every Optimize switch and the tolerance edge; Weld with a collapsing polygon
+  and the swap-remove order; Melt of an interior point, a hole, two groups, a lone polygon, a
+  closed surface; Dissolve of edges, points, polygons; Split copy; Disconnect groups and the
+  unshared-point rule; Connect on a hexagon; Mirror (plane, normal, duplicate, weld); Center
+  Axis modes; settings validation of vectors.
+- `crates/app/tests/mesh_commands.rs`: the 13 commands headless (one undo step each, undo
+  restores the mesh), Melt selection, Split object naming and selection, Center Axis with a
+  child, argument errors, Mirror duplicate, schemas.
+- `crates/ui/tests/tools.rs`: the Mesh menu lists the commands, no drag for setting-less
+  commands, vector rows, Apply from the panel.

@@ -1314,6 +1314,7 @@ dependencies = [
  "forge-io",
  "forge-modeling",
  "forge-modifiers",
+ "glam",
  "schemars",
  "serde",
  "serde_json",

@@ -45,7 +45,28 @@ fn steps(st: &EditorState) -> usize {
 fn tools_come_from_descriptors() {
     let all = tools();
     let ids: Vec<_> = all.iter().map(|t| t.id()).collect();
-    assert_eq!(ids, ["extrude", "extrude_inner", "bevel"]);
+    // the three tools of briefs 020/021, then the mesh commands of brief 022 (MODELING.md §4)
+    assert_eq!(
+        ids,
+        [
+            "extrude",
+            "extrude_inner",
+            "bevel",
+            "subdivide",
+            "triangulate",
+            "untriangulate",
+            "reverse_normals",
+            "optimize",
+            "weld",
+            "melt",
+            "dissolve",
+            "split",
+            "disconnect",
+            "connect_points",
+            "mirror",
+            "center_axis"
+        ]
+    );
     let (mut st, _) = setup();
     assert!(!activate_tool(&mut st, "nope"));
     assert!(activate_tool(&mut st, "extrude"));
@@ -235,4 +256,64 @@ fn the_bevel_panel_has_enum_rows_and_the_menu_entry() {
     h.run();
     assert_eq!(counts(&h.state().state, id), (10, 7));
     assert_eq!(steps(&h.state().state), before + 1);
+}
+
+#[test]
+fn mesh_commands_apply_without_a_drag() {
+    let (mut st, id) = setup();
+    let before = steps(&st);
+    // Reverse Normals has no setting to drag: a drag does not start, Apply runs the command
+    assert!(activate_tool(&mut st, "reverse_normals"));
+    assert!(ToolDrag::begin(&st, 400.0, 800.0).is_none());
+    assert_eq!(
+        st.tool.as_ref().unwrap().tool().settings().len(),
+        0,
+        "no settings"
+    );
+    let (_, preview) = tool_preview(&st).expect("preview of the selected polygon");
+    assert_eq!(preview.polys[4], vec![1, 3, 5, 7]);
+    apply_tool(&mut st).unwrap();
+    assert_eq!(steps(&st), before + 1);
+    // Mirror: vector settings are rows, Subdivide applies to the whole mesh
+    assert!(activate_tool(&mut st, "mirror"));
+    let ts = st.tool.as_ref().unwrap();
+    let rows = tool_rows(ts.tool().settings(), ts.values());
+    let normal = rows.iter().find(|r| r.param == "plane_normal").unwrap();
+    assert_eq!(normal.value, Value::Vec3([1.0, 0.0, 0.0]));
+    // Subdivide works on the whole mesh: a part of the polygons is refused, none is all
+    assert!(activate_tool(&mut st, "subdivide"));
+    assert!(apply_tool(&mut st).is_err());
+    st.doc
+        .transact("sel", |tx| {
+            tx.set_param(id, "selection.polys", Value::IndexList(vec![]))
+        })
+        .unwrap();
+    st.tool
+        .as_mut()
+        .unwrap()
+        .set("hyper", Value::Bool(true))
+        .unwrap();
+    apply_tool(&mut st).unwrap();
+    assert_eq!(counts(&st, id), (26, 24));
+    execute(&mut st, "edit.undo", json!({})).unwrap();
+    assert_eq!(counts(&st, id), (8, 6));
+}
+
+#[test]
+fn the_mesh_menu_lists_the_commands_and_their_panels_show() {
+    let (st, id) = setup();
+    let before = steps(&st);
+    let mut h = harness(st);
+    h.get_by_label("Mesh").click();
+    h.run();
+    h.get_by_label("Weld");
+    h.get_by_label("Untriangulate");
+    h.get_by_label("Mirror").click();
+    h.run();
+    assert!(h.query_all_by_label("Plane Normal").count() > 0);
+    h.get_by_label("Duplicate");
+    h.get_by_label("Apply").click();
+    h.run();
+    assert_eq!(steps(&h.state().state), before + 1);
+    assert_eq!(counts(&h.state().state, id), (8, 6));
 }

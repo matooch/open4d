@@ -147,9 +147,127 @@ fn bevel_desc() -> ToolDesc {
     }
 }
 
+/// A mesh command (docs/specs/MODELING.md §4): no drag parameter, `components` when it reads
+/// points or edges.
+fn command_desc(
+    id: &'static str,
+    label: &'static str,
+    command: &'static str,
+    components: bool,
+    params: Vec<ParamDesc>,
+) -> ToolDesc {
+    ToolDesc {
+        id,
+        label,
+        command,
+        drag_param: "",
+        params,
+        components,
+    }
+}
+
+fn command_descs() -> Vec<ToolDesc> {
+    vec![
+        command_desc(
+            "subdivide",
+            "Subdivide",
+            "mesh.subdivide",
+            false,
+            vec![
+                ParamDesc::int("subdivisions", "Subdivisions", 1).range(1, 8),
+                ParamDesc::bool("hyper", "Hyper", false),
+            ],
+        ),
+        command_desc(
+            "triangulate",
+            "Triangulate",
+            "mesh.triangulate",
+            false,
+            vec![],
+        ),
+        command_desc(
+            "untriangulate",
+            "Untriangulate",
+            "mesh.untriangulate",
+            false,
+            vec![
+                ParamDesc::float("angle_deg", "Angle", 1.0).range(0.0, 90.0),
+                ParamDesc::bool("ngons", "N-gons", false),
+            ],
+        ),
+        command_desc(
+            "reverse_normals",
+            "Reverse Normals",
+            "mesh.reverse_normals",
+            false,
+            vec![],
+        ),
+        command_desc(
+            "optimize",
+            "Optimize",
+            "mesh.optimize",
+            false,
+            vec![
+                ParamDesc::float("tolerance", "Tolerance", 0.01).range(0.0, BIG),
+                ParamDesc::bool("optimize_points", "Optimize Points", true),
+                ParamDesc::bool("optimize_polygons", "Optimize Polygons", true),
+                ParamDesc::bool("delete_unused_points", "Delete Unused Points", true),
+            ],
+        ),
+        command_desc("weld", "Weld", "mesh.weld", true, vec![]),
+        command_desc("melt", "Melt", "mesh.melt", false, vec![]),
+        command_desc("dissolve", "Dissolve", "mesh.dissolve", true, vec![]),
+        command_desc("split", "Split", "mesh.split", false, vec![]),
+        command_desc(
+            "disconnect",
+            "Disconnect",
+            "mesh.disconnect",
+            false,
+            vec![ParamDesc::bool("preserve_groups", "Preserve Groups", true)],
+        ),
+        command_desc(
+            "connect_points",
+            "Connect Points/Edges",
+            "mesh.connect_points",
+            true,
+            vec![],
+        ),
+        command_desc(
+            "mirror",
+            "Mirror",
+            "mesh.mirror",
+            false,
+            vec![
+                ParamDesc::vec3("plane_point", "Plane Point", [0.0; 3]).range(-BIG, BIG),
+                ParamDesc::vec3("plane_normal", "Plane Normal", [1.0, 0.0, 0.0]).range(-BIG, BIG),
+                ParamDesc::bool("duplicate", "Duplicate", false),
+                ParamDesc::bool("weld", "Weld", true),
+                ParamDesc::float("tolerance", "Tolerance", 0.01).range(0.0, BIG),
+            ],
+        ),
+        command_desc(
+            "center_axis",
+            "Center Axis to",
+            "mesh.center_axis",
+            false,
+            vec![ParamDesc::enumeration(
+                "mode",
+                "Center",
+                "bounding_box",
+                &[
+                    ("bounding_box", "Bounding Box"),
+                    ("point_average", "Point Average"),
+                ],
+            )],
+        ),
+    ]
+}
+
 /// Every tool, in menu order.
 pub fn tool_descs() -> Vec<ToolDesc> {
-    vec![extrude_desc(), extrude_inner_desc(), bevel_desc()]
+    let mut all = vec![extrude_desc(), extrude_inner_desc(), bevel_desc()];
+    all.extend(command_descs());
+    all
 }
 
 /// The tool with this id (`inset` is accepted as a spelling of `extrude_inner`).

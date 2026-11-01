@@ -2,7 +2,7 @@
 
 # Command reference
 
-38 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+51 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -27,6 +27,19 @@
 | [`mesh.extrude`](#meshextrude) | Extrude | yes | `mesh_extrude` |
 | [`mesh.extrude_inner`](#meshextrude_inner) | Extrude Inner | yes | `mesh_extrude_inner` |
 | [`mesh.bevel`](#meshbevel) | Bevel | yes | `mesh_bevel` |
+| [`mesh.subdivide`](#meshsubdivide) | Subdivide | yes | `mesh_subdivide` |
+| [`mesh.triangulate`](#meshtriangulate) | Triangulate | yes | `mesh_triangulate` |
+| [`mesh.untriangulate`](#meshuntriangulate) | Untriangulate | yes | `mesh_untriangulate` |
+| [`mesh.reverse_normals`](#meshreverse_normals) | Reverse Normals | yes | `mesh_reverse_normals` |
+| [`mesh.optimize`](#meshoptimize) | Optimize | yes | `mesh_optimize` |
+| [`mesh.weld`](#meshweld) | Weld | yes | `mesh_weld` |
+| [`mesh.melt`](#meshmelt) | Melt | yes | `mesh_melt` |
+| [`mesh.dissolve`](#meshdissolve) | Dissolve | yes | `mesh_dissolve` |
+| [`mesh.split`](#meshsplit) | Split | yes | `mesh_split` |
+| [`mesh.disconnect`](#meshdisconnect) | Disconnect | yes | `mesh_disconnect` |
+| [`mesh.connect_points`](#meshconnect_points) | Connect Points/Edges | yes | `mesh_connect_points` |
+| [`mesh.mirror`](#meshmirror) | Mirror | yes | `mesh_mirror` |
+| [`mesh.center_axis`](#meshcenter_axis) | Center Axis to | yes | `mesh_center_axis` |
 | [`param.set`](#paramset) | Set Parameter | yes | `param_set` |
 | [`key.record`](#keyrecord) | Record | yes | `key_record` |
 | [`key.delete_at_frame`](#keydelete_at_frame) | Delete Keys | yes | `key_delete_at_frame` |
@@ -268,6 +281,168 @@ Bevel. One undo step.
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
 Example: `forge cmd scene.forge mesh.bevel --args '{"polys":[0],"settings":{"offset":10.0}}'`
+
+### `mesh.subdivide`
+
+Subdivide. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.subdivide --args '{"polys":[0]}'`
+
+### `mesh.triangulate`
+
+Triangulate. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.triangulate --args '{"polys":[0]}'`
+
+### `mesh.untriangulate`
+
+Untriangulate. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.untriangulate --args '{"polys":[0]}'`
+
+### `mesh.reverse_normals`
+
+Reverse Normals. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.reverse_normals --args '{"polys":[0]}'`
+
+### `mesh.optimize`
+
+Optimize. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.optimize --args '{"polys":[0]}'`
+
+### `mesh.weld`
+
+Weld. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `edges` | array of integer \| array of integer (length 2) or null | no | Edges (edge mode): edge ids of the mesh, or point pairs [a, b]. |
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `points` | array of integer or null | no | Point indices (point mode). |
+| `polys` | array of integer or null | no | Polygon indices (polygon mode). When none of polys, edges, points is given the stored selection is used. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.weld --args '{"polys":[0]}'`
+
+### `mesh.melt`
+
+Melt. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.melt --args '{"polys":[0]}'`
+
+### `mesh.dissolve`
+
+Dissolve. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `edges` | array of integer \| array of integer (length 2) or null | no | Edges (edge mode): edge ids of the mesh, or point pairs [a, b]. |
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `points` | array of integer or null | no | Point indices (point mode). |
+| `polys` | array of integer or null | no | Polygon indices (polygon mode). When none of polys, edges, points is given the stored selection is used. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.dissolve --args '{"polys":[0]}'`
+
+### `mesh.split`
+
+Split. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.split --args '{"polys":[0]}'`
+
+### `mesh.disconnect`
+
+Disconnect. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.disconnect --args '{"polys":[0]}'`
+
+### `mesh.connect_points`
+
+Connect Points/Edges. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `edges` | array of integer \| array of integer (length 2) or null | no | Edges (edge mode): edge ids of the mesh, or point pairs [a, b]. |
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `points` | array of integer or null | no | Point indices (point mode). |
+| `polys` | array of integer or null | no | Polygon indices (polygon mode). When none of polys, edges, points is given the stored selection is used. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.connect_points --args '{"polys":[0]}'`
+
+### `mesh.mirror`
+
+Mirror. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.mirror --args '{"polys":[0]}'`
+
+### `mesh.center_axis`
+
+Center Axis to. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.center_axis --args '{"polys":[0]}'`
 
 
 ## `param`

@@ -68,7 +68,8 @@ fn defaults_are_the_observed_ones() {
     let i = Settings::defaults(&tool_desc("extrude_inner").unwrap());
     assert_eq!(i.float("maximum_angle_deg"), 89.0);
     assert_eq!(tool_desc("inset").unwrap().id, "extrude_inner");
-    assert_eq!(tool_descs().len(), 3);
+    // Extrude, Extrude Inner, Bevel and the 13 mesh commands of MODELING.md §4
+    assert_eq!(tool_descs().len(), 16);
 }
 
 #[test]

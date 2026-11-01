@@ -208,6 +208,10 @@ impl ToolDrag {
     /// active tool or target.
     pub fn begin(state: &EditorState, y: f64, height: f64) -> Option<ToolDrag> {
         let ts = state.tool.as_ref()?;
+        // mesh commands (docs/specs/MODELING.md §4) have no drag setting: Apply only
+        if ts.tool.drag_param().is_empty() {
+            return None;
+        }
         let (_, mesh, _) = tool_target(state)?;
         Some(ToolDrag {
             start_value: ts.values.float(ts.tool.drag_param()),

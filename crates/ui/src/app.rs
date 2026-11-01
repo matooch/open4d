@@ -449,7 +449,11 @@ impl Editor {
                 }
             });
             ui.menu_button("Mesh", |ui| {
-                for tool in crate::tools::tools() {
+                for (i, tool) in crate::tools::tools().into_iter().enumerate() {
+                    // the three interactive tools, then the mesh commands (MODELING.md §4)
+                    if i == 3 {
+                        ui.separator();
+                    }
                     if ui.button(tool.label()).clicked() {
                         crate::tools::activate_tool(&mut self.state, tool.id());
                         ui.close();
@@ -1164,6 +1168,31 @@ impl Editor {
                                         .changed()
                                     {
                                         edits.push((row.param.clone(), Value::Float(x)));
+                                    }
+                                }
+                                (Widget::Vec3Drag { .. }, Value::Vec3(v)) => {
+                                    let name = ui.label(&row.label);
+                                    let mut d = *v;
+                                    let changed = ui
+                                        .horizontal(|ui| {
+                                            let mut changed = false;
+                                            for (axis, c) in
+                                                ["X", "Y", "Z"].iter().zip(d.iter_mut())
+                                            {
+                                                changed |= ui
+                                                    .add(
+                                                        egui::DragValue::new(c)
+                                                            .speed(0.1)
+                                                            .prefix(format!("{axis} ")),
+                                                    )
+                                                    .labelled_by(name.id)
+                                                    .changed();
+                                            }
+                                            changed
+                                        })
+                                        .inner;
+                                    if changed {
+                                        edits.push((row.param.clone(), Value::Vec3(d)));
                                     }
                                 }
                                 (Widget::Combo { options }, Value::Enum(cur)) => {

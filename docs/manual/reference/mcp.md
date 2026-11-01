@@ -80,6 +80,19 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `mesh_extrude` | Extrude. Undoable editing command. Runs command `mesh.extrude`. |
 | `mesh_extrude_inner` | Extrude Inner. Undoable editing command. Runs command `mesh.extrude_inner`. |
 | `mesh_bevel` | Bevel. Undoable editing command. Runs command `mesh.bevel`. |
+| `mesh_subdivide` | Subdivide. Undoable editing command. Runs command `mesh.subdivide`. |
+| `mesh_triangulate` | Triangulate. Undoable editing command. Runs command `mesh.triangulate`. |
+| `mesh_untriangulate` | Untriangulate. Undoable editing command. Runs command `mesh.untriangulate`. |
+| `mesh_reverse_normals` | Reverse Normals. Undoable editing command. Runs command `mesh.reverse_normals`. |
+| `mesh_optimize` | Optimize. Undoable editing command. Runs command `mesh.optimize`. |
+| `mesh_weld` | Weld. Undoable editing command. Runs command `mesh.weld`. |
+| `mesh_melt` | Melt. Undoable editing command. Runs command `mesh.melt`. |
+| `mesh_dissolve` | Dissolve. Undoable editing command. Runs command `mesh.dissolve`. |
+| `mesh_split` | Split. Undoable editing command. Runs command `mesh.split`. |
+| `mesh_disconnect` | Disconnect. Undoable editing command. Runs command `mesh.disconnect`. |
+| `mesh_connect_points` | Connect Points/Edges. Undoable editing command. Runs command `mesh.connect_points`. |
+| `mesh_mirror` | Mirror. Undoable editing command. Runs command `mesh.mirror`. |
+| `mesh_center_axis` | Center Axis to. Undoable editing command. Runs command `mesh.center_axis`. |
 | `param_set` | Set Parameter. Undoable editing command. Runs command `param.set`. |
 | `key_record` | Record. Undoable editing command. Runs command `key.record`. |
 | `key_delete_at_frame` | Delete Keys. Undoable editing command. Runs command `key.delete_at_frame`. |

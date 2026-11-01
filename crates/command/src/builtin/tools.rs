@@ -56,6 +56,33 @@ fn edge_ids(mesh: &PolyMesh, items: &[Json]) -> Result<IndexSet, String> {
     Ok(out)
 }
 
+/// Center Axis (MODELING.md §4.11): the position moves by the object-space `c` (through the
+/// object's rotation and scale); direct children move back by `c` so nothing moves in the world.
+fn center_object(
+    tx: &mut forge_core::Tx,
+    node: NodeId,
+    c: glam::DVec3,
+) -> Result<(), forge_core::EditError> {
+    use forge_core::transform::POS;
+    let scene = tx.scene();
+    let t = scene
+        .local_transform(node)
+        .ok_or(forge_core::EditError::UnknownNode(node))?;
+    let pos = t.pos + t.matrix().transform_vector3(c);
+    let children: Vec<(NodeId, glam::DVec3)> = scene
+        .node(node)
+        .map(|n| n.children.clone())
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|ch| Some((ch, scene.local_transform(ch)?.pos - c)))
+        .collect();
+    tx.set_param(node, POS, Value::Vec3(pos.to_array()))?;
+    for (ch, p) in children {
+        tx.set_param(ch, POS, Value::Vec3(p.to_array()))?;
+    }
+    Ok(())
+}
+
 fn setting_schema(p: &forge_core::ParamDesc) -> Json {
     match &p.default {
         Value::Bool(b) => json!({"type": "boolean", "default": b}),
@@ -70,6 +97,13 @@ fn setting_schema(p: &forge_core::ParamDesc) -> Json {
             };
             json!({"type": "string", "enum": options, "default": e})
         }
+        Value::Vec3(v) => json!({
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3,
+            "default": v
+        }),
         _ => json!({}),
     }
 }
@@ -234,14 +268,53 @@ impl CommandHandler for ToolCommand {
         let (points, polys) = (mesh.points.len(), mesh.polys.len());
         let data = Arc::new(from_poly_mesh(&mesh));
         let sel = selected.clone();
+        // the two commands that do more than replace the mesh (MODELING.md §4)
+        let split = match self.desc.id {
+            "split" => {
+                Some(forge_modeling::split_copy(&base, &chosen).map_err(|e| fail(e.to_string()))?)
+            }
+            _ => None,
+        };
+        let moved = match self.desc.id {
+            "center_axis" => Some(
+                forge_modeling::center_axis(&base, &settings)
+                    .map_err(|e| fail(e.to_string()))?
+                    .1,
+            ),
+            _ => None,
+        };
+        let mut created = None;
         ctx.doc_mut().transact(self.desc.label, |tx| {
             tx.set_param(node, "mesh", Value::Mesh(data))?;
             tx.set_param(node, SELECTION_POLYS, Value::IndexList(sel))?;
             tx.set_param(node, SELECTION_POINTS, Value::IndexList(Vec::new()))?;
             tx.set_param(node, SELECTION_EDGES, Value::IndexList(Vec::new()))?;
+            if let Some(copy) = &split {
+                created = Some(forge_generators::spawn_split(tx, node, copy).map_err(
+                    |e| match e {
+                        forge_generators::EditableError::Edit(e) => e,
+                        _ => forge_core::EditError::UnknownNode(node),
+                    },
+                )?);
+            }
+            if let Some(c) = moved {
+                center_object(tx, node, c)?;
+            }
             Ok(())
         })?;
-        Ok(json!({"node": node.0, "points": points, "polys": polys, "selected": selected}))
+        if let Some(new) = created {
+            ctx.selection_mut().click(new);
+            ctx.retain_selection();
+        }
+        let mut result =
+            json!({"node": node.0, "points": points, "polys": polys, "selected": selected});
+        if let Some(new) = created {
+            result["created"] = json!(new.0);
+        }
+        if let Some(c) = moved {
+            result["center"] = json!([c.x, c.y, c.z]);
+        }
+        Ok(result)
     }
 
     fn undoable(&self) -> bool {
@@ -249,6 +322,10 @@ impl CommandHandler for ToolCommand {
     }
 
     fn sample_args(&self) -> Json {
-        json!({"polys": [0], "settings": {"offset": 10.0}})
+        if self.desc.params.iter().any(|p| p.id == "offset") {
+            json!({"polys": [0], "settings": {"offset": 10.0}})
+        } else {
+            json!({"polys": [0]})
+        }
     }
 }
