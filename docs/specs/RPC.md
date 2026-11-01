@@ -217,3 +217,62 @@ Claude Desktop config.
   `App`): tools work through the RPC client; a wrong token and a missing editor are
   `isError`.
 - Unit tests: name mapping and collisions, schema wrapping, bbox.
+
+## 9. Python client (`python/forge_py`, package `forge_py`) and `forge-rpc-serve`
+
+Source: our own design (A-automation.md, brief 017); the wire protocol is §1 to §4.
+Nothing here is **parity-pending**.
+
+A pure-Python package (standard library only: `socket`, `json`, `threading`; Python
+3.9 or newer) that drives a running editor, or `forge-rpc-serve`, over RPC. Nothing is
+embedded and nothing is imported from the editor.
+
+### 9.1 API
+- `forge_py.Client(port=None, token=None, *, host="127.0.0.1", timeout=60.0)`; connects
+  at construction. Port and token resolve as in §2 when not given (environment, then the
+  settings file, then port 7323). Only loopback hosts are accepted. Usable as a context
+  manager; `close()` is idempotent. Thread-safe (one request in flight at a time).
+- `call(method, params=None)` sends one request and returns `result`; the response `id`
+  is checked. Errors: `ForgeError` (base); `ConnectionFailed` (cannot connect, socket
+  closed, bad response line); `RpcError(code, message, data)` for a JSON-RPC error, with
+  the subclass `Unauthorized` for -32001.
+- Queries: `version()`, `commands()` (the `command.list` entries), `scene()`,
+  `node(id)`, `timeline()`, `eval_mesh(node, frame=None)` returning a `Mesh` (`node`,
+  `frame`, `points` as `[x, y, z]` lists, `polys`, `bbox()` as `(min, max)` or `None`).
+- `run(id, **args)` is `command.run`; it returns the command's `result`. Arguments whose
+  name is a Python keyword or clashes with `self` are passed with `run(id, {"from": 1})`
+  (a dict as the second positional argument is merged with the keywords).
+- Generated methods: on first use the client reads `command.list` and exposes each
+  command as a method whose name is the id with `.` replaced by `_` (`object.create` is
+  `client.object_create(type="forge.cube")`). Keyword arguments only. Before sending, the
+  client checks the command's `args_schema`: an unknown argument or a missing required one
+  is a `TypeError` naming the command (no request is made). Each method has a docstring
+  with the label, undoability and the argument names. A command whose mapped name equals
+  an explicit method is reachable only through `run`. `client.command_names()` lists the
+  mapped names; `dir(client)` includes them; an unknown attribute is `AttributeError`.
+- Frames are integers, angles degrees (§4).
+
+### 9.2 `forge-rpc-serve` (`crates/rpc`, binary)
+A headless server for scripts and tests: an in-process `App` behind `Server`, served on
+the main thread. `forge-rpc-serve [--port N] [--insecure-local] [scene-file]`; port 0 (the
+default) is any free port. The token comes as in §2 (`FORGE_RPC_TOKEN`). It prints one
+line `FORGE_RPC_PORT=<port>` to stdout when listening, and exits when its stdin reaches EOF
+(so a test run that dies leaves no server). Exit 2 for a bad argument or unreadable scene,
+1 if it cannot start.
+
+### 9.3 Tests (`python/forge_py/tests`, `python3 -m unittest`)
+Run against a real `forge-rpc-serve` started by the test module (binary from
+`$FORGE_RPC_SERVE`, else `target/{debug,release}/forge-rpc-serve`, else
+`cargo build -p forge-rpc --bin forge-rpc-serve`), port 0, random token. If python is not
+available the gate and CI skip with a message.
+- `version`, `commands` equals `command.list`; generated `object_create(type="forge.cube")`
+  then `scene()` and `node()` show the node; a param change is visible in `node()`;
+  `eval_mesh` of a cube has 8 points, 6 polys, a bbox, and `frame` is honoured;
+  `timeline()`.
+- Errors: wrong token is `Unauthorized`; a failing command and an unknown node are
+  `RpcError` -32000 and the client stays usable; unknown method -32601; `TypeError` for an
+  unknown or a missing argument without a request; `AttributeError` for an unknown name.
+- Connection refused is `ConnectionFailed`; `close()` twice; context manager.
+- Unit tests without a server: name mapping, schema checking, settings resolution
+  (environment beats the file, empty token is none), a fake socket server for a mismatched
+  response id and a non-JSON line.

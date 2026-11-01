@@ -1,6 +1,6 @@
 # 017 · Python client `forge-py`
 
-Status: ready · Area: A · Depends on: 014 · Observations: – · Touches: python/forge_py (new)
+Status: done · Area: A · Depends on: 014 · Observations: – · Touches: python/forge_py (new)
 
 ## Goal
 Python users and tools drive Forge3D over RPC with a small, pure-Python package. Nothing is embedded.
@@ -14,9 +14,9 @@ Python users and tools drive Forge3D over RPC with a small, pure-Python package.
 - CI: the Linux job runs a Python test that starts `forge-studio --headless --rpc` (or the in-process test server binary) and runs the client tests.
 
 ## Done when
-- [ ] README in the package with examples.
-- [ ] Tests pass in CI with the system Python 3.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] README in the package with examples.
+- [x] Tests pass in CI with the system Python 3.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Out of scope
 Embedding Python (v2).
@@ -29,9 +29,9 @@ Embedding Python (v2).
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: 29 Python `unittest` tests (21 against a real server, 8 server-free incl. a fake socket server); spec in RPC.md section 9. No parity involved (our own design), so no `UNSUPPORTED` / `KNOWN_MISMATCH`.
+- Rules derived: none parity-related. Client rules are in RPC.md 9.1 (generated `object_create(type=...)` methods from `command.list`, local `args_schema` check raising `TypeError`, `RpcError`/`Unauthorized`/`ConnectionFailed`, response id checked).
+- Deviations: (1) no headless server existed (`forge serve` is not implemented and `forge-studio` is not built here), so I added a small binary `forge-rpc-serve` in `crates/rpc` (RPC.md 9.2), which the brief allows as the "in-process test server binary"; it is the server the tests, gate and CI use. (2) Package layout is `python/forge_py/forge_py/` (flat, hatchling `packages = ["forge_py"]`). (3) Extra explicit methods beyond the brief: `version`, `commands`, `timeline`, `call`; `eval_mesh` returns a `Mesh` object with `bbox()`.
+- Files changed: `python/forge_py/**` (new), `crates/rpc/src/bin/forge-rpc-serve.rs` (new), `docs/specs/RPC.md`, `scripts/gate.sh` (Python step, skipped with a message without python3), `.github/workflows/ci.yml` (Linux `python-client` job), `.gitignore`, this brief, BACKLOG.md.
+- Open questions: the user-facing `forge serve` (A-automation scope) could replace `forge-rpc-serve` later; the tests honour `$FORGE_RPC_SERVE`.
+- Gate output: see the commit message / final report.

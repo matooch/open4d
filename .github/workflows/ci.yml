@@ -17,6 +17,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo run --quiet -p forge-cleanroom -- .
 
+  # Python client (brief 017): runs against a real forge-rpc-serve; the system python3.
+  python-client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p forge-rpc --bin forge-rpc-serve
+      - run: python3 -m unittest discover -t . -s tests -v
+        working-directory: python/forge_py
+
   # fmt + clippy + tests on every OS.
   #
   # GPU policy (FORGE_REQUIRE_GPU, read by crates/viewport/tests/render.rs):

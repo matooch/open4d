@@ -14,7 +14,7 @@ implementers can avoid collisions.
 | 014 | [JSON-RPC server in the editor, plus a Rust client](../agents/tasks/014-json-rpc-server-in-the-editor-plus-a-rust-client.md) | A | 012 | done | rpc (new), ui, app |
 | 015 | [MCP server `forge-mcp`](../agents/tasks/015-mcp-server-forge-mcp.md) | A | 014 | done | mcp (new) |
 | 016 | [Rhai scripting: engine, bindings, `forge run`, Script Manager panel](../agents/tasks/016-rhai-scripting-engine-bindings-forge-run-script-manager-pane.md) | A | 012 | done | script (new), apps/forge, ui |
-| 017 | [Python client `forge-py`](../agents/tasks/017-python-client-forge-py.md) | A | 014 | ready | python/forge_py (new) |
+| 017 | [Python client `forge-py`](../agents/tasks/017-python-client-forge-py.md) | A | 014 | done | python/forge_py (new) |
 | 018 | [RPC notifications, viewport screenshot, progress for long jobs](../agents/tasks/018-rpc-notifications-viewport-screenshot-progress-for-long-jobs.md) | A | 014 | ready | rpc, ui |
 | 019 | [Automation docs, generated command reference, S1/S2 acceptance tests](../agents/tasks/019-automation-docs-generated-command-reference-s1-s2-acceptance.md) | A | 013, 015, 016 | ready | docs, apps/forge |
 | 020 | [Tool framework + Extrude and Extrude Inner](../agents/tasks/020-tool-framework-extrude-inset.md) | B | 011 | ready | modeling (new), ui, geometry |
