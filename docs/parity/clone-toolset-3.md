@@ -39,6 +39,16 @@ Unblocks: E/067, 076, 077, 078.
 | cloner-f/honey-var | Honeycomb, both variations 50 %, seed 1 | samples |
 | cloner-f/honey-odd-even | Honeycomb, width count 5, height count 4 | samples |
 | cloner-f/reset-coords-off | Linear, count 3, the child cube moved to (0, 50, 0) and rotated H 30°, Reset Coordinates off | samples + mesh |
+| effector-f/space-node | follow-up from brief 068: Linear cloner (count 3, P (0, 0, 100)), Step Rotation H 90°; Plain effector P (50, 0, 0), space Node; then `space-object` and `space-effector` (effector rotated H 90°) | samples |
+| effector-f/absolute-rs | Plain, transform mode Absolute, R (45, 0, 0), S 2 (uniform) | samples |
+| effector-f/remap-minmax | Plain, mode Remap, P (0, 100, 0), Minimum 20 %, Maximum 80 %, with a Linear field | samples |
+| effector-f/abs-scale | Plain, Scale 2 with Absolute Scale on; and `abs-scale-off` | samples |
+| effector-f/color-alpha | Plain, Custom Color (1, 0, 0), Strength 50 %, Use Alpha/Strength on; and `-off` | samples |
+| effector-f/blend-add | Plain, Custom Color (0.5, 0, 0), Blending Mode Add over a cloner colour (0, 0.5, 0); and `blend-multiply` | samples |
+| effector-f/visibility | Plain, Visibility on, with a Linear field across the clones | samples |
+| effector-f/order | two Plain effectors: A rotates R (90, 0, 0), B moves P (100, 0, 0); in order A, B and then `order-swapped` | samples |
+| effector-f/per-effector-50 | Plain P (0, 100, 0), the cloner's strength for that effector set to 50 % | samples |
+| effector-f/linear-plain-field | re-record O8 `linear-plain-field` with the field's full parameter table and Color in `case.toml` | samples |
 
 ## Notes
 TODO
