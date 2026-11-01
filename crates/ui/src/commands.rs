@@ -81,6 +81,14 @@ impl CommandContext for EditorState {
         self.app.set_edit_mode(mode);
     }
 
+    fn component_settings(&self) -> &forge_modeling::ComponentSettings {
+        self.app.component_settings()
+    }
+
+    fn component_settings_mut(&mut self) -> &mut forge_modeling::ComponentSettings {
+        self.app.component_settings_mut()
+    }
+
     fn timeline(&self) -> &Timeline {
         self.app.timeline()
     }

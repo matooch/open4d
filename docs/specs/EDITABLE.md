@@ -344,3 +344,105 @@ components is out of scope.
 Make Editable and Current State to Object also copy the source's `transform.*` keyframe
 tracks to the new polygon object (ANIM.md §2.8); other tracks are dropped. The mesh is
 baked from the stored parameter values (parity-pending).
+
+## 5. Soft selection and symmetry (brief 026; `crates/modeling/src/soft.rs`)
+
+Sources: own design (brief 026, roadmap area B). GUI session G3 item 6 (where soft selection
+lives and its modes) is unanswered, so **every rule below is parity-pending**. The maths is
+pure and lives in `forge-modeling` (`ComponentPlan`, `SoftSelection`, `Symmetry`); the
+editor keeps the current values in `ComponentSettings` (`App::component_settings`, not saved,
+not undoable); `forge-ui` and the `mesh.transform` command both go through the same plan.
+No falloff code is shared with `forge-fields` (that crate is an empty stub).
+
+### 5.1 Settings
+Editor settings (`edit.soft_selection`, `edit.symmetry`; the Components bar in the studio):
+
+| Id | Kind | Default | Range / values |
+|---|---|---|---|
+| soft `enabled` | bool | false | |
+| soft `radius` | float | 100 | 0.001 .. 1e9 (object-space units) |
+| soft `falloff` | enum | `linear` | `linear`, `dome`, `bell`, `spline` |
+| soft `distance` | enum | `volume` | `volume`, `surface` |
+| soft `curve` | float list | `[1, 0.896, 0.5, 0.104, 0]` | 2..64 values in 0..1 (used by `spline`) |
+| symmetry `enabled` | bool | false | |
+| symmetry `axis` | enum | `x` | `x`, `y`, `z`: the plane is perpendicular to that object-space axis |
+| symmetry `offset` | float | 0 | plane position along the axis |
+| symmetry `tolerance` | float | 0.1 | 0 .. 1e6; how far a mirror image may be from a point |
+
+### 5.2 Weights (soft selection)
+Per point, `w` in 0..1 is the blend factor of the transform. Selected points (the affected
+points of §3.2) have `w = 1`. For any other point, `d` is its distance to the selection and
+`t = d / radius`; `w = 0` for `t >= 1`, else:
+
+| Falloff | `w(t)` |
+|---|---|
+| linear | `1 - t` |
+| dome | `sqrt(1 - t^2)` (stays high, drops steeply at the rim) |
+| bell | `0.5 (1 + cos(pi t))` (smooth S shape, zero slope at both ends) |
+| spline | the user curve: values `c_0..c_{n-1}` at `t_i = i/(n-1)`, Catmull-Rom between samples, clamped to 0..1 |
+
+Distance: **volume** is the straight-line distance to the nearest selected point (object
+space); **surface** is the shortest path along mesh edges (Dijkstra, edge lengths), so
+points on another sheet or across a gap are `w = 0`. Unreachable points have `w = 0`.
+With soft selection off, `w` is 1 for selected points and 0 elsewhere (the behaviour of §3.3).
+
+### 5.3 Applying a matrix
+`p' = p + w (m p - p)`: the point moves by the fraction `w` of its displacement under `m`
+(rotations and scales blend positions linearly, not the matrix). Selected points get the
+full transform, so the result equals `transform_points` when soft selection is off.
+
+### 5.4 Symmetry
+The plane is `{x : x[axis] = offset}` in object space. The **partner** of point `p` is the
+point nearest to its mirror image `R p` within `tolerance` (ties: lowest index); a point
+on the plane is its own partner; `None` if there is none. Let `d_a(p) = w(p)(m p - p)` be the
+displacement without symmetry (weights from the selected points only) and `R_lin` the linear
+reflection. The displacement used is:
+- no partner: `d_a(p)`;
+- own partner (on the plane): `(d_a + R_lin d_a) / 2`, which drops the part of the move
+  normal to the plane, so the point stays on the plane;
+- partner `q != p`: `d_a(p)` if `w(p) > w(q)` or the weights are equal (within 1e-12) and
+  `p < q`; else `R_lin d_a(q)`. The point with the larger weight drives its mirror partner.
+
+Selecting one side therefore moves the other side by the mirror image; selecting both sides
+moves the lower-index point and mirrors it. A symmetric mesh stays symmetric (to the
+tolerance) under any move, rotation or scale.
+Scope: symmetry applies to component transforms (drag and `mesh.transform`). The modeling
+tools (extrude, bevel, ...) are **not** mirrored; the brief names only transforms
+(deviation noted in the brief report; Mirror and Center Axis of MODELING.md §4 stay the
+tools for mirroring geometry).
+
+### 5.5 Commands (COMMANDS.md §6)
+- `edit.soft_selection {enabled?, radius?, falloff?, distance?, curve?}` and
+  `edit.symmetry {enabled?, axis?, offset?, tolerance?}` change the editor settings (omitted
+  keys keep their value; numbers outside the range are an error); both return the
+  resulting settings and are not undoable.
+- `mesh.transform {node?, points?, move?, rotate?, scale?, pivot?, soft?, symmetry?}`:
+  transforms components of a polygon object in object space as one undo step
+  ("Move", "Rotate", "Scale" or "Transform"). `points` lists point ids; without it the
+  stored selection of the current edit mode is used (points, points of the edges, points of
+  the polygons; Model mode is an error). `move` `[x,y,z]`; `rotate` `{axis:[x,y,z], angle}`
+  in degrees; `scale` `[x,y,z]` or one number; `pivot` defaults to the mean of the selected
+  points. The matrix is `T(move) T(pivot) R S T(-pivot)`. `soft` and `symmetry` override the
+  editor settings for this call: `false` turns the feature off, `true` turns it on with
+  the editor values, an object turns it on with those keys over the editor values. The
+  stored selection sets are unchanged. An empty or out-of-range point list is an error.
+- The result is `{node, moved, soft, symmetry}` (`moved`: number of points that changed).
+
+### 5.6 Gizmo drags
+`ComponentDrag::begin` snapshots the editor settings and builds the plan once (weights and
+partners depend only on the start mesh); each frame writes `plan.apply(start, m)`. With both
+features off the old `transform_points` path runs. The Components bar in the header has
+Soft (checkbox, radius, falloff, distance) and Sym (checkbox, axis) controls.
+
+### 5.7 Checks
+- `crates/modeling/tests/soft.rs`: falloff values at t = 0, 0.25, 0.5, 1 for each shape;
+  a move of one point of a 11-point row (spacing 10) with radius 100 moves the neighbours
+  by exactly the falloff fraction; surface distance does not cross a gap that volume does;
+  spline curve interpolation and validation; partners within tolerance; symmetric
+  moves/rotations/scales keep a symmetric mesh symmetric; one-sided selection moves the
+  mirror side; on-plane points stay on the plane; soft and symmetry combined.
+- `crates/app/tests/soft_commands.rs`: the two settings commands, `mesh.transform` on a
+  subdivided plane with radius 100, symmetry on a cube, overrides, one undo step, errors
+  change nothing, schemas.
+- `crates/ui/tests/component_edit.rs`: a drag with soft selection and symmetry active.
+

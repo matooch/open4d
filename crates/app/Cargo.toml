@@ -10,6 +10,7 @@ forge-command = { path = "../command" }
 forge-core = { path = "../core" }
 forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }
+forge-modeling = { path = "../modeling" }
 forge-io = { path = "../io" }
 forge-modifiers = { path = "../modifiers" }
 glam = "0.34"

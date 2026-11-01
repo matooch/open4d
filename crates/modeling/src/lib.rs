@@ -10,6 +10,7 @@ mod merge;
 mod points;
 mod settings;
 mod slide;
+mod soft;
 mod surface;
 mod util;
 
@@ -31,6 +32,10 @@ pub use points::{
 };
 pub use settings::{Settings, SettingsError};
 pub use slide::slide;
+pub use soft::{
+    Axis, CURVE_LEN, ComponentPlan, ComponentSettings, Distance, Falloff, SoftSelection, Symmetry,
+    distances, partners, transform_components, weights,
+};
 pub use surface::{optimize, reverse_normals, subdivide, triangulate, untriangulate};
 
 /// The pure function of a tool (docs/specs/MODELING.md §0). It reads the part of the

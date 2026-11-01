@@ -7,6 +7,7 @@ use forge_core::transform::rotation_part;
 use forge_core::{Document, EditError, MeshData, NodeId, Scene, Value};
 use forge_generators::{POLYGON, to_poly_mesh};
 use forge_geometry::selection::{IndexSet, Selection, edges_to_points, polys_to_points};
+use forge_modeling::ComponentPlan;
 use forge_viewport::gizmo::DragDelta;
 use glam::{DMat3, DMat4, DVec3};
 
@@ -51,6 +52,16 @@ pub fn transform_points(mesh: &MeshData, points: &IndexSet, m: DMat4) -> MeshDat
         if let Some(p) = out.points.get_mut(i as usize) {
             *p = m.transform_point3(DVec3::from_array(*p)).to_array();
         }
+    }
+    out
+}
+
+/// `mesh` with `m` applied through a soft selection / symmetry `plan` (EDITABLE.md §5.3).
+pub fn transform_points_planned(mesh: &MeshData, plan: &ComponentPlan, m: DMat4) -> MeshData {
+    let start: Vec<DVec3> = mesh.points.iter().map(|p| DVec3::from_array(*p)).collect();
+    let mut out = mesh.clone();
+    for (slot, p) in out.points.iter_mut().zip(plan.apply(&start, m)) {
+        *slot = p.to_array();
     }
     out
 }
@@ -116,17 +127,27 @@ pub struct ComponentDrag {
     start: Arc<MeshData>,
     points: IndexSet,
     pivot: DVec3,
+    /// Soft selection weights and mirror partners, fixed at the start; `None` when both
+    /// features are off (the plain §3.3 path).
+    plan: Option<ComponentPlan>,
 }
 
 impl ComponentDrag {
     /// Starts a drag on the current selection; `None` if there is nothing to move.
     pub fn begin(s: &EditorState) -> Option<ComponentDrag> {
         let (id, start, points, pivot) = edit_set(s)?;
+        let settings = &s.app.component_settings;
+        let plan = (settings.soft.enabled || settings.symmetry.enabled).then(|| {
+            let poly = to_poly_mesh(&start);
+            let selected: Vec<u32> = points.iter().collect();
+            ComponentPlan::new(&poly, &selected, settings)
+        });
         Some(ComponentDrag {
             id,
             start,
             points,
             pivot,
+            plan,
         })
     }
 
@@ -142,7 +163,10 @@ impl ComponentDrag {
             .world_matrix(self.id)
             .ok_or(EditError::UnknownNode(self.id))?;
         let m = local_matrix(&world, self.pivot, delta);
-        let mesh = Arc::new(transform_points(&self.start, &self.points, m));
+        let mesh = Arc::new(match &self.plan {
+            Some(plan) => transform_points_planned(&self.start, plan, m),
+            None => transform_points(&self.start, &self.points, m),
+        });
         let label = match delta {
             DragDelta::Translate(_) => "Move",
             DragDelta::Rotate { .. } => "Rotate",

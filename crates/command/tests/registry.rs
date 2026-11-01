@@ -19,6 +19,7 @@ struct Headless {
     autokey: bool,
     status: String,
     path: Option<String>,
+    component_settings: forge_modeling::ComponentSettings,
 }
 
 impl Headless {
@@ -39,6 +40,7 @@ impl Headless {
             autokey: false,
             status: String::new(),
             path: None,
+            component_settings: Default::default(),
         }
     }
 }
@@ -61,6 +63,12 @@ impl CommandContext for Headless {
     }
     fn set_edit_mode(&mut self, mode: ModeArg) {
         self.mode = mode;
+    }
+    fn component_settings(&self) -> &forge_modeling::ComponentSettings {
+        &self.component_settings
+    }
+    fn component_settings_mut(&mut self) -> &mut forge_modeling::ComponentSettings {
+        &mut self.component_settings
     }
     fn timeline(&self) -> &Timeline {
         &self.timeline

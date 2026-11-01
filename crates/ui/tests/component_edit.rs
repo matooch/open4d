@@ -425,3 +425,65 @@ fn a_bend_child_deforms_the_edited_mesh() {
         }
     }
 }
+
+#[test]
+fn a_drag_with_soft_selection_and_symmetry_uses_the_editor_settings() {
+    let (mut st, id) = setup(EditMode::Points);
+    let m = stored(&st, id);
+    let a = (0..8)
+        .find(|i| {
+            let p = pt(&m, *i);
+            p.x > 0.0 && p.y > 0.0 && p.z > 0.0
+        })
+        .unwrap();
+    let mirror = (0..8)
+        .find(|i| pt(&m, *i) == DVec3::new(-pt(&m, a).x, pt(&m, a).y, pt(&m, a).z))
+        .unwrap();
+    select(&mut st, id, SELECTION_POINTS, &[a as u32]);
+    let delta = DragDelta::Translate(DVec3::new(10.0, 20.0, 0.0));
+
+    // both off: only the selected point (the plain path)
+    let drag = ComponentDrag::begin(&st).unwrap();
+    drag.apply(&mut st.doc, delta, Gesture::Commit).unwrap();
+    assert_only_moved(&m, &stored(&st, id), &[a as u32]);
+    assert!(st.doc.undo());
+
+    // symmetry: the mirror point follows; frames are computed from the start mesh
+    execute(
+        &mut st,
+        "edit.symmetry",
+        json!({"enabled": true, "axis": "x"}),
+    )
+    .unwrap();
+    let drag = ComponentDrag::begin(&st).unwrap();
+    for _ in 0..3 {
+        drag.apply(&mut st.doc, delta, Gesture::Drag(9)).unwrap();
+    }
+    let out = stored(&st, id);
+    assert_only_moved(&m, &out, &[a as u32, mirror as u32]);
+    close(pt(&out, a), pt(&m, a) + DVec3::new(10.0, 20.0, 0.0));
+    close(
+        pt(&out, mirror),
+        pt(&m, mirror) + DVec3::new(-10.0, 20.0, 0.0),
+    );
+    assert!(st.doc.undo());
+    assert_eq!(*stored(&st, id), *m);
+
+    // soft selection, radius 300 and linear falloff: edge neighbours (200 away) move by 1/3
+    execute(&mut st, "edit.symmetry", json!({"enabled": false})).unwrap();
+    execute(
+        &mut st,
+        "edit.soft_selection",
+        json!({"enabled": true, "radius": 300.0, "falloff": "linear"}),
+    )
+    .unwrap();
+    let drag = ComponentDrag::begin(&st).unwrap();
+    drag.apply(&mut st.doc, delta, Gesture::Commit).unwrap();
+    let out = stored(&st, id);
+    for i in 0..8 {
+        let d = pt(&m, i).distance(pt(&m, a));
+        let w = (1.0 - d / 300.0).max(0.0);
+        close(pt(&out, i), pt(&m, i) + w * DVec3::new(10.0, 20.0, 0.0));
+    }
+    assert!(st.doc.undo());
+}

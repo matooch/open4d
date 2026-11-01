@@ -104,6 +104,9 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `mesh_close_hole` | Close Polygon Hole. Undoable editing command. Runs command `mesh.close_hole`. |
 | `mesh_stitch` | Stitch and Sew. Undoable editing command. Runs command `mesh.stitch`. |
 | `mesh_pen` | Polygon Pen. Undoable editing command. Runs command `mesh.pen`. |
+| `mesh_transform` | Transform Components. Undoable editing command. Runs command `mesh.transform`. |
+| `edit_soft_selection` | Soft Selection. Not an undoable edit. Runs command `edit.soft_selection`. |
+| `edit_symmetry` | Symmetry. Not an undoable edit. Runs command `edit.symmetry`. |
 | `param_set` | Set Parameter. Undoable editing command. Runs command `param.set`. |
 | `key_record` | Record. Undoable editing command. Runs command `key.record`. |
 | `key_delete_at_frame` | Delete Keys. Undoable editing command. Runs command `key.delete_at_frame`. |

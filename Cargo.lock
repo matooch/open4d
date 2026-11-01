@@ -1269,6 +1269,7 @@ dependencies = [
  "forge-generators",
  "forge-geometry",
  "forge-io",
+ "forge-modeling",
  "forge-modifiers",
  "forge-parity-harness",
  "glam",

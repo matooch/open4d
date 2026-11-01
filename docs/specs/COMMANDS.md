@@ -115,6 +115,9 @@ touch history.
 | `mesh.close_hole` | `node?`, `edge` (id or point pair of a border edge) (MODELING.md §6.3) | `{node, points, polys, new_polys, new_points}` | yes |
 | `mesh.stitch` | `node?`, `points: [[a, b]]` or `edges: [[e, e]]`, `position?` middle\|first (MODELING.md §6.4) | `{node, points, polys, merged}` | yes |
 | `mesh.pen` | `node?`, `corners: [{point} \| {pos}]` (MODELING.md §6.5) | `{node, points, polys, new_polys, new_points}` | yes |
+| `mesh.transform` | `node?`, `points?`, `move?`, `rotate? {axis, angle}`, `scale?`, `pivot?`, `soft?`, `symmetry?` (EDITABLE.md §5.5) | `{node, moved, soft, symmetry}` | yes |
+| `edit.soft_selection` | `enabled?`, `radius?`, `falloff?`, `distance?`, `curve?` (EDITABLE.md §5.1) | the soft selection settings | no |
+| `edit.symmetry` | `enabled?`, `axis?`, `offset?`, `tolerance?` (EDITABLE.md §5.1) | the symmetry settings | no |
 | `select.mode` | `mode` model, points, edges, polys | null | no |
 | `select.all` `select.none` `select.invert` `select.grow` `select.shrink` `select.connected` | - | null | yes |
 | `select.convert` | `to` points, edges, polys; `mode?` strict, tolerant (EDITABLE.md §2.8) | null | yes |

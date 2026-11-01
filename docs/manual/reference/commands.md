@@ -2,7 +2,7 @@
 
 # Command reference
 
-62 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+65 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -51,6 +51,9 @@
 | [`mesh.close_hole`](#meshclose_hole) | Close Polygon Hole | yes | `mesh_close_hole` |
 | [`mesh.stitch`](#meshstitch) | Stitch and Sew | yes | `mesh_stitch` |
 | [`mesh.pen`](#meshpen) | Polygon Pen | yes | `mesh_pen` |
+| [`mesh.transform`](#meshtransform) | Transform Components | yes | `mesh_transform` |
+| [`edit.soft_selection`](#editsoft_selection) | Soft Selection | no | `edit_soft_selection` |
+| [`edit.symmetry`](#editsymmetry) | Symmetry | no | `edit_symmetry` |
 | [`param.set`](#paramset) | Set Parameter | yes | `param_set` |
 | [`key.record`](#keyrecord) | Record | yes | `key_record` |
 | [`key.delete_at_frame`](#keydelete_at_frame) | Delete Keys | yes | `key_delete_at_frame` |
@@ -131,6 +134,33 @@ Redo. Not an undoable edit.
 No arguments.
 
 Example: `forge cmd scene.forge edit.redo --args '{}'`
+
+### `edit.soft_selection`
+
+Soft Selection. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `curve` | array of number | no |  |
+| `distance` | `"volume"` \| `"surface"` | no |  |
+| `enabled` | boolean | no |  |
+| `falloff` | `"linear"` \| `"dome"` \| `"bell"` \| `"spline"` | no |  |
+| `radius` | number | no |  |
+
+Example: `forge cmd scene.forge edit.soft_selection --args '{"enabled":true,"falloff":"bell","radius":100.0}'`
+
+### `edit.symmetry`
+
+Symmetry. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `axis` | `"x"` \| `"y"` \| `"z"` | no |  |
+| `enabled` | boolean | no |  |
+| `offset` | number | no |  |
+| `tolerance` | number | no |  |
+
+Example: `forge cmd scene.forge edit.symmetry --args '{"axis":"x","enabled":true}'`
 
 
 ## `view`
@@ -589,6 +619,23 @@ Polygon Pen. One undo step.
 | `node` | integer or null | no | Polygon object; the active node when absent. |
 
 Example: `forge cmd scene.forge mesh.pen --args '{"corners":[{"pos":[0.0,0.0,0.0]},{"pos":[1.0,0.0,0.0]},{"pos":[0.0,1.0,0.0]}]}'`
+
+### `mesh.transform`
+
+Transform Components. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `move` | array of number (length 3) | no | Translation in object space. |
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `pivot` | array of number (length 3) | no | Pivot, object space; the mean of the selected points when absent. |
+| `points` | array of integer or null | no | Point ids; the stored selection of the current mode (points, points of the edges or of the polygons) when absent. |
+| `rotate` | object | no | Rotation about the pivot, angle in degrees. |
+| `scale` | number \| array of number (length 3) | no | Scale about the pivot: one number or [x, y, z]. |
+| `soft` | boolean \| object | no | false: off, true: on with the editor settings, object: on with these values over the editor settings. Absent: the editor setting. |
+| `symmetry` | boolean \| object | no | As soft, for the symmetry plane. |
+
+Example: `forge cmd scene.forge mesh.transform --args '{"move":[0.0,10.0,0.0],"points":[0],"soft":{"falloff":"bell","radius":100.0},"symmetry":{"axis":"x"}}'`
 
 
 ## `param`

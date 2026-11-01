@@ -675,6 +675,45 @@ impl Editor {
         }
     }
 
+    /// Soft selection and symmetry controls of component modes (EDITABLE.md §5.6).
+    fn component_bar(&mut self, ui: &mut Ui) {
+        use forge_modeling::{Axis, Distance, Falloff};
+        let st = &mut self.state.app.component_settings;
+        ui.checkbox(&mut st.soft.enabled, "Soft");
+        if st.soft.enabled {
+            ui.add(
+                egui::DragValue::new(&mut st.soft.radius)
+                    .range(0.001..=1e9)
+                    .speed(1.0)
+                    .prefix("R "),
+            );
+            egui::ComboBox::from_id_salt("soft_falloff")
+                .selected_text(st.soft.falloff.id())
+                .show_ui(ui, |ui| {
+                    for f in Falloff::ALL {
+                        ui.selectable_value(&mut st.soft.falloff, f, f.id());
+                    }
+                });
+            egui::ComboBox::from_id_salt("soft_distance")
+                .selected_text(st.soft.distance.id())
+                .show_ui(ui, |ui| {
+                    for d in Distance::ALL {
+                        ui.selectable_value(&mut st.soft.distance, d, d.id());
+                    }
+                });
+        }
+        ui.checkbox(&mut st.symmetry.enabled, "Sym");
+        if st.symmetry.enabled {
+            egui::ComboBox::from_id_salt("sym_axis")
+                .selected_text(st.symmetry.axis.id())
+                .show_ui(ui, |ui| {
+                    for a in Axis::ALL {
+                        ui.selectable_value(&mut st.symmetry.axis, a, a.id());
+                    }
+                });
+        }
+    }
+
     fn viewport_ui(&mut self, ui: &mut Ui, rs: Option<&egui_wgpu::RenderState>) {
         // header: what a click selects (EDITABLE.md §2.6)
         ui.horizontal(|ui| {
@@ -689,6 +728,10 @@ impl Editor {
                         json!({"mode": forge_command::ModeArg::from(mode)}),
                     ));
                 }
+            }
+            if self.state.mode != EditMode::Model {
+                ui.separator();
+                self.component_bar(ui);
             }
         });
         let rect = ui.available_rect_before_wrap();

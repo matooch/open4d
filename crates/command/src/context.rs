@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use forge_core::{Document, NodeId, Scene};
+use forge_modeling::ComponentSettings;
 
 use crate::state::{ModeArg, NodeSelection, SelectExtra, SelectOp, ShadingMode};
 use crate::timeline::Timeline;
@@ -14,6 +15,9 @@ pub trait CommandContext {
     fn selection_mut(&mut self) -> &mut NodeSelection;
     fn edit_mode(&self) -> ModeArg;
     fn set_edit_mode(&mut self, mode: ModeArg);
+    /// Soft selection and symmetry for component transforms (EDITABLE.md §5).
+    fn component_settings(&self) -> &ComponentSettings;
+    fn component_settings_mut(&mut self) -> &mut ComponentSettings;
     fn timeline(&self) -> &Timeline;
     fn timeline_mut(&mut self) -> &mut Timeline;
     fn autokey(&self) -> bool;

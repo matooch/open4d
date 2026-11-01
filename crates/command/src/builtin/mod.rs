@@ -8,6 +8,7 @@ use crate::error::CommandError;
 use crate::registry::{CommandRegistry, CommandSpec, NoArgs};
 
 mod building;
+mod components;
 mod cutting;
 mod file;
 mod mesh;
@@ -23,6 +24,7 @@ pub fn register_editor_commands(r: &mut CommandRegistry) -> Result<(), CommandEr
     tools::register(r)?;
     cutting::register(r)?;
     building::register(r)?;
+    components::register(r)?;
     param::register(r)?;
     timeline::register(r)?;
     file::register(r)?;

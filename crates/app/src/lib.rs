@@ -62,6 +62,8 @@ pub struct App {
     pub selection: NodeSelection,
     /// What viewport clicks select (docs/specs/EDITABLE.md §2.2). Not saved, not undoable.
     pub mode: EditMode,
+    /// Soft selection and symmetry of component transforms (EDITABLE.md §5). Not saved.
+    pub component_settings: forge_modeling::ComponentSettings,
     /// Current frame and playback; fps and range are scene settings.
     pub timeline: Timeline,
     /// Autokey: edits of animatable parameters write keys (docs/specs/ANIM.md §2.4).
@@ -95,6 +97,7 @@ impl App {
             commands,
             selection: NodeSelection::default(),
             mode: EditMode::default(),
+            component_settings: Default::default(),
             timeline: Timeline::default(),
             autokey: false,
             eval: Evaluated::default(),
@@ -241,6 +244,14 @@ impl CommandContext for App {
 
     fn set_edit_mode(&mut self, mode: ModeArg) {
         self.mode = mode.into();
+    }
+
+    fn component_settings(&self) -> &forge_modeling::ComponentSettings {
+        &self.component_settings
+    }
+
+    fn component_settings_mut(&mut self) -> &mut forge_modeling::ComponentSettings {
+        &mut self.component_settings
     }
 
     fn timeline(&self) -> &Timeline {
