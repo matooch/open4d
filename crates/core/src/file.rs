@@ -444,10 +444,32 @@ fn relativize(path: &str, base: &Path) -> Option<String> {
 
 fn resolve(rel: &str, base: &Path) -> Option<String> {
     let rel = Path::new(rel);
-    if rel.is_absolute() || !base.is_absolute() {
+    // `has_root` also catches drive-less rooted paths such as `/abs.png` on Windows.
+    if rel.is_absolute() || rel.has_root() || !base.is_absolute() {
         return None;
     }
-    Some(normalize(&base.join(rel)).to_string_lossy().into_owned())
+    Some(to_slash(&normalize(&base.join(rel))))
+}
+
+/// A path with `/` separators on every OS (Windows accepts them), so stored and resolved
+/// paths compare equal across platforms. A Windows prefix such as `C:` is kept.
+fn to_slash(path: &Path) -> String {
+    use std::path::Component;
+    let mut prefix = String::new();
+    let mut rooted = false;
+    let mut parts = Vec::new();
+    for c in path.components() {
+        match c {
+            Component::Prefix(p) => prefix = p.as_os_str().to_string_lossy().into_owned(),
+            Component::RootDir => rooted = true,
+            other => parts.push(other.as_os_str().to_string_lossy().into_owned()),
+        }
+    }
+    format!(
+        "{prefix}{}{}",
+        if rooted { "/" } else { "" },
+        parts.join("/")
+    )
 }
 
 // --- chunks ---
@@ -790,12 +812,25 @@ mod tests {
 
     #[test]
     fn relative_paths_are_lexical() {
-        let b = Path::new("/a/b");
-        assert_eq!(relativize("/a/b/c/d.png", b).as_deref(), Some("c/d.png"));
-        assert_eq!(relativize("/a/x.png", b).as_deref(), Some("../x.png"));
-        assert_eq!(relativize("/a/b", b).as_deref(), Some("."));
+        // An absolute path needs a drive on Windows.
+        let abs = |p: &str| {
+            if cfg!(windows) {
+                format!("C:{p}")
+            } else {
+                p.to_string()
+            }
+        };
+        let base = abs("/a/b");
+        let b = Path::new(&base);
+        assert_eq!(
+            relativize(&abs("/a/b/c/d.png"), b).as_deref(),
+            Some("c/d.png")
+        );
+        assert_eq!(relativize(&abs("/a/x.png"), b).as_deref(), Some("../x.png"));
+        assert_eq!(relativize(&abs("/a/b"), b).as_deref(), Some("."));
         assert_eq!(relativize("rel.png", b), None);
-        assert_eq!(resolve("../x.png", b).as_deref(), Some("/a/x.png"));
+        assert_eq!(resolve("../x.png", b), Some(abs("/a/x.png")));
         assert_eq!(resolve("/abs.png", b), None);
+        assert_eq!(resolve(&abs("/abs.png"), b), None);
     }
 }

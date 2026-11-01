@@ -422,13 +422,22 @@ fn hidden_object_params_of_brief_149_are_filled_for_old_files() {
 
 // --- external references ---
 
+/// An absolute path on this OS: Windows needs a drive prefix.
+fn abs(p: &str) -> String {
+    if cfg!(windows) {
+        format!("C:{p}")
+    } else {
+        p.to_string()
+    }
+}
+
 fn tex_scene(path: &str) -> (forge_core::Scene, NodeId) {
     let mut doc = Document::new(registry());
     let id = doc
         .transact("t", |tx| {
             let id = tx.create("test.tex", None, None)?;
             tx.set_param(id, "file", Value::String(path.into()))?;
-            tx.set_param(id, "note", Value::String("/proj/scenes/keep.png".into()))?;
+            tx.set_param(id, "note", Value::String(abs("/proj/scenes/keep.png")))?;
             Ok(id)
         })
         .unwrap();
@@ -437,7 +446,7 @@ fn tex_scene(path: &str) -> (forge_core::Scene, NodeId) {
 
 fn saved_text(scene: &forge_core::Scene, base: &str) -> String {
     let opts = SaveOptions {
-        base_dir: Some(PathBuf::from(base)),
+        base_dir: Some(PathBuf::from(abs(base))),
         ..SaveOptions::default()
     };
     String::from_utf8(file::save_with(scene, &opts)).unwrap()
@@ -445,7 +454,7 @@ fn saved_text(scene: &forge_core::Scene, base: &str) -> String {
 
 #[test]
 fn absolute_paths_are_saved_relative_to_the_scene_folder() {
-    for (abs, rel) in [
+    for (abs_path, rel) in [
         ("/proj/scenes/tex/a.png", "tex/a.png"),
         ("/proj/scenes/a.png", "a.png"),
         ("/proj/shared/b.png", "../shared/b.png"),
@@ -454,28 +463,33 @@ fn absolute_paths_are_saved_relative_to_the_scene_folder() {
         ("", ""),
         ("relative/already.png", "relative/already.png"),
     ] {
-        let (scene, _) = tex_scene(abs);
+        let path = if abs_path.starts_with('/') {
+            abs(abs_path)
+        } else {
+            abs_path.to_string()
+        };
+        let (scene, _) = tex_scene(&path);
         let text = saved_text(&scene, "/proj/scenes");
         assert!(
             text.contains(&format!("\"file\": String(\"{rel}\")")),
-            "{abs}: {text}"
+            "{path}: {text}"
         );
         // only file reference params are rewritten
-        assert!(
-            text.contains("\"note\": String(\"/proj/scenes/keep.png\")"),
-            "{text}"
-        );
+        let keep = format!("\"note\": String({:?})", abs("/proj/scenes/keep.png"));
+        assert!(text.contains(&keep), "{text}");
     }
 }
 
 #[test]
 fn relative_paths_resolve_against_the_new_folder_so_projects_can_move() {
-    let (scene, id) = tex_scene("/proj/scenes/tex/a.png");
+    let (scene, id) = tex_scene(&abs("/proj/scenes/tex/a.png"));
     let bytes = saved_text(&scene, "/proj/scenes").into_bytes();
     for (base, expect) in [
         ("/proj/scenes", "/proj/scenes/tex/a.png"),
         ("/moved/here", "/moved/here/tex/a.png"),
     ] {
+        let (base, expect) = (abs(base), abs(expect));
+        let expect = expect.as_str();
         let opts = LoadOptions {
             base_dir: Some(PathBuf::from(base)),
             ..LoadOptions::default()
@@ -495,16 +509,16 @@ fn relative_paths_resolve_against_the_new_folder_so_projects_can_move() {
         );
     }
     // ".." segments
-    let (scene, id) = tex_scene("/proj/shared/b.png");
+    let (scene, id) = tex_scene(&abs("/proj/shared/b.png"));
     let bytes = saved_text(&scene, "/proj/scenes").into_bytes();
     let opts = LoadOptions {
-        base_dir: Some(PathBuf::from("/x/y")),
+        base_dir: Some(PathBuf::from(abs("/x/y"))),
         ..LoadOptions::default()
     };
     let (loaded, _) = file::load_with(registry(), &bytes, &opts).unwrap();
     assert_eq!(
         loaded.param(id, "file"),
-        Some(&Value::String("/x/shared/b.png".into()))
+        Some(&Value::String(abs("/x/shared/b.png")))
     );
     // without a base dir nothing is touched
     let (loaded, _) = file::load_bytes(registry(), &bytes).unwrap();
