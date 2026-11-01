@@ -2,6 +2,12 @@
 name = "forge-clone-engine"
 version.workspace = true
 edition.workspace = true
+description = "Clone data, the cloner node and its distribution modes (see the clone-toolset spec in docs/specs)."
+
+[dependencies]
+forge-core = { path = "../core" }
+glam = "0.34"
+thiserror = "2"
 
 [lints]
 workspace = true

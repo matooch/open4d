@@ -2,6 +2,7 @@
 //! (vertex and face orders come from docs/parity/{plane,cube,sphere}.md).
 
 mod boole;
+mod cloner;
 mod cube;
 mod lathe;
 mod modeling;
@@ -16,6 +17,7 @@ pub mod splines;
 mod subdivision;
 
 pub use boole::{boole, inputs_of as boole_inputs_of};
+pub use cloner::{clone_data, prototypes_of as cloner_prototypes};
 pub use modeling::{array, connect, inputs_of as modeling_inputs_of, symmetry};
 pub use polygon::{
     EditableError, SELECTION_EDGES, SELECTION_POINTS, SELECTION_POLYS, TYPE as POLYGON,
@@ -195,6 +197,9 @@ pub(crate) fn evaluate_geometry(
     if node.type_id == boole::TYPE {
         return boole::evaluate_boole(scene, id, ctx);
     }
+    if node.type_id == cloner::TYPE {
+        return cloner::evaluate_cloner(scene, id, &node.params, ctx);
+    }
     if spline_gens::spline_input_count(&node.type_id).is_some() {
         return spline_gens::evaluate_spline_gen(scene, id, &node.type_id, &node.params);
     }
@@ -250,6 +255,7 @@ fn produces_geometry(type_id: &str) -> bool {
     types().iter().any(|t| t.id == type_id)
         || type_id == subdivision::TYPE
         || type_id == boole::TYPE
+        || type_id == cloner::TYPE
         || type_id == polygon::TYPE
         || type_id == modeling::INSTANCE
         || modeling::input_count(type_id).is_some()
@@ -269,6 +275,7 @@ pub fn is_consumed(scene: &Scene, id: NodeId) -> bool {
     match p.type_id.as_str() {
         subdivision::TYPE => input_of(scene, p.id) == Some(id),
         boole::TYPE => boole::inputs_of(scene, p.id).contains(&id),
+        cloner::TYPE => cloner::prototypes_of(scene, p.id).contains(&id),
         t if modeling::input_count(t).is_some() => modeling::inputs_of(scene, p.id).contains(&id),
         t if spline_gens::spline_input_count(t).is_some() => {
             spline_gens::spline_inputs_of(scene, p.id).contains(&id)

@@ -6,6 +6,7 @@ description = "Headless application core: documents, commands, evaluation and ex
 
 [dependencies]
 forge-anim = { path = "../anim" }
+forge-clone-engine = { path = "../clone-engine" }
 forge-command = { path = "../command" }
 forge-core = { path = "../core" }
 forge-generators = { path = "../generators" }

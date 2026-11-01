@@ -9,6 +9,7 @@ pub mod select;
 
 use std::sync::Arc;
 
+use forge_clone_engine::CloneToolset;
 use forge_command::{
     CommandContext, CommandError, CommandRegistry, ModeArg, NodeSelection, SelectExtra, SelectOp,
     Timeline, register_editor_commands,
@@ -29,6 +30,7 @@ pub fn default_registry() -> Result<Registry, RegistryError> {
     let mut registry = Registry::with_builtins();
     registry.install(&Primitives)?;
     registry.install(&Deformers)?;
+    registry.install(&CloneToolset)?;
     Ok(registry)
 }
 

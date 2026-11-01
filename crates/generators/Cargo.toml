@@ -5,6 +5,7 @@ edition.workspace = true
 description = "Parametric primitives and generators (docs/specs/PRIMITIVES.md)."
 
 [dependencies]
+forge-clone-engine = { path = "../clone-engine" }
 forge-core = { path = "../core" }
 forge-geometry = { path = "../geometry" }
 forge-modifiers = { path = "../modifiers" }

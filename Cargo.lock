@@ -1264,6 +1264,7 @@ name = "forge-app"
 version = "0.1.0"
 dependencies = [
  "forge-anim",
+ "forge-clone-engine",
  "forge-command",
  "forge-core",
  "forge-generators",
@@ -1305,6 +1306,11 @@ dependencies = [
 [[package]]
 name = "forge-clone-engine"
 version = "0.1.0"
+dependencies = [
+ "forge-core",
+ "glam",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "forge-command"
@@ -1343,6 +1349,7 @@ version = "0.1.0"
 name = "forge-generators"
 version = "0.1.0"
 dependencies = [
+ "forge-clone-engine",
  "forge-core",
  "forge-geometry",
  "forge-modifiers",

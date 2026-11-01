@@ -637,3 +637,40 @@ fn modeling_tools_are_commands_for_scripts() {
     let report = ok(&mut app, src);
     assert_eq!(report.value, json!([10, 7]));
 }
+
+#[test]
+fn a_script_builds_a_cloner() {
+    let mut app = App::new_default();
+    let r = ok(
+        &mut app,
+        r#"
+        let c = create("forge.cloner", "Row");
+        let cube = create("forge.cube", "Box");
+        run("object.reparent", #{ node: cube, parent: c });
+        set_param(cube, "size_x", 20.0);
+        set_param(c, "mode", "linear");
+        set_param(c, "linear_count", 4);
+        set_param(c, "transform_position", vec3(0, 0, 100));
+        c
+        "#,
+    );
+    let cloner = NodeId(r.value.as_u64().unwrap());
+    // Four clones of the 8-point cube, 100 apart along z.
+    let mesh = app.eval_mesh(cloner, 0).unwrap();
+    assert_eq!(mesh.points.len(), 32);
+    let z: Vec<f64> = (0..4)
+        .map(|k| {
+            mesh.points[8 * k..8 * k + 8]
+                .iter()
+                .map(|p| p.z)
+                .sum::<f64>()
+                / 8.0
+        })
+        .collect();
+    assert!(
+        z.iter()
+            .enumerate()
+            .all(|(k, v)| near(*v, 100.0 * k as f64)),
+        "{z:?}"
+    );
+}
