@@ -71,7 +71,14 @@ You can also do a sitting **with an observer session's help**:
      of its right edge, seen from the Top view; note whether a cut that ends inside a
      polygon is kept or dropped;
    - `slide-loop` (2/2/2 cube): slide the middle loop 50 % up; note the range and the
-     sign of the value in the HUD.
+     sign of the value in the HUD;
+   - `bridge-two` (1/1/1 cube with top and bottom polygons deleted): Bridge the two open
+     borders; note how the tool picks which points pair up;
+   - `close-hole` (1/1/1 cube with the top polygon deleted): Close Polygon Hole on it;
+   - `stitch` (2/1/1 cube, polygon 6 disconnected and moved up 20): Stitch and Sew the
+     seam back; note the merge position and tolerance;
+   - `pen-quad`: Polygon Pen, click four points of a new quad above the cube; note the
+     snap radius and how to finish the polygon.
 8. Extrude drag: how far the offset changes per screen pixel at the default camera
    (drag 100 px and read the offset).
 
