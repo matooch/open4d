@@ -1166,6 +1166,30 @@ impl Editor {
                                         edits.push((row.param.clone(), Value::Float(x)));
                                     }
                                 }
+                                (Widget::Combo { options }, Value::Enum(cur)) => {
+                                    let name = ui.label(&row.label);
+                                    let current = options
+                                        .iter()
+                                        .find(|o| o.id == *cur)
+                                        .map_or(cur.as_str(), |o| o.label.as_str());
+                                    egui::ComboBox::from_id_salt(("tool_combo", &row.param))
+                                        .selected_text(current)
+                                        .show_ui(ui, |ui| {
+                                            for o in options {
+                                                if ui
+                                                    .selectable_label(o.id == *cur, &o.label)
+                                                    .clicked()
+                                                {
+                                                    edits.push((
+                                                        row.param.clone(),
+                                                        Value::Enum(o.id.clone()),
+                                                    ));
+                                                }
+                                            }
+                                        })
+                                        .response
+                                        .labelled_by(name.id);
+                                }
                                 _ => continue,
                             }
                             ui.end_row();

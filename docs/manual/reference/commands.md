@@ -2,7 +2,7 @@
 
 # Command reference
 
-37 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+38 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -26,6 +26,7 @@
 | [`mesh.current_state_to_object`](#meshcurrent_state_to_object) | Current State to Object | yes | `mesh_current_state_to_object` |
 | [`mesh.extrude`](#meshextrude) | Extrude | yes | `mesh_extrude` |
 | [`mesh.extrude_inner`](#meshextrude_inner) | Extrude Inner | yes | `mesh_extrude_inner` |
+| [`mesh.bevel`](#meshbevel) | Bevel | yes | `mesh_bevel` |
 | [`param.set`](#paramset) | Set Parameter | yes | `param_set` |
 | [`key.record`](#keyrecord) | Record | yes | `key_record` |
 | [`key.delete_at_frame`](#keydelete_at_frame) | Delete Keys | yes | `key_delete_at_frame` |
@@ -253,6 +254,20 @@ Extrude Inner. One undo step.
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
 Example: `forge cmd scene.forge mesh.extrude_inner --args '{"polys":[0],"settings":{"offset":10.0}}'`
+
+### `mesh.bevel`
+
+Bevel. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `edges` | array of integer \| array of integer (length 2) or null | no | Edges (edge mode): edge ids of the mesh, or point pairs [a, b]. |
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `points` | array of integer or null | no | Point indices (point mode). |
+| `polys` | array of integer or null | no | Polygon indices (polygon mode). When none of polys, edges, points is given the stored selection is used. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.bevel --args '{"polys":[0],"settings":{"offset":10.0}}'`
 
 
 ## `param`

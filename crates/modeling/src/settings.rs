@@ -119,6 +119,14 @@ impl Settings {
         }
     }
 
+    /// The option id of an enum setting ("" when absent).
+    pub fn choice(&self, id: &str) -> &str {
+        match self.values.get(id) {
+            Some(Value::Enum(e)) => e,
+            _ => "",
+        }
+    }
+
     pub fn bool(&self, id: &str) -> bool {
         matches!(self.values.get(id), Some(Value::Bool(true)))
     }

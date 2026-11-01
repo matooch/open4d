@@ -14,6 +14,8 @@ pub struct ToolDesc {
     /// The setting an interactive drag edits.
     pub drag_param: &'static str,
     pub params: Vec<ParamDesc>,
+    /// The tool also works on edges and points (the command takes `edges` and `points`).
+    pub components: bool,
 }
 
 const BIG: f64 = 1e20;
@@ -50,6 +52,7 @@ fn extrude_desc() -> ToolDesc {
         command: "mesh.extrude",
         drag_param: "offset",
         params,
+        components: false,
     }
 }
 
@@ -66,12 +69,87 @@ fn extrude_inner_desc() -> ToolDesc {
         command: "mesh.extrude_inner",
         drag_param: "offset",
         params,
+        components: false,
+    }
+}
+
+fn bevel_desc() -> ToolDesc {
+    let on = |id: &str, label: &str, default: bool| ParamDesc::bool(id, label, default);
+    let params = vec![
+        ParamDesc::enumeration(
+            "bevel_mode",
+            "Bevel Mode",
+            "chamfer",
+            &[("chamfer", "Chamfer"), ("solid", "Solid")],
+        ),
+        ParamDesc::enumeration(
+            "offset_mode",
+            "Offset Mode",
+            "fixed_distance",
+            &[
+                ("fixed_distance", "Fixed Distance"),
+                ("radial", "Radial"),
+                ("proportional", "Proportional"),
+            ],
+        ),
+        ParamDesc::float("offset", "Offset", 10.0).range(-BIG, BIG),
+        ParamDesc::int("subdivision", "Subdivision", 0).range(0, 1_000_000),
+        ParamDesc::float("depth", "Depth", 1.0).range(-1e18, 1e18),
+        on("limit", "Limit", true),
+        ParamDesc::enumeration(
+            "shape",
+            "Shape",
+            "round",
+            &[("round", "Round"), ("user", "User"), ("profile", "Profile")],
+        ),
+        ParamDesc::float("tension", "Tension", 1.0).range(-1e18, 1e18),
+        ParamDesc::enumeration(
+            "mitering",
+            "Mitering",
+            "default",
+            &[
+                ("default", "Default"),
+                ("uniform", "Uniform"),
+                ("radial", "Radial"),
+                ("patch", "Patch"),
+            ],
+        ),
+        ParamDesc::enumeration(
+            "ending",
+            "Ending",
+            "default",
+            &[
+                ("default", "Default"),
+                ("extend", "Extend"),
+                ("inset", "Inset"),
+            ],
+        ),
+        ParamDesc::enumeration(
+            "partial_rounding",
+            "Partial Rounding",
+            "none",
+            &[("none", "None"), ("full", "Full"), ("convex", "Convex")],
+        ),
+        on("corner_ngons", "Corner N-gons", false),
+        on("rounding_ngons", "Rounding N-gons", false),
+        on("phong_break_rounding", "Phong Break Rounding", false),
+        on("phong_break_miters", "Phong Break Miters", false),
+        on("realtime_update", "Realtime Update", true),
+        ParamDesc::float("extrusion", "Extrusion", 10.0).range(-BIG, BIG),
+    ];
+    ToolDesc {
+        id: "bevel",
+        label: "Bevel",
+        command: "mesh.bevel",
+        drag_param: "offset",
+        params,
+        components: true,
     }
 }
 
 /// Every tool, in menu order.
 pub fn tool_descs() -> Vec<ToolDesc> {
-    vec![extrude_desc(), extrude_inner_desc()]
+    vec![extrude_desc(), extrude_inner_desc(), bevel_desc()]
 }
 
 /// The tool with this id (`inset` is accepted as a spelling of `extrude_inner`).

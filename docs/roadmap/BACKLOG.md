@@ -18,7 +18,7 @@ implementers can avoid collisions.
 | 018 | [RPC notifications, viewport screenshot, progress for long jobs](../agents/tasks/018-rpc-notifications-viewport-screenshot-progress-for-long-jobs.md) | A | 014 | done | rpc, ui |
 | 019 | [Automation docs, generated command reference, S1/S2 acceptance tests](../agents/tasks/019-automation-docs-generated-command-reference-s1-s2-acceptance.md) | A | 013, 015, 016 | done (S1 partly pending: 065/069/164/136) | docs, apps/forge |
 | 020 | [Tool framework + Extrude and Extrude Inner](../agents/tasks/020-tool-framework-extrude-inset.md) | B | 011 | done | modeling (new), ui, geometry |
-| 021 | [Bevel tool (all modes)](../agents/tasks/021-bevel.md) | B | 020 | ready | modeling, ui |
+| 021 | [Bevel tool (all modes)](../agents/tasks/021-bevel.md) | B | 020 | done | modeling, ui |
 | 022 | [Mesh commands: Subdivide, Triangulate, Untriangulate, Reverse, Optimize, Weld, Melt, Dissolve, Split, Disconnect, Connect, Mirror, Center Axis](../agents/tasks/022-mesh-commands.md) | B | 020 | ready | modeling, ui |
 | 023 | [Selection commands: grow, shrink, convert, invert, connected, loop, ring](../agents/tasks/023-selection-commands.md) | B | 011 | ready | geometry, ui |
 | 024 | [Interactive cutting: Loop/Path Cut, Knife (line, plane, loop), Slide](../agents/tasks/024-interactive-cutting.md) | B | 020, 023 | ready | modeling, ui, viewport |

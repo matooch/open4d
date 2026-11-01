@@ -628,4 +628,12 @@ fn modeling_tools_are_commands_for_scripts() {
     "#;
     let report = ok(&mut app, src);
     assert_eq!(report.value, json!([20, 18]));
+    let src = r#"
+        run("object.create", #{ type: "forge.cube" });
+        run("mesh.make_editable");
+        let r = run("mesh.bevel", #{ edges: [[1, 3]], settings: #{ offset: 20.0, bevel_mode: "chamfer" } });
+        [r.points, r.polys]
+    "#;
+    let report = ok(&mut app, src);
+    assert_eq!(report.value, json!([10, 7]));
 }

@@ -1,4 +1,4 @@
-//! Parity: docs/specs/MODELING.md §1–3 against the Extrude and Extrude Inner cases of
+//! Parity: docs/specs/MODELING.md §1–4 against the Extrude, Extrude Inner and Bevel cases of
 //! tests/golden/modeling-tools.
 
 use std::path::Path;
@@ -7,12 +7,12 @@ use std::sync::Arc;
 use forge_core::{Document, EvalCtx, Registry};
 use forge_generators::{Primitives, evaluate};
 use forge_geometry::PolyMesh;
-use forge_geometry::selection::IndexSet;
-use forge_modeling::{Settings, extrude, extrude_inner, tool_desc};
+use forge_geometry::selection::{IndexSet, Selection};
+use forge_modeling::{Settings, tool_desc, tool_fn};
 use forge_parity_harness::{Mesh, compare_meshes, discover_cases, export_weld};
 
 /// Tools this test covers; every other `modeling-tools` case belongs to later briefs.
-const TOOLS: &[&str] = &["extrude", "extrude_inner", "inset"];
+const TOOLS: &[&str] = &["extrude", "extrude_inner", "inset", "bevel"];
 
 /// Observed options we return `Unsupported` for (none among the golden cases).
 const UNSUPPORTED: &[&str] = &[];
@@ -62,11 +62,15 @@ fn extrude_and_inset_match_the_reference() {
     let mut matched = Vec::new();
     let mut unsupported = std::collections::BTreeSet::new();
     for case in discover_cases(&root).unwrap() {
-        if case.feature != "modeling-tools" {
+        // `rechecks/extrude-bevel-subdiv` (O15) is an Extrude case
+        if case.feature != "modeling-tools" && case.feature != "rechecks" {
             continue;
         }
         let m = case.manifest().unwrap();
-        let tool = m.params["tool"].as_str().unwrap().to_string();
+        let Some(tool) = m.params.get("tool").and_then(|t| t.as_str()) else {
+            continue;
+        };
+        let tool = tool.to_string();
         if !TOOLS.contains(&tool.as_str()) {
             continue;
         }
@@ -77,12 +81,29 @@ fn extrude_and_inset_match_the_reference() {
             .iter()
             .map(|v| v.as_integer().unwrap())
             .collect();
-        let polys: IndexSet = m.params["select_polys"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|v| v.as_integer().unwrap() as u32)
-            .collect();
+        let base = cube([seg[0], seg[1], seg[2]]);
+        let mut sel = Selection::default();
+        if let Some(polys) = m.params.get("select_polys") {
+            sel.polys = polys
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_integer().unwrap() as u32)
+                .collect();
+        }
+        if let Some(pairs) = m.params.get("select_edges") {
+            let ids = base.edge_ids();
+            sel.edges = pairs
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| {
+                    let p = p.as_array().unwrap();
+                    let (a, b) = (p[0].as_integer().unwrap(), p[1].as_integer().unwrap());
+                    ids[&forge_geometry::Edge::new(a as u32, b as u32)]
+                })
+                .collect::<IndexSet>();
+        }
         let desc = tool_desc(&tool).unwrap();
         let object: serde_json::Map<String, serde_json::Value> = m.params["settings"]
             .as_table()
@@ -91,11 +112,7 @@ fn extrude_and_inset_match_the_reference() {
             .map(|(k, v)| (k.clone(), json_of(v)))
             .collect();
         let settings = Settings::from_json(&desc, &object).unwrap();
-        let base = cube([seg[0], seg[1], seg[2]]);
-        let result = match desc.id {
-            "extrude" => extrude(&base, &polys, &settings),
-            _ => extrude_inner(&base, &polys, &settings),
-        };
+        let result = tool_fn(desc.id).unwrap()(&base, &sel, &settings);
         let ours = match result {
             Err(forge_modeling::ToolError::Unsupported(what)) => {
                 println!("{key}: unsupported ({what})");
@@ -122,5 +139,5 @@ fn extrude_and_inset_match_the_reference() {
     let want: std::collections::BTreeSet<String> =
         UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 11, "{matched:?}");
+    assert_eq!(matched.len(), 20, "{matched:?}");
 }

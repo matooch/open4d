@@ -1,4 +1,4 @@
-//! mesh.extrude and mesh.extrude_inner headless (docs/specs/MODELING.md §0.1, §4).
+//! mesh.extrude, mesh.extrude_inner and mesh.bevel headless (docs/specs/MODELING.md §0.1, §4).
 
 use forge_app::App;
 use forge_command::{CommandError, schema};
@@ -130,4 +130,127 @@ fn schemas_and_samples_are_valid() {
         // an unknown setting is refused by the schema too
         assert!(schema::validate(&schema, &json!({"settings": {"nope": 1}})).is_err());
     }
+}
+
+#[test]
+fn bevel_edges_by_point_pair_are_one_undo_step() {
+    let mut app = App::new_default();
+    let cube = editable_cube(&mut app);
+    let before = steps(&app);
+    let out = app
+        .run(
+            "mesh.bevel",
+            json!({"edges": [[1, 3]], "settings": {"offset": 20.0, "subdivision": 2}}),
+        )
+        .unwrap();
+    // bevel-edge-sub: 14 points, 9 polygons; the 3 strip polygons are selected
+    assert_eq!(
+        (out["points"].as_u64(), out["polys"].as_u64()),
+        (Some(14), Some(9))
+    );
+    assert_eq!(out["selected"], json!([6, 7, 8]));
+    assert_eq!(mesh_of(&app, cube), (14, 9));
+    assert_eq!(list(&app, cube, "selection.polys"), vec![6, 7, 8]);
+    assert!(list(&app, cube, "selection.edges").is_empty());
+    assert_eq!(steps(&app), before + 1);
+    app.run("edit.undo", json!({})).unwrap();
+    assert_eq!(mesh_of(&app, cube), (8, 6));
+    assert_eq!(steps(&app), before);
+    // the same edge by its id in the mesh's edge list
+    let id = match app.doc.scene().param(cube, "mesh") {
+        Some(Value::Mesh(m)) => {
+            forge_generators::to_poly_mesh(m).edge_ids()[&forge_geometry::Edge::new(1, 3)]
+        }
+        _ => panic!("mesh"),
+    };
+    app.run(
+        "mesh.bevel",
+        json!({"edges": [id], "settings": {"offset": 20.0}}),
+    )
+    .unwrap();
+    assert_eq!(mesh_of(&app, cube), (10, 7));
+}
+
+#[test]
+fn bevel_uses_the_stored_selection_and_edge_ids() {
+    let mut app = App::new_default();
+    let cube = editable_cube(&mut app);
+    // stored polygon selection: polygon mode, the default Extrusion lifts by 10
+    app.doc
+        .transact("sel", |tx| {
+            tx.set_param(cube, "selection.polys", Value::IndexList(vec![4]))
+        })
+        .unwrap();
+    app.run("mesh.bevel", json!({"settings": {"offset": 20.0}}))
+        .unwrap();
+    assert_eq!(mesh_of(&app, cube), (12, 10));
+    // an explicit argument replaces the stored sets: edge ids work as well as pairs
+    let e = match app.doc.scene().param(cube, "mesh") {
+        Some(Value::Mesh(m)) => forge_generators::to_poly_mesh(m)
+            .edge_ids()
+            .get(&forge_geometry::Edge::new(1, 3))
+            .copied()
+            .unwrap(),
+        _ => panic!("mesh"),
+    };
+    // after the polygon bevel, points 1 and 3 are used by four polygons: refused, unchanged
+    let r = app.run("mesh.bevel", json!({"edges": [e]}));
+    assert!(matches!(r, Err(CommandError::Failed(_))), "{r:?}");
+    assert_eq!(mesh_of(&app, cube), (12, 10));
+}
+
+#[test]
+fn bevel_errors_change_nothing() {
+    let mut app = App::new_default();
+    let cube = editable_cube(&mut app);
+    let before = steps(&app);
+    let failed = |r: Result<Json, CommandError>| matches!(r, Err(CommandError::Failed(_)));
+    assert!(failed(app.run("mesh.bevel", json!({}))), "nothing selected");
+    assert!(
+        failed(app.run("mesh.bevel", json!({"edges": [[0, 5]]}))),
+        "not an edge"
+    );
+    assert!(failed(app.run("mesh.bevel", json!({"edges": [999]}))));
+    assert!(
+        failed(app.run("mesh.bevel", json!({"points": [1]}))),
+        "point mode"
+    );
+    assert!(failed(app.run(
+        "mesh.bevel",
+        json!({"edges": [[1, 3]], "settings": {"shape": "user"}})
+    )));
+    assert!(matches!(
+        app.run(
+            "mesh.bevel",
+            json!({"edges": [[1, 3]], "settings": {"shape": "sharp"}})
+        ),
+        Err(CommandError::InvalidArgs(_))
+    ));
+    assert!(matches!(
+        app.run("mesh.bevel", json!({"edges": [[1.5, 3]]})),
+        Err(CommandError::InvalidArgs(_)) | Err(CommandError::Failed(_))
+    ));
+    assert!(matches!(
+        app.run("mesh.extrude", json!({"edges": [[1, 3]]})),
+        Err(CommandError::InvalidArgs(_))
+    ));
+    assert_eq!(steps(&app), before);
+    assert_eq!(mesh_of(&app, cube), (8, 6));
+}
+
+#[test]
+fn bevel_schema_lists_enums_and_components() {
+    let app = App::new_default();
+    let h = app.commands.get("mesh.bevel").unwrap();
+    let schema = h.args_schema();
+    schema::validate(&schema, &h.sample_args()).unwrap();
+    let mode = &schema["properties"]["settings"]["properties"]["bevel_mode"];
+    assert_eq!(mode["enum"], json!(["chamfer", "solid"]));
+    assert_eq!(mode["default"], "chamfer");
+    assert_eq!(
+        schema["properties"]["settings"]["properties"]["offset"]["default"],
+        10.0
+    );
+    schema::validate(&schema, &json!({"edges": [[1, 3], 5], "points": [0]})).unwrap();
+    assert!(schema::validate(&schema, &json!({"settings": {"bevel_mode": "sharp"}})).is_err());
 }

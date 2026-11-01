@@ -45,7 +45,7 @@ fn steps(st: &EditorState) -> usize {
 fn tools_come_from_descriptors() {
     let all = tools();
     let ids: Vec<_> = all.iter().map(|t| t.id()).collect();
-    assert_eq!(ids, ["extrude", "extrude_inner"]);
+    assert_eq!(ids, ["extrude", "extrude_inner", "bevel"]);
     let (mut st, _) = setup();
     assert!(!activate_tool(&mut st, "nope"));
     assert!(activate_tool(&mut st, "extrude"));
@@ -159,4 +159,80 @@ fn the_attribute_panel_shows_the_tool_and_apply_is_one_step() {
     h.get_by_label("Done").click();
     h.run();
     assert!(h.state().state.tool.is_none());
+}
+
+/// An editable cube with the top-front edge (points 1 and 3) selected, stored as edge ids.
+fn setup_edge() -> (EditorState, NodeId) {
+    let (mut st, id) = setup();
+    let edge = match st.doc.scene().param(id, "mesh") {
+        Some(Value::Mesh(m)) => forge_generators::to_poly_mesh(m)
+            .edge_ids()
+            .get(&forge_geometry::Edge::new(1, 3))
+            .copied()
+            .unwrap(),
+        _ => panic!("mesh"),
+    };
+    st.doc
+        .transact("sel", |tx| {
+            tx.set_param(id, "selection.polys", Value::IndexList(Vec::new()))?;
+            tx.set_param(id, "selection.edges", Value::IndexList(vec![edge]))
+        })
+        .unwrap();
+    (st, id)
+}
+
+#[test]
+fn bevel_previews_the_stored_edges_and_applies_in_one_step() {
+    let (mut st, id) = setup_edge();
+    let before = steps(&st);
+    assert!(activate_tool(&mut st, "bevel"));
+    let ts = st.tool.as_mut().unwrap();
+    assert_eq!(ts.values().float("offset"), 10.0);
+    assert_eq!(ts.values().choice("bevel_mode"), "chamfer");
+    ts.set("offset", Value::Float(20.0)).unwrap();
+    ts.set("subdivision", Value::Int(2)).unwrap();
+    ts.set("offset_mode", Value::Enum("proportional".into()))
+        .unwrap();
+    assert!(
+        ts.set("offset_mode", Value::Enum("sideways".into()))
+            .is_err()
+    );
+    ts.set("offset_mode", Value::Enum("fixed_distance".into()))
+        .unwrap();
+    let (_, preview) = tool_preview(&st).expect("preview");
+    assert_eq!((preview.points.len(), preview.polys.len()), (14, 9));
+    assert_eq!(counts(&st, id), (8, 6), "the document is untouched");
+    // a drag edits the offset and applies as one command
+    let drag = ToolDrag::begin(&st, 400.0, 800.0).expect("a target");
+    drag.update(&mut st, 380.0);
+    drag.finish(&mut st).unwrap();
+    assert_eq!(counts(&st, id), (14, 9));
+    assert_eq!(steps(&st), before + 1);
+    // an unsupported option leaves no preview and no change
+    st.tool
+        .as_mut()
+        .unwrap()
+        .set("shape", Value::Enum("user".into()))
+        .unwrap();
+    assert!(tool_preview(&st).is_none());
+    assert!(apply_tool(&mut st).is_err());
+    assert_eq!(steps(&st), before + 1);
+}
+
+#[test]
+fn the_bevel_panel_has_enum_rows_and_the_menu_entry() {
+    let (st, id) = setup_edge();
+    let before = steps(&st);
+    let mut h = harness(st);
+    h.get_by_label("Mesh").click();
+    h.run();
+    h.get_by_label("Bevel").click();
+    h.run();
+    h.get_by_label("Bevel Mode");
+    h.get_by_label("Offset Mode");
+    h.get_by_label("Subdivision");
+    h.get_by_label("Apply").click();
+    h.run();
+    assert_eq!(counts(&h.state().state, id), (10, 7));
+    assert_eq!(steps(&h.state().state), before + 1);
 }

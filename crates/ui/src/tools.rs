@@ -5,10 +5,12 @@
 use std::sync::Arc;
 
 use forge_core::{NodeId, ParamDesc, Scene, Value};
-use forge_generators::{POLYGON, SELECTION_POLYS, from_poly_mesh, to_poly_mesh};
+use forge_generators::{
+    POLYGON, SELECTION_EDGES, SELECTION_POINTS, SELECTION_POLYS, from_poly_mesh, to_poly_mesh,
+};
 use forge_geometry::PolyMesh;
-use forge_geometry::selection::IndexSet;
-use forge_modeling::{Settings, ToolDesc, extrude, extrude_inner, tool_descs};
+use forge_geometry::selection::{IndexSet, Selection};
+use forge_modeling::{Settings, ToolDesc, tool_descs, tool_fn};
 use serde_json::{Value as Json, json};
 
 use crate::commands::execute;
@@ -25,7 +27,7 @@ pub trait Tool: Send + Sync {
     /// The setting an interactive drag edits.
     fn drag_param(&self) -> &'static str;
     /// The result of the tool on `mesh`; never writes the document.
-    fn preview(&self, mesh: &PolyMesh, polys: &IndexSet, s: &Settings) -> Result<PolyMesh, String>;
+    fn preview(&self, mesh: &PolyMesh, sel: &Selection, s: &Settings) -> Result<PolyMesh, String>;
 }
 
 /// A tool defined by a `forge-modeling` descriptor and pure function.
@@ -55,8 +57,8 @@ impl Tool for ModelingTool {
         self.desc.drag_param
     }
 
-    fn preview(&self, mesh: &PolyMesh, polys: &IndexSet, s: &Settings) -> Result<PolyMesh, String> {
-        (self.apply)(mesh, polys, s)
+    fn preview(&self, mesh: &PolyMesh, sel: &Selection, s: &Settings) -> Result<PolyMesh, String> {
+        (self.apply)(mesh, sel, s)
             .map(|(m, _)| m)
             .map_err(|e| e.to_string())
     }
@@ -66,12 +68,9 @@ impl Tool for ModelingTool {
 pub fn tools() -> Vec<Box<dyn Tool>> {
     tool_descs()
         .into_iter()
-        .map(|desc| {
-            let apply = match desc.id {
-                "extrude" => extrude,
-                _ => extrude_inner,
-            };
-            Box::new(ModelingTool { desc, apply }) as Box<dyn Tool>
+        .filter_map(|desc| {
+            let apply = tool_fn(desc.id)?;
+            Some(Box::new(ModelingTool { desc, apply }) as Box<dyn Tool>)
         })
         .collect()
 }
@@ -127,9 +126,9 @@ pub fn deactivate_tool(state: &mut EditorState) {
     state.tool = None;
 }
 
-/// What the tool works on: the active polygon object, its stored mesh and polygon
-/// selection (non-empty).
-pub fn tool_target(state: &EditorState) -> Option<(NodeId, PolyMesh, IndexSet)> {
+/// What the tool works on: the active polygon object, its stored mesh and its stored
+/// selection (at least one of the three sets is non-empty).
+pub fn tool_target(state: &EditorState) -> Option<(NodeId, PolyMesh, Selection)> {
     let scene = state.doc.scene();
     let id = state.selection.active?;
     if scene.node(id)?.type_id != POLYGON {
@@ -138,19 +137,27 @@ pub fn tool_target(state: &EditorState) -> Option<(NodeId, PolyMesh, IndexSet)> 
     let Some(Value::Mesh(m)) = scene.param(id, "mesh") else {
         return None;
     };
-    let polys: IndexSet = match scene.param(id, SELECTION_POLYS) {
-        Some(Value::IndexList(l)) => l.iter().copied().collect(),
-        _ => IndexSet::new(),
+    let stored = |key: &str| -> IndexSet {
+        match scene.param(id, key) {
+            Some(Value::IndexList(l)) => l.iter().copied().collect(),
+            _ => IndexSet::new(),
+        }
     };
-    (!polys.is_empty()).then(|| (id, to_poly_mesh(m), polys))
+    let sel = Selection {
+        polys: stored(SELECTION_POLYS),
+        points: stored(SELECTION_POINTS),
+        edges: stored(SELECTION_EDGES),
+    };
+    let any = !(sel.polys.is_empty() && sel.points.is_empty() && sel.edges.is_empty());
+    any.then(|| (id, to_poly_mesh(m), sel))
 }
 
 /// The tool's result on the current target, or `None` without an active tool, a target, or
 /// when the tool refuses the current values.
 pub fn tool_preview(state: &EditorState) -> Option<(NodeId, PolyMesh)> {
     let ts = state.tool.as_ref()?;
-    let (id, mesh, polys) = tool_target(state)?;
-    let out = ts.tool.preview(&mesh, &polys, &ts.values).ok()?;
+    let (id, mesh, sel) = tool_target(state)?;
+    let out = ts.tool.preview(&mesh, &sel, &ts.values).ok()?;
     Some((id, out))
 }
 

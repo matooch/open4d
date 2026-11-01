@@ -2,7 +2,7 @@
 name = "forge-modeling"
 version.workspace = true
 edition.workspace = true
-description = "Modeling tools as pure functions on polygon meshes: Extrude, Extrude Inner (docs/specs/MODELING.md)."
+description = "Modeling tools as pure functions on polygon meshes: Extrude, Extrude Inner, Bevel (docs/specs/MODELING.md)."
 
 [dependencies]
 forge-core = { path = "../core" }

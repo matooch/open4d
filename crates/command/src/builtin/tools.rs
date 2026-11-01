@@ -6,8 +6,9 @@ use forge_core::{NodeId, Value};
 use forge_generators::{
     POLYGON, SELECTION_EDGES, SELECTION_POINTS, SELECTION_POLYS, from_poly_mesh, to_poly_mesh,
 };
-use forge_geometry::selection::IndexSet;
-use forge_modeling::{Settings, ToolDesc, extrude, extrude_inner, tool_descs};
+use forge_geometry::selection::{IndexSet, Selection};
+use forge_geometry::{Edge, PolyMesh};
+use forge_modeling::{Settings, ToolDesc, tool_descs, tool_fn};
 use serde_json::{Map, Value as Json, json};
 
 use crate::context::CommandContext;
@@ -23,10 +24,8 @@ struct ToolCommand {
 
 pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
     for desc in tool_descs() {
-        let apply: forge_modeling::ToolFn = match desc.id {
-            "extrude" => extrude,
-            _ => extrude_inner,
-        };
+        let apply: forge_modeling::ToolFn = tool_fn(desc.id)
+            .ok_or_else(|| CommandError::Failed(format!("tool {} has no function", desc.id)))?;
         r.register(Box::new(ToolCommand {
             command: desc.command,
             desc,
@@ -36,11 +35,41 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
     Ok(())
 }
 
+/// Edge ids from the `edges` argument: an id, or a point pair `[a, b]` of an existing edge.
+fn edge_ids(mesh: &PolyMesh, items: &[Json]) -> Result<IndexSet, String> {
+    let ids = mesh.edge_ids();
+    let index = |v: &Json| v.as_u64().and_then(|i| u32::try_from(i).ok());
+    let mut out = IndexSet::new();
+    for item in items {
+        let id = match item {
+            Json::Array(pair) if pair.len() == 2 => {
+                let (Some(a), Some(b)) = (index(&pair[0]), index(&pair[1])) else {
+                    return Err("bad edge pair".into());
+                };
+                *ids.get(&Edge::new(a, b))
+                    .ok_or_else(|| format!("points {a} and {b} do not share an edge"))?
+            }
+            other => index(other).ok_or("bad edge id")?,
+        };
+        out.insert(id);
+    }
+    Ok(out)
+}
+
 fn setting_schema(p: &forge_core::ParamDesc) -> Json {
     match &p.default {
         Value::Bool(b) => json!({"type": "boolean", "default": b}),
         Value::Int(i) => json!({"type": "integer", "default": i}),
         Value::Float(f) => json!({"type": "number", "default": f}),
+        Value::Enum(e) => {
+            let options: Vec<String> = match &p.kind {
+                forge_core::ParamKind::Enum { options } => {
+                    options.iter().map(|o| o.id.clone()).collect()
+                }
+                _ => Vec::new(),
+            };
+            json!({"type": "string", "enum": options, "default": e})
+        }
         _ => json!({}),
     }
 }
@@ -61,26 +90,47 @@ impl CommandHandler for ToolCommand {
             .iter()
             .map(|p| (p.id.clone(), setting_schema(p)))
             .collect();
+        let mut properties = json!({
+            "node": {
+                "description": "Polygon object; the active node when absent.",
+                "type": ["integer", "null"]
+            },
+            "polys": {
+                "description": "Polygon indices; the stored polygon selection when absent.",
+                "type": ["array", "null"],
+                "items": {"type": "integer", "minimum": 0}
+            },
+            "settings": {
+                "description": "Tool settings; absent keys keep the factory defaults.",
+                "type": "object",
+                "additionalProperties": false,
+                "properties": settings
+            }
+        });
+        if self.desc.components {
+            properties["polys"]["description"] = json!(
+                "Polygon indices (polygon mode). When none of polys, edges, points is given \
+                 the stored selection is used."
+            );
+            properties["edges"] = json!({
+                "description": "Edges (edge mode): edge ids of the mesh, or point pairs [a, b].",
+                "type": ["array", "null"],
+                "items": {"anyOf": [
+                    {"type": "integer", "minimum": 0},
+                    {"type": "array", "items": {"type": "integer", "minimum": 0},
+                     "minItems": 2, "maxItems": 2}
+                ]}
+            });
+            properties["points"] = json!({
+                "description": "Point indices (point mode).",
+                "type": ["array", "null"],
+                "items": {"type": "integer", "minimum": 0}
+            });
+        }
         json!({
             "type": "object",
             "additionalProperties": false,
-            "properties": {
-                "node": {
-                    "description": "Polygon object; the active node when absent.",
-                    "type": ["integer", "null"]
-                },
-                "polys": {
-                    "description": "Polygon indices; the stored polygon selection when absent.",
-                    "type": ["array", "null"],
-                    "items": {"type": "integer", "minimum": 0}
-                },
-                "settings": {
-                    "description": "Tool settings; absent keys keep the factory defaults.",
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": settings
-                }
-            }
+            "properties": properties
         })
     }
 
@@ -91,7 +141,8 @@ impl CommandHandler for ToolCommand {
             CommandError::InvalidArgs(format!("{id}: arguments must be an object"))
         })?;
         for key in obj.keys() {
-            if !["node", "polys", "settings"].contains(&key.as_str()) {
+            let component = self.desc.components && ["edges", "points"].contains(&key.as_str());
+            if !(component || ["node", "polys", "settings"].contains(&key.as_str())) {
                 return Err(CommandError::InvalidArgs(format!(
                     "{id}: unknown key {key}"
                 )));
@@ -117,21 +168,27 @@ impl CommandHandler for ToolCommand {
             })?,
             Some(_) => return Err(CommandError::InvalidArgs(format!("{id}: bad node id"))),
         };
-        let given: Option<IndexSet> = match obj.get("polys") {
-            None | Some(Json::Null) => None,
-            Some(Json::Array(items)) => Some(
-                items
+        let index_list = |key: &str| -> Result<Option<IndexSet>, CommandError> {
+            match obj.get(key) {
+                None | Some(Json::Null) => Ok(None),
+                Some(Json::Array(items)) => items
                     .iter()
                     .map(|v| {
                         v.as_u64()
                             .and_then(|i| u32::try_from(i).ok())
-                            .ok_or_else(|| {
-                                CommandError::InvalidArgs(format!("{id}: bad polygon index"))
-                            })
+                            .ok_or_else(|| CommandError::InvalidArgs(format!("{id}: bad {key}")))
                     })
-                    .collect::<Result<_, _>>()?,
-            ),
-            Some(_) => return Err(CommandError::InvalidArgs(format!("{id}: bad polys"))),
+                    .collect::<Result<IndexSet, _>>()
+                    .map(Some),
+                Some(_) => Err(CommandError::InvalidArgs(format!("{id}: bad {key}"))),
+            }
+        };
+        let given_polys = index_list("polys")?;
+        let given_points = index_list("points")?;
+        let given_edges = match obj.get("edges") {
+            None | Some(Json::Null) => None,
+            Some(Json::Array(items)) => Some(items.clone()),
+            Some(_) => return Err(CommandError::InvalidArgs(format!("{id}: bad edges"))),
         };
         let fail = |msg: String| CommandError::Failed(format!("{}: {msg}", self.desc.label));
         let scene = ctx.doc().scene();
@@ -142,10 +199,35 @@ impl CommandHandler for ToolCommand {
             ));
         };
         let base = to_poly_mesh(stored);
-        let chosen = given.unwrap_or_else(|| match scene.param(node, SELECTION_POLYS) {
-            Some(Value::IndexList(l)) => l.iter().copied().collect(),
-            _ => IndexSet::new(),
-        });
+        let stored = |key: &str| -> IndexSet {
+            match scene.param(node, key) {
+                Some(Value::IndexList(l)) => l.iter().copied().collect(),
+                _ => IndexSet::new(),
+            }
+        };
+        let any_given = given_polys.is_some() || given_points.is_some() || given_edges.is_some();
+        let chosen = if !self.desc.components {
+            Selection {
+                polys: given_polys.unwrap_or_else(|| stored(SELECTION_POLYS)),
+                ..Selection::default()
+            }
+        } else if any_given {
+            let edges = match given_edges {
+                Some(items) => edge_ids(&base, &items).map_err(fail)?,
+                None => IndexSet::new(),
+            };
+            Selection {
+                polys: given_polys.unwrap_or_default(),
+                points: given_points.unwrap_or_default(),
+                edges,
+            }
+        } else {
+            Selection {
+                polys: stored(SELECTION_POLYS),
+                points: stored(SELECTION_POINTS),
+                edges: stored(SELECTION_EDGES),
+            }
+        };
         let (mesh, selection) =
             (self.apply)(&base, &chosen, &settings).map_err(|e| fail(e.to_string()))?;
         let selected: Vec<u32> = selection.polys.iter().collect();

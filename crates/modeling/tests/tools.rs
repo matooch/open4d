@@ -68,7 +68,7 @@ fn defaults_are_the_observed_ones() {
     let i = Settings::defaults(&tool_desc("extrude_inner").unwrap());
     assert_eq!(i.float("maximum_angle_deg"), 89.0);
     assert_eq!(tool_desc("inset").unwrap().id, "extrude_inner");
-    assert_eq!(tool_descs().len(), 2);
+    assert_eq!(tool_descs().len(), 3);
 }
 
 #[test]

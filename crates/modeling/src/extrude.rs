@@ -14,6 +14,8 @@ use crate::settings::Settings;
 enum Kind {
     Extrude,
     Inset,
+    /// Polygon-mode Bevel: an inset plus a lift (MODELING.md §3.3).
+    Bevel,
 }
 
 struct Run {
@@ -22,6 +24,7 @@ struct Run {
     rows: usize,
     preserve_groups: bool,
     max_angle: f64,
+    lift: f64,
 }
 
 /// Extrudes `polys` along their normals by `offset`, with side faces (MODELING.md §1).
@@ -62,7 +65,27 @@ fn params(kind: Kind, s: &Settings) -> Run {
         rows: s.int("subdivision").max(0) as usize + 1,
         preserve_groups: s.bool("preserve_groups"),
         max_angle: s.float("maximum_angle_deg").to_radians(),
+        lift: 0.0,
     }
+}
+
+/// Polygon-mode Bevel: inset by `offset`, lifted by `extrusion` (MODELING.md §3.3). The group
+/// settings are the hidden values of the reference tool (Preserve Groups on, 89 degrees).
+pub(crate) fn bevel_polys(
+    mesh: &PolyMesh,
+    polys: &IndexSet,
+    offset: f64,
+    extrusion: f64,
+) -> Result<(PolyMesh, Selection), ToolError> {
+    let p = Run {
+        kind: Kind::Bevel,
+        offset,
+        rows: 1,
+        preserve_groups: true,
+        max_angle: 89f64.to_radians(),
+        lift: extrusion,
+    };
+    run(mesh, polys, &p)
 }
 
 fn run(mesh: &PolyMesh, polys: &IndexSet, p: &Run) -> Result<(PolyMesh, Selection), ToolError> {
@@ -153,16 +176,34 @@ fn apply_group(mesh: &PolyMesh, group: &[u32], p: &Run, out: &mut PolyMesh) {
         }
     }
     let boundary: BTreeSet<u32> = sides.iter().flat_map(|s| [s.a, s.b]).collect();
-    let moved: BTreeSet<u32> = match p.kind {
-        Kind::Extrude => group
+    let every = || -> BTreeSet<u32> {
+        group
             .iter()
             .flat_map(|i| mesh.polys[*i as usize].iter().copied())
-            .collect(),
+            .collect()
+    };
+    let moved: BTreeSet<u32> = match p.kind {
+        Kind::Extrude => every(),
         Kind::Inset => boundary,
+        Kind::Bevel if p.lift != 0.0 => every(),
+        Kind::Bevel => boundary,
     };
     let target = match p.kind {
         Kind::Extrude => extrude_targets(mesh, group, &moved, p.offset),
         Kind::Inset => inset_targets(mesh, &sides, &moved, p.offset),
+        Kind::Bevel => {
+            let edge: BTreeSet<u32> = sides.iter().flat_map(|s| [s.a, s.b]).collect();
+            let inner = inset_targets(mesh, &sides, &edge, p.offset);
+            let lifted = extrude_targets(mesh, group, &moved, p.lift);
+            moved
+                .iter()
+                .map(|v| {
+                    let at = pts[*v as usize];
+                    let base = inner.get(v).copied().unwrap_or(at);
+                    (*v, base + (lifted[v] - at))
+                })
+                .collect()
+        }
     };
     // new points, ascending original index
     let mut new_of: HashMap<u32, u32> = HashMap::new();
