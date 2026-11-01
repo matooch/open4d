@@ -35,7 +35,7 @@ fn create_fills_defaults_and_label() {
     let n = doc.scene().node(id).unwrap();
     assert_eq!(n.name, "Box");
     assert_eq!(n.type_id, "test.box");
-    assert_eq!(n.params.len(), 11, "8 own + 3 transform");
+    assert_eq!(n.params.len(), 14, "8 own + 3 transform + 3 object state");
     assert_eq!(doc.scene().param(id, "size"), Some(&Value::Float(100.0)));
     assert_eq!(
         doc.scene().param(id, "mode"),

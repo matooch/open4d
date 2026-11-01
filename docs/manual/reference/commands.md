@@ -2,7 +2,7 @@
 
 # Command reference
 
-66 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+70 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -10,6 +10,10 @@
 | [`object.delete`](#objectdelete) | Delete | yes | `object_delete` |
 | [`object.rename`](#objectrename) | Rename | yes | `object_rename` |
 | [`object.reparent`](#objectreparent) | Move | yes | `object_reparent` |
+| [`object.move`](#objectmove) | Move Objects | yes | `object_move` |
+| [`object.group`](#objectgroup) | Group Objects | yes | `object_group` |
+| [`object.visibility`](#objectvisibility) | Visibility | yes | `object_visibility` |
+| [`object.enable`](#objectenable) | Enable | yes | `object_enable` |
 | [`edit.undo`](#editundo) | Undo | no | `edit_undo` |
 | [`edit.redo`](#editredo) | Redo | no | `edit_redo` |
 | [`view.shading`](#viewshading) | Shading | no | `view_shading` |
@@ -116,6 +120,52 @@ Move. One undo step.
 | `parent` | integer or null | no | New parent; null moves to the root level. Appended as the last child. |
 
 Example: `forge cmd scene.forge object.reparent --args '{"node":2,"parent":1}'`
+
+### `object.move`
+
+Move Objects. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `index` | integer or null | no | Position among the parent's children without the moved nodes; absent = last. |
+| `nodes` | array of integer or null | no | Nodes to move; the current selection when absent. |
+| `parent` | integer or null | no | New parent; null or absent moves to the root level. |
+
+Example: `forge cmd scene.forge object.move --args '{"index":0,"nodes":[2,3],"parent":1}'`
+
+### `object.group`
+
+Group Objects. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string or null | no | Name of the new group (default "Null"). |
+| `nodes` | array of integer or null | no | Nodes to group; the current selection when absent. |
+
+Example: `forge cmd scene.forge object.group --args '{"name":"Group","nodes":[2,3]}'`
+
+### `object.visibility`
+
+Visibility. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `editor` | `"on"` \| `"off"` \| string \| null | no | Editor (viewport) visibility. |
+| `nodes` | array of integer or null | no | Nodes to change; the current selection when absent. |
+| `render` | `"on"` \| `"off"` \| string \| null | no | Render visibility. |
+
+Example: `forge cmd scene.forge object.visibility --args '{"editor":"off","nodes":[1],"render":"default"}'`
+
+### `object.enable`
+
+Enable. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean | yes |  |
+| `nodes` | array of integer or null | no | Nodes to change; the current selection when absent. |
+
+Example: `forge cmd scene.forge object.enable --args '{"enabled":false,"nodes":[1]}'`
 
 
 ## `edit`

@@ -136,6 +136,10 @@ pub fn scene_meshes_at(
             if forge_generators::is_consumed(scene, id) {
                 continue;
             }
+            // hidden or disabled objects are not drawn (UI.md §13.1)
+            if !forge_core::visibility::editor_visible(scene, id) {
+                continue;
+            }
             let (Ok(Some(mut mesh)), Some(m)) = (
                 forge_generators::evaluate(scene, id, ctx),
                 scene.world_matrix(id),

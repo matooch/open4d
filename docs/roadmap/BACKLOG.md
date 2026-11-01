@@ -146,7 +146,7 @@ implementers can avoid collisions.
 | 146 | [S8 acceptance test and rendering docs](../agents/tasks/146-s8-rendering-acceptance.md) | K | 139, 145 | ready | tests, docs |
 | 147 | [Familiar default layout: command bar, tool palette, manager arrangement](../agents/tasks/147-default-layout.md) | L | 011 | done (parity-pending G1) | ui |
 | 148 | [Icon set and icon atlas](../agents/tasks/148-icon-set.md) | L | 147 | ready | ui |
-| 149 | [Object manager parity: columns, dots, tags, drag/drop, search, context menus](../agents/tasks/149-object-manager.md) | L | 147 | ready | ui |
+| 149 | [Object manager parity: columns, dots, tags, drag/drop, search, context menus](../agents/tasks/149-object-manager.md) | L | 147 | done (parity-pending G1; follow-up: render bridge honours render visibility, layer colours) | ui |
 | 150 | [Attribute manager parity: tabs, widgets, multi-edit, keyframe dots, history](../agents/tasks/150-attribute-manager.md) | L | 147 | done (parity-pending G4; follow-up: lock/history, tool panel on shared widgets) | ui |
 | 151 | [Coordinates manager modes](../agents/tasks/151-coordinates-manager.md) | L | 150 | ready | ui |
 | 152 | [Key map: defaults, customisation editor](../agents/tasks/152-key-map.md) | L | 011 | ready | ui |

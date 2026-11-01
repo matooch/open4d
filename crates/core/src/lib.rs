@@ -11,6 +11,7 @@ mod scene;
 pub mod smoothing;
 mod track;
 pub mod transform;
+pub mod visibility;
 
 pub use cache::EvalCache;
 pub use document::{Document, EditError, History, Tx};

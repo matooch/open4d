@@ -99,6 +99,10 @@ touch history.
 | `object.delete` | `nodes?` | `{deleted: n}` | yes |
 | `object.rename` | `node`, `name` | null | yes |
 | `object.reparent` | `node`, `parent?` (null = root) | null | yes |
+| `object.move` | `nodes?` (selection), `parent?` (null = root), `index?` (position among the parent's children without the moved nodes; absent = last) | `{moved}` | yes |
+| `object.group` | `nodes?`, `name?` (default "Null") | `{node}` | yes |
+| `object.visibility` | `nodes?`, `editor?`, `render?` each `default`\|`on`\|`off` (at least one) | null | yes |
+| `object.enable` | `nodes?`, `enabled` | null | yes |
 | `edit.undo` | - | `{done}` | no |
 | `edit.redo` | - | `{done}` | no |
 | `view.shading` | `mode` smooth, flat, wire, smooth_wire, flat_wire | null | no |
@@ -140,6 +144,14 @@ touch history.
 | `transform.set` | `node`, `pos?`, `rot?` (degrees), `scale?` | null | yes |
 | `param.set` | `node`, `param`, `value` | null | yes |
 | `param.edit` | `param`, `value`, `nodes?`, `component?`, `gesture?` | `{changed}` | yes |
+
+`object.move`: nodes listed below another listed node are dropped from the list (they move
+with it); the rest keep the order given and end up consecutively at `index`; one undo step;
+a cycle fails and changes nothing. `object.group` creates a `forge.null` under the first
+node's parent at the first node's position (after the group's nodes are removed) and moves
+the nodes into it in the order given (nested ones dropped as above), then selects the group.
+`object.visibility` / `object.enable` write the `object.*` params (TRANSFORM.md §2) of every
+named node in one undo step; tags and non-hierarchy nodes are skipped.
 
 Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and ANIM.md §2):
 

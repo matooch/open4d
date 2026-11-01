@@ -102,7 +102,8 @@ it has no other effect (such nodes can still be created by code and loaded from 
 - `Registry::with_builtins()` registers `forge.null` (Object; only the transform params).
   It also registers the `forge.smoothing` tag (docs/specs/SMOOTHING.md §2).
 - Hierarchy types get `transform.pos/rot/scale` prepended; `transform.*` ids are
-  reserved (`RegistryError::ReservedParam`). See docs/specs/TRANSFORM.md §2.
+  reserved (`RegistryError::ReservedParam`), and so is `object.*` (visibility and enable
+  flags, brief 149). See docs/specs/TRANSFORM.md §2.
 
 `trait Plugin { fn id(&self) -> &str; fn register(&self, r: &mut Registry) -> Result<(), RegistryError>; }`
 

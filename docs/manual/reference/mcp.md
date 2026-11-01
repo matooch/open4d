@@ -63,6 +63,10 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `object_delete` | Delete. Undoable editing command. Runs command `object.delete`. |
 | `object_rename` | Rename. Undoable editing command. Runs command `object.rename`. |
 | `object_reparent` | Move. Undoable editing command. Runs command `object.reparent`. |
+| `object_move` | Move Objects. Undoable editing command. Runs command `object.move`. |
+| `object_group` | Group Objects. Undoable editing command. Runs command `object.group`. |
+| `object_visibility` | Visibility. Undoable editing command. Runs command `object.visibility`. |
+| `object_enable` | Enable. Undoable editing command. Runs command `object.enable`. |
 | `edit_undo` | Undo. Not an undoable edit. Runs command `edit.undo`. |
 | `edit_redo` | Redo. Not an undoable edit. Runs command `edit.redo`. |
 | `view_shading` | Shading. Not an undoable edit. Runs command `view.shading`. |

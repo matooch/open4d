@@ -15,6 +15,7 @@ pub mod cutting;
 pub mod dock;
 pub mod layout;
 pub mod manipulate;
+pub mod object_manager;
 pub mod screenshot;
 pub mod script_panel;
 pub mod state;

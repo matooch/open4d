@@ -139,18 +139,19 @@ impl Registry {
         if self.types.contains_key(&ty.id) {
             return Err(RegistryError::DuplicateType(ty.id));
         }
-        if let Some(p) = ty
-            .params
-            .iter()
-            .find(|p| p.id.starts_with(transform::PREFIX))
-        {
+        if let Some(p) = ty.params.iter().find(|p| {
+            p.id.starts_with(transform::PREFIX) || p.id.starts_with(crate::visibility::PREFIX)
+        }) {
             return Err(RegistryError::ReservedParam {
                 type_id: ty.id.clone(),
                 param: p.id.clone(),
             });
         }
         if ty.category.is_hierarchy() {
-            ty.params.splice(0..0, transform::params());
+            let own = transform::params()
+                .into_iter()
+                .chain(crate::visibility::params());
+            ty.params.splice(0..0, own);
         }
         let mut seen = BTreeSet::new();
         for p in &ty.params {

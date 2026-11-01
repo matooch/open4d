@@ -22,9 +22,9 @@ use crate::coordinates::{Row, Space, Third, coord_view, set_coord_anim};
 use crate::dock::{Area, Panel};
 use crate::layout::{ButtonGroup, Layout, Sizes, command_bar, tool_palette};
 use crate::manipulate::apply_drag_anim;
+use crate::object_manager::ObjectManager;
 use crate::state::EditorState;
 use crate::theme::Theme;
-use crate::tree::tree_rows;
 use crate::viewport_panel::{NavInput, SceneView, ViewportPanel, apply_nav, nav_action};
 
 mod files;
@@ -96,8 +96,8 @@ pub struct Editor {
     /// Initial sizes of the resizable areas (docs/specs/UI.md §11).
     sizes: Sizes,
     viewport: ViewportPanel,
-    /// Row being renamed in the tree, with its edit buffer.
-    renaming: Option<(NodeId, String)>,
+    /// The object manager's panel state: rename buffer, search text (UI.md §13).
+    objects: ObjectManager,
     /// Name field buffer in the attribute panel.
     name_edit: Option<(NodeId, String)>,
     /// The attribute manager tab shown (UI.md §12).
@@ -134,12 +134,17 @@ impl eframe::App for Editor {
 }
 
 impl Editor {
+    /// The object manager's panel state.
+    pub fn objects(&self) -> &ObjectManager {
+        &self.objects
+    }
+
     pub fn new(state: EditorState) -> Editor {
         Editor {
             state,
             sizes: Sizes::default(),
             viewport: ViewportPanel::default(),
-            renaming: None,
+            objects: ObjectManager::default(),
             name_edit: None,
             attr_tab: String::new(),
             gesture_seq: 0,
@@ -358,7 +363,7 @@ impl Editor {
             && let Some(id) = self.state.selection.active
             && let Some(n) = self.state.doc.scene().node(id)
         {
-            self.renaming = Some((id, n.name.clone()));
+            self.objects.renaming = Some((id, n.name.clone()));
         }
         for c in cmds {
             self.run(c);
@@ -1295,102 +1300,7 @@ impl Editor {
     }
 
     fn tree_ui(&mut self, ui: &mut Ui) {
-        let rows = tree_rows(self.state.doc.scene(), &self.state.expanded);
-        let order: Vec<NodeId> = rows.iter().map(|r| r.id).collect();
-        let mut cmds: Vec<Cmd> = Vec::new();
-        egui::ScrollArea::vertical()
-            .auto_shrink(false)
-            .show(ui, |ui| {
-                for row in &rows {
-                    ui.horizontal(|ui| {
-                        ui.add_space(row.depth as f32 * 14.0);
-                        if row.has_children {
-                            let arrow = if row.expanded { "-" } else { "+" };
-                            if ui.small_button(arrow).clicked() {
-                                cmds.push(("view.toggle_expanded", json!({"node": row.id.0})));
-                            }
-                        } else {
-                            ui.add_space(18.0);
-                        }
-                        if let Some((id, buf)) = &mut self.renaming
-                            && *id == row.id
-                        {
-                            let r = ui.text_edit_singleline(buf);
-                            r.request_focus();
-                            if ui.input(|i| i.key_pressed(Key::Escape)) {
-                                self.renaming = None;
-                            } else if r.lost_focus() {
-                                cmds.push((
-                                    "object.rename",
-                                    json!({"node": row.id.0, "name": buf}),
-                                ));
-                                self.renaming = None;
-                            }
-                            return;
-                        }
-                        let selected = self.state.selection.nodes.contains(&row.id);
-                        let mut text = RichText::new(&row.name);
-                        if row.missing_type {
-                            text = text.italics();
-                        }
-                        let r = ui
-                            .selectable_label(selected, text)
-                            .interact(Sense::click_and_drag());
-                        r.dnd_set_drag_payload(row.id);
-                        if let Some(dragged) = r.dnd_release_payload::<NodeId>()
-                            && *dragged != row.id
-                        {
-                            cmds.push((
-                                "object.reparent",
-                                json!({"node": dragged.0, "parent": row.id.0}),
-                            ));
-                        }
-                        if r.double_clicked() {
-                            self.renaming = Some((row.id, row.name.clone()));
-                        } else if r.clicked() {
-                            let m = ui.input(|i| i.modifiers);
-                            if m.shift {
-                                self.state.selection.range(row.id, &order);
-                            } else if m.command {
-                                self.state.selection.toggle(row.id);
-                            } else {
-                                self.state.selection.click(row.id);
-                            }
-                        }
-                        r.context_menu(|ui| {
-                            if ui.button("Rename").clicked() {
-                                self.renaming = Some((row.id, row.name.clone()));
-                                ui.close();
-                            }
-                            if ui.button("Delete").clicked() {
-                                self.state.selection.click(row.id);
-                                cmds.push(cmd("object.delete"));
-                                ui.close();
-                            }
-                            if ui.button("Move to root").clicked() {
-                                cmds.push((
-                                    "object.reparent",
-                                    json!({"node": row.id.0, "parent": null}),
-                                ));
-                                ui.close();
-                            }
-                        });
-                        ui.weak(&row.type_label);
-                        for (_, tag) in &row.tags {
-                            ui.weak(format!("[{tag}]"));
-                        }
-                    });
-                }
-                // Dropping below the rows moves the node to the end of the root list.
-                let size = egui::vec2(ui.available_width(), ui.available_height().max(40.0));
-                let rest = ui.allocate_response(size, Sense::hover());
-                if let Some(dragged) = rest.dnd_release_payload::<NodeId>() {
-                    cmds.push((
-                        "object.reparent",
-                        json!({"node": dragged.0, "parent": null}),
-                    ));
-                }
-            });
+        let cmds = self.objects.show(ui, &mut self.state);
         for c in cmds {
             self.run(c);
         }

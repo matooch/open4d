@@ -57,11 +57,9 @@ pre-order over hierarchy nodes; children of collapsed nodes are omitted; tags ar
 listed on their host row (label = type label), never as rows. `type_label` is the
 registered label, or the raw type id with `missing_type = true`.
 
-Interactions (egui): click/Ctrl/Shift selection (§1); arrow toggles expansion;
-double-click renames (Enter commits, Esc cancels); drag a row onto another row
-reparents it as that row's last child; drop on empty space moves it to the root end;
-context menu: Rename, Delete, Move to root. Failed edits (e.g. cycles) set
-`status` and change nothing.
+The interactions (selection, drag and drop, rename, search, context menu, columns) are
+specified in §13 (Object manager, brief 149), which replaces the first version of this
+section. Failed edits (e.g. cycles) set `status` and change nothing.
 
 ## 4. Attribute panel (`attributes`)
 
@@ -288,3 +286,84 @@ left of its label (`key_marker`, filled = key here, hollow = animated, ANIM.md �
 attaches click and context menu to that slot. `AttrRow.animatable` mirrors the descriptor.
 
 Not in this brief: lock/unlock, history back/forward, the field-list widget.
+
+## 13. Object manager (`tree`, `object_manager`; brief 149)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G1 (docs/parity/GUI-SESSIONS.md)
+is unanswered, so **the column order, what the dots and tick show, the dot click cycle, the
+drop zones and the context menu items are parity-pending**. Look and labels are ours.
+All edits are registry commands (COMMANDS.md §6); the panel only computes arguments, so an
+agent gets the same behaviour. Each user gesture is one undo step.
+
+### 13.1 Columns (left to right, parity-pending)
+
+1. Expand arrow (`+` / `-`, only for rows with children), indented 14 px per depth.
+2. Name (type label as a weak suffix), renamed in place.
+3. Editor dot, Render dot, Enable tick.
+4. Tags: one weak `[label]` per tag on the host.
+
+Dot state (`object.editor_vis`, `object.render_vis`, `Vis`): `Default` (grey: follows the
+parent, root = on), `Off` (red), `On` (green, forced on even under an Off parent). A click
+cycles Default -> Off -> On -> Default and runs `object.visibility` for the clicked row (or
+for the whole selection when the row is selected). The tick is `object.enabled`; a click runs
+`object.enable` with the inverted value. A node is shown in the viewport iff it and every
+ancestor are enabled and its resolved editor visibility (`forge_core::visibility`) is on.
+Render visibility is stored and resolved the same way (`render_visible`) but honouring it in
+the render bridge is a follow-up (the renderer does not read it yet).
+Accessibility labels (used by the tests): `Editor visibility: <name>`, `Render visibility:
+<name>`, `Enabled: <name>`.
+
+### 13.2 Selection (pure, `tree::click_selection`)
+
+Plain click selects only the row; Shift-click selects the visible rows from the anchor to
+the row (`NodeSelection::range`); Ctrl/Cmd-click toggles the row. The anchor is set by plain
+and Ctrl clicks. A Shift range replaces the selection (it does not add), like the viewport.
+Clicking selects through `NodeSelection`; it is not a command and not undoable.
+
+### 13.3 Drag and drop (pure, `tree::drop_target`, `tree::plan_drop`)
+
+A drag starts on a row's name; the payload is the dragged `NodeId` (the attribute manager's
+link fields accept it, UI.md §12). The set moved is the whole selection when the dragged row
+is selected, else only the dragged row; nodes below another moved node move with it.
+The pointer height within the hovered row decides the zone (`DropZone`): top quarter
+`Before`, bottom quarter `After`, middle `Into`. `drop_target(rows, hovered, zone, moved)`
+returns `DropTarget { parent: Option<NodeId>, index: Option<usize> }` (index counts the
+parent's children without the moved nodes; `None` = last) or `None` when the drop is invalid:
+dropping on a moved node, or into/next to a descendant of a moved node (a cycle).
+`Into` = last child of the row; `Before` = at the row's index in its parent's child list;
+`After` = right after it, except an expanded row with children: `After` then means first
+child (the position the line is drawn at). The empty area below the rows = root list, last.
+The drop runs `object.move` (`nodes` in visible order, `parent`, `index`). A drag hover
+shows an insertion line (Before/After) or a row highlight (Into). Dragging is disabled while a
+search filter is active. Moving keeps local transforms, like `object.reparent`.
+
+### 13.4 Rename
+
+Double-click (or F2, or the menu item) opens a text field on the row; Enter or focus loss
+commits via `object.rename` (an unchanged or empty name is not committed), Escape cancels.
+
+### 13.5 Search / filter (pure, `tree::filter_rows`)
+
+A text field above the rows. A row matches when the query (trimmed, case-insensitive)
+is a substring of its name, type label or one of its tag labels. The filtered list
+is the matching rows plus their ancestors (so paths stay visible), in tree order, with
+every ancestor of a match shown expanded; ancestors that do not match themselves are `dim`.
+An empty query shows the normal tree. The query is panel state, not document state.
+
+### 13.6 Context menu (pure, `tree::context_menu`)
+
+Right-click on a row that is not selected selects it first (plain click); the menu acts on
+the selection. Items, all top level (no sub-menus), each `{label, command, args}`:
+Rename (no command: starts the in-place edit; single selection only), Group Objects
+(`object.group`), Make Editable (`mesh.make_editable`), Hide / Show (`object.visibility`
+editor and render both Off, or Default when all are already Off), Disable / Enable
+(`object.enable`), Move to Root (`object.move` parent null), Delete (`object.delete`).
+"Make Editable" is listed only if some selected node is a generator.
+
+### 13.7 Tests
+
+Pure unit tests (crates/ui/tests/object_manager.rs): drop targets for every zone,
+cycles, ranges, filter, context items, visibility resolution (core). egui_kittest: reparent
+by drag, reorder by drag, dots and tick (each with undo), rename, search, context menu
+actions, a drag onto an attribute link field.
+

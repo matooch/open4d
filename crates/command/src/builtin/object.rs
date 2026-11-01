@@ -46,6 +46,55 @@ struct ReparentArgs {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+struct MoveArgs {
+    /// Nodes to move; the current selection when absent.
+    nodes: Option<Vec<u64>>,
+    /// New parent; null or absent moves to the root level.
+    parent: Option<u64>,
+    /// Position among the parent's children without the moved nodes; absent = last.
+    index: Option<usize>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct GroupArgs {
+    /// Nodes to group; the current selection when absent.
+    nodes: Option<Vec<u64>>,
+    /// Name of the new group (default "Null").
+    name: Option<String>,
+}
+
+/// A visibility setting.
+#[derive(Deserialize, JsonSchema, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum VisArg {
+    /// Follow the parent.
+    Default,
+    On,
+    Off,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct VisibilityArgs {
+    /// Nodes to change; the current selection when absent.
+    nodes: Option<Vec<u64>>,
+    /// Editor (viewport) visibility.
+    editor: Option<VisArg>,
+    /// Render visibility.
+    render: Option<VisArg>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct EnableArgs {
+    /// Nodes to change; the current selection when absent.
+    nodes: Option<Vec<u64>>,
+    enabled: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct ShadingArgs {
     mode: ShadingMode,
 }
@@ -123,6 +172,42 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
             || json!({"node": 2, "parent": 1}),
         ),
         reparent,
+    )?;
+    r.register_fn(
+        spec(
+            "object.move",
+            "Move Objects",
+            true,
+            || json!({"nodes": [2, 3], "parent": 1, "index": 0}),
+        ),
+        move_nodes,
+    )?;
+    r.register_fn(
+        spec(
+            "object.group",
+            "Group Objects",
+            true,
+            || json!({"nodes": [2, 3], "name": "Group"}),
+        ),
+        group,
+    )?;
+    r.register_fn(
+        spec(
+            "object.visibility",
+            "Visibility",
+            true,
+            || json!({"nodes": [1], "editor": "off", "render": "default"}),
+        ),
+        visibility,
+    )?;
+    r.register_fn(
+        spec(
+            "object.enable",
+            "Enable",
+            true,
+            || json!({"nodes": [1], "enabled": false}),
+        ),
+        enable,
     )?;
     register_plain(r, "edit.undo", "Undo", false, |c| undo_redo(c, true))?;
     register_plain(r, "edit.redo", "Redo", false, |c| undo_redo(c, false))?;
@@ -311,6 +396,140 @@ fn reparent(ctx: &mut dyn CommandContext, a: ReparentArgs) -> Result<Value, Comm
         tx.move_node(NodeId(a.node), a.parent.map(NodeId), None)
     })?;
     Ok(Value::Null)
+}
+
+/// The hierarchy nodes of `ids`, without duplicates and without nodes below another listed
+/// node, in the order given.
+fn top_level(scene: &forge_core::Scene, ids: &[NodeId]) -> Vec<NodeId> {
+    let chosen: BTreeSet<NodeId> = ids.iter().copied().collect();
+    let mut seen = BTreeSet::new();
+    ids.iter()
+        .copied()
+        .filter(|id| {
+            let Some(n) = scene.node(*id) else {
+                return false;
+            };
+            if n.is_tag() || !seen.insert(*id) {
+                return false;
+            }
+            let mut p = n.parent;
+            while let Some(pid) = p {
+                if chosen.contains(&pid) {
+                    return false;
+                }
+                p = scene.node(pid).and_then(|n| n.parent);
+            }
+            true
+        })
+        .collect()
+}
+
+fn siblings(scene: &forge_core::Scene, parent: Option<NodeId>) -> Vec<NodeId> {
+    match parent {
+        Some(p) => scene
+            .node(p)
+            .map(|n| n.children.clone())
+            .unwrap_or_default(),
+        None => scene.roots().to_vec(),
+    }
+}
+
+fn move_nodes(ctx: &mut dyn CommandContext, a: MoveArgs) -> Result<Value, CommandError> {
+    let ids = target_nodes(ctx, a.nodes);
+    let parent = a.parent.map(NodeId);
+    let moved = top_level(ctx.doc().scene(), &ids);
+    if moved.is_empty() {
+        return Ok(json!({"moved": 0}));
+    }
+    let base_len = siblings(ctx.doc().scene(), parent)
+        .iter()
+        .filter(|s| !moved.contains(s))
+        .count();
+    ctx.doc_mut().transact("Move", |tx| {
+        // Append all first, so `index` counts the list without them, then place them.
+        for id in &moved {
+            tx.move_node(*id, parent, None)?;
+        }
+        if let Some(index) = a.index {
+            let index = index.min(base_len);
+            for (k, id) in moved.iter().enumerate() {
+                tx.move_node(*id, parent, Some(index + k))?;
+            }
+        }
+        Ok(())
+    })?;
+    Ok(json!({"moved": moved.len()}))
+}
+
+fn group(ctx: &mut dyn CommandContext, a: GroupArgs) -> Result<Value, CommandError> {
+    let ids = target_nodes(ctx, a.nodes);
+    let nodes = top_level(ctx.doc().scene(), &ids);
+    let Some(first) = nodes.first().copied() else {
+        return Err(CommandError::failed("select objects to group"));
+    };
+    let (parent, index) = {
+        let scene = ctx.doc().scene();
+        let parent = scene.node(first).and_then(|n| n.parent);
+        let index = siblings(scene, parent).iter().position(|s| *s == first);
+        (parent, index)
+    };
+    let name = a.name.unwrap_or_else(|| "Null".into());
+    let group = ctx.doc_mut().transact("Group Objects", |tx| {
+        let g = tx.create("forge.null", parent, index)?;
+        tx.rename(g, &name)?;
+        for id in &nodes {
+            tx.move_node(*id, Some(g), None)?;
+        }
+        Ok(g)
+    })?;
+    ctx.selection_mut().click(group);
+    Ok(json!({"node": group.0}))
+}
+
+fn visibility(ctx: &mut dyn CommandContext, a: VisibilityArgs) -> Result<Value, CommandError> {
+    use forge_core::visibility::{EDITOR_VIS, RENDER_VIS, Vis};
+    if a.editor.is_none() && a.render.is_none() {
+        return Err(CommandError::InvalidArgs(
+            "object.visibility needs `editor` and/or `render`".into(),
+        ));
+    }
+    let vis = |v: VisArg| match v {
+        VisArg::Default => Vis::Default,
+        VisArg::On => Vis::On,
+        VisArg::Off => Vis::Off,
+    };
+    let ids = hierarchy_targets(ctx, a.nodes);
+    ctx.doc_mut().transact("Visibility", |tx| {
+        for id in &ids {
+            if let Some(v) = a.editor {
+                tx.set_param(*id, EDITOR_VIS, Param::Enum(vis(v).id().into()))?;
+            }
+            if let Some(v) = a.render {
+                tx.set_param(*id, RENDER_VIS, Param::Enum(vis(v).id().into()))?;
+            }
+        }
+        Ok(())
+    })?;
+    Ok(Value::Null)
+}
+
+fn enable(ctx: &mut dyn CommandContext, a: EnableArgs) -> Result<Value, CommandError> {
+    let ids = hierarchy_targets(ctx, a.nodes);
+    ctx.doc_mut().transact("Enable", |tx| {
+        ids.iter().try_for_each(|id| {
+            tx.set_param(*id, forge_core::visibility::ENABLED, Param::Bool(a.enabled))
+        })
+    })?;
+    Ok(Value::Null)
+}
+
+/// Existing hierarchy nodes among the targets (tags have no object state).
+fn hierarchy_targets(ctx: &dyn CommandContext, nodes: Option<Vec<u64>>) -> Vec<NodeId> {
+    let scene = ctx.doc().scene();
+    target_nodes(ctx, nodes)
+        .into_iter()
+        .filter(|id| scene.node(*id).is_some_and(|n| !n.is_tag()))
+        .collect()
 }
 
 fn undo_redo(ctx: &mut dyn CommandContext, undo: bool) -> Result<Value, CommandError> {
