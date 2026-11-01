@@ -35,6 +35,11 @@ Record each deformer's parameter table once.
 | box-gate/bend-rotated | Bend | same cube, Bend strength 90°, Within Box, size (100, 250, 400), deformer rotated H 45° |
 | box-gate/bend-angle | Bend | same cube, Bend strength 90°, angle 45°, Within Box, size (100, 250, 400) |
 | box-gate/bend-equal | Bend | same cube (200 cm), Bend strength 90°, Within Box, size (200, 250, 200) exactly the extent |
+| falloff/bend-offset | Bend | follow-up from brief 061: the O24 `bend-spherical` setup with the cube moved to (0, 100, 0) (the field stays at the origin) |
+| falloff/bend-strength-200 | Bend | O24 `bend-spherical` with the field's Strength 200 % and Clamp Max off |
+| falloff/shear-spherical | Shear | O9 cube, Shear defaults with strength 50, a default Spherical field in its falloff list |
+| falloff/spherify-linear | Spherify | O9 cube, Spherify 100 %, a default Linear field in its falloff list |
+| falloff/field-child | Bend | O24 `bend-spherical`, with the Spherical field made a child of the Bend deformer |
 
 ## Notes
 TODO

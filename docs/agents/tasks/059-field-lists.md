@@ -14,6 +14,12 @@ Field lists with ordered layers, blend modes and strengths, plus Group, Formula 
 ## Design decisions (planner)
 - `FieldList { layers: Vec<Layer { field, blend, strength, enabled }> }`, evaluated bottom to top. Implement the 9 blend modes per the observed data. The Shader field uses `forge-shaders` (125); pin it until then.
 
+## Planner note (after 061)
+Brief 061 stored a list row's strength as a field-node param `layer_strength`, because a
+link list had no per-row data. Give field-list rows their own storage (strength, blend mode,
+enabled) as part of this brief, migrate `layer_strength` into it, and keep the O24 and
+effector cases passing.
+
 ## Done when
 - [ ] FIELDS.md §lists.
 - [ ] O23 blend cases match.
