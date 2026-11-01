@@ -49,6 +49,14 @@ Unblocks: E/067, 076, 077, 078.
 | effector-f/order | two Plain effectors: A rotates R (90, 0, 0), B moves P (100, 0, 0); in order A, B and then `order-swapped` | samples |
 | effector-f/per-effector-50 | Plain P (0, 100, 0), the cloner's strength for that effector set to 50 % | samples |
 | effector-f/linear-plain-field | re-record O8 `linear-plain-field` with the field's full parameter table and Color in `case.toml` | samples |
+| random-f/count50-s12345 | follow-up from brief 069: Linear cloner count 50, P (0, 0, 20); Random effector defaults (seed 12345); then `-s0` (seed 0), `-s1` (seed 1) and `-strength50` (Strength 50 %) | samples |
+| random-f/indexed-50 | the same, Indexed on; then `indexed-5` and `indexed-8` with counts 5 and 8 | samples |
+| random-f/gaussian-50 | the same, mode Gaussian | samples |
+| random-f/noise-steps | Linear count 20, P (0, 0, 10); Random mode Noise; then `noise-scale50`, `noise-scale200`, `noise-speed0-f30` (Animation Speed 0 %, frame 30), `noise-uv` (Space UV) | samples |
+| random-f/turbulence | Linear count 20, Random mode Turbulence | samples |
+| random-f/synchronized | Linear count 20, Random, Synchronized on | samples |
+| random-f/sorted | Linear count 20, Random mode Sorted (if offered) | samples |
+| random-f/rot-h | Linear count 20, Random with Position off and Rotation on, R (90, 0, 0) | samples |
 
 ## Notes
 TODO
