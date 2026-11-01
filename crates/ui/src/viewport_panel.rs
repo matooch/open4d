@@ -11,7 +11,10 @@ use forge_viewport::camera::Camera;
 use forge_viewport::gizmo::Gizmo;
 use forge_viewport::grid::grid_lines;
 use forge_viewport::nav;
-use forge_viewport::render::{DrawMesh, Frame, MeshBuffers, Palette, Renderer, Settings, Shading};
+use forge_viewport::panes::Pane;
+use forge_viewport::render::{
+    DrawMesh, Frame, MeshBuffers, Palette, RenderTargets, Renderer, Settings, Shading,
+};
 
 use crate::components::{EditMode, display_selection, stored_selection};
 use crate::theme::Theme;
@@ -109,6 +112,9 @@ pub fn component_shading(shading: Shading) -> Shading {
     match shading {
         Shading::Smooth => Shading::SmoothWire,
         Shading::Flat => Shading::FlatWire,
+        // faces plus edges, in the closest look to the chosen mode
+        Shading::Quick | Shading::BoundingBox => Shading::SmoothWire,
+        Shading::Constant => Shading::HiddenLine,
         other => other,
     }
 }
@@ -131,16 +137,16 @@ pub fn apply_nav(cam: &mut Camera, action: NavAction, size: [f64; 2]) {
 
 struct Target {
     size: [u32; 2],
-    color: wgpu::Texture,
-    depth: wgpu::Texture,
+    targets: RenderTargets,
     texture_id: egui::TextureId,
 }
 
-/// Offscreen render target registered with egui, recreated on resize.
+/// Offscreen render targets registered with egui (one per pane), recreated on resize or when
+/// the sample count changes.
 #[derive(Default)]
 pub struct ViewportPanel {
     renderer: Option<Renderer>,
-    target: Option<Target>,
+    targets: [Option<Target>; 4],
     /// GPU meshes of the scene's generator nodes, keyed by scene revision and selection.
     meshes: Option<SceneMeshes>,
 }
@@ -195,13 +201,16 @@ pub fn scene_meshes_at(
 }
 
 impl ViewportPanel {
-    /// Renders the scene at `size` pixels and returns the egui texture to show.
+    /// Renders the scene into `pane`'s target at `size` pixels and returns the egui texture to
+    /// show. `base` carries the pane's shading, lighting, shadows and anti-aliasing
+    /// (`panes::display_settings`); the panel adds the component-mode overrides.
     pub fn render(
         &mut self,
         rs: &egui_wgpu::RenderState,
+        pane: Pane,
         size: [u32; 2],
         cam: &Camera,
-        shading: Shading,
+        base: Settings,
         view: SceneView,
     ) -> egui::TextureId {
         let SceneView {
@@ -212,45 +221,37 @@ impl ViewportPanel {
             ctx,
         } = view;
         let device = &rs.device;
-        let renderer = self
+        let samples = base.msaa.samples();
+        if self
             .renderer
-            .get_or_insert_with(|| Renderer::new(device, wgpu::TextureFormat::Rgba8Unorm));
-        let size = [size[0].max(1), size[1].max(1)];
-        if self.target.as_ref().is_none_or(|t| t.size != size) {
-            let extent = wgpu::Extent3d {
-                width: size[0],
-                height: size[1],
-                depth_or_array_layers: 1,
-            };
-            let make = |label, format, usage, view_formats: &'static [wgpu::TextureFormat]| {
-                device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: extent,
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage,
-                    view_formats,
-                })
-            };
-            let color = make(
-                "viewport color",
+            .as_ref()
+            .is_none_or(|r| r.samples() != samples)
+        {
+            self.renderer = Some(Renderer::with_samples(
+                device,
                 wgpu::TextureFormat::Rgba8Unorm,
-                wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-                &[],
-            );
-            let depth = make(
-                "viewport depth",
-                wgpu::TextureFormat::Depth32Float,
-                wgpu::TextureUsages::RENDER_ATTACHMENT,
-                &[],
+                samples,
+            ));
+        }
+        let renderer = self.renderer.as_ref().expect("renderer created above");
+        let size = [size[0].max(1), size[1].max(1)];
+        let slot = &mut self.targets[pane.index()];
+        if slot
+            .as_ref()
+            .is_none_or(|t| t.size != size || t.targets.samples != samples)
+        {
+            let targets = RenderTargets::new(
+                device,
+                size[0],
+                size[1],
+                samples,
+                wgpu::TextureUsages::TEXTURE_BINDING,
             );
             // egui samples the unorm view as-is, so palette values display as authored
             // (matching the offscreen snapshot PNGs).
-            let view = color.create_view(&Default::default());
+            let view = targets.color.create_view(&Default::default());
             let mut egui_renderer = rs.renderer.write();
-            let texture_id = match &self.target {
+            let texture_id = match &*slot {
                 Some(old) => {
                     egui_renderer.update_egui_texture_from_wgpu_texture(
                         device,
@@ -264,10 +265,9 @@ impl ViewportPanel {
                     egui_renderer.register_native_texture(device, &view, wgpu::FilterMode::Nearest)
                 }
             };
-            self.target = Some(Target {
+            *slot = Some(Target {
                 size,
-                color,
-                depth,
+                targets,
                 texture_id,
             });
         }
@@ -322,9 +322,9 @@ impl ViewportPanel {
                 color: *color,
             })
             .collect();
-        let t = self.target.as_ref().expect("target created above");
-        let color_view = t.color.create_view(&Default::default());
-        let depth_view = t.depth.create_view(&Default::default());
+        let t = self.targets[pane.index()]
+            .as_ref()
+            .expect("target created above");
         let grid = grid_lines(cam, size[1] as f64);
         let frame = Frame {
             meshes: &draw,
@@ -332,26 +332,18 @@ impl ViewportPanel {
             gizmo,
             settings: Settings {
                 shading: if component.is_some() {
-                    component_shading(shading)
+                    component_shading(base.shading)
                 } else {
-                    shading
+                    base.shading
                 },
                 show_points: component.is_some_and(|(_, m)| m == EditMode::Points),
                 point_size: POINT_SIZE,
                 palette,
+                ..base
             },
         };
         let mut encoder = device.create_command_encoder(&Default::default());
-        renderer.render(
-            device,
-            &mut encoder,
-            &color_view,
-            &depth_view,
-            size[0],
-            size[1],
-            cam,
-            &frame,
-        );
+        renderer.render_to(device, &mut encoder, &t.targets, cam, &frame);
         rs.queue.submit([encoder.finish()]);
         t.texture_id
     }

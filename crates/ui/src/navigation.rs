@@ -64,6 +64,7 @@ fn standard_view(v: ViewArg) -> StandardView {
 
 impl EditorState {
     fn frame_nodes(&mut self, only: Option<BTreeSet<NodeId>>) {
+        self.touch_view();
         let scene = self.evaluated();
         let ctx = EvalCtx::at_frame(self.timeline.current, f64::from(scene.settings().fps));
         match scene_bounds(&scene, &ctx, only.as_ref()) {
@@ -88,10 +89,12 @@ impl EditorState {
     }
 
     pub fn show_view(&mut self, view: ViewArg) {
+        self.touch_view();
         self.camera = view_camera(&self.camera, standard_view(view));
     }
 
     pub fn apply_camera_set(&mut self, set: CameraSet) {
+        self.touch_view();
         let c = &mut self.camera;
         if let Some(t) = set.target {
             c.target = DVec3::from(t) * c.mirror();

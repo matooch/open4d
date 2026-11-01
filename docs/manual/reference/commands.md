@@ -2,7 +2,7 @@
 
 # Command reference
 
-81 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+86 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -17,6 +17,11 @@
 | [`edit.undo`](#editundo) | Undo | no | `edit_undo` |
 | [`edit.redo`](#editredo) | Redo | no | `edit_redo` |
 | [`view.shading`](#viewshading) | Shading | no | `view_shading` |
+| [`view.layout`](#viewlayout) | Viewport Layout | no | `view_layout` |
+| [`view.maximize`](#viewmaximize) | Maximize Pane | no | `view_maximize` |
+| [`view.lighting`](#viewlighting) | Viewport Lighting | no | `view_lighting` |
+| [`view.shadows`](#viewshadows) | Viewport Shadows | no | `view_shadows` |
+| [`view.antialias`](#viewantialias) | Viewport Anti-aliasing | no | `view_antialias` |
 | [`view.gizmo_mode`](#viewgizmo_mode) | Gizmo Mode | no | `view_gizmo_mode` |
 | [`view.gizmo_space`](#viewgizmo_space) | Gizmo Space | no | `view_gizmo_space` |
 | [`object.begin_rename`](#objectbegin_rename) | Rename Active | no | `object_begin_rename` |
@@ -241,9 +246,60 @@ Shading. Not an undoable edit.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `mode` | `"smooth"` \| `"flat"` \| `"wire"` \| `"smooth_wire"` \| `"flat_wire"` | yes | Viewport shading (mirrors the viewport's `Shading`). |
+| `mode` | `"smooth"` \| `"flat"` \| `"wire"` \| `"smooth_wire"` \| `"flat_wire"` \| `"quick"` \| `"constant"` \| `"hidden_line"` \| `"bounding_box"` | yes | Viewport shading (mirrors the viewport's `Shading`). |
+| `pane` | `"perspective"` \| `"top"` \| `"front"` \| `"right"` \| null | no | Viewport pane; absent = the active pane. |
 
 Example: `forge cmd scene.forge view.shading --args '{"mode":"smooth_wire"}'`
+
+### `view.layout`
+
+Viewport Layout. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `layout` | `"single"` \| `"four"` \| null | no | `single` or `four`; absent toggles. |
+
+Example: `forge cmd scene.forge view.layout --args '{"layout":"four"}'`
+
+### `view.maximize`
+
+Maximize Pane. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `pane` | `"perspective"` \| `"top"` \| `"front"` \| `"right"` \| null | no | Viewport pane; absent = the active pane. |
+
+Example: `forge cmd scene.forge view.maximize --args '{"pane":"top"}'`
+
+### `view.lighting`
+
+Viewport Lighting. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `mode` | `"headlight"` \| `"rig"` | yes | `view.lighting`: the lights the viewport shades with (docs/specs/VIEWPORT.md §8.1). |
+
+Example: `forge cmd scene.forge view.lighting --args '{"mode":"rig"}'`
+
+### `view.shadows`
+
+Viewport Shadows. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean | yes |  |
+
+Example: `forge cmd scene.forge view.shadows --args '{"enabled":true}'`
+
+### `view.antialias`
+
+Viewport Anti-aliasing. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean | yes |  |
+
+Example: `forge cmd scene.forge view.antialias --args '{"enabled":true}'`
 
 ### `view.gizmo_mode`
 
@@ -288,6 +344,7 @@ Set View. Not an undoable edit.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `view` | `"perspective"` \| `"front"` \| `"back"` \| `"left"` \| `"right"` \| `"top"` \| `"bottom"` | yes | A named camera view (`view.set_view`; mirrors the viewport's `StandardView`). |
+| `pane` | `"perspective"` \| `"top"` \| `"front"` \| `"right"` \| null | no | Viewport pane; absent = the active pane. |
 
 Example: `forge cmd scene.forge view.set_view --args '{"view":"top"}'`
 

@@ -4,7 +4,9 @@
 pub mod camera;
 pub mod gizmo;
 pub mod grid;
+pub mod lights;
 pub mod nav;
+pub mod panes;
 pub mod picking;
 pub mod render;
 pub mod snap;

@@ -120,6 +120,36 @@ pub enum ShadingMode {
     Wire,
     SmoothWire,
     FlatWire,
+    Quick,
+    Constant,
+    HiddenLine,
+    BoundingBox,
+}
+
+/// One of the four viewport panes (mirrors the viewport's `Pane`; docs/specs/VIEWPORT.md §9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PaneArg {
+    Perspective,
+    Top,
+    Front,
+    Right,
+}
+
+/// `view.layout`: one viewport or the 2x2 four-view grid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LayoutArg {
+    Single,
+    Four,
+}
+
+/// `view.lighting`: the lights the viewport shades with (docs/specs/VIEWPORT.md §8.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LightingArg {
+    Headlight,
+    Rig,
 }
 
 /// The viewport gizmo's mode (mirrors the viewport's `GizmoMode`).

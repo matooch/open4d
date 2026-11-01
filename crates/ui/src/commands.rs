@@ -2,14 +2,15 @@
 //! them against the editor state and implements the command context for it.
 
 use forge_command::{
-    CameraSet, CommandContext, GizmoModeArg, GizmoSpaceArg, ModeArg, NodeSelection, SelectExtra,
-    SelectOp, ShadingMode, Timeline, UiRequest, ViewArg,
+    CameraSet, CommandContext, GizmoModeArg, GizmoSpaceArg, LayoutArg, LightingArg, ModeArg,
+    NodeSelection, PaneArg, SelectExtra, SelectOp, ShadingMode, Timeline, UiRequest, ViewArg,
 };
 use forge_core::{Category, Document, NodeId, Registry};
 use forge_viewport::gizmo::{GizmoMode, Space as GizmoSpace};
 use forge_viewport::render::Shading;
 use serde_json::Value;
 
+use crate::panes::{layout_of, pane_of};
 use crate::state::EditorState;
 
 /// Runs the command `id` with JSON `args` through the state's registry. The error is the
@@ -52,6 +53,10 @@ pub fn shading_of(m: ShadingMode) -> Shading {
         ShadingMode::Wire => Shading::Wire,
         ShadingMode::SmoothWire => Shading::SmoothWire,
         ShadingMode::FlatWire => Shading::FlatWire,
+        ShadingMode::Quick => Shading::Quick,
+        ShadingMode::Constant => Shading::Constant,
+        ShadingMode::HiddenLine => Shading::HiddenLine,
+        ShadingMode::BoundingBox => Shading::BoundingBox,
     }
 }
 
@@ -63,6 +68,10 @@ pub fn shading_mode_of(m: Shading) -> ShadingMode {
         Shading::Wire => ShadingMode::Wire,
         Shading::SmoothWire => ShadingMode::SmoothWire,
         Shading::FlatWire => ShadingMode::FlatWire,
+        Shading::Quick => ShadingMode::Quick,
+        Shading::Constant => ShadingMode::Constant,
+        Shading::HiddenLine => ShadingMode::HiddenLine,
+        Shading::BoundingBox => ShadingMode::BoundingBox,
     }
 }
 
@@ -145,8 +154,7 @@ impl CommandContext for EditorState {
         self.tool = None;
         if full {
             // File > New: everything but the dock layout starts over.
-            self.camera = EditorState::default_camera();
-            self.shading = Shading::SmoothWire;
+            self.reset_views();
         }
     }
 
@@ -162,8 +170,9 @@ impl CommandContext for EditorState {
         self.app.mark_saved(path);
     }
 
-    fn set_shading(&mut self, shading: ShadingMode) {
-        self.shading = shading_of(shading);
+    fn set_shading(&mut self, shading: ShadingMode, pane: Option<PaneArg>) {
+        let shading = shading_of(shading);
+        self.with_pane(pane.map(pane_of), |s| s.shading = shading);
     }
 
     fn frame_all(&mut self) {
@@ -174,8 +183,28 @@ impl CommandContext for EditorState {
         self.frame_selected_nodes();
     }
 
-    fn set_view(&mut self, view: ViewArg) {
-        self.show_view(view);
+    fn set_view(&mut self, view: ViewArg, pane: Option<PaneArg>) {
+        self.with_pane(pane.map(pane_of), |s| s.show_view(view));
+    }
+
+    fn set_layout(&mut self, layout: Option<LayoutArg>) {
+        self.set_view_layout(layout.map(layout_of));
+    }
+
+    fn maximize(&mut self, pane: Option<PaneArg>) {
+        self.toggle_maximize(pane.map(pane_of));
+    }
+
+    fn set_lighting(&mut self, lighting: LightingArg) {
+        self.views.lighting = lighting;
+    }
+
+    fn set_shadows(&mut self, on: bool) {
+        self.views.shadows = on;
+    }
+
+    fn set_antialias(&mut self, on: bool) {
+        self.views.antialias = on;
     }
 
     fn set_camera(&mut self, set: CameraSet) {

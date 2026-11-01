@@ -19,6 +19,7 @@ pub mod layout;
 pub mod manipulate;
 pub mod navigation;
 pub mod object_manager;
+pub mod panes;
 pub mod screenshot;
 pub mod script_panel;
 pub mod state;

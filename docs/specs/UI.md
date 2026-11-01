@@ -186,6 +186,48 @@ target is drawn with its points / edges / polygon outlines and selected componen
 component selection colour (§8); the panel rebuilds its GPU meshes when the revision, the
 node selection, the mode or the target changes.
 
+### 6.2 Panes, 4-view layout, lights and anti-aliasing (brief 143)
+
+Maths: VIEWPORT.md §8-§9. G8 is unanswered: **the modes, keys, arrangement and the default
+shading of the orthographic panes are ours, parity-pending G8.**
+
+`EditorState.views: Views { layout, active, maximized, lighting, shadows, antialias }` plus the
+saved per-pane `PaneState { camera, shading }`. `EditorState.camera` and `.shading` stay the
+fields everything else uses: they are the **active pane's working copy**. `activate(pane)`
+stores the working copy in the pane it leaves and loads the new one, so every tool, pick and
+command that reads `state.camera` automatically acts on the active pane. `pane_camera(pane)` /
+`pane_shading(pane)` read any pane (the working copy for the active one).
+
+- Initial state: `Single` layout, active `Perspective`, `Top`/`Front`/`Right` cameras from
+  `pane_camera`, shading `SmoothWire` for Perspective and `Wire` for the three orthographic panes
+  (they start as line drawings, our choice). File > New resets all of it (the dock layout stays).
+- `Single` shows the active pane only (the earlier behaviour). `Four` shows the 2×2 grid of
+  VIEWPORT.md §9 in the viewport area, with a 2 px gap; the active pane has an accent outline.
+  `maximized = Some(p)` in `Four` shows `p` alone, full size; toggling it off restores the quad.
+- Hovering a pane, or pressing/dragging in it, makes it active before the input is read, so
+  navigation, picking, gizmos, tools and `view.frame_*` act on the pane under the pointer. A drag
+  that started in a pane keeps it active until it ends. Each pane draws its own label
+  `"<Pane> · <shading>"` (plus the component mode), its own grid (from its camera), and its
+  own texture; meshes are uploaded once and shared.
+- Lighting: `LightingMode = Headlight | Rig` (default Headlight), `shadows` (default on; only a
+  shadow-casting light, i.e. the Rig's key, produces shadows) and `antialias` (default on, 4× MSAA).
+  `panes::display_settings(views, shading, scene_lights)` builds the viewport `Settings`; scene
+  lights (VIEWPORT.md §8.1) override the mode.
+- `viewport.screenshot` (RPC.md §10.2) renders what the viewport shows: the active pane in
+  `Single`, the maximised pane, or in `Four` a composite of the four panes (gap strips in the
+  theme's dark colour) at the requested size.
+- Commands (COMMANDS.md §6): `view.layout`, `view.maximize`, `view.lighting`, `view.shadows`,
+  `view.antialias`; `view.shading` and `view.set_view` take an optional `pane`.
+- View menu: the shading list (all nine modes), "Layout: single / four", "Maximise pane"
+  (checkbox, enabled in the 4-view layout), "Lighting: headlight / rig", "Shadows", "Anti-aliasing".
+
+Tests: crates/ui/tests/panes.rs (state and commands, no GPU): initial panes, `view.layout`
+toggle and explicit, `view.maximize` toggle and with a pane, per-pane `view.shading` and
+`view.set_view` leave the other panes alone, activation keeps cameras, File > New resets, settings
+builder (lighting, shadows, antialias, scene lights), screenshot composite; egui_kittest: F4
+shows four panes and back, `Mod+M` maximises the active pane to one and back, hovering another
+pane makes it active, the View menu radio entries.
+
 ## 7. Timeline (`timeline`, `animate`)
 
 Behaviour, data and rules: docs/specs/ANIM.md §2. Panel summary (own design,
@@ -454,6 +496,9 @@ Default bindings (all parity-pending, ours):
 | Alt+1 / Alt+2 / Alt+3 / Alt+4 | `select.mode` model / points / edges / polys |
 | Mod+Shift+E | `mesh.make_editable` |
 | 1 .. 5 | `view.shading` smooth, flat, wire, smooth_wire, flat_wire |
+| 6 .. 9 | `view.shading` quick, constant, hidden_line, bounding_box (brief 143) |
+| F4 | `view.layout` (toggle single / four; brief 143) |
+| Mod+M | `view.maximize` (toggle the active pane; brief 143) |
 | W / E / R | `view.gizmo_mode` move / rotate / scale |
 | Q | `view.gizmo_space` (toggle) |
 | H / S | `view.frame_all` / `view.frame_selected` (brief 153) |

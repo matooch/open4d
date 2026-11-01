@@ -101,6 +101,35 @@ chord = "5"
 command = "view.shading"
 args = { mode = "flat_wire" }
 
+# View: more display modes, the four-view layout (brief 143)
+[[bind]]
+chord = "6"
+command = "view.shading"
+args = { mode = "quick" }
+
+[[bind]]
+chord = "7"
+command = "view.shading"
+args = { mode = "constant" }
+
+[[bind]]
+chord = "8"
+command = "view.shading"
+args = { mode = "hidden_line" }
+
+[[bind]]
+chord = "9"
+command = "view.shading"
+args = { mode = "bounding_box" }
+
+[[bind]]
+chord = "F4"
+command = "view.layout"
+
+[[bind]]
+chord = "Mod+M"
+command = "view.maximize"
+
 # View: framing and named views (brief 153)
 [[bind]]
 chord = "H"

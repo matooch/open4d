@@ -8,6 +8,7 @@ use forge_command::UiRequest;
 use forge_core::transform::{Transform, rotation_part};
 use forge_core::{NodeId, Value};
 use forge_viewport::gizmo::{Drag, Gizmo, GizmoMode, Space as GizmoSpace};
+use forge_viewport::panes::{Layout as PaneLayout, Pane, arrange};
 use forge_viewport::render::Shading;
 use glam::DVec3;
 use serde_json::{Value as Json, json};
@@ -25,20 +26,27 @@ use crate::keymap_editor::KeyMapEditor;
 use crate::layout::{ButtonGroup, Layout, Sizes, command_bar, tool_palette};
 use crate::manipulate::apply_drag_anim;
 use crate::object_manager::ObjectManager;
+use crate::panes::{PANE_GAP, display_settings};
 use crate::state::EditorState;
 use crate::theme::Theme;
-use crate::viewport_panel::{NavInput, NavMode, SceneView, ViewportPanel, apply_nav, nav_action};
+use crate::viewport_panel::{
+    NavAction, NavInput, NavMode, SceneView, ViewportPanel, apply_nav, nav_action,
+};
 
 mod files;
 
 pub use files::{Dialogs, FileKind, NativeDialogs, Unsaved};
 
-const SHADINGS: [(Shading, &str); 5] = [
+const SHADINGS: [(Shading, &str); 9] = [
     (Shading::Smooth, "Smooth"),
     (Shading::Flat, "Flat"),
     (Shading::Wire, "Wireframe"),
     (Shading::SmoothWire, "Smooth + wire"),
     (Shading::FlatWire, "Flat + wire"),
+    (Shading::Quick, "Quick"),
+    (Shading::Constant, "Constant"),
+    (Shading::HiddenLine, "Hidden line"),
+    (Shading::BoundingBox, "Bounding box"),
 ];
 
 /// A command to run: registry id and JSON arguments (docs/specs/COMMANDS.md).
@@ -551,6 +559,8 @@ impl Editor {
                     }
                 }
                 ui.separator();
+                self.view_options_menu(ui);
+                ui.separator();
                 ui.radio_value(
                     &mut self.state.gizmo_space,
                     GizmoSpace::Object,
@@ -772,6 +782,77 @@ impl Editor {
         }
     }
 
+    /// View menu: layout, maximise, lighting, shadows, anti-aliasing (docs/specs/UI.md §6.2).
+    /// Each entry runs its registry command.
+    fn view_options_menu(&mut self, ui: &mut Ui) {
+        let v = self.state.views.clone();
+        let four = v.layout == PaneLayout::Four;
+        let mut runs: Vec<Cmd> = Vec::new();
+        let mut item = |ui: &mut Ui, this: &Self, on: bool, label: &str, command: Cmd| {
+            let mut button = egui::Button::new(label).selected(on);
+            if let Some(sc) = this.chord_text(ui.ctx(), &command) {
+                button = button.shortcut_text(sc);
+            }
+            if ui.add(button).clicked() {
+                runs.push(command);
+                ui.close();
+            }
+        };
+        item(
+            ui,
+            self,
+            !four,
+            "Layout: single view",
+            ("view.layout", json!({"layout": "single"})),
+        );
+        item(
+            ui,
+            self,
+            four,
+            "Layout: four views",
+            ("view.layout", json!({"layout": "four"})),
+        );
+        ui.add_enabled_ui(four, |ui| {
+            item(
+                ui,
+                self,
+                v.maximized.is_some(),
+                "Maximize pane",
+                ("view.maximize", json!({})),
+            );
+        });
+        ui.separator();
+        for (mode, label) in [
+            (forge_command::LightingArg::Headlight, "Lighting: headlight"),
+            (forge_command::LightingArg::Rig, "Lighting: rig"),
+        ] {
+            item(
+                ui,
+                self,
+                v.lighting == mode,
+                label,
+                ("view.lighting", json!({"mode": mode})),
+            );
+        }
+        item(
+            ui,
+            self,
+            v.shadows,
+            "Shadows",
+            ("view.shadows", json!({"enabled": !v.shadows})),
+        );
+        item(
+            ui,
+            self,
+            v.antialias,
+            "Anti-aliasing",
+            ("view.antialias", json!({"enabled": !v.antialias})),
+        );
+        for c in runs {
+            self.run(c);
+        }
+    }
+
     fn viewport_ui(&mut self, ui: &mut Ui, rs: Option<&egui_wgpu::RenderState>) {
         // header: what a click selects (EDITABLE.md §2.6)
         ui.horizontal(|ui| {
@@ -792,9 +873,48 @@ impl Editor {
                 self.component_bar(ui);
             }
         });
-        let rect = ui.available_rect_before_wrap();
+        let area = ui.available_rect_before_wrap();
+        let rects = arrange(
+            self.state.views.layout,
+            self.state.views.active,
+            self.state.views.maximized,
+            area.width(),
+            area.height(),
+            PANE_GAP,
+        );
+        self.viewport_hot = false;
+        let four = rects.len() > 1;
+        let active = self.state.views.active;
+        for r in rects {
+            let rect =
+                egui::Rect::from_min_size(area.min + egui::vec2(r.x, r.y), egui::vec2(r.w, r.h));
+            self.pane_ui(ui, rs, r.pane, rect);
+            if four && r.pane == active {
+                // the active pane's outline
+                ui.painter().rect_stroke(
+                    rect,
+                    0.0,
+                    egui::Stroke::new(1.5, Theme::default().component_selection),
+                    egui::StrokeKind::Inside,
+                );
+            }
+        }
+    }
+
+    /// One viewport pane in `rect`: the pointer in it makes it active, then navigation,
+    /// picking and gizmos act on it (docs/specs/UI.md §6.2).
+    fn pane_ui(
+        &mut self,
+        ui: &mut Ui,
+        rs: Option<&egui_wgpu::RenderState>,
+        pane: Pane,
+        rect: egui::Rect,
+    ) {
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
-        self.viewport_hot = response.hovered() || response.has_focus();
+        self.viewport_hot |= response.hovered() || response.has_focus();
+        if response.hovered() || response.dragged() || response.is_pointer_button_down_on() {
+            self.state.activate(pane);
+        }
         let typing = ui.ctx().egui_wants_keyboard_input();
         // the response reads the input itself, so ask it before locking the input
         let drag = if response.dragged() {
@@ -823,9 +943,14 @@ impl Editor {
         });
         let action = nav_action(&input);
         let view_size = [rect.width() as f64, rect.height() as f64];
-        apply_nav(&mut self.state.camera, action, view_size);
-        if view_size[1] > 0.0 {
-            self.state.view_aspect = view_size[0] / view_size[1];
+        if pane == self.state.views.active {
+            if action != NavAction::None {
+                self.state.touch_view();
+            }
+            apply_nav(&mut self.state.camera, action, view_size);
+            if view_size[1] > 0.0 {
+                self.state.view_aspect = view_size[0] / view_size[1];
+            }
         }
         let Some(rs) = rs else {
             // not selectable: a selectable label would take the pointer from the navigation
@@ -850,11 +975,13 @@ impl Editor {
         let shown = self.state.evaluated();
         // a live tool preview replaces the target's mesh in the drawn scene only
         let shown = crate::tools::with_preview(&self.state, &shown).unwrap_or(shown);
+        let lights = crate::panes::scene_lights(&shown);
         let tex = self.viewport.render(
             rs,
+            pane,
             size,
-            &self.state.camera,
-            self.state.shading,
+            &self.state.pane_camera(pane),
+            display_settings(&self.state.views, self.state.pane_shading(pane), &lights),
             SceneView {
                 scene: &shown,
                 selected: &self.state.selection.nodes,
@@ -884,14 +1011,14 @@ impl Editor {
         }
         let label = SHADINGS
             .iter()
-            .find(|(s, _)| *s == self.state.shading)
+            .find(|(s, _)| *s == self.state.pane_shading(pane))
             .map_or("", |(_, l)| l);
         ui.painter().text(
             rect.left_top() + egui::vec2(8.0, 6.0),
             egui::Align2::LEFT_TOP,
             match self.state.mode {
-                EditMode::Model => format!("Perspective · {label}"),
-                mode => format!("Perspective · {label} · {} mode", mode.label()),
+                EditMode::Model => format!("{} · {label}", pane.label()),
+                mode => format!("{} · {label} · {} mode", pane.label(), mode.label()),
             },
             egui::FontId::proportional(12.0),
             Theme::default().weak_text,

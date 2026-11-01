@@ -5,15 +5,64 @@ struct Uniforms {
     base: vec4<f32>,
     selection: vec4<f32>,
     wire: vec4<f32>,
-    // xyz: unit direction towards the light (headlight = -forward)
+    // unused (the lights are in group 1)
     light: vec4<f32>,
-    // x: 1 = smooth normals, y: depth bias in NDC (toward the camera)
+    // x: 1 = smooth normals, y: depth bias in NDC (toward the camera), z: 1 = unlit
     params: vec4<f32>,
     // x: half point size in pixels, y/z: NDC units per pixel (2/width, 2/height)
     point: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
+
+// Lights (docs/specs/VIEWPORT.md §8.1-§8.2)
+struct Light {
+    // directional: xyz unit vector towards the light; point/spot: position; w: kind 0/1/2
+    pos_kind: vec4<f32>,
+    // rgb: colour * intensity; w: shadow layer, -1 = none
+    color: vec4<f32>,
+    // spot: xyz axis (travel direction), w: cos(outer)
+    axis_cos: vec4<f32>,
+    // x: cos(inner), y: range (0 = none), z: shadow bias in NDC depth
+    params: vec4<f32>,
+    shadow_vp: mat4x4<f32>,
+};
+
+struct Lights {
+    lights: array<Light, 8>,
+    // x: light count, y: ambient, z: 1 / shadow map size
+    info: vec4<f32>,
+};
+
+@group(1) @binding(0) var<uniform> lit: Lights;
+@group(1) @binding(1) var shadow_map: texture_depth_2d_array;
+@group(1) @binding(2) var shadow_samp: sampler_comparison;
+
+// Fraction of the 3x3 taps around the fragment that the light reaches.
+fn shadow_factor(light: Light, wpos: vec3<f32>) -> f32 {
+    let layer = i32(light.color.w);
+    if layer < 0 {
+        return 1.0;
+    }
+    let lp = light.shadow_vp * vec4<f32>(wpos, 1.0);
+    if lp.w <= 0.0 {
+        return 1.0;
+    }
+    let ndc = lp.xyz / lp.w;
+    let uv = vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+    if any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) || ndc.z > 1.0 || ndc.z < 0.0 {
+        return 1.0;
+    }
+    let reference = ndc.z - light.params.z;
+    var sum = 0.0;
+    for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+            let o = vec2<f32>(f32(dx), f32(dy)) * lit.info.z;
+            sum += textureSampleCompareLevel(shadow_map, shadow_samp, uv + o, layer, reference);
+        }
+    }
+    return sum / 9.0;
+}
 
 struct TriIn {
     @location(0) pos: vec3<f32>,
@@ -26,12 +75,19 @@ struct TriOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) n: vec3<f32>,
     @location(1) @interpolate(flat) selected: f32,
+    @location(2) wpos: vec3<f32>,
 };
+
+@vertex
+fn vs_shadow(v: TriIn) -> @builtin(position) vec4<f32> {
+    return u.view_proj * vec4<f32>(v.pos, 1.0);
+}
 
 @vertex
 fn vs_tri(v: TriIn) -> TriOut {
     var o: TriOut;
     o.clip = u.view_proj * vec4<f32>(v.pos, 1.0);
+    o.wpos = v.pos;
     o.n = select(v.flat_n, v.smooth_n, u.params.x > 0.5);
     o.selected = v.selected;
     return o;
@@ -41,9 +97,31 @@ fn vs_tri(v: TriIn) -> TriOut {
 fn fs_tri(i: TriOut) -> @location(0) vec4<f32> {
     let len = length(i.n);
     let n = select(vec3<f32>(0.0), i.n / len, len > 1e-8);
-    let k = 0.25 + 0.75 * abs(dot(n, u.light.xyz));
     let base = select(u.base.rgb, u.selection.rgb, i.selected > 0.5);
-    return vec4<f32>(base * k, 1.0);
+    if u.params.z > 0.5 {
+        return vec4<f32>(base, 1.0);
+    }
+    var sum = vec3<f32>(0.0);
+    let count = i32(lit.info.x);
+    for (var k = 0; k < count; k++) {
+        let li = lit.lights[k];
+        var l = li.pos_kind.xyz;
+        var att = 1.0;
+        if li.pos_kind.w > 0.5 {
+            let d = li.pos_kind.xyz - i.wpos;
+            let dist = length(d);
+            l = d / max(dist, 1e-9);
+            if li.params.y > 0.0 {
+                let t = 1.0 - min(dist / li.params.y, 1.0);
+                att = t * t;
+            }
+            if li.pos_kind.w > 1.5 {
+                att = att * smoothstep(li.axis_cos.w, li.params.x, dot(-l, li.axis_cos.xyz));
+            }
+        }
+        sum += li.color.rgb * (att * abs(dot(n, l)) * shadow_factor(li, i.wpos));
+    }
+    return vec4<f32>(base * (vec3<f32>(lit.info.y) + sum), 1.0);
 }
 
 struct EdgeIn {

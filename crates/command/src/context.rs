@@ -7,8 +7,8 @@ use forge_modeling::ComponentSettings;
 use serde_json::Value;
 
 use crate::state::{
-    CameraSet, GizmoModeArg, GizmoSpaceArg, ModeArg, NodeSelection, SelectExtra, SelectOp,
-    ShadingMode, UiRequest, ViewArg,
+    CameraSet, GizmoModeArg, GizmoSpaceArg, LayoutArg, LightingArg, ModeArg, NodeSelection,
+    PaneArg, SelectExtra, SelectOp, ShadingMode, UiRequest, ViewArg,
 };
 use crate::timeline::Timeline;
 
@@ -56,11 +56,20 @@ pub trait CommandContext {
     }
 
     // View-only state; headless contexts ignore it.
-    fn set_shading(&mut self, _shading: ShadingMode) {}
+    /// Sets a pane's shading (`None`: the active pane).
+    fn set_shading(&mut self, _shading: ShadingMode, _pane: Option<PaneArg>) {}
     fn frame_all(&mut self) {}
     /// Frames the selected nodes and their descendants (all when none has geometry).
     fn frame_selected(&mut self) {}
-    fn set_view(&mut self, _view: ViewArg) {}
+    /// Points a pane's camera along a named view (`None`: the active pane).
+    fn set_view(&mut self, _view: ViewArg, _pane: Option<PaneArg>) {}
+    /// Sets the viewport layout; `None` toggles single / four.
+    fn set_layout(&mut self, _layout: Option<LayoutArg>) {}
+    /// Toggles a pane's maximised state in the four-view layout (`None`: the active pane).
+    fn maximize(&mut self, _pane: Option<PaneArg>) {}
+    fn set_lighting(&mut self, _lighting: LightingArg) {}
+    fn set_shadows(&mut self, _on: bool) {}
+    fn set_antialias(&mut self, _on: bool) {}
     /// Applies validated camera fields.
     fn set_camera(&mut self, _set: CameraSet) {}
     /// The camera as JSON (`view.get_camera`); null without a viewport.

@@ -13,6 +13,7 @@ use forge_viewport::render::Shading;
 
 use crate::dock::Dock;
 use crate::keymap::KeyMapState;
+use crate::panes::{DEFAULT_SHADING, Views};
 use crate::screenshot::OffscreenGpu;
 use crate::script_panel::ScriptPanelState;
 use crate::tools::ToolState;
@@ -25,10 +26,14 @@ pub struct EditorState {
     pub app: App,
     pub expanded: BTreeSet<NodeId>,
     pub dock: Dock,
+    /// The active pane's camera and shading are these two fields; the other panes' are in
+    /// `views` (docs/specs/UI.md §6.2).
     pub camera: Camera,
     /// Width / height of the viewport as last drawn; the frame commands fit to it.
     pub view_aspect: f64,
     pub shading: Shading,
+    /// Viewport layout, active and maximised pane, lighting options and the other panes.
+    pub views: Views,
     /// Script Manager source, console and recent list (docs/specs/UI.md §10).
     pub script: ScriptPanelState,
     /// The headless GPU device `viewport.screenshot` renders with (RPC.md §10.2).
@@ -78,7 +83,8 @@ impl EditorState {
             dock: Dock::default(),
             camera: Self::default_camera(),
             view_aspect: 16.0 / 9.0,
-            shading: Shading::SmoothWire,
+            shading: DEFAULT_SHADING,
+            views: Views::new(&Self::default_camera()),
             script: ScriptPanelState::default(),
             offscreen: OffscreenGpu::default(),
             tool: None,

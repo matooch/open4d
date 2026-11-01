@@ -105,10 +105,15 @@ touch history.
 | `object.enable` | `nodes?`, `enabled` | null | yes |
 | `edit.undo` | - | `{done}` | no |
 | `edit.redo` | - | `{done}` | no |
-| `view.shading` | `mode` smooth, flat, wire, smooth_wire, flat_wire | null | no |
+| `view.shading` | `mode` smooth, flat, wire, smooth_wire, flat_wire, quick, constant, hidden_line, bounding_box; `pane?` perspective, top, front, right (default: the active pane) | null | no |
 | `view.frame_all` | - | null | no |
 | `view.frame_selected` | - | null | no |
-| `view.set_view` | `view` perspective, front, back, left, right, top, bottom | null | no |
+| `view.set_view` | `view` perspective, front, back, left, right, top, bottom; `pane?` perspective, top, front, right (default: the active pane) | null | no |
+| `view.layout` | `layout?` single, four (absent toggles) | null | no |
+| `view.maximize` | `pane?` perspective, top, front, right (default: the active pane) | null | no |
+| `view.lighting` | `mode` headlight, rig | null | no |
+| `view.shadows` | `enabled` | null | no |
+| `view.antialias` | `enabled` | null | no |
 | `view.set_camera` | `target?` [x,y,z] world, `distance?`, `yaw?`, `pitch?` (degrees), `projection?` perspective, orthographic, `fov?` (degrees), `height?` (orthographic) | null | no |
 | `view.get_camera` | - | `{target, eye, distance, yaw, pitch, projection, fov?, height?}` | no |
 | `view.gizmo_mode` | `mode` move, rotate, scale | null | no |
@@ -200,6 +205,15 @@ Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and A
   in a right-handed world). `view.get_camera` reads the same fields back (`eye` in world
   space), so an agent can drive the camera and check it. Headless contexts (no viewport)
   ignore the setters and answer `view.get_camera` with null.
+- `view.shading`, `view.set_view`, `view.layout`, `view.maximize`, `view.lighting`, `view.shadows`,
+  `view.antialias` (brief 143, VIEWPORT.md §8-§9, UI.md §6.2): view state only, not undoable.
+  `pane` selects one of the four viewport panes (`perspective`, `top`, `front`, `right`); absent it
+  means the active pane. A command with a `pane` changes that pane's camera or shading and leaves the
+  other panes and the active pane alone. `view.layout` without `layout` toggles; `view.maximize`
+  toggles the pane's maximised state (a no-op in the single layout). `view.lighting`
+  chooses the headlight or the default rig, `view.shadows` and `view.antialias` switch shadow maps
+  and 4x MSAA. Headless contexts ignore all of them. `view.frame_*`, `view.set_camera` and
+  `view.get_camera` act on the active pane.
 - `key.*`, `timeline.*`: ANIM.md §2; `timeline.set_frame` and `step` clamp to the project
   range. `timeline.settings` merges steps like before (`timeline-settings` key).
 - `key.set`: writes one Spline key (ANIM.md §1) on `track` (an animatable float parameter id

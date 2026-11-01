@@ -13,8 +13,8 @@ use crate::context::CommandContext;
 use crate::error::CommandError;
 use crate::registry::CommandRegistry;
 use crate::state::{
-    CameraSet, ConvertMode, GizmoModeArg, GizmoSpaceArg, ModeArg, SelectExtra, SelectOp,
-    ShadingMode, UiRequest, ViewArg,
+    CameraSet, ConvertMode, GizmoModeArg, GizmoSpaceArg, LayoutArg, LightingArg, ModeArg, PaneArg,
+    SelectExtra, SelectOp, ShadingMode, UiRequest, ViewArg,
 };
 
 #[derive(Deserialize, JsonSchema)]
@@ -100,12 +100,42 @@ struct EnableArgs {
 #[serde(deny_unknown_fields)]
 struct ShadingArgs {
     mode: ShadingMode,
+    /// Viewport pane; absent = the active pane.
+    pane: Option<PaneArg>,
 }
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct ViewArgs {
     view: ViewArg,
+    /// Viewport pane; absent = the active pane.
+    pane: Option<PaneArg>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct LayoutArgs {
+    /// `single` or `four`; absent toggles.
+    layout: Option<LayoutArg>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct MaximizeArgs {
+    /// Viewport pane; absent = the active pane.
+    pane: Option<PaneArg>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct LightingArgs {
+    mode: LightingArg,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct EnabledArgs {
+    enabled: bool,
 }
 
 /// Checks the numbers of `view.set_camera` (docs/specs/COMMANDS.md §6).
@@ -273,7 +303,67 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
             || json!({"mode": "smooth_wire"}),
         ),
         |c, a: ShadingArgs| {
-            c.set_shading(a.mode);
+            c.set_shading(a.mode, a.pane);
+            Ok(Value::Null)
+        },
+    )?;
+    r.register_fn(
+        spec(
+            "view.layout",
+            "Viewport Layout",
+            false,
+            || json!({"layout": "four"}),
+        ),
+        |c, a: LayoutArgs| {
+            c.set_layout(a.layout);
+            Ok(Value::Null)
+        },
+    )?;
+    r.register_fn(
+        spec(
+            "view.maximize",
+            "Maximize Pane",
+            false,
+            || json!({"pane": "top"}),
+        ),
+        |c, a: MaximizeArgs| {
+            c.maximize(a.pane);
+            Ok(Value::Null)
+        },
+    )?;
+    r.register_fn(
+        spec(
+            "view.lighting",
+            "Viewport Lighting",
+            false,
+            || json!({"mode": "rig"}),
+        ),
+        |c, a: LightingArgs| {
+            c.set_lighting(a.mode);
+            Ok(Value::Null)
+        },
+    )?;
+    r.register_fn(
+        spec(
+            "view.shadows",
+            "Viewport Shadows",
+            false,
+            || json!({"enabled": true}),
+        ),
+        |c, a: EnabledArgs| {
+            c.set_shadows(a.enabled);
+            Ok(Value::Null)
+        },
+    )?;
+    r.register_fn(
+        spec(
+            "view.antialias",
+            "Viewport Anti-aliasing",
+            false,
+            || json!({"enabled": true}),
+        ),
+        |c, a: EnabledArgs| {
+            c.set_antialias(a.enabled);
             Ok(Value::Null)
         },
     )?;
@@ -322,7 +412,7 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
             || json!({"view": "top"}),
         ),
         |c, a: ViewArgs| {
-            c.set_view(a.view);
+            c.set_view(a.view, a.pane);
             Ok(Value::Null)
         },
     )?;
