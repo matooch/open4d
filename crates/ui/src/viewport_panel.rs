@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 
 use eframe::egui_wgpu;
-use forge_core::{NodeId, Scene};
+use forge_core::{EvalCtx, NodeId, Scene};
 use forge_geometry::PolyMesh;
 use forge_geometry::selection::Selection;
 use forge_viewport::camera::Camera;
@@ -58,6 +58,8 @@ pub struct SceneView<'a> {
     pub gizmo: Option<&'a Gizmo>,
     /// The component target and the mode being edited (EDITABLE.md §2.6).
     pub component: Option<(NodeId, EditMode)>,
+    /// Evaluation context of the shown frame.
+    pub ctx: EvalCtx,
 }
 
 /// Base colour of selected objects (our palette).
@@ -118,6 +120,15 @@ pub fn scene_meshes(
     scene: &Scene,
     selected: &BTreeSet<NodeId>,
 ) -> Vec<(NodeId, PolyMesh, bool, Option<f64>)> {
+    scene_meshes_at(scene, selected, &EvalCtx::default())
+}
+
+/// [`scene_meshes`] evaluated with `ctx` (time, fps, seed).
+pub fn scene_meshes_at(
+    scene: &Scene,
+    selected: &BTreeSet<NodeId>,
+    ctx: &EvalCtx,
+) -> Vec<(NodeId, PolyMesh, bool, Option<f64>)> {
     let mut out = Vec::new();
     for root in scene.roots() {
         for id in std::iter::once(*root).chain(scene.descendants(*root)) {
@@ -126,7 +137,7 @@ pub fn scene_meshes(
                 continue;
             }
             let (Ok(Some(mut mesh)), Some(m)) = (
-                forge_generators::evaluate(scene, id),
+                forge_generators::evaluate(scene, id, ctx),
                 scene.world_matrix(id),
             ) else {
                 continue;
@@ -156,6 +167,7 @@ impl ViewportPanel {
             selected,
             gizmo,
             component,
+            ctx,
         } = view;
         let device = &rs.device;
         let renderer = self
@@ -224,7 +236,7 @@ impl ViewportPanel {
         if self.meshes.as_ref().is_none_or(|m| {
             m.revision != scene.revision() || m.selection != *selected || m.component != component
         }) {
-            let items = scene_meshes(scene, selected)
+            let items = scene_meshes_at(scene, selected, &ctx)
                 .into_iter()
                 .map(|(id, mesh, sel, smoothing)| {
                     match component.filter(|(target, _)| *target == id) {

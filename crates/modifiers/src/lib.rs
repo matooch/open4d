@@ -11,7 +11,7 @@ pub mod taper;
 pub mod twist;
 
 use forge_core::{
-    Category, NodeId, NodeType, ParamDesc, Plugin, Registry, RegistryError, Scene, Unit,
+    Category, EvalCtx, NodeId, NodeType, ParamDesc, Plugin, Registry, RegistryError, Scene, Unit,
 };
 use glam::{DMat4, DVec3};
 
@@ -189,8 +189,16 @@ enum Job {
 /// (MODIFIERS.md §0): the points are taken into the deformer's space with the inverse
 /// of the deformer's transform relative to `target`, deformed, and put back.
 ///
+/// `_ctx` (time, fps, seed; MODIFIERS.md §8) is read by no deformer yet.
+///
 /// Does nothing for a disabled deformer, a missing node or an unknown type.
-pub fn apply_deformer(scene: &Scene, deformer: NodeId, target: NodeId, points: &mut [DVec3]) {
+pub fn apply_deformer(
+    scene: &Scene,
+    deformer: NodeId,
+    target: NodeId,
+    points: &mut [DVec3],
+    _ctx: &EvalCtx,
+) {
     let (Some(node), Some(ty)) = (scene.node(deformer), scene.node_type(deformer)) else {
         return;
     };

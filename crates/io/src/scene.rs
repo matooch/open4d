@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use forge_core::smoothing::{TAG as SMOOTHING_TAG, smoothing_angle};
-use forge_core::{EditError, NodeId, Scene, Tx, Value};
+use forge_core::{EditError, EvalCtx, NodeId, Scene, Tx, Value};
 use forge_generators::{POLYGON, evaluate, from_poly_mesh, is_consumed};
 
 use crate::obj::ObjObject;
@@ -36,7 +36,7 @@ pub fn export_scene(scene: &Scene, roots: Option<&[NodeId]>) -> Vec<ObjObject> {
             if node.is_tag() || is_consumed(scene, id) {
                 return None;
             }
-            let mesh = evaluate(scene, id).ok().flatten()?;
+            let mesh = evaluate(scene, id, &EvalCtx::default()).ok().flatten()?;
             if mesh.polys.is_empty() {
                 return None;
             }

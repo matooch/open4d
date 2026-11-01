@@ -46,18 +46,24 @@ Status: draft · Source: docs/parity/{bend,twist,deformer-common,taper,bulge,she
     tangent to travel along: it holds the value at `t = 1` above the box, which is why
     Taper keeps its top scale there (`taper/strength`).
   - `within_box`: only points inside the box deform, everything else is unchanged —
-    on **all three axes**: `|x| ≤ size_x/2`, `|y| ≤ size_y/2`, `|z| ≤ size_z/2`
+    on **all three axes**: `|x| ≤ size_x/2`, `|y| ≤ size_y/2`, `|z| ≤ size_z/2`,
+    boundaries inclusive, all tested in the deformer's local space
     (`bend/mode-box`, `twist/mode-box`: the part above the box is not carried along;
     `bend/mode-box-narrow-x`: the `x = ±100` columns stay unmoved while `|x| ≤ 50`
     bends; `bend/mode-box-narrow-z`: all 90 vertices at `|z| = 100` exactly unmoved,
-    versus the 40 in `bend/mode-box` that are outside in y as well). One exception:
-    the whole deformation is **suppressed** when the box spans the parent object's x/z
-    extent in neither axis (`bend/mode-box-narrow`: size (100, 250, 100) against the
-    200 × 400 × 200 cube → the undeformed cube, although points lie inside the box;
-    with a (100, 400, 100) cube the box (120, 250, 150) does deform, so the threshold
-    follows the object's extent, not an absolute size). In `limited` the box's x/z
+    versus the 40 in `bend/mode-box` that are outside in y as well). Second rule, the
+    **suppression**: with `ex`, `ez` the x and z extents (max − min) of the object's
+    points in the deformer's local space, the whole deformation is skipped when
+    `size_x < ex` **and** `size_z < ez`, i.e. when the box spans the object in neither
+    axis (`bend/mode-box-narrow`: size (100, 250, 100) against the 200 × 400 × 200
+    cube → the undeformed cube, although points lie inside the box). "Spans" is
+    `size ≥ extent`: the interactive sweep in `docs/parity/bend.md` gives (100, 250, 200)
+    deforms (`size_z = ez`) and (120, 250, 190) does not. The threshold is relative to
+    the object (a 100 × 400 × 100 cube with box (120, 250, 150) bends), which is why it
+    uses the extent. Both rules apply to `within_box` only: in `limited` the box's x/z
     size is ignored (`deformer-common/on-plane`: points with |x|, |z| > 125 deform
-    normally).
+    normally). **Implemented for Bend only** (the one deformer observed); applying it to
+    the other deformers is **parity-pending** until a golden case narrows their box.
   - `unlimited`: the same rate continues below and above the box
     (`bend/mode-unlimited`: min y −299.40 = the arc at t = −0.3; `twist/mode-unlimited`:
     the corner (−100, −200, −100) → (−134.50, −200, −43.70) = a −27° turn).
@@ -158,7 +164,10 @@ matches with the same `R`.
 | `mode-box-narrow-z` | box (250, 250, 100): `within_box` gates per point on z (same bbox as `mode-box`, z = ±100 columns unmoved) |
 | `strength-zero` | α = 0 with angle 45° → the undeformed cube: a zero strength means no deformation regardless of the angle |
 
-`within_box` details (suppression and per-point x/z gating) are §0.
+`within_box` details (suppression and per-point x/z gating) are §0. In `bend.rs` the
+gate and the suppression are evaluated on the point in the deformer's local space
+**before** the `angle` rotation (the box is not turned by `angle`; `angle` with
+`within_box` was not observed: **parity-pending**).
 
 ## 2. Twist (`forge.twist`)
 
@@ -369,19 +378,27 @@ is byte-identical to `defaults`; `spherify/moved` centres the sphere on (50, 100
 | `radius` | radius 100 at 100 % → every point at distance 100 |
 | `moved` | the sphere follows the deformer's transform (centre (50, 100, 0)) |
 
+## 8. Evaluation context
+
+`forge_core::EvalCtx { time: f64, fps: f64, seed: u64 }` (seconds, frames per second, RNG
+seed) is passed to `forge_generators::evaluate(scene, id, &ctx)` and from there to
+`forge_modifiers::apply_deformer(scene, deformer, target, points, &ctx)`. The default is
+frame 0 at 30 fps with seed 0 (`EvalCtx::default()`), `EvalCtx::at_frame(frame, fps)`
+builds the context of a frame. Interactive callers pass the document time; no deformer
+reads the context yet (time-dependent deformers and effectors will), so results do not
+change. Source: own design (docs/roadmap/areas/D-deformers-fields.md).
+
 ## 9. Parity
 
-Test: `crates/modifiers/tests/deformers_parity.rs` — features `bend` (14 cases),
+Test: `crates/modifiers/tests/deformers_parity.rs` — features `bend` (15 cases),
 `twist` (7), `deformer-common` (6), `taper` (8), `bulge` (7), `shear` (7) and
-`spherify` (5) — 54 in all — are rebuilt from their `case.toml` (`parent`, `hierarchy`,
+`spherify` (5) — 55 in all — are rebuilt from their `case.toml` (`parent`, `hierarchy`,
 `rot` degrees HPB, vec3 `size` are the keys the batch added; `level` maps to
 `level_view`) and compared with `export_weld` on both sides (GENERATORS2 §0).
 
 - `UNSUPPORTED`: none.
-- `KNOWN_MISMATCH` (observed, not derived yet): `bend/mode-box-narrow`,
-  `bend/mode-box-narrow-x`, `bend/mode-box-narrow-z` — our `within_box` gates only on
-  y (§0); the observed mode gates per point on x/y/z and suppresses the whole
-  deformation when the box spans the object's x/z extent in neither axis.
+- `KNOWN_MISMATCH`: none (the three `bend/mode-box-narrow*` cases matched once §0's
+  per-axis gate and suppression landed).
 - Evaluation order and placement rules are §0; the modifier maths are §1–§6.
 - Parity-pending (implemented, seen in one configuration only): sibling deformers below
   the object (§0), `fillet` together with

@@ -177,7 +177,7 @@ fn widened_ranges_build_at_their_minimum() {
                 Ok(g)
             })
             .unwrap();
-        match evaluate(d.scene(), g) {
+        match evaluate(d.scene(), g, &forge_core::EvalCtx::default()) {
             Ok(_) | Err(BuildError::Unsupported(_)) => {}
             Err(e) => panic!("{ty}.{key}={v}: {e}"),
         }
@@ -196,7 +196,7 @@ fn widened_ranges_build_at_their_minimum() {
                 Ok(g)
             })
             .unwrap();
-        match evaluate(d.scene(), g) {
+        match evaluate(d.scene(), g, &forge_core::EvalCtx::default()) {
             Ok(_) | Err(BuildError::Unsupported(_)) => {}
             Err(e) => panic!("loft u={u}: {e}"),
         }

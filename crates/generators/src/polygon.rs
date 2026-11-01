@@ -3,7 +3,9 @@
 use std::sync::Arc;
 
 use forge_core::transform::PREFIX;
-use forge_core::{Category, EditError, MeshData, NodeId, NodeType, ParamDesc, Scene, Tx, Value};
+use forge_core::{
+    Category, EditError, EvalCtx, MeshData, NodeId, NodeType, ParamDesc, Scene, Tx, Value,
+};
 use forge_geometry::PolyMesh;
 use glam::DVec3;
 
@@ -169,8 +171,8 @@ pub fn make_editable(tx: &mut Tx, id: NodeId) -> Result<NodeId, EditableError> {
     if node.type_id == TYPE {
         return Ok(id);
     }
-    let mesh =
-        evaluate_geometry(scene, id)?.ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?;
+    let mesh = evaluate_geometry(scene, id, &EvalCtx::default())?
+        .ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?;
     let (parent, index) = index_of(scene, id).ok_or(EditError::UnknownNode(id))?;
     let (consumed, kept): (Vec<NodeId>, Vec<NodeId>) =
         node.children.iter().partition(|c| is_consumed(scene, **c));
@@ -193,7 +195,8 @@ pub fn current_state_to_object(tx: &mut Tx, id: NodeId) -> Result<NodeId, Editab
     if scene.node(id).is_none_or(|n| n.is_tag()) {
         return Err(EditableError::NoMesh(name_of(scene, id)));
     }
-    let mut mesh = evaluate(scene, id)?.ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?;
+    let mut mesh = evaluate(scene, id, &EvalCtx::default())?
+        .ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?;
     let (parent, index) = index_of(scene, id).ok_or(EditError::UnknownNode(id))?;
     // Deformers inherited from a geometry-less parent would deform the copy again under
     // that parent: put it after the parent instead, in the parent's space (§1.3).

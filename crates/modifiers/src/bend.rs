@@ -17,6 +17,9 @@ pub fn bend(points: &mut [DVec3], params: &BendParams) {
     if h <= 0.0 || alpha == 0.0 {
         return;
     }
+    if suppressed(points, params) {
+        return;
+    }
     let half = h / 2.0;
     // Radius of the neutral line (MODIFIERS.md §1): with Keep Y-Axis Length the arc
     // length of the centre line is the box height, so R = h/α.
@@ -36,7 +39,12 @@ pub fn bend(points: &mut [DVec3], params: &BendParams) {
             point.y,
             -point.x * sb + point.z * cb,
         );
-        let (qx, qy) = match placement(&params.mode, y, h) {
+        let placed = if outside_xz(&params.mode, point, params.size) {
+            Placement::Unchanged
+        } else {
+            placement(&params.mode, y, h)
+        };
+        let (qx, qy) = match placed {
             Placement::Unchanged => (x, y),
             Placement::Deform(t) => arc(radius, half, alpha * t, x),
             Placement::Carry => {
@@ -50,6 +58,30 @@ pub fn bend(points: &mut [DVec3], params: &BendParams) {
         // Back out of the bend frame, R(β) on (x, z).
         *point = DVec3::new(qx * cb - z * sb, qy, qx * sb + z * cb);
     }
+}
+
+/// `within_box` gates on x and z too (MODIFIERS.md §0): a point beyond the box half-size
+/// in either axis keeps its place. `point` is in the deformer's space, before `angle`.
+fn outside_xz(mode: &str, point: &DVec3, size: DVec3) -> bool {
+    mode == "within_box" && (point.x.abs() > size.x / 2.0 || point.z.abs() > size.z / 2.0)
+}
+
+/// `within_box` does nothing at all when the box spans the object's x/z extent in
+/// neither axis (MODIFIERS.md §0, `bend/mode-box-narrow`).
+fn suppressed(points: &[DVec3], params: &BendParams) -> bool {
+    if params.mode != "within_box" || points.is_empty() {
+        return false;
+    }
+    let extent = |axis: fn(&DVec3) -> f64| {
+        let (lo, hi) = points
+            .iter()
+            .map(axis)
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
+                (lo.min(v), hi.max(v))
+            });
+        hi - lo
+    };
+    params.size.x < extent(|p| p.x) && params.size.z < extent(|p| p.z)
 }
 
 /// The bent position of a point at signed distance `x` from the neutral line, on the
@@ -123,5 +155,65 @@ mod tests {
         let mut points = vec![DVec3::new(1.0, 2.0, 3.0)];
         bend(&mut points, &p);
         assert_eq!(points[0], DVec3::new(1.0, 2.0, 3.0));
+    }
+
+    fn within_box(size: DVec3) -> BendParams {
+        BendParams {
+            size,
+            mode: "within_box".to_string(),
+            ..params()
+        }
+    }
+
+    /// A 200 x 400 x 200 object as its corner and centre points.
+    fn object() -> Vec<DVec3> {
+        vec![
+            DVec3::new(-100.0, 0.0, -100.0),
+            DVec3::new(100.0, 0.0, 100.0),
+            DVec3::new(0.0, 0.0, 0.0),
+        ]
+    }
+
+    #[test]
+    fn within_box_gates_each_axis_inclusively() {
+        // Spans z (250 >= 200), narrow in x: the x = +-100 points keep their place.
+        let mut pts = object();
+        bend(&mut pts, &within_box(DVec3::new(100.0, 250.0, 250.0)));
+        assert_eq!(pts[0], DVec3::new(-100.0, 0.0, -100.0));
+        assert_ne!(pts[2], DVec3::ZERO);
+        // z only; |z| = size_z/2 is outside nothing: boundary is inclusive.
+        let mut pts = vec![DVec3::new(0.0, 0.0, 50.0), DVec3::new(0.0, 0.0, 50.1)];
+        bend(&mut pts, &within_box(DVec3::new(250.0, 250.0, 100.0)));
+        assert_ne!(pts[0], DVec3::new(0.0, 0.0, 50.0));
+        assert_eq!(pts[1], DVec3::new(0.0, 0.0, 50.1));
+    }
+
+    #[test]
+    fn within_box_is_suppressed_when_the_box_spans_neither_axis() {
+        let mut pts = object();
+        bend(&mut pts, &within_box(DVec3::new(100.0, 250.0, 100.0)));
+        assert_eq!(pts, object());
+        // (120, 250, 190) is also narrower than the 200 x 200 object in both axes.
+        bend(&mut pts, &within_box(DVec3::new(120.0, 250.0, 190.0)));
+        assert_eq!(pts, object());
+        // Spanning one axis (size == extent) deforms.
+        bend(&mut pts, &within_box(DVec3::new(100.0, 250.0, 200.0)));
+        assert_ne!(pts[2], DVec3::ZERO);
+    }
+
+    #[test]
+    fn the_suppression_follows_the_object_extent_and_within_box_only() {
+        // A 100 x 100 object with box (120, 250, 150) spans it: it bends.
+        let mut pts = vec![DVec3::new(-50.0, 0.0, -50.0), DVec3::new(50.0, 0.0, 50.0)];
+        bend(&mut pts, &within_box(DVec3::new(120.0, 250.0, 150.0)));
+        assert_ne!(pts[1], DVec3::new(50.0, 0.0, 50.0));
+        // `limited` ignores the x/z size entirely.
+        let mut pts = object();
+        let limited = BendParams {
+            size: DVec3::new(100.0, 250.0, 100.0),
+            ..params()
+        };
+        bend(&mut pts, &limited);
+        assert_ne!(pts[2], DVec3::ZERO);
     }
 }

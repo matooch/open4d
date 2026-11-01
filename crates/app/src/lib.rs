@@ -13,7 +13,7 @@ use forge_command::{
     CommandContext, CommandError, CommandRegistry, ModeArg, NodeSelection, SelectOp, Timeline,
     register_editor_commands,
 };
-use forge_core::{Document, NodeId, Registry, RegistryError, Scene, SceneSettings};
+use forge_core::{Document, EvalCtx, NodeId, Registry, RegistryError, Scene, SceneSettings};
 use forge_generators::{Primitives, evaluate};
 use forge_geometry::PolyMesh;
 use forge_io::export_scene;
@@ -158,9 +158,13 @@ impl App {
         if !scene.contains(node) {
             return Err(AppError::UnknownNode(node.0));
         }
-        let mut mesh = evaluate(&scene, node)
-            .map_err(|e| AppError::Build(e.to_string()))?
-            .ok_or(AppError::NoGeometry(node.0))?;
+        let mut mesh = evaluate(
+            &scene,
+            node,
+            &EvalCtx::at_frame(frame, f64::from(scene.settings().fps)),
+        )
+        .map_err(|e| AppError::Build(e.to_string()))?
+        .ok_or(AppError::NoGeometry(node.0))?;
         let world = scene
             .world_matrix(node)
             .ok_or(AppError::UnknownNode(node.0))?;

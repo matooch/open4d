@@ -92,7 +92,7 @@ fn every_primitive_golden_case_survives_make_editable() {
                 Ok(id)
             })
             .unwrap();
-        let before = evaluate(d.scene(), src);
+        let before = evaluate(d.scene(), src, &forge_core::EvalCtx::default());
         let new = d.transact("make editable", |tx| {
             make_editable(tx, src).map_err(|e| match e {
                 EditableError::Edit(e) => e,
@@ -107,7 +107,9 @@ fn every_primitive_golden_case_survives_make_editable() {
         let new = new.unwrap();
         let before = before.expect("primitive has a mesh");
         assert_eq!(d.scene().node(new).unwrap().type_id, POLYGON, "{key}");
-        let after = evaluate(d.scene(), new).unwrap().unwrap();
+        let after = evaluate(d.scene(), new, &forge_core::EvalCtx::default())
+            .unwrap()
+            .unwrap();
         assert_eq!(before, after, "{key}: mesh changed by Make Editable");
 
         let expected = case.expected_mesh().unwrap().unwrap();
@@ -164,7 +166,9 @@ fn make_editable_keeps_the_deformer_as_a_child_and_still_applies_it() {
             .unwrap();
         (c, b)
     };
-    let deformed = evaluate(d.scene(), cube).unwrap().unwrap();
+    let deformed = evaluate(d.scene(), cube, &forge_core::EvalCtx::default())
+        .unwrap()
+        .unwrap();
     let undeformed = {
         let node = d.scene().node(cube).unwrap();
         forge_generators::build(&node.type_id, &node.params).unwrap()
@@ -196,7 +200,12 @@ fn make_editable_keeps_the_deformer_as_a_child_and_still_applies_it() {
         panic!("mesh param")
     };
     assert_eq!(forge_generators::to_poly_mesh(stored), undeformed);
-    assert_eq!(evaluate(s, new).unwrap().unwrap(), deformed);
+    assert_eq!(
+        evaluate(s, new, &forge_core::EvalCtx::default())
+            .unwrap()
+            .unwrap(),
+        deformed
+    );
 }
 
 #[test]
@@ -206,7 +215,9 @@ fn current_state_to_object_bakes_the_deformer_and_keeps_the_source() {
     let tail = d
         .transact("tail", |tx| tx.create("forge.null", None, None))
         .unwrap();
-    let deformed = evaluate(d.scene(), cube).unwrap().unwrap();
+    let deformed = evaluate(d.scene(), cube, &forge_core::EvalCtx::default())
+        .unwrap()
+        .unwrap();
     let before = file::save(d.scene());
 
     let new = d
@@ -224,7 +235,9 @@ fn current_state_to_object_bakes_the_deformer_and_keeps_the_source() {
         Some(&Value::Vec3([10.0, 20.0, 30.0]))
     );
     assert_eq!(
-        evaluate(s, new).unwrap().unwrap(),
+        evaluate(s, new, &forge_core::EvalCtx::default())
+            .unwrap()
+            .unwrap(),
         deformed,
         "bend baked in"
     );
@@ -261,7 +274,9 @@ fn consumed_children_are_removed_and_other_children_kept() {
             Ok((sub, input, bend, extra))
         })
         .unwrap();
-    let expected = evaluate(d.scene(), sub).unwrap().unwrap();
+    let expected = evaluate(d.scene(), sub, &forge_core::EvalCtx::default())
+        .unwrap()
+        .unwrap();
     let new = d
         .transact("make editable", |tx| Ok(make_editable(tx, sub).unwrap()))
         .unwrap();
@@ -330,8 +345,8 @@ fn polygon_object_saves_and_loads_with_its_mesh() {
     assert!(report.warnings.is_empty(), "{:?}", report.warnings);
     assert_eq!(file::save(&scene), text);
     assert_eq!(
-        evaluate(&scene, new).unwrap(),
-        evaluate(d.scene(), new).unwrap()
+        evaluate(&scene, new, &forge_core::EvalCtx::default()).unwrap(),
+        evaluate(d.scene(), new, &forge_core::EvalCtx::default()).unwrap()
     );
 }
 
@@ -355,11 +370,18 @@ fn a_parent_null_passes_its_deformer_to_a_polygon_object() {
         })
         .unwrap();
     let _ = (null, bend);
-    let deformed = evaluate(d.scene(), cube).unwrap().unwrap();
+    let deformed = evaluate(d.scene(), cube, &forge_core::EvalCtx::default())
+        .unwrap()
+        .unwrap();
     let poly = d
         .transact("m", |tx| Ok(make_editable(tx, cube).unwrap()))
         .unwrap();
-    assert_eq!(evaluate(d.scene(), poly).unwrap().unwrap(), deformed);
+    assert_eq!(
+        evaluate(d.scene(), poly, &forge_core::EvalCtx::default())
+            .unwrap()
+            .unwrap(),
+        deformed
+    );
 }
 
 #[test]
@@ -385,7 +407,9 @@ fn current_state_to_object_with_a_sibling_deformer_is_not_deformed_twice() {
         .unwrap();
     let world = |d: &Document, id: NodeId| {
         let m = d.scene().world_matrix(id).unwrap();
-        let mesh = evaluate(d.scene(), id).unwrap().unwrap();
+        let mesh = evaluate(d.scene(), id, &forge_core::EvalCtx::default())
+            .unwrap()
+            .unwrap();
         mesh.points
             .iter()
             .map(|p| m.transform_point3(*p))
@@ -417,7 +441,9 @@ fn current_state_to_object_with_a_sibling_deformer_is_not_deformed_twice() {
     };
     assert_eq!(
         forge_generators::to_poly_mesh(stored),
-        evaluate(s, new).unwrap().unwrap()
+        evaluate(s, new, &forge_core::EvalCtx::default())
+            .unwrap()
+            .unwrap()
     );
     d.undo();
     assert_eq!(file::save(d.scene()), before);
@@ -434,7 +460,9 @@ fn make_editable_redirects_links_to_the_new_object() {
             Ok((cube, inst))
         })
         .unwrap();
-    let before = evaluate(d.scene(), inst).unwrap().unwrap();
+    let before = evaluate(d.scene(), inst, &forge_core::EvalCtx::default())
+        .unwrap()
+        .unwrap();
     assert!(!before.points.is_empty());
     let new = d
         .transact("m", |tx| Ok(make_editable(tx, cube).unwrap()))
@@ -443,7 +471,12 @@ fn make_editable_redirects_links_to_the_new_object() {
         d.scene().param(inst, "reference"),
         Some(&Value::Link(Some(new)))
     );
-    assert_eq!(evaluate(d.scene(), inst).unwrap().unwrap(), before);
+    assert_eq!(
+        evaluate(d.scene(), inst, &forge_core::EvalCtx::default())
+            .unwrap()
+            .unwrap(),
+        before
+    );
     d.undo();
     assert_eq!(
         d.scene().param(inst, "reference"),

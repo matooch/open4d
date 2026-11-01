@@ -232,7 +232,15 @@ fn scene_at_animates_one_component_of_a_cube() {
     assert_eq!(m.w_axis.truncate().to_array(), [50.0, 2.0, 3.0]);
 
     // geometry evaluates on the copy, and the copy at another time has another revision
-    assert!(evaluate(&scene_at(scene, 1.0), cube).unwrap().is_some());
+    assert!(
+        evaluate(
+            &scene_at(scene, 1.0),
+            cube,
+            &forge_core::EvalCtx::at_time(1.0, 30.0)
+        )
+        .unwrap()
+        .is_some()
+    );
     let (a, b) = (scene_at(scene, 1.0), scene_at(scene, 1.5));
     assert_ne!(a.deep_revision(cube), b.deep_revision(cube));
 }

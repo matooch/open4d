@@ -387,7 +387,9 @@ fn a_bend_child_deforms_the_edited_mesh() {
     execute(&mut st, "select.mode", json!({"mode": "polys"})).unwrap();
     let m = stored(&st, id);
     let (pi, ring) = top_poly(&m);
-    let before = evaluate(st.doc.scene(), id).unwrap().unwrap();
+    let before = evaluate(st.doc.scene(), id, &forge_core::EvalCtx::default())
+        .unwrap()
+        .unwrap();
     // the bend is active
     assert!(
         (0..8).any(
@@ -408,7 +410,9 @@ fn a_bend_child_deforms_the_edited_mesh() {
     for &i in &ring {
         assert_eq!(edited.points[i as usize][1], 150.0);
     }
-    let after = evaluate(st.doc.scene(), id).unwrap().unwrap();
+    let after = evaluate(st.doc.scene(), id, &forge_core::EvalCtx::default())
+        .unwrap()
+        .unwrap();
     assert_eq!(after.polys, before.polys);
     for i in 0..8usize {
         if ring.contains(&(i as u32)) {

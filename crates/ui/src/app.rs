@@ -677,6 +677,10 @@ impl Editor {
                 selected: &self.state.selection.nodes,
                 gizmo: gizmo.as_ref(),
                 component: component_target(&self.state).map(|id| (id, self.state.mode)),
+                ctx: forge_core::EvalCtx::at_frame(
+                    self.state.timeline.current,
+                    f64::from(shown.settings().fps),
+                ),
             },
         );
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));

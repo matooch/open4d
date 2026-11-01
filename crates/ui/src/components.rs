@@ -1,7 +1,7 @@
 //! Component modes and selection (docs/specs/EDITABLE.md §2). UI-free: the egui code in
 //! `app` only turns pointer input into these calls.
 
-use forge_core::{NodeId, Scene};
+use forge_core::{EvalCtx, NodeId, Scene};
 use forge_generators::evaluate;
 use forge_geometry::PolyMesh;
 use forge_geometry::selection::{IndexSet, Mode as Combine, Selection, polys_to_edges};
@@ -107,7 +107,7 @@ pub fn apply_click(current: &IndexSet, picked: Option<u32>, op: SelectOp) -> Ind
 pub fn pick_mesh(scene: &Scene, id: NodeId) -> Option<PolyMesh> {
     let base = base_mesh(scene, id)?;
     let world = scene.world_matrix(id)?;
-    let mut mesh = match evaluate(scene, id) {
+    let mut mesh = match evaluate(scene, id, &EvalCtx::default()) {
         Ok(Some(m)) if m.points.len() == base.points.len() && m.polys.len() == base.polys.len() => {
             m
         }

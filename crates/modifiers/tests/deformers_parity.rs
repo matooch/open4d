@@ -27,14 +27,7 @@ const FEATURES: &[&str] = &[
 const UNSUPPORTED: &[&str] = &[];
 
 /// Cases we build but that differ, pinned so a fix shows up (MODIFIERS.md §9).
-const KNOWN_MISMATCH: &[&str] = &[
-    // Our `within_box` gates only on y; the reference gates per point on x/y/z and
-    // suppresses the whole deformation when the box spans the object's x/z extent
-    // in neither axis (MODIFIERS.md §0, docs/parity/bend.md).
-    "bend/mode-box-narrow",
-    "bend/mode-box-narrow-x",
-    "bend/mode-box-narrow-z",
-];
+const KNOWN_MISMATCH: &[&str] = &[];
 
 /// Golden `type` keys that are not our id with `forge.` in front.
 fn type_id(name: &str) -> String {
@@ -200,7 +193,7 @@ fn deformers_match_the_reference() {
 
         let mut doc = Document::new(reg.clone());
         let target = build_case(&mut doc, &reg, &case.feature, &params);
-        let mesh = match evaluate(doc.scene(), target) {
+        let mesh = match evaluate(doc.scene(), target, &forge_core::EvalCtx::default()) {
             Err(forge_generators::BuildError::Unsupported(what)) => {
                 println!("{key}: unsupported ({what})");
                 unsupported.insert(key);
@@ -242,5 +235,5 @@ fn deformers_match_the_reference() {
     let want: std::collections::BTreeSet<String> =
         UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 12 + 7 + 6 + 8 + 7 + 7 + 5, "{matched:?}");
+    assert_eq!(matched.len(), 15 + 7 + 6 + 8 + 7 + 7 + 5, "{matched:?}");
 }

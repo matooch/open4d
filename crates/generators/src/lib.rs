@@ -26,7 +26,7 @@ pub use subdivision::{input_of, subdivide, subdivide_with_creases};
 
 use std::collections::BTreeMap;
 
-use forge_core::{NodeId, NodeType, Plugin, Registry, RegistryError, Scene, Value};
+use forge_core::{EvalCtx, NodeId, NodeType, Plugin, Registry, RegistryError, Scene, Value};
 use forge_geometry::PolyMesh;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -159,12 +159,13 @@ pub fn build(type_id: &str, values: &BTreeMap<String, Value>) -> Result<PolyMesh
 /// `Ok(None)` for nodes without geometry.
 ///
 /// The node's enabled deformer children are applied to the mesh in tree order
-/// (docs/specs/MODIFIERS.md §0), so callers see the deformed object.
-pub fn evaluate(scene: &Scene, id: NodeId) -> Result<Option<PolyMesh>, BuildError> {
-    let mut mesh = evaluate_geometry(scene, id)?;
+/// (docs/specs/MODIFIERS.md §0), so callers see the deformed object. `ctx` carries the
+/// time, fps and seed (MODIFIERS.md §8).
+pub fn evaluate(scene: &Scene, id: NodeId, ctx: &EvalCtx) -> Result<Option<PolyMesh>, BuildError> {
+    let mut mesh = evaluate_geometry(scene, id, ctx)?;
     if let Some(mesh) = mesh.as_mut() {
         for d in deformer_children(scene, id) {
-            forge_modifiers::apply_deformer(scene, d, id, &mut mesh.points);
+            forge_modifiers::apply_deformer(scene, d, id, &mut mesh.points, ctx);
         }
     }
     Ok(mesh)
@@ -172,7 +173,11 @@ pub fn evaluate(scene: &Scene, id: NodeId) -> Result<Option<PolyMesh>, BuildErro
 
 /// [`evaluate`] without the deformers: used where only the presence of geometry
 /// matters (the input probes of subdivision, the modeling generators and boole).
-pub(crate) fn evaluate_geometry(scene: &Scene, id: NodeId) -> Result<Option<PolyMesh>, BuildError> {
+pub(crate) fn evaluate_geometry(
+    scene: &Scene,
+    id: NodeId,
+    ctx: &EvalCtx,
+) -> Result<Option<PolyMesh>, BuildError> {
     let Some(node) = scene.node(id) else {
         return Ok(None);
     };
@@ -182,19 +187,19 @@ pub(crate) fn evaluate_geometry(scene: &Scene, id: NodeId) -> Result<Option<Poly
             ty: &ty,
             values: &node.params,
         };
-        return subdivision::evaluate_subdivision(scene, id, &p);
+        return subdivision::evaluate_subdivision(scene, id, &p, ctx);
     }
     if node.type_id == polygon::TYPE {
         return Ok(Some(polygon::stored_mesh(scene, id)));
     }
     if node.type_id == boole::TYPE {
-        return boole::evaluate_boole(scene, id);
+        return boole::evaluate_boole(scene, id, ctx);
     }
     if spline_gens::spline_input_count(&node.type_id).is_some() {
         return spline_gens::evaluate_spline_gen(scene, id, &node.type_id, &node.params);
     }
     if modeling::input_count(&node.type_id).is_some() || node.type_id == modeling::INSTANCE {
-        return modeling::evaluate_modeling(scene, id, &node.type_id, &node.params);
+        return modeling::evaluate_modeling(scene, id, &node.type_id, &node.params, ctx);
     }
     match build(&node.type_id, &node.params) {
         Ok(mesh) => Ok(Some(mesh)),

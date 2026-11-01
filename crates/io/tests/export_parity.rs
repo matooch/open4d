@@ -190,7 +190,7 @@ fn golden_scenes_through_the_writer_match_the_reference() {
         let m = case.manifest().unwrap();
         let params: Table = resolved_params(&case, &m);
         let (doc, id) = build_scene(&reg, feature, &params);
-        match evaluate(doc.scene(), id) {
+        match evaluate(doc.scene(), id, &forge_core::EvalCtx::default()) {
             Err(BuildError::Unsupported(what)) => {
                 println!("{key}: unsupported ({what})");
                 unsupported.insert(key);

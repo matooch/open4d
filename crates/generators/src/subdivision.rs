@@ -1,6 +1,6 @@
 //! Subdivision surface generator (docs/specs/SUBDIVISION.md; docs/parity/subdivision.md).
 
-use forge_core::{Category, NodeId, NodeType, ParamDesc, Scene};
+use forge_core::{Category, EvalCtx, NodeId, NodeType, ParamDesc, Scene};
 use forge_geometry::PolyMesh;
 use std::collections::BTreeSet;
 
@@ -71,21 +71,24 @@ pub fn subdivide_with_creases(
 /// The child the generator subdivides: its first hierarchy child with a mesh.
 pub fn input_of(scene: &Scene, id: NodeId) -> Option<NodeId> {
     let node = scene.node(id)?;
-    node.children
-        .iter()
-        .copied()
-        .find(|c| matches!(evaluate_geometry(scene, *c), Ok(Some(_)) | Err(_)))
+    node.children.iter().copied().find(|c| {
+        matches!(
+            evaluate_geometry(scene, *c, &EvalCtx::default()),
+            Ok(Some(_)) | Err(_)
+        )
+    })
 }
 
 pub(crate) fn evaluate_subdivision(
     scene: &Scene,
     id: NodeId,
     p: &Params,
+    ctx: &EvalCtx,
 ) -> Result<Option<PolyMesh>, BuildError> {
     let Some(child) = input_of(scene, id) else {
         return Ok(None);
     };
-    let Some(mut mesh) = evaluate(scene, child)? else {
+    let Some(mut mesh) = evaluate(scene, child, ctx)? else {
         return Ok(None);
     };
     let m = scene.local_transform(child).expect("child exists").matrix();
