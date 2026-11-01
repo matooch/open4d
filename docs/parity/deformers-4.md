@@ -29,6 +29,12 @@ Record each deformer's parameter table once.
 | correction/defaults | Correction | under a Bend (strength 90) on the cube: Correction defaults, then move one corrected point through its point list |
 | ffd-grid-5 | FFD | grid points 5/5/5, the centre grid point moved by (0, 100, 0) |
 | explosion-fx/frame-10 | Explosion FX | defaults, frame 10 |
+| box-gate/twist-narrow-x | Twist | follow-up from brief 050: O9 cube (segments 4/4/4), Twist angle 90°, mode Within Box, size (100, 250, 400) |
+| box-gate/taper-narrow-x | Taper | same cube, Taper strength 50 %, Within Box, size (100, 250, 400) |
+| box-gate/bulge-narrow-z | Bulge | same cube, Bulge strength 50 %, Within Box, size (400, 250, 100) |
+| box-gate/bend-rotated | Bend | same cube, Bend strength 90°, Within Box, size (100, 250, 400), deformer rotated H 45° |
+| box-gate/bend-angle | Bend | same cube, Bend strength 90°, angle 45°, Within Box, size (100, 250, 400) |
+| box-gate/bend-equal | Bend | same cube (200 cm), Bend strength 90°, Within Box, size (200, 250, 200) exactly the extent |
 
 ## Notes
 TODO
