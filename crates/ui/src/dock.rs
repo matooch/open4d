@@ -1,7 +1,10 @@
 //! Our own dock model: panels in named areas with tabs (docs/specs/UI.md §2).
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Area {
+    Top,
     Left,
     RightTop,
     RightBottom,
@@ -10,7 +13,8 @@ pub enum Area {
 }
 
 impl Area {
-    pub const ALL: [Area; 5] = [
+    pub const ALL: [Area; 6] = [
+        Area::Top,
         Area::Left,
         Area::RightTop,
         Area::RightBottom,
@@ -20,6 +24,7 @@ impl Area {
 
     pub fn label(self) -> &'static str {
         match self {
+            Area::Top => "top",
             Area::Left => "left",
             Area::RightTop => "right top",
             Area::RightBottom => "right bottom",
@@ -29,8 +34,10 @@ impl Area {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Panel {
+    CommandBar,
+    ToolPalette,
     Viewport,
     ObjectTree,
     Attributes,
@@ -41,7 +48,9 @@ pub enum Panel {
 
 impl Panel {
     /// Every panel, in Window menu order.
-    pub const ALL: [Panel; 6] = [
+    pub const ALL: [Panel; 8] = [
+        Panel::CommandBar,
+        Panel::ToolPalette,
         Panel::Viewport,
         Panel::ObjectTree,
         Panel::Attributes,
@@ -51,7 +60,9 @@ impl Panel {
     ];
 
     /// The panels `Dock::default()` opens; the others open from the Window menu.
-    pub const DEFAULT: [Panel; 5] = [
+    pub const DEFAULT: [Panel; 7] = [
+        Panel::CommandBar,
+        Panel::ToolPalette,
         Panel::Viewport,
         Panel::ObjectTree,
         Panel::Attributes,
@@ -61,6 +72,8 @@ impl Panel {
 
     pub fn title(self) -> &'static str {
         match self {
+            Panel::CommandBar => "Command bar",
+            Panel::ToolPalette => "Tools",
             Panel::Viewport => "Viewport",
             Panel::ObjectTree => "Objects",
             Panel::Attributes => "Attributes",
@@ -72,6 +85,8 @@ impl Panel {
 
     pub fn default_area(self) -> Area {
         match self {
+            Panel::CommandBar => Area::Top,
+            Panel::ToolPalette => Area::Left,
             Panel::Viewport => Area::Center,
             Panel::ObjectTree => Area::RightTop,
             Panel::Attributes => Area::RightBottom,
@@ -82,15 +97,15 @@ impl Panel {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 struct AreaState {
     tabs: Vec<Panel>,
     active: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Dock {
-    areas: [AreaState; 5],
+    areas: [AreaState; 6],
 }
 
 impl Default for Dock {
@@ -106,6 +121,24 @@ impl Default for Dock {
 }
 
 impl Dock {
+    /// True if no panel appears twice and every active index is in range (a loaded dock
+    /// must satisfy this; the editing methods keep it).
+    pub fn is_valid(&self) -> bool {
+        let mut seen = Vec::new();
+        for a in &self.areas {
+            if a.active > a.tabs.len().saturating_sub(1) {
+                return false;
+            }
+            for p in &a.tabs {
+                if seen.contains(p) {
+                    return false;
+                }
+                seen.push(*p);
+            }
+        }
+        true
+    }
+
     pub fn tabs(&self, area: Area) -> &[Panel] {
         &self.areas[area as usize].tabs
     }

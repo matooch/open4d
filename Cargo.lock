@@ -1522,6 +1522,7 @@ dependencies = [
  "glam",
  "png",
  "rfd",
+ "serde",
  "serde_json",
  "wgpu",
 ]

@@ -144,7 +144,7 @@ implementers can avoid collisions.
 | 144 | [Viewport performance: GPU instancing, LOD, large meshes](../agents/tasks/144-viewport-performance.md) | K | 143 | ready | viewport |
 | 145 | [Render parity tests against O30/O43/O57](../agents/tasks/145-render-parity-tests.md) | K | 137, 138 | waiting: O30, O43, O57 | tests |
 | 146 | [S8 acceptance test and rendering docs](../agents/tasks/146-s8-rendering-acceptance.md) | K | 139, 145 | ready | tests, docs |
-| 147 | [Familiar default layout: command bar, tool palette, manager arrangement](../agents/tasks/147-default-layout.md) | L | 011 | ready | ui |
+| 147 | [Familiar default layout: command bar, tool palette, manager arrangement](../agents/tasks/147-default-layout.md) | L | 011 | done (parity-pending G1) | ui |
 | 148 | [Icon set and icon atlas](../agents/tasks/148-icon-set.md) | L | 147 | ready | ui |
 | 149 | [Object manager parity: columns, dots, tags, drag/drop, search, context menus](../agents/tasks/149-object-manager.md) | L | 147 | ready | ui |
 | 150 | [Attribute manager parity: tabs, widgets, multi-edit, keyframe dots, history](../agents/tasks/150-attribute-manager.md) | L | 147 | ready | ui |

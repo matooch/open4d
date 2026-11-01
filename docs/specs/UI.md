@@ -32,11 +32,13 @@ built with `EditorState::new(Arc<Registry>)`. `mode` is `EditMode::Model` at sta
 
 ## 2. Dock model (`dock`)
 
-Areas: `Left, RightTop, RightBottom, Bottom, Center`. Panels: `Viewport, ObjectTree,
-Attributes, Timeline, Coordinates, Script` (the Script Manager, §10, default area Bottom). Each area holds an ordered tab list and an active index; each
+Areas: `Top, Left, RightTop, RightBottom, Bottom, Center`. Panels: `CommandBar, ToolPalette,
+Viewport, ObjectTree, Attributes, Timeline, Coordinates, Script` (the Script Manager, §10,
+default area Bottom). Each area holds an ordered tab list and an active index; each
 panel appears at most once in the whole dock.
-- `Dock::default()` (our layout): Center [Viewport], RightTop [ObjectTree],
-  RightBottom [Attributes], Bottom [Timeline, Coordinates], Left []. The Script Manager
+- `Dock::default()` (the layout of §11): Top [CommandBar], Left [ToolPalette], Center
+  [Viewport], RightTop [ObjectTree], RightBottom [Attributes], Bottom [Timeline,
+  Coordinates]. The Script Manager
   is closed by default (`Panel::DEFAULT` lists the panels a default layout opens); the
   Window menu opens it.
 - `area_of(panel)`, `tabs(area)`, `active(area) -> Option<Panel>`.
@@ -45,7 +47,7 @@ panel appears at most once in the whole dock.
   active there. Moving to its own area is a no-op.
 - `close(panel)`, `open(panel)`: reopen in its default area (no-op if present) and
   make it active. `set_active(area, i)` (ignored if out of range).
-- An area with no tabs is not drawn. Left/right/bottom areas are resizable.
+- An area with no tabs is not drawn; a Top, Left or Centre area with one panel has no tab header. Left/right/bottom areas are resizable.
 
 ## 3. Object tree (`tree`)
 
@@ -202,3 +204,41 @@ recent list) lives in `EditorState::script` (`ScriptPanelState`) so tests can dr
 `run_source(&mut self, &mut App-like)`. Tests (egui_kittest, no GPU): open the panel via
 the Window menu, set a source, click Run, see the output and the created node, undo it
 in one step; a failing script shows its error and changes nothing.
+
+## 11. Default layout, command bar, tool palette (`layout`; brief 147)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G1 (docs/parity/GUI-SESSIONS.md)
+is unanswered, so **the arrangement and the order of the button groups are parity-pending**.
+Labels, glyphs and sizes are ours. The dock is the model of §2 (egui_dock does not build
+against our egui, see the top of this file); the brief's "on egui_dock" is met by `Layout`
+being plain data over that model.
+
+`Layout { version, dock: Dock, sizes: Sizes }` is serde data (`to_json` / `from_json`;
+`from_json` rejects a version other than `LAYOUT_VERSION`, a panel listed twice and an
+active tab out of range). `Layout::standard()` is the default; `Editor::layout()` /
+`set_layout()` read and apply one, and Window > Reset layout applies the standard layout.
+`Sizes { left_width 150, right_width 340, right_top_fraction 0.45, bottom_height 120 }` are
+initial sizes of the resizable areas (egui remembers later drags).
+
+Standard arrangement, top to bottom: menu bar; Top area: command bar; Left: tool palette
+column; Centre: viewport; right column: Object manager above Attribute manager; Bottom
+strip: Timeline, with Coordinates as a second tab; status bar. Menus are unchanged
+(File, Edit, Select, Mesh, Create, Animate, View, Window).
+
+Every button is a `CommandButton { command, args, glyph, label, tip }` that runs the
+registry command `command` with `args` through `Editor::run`; nothing else happens on a
+click. Button text is `"<glyph> <label>"` (a short ASCII placeholder symbol, since the bundled fonts lack most Unicode symbols; icons are
+brief 148), which also keeps labels distinct from the menu items. `command_bar()` groups:
+History (`edit.undo`, `edit.redo`, `object.delete`); Objects (`object.create` for
+`forge.cube`, `forge.sphere`, `forge.cylinder`, `forge.cone`, `forge.plane`, `forge.torus`;
+`mesh.make_editable`); View (`view.shading` smooth and wire, `view.frame_all`); Animation
+(`timeline.play`, `timeline.stop`, `key.record`). `tool_palette()` groups: Mode
+(`select.mode` model, points, edges, polys); Selection (`select.all`, `select.none`,
+`select.invert`, `select.grow`, `select.shrink`); Modeling (`mesh.extrude`,
+`mesh.extrude_inner`, `mesh.bevel`, `mesh.subdivide`, `mesh.triangulate`, `mesh.optimize`,
+`mesh.reverse_normals`, run with the stored selection and default settings). The
+`select.mode` and `view.shading` buttons show as selected for the current value. A failed
+command goes to the status bar like any other.
+
+Not in the palette yet (no registry command exists): snapping, workplane, axis mode.
+Pointer-driven tools (cuts, bridge, pen) stay in the Mesh menu.

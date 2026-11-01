@@ -21,7 +21,8 @@ use crate::components::{
     ClickModifiers, EditMode, SelectCmd, target as component_target, viewport_click, viewport_rect,
 };
 use crate::coordinates::{Row, Space, Third, coord_view, set_coord_anim};
-use crate::dock::{Area, Dock, Panel};
+use crate::dock::{Area, Panel};
+use crate::layout::{ButtonGroup, Layout, Sizes, command_bar, tool_palette};
 use crate::manipulate::apply_drag_anim;
 use crate::state::EditorState;
 use crate::theme::Theme;
@@ -94,6 +95,8 @@ enum FileAction {
 
 pub struct Editor {
     pub state: EditorState,
+    /// Initial sizes of the resizable areas (docs/specs/UI.md §11).
+    sizes: Sizes,
     viewport: ViewportPanel,
     /// Row being renamed in the tree, with its edit buffer.
     renaming: Option<(NodeId, String)>,
@@ -134,6 +137,7 @@ impl Editor {
     pub fn new(state: EditorState) -> Editor {
         Editor {
             state,
+            sizes: Sizes::default(),
             viewport: ViewportPanel::default(),
             renaming: None,
             name_edit: None,
@@ -157,6 +161,21 @@ impl Editor {
     /// Serves the RPC server's queued requests from now on, one batch per frame.
     pub fn attach_rpc(&mut self, inbox: forge_rpc::Inbox) {
         self.rpc = Some(inbox);
+    }
+
+    /// The current arrangement as a serialisable layout.
+    pub fn layout(&self) -> Layout {
+        Layout {
+            version: crate::layout::LAYOUT_VERSION,
+            dock: self.state.dock.clone(),
+            sizes: self.sizes,
+        }
+    }
+
+    /// Switches to `layout`. Area sizes apply to areas that have not been drawn yet.
+    pub fn set_layout(&mut self, layout: Layout) {
+        self.state.dock = layout.dock;
+        self.sizes = layout.sizes;
     }
 
     /// Runs a command; an error goes to the status bar. True if it succeeded.
@@ -209,16 +228,22 @@ impl Editor {
         }
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
+        let sizes = self.sizes;
+        if !self.state.dock.tabs(Area::Top).is_empty() {
+            egui::Panel::top("area_top")
+                .resizable(false)
+                .show(ui, |ui| self.area(ui, Area::Top, rs));
+        }
         if !self.state.dock.tabs(Area::Bottom).is_empty() {
             egui::Panel::bottom("area_bottom")
                 .resizable(true)
-                .default_size(120.0)
+                .default_size(sizes.bottom_height)
                 .show(ui, |ui| self.area(ui, Area::Bottom, rs));
         }
         if !self.state.dock.tabs(Area::Left).is_empty() {
             egui::Panel::left("area_left")
                 .resizable(true)
-                .default_size(280.0)
+                .default_size(sizes.left_width)
                 .show(ui, |ui| self.area(ui, Area::Left, rs));
         }
         let (top, bottom) = (
@@ -228,13 +253,13 @@ impl Editor {
         if top || bottom {
             egui::Panel::right("area_right")
                 .resizable(true)
-                .default_size(340.0)
+                .default_size(sizes.right_width)
                 .show(ui, |ui| {
                     if top && bottom {
                         let h = ui.available_height();
                         egui::Panel::top("area_right_top")
                             .resizable(true)
-                            .default_size(h * 0.45)
+                            .default_size(h * sizes.right_top_fraction)
                             .show(ui, |ui| self.area(ui, Area::RightTop, rs));
                         self.area(ui, Area::RightBottom, rs);
                     } else if top {
@@ -627,7 +652,7 @@ impl Editor {
                 }
                 ui.separator();
                 if ui.button("Reset layout").clicked() {
-                    self.state.dock = Dock::default();
+                    self.set_layout(Layout::standard());
                     ui.close();
                 }
             });
@@ -652,7 +677,8 @@ impl Editor {
         let Some(active) = self.state.dock.active(area) else {
             return;
         };
-        if area != Area::Center || tabs.len() > 1 {
+        // single-panel Centre, Top and Left areas have no tab header
+        if tabs.len() > 1 || !matches!(area, Area::Center | Area::Top | Area::Left) {
             ui.horizontal(|ui| {
                 for (i, p) in tabs.iter().enumerate() {
                     let title = RichText::new(p.title()).strong();
@@ -664,6 +690,8 @@ impl Editor {
             ui.separator();
         }
         match active {
+            Panel::CommandBar => self.command_bar_ui(ui),
+            Panel::ToolPalette => self.tool_palette_ui(ui),
             Panel::Viewport => self.viewport_ui(ui, rs),
             Panel::ObjectTree => self.tree_ui(ui),
             Panel::Attributes => self.attributes_ui(ui),
@@ -673,6 +701,63 @@ impl Editor {
                 crate::script_panel::script_panel_ui(ui, &mut self.state, self.dialogs.as_mut())
             }
         }
+    }
+
+    /// The command bar: grouped buttons, each running one registry command.
+    fn command_bar_ui(&mut self, ui: &mut Ui) {
+        let mut clicked: Option<Cmd> = None;
+        ui.horizontal_wrapped(|ui| {
+            for (i, group) in command_bar().iter().enumerate() {
+                if i > 0 {
+                    ui.separator();
+                }
+                if let Some(c) = self.button_group(ui, group) {
+                    clicked = Some(c);
+                }
+            }
+        });
+        if let Some(c) = clicked {
+            self.run(c);
+        }
+    }
+
+    /// The tool palette: the groups stacked in a column.
+    fn tool_palette_ui(&mut self, ui: &mut Ui) {
+        let mut clicked: Option<Cmd> = None;
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for group in tool_palette() {
+                ui.weak(group.name);
+                ui.horizontal_wrapped(|ui| {
+                    if let Some(c) = self.button_group(ui, &group) {
+                        clicked = Some(c);
+                    }
+                });
+                ui.separator();
+            }
+        });
+        if let Some(c) = clicked {
+            self.run(c);
+        }
+    }
+
+    /// Draws a group's buttons; the command of the one clicked, if any.
+    fn button_group(&self, ui: &mut Ui, group: &ButtonGroup) -> Option<Cmd> {
+        let mut clicked = None;
+        for b in &group.buttons {
+            let selected = b.command == "select.mode"
+                && b.args["mode"] == json!(forge_command::ModeArg::from(self.state.mode))
+                || (b.command == "view.shading"
+                    && b.args["mode"]
+                        == json!(crate::commands::shading_mode_of(self.state.shading)));
+            let response = ui
+                .add(egui::Button::new(b.text()).selected(selected))
+                .on_hover_text(b.tip);
+            if response.clicked() {
+                // the registry owns the ids; `Cmd` borrows them as 'static
+                clicked = Some((b.command, b.args.clone()));
+            }
+        }
+        clicked
     }
 
     /// Soft selection and symmetry controls of component modes (EDITABLE.md §5.6).

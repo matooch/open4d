@@ -13,6 +13,7 @@ pub mod components;
 pub mod coordinates;
 pub mod cutting;
 pub mod dock;
+pub mod layout;
 pub mod manipulate;
 pub mod screenshot;
 pub mod script_panel;

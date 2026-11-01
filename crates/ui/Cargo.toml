@@ -20,6 +20,7 @@ forge-script = { path = "../script" }
 forge-viewport = { path = "../viewport" }
 glam = "0.34"
 png = "0.18"
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Native file dialogs; the default backend is the XDG desktop portal on Linux (no GTK).
 rfd = "0.17"
