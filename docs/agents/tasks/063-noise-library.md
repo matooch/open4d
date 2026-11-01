@@ -1,6 +1,6 @@
 # 063 · Noise library `forge-noise`
 
-Status: waiting: O42 · Area: D · Depends on: – · Observations: O13, O42 · Touches: noise (new)
+Status: ready (planner decision: implement now from O13 data and the public noise literature; shader-noise parity stays pending until O42) · Area: D · Depends on: – · Observations: O13, O42 · Touches: noise (new)
 
 ## Goal
 A seeded 3D/4D noise library with the reference's noise types. Exact where derivable, statistically close otherwise.
