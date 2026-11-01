@@ -60,7 +60,19 @@ You can also do a sitting **with an observer session's help**:
    - Grow and Shrink with the …-dialog: which settings it shows.
 5. When switching points ↔ polygons mode, is the selection converted?
 6. Soft selection: where it lives and its modes.
-7. Extrude drag: how far the offset changes per screen pixel at the default camera
+7. **Cuts to export** (brief 024; the script couldn't run them). Do each in the GUI on a
+   default cube made editable (segments 1/1/1), then have the observer export the mesh
+   through the bridge to `tests/golden/modeling-tools/<case>/mesh.obj` with a `case.toml`
+   naming the steps:
+   - `loopcut-mid`: Loop/Path Cut across the 4 side faces, offset 50 %;
+   - `loopcut-quarter`: the same at 25 % (note which end the 25 % is measured from);
+   - `loopcut-two`: two cuts at once, if the tool's count setting allows it;
+   - `knife-line`: Knife Line from the middle of the top face's left edge to the middle
+     of its right edge, seen from the Top view; note whether a cut that ends inside a
+     polygon is kept or dropped;
+   - `slide-loop` (2/2/2 cube): slide the middle loop 50 % up; note the range and the
+     sign of the value in the HUD.
+8. Extrude drag: how far the offset changes per screen pixel at the default camera
    (drag 100 px and read the offset).
 
 ## G4 · Attribute manager widgets and field lists

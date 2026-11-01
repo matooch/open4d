@@ -21,7 +21,7 @@ implementers can avoid collisions.
 | 021 | [Bevel tool (all modes)](../agents/tasks/021-bevel.md) | B | 020 | done | modeling, ui |
 | 022 | [Mesh commands: Subdivide, Triangulate, Untriangulate, Reverse, Optimize, Weld, Melt, Dissolve, Split, Disconnect, Connect, Mirror, Center Axis](../agents/tasks/022-mesh-commands.md) | B | 020 | done | modeling, ui |
 | 023 | [Selection commands: grow, shrink, convert, invert, connected, loop, ring](../agents/tasks/023-selection-commands.md) | B | 011 | done | geometry, ui |
-| 024 | [Interactive cutting: Loop/Path Cut, Knife (line, plane, loop), Slide](../agents/tasks/024-interactive-cutting.md) | B | 020, 023 | done | modeling, ui, viewport |
+| 024 | [Interactive cutting: Loop/Path Cut, Knife (line, plane, loop), Slide](../agents/tasks/024-interactive-cutting.md) | B | 020, 023 | done (parity-pending: O58, G3 item 7) | modeling, ui, viewport |
 | 025 | [Bridge, Stitch and Sew, Close Polygon Hole, Polygon Pen](../agents/tasks/025-bridge-stitch-close-pen.md) | B | 020 | ready | modeling, ui |
 | 026 | [Soft selection and symmetry modeling](../agents/tasks/026-soft-selection-symmetry.md) | B | 023 | ready | ui, modeling |
 | 027 | [Selection tags, vertex map tags, restriction tags](../agents/tasks/027-selection-vertexmap-restriction-tags.md) | B | 023 | waiting: O54 | core, generators, ui, modifiers |

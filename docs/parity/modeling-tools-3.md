@@ -1,4 +1,4 @@
-# Modeling tools III: follow-ups from briefs 020–023 — observation (O58)
+# Modeling tools III: follow-ups from briefs 020–024 — observation (O58)
 
 Status: not observed · App version: TODO · OS: TODO · Observer: TODO · Date: TODO
 Method: exactly as [modeling-tools-2.md](modeling-tools-2.md) (O25): a default cube made
@@ -57,6 +57,9 @@ Unblocks: confirms 020/021; no brief waits on it.
 | sel/convert-tolerant-p2poly | 2/2/2 | the start of O26 convert-point-to-poly | Convert Selection points → polygons, Tolerant on. Output `selection.json` and the edit mode afterwards |
 | sel/convert-tolerant-e2poly | 2/2/2 | the start of O26 convert-edge-to-poly | Convert Selection edges → polygons, Tolerant on. Output `selection.json` |
 | sel/connected-point-only | two default cubes made editable, Connect (Weld off), then Optimize so they share only one corner point (second cube at (200, 200, 0)) | one polygon of the first cube | Select Connected. Output `selection.json` |
+| knife-plane-mid | 1/1/1 | all polygons | Knife in Plane mode, plane through (0, 0, 0) with normal (0, 1, 0), if it can be set by script (else write "gui-only" and skip) |
+| slide-loop | 2/2/2 | the 4 middle edges around the cube at y = 0 (an edge loop) | Slide, offset 0.5 toward +y (if scriptable; record the settings and their range; else "gui-only") |
+| slide-edge | 2/2/2 | one middle edge at y = 0 on the front face | Slide, offset 0.5 (if scriptable) |
 
 GUI read (add to G3): the default of every setting in the Subdivide, Optimize, Weld, Melt,
 Dissolve, Disconnect, Mirror and Triangulate dialogs.
