@@ -4,6 +4,8 @@
 //! subcommand and returns the exit code (0 ok, 1 user error, 2 scene load error,
 //! 3 internal error). The editor forwards `--headless <args>` to the same function.
 
+pub mod docs;
+
 use std::ffi::OsString;
 use std::io::Write;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -84,7 +86,20 @@ enum Sub {
         save: bool,
     },
     /// List the command registry with argument schemas.
-    Commands,
+    Commands {
+        /// Print the command reference as markdown instead.
+        #[arg(long)]
+        markdown: bool,
+    },
+    /// Write the generated reference (commands, CLI, RPC, MCP, scripting) as markdown.
+    Docs {
+        /// Directory to write (default: docs/manual/reference).
+        #[arg(long, default_value = "docs/manual/reference")]
+        out: String,
+        /// Write nothing; fail (exit 1) if the files in --out differ from the generated ones.
+        #[arg(long)]
+        check: bool,
+    },
     /// Run a Rhai script on a scene (docs/specs/SCRIPTING.md).
     Run {
         script: String,
@@ -248,7 +263,8 @@ fn execute(command: Sub) -> Outcome {
             args,
             save,
         } => cmd(&scene, &command, &args, save),
-        Sub::Commands => commands(),
+        Sub::Commands { markdown } => commands(markdown),
+        Sub::Docs { out, check } => docs_cmd(&out, check),
         Sub::Run {
             script,
             scene,
@@ -513,7 +529,47 @@ fn run_script_file(script: &str, scene: Option<&str>, save: Option<&str>) -> Out
     })
 }
 
-fn commands() -> Outcome {
+fn docs_cmd(out: &str, check: bool) -> Outcome {
+    let pages = docs::generate();
+    let dir = std::path::Path::new(out);
+    let mut stale = Vec::new();
+    for (name, content) in &pages {
+        let path = dir.join(name);
+        if check {
+            if std::fs::read_to_string(&path).ok().as_deref() != Some(content.as_str()) {
+                stale.push(path.display().to_string());
+            }
+        } else {
+            std::fs::create_dir_all(dir)
+                .and_then(|()| std::fs::write(&path, content))
+                .map_err(|e| user(format!("cannot write {}: {e}", path.display())))?;
+        }
+    }
+    if !stale.is_empty() {
+        return Err(user(format!(
+            "stale reference (run `forge docs --out {out}`): {}",
+            stale.join(", ")
+        )));
+    }
+    let files: Vec<&str> = pages.iter().map(|(n, _)| *n).collect();
+    Ok(Out {
+        text: format!(
+            "{} {} page(s) in {out}",
+            if check { "checked" } else { "wrote" },
+            files.len()
+        ),
+        json: json!({"dir": out, "files": files, "checked": check}),
+    })
+}
+
+fn commands(markdown: bool) -> Outcome {
+    if markdown {
+        let page = docs::commands_page();
+        return Ok(Out {
+            json: json!({"markdown": page}),
+            text: page,
+        });
+    }
     let app = App::new_default();
     let mut list = Vec::new();
     let mut text = String::new();

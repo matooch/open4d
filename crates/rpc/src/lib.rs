@@ -8,6 +8,7 @@
 pub mod base64;
 mod client;
 mod config;
+pub mod docs;
 mod host;
 mod hub;
 mod jobs;

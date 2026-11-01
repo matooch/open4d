@@ -495,3 +495,141 @@ fn headless_has_no_list_changes_and_no_viewport() {
     assert!(err);
     assert_eq!(mcp.request("ping", json!({}))["result"], json!({}));
 }
+
+// ---------------------------------------------------------------------------------------
+// Acceptance scenario S2 (docs/roadmap/README.md): "An MCP agent connects to a running
+// editor, creates a sphere, keys its position at 0 and 30, plays the timeline, and reads
+// back the evaluated position at frame 15." Driven only through MCP tools (and, for the
+// observer, the RPC client). The editor is an RPC server around an `App` pumped by a
+// thread, the same host the window uses minus the window: there is no UI clock, so
+// "plays the timeline" is checked as the playing flag, and the frame is then moved with
+// `frame_set`. Real playback ticking belongs to the editor frame loop (briefs 094, 162).
+// ---------------------------------------------------------------------------------------
+
+/// The x coordinate of the middle of a bounding box.
+fn centre_x(summary: &Value) -> f64 {
+    let (lo, hi) = (
+        summary["bbox"]["min"][0].as_f64().unwrap(),
+        summary["bbox"]["max"][0].as_f64().unwrap(),
+    );
+    (lo + hi) / 2.0
+}
+
+/// Steps 2 to 6 of S2 on a connected, initialised agent. Returns the sphere's node id.
+fn s2_steps(mcp: &mut Mcp) -> u64 {
+    // The agent discovers the tools it needs.
+    let names = tool_names(mcp);
+    for want in [
+        "object_create",
+        "timeline_settings",
+        "key_set",
+        "timeline_play",
+        "timeline_stop",
+        "frame_set",
+        "eval_mesh_summary",
+    ] {
+        assert!(names.contains(&want.to_string()), "missing tool {want}");
+    }
+
+    // Create a sphere.
+    let (err, made) = mcp.tool("object_create", json!({"type": "forge.sphere"}));
+    assert!(!err, "{made}");
+    let sphere = made["node"].as_u64().unwrap();
+    let (err, r) = mcp.tool(
+        "timeline_settings",
+        json!({"fps": 30, "start": 0, "end": 30}),
+    );
+    assert!(!err, "{r}");
+
+    // Key position X at frame 0 (0) and frame 30 (300).
+    for (frame, value) in [(0, 0.0), (30, 300.0)] {
+        let (err, r) = mcp.tool(
+            "key_set",
+            json!({"node": sphere, "track": "transform.pos.x", "frame": frame, "value": value}),
+        );
+        assert!(!err, "{r}");
+    }
+    sphere
+}
+
+/// Step 7: evaluated position at frame 15, and the ends. The sphere mesh is not exactly
+/// symmetric and the key curve is solved numerically, so positions are bounding-box
+/// middles relative to frame 0, within 0.01.
+fn s2_read_back(mcp: &mut Mcp, sphere: u64) {
+    let (_, start) = mcp.tool("eval_mesh_summary", json!({"node": sphere, "frame": 0}));
+    let base = centre_x(&start);
+    let (err, r) = mcp.tool("frame_set", json!({"frame": 15}));
+    assert!(!err, "{r}");
+    assert_eq!(r["frame"], 15);
+    let (err, at15) = mcp.tool("eval_mesh_summary", json!({"node": sphere}));
+    assert!(!err, "{at15}");
+    assert_eq!(at15["frame"], 15, "evaluated at the current frame");
+    assert!(
+        (centre_x(&at15) - base - 150.0).abs() < 1e-2,
+        "x at frame 15: {}",
+        centre_x(&at15) - base
+    );
+    // An explicit frame does not move the timeline.
+    let (_, end) = mcp.tool("eval_mesh_summary", json!({"node": sphere, "frame": 30}));
+    assert!((centre_x(&end) - base - 300.0).abs() < 1e-2, "{end}");
+    let (_, scene) = mcp.tool("scene_get", json!({}));
+    assert_eq!(scene["frame"], 15);
+}
+
+#[test]
+fn s2_agent_keys_a_sphere_in_a_running_editor_and_reads_frame_15() {
+    let editor = Editor::start("s2-token");
+    let port = editor.server.port();
+    // A second client plays the editor's user: it watches the timeline.
+    let mut observer = Client::connect(port, Some("s2-token")).unwrap();
+    observer.subscribe(&["frame"]).unwrap();
+    // The first pump iteration only records the baseline for notifications.
+    observer.version().unwrap();
+
+    let port_arg = port.to_string();
+    let mut mcp = Mcp::spawn(&["--port", &port_arg], &[("FORGE_RPC_TOKEN", "s2-token")]);
+    mcp.initialize();
+    let sphere = s2_steps(&mut mcp);
+
+    // Play the timeline: the editor reports it as playing, then the agent stops it.
+    let (err, r) = mcp.tool("timeline_play", json!({}));
+    assert!(!err, "{r}");
+    assert_eq!(observer.timeline_get().unwrap()["playing"], true);
+    let (err, r) = mcp.tool("timeline_stop", json!({}));
+    assert!(!err, "{r}");
+    assert_eq!(observer.timeline_get().unwrap()["playing"], false);
+
+    s2_read_back(&mut mcp, sphere);
+
+    // The observer sees the frame change and the same evaluated mesh over RPC.
+    let seen = observer
+        .next_notification(Duration::from_secs(10))
+        .unwrap()
+        .expect("frame.changed");
+    assert_eq!(seen.method, "frame.changed");
+    assert_eq!(seen.params["frame"], 15);
+    let mesh = observer.eval_mesh(sphere, Some(15)).unwrap();
+    let xs: Vec<f64> = mesh.points.iter().map(|p| p[0]).collect();
+    let centre = (xs.iter().cloned().fold(f64::MIN, f64::max)
+        + xs.iter().cloned().fold(f64::MAX, f64::min))
+        / 2.0;
+    let origin = observer.eval_mesh(sphere, Some(0)).unwrap();
+    let xs0: Vec<f64> = origin.points.iter().map(|p| p[0]).collect();
+    let centre0 = (xs0.iter().cloned().fold(f64::MIN, f64::max)
+        + xs0.iter().cloned().fold(f64::MAX, f64::min))
+        / 2.0;
+    assert!((centre - centre0 - 150.0).abs() < 1e-2);
+}
+
+#[test]
+fn s2_works_the_same_headless() {
+    let mut mcp = Mcp::spawn(&["--headless"], &[]);
+    mcp.initialize();
+    let sphere = s2_steps(&mut mcp);
+    let (err, r) = mcp.tool("timeline_play", json!({}));
+    assert!(!err, "{r}");
+    let (err, r) = mcp.tool("timeline_stop", json!({}));
+    assert!(!err, "{r}");
+    s2_read_back(&mut mcp, sphere);
+    assert!(mcp.finish().success());
+}

@@ -34,7 +34,7 @@ gets the "agents build things in the app for me" capability early.
   - a Script Manager panel (edit, run, console);
   - script nodes later (H, node expressions).
 - [ ] **Python client** `forge-py`: a pure-Python package that talks RPC (no embedding).
-- [ ] **Docs**:
+- [x] **Docs**:
   - a generated command reference (from the registry);
   - CLI, RPC and MCP guides;
   - examples that are also the S1/S2 acceptance tests.

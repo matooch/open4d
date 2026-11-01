@@ -3,6 +3,11 @@
 A native Rust reimplementation of a classic DCC application for Linux, macOS and Windows. See `CLAUDE.md` and
 `docs/` for the rules and specs; the full plan is `docs/roadmap/README.md`.
 
+## Automation
+
+CLI, JSON-RPC, MCP, Python and Rhai: see `docs/manual/automation.md`. The generated
+references are in `docs/manual/reference/` (`forge docs --out docs/manual/reference`).
+
 ## Use Forge3D from an AI agent (MCP)
 
 `forge-mcp` is a Model Context Protocol server (stdio). Every editor command becomes a

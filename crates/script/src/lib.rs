@@ -5,6 +5,7 @@
 //! second API), reads the scene through query handles, and runs as one undo step. Limits on
 //! operations, time, commands and recursion stop a runaway script with an error.
 
+pub mod api;
 mod bind;
 mod convert;
 mod host;
@@ -19,6 +20,7 @@ use forge_command::{CommandContext, CommandRegistry};
 use rhai::{Dynamic, Engine, Scope};
 use serde_json::Value as Json;
 
+pub use host::BLOCKED_COMMANDS;
 use host::Host;
 
 /// Undo label of a script run.

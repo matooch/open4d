@@ -404,3 +404,14 @@ kinds are written with small slices.
 - `python/forge_py/tests`: subscribe, `timeline_set_frame`, `next_notification` gets
   `frame.changed`; callback; `job_start` + `job_wait`; `screenshot` against
   `forge-rpc-serve` is an `RpcError` -32000.
+
+## 11. Generated reference (brief 019)
+
+`crates/rpc/src/docs.rs` holds the methods (`METHODS`), notifications (`NOTIFICATIONS`), error
+codes (`ERRORS`) and limits as data; `forge docs` renders them into
+`docs/manual/reference/rpc.md` (CLI.md `docs`). Unit tests scan the server sources and fail
+when a method or notification name appears there but not in the tables, when a sent
+notification is undocumented or when an error code constant has no row.
+`crates/rpc/tests/reference.rs` calls every documented method on a real server and requires
+that none is answered -32601 (and that an unlisted one is). The hand-written sections above
+stay the normative description; the tables only name and summarise.

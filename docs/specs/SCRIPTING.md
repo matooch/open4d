@@ -99,6 +99,13 @@ Queries read the stored scene (not the animated one at the current frame).
 Standard Rhai (loops, maps, arrays, closures, string functions, `PI()`, `sin` ...) is
 available. `print(x)` and `debug(x)` append a line to the report's `output`.
 
+The binding reference above is mirrored as data in `crates/script/src/api.rs` (`API`), which
+the generated `docs/manual/reference/scripting.md` renders. A unit test compares it with the
+functions the engine registers (name and parameter count, read through Rhai's `metadata`
+feature, enabled for tests only), so adding, removing or re-shaping a binding without
+updating the table fails the build. `forge_script::BLOCKED_COMMANDS` is the list of commands
+refused in scripts.
+
 ## 4. Language surface removed
 
 `import`/`export` and modules (feature `no_module`), time functions (`no_time`: `timestamp`),

@@ -16,7 +16,7 @@ implementers can avoid collisions.
 | 016 | [Rhai scripting: engine, bindings, `forge run`, Script Manager panel](../agents/tasks/016-rhai-scripting-engine-bindings-forge-run-script-manager-pane.md) | A | 012 | done | script (new), apps/forge, ui |
 | 017 | [Python client `forge-py`](../agents/tasks/017-python-client-forge-py.md) | A | 014 | done | python/forge_py (new) |
 | 018 | [RPC notifications, viewport screenshot, progress for long jobs](../agents/tasks/018-rpc-notifications-viewport-screenshot-progress-for-long-jobs.md) | A | 014 | done | rpc, ui |
-| 019 | [Automation docs, generated command reference, S1/S2 acceptance tests](../agents/tasks/019-automation-docs-generated-command-reference-s1-s2-acceptance.md) | A | 013, 015, 016 | ready | docs, apps/forge |
+| 019 | [Automation docs, generated command reference, S1/S2 acceptance tests](../agents/tasks/019-automation-docs-generated-command-reference-s1-s2-acceptance.md) | A | 013, 015, 016 | done (S1 partly pending: 065/069/164/136) | docs, apps/forge |
 | 020 | [Tool framework + Extrude and Extrude Inner](../agents/tasks/020-tool-framework-extrude-inset.md) | B | 011 | ready | modeling (new), ui, geometry |
 | 021 | [Bevel tool (all modes)](../agents/tasks/021-bevel.md) | B | 020 | ready | modeling, ui |
 | 022 | [Mesh commands: Subdivide, Triangulate, Untriangulate, Reverse, Optimize, Weld, Melt, Dissolve, Split, Disconnect, Connect, Mirror, Center Axis](../agents/tasks/022-mesh-commands.md) | B | 020 | ready | modeling, ui |

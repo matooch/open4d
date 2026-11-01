@@ -70,9 +70,22 @@ rewritten only with `--save` (so a plain run is a dry run). A failing command ch
 and saves nothing (exit 1). Selection is not stored in scene files, so commands that take
 an optional `nodes` list must be given it explicitly.
 
-### `forge commands`
+### `forge commands [--markdown]`
 Lists the registry. Text: `id  label` per line. JSON:
 `{"ok": true, "commands": [{"id", "label", "undoable", "args_schema": {..}}]}`.
+`--markdown` prints the command reference page instead (the same text as
+`docs/manual/reference/commands.md`; JSON: `{"ok": true, "markdown": "..."}`).
+
+### `forge docs [--out DIR] [--check]`
+Writes the generated reference pages into `DIR` (default `docs/manual/reference`):
+`commands.md` (every command: id, label, undo, MCP tool name, argument table from the JSON
+Schema, example), `cli.md` (from the clap definition: subcommands, arguments, defaults, exit
+codes), `rpc.md` (methods, notifications, error codes and limits from `forge_rpc::docs`),
+`mcp.md` (the tool list of a headless `forge-mcp`), `scripting.md` (the script API table of
+`forge_script::api`, blocked commands, sandbox limits). Everything comes from code, so the
+pages cannot drift; `--check` writes nothing and exits 1, naming the stale files, when the
+files in `DIR` differ from the generated ones. JSON: `{"ok": true, "dir", "files": [..],
+"checked": bool}`. Output is deterministic (registry order, sorted schema keys).
 
 ### `forge rpc <method> [--params JSON] [--port N] [--token T]`
 Calls a method of a running editor over JSON-RPC (RPC.md; methods in RPC.md §4).
@@ -118,5 +131,16 @@ and exits with its code. Without `--headless` the editor starts.
   nodes); no `--save` leaves the scene file unchanged; `--scene` input; `--json` output;
   a syntax error, a runtime error and an operation-limit stop are exit 1 and save
   nothing; a missing script file is exit 1; a missing scene is exit 2.
+- Reference (`tests/docs.rs`): the committed `docs/manual/reference/*.md` equal
+  `forge_cli::docs::generate()` (the stale-reference test; fix with `forge docs --out
+  docs/manual/reference`); no stray files; generation is deterministic and mentions every
+  command, RPC method, subcommand and script function; `forge docs --check` fails on a missing
+  or edited page and passes after `forge docs`; `commands --markdown` equals `commands.md`.
+- Acceptance S1 (`tests/acceptance.rs`, script `tests/acceptance/s1.rhai`): see
+  `docs/manual/automation.md`. Passing: script builds cube plus animated bend, `info`/`validate`,
+  frame 0 equals the cube golden, frame 30 is bent between frames 0 and 60, `export` equals
+  `eval --export`, two builds are byte-identical. Pending (ignored tests naming the brief):
+  cloner with random effector (065, 069), glTF export (164), PNG render (136, 139, 146); a
+  test pins `export --format gltf` and `render` as stubs so enabling them is noticed.
 - A closed stdout pipe (`forge --json commands | head -c 300`) is exit 0 without a panic:
   output goes through a locked stdout handle and `BrokenPipe` is a quiet success.

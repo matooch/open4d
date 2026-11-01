@@ -12,17 +12,18 @@ use crate::convert;
 
 /// Commands a script may not run (docs/specs/SCRIPTING.md §3): they would break the single
 /// undo step or reach the file system without an explicit export path.
+pub const BLOCKED_COMMANDS: &[&str] = &[
+    "edit.undo",
+    "edit.redo",
+    "file.new",
+    "file.open",
+    "file.save",
+    "file.save_as",
+    "file.import_obj",
+];
+
 fn blocked(id: &str) -> bool {
-    matches!(
-        id,
-        "edit.undo"
-            | "edit.redo"
-            | "file.new"
-            | "file.open"
-            | "file.save"
-            | "file.save_as"
-            | "file.import_obj"
-    )
+    BLOCKED_COMMANDS.contains(&id)
 }
 
 pub(crate) struct Host {
