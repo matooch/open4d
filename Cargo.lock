@@ -1325,6 +1325,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-mcp"
+version = "0.1.0"
+dependencies = [
+ "forge-app",
+ "forge-rpc",
+ "serde_json",
+]
+
+[[package]]
 name = "forge-modifiers"
 version = "0.1.0"
 dependencies = [

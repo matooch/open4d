@@ -1,0 +1,21 @@
+[package]
+name = "forge-mcp"
+version.workspace = true
+edition.workspace = true
+description = "MCP server (stdio) for the Forge3D editor or a headless app (docs/specs/RPC.md section 8)."
+
+[lib]
+name = "forge_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "forge-mcp"
+path = "src/main.rs"
+
+[dependencies]
+forge-app = { path = "../app" }
+forge-rpc = { path = "../rpc" }
+serde_json = "1"
+
+[lints]
+workspace = true

@@ -143,3 +143,77 @@ All servers bind port 0 and read the port back.
 - `forge rpc` against a server started in the test (port 0, token in the environment).
 - The editor's `EditorState` implements `Host` and answers `command.run` including
   `view.shading` (`crates/ui/tests/rpc.rs`).
+
+## 8. MCP server (`crates/mcp`, package `forge-mcp`, binary `forge-mcp`)
+
+Source: the public Model Context Protocol specification (stdio transport, `initialize`,
+`tools/list`, `tools/call`, revisions 2024-11-05, 2025-03-26, 2025-06-18); our own design
+otherwise (A-automation.md, DECISIONS D3). Nothing here is **parity-pending**.
+
+AI agents use the editor through MCP. The server is a thin mapping from tools onto the RPC
+methods of §4, so it adds no behaviour of its own.
+
+### 8.1 Transport and protocol
+- stdio: one JSON-RPC 2.0 message per line on stdin, replies one per line on stdout.
+  stdout carries only protocol messages; diagnostics go to stderr. EOF on stdin ends the
+  process with exit code 0.
+- Hand-written (no SDK): the subset needed is `initialize`, `notifications/initialized`,
+  `ping`, `tools/list` and `tools/call`; no async runtime, only `serde_json`. The MCP
+  Rust SDK would pull in tokio and a macro layer for about 300 lines of protocol.
+- `initialize`: reply `{"protocolVersion", "capabilities": {"tools": {}}, "serverInfo":
+  {"name": "forge-mcp", "version"}, "instructions"}`. `protocolVersion` echoes the client's
+  if it is one of the three revisions above, else the newest (2025-06-18).
+- Messages without `id` are notifications and are never answered. `ping` returns `{}`.
+  Unknown method: -32601. Malformed JSON: -32700 with `id` null. Not an object, or
+  `method` not a string: -32600. Batches are not supported (-32600).
+- `tools/call` for an unknown tool or bad `arguments` (not an object): -32602. A tool that
+  ran and failed (command refused, unknown node, editor not reachable) is a normal result
+  with `"isError": true` and the message as text, so the agent can read it.
+- A successful call returns `{"content": [{"type": "text", "text": <JSON text>}],
+  "isError": false}`.
+
+### 8.2 Tools
+Generated at `tools/list` from `command.list`, so a command added to the registry appears
+without code changes.
+- One tool per command: `name` = id with `.` replaced by `_` (`object.create` is
+  `object_create`; ids contain only `[a-z0-9_.]`), `description` = label, whether it is
+  undoable, and the original id, `inputSchema` = the command's `args_schema` (a schema
+  without `"type": "object"` is wrapped). Call = `command.run`; the text is the command's
+  result.
+- Query tools: `scene_get` (= `scene.get`), `node_get {id}` (= `node.get`),
+  `eval_mesh_summary {node, frame?}` (= `eval.mesh`, reduced to `{node, frame, points,
+  polys, bbox: {min, max} | null}`: counts and bounding box, never the mesh),
+  `export_obj {path, selected?}` (= command `file.export_obj`), `frame_set {frame}`
+  (= command `timeline.set_frame`). A command whose mapped name equals one of these five is
+  not listed.
+- Names are unique; they match `[a-zA-Z0-9_]{1,64}`.
+
+### 8.3 Connection
+- Default: editor mode. The server connects to `127.0.0.1` with `forge_rpc::Client`; port
+  and token resolve as in §2 (`FORGE_RPC_PORT`/`FORGE_RPC_TOKEN`, then the settings file);
+  `--port N` overrides the port. The token is never taken from an argument (visible in
+  `ps`) and never printed. The connection is made lazily on the first call and re-made after
+  an I/O failure, so the MCP client can start before the editor; an unreachable editor is
+  an `isError` tool result saying so.
+- `--headless [scene]`: an in-process `forge_app::App` (opened from `scene` if given)
+  answers through the same `dispatch` as the editor (`Host for App`); no port, no token.
+  The document lives as long as the process; use `file_save_as` to keep it.
+- Exactly one of the two modes per process; `--help` prints usage; a bad argument is exit 2.
+
+### 8.4 Configuration
+README.md (repository root) shows `claude mcp add` and `.mcp.json` for Claude Code and the
+Claude Desktop config.
+
+### 8.5 Tests (`crates/mcp/tests/stdio.rs` and unit tests)
+- Spawn `forge-mcp --headless` and talk over its pipes: `initialize`, the initialized
+  notification (no reply), `tools/list` contains `object_create`, `scene_get` and the
+  other query tools with valid names; `tools/call object_create {"type": "forge.cube"}` then
+  `scene_get` shows the node; `eval_mesh_summary` of a cube gives 8 points, 6 polys and its
+  bbox; `frame_set` moves the frame; `export_obj` writes a file; a failing command is
+  `isError` and the server keeps serving; unknown tool and unknown method; malformed line;
+  EOF exits 0.
+- A `--headless <scene file>` run starts with that scene.
+- Editor mode against a `forge_rpc::Server` on port 0 with a token (pump thread with an
+  `App`): tools work through the RPC client; a wrong token and a missing editor are
+  `isError`.
+- Unit tests: name mapping and collisions, schema wrapping, bbox.
