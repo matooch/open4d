@@ -127,3 +127,46 @@ fn make_editable_through_the_command() {
         "the polygon object and its smoothing tag"
     );
 }
+
+/// Brief 068: a Plain effector made by `object.create`, linked through `param.set` on the
+/// cloner's `effectors` list (spec E1), moves the clones; undo, save and load keep the link.
+#[test]
+fn an_effector_is_created_and_linked_by_commands() {
+    let mut app = App::new_default();
+    let (cloner, _) = scene(&mut app);
+    let plain = create(&mut app, "forge.effector.plain");
+    let before = app.eval_mesh(cloner, 0).unwrap();
+    set(&mut app, cloner, "effectors", json!([plain.0]));
+    let after = app.eval_mesh(cloner, 0).unwrap();
+    // Default Plain: P (0, 100, 0) at strength 100 %.
+    assert!((after.points[0].y - before.points[0].y - 100.0).abs() < 1e-9);
+    // Strength is set in percent like every percent parameter.
+    set(&mut app, plain, "strength", json!(50.0));
+    let half = app.eval_mesh(cloner, 0).unwrap();
+    assert!((half.points[0].y - before.points[0].y - 50.0).abs() < 1e-9);
+    // The query shows the list as node ids.
+    let node = forge_app::query::node_json(app.doc.scene(), cloner);
+    assert_eq!(node["params"]["effectors"], json!([plain.0]));
+    // A cube is not an effector.
+    let cube = create(&mut app, "forge.cube");
+    let err = app.run(
+        "param.set",
+        json!({"node": cloner.0, "param": "effectors", "value": [cube.0]}),
+    );
+    assert!(err.is_err());
+
+    // Undo takes the cube and then the strength edit back (the refused link changed nothing).
+    app.run("edit.undo", json!({})).unwrap();
+    app.run("edit.undo", json!({})).unwrap();
+    assert_eq!(app.eval_mesh(cloner, 0).unwrap(), after);
+    let dir = std::env::temp_dir().join(format!("forge-effector-test-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("effector.forge").to_string_lossy().into_owned();
+    app.save(&path).unwrap();
+    let mut other = App::new_default();
+    other.open(&path).unwrap();
+    assert_eq!(
+        other.eval_mesh(cloner, 0).unwrap(),
+        app.eval_mesh(cloner, 0).unwrap()
+    );
+}

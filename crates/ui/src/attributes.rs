@@ -79,7 +79,7 @@ pub(crate) fn widget(kind: &ParamKind, unit: Unit) -> Widget {
         ParamKind::Link { accepts } => Widget::Link {
             accepts: accepts.clone(),
         },
-        ParamKind::Mesh | ParamKind::IndexList => Widget::ReadOnly,
+        ParamKind::Mesh | ParamKind::IndexList | ParamKind::LinkList { .. } => Widget::ReadOnly,
     }
 }
 

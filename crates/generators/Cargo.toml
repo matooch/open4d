@@ -13,6 +13,7 @@ glam = "0.34"
 thiserror = "2"
 
 [dev-dependencies]
+forge-fields = { path = "../fields" }
 forge-parity-harness = { path = "../parity-harness" }
 toml = "1"
 

@@ -6,7 +6,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use forge_clone_engine::CloneToolset;
-use forge_core::{Document, EvalCtx, ParamKind, Registry, Tx, Value};
+use forge_core::{Category, Document, EvalCtx, NodeId, ParamKind, Registry, Tx, Value, transform};
+use forge_fields::FieldToolset;
 use forge_generators::{BuildError, Primitives, clone_data, evaluate};
 use forge_parity_harness::{
     Mesh, Samples, compare_meshes, compare_samples, discover_cases, export_weld,
@@ -36,6 +37,7 @@ fn registry() -> Arc<Registry> {
     let mut reg = Registry::with_builtins();
     reg.install(&Primitives).unwrap();
     reg.install(&CloneToolset).unwrap();
+    reg.install(&FieldToolset).unwrap();
     Arc::new(reg)
 }
 
@@ -293,4 +295,400 @@ fn a_cloner_inside_a_cloner_matches_the_nested_mesh() {
     let want = export_weld(&case.expected_mesh().unwrap().unwrap());
     let r = compare_meshes(&want, &ours, &case.manifest().unwrap().tolerance);
     assert!(r.passed(), "{:?}", r.failures);
+}
+
+// ---------------------------------------------------------------------------------------
+// Plain effector (spec E9)
+
+/// Plain cases built but differing, with the reason (spec E9). None.
+const PLAIN_KNOWN_MISMATCH: &[&str] = &[];
+
+/// The case whose `case.toml` has no field table (the description says: a Linear field with
+/// defaults, in the effector's list). It is rebuilt by its own test (spec E9).
+const PLAIN_NO_FIELD_TABLE: &[&str] = &["linear-plain-field"];
+
+/// Percent-valued effector keys that the oldest case files write without the suffix.
+const OLD_PERCENT: &[&str] = &[
+    "strength",
+    "maximum",
+    "minimum",
+    "weight_transform",
+    "u_transform",
+    "v_transform",
+    "modify_clone",
+];
+
+/// Keys of a field table that are not parameters (the colour/direction channel remapping).
+const FIELD_SKIP: &[&str] = &[
+    "type",
+    "color_mode",
+    "length_1005025",
+    "scale_percent",
+    "scale_percent_1005032",
+    "invert_direction",
+    "invert_rotations",
+];
+
+fn degrees(v: f64) -> f64 {
+    v * std::f64::consts::PI / 180.0
+}
+
+/// One case key of a node table as `(param id, value)`; `None` for keys that are not
+/// parameters of `ty_id`.
+fn node_param(
+    reg: &Registry,
+    ty_id: &str,
+    key: &str,
+    raw: &toml::Value,
+    renames: &[(&str, &str)],
+) -> Option<(String, Value)> {
+    let ty = reg.get(ty_id).unwrap();
+    if key == "name" {
+        return None;
+    }
+    let renames = [renames, &[("scale_1018", "scale_value")][..]].concat();
+    let renamed = renames
+        .iter()
+        .find(|(from, _)| *from == key)
+        .map_or(key, |(_, to)| *to);
+    let (id, scale) = match renamed {
+        "position" if raw.is_array() => (transform::POS.to_string(), 1.0),
+        "rotation_deg" | "object_rotation_deg" => (transform::ROT.to_string(), degrees(1.0)),
+        k if OLD_PERCENT.contains(&k) => (k.to_string(), 0.01),
+        k => match (k.strip_suffix("_percent"), k.strip_suffix("_deg")) {
+            (Some(b), _) => (b.to_string(), 0.01),
+            (_, Some(b)) => (b.to_string(), degrees(1.0)),
+            _ => (k.to_string(), 1.0),
+        },
+    };
+    let desc = ty.find_param(&id)?;
+    // The strings of the field's channel remapping ("Use Value", "No Remap") share ids
+    // with numeric parameters.
+    if raw.is_str() && matches!(desc.kind, ParamKind::Float { .. }) {
+        return None;
+    }
+    let value = match (&desc.kind, raw) {
+        (ParamKind::Bool, toml::Value::Boolean(b)) => Value::Bool(*b),
+        (ParamKind::Int { .. }, toml::Value::Integer(i)) => Value::Int(*i),
+        (ParamKind::Float { .. }, v) => Value::Float(
+            v.as_float()
+                .unwrap_or_else(|| v.as_integer().expect("number") as f64)
+                * scale,
+        ),
+        (ParamKind::Vec3 { .. }, v) => {
+            let f = floats(v);
+            Value::Vec3([f[0] * scale, f[1] * scale, f[2] * scale])
+        }
+        (ParamKind::Color, v) => {
+            let f = floats(v);
+            Value::Color([f[0], f[1], f[2]])
+        }
+        (ParamKind::String, toml::Value::String(s)) => Value::String(s.clone()),
+        (ParamKind::Enum { options }, toml::Value::String(s)) => {
+            let o = options
+                .iter()
+                .find(|o| o.label.eq_ignore_ascii_case(s))
+                .unwrap_or_else(|| panic!("{id}: no option labelled {s:?}"));
+            Value::Enum(o.id.clone())
+        }
+        // The strings of the field's channel remapping ("Use Value", "No Remap").
+        (_, toml::Value::String(_)) => return None,
+        other => panic!("{id}: unexpected value {other:?}"),
+    };
+    Some((id, desc.validate(value).expect("valid case value")))
+}
+
+/// Creates a node of `ty` at the root with the case table's parameters.
+fn create_node(
+    tx: &mut Tx,
+    reg: &Registry,
+    ty: &str,
+    table: &Table,
+    skip: &[&str],
+    renames: &[(&str, &str)],
+) -> NodeId {
+    let id = tx.create(ty, None, None).unwrap();
+    for (key, raw) in table {
+        if raw.is_table() || skip.contains(&key.as_str()) {
+            continue;
+        }
+        if let Some((param, v)) = node_param(reg, ty, key, raw, renames) {
+            tx.set_param(id, &param, v).unwrap();
+        }
+    }
+    id
+}
+
+fn field_type_of(label: &str) -> &'static str {
+    match label {
+        "Spherical Field" => "forge.field.spherical",
+        "Linear Field" => "forge.field.linear",
+        other => panic!("field type {other:?} is not part of brief 068"),
+    }
+}
+
+/// The cloner with its 20 cm cube, its Plain effectors in list order and their fields.
+fn build_with_effectors(
+    doc: &mut Document,
+    reg: &Registry,
+    mode: &str,
+    table: &Table,
+    effectors: &[&Table],
+) -> NodeId {
+    let cloner = build(doc, reg, mode, table);
+    doc.transact("effectors", |tx: &mut Tx| {
+        let mut ids = Vec::new();
+        for e in effectors {
+            let eff = create_node(
+                tx,
+                reg,
+                "forge.effector.plain",
+                e,
+                &["type", "use_alpha_strength_1071"],
+                &[],
+            );
+            if let Some(toml::Value::Table(f)) = e.get("field") {
+                let field = create_node(
+                    tx,
+                    reg,
+                    field_type_of(f["type"].as_str().unwrap()),
+                    f,
+                    FIELD_SKIP,
+                    &[("size", "radius")],
+                );
+                tx.set_param(eff, "fields", Value::LinkList(vec![field]))
+                    .unwrap();
+            }
+            ids.push(eff);
+        }
+        tx.set_param(cloner, "effectors", Value::LinkList(ids))
+    })
+    .unwrap();
+    cloner
+}
+
+/// The effector tables of a case in list order (`effector`, `effector_2`, ...).
+fn effector_tables(params: &std::collections::BTreeMap<String, toml::Value>) -> Vec<&Table> {
+    let mut out = Vec::new();
+    for key in std::iter::once("effector".to_string()).chain((2..).map(|n| format!("effector_{n}")))
+    {
+        match params.get(&key) {
+            Some(toml::Value::Table(t)) => out.push(t),
+            _ => break,
+        }
+    }
+    out
+}
+
+#[test]
+fn plain_effector_cases_match_the_reference() {
+    let reg = registry();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
+    let mut matched = Vec::new();
+    let mut mismatched = BTreeSet::new();
+    let ctx = EvalCtx::default();
+    for case in discover_cases(&root).unwrap() {
+        if case.feature != "cloner" {
+            continue;
+        }
+        let m = case.manifest().unwrap();
+        let effectors = effector_tables(&m.params);
+        let all_plain = effectors
+            .iter()
+            .all(|e| e.get("type").and_then(|t| t.as_str()) == Some("plain"));
+        if effectors.is_empty() || !all_plain {
+            continue;
+        }
+        if PLAIN_NO_FIELD_TABLE.contains(&case.name.as_str()) {
+            continue;
+        }
+        let mode = m.params["mode"].as_str().unwrap().to_string();
+        let table: Table = m
+            .params
+            .iter()
+            .filter(|(k, v)| {
+                !v.is_table() && !k.starts_with("plain") && k.as_str() != "document_frame"
+            })
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        let mut doc = Document::new(reg.clone());
+        let cloner = build_with_effectors(&mut doc, &reg, &mode, &table, &effectors);
+
+        let data = clone_data(doc.scene(), cloner, &ctx).unwrap().unwrap();
+        assert!(data.is_consistent(), "{}", case.name);
+        let ours = Samples::Clones {
+            tolerance: 1e-4,
+            clones: (0..data.len()).map(|i| sample_of(&data, i)).collect(),
+        };
+        let (_, expected) = case.samples().unwrap().remove(0);
+        let samples = compare_samples(&expected, &ours);
+
+        let mesh = evaluate(doc.scene(), cloner, &ctx)
+            .unwrap()
+            .expect("geometry");
+        let ours = export_weld(&Mesh {
+            positions: mesh.points.iter().map(|p| p.to_array()).collect(),
+            faces: mesh.polys.clone(),
+        });
+        let want = export_weld(&case.expected_mesh().unwrap().unwrap());
+        let geo = compare_meshes(&want, &ours, &m.tolerance);
+        let ok = samples.passed() && geo.passed();
+        if PLAIN_KNOWN_MISMATCH.contains(&case.name.as_str()) {
+            assert!(
+                !ok,
+                "{} matches now: remove it from PLAIN_KNOWN_MISMATCH",
+                case.name
+            );
+            mismatched.insert(case.name.clone());
+            continue;
+        }
+        assert!(
+            samples.passed(),
+            "{}: samples {:?} (max error {})",
+            case.name,
+            samples.failures,
+            samples.max_error
+        );
+        assert!(
+            geo.passed(),
+            "{}: mesh {:?} (max error {:?})",
+            case.name,
+            geo.failures,
+            geo.max_position_error
+        );
+        matched.push(case.name.clone());
+    }
+    println!("matched: {}", matched.join(", "));
+    assert_eq!(
+        mismatched,
+        PLAIN_KNOWN_MISMATCH.iter().map(|s| s.to_string()).collect()
+    );
+    assert_eq!(matched.len(), 13, "{matched:?}");
+}
+
+/// The effector list is in order and the order matters when the channels interact:
+/// Absolute Scale 2 then Relative Scale 1 gives 3, the swapped list gives 2 (spec E1, E5).
+#[test]
+fn the_effector_list_applies_in_list_order() {
+    let reg = registry();
+    let mut doc = Document::new(reg.clone());
+    let (cloner, first, second) = doc
+        .transact("scene", |tx| {
+            let cloner = tx.create("forge.cloner", None, None)?;
+            tx.set_param(cloner, "mode", Value::Enum("linear".into()))?;
+            tx.create("forge.cube", Some(cloner), None)?;
+            let mk = |tx: &mut Tx, absolute: bool| -> Result<NodeId, forge_core::EditError> {
+                let e = tx.create("forge.effector.plain", None, None)?;
+                tx.set_param(e, "position", Value::Bool(false))?;
+                tx.set_param(e, "scale", Value::Bool(true))?;
+                tx.set_param(e, "uniform_scale", Value::Bool(true))?;
+                tx.set_param(e, "absolute_scale", Value::Bool(absolute))?;
+                tx.set_param(
+                    e,
+                    "scale_value",
+                    Value::Float(if absolute { 2.0 } else { 1.0 }),
+                )?;
+                Ok(e)
+            };
+            let first = mk(tx, true)?;
+            let second = mk(tx, false)?;
+            Ok((cloner, first, second))
+        })
+        .unwrap();
+    let scale_of = |doc: &Document| {
+        clone_data(doc.scene(), cloner, &EvalCtx::default())
+            .unwrap()
+            .unwrap()
+            .matrices[0]
+            .x_axis
+            .length()
+    };
+    let link = |doc: &mut Document, list: Vec<NodeId>| {
+        doc.transact("link", |tx| {
+            tx.set_param(cloner, "effectors", Value::LinkList(list))
+        })
+        .unwrap();
+    };
+    link(&mut doc, vec![first, second]);
+    assert!((scale_of(&doc) - 3.0).abs() < 1e-12);
+    link(&mut doc, vec![second, first]);
+    assert!((scale_of(&doc) - 2.0).abs() < 1e-12);
+    // The categories are checked: a cube cannot be an effector.
+    let cube = doc.scene().node(cloner).unwrap().children[0];
+    let err = doc.transact("bad", |tx| {
+        tx.set_param(cloner, "effectors", Value::LinkList(vec![cube]))
+    });
+    assert!(err.is_err());
+    // A node appears at most once, and never links to itself.
+    let twice = doc.transact("twice", |tx| {
+        tx.set_param(cloner, "effectors", Value::LinkList(vec![first, first]))
+    });
+    assert!(twice.is_err());
+    assert_eq!(
+        doc.scene().node_type(first).unwrap().category,
+        Category::Effector
+    );
+}
+
+/// `linear-plain-field`: the case file holds no field table, only the description (a Linear
+/// field with defaults as the effector's only layer). Rebuilt here with the default Linear
+/// field at the origin. Its Color is not recorded either, so it is read back from the samples
+/// with the rule of spec E6 (`sample = 1 + (field colour - 1) * value`, value 0.5 at x = 0);
+/// positions, the expanded mesh and the equal colours of all ten clones are checked
+/// independently of that.
+#[test]
+fn linear_plain_field_matches_with_the_default_linear_field() {
+    let reg = registry();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
+    let case = discover_cases(&root)
+        .unwrap()
+        .into_iter()
+        .find(|c| c.feature == "cloner" && c.name == "linear-plain-field")
+        .unwrap();
+    let m = case.manifest().unwrap();
+    let (_, expected) = case.samples().unwrap().remove(0);
+    let Samples::Clones { clones, .. } = &expected else {
+        panic!("clone samples expected");
+    };
+    let first = clones[0].color;
+    assert!(clones.iter().all(|c| c.color == first));
+    let field_color = first.map(|c| 1.0 + (c - 1.0) / 0.5);
+
+    let mode = m.params["mode"].as_str().unwrap().to_string();
+    let table: Table = m
+        .params
+        .iter()
+        .filter(|(k, v)| !v.is_table() && !k.starts_with("plain"))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    let effector = effector_tables(&m.params)[0];
+    let mut doc = Document::new(reg.clone());
+    let cloner = build_with_effectors(&mut doc, &reg, &mode, &table, &[effector]);
+    let eff = match doc.scene().param(cloner, "effectors") {
+        Some(Value::LinkList(l)) => l[0],
+        other => panic!("no effector list: {other:?}"),
+    };
+    doc.transact("field", |tx| {
+        let f = tx.create("forge.field.linear", None, None)?;
+        tx.set_param(f, "color", Value::Color(field_color))?;
+        tx.set_param(eff, "fields", Value::LinkList(vec![f]))
+    })
+    .unwrap();
+
+    let ctx = EvalCtx::default();
+    let data = clone_data(doc.scene(), cloner, &ctx).unwrap().unwrap();
+    let ours = Samples::Clones {
+        tolerance: 1e-4,
+        clones: (0..data.len()).map(|i| sample_of(&data, i)).collect(),
+    };
+    let samples = compare_samples(&expected, &ours);
+    assert!(samples.passed(), "{:?}", samples.failures);
+    let mesh = evaluate(doc.scene(), cloner, &ctx).unwrap().unwrap();
+    let ours = export_weld(&Mesh {
+        positions: mesh.points.iter().map(|p| p.to_array()).collect(),
+        faces: mesh.polys.clone(),
+    });
+    let want = export_weld(&case.expected_mesh().unwrap().unwrap());
+    let geo = compare_meshes(&want, &ours, &m.tolerance);
+    assert!(geo.passed(), "{:?}", geo.failures);
 }

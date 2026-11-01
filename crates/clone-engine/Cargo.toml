@@ -6,6 +6,7 @@ description = "Clone data, the cloner node and its distribution modes (see the c
 
 [dependencies]
 forge-core = { path = "../core" }
+forge-fields = { path = "../fields" }
 glam = "0.34"
 thiserror = "2"
 

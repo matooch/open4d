@@ -328,6 +328,8 @@ pub fn cloner_type() -> NodeType {
             ],
             HONEY,
         ))
+        // Effectors (list order = application order, spec E1).
+        .param(ParamDesc::link_list("effectors", "Effectors", &[Category::Effector]).group(OBJ))
         // Transform tab.
         .param(en(
             "display",
@@ -403,14 +405,15 @@ impl Plugin for CloneToolset {
     }
 
     fn register(&self, r: &mut Registry) -> Result<(), RegistryError> {
-        r.register(cloner_type())
+        r.register(cloner_type())?;
+        r.register(crate::plain::plain_type())
     }
 }
 
 /// Typed parameter access with defaults from the descriptors.
-struct Params<'a> {
-    ty: &'a NodeType,
-    values: &'a BTreeMap<String, Value>,
+pub(crate) struct Params<'a> {
+    pub(crate) ty: &'a NodeType,
+    pub(crate) values: &'a BTreeMap<String, Value>,
 }
 
 impl Params<'_> {
@@ -422,7 +425,7 @@ impl Params<'_> {
             .unwrap_or_else(|| desc.default.clone())
     }
 
-    fn float(&self, id: &str) -> f64 {
+    pub(crate) fn float(&self, id: &str) -> f64 {
         match self.get(id) {
             Value::Float(f) => f,
             other => unreachable!("{id} is not a float: {other:?}"),
@@ -440,25 +443,25 @@ impl Params<'_> {
         self.int(id).max(0) as usize
     }
 
-    fn bool(&self, id: &str) -> bool {
+    pub(crate) fn bool(&self, id: &str) -> bool {
         matches!(self.get(id), Value::Bool(true))
     }
 
-    fn vec3(&self, id: &str) -> DVec3 {
+    pub(crate) fn vec3(&self, id: &str) -> DVec3 {
         match self.get(id) {
             Value::Vec3(v) => DVec3::from_array(v),
             other => unreachable!("{id} is not a vec3: {other:?}"),
         }
     }
 
-    fn color(&self, id: &str) -> [f64; 3] {
+    pub(crate) fn color(&self, id: &str) -> [f64; 3] {
         match self.get(id) {
             Value::Color(c) => c,
             other => unreachable!("{id} is not a colour: {other:?}"),
         }
     }
 
-    fn option(&self, id: &str) -> String {
+    pub(crate) fn option(&self, id: &str) -> String {
         match self.get(id) {
             Value::Enum(s) => s,
             other => unreachable!("{id} is not an enum: {other:?}"),

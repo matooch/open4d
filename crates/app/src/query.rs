@@ -21,6 +21,7 @@ pub fn display_value(value: &Value, unit: Unit) -> Json {
         Value::Color(c) => json!(c),
         Value::Enum(s) | Value::String(s) => json!(s),
         Value::Link(l) => json!(l.map(|n| n.0)),
+        Value::LinkList(l) => json!(l.iter().map(|n| n.0).collect::<Vec<_>>()),
         Value::Mesh(m) => json!({"points": m.points.len(), "polys": m.polys.len()}),
         Value::IndexList(i) => json!(i),
     }

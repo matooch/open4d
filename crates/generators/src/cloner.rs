@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use forge_clone_engine::{CLONER, CloneError, generate, settings_from_params};
+use forge_clone_engine::{CLONER, CloneError, apply_effectors, generate, settings_from_params};
 use forge_core::{EvalCtx, NodeId, Scene, Value};
 use forge_geometry::PolyMesh;
 
@@ -44,6 +44,7 @@ pub(crate) fn evaluate_cloner(
 ) -> Result<Option<PolyMesh>, BuildError> {
     let settings = settings_from_params(values);
     let mut clones = generate(&settings, ctx).map_err(map_error)?;
+    apply_effectors(scene, id, &mut clones, ctx).map_err(map_error)?;
     let mut protos = Vec::new();
     for child in prototypes_of(scene, id) {
         let Some(mut mesh) = evaluate(scene, child, ctx)? else {
@@ -94,6 +95,7 @@ pub fn clone_data(
     };
     let settings = settings_from_params(&node.params);
     let mut clones = generate(&settings, ctx).map_err(map_error)?;
+    apply_effectors(scene, id, &mut clones, ctx).map_err(map_error)?;
     clones
         .assign_children(prototypes_of(scene, id).len(), settings.clones_mode)
         .map_err(map_error)?;

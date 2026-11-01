@@ -66,6 +66,7 @@ fn field_type(id: &str, label: &str, shape: Vec<ParamDesc>, inner: f64, mirror: 
         ty = ty.param(p);
     }
     ty = ty.param(ParamDesc::bool("clip_to_shape", "Clip to Shape", false).group(FIELD));
+    ty = ty.param(ParamDesc::color("color", "Color", [1.0; 3]).group(FIELD));
     for p in remap_params(inner, mirror) {
         ty = ty.param(p);
     }
@@ -182,6 +183,13 @@ impl Params<'_> {
         }
     }
 
+    fn color(&self, id: &str) -> [f64; 3] {
+        match self.get(id) {
+            Value::Color(c) => c,
+            other => unreachable!("{id} is not a colour: {other:?}"),
+        }
+    }
+
     fn option(&self, id: &str) -> String {
         match self.get(id) {
             Value::Enum(s) => s,
@@ -252,10 +260,8 @@ pub(crate) fn shape_field(
             size: p.vec3("size"),
         },
     };
-    Some(ShapeField::new(
-        shape,
-        p.remap(),
-        p.bool("clip_to_shape"),
-        world,
-    ))
+    Some(
+        ShapeField::new(shape, p.remap(), p.bool("clip_to_shape"), world)
+            .map(|f| f.with_color(p.color("color"))),
+    )
 }

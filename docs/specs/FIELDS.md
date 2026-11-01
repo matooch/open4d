@@ -21,8 +21,11 @@ pub trait Field: Send + Sync {
 pub struct FieldSample { pub value: f64, pub color: [f64; 3], pub direction: DVec3 }
 ```
 
-- `value` is the remapped field value (the observed channel). `color` is `[value; 3]` and
-  `direction` is zero until the colour and direction channels are observed (**parity-pending**).
+- `value` is the remapped field value (the observed channel). `color` is the field's `Color`
+  parameter (a constant colour, white by default; brief 068 observed it through the Plain effector's
+  Fields Color mode, MOGRAPH.md E6) and `direction` is zero until the direction channel is observed
+  (**parity-pending**). A list mixes the colour with the layer strengths like the value; its blending
+  beyond one layer is parity-pending.
 - Points are **world** positions. A field object converts them to its own space with the inverse
   of its world matrix (position, rotation, scale and parents), so a scaled field is an ellipsoid
   (`spherical-scaled`) and a moved one follows (`spherical-moved`).
@@ -56,6 +59,7 @@ Type ids `forge.field.linear`, `forge.field.spherical`, `forge.field.box`; categ
 | `radius` (Spherical) | Size | float, distance | 100 | 0 .. 1e20 |
 | `size` (Box) | Size | vec3, distance | (100, 100, 100) | 0 .. 1e20 |
 | `clip_to_shape` | Clip to Shape | bool | off | |
+| `color` | Color | colour | white | the constant colour channel (brief 068, MOGRAPH.md E6, E8) |
 | `enable_remapping` | Enable Remapping | bool | on | |
 | `strength` | Strength | float, percent | 100 % | -1e20 .. 1e20 |
 | `invert` | Invert | bool | off | |
@@ -70,7 +74,8 @@ Type ids `forge.field.linear`, `forge.field.spherical`, `forge.field.box`; categ
 | `spline_offset`, `spline_range` | Spline Offset / Range | float, percent | 0 % / 100 % | stored only |
 
 The colour and direction channel remapping parameters of O7 (Color Mode, Length, Invert
-Direction, Strength, Invert Rotations) are not types here: no case observes those channels.
+Direction, Strength, Invert Rotations) are not parameters here: no case observes their effect. Only
+the constant `color` is (above).
 
 ## F3. Shape value
 

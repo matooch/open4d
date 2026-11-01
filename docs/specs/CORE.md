@@ -28,6 +28,7 @@ evaluation of real node types (Phases 5+).
 | `Link` | `Option<NodeId>` | reference to another node |
 | `Mesh` | `Arc<MeshData>` | an editable polygon mesh (see below) |
 | `IndexList` | `Vec<u32>` | a sorted set of element indices (component selections) |
+| `LinkList` | `Vec<NodeId>` | an ordered list of node references (a cloner's effector list, an effector's field list); order is meaningful |
 
 `ParamDesc { id, label, kind, default, ui, animatable }`:
 - `id`: non-empty, chars `[a-z0-9_.]`, unique within its node type. Stable forever:
@@ -35,7 +36,7 @@ evaluation of real node types (Phases 5+).
 - `kind: ParamKind`: `Bool`, `Int { min, max }`, `Float { min, max }`,
   `Vec3 { min, max }` (per component), `Color`, `Enum { options }` (each option
   `{ id, label }`, ids unique, at least one), `String`, `Link { accepts }` (list of
-  categories; empty = any), `Mesh`, `IndexList`.
+  categories; empty = any), `LinkList { accepts }` (the same for each entry), `Mesh`, `IndexList`.
 - `ui: UiHint { group, unit, soft_min, soft_max, step, hidden }`. `unit` ∈
   `None | Distance | Angle | Percent | Time`. UI-only; never affects validation.
 - `animatable`: defaults to true for `Int/Float/Vec3/Color/Bool`, false otherwise.
@@ -51,7 +52,7 @@ evaluation of real node types (Phases 5+).
   default, is `hidden()` and `animatable(false)`. Core does not know what the indices refer to.
 - Builders: `ParamDesc::float(id, label, default)`, `.int`, `.bool`, `.vec3`,
   `.color`, `.enumeration(id, label, default_id, &[(id, label)])`, `.string`,
-  `.link(id, label, accepts)`, `.mesh(id, label)`, `.index_list(id, label)`, then `.range(min, max)`, `.unit(u)`, `.group(g)`,
+  `.link(id, label, accepts)`, `.link_list(id, label, accepts)`, `.mesh(id, label)`, `.index_list(id, label)`, then `.range(min, max)`, `.unit(u)`, `.group(g)`,
   `.soft_range(a, b)`, `.step(s)`, `.hidden()`, `.animatable(bool)`.
 
 `ParamDesc::validate(Value) -> Result<Value, ParamError>`:
@@ -69,6 +70,13 @@ evaluation of real node types (Phases 5+).
    tests/golden/cone), and Make Editable must keep the face lists exactly.
 7. `IndexList`: the list is **sorted ascending and deduplicated** (not an error). No range
    check (the kind does not know the element count).
+8. `LinkList`: the order is kept; a node twice in the list is `ParamError::DuplicateLink`.
+   `Tx::set_param` checks every entry like a `Link` (exists, not the node itself, accepted
+   category) and `param.set` takes an array of node ids. The default is the empty list and the
+   parameter is not animatable. Targets count for `deep_revision`. Brief 068 added it for
+   the clone toolset (MOGRAPH.md E1). The file version stays 5: `LinkList([1, 2])` appears only in
+   scenes that link effectors or fields, and an older build reads such a file as a parse error
+   instead of `UnsupportedVersion`.
 
 ## 2. Node types and the plugin registry (`registry`)
 

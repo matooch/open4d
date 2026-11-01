@@ -30,7 +30,7 @@ pub enum FieldError {
 pub struct FieldSample {
     /// The remapped value.
     pub value: f64,
-    /// Colour channel (`[value; 3]` until it is observed).
+    /// Colour channel: the field's constant Color (spec F2; `[value; 3]` for fields without one).
     pub color: [f64; 3],
     /// Direction channel (zero until it is observed).
     pub direction: DVec3,
@@ -63,6 +63,8 @@ pub struct ShapeField {
     pub shape: Shape,
     pub remap: Remap,
     pub clip_to_shape: bool,
+    /// The colour channel: a constant colour (the field's Color; white by default).
+    pub color: [f64; 3],
     /// World to field space.
     pub world_to_local: DMat4,
 }
@@ -80,8 +82,15 @@ impl ShapeField {
             shape,
             remap,
             clip_to_shape,
+            color: [1.0; 3],
             world_to_local: world.inverse(),
         })
+    }
+
+    /// The same field with a colour channel.
+    pub fn with_color(mut self, color: [f64; 3]) -> ShapeField {
+        self.color = color;
+        self
     }
 
     /// The remapped value at a world position.
@@ -96,7 +105,10 @@ impl ShapeField {
 
 impl Field for ShapeField {
     fn sample(&self, p_world: DVec3, _ctx: &EvalCtx) -> FieldSample {
-        FieldSample::from_value(self.value(p_world))
+        FieldSample {
+            color: self.color,
+            ..FieldSample::from_value(self.value(p_world))
+        }
     }
 }
 

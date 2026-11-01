@@ -674,3 +674,33 @@ fn a_script_builds_a_cloner() {
         "{z:?}"
     );
 }
+
+#[test]
+fn a_script_links_an_effector_to_a_cloner() {
+    let mut app = App::new_default();
+    let r = ok(
+        &mut app,
+        r#"
+        let c = create("forge.cloner", "Row");
+        let cube = create("forge.cube", "Box");
+        run("object.reparent", #{ node: cube, parent: c });
+        set_param(cube, "size_x", 20.0);
+        set_param(cube, "size_y", 20.0);
+        set_param(cube, "size_z", 20.0);
+        set_param(c, "mode", "linear");
+        set_param(c, "linear_count", 2);
+        let e = create("forge.effector.plain", "Lift");
+        set_param(e, "p", vec3(0, 0, 25));
+        set_param(c, "effectors", [e]);
+        c
+        "#,
+    );
+    let cloner = NodeId(r.value.as_u64().unwrap());
+    let mesh = app.eval_mesh(cloner, 0).unwrap();
+    // The first clone sits 25 along z (the cube's own z extent is 10 either side).
+    let z: Vec<f64> = mesh.points[..8].iter().map(|p| p.z).collect();
+    assert!(
+        z.iter()
+            .all(|z| (*z - 25.0).abs() <= 10.0 + 1e-9 && *z > 14.0)
+    );
+}

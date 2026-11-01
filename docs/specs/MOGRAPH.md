@@ -3,7 +3,7 @@
 - [ ] Cloner (brief 065: clone data, Linear, Radial, Grid Array, Honeycomb and instance modes done, see the clone-toolset sections below; Object, order modes, effectors pending): modes Linear, Radial, Grid Array, Honeycomb, Object (vertex/edge/polygon/surface/volume/axis), Blend; Iterate/Random/Blend/Sort clone order; fix clone, fix texture, instance modes (Instance/Render Instance/Multi-Instance), effectors list, per-clone transforms, scale/rotation/color/weight, MoData output
 - [ ] Matrix, Fracture (modes + connectors), Voronoi Fracture (sources, distribution, shape, details), MoSpline (Spline/Turtle/Simple modes), MoText, MoInstance, Tracer (trace links/vertices, interval, spline types)
 ## Effectors
-- [ ] Plain, Delay, Formula, Inheritance, Python, Random, Shader, Sound, Spline, Step, Target, Time, Volume, Push Apart, Reeffector, Group
+- [ ] Plain (brief 068: framework + Plain done, see section E below), Delay, Formula, Inheritance, Python, Random, Shader, Sound, Spline, Step, Target, Time, Volume, Push Apart, Reeffector, Group
 - [ ] Common: strength, selection, transform (P/S/R), color, weight, UV, visibility, falloff (shapes/directions/field list), min/max, mode (Add/Subtract/Multiply/etc.)
 ## Fields
 - [ ] Solid, Spherical, Box, Cylinder, Capsule, Cone, Torus, Formula, Linear, Radial, Random, Shader, Sound, Step, Delay, Object, Group, Python
@@ -350,3 +350,192 @@ One observation per bullet, each a small cloner case with a 20 cm cube child:
   Variation (two seeds), odd and even counts in both Offset Directions, Form Circle and Spline.
 - Reset Coordinates off with a child placed away from the origin.
 - UVW of the clones (`uvw`), e.g. through the Display = UV overlay or a shader reading it.
+
+
+---
+
+# Clone toolset: effector framework and the Plain effector (brief 068)
+
+Wording as above ("effector", "clone data", "clone toolset"). Sources: parity observations
+O8 [cloner.md](../parity/cloner.md), O14 [effectors-2.md](../parity/effectors-2.md),
+O22 [effectors-3.md](../parity/effectors-3.md), design [E-clone-toolset.md](../roadmap/areas/E-clone-toolset.md),
+fields [FIELDS.md](FIELDS.md). Golden data: the 14 Plain cases of `tests/golden/cloner/`
+(`samples.json` level B, tolerance 1e-4; `mesh.obj` level A). Out of scope: Random (069), Step, Formula,
+Time, Delay, Target (070), the other effectors (071), field-list falloff beyond what the Plain cases
+need (072: layer blend modes, groups, direction channel).
+
+## E1. Framework (`forge_clone_engine`)
+
+```rust
+pub trait Effector {
+    fn apply(&self, data: &mut CloneData, falloff: &FieldList, ctx: &EffectorCtx)
+        -> Result<(), CloneError>;
+}
+pub struct EffectorCtx<'a> { pub eval: &'a EvalCtx, pub cloner_world: DMat4 }
+```
+
+- An effector is a node of `Category::Effector`, registered by the `CloneToolset` plugin
+  (so `object.create {type: "forge.effector.plain"}` works from UI, CLI, RPC, MCP and Rhai).
+  `effector_from_node(scene, id)` builds the `Effector` of a node (`None` for a missing, disabled
+  or non-effector node; an effector type without an implementation is `Unsupported`).
+- **Linking model.** The cloner has the parameter `effectors`, a *link list* (`Value::LinkList`,
+  `ParamKind::LinkList`: an ordered list of node ids, each node at most once, category `Effector`,
+  not the node itself). It is set with `param.set {node: <cloner>, param: "effectors", value: [id, ...]}`
+  (CLI, RPC, MCP, Rhai `set_param`), is undoable, saved, and its targets count for the cloner's
+  cache revision. Effectors are applied **in list order** (`apply_effectors`): the second effector
+  sees the clone data the first one left. A link to a deleted node is skipped.
+- **Falloff.** An effector has the link list `fields` (category `Field`, **top to bottom**, the order
+  of FIELDS.md F1). `FieldList::from_nodes` builds the list and the effector samples it at the **world**
+  position of each clone (`cloner_world · clone position`, taken when the effector starts). An empty
+  list is value 1 (full effect, FIELDS.md F1). A clone's effect weight is `w = strength · value`.
+- The result of all effectors is the clone data of the cloner; `clone_data(scene, cloner, ctx)` and the
+  expanded geometry (C3) both run the effectors, so hidden clones (visibility) vanish from the mesh.
+- Per-effector strength on the cloner (the extra field "Plain 100 %" a cloner gets for each effector in
+  the app, O8 notes) is not modelled: every sample has 100 %. **parity-pending**; it would be a second
+  list parameter next to `effectors`.
+
+## E2. Plain effector parameters (`forge.effector.plain`)
+
+Angles in radians, percent as fractions (`Unit::Percent`), lengths in cm; case files hold the labels,
+degrees and percent as typed.
+
+| id | label | kind | default | notes |
+|---|---|---|---|---|
+| `enabled` | Enabled | bool | on | off: the effector does nothing |
+| `strength` | Strength | float, percent | 100 % | -1e20 .. 1e20 |
+| `selection` | Selection | string | empty | stored only (clone selection tags are brief 078) |
+| `deformation` | Deformation | enum | `off` | `off`, `object`, `point`, `polygon`; anything but `off` is `Unsupported` |
+| `fields` | Fields | link list | empty | falloff, top to bottom |
+| `maximum`, `minimum` | Maximum, Minimum | float, percent | 100 %, 0 % | used by Remap (E3) |
+| `transform_mode` | Transform Mode | enum | `relative` | `relative`, `absolute`, `remap` |
+| `transform_space` | Transform Space | enum | `node` | `node`, `effector`, `object` |
+| `position` | Position | bool | **on** | Plain: P is on by default (O14 table) |
+| `p` | P | vec3, distance | (0, 100, 0) | |
+| `rotation` | Rotation | bool | off | |
+| `r` | R | vec3 (h, p, b), angle | (0, 0, 0) | |
+| `scale` | Scale | bool | off | |
+| `uniform_scale` | Uniform Scale | bool | off | |
+| `absolute_scale` | Absolute Scale | bool | off | |
+| `s` | S | vec3 | (0, 0, 0) | used when Uniform Scale is off |
+| `scale_value` | Scale | float | 0 | the value under Uniform Scale (`scale_1018` in the case files) |
+| `color_mode` | Color Mode | enum | `fields_color` | `off`, `effector_color`, `custom_color`, `fields_color` |
+| `color` | Color | colour | white | the Custom Color swatch |
+| `use_alpha_strength` | Use Alpha/Strength | bool | off | colour block (the app switches it on with Custom Color) |
+| `blending_mode` | Blending Mode | enum | `default` | `default`, `add`, `subtract`, `multiply`, `divide`; all but `default` are `Unsupported` |
+| `weight_transform`, `u_transform`, `v_transform` | Weight, U, V Transform | float, percent | 0 | |
+| `modify_clone` | Modify Clone | float, percent | 0 | stored only (nothing observed) |
+| `visibility` | Visibility | bool | off | |
+
+`use_alpha_strength_1071` (the Weight tab's own Use Alpha/Strength) is not stored: no case sets it.
+
+## E3. Transform modes and strength
+
+`w = strength · value` (E1). Relative, Absolute and Remap all use `w`, except Remap, whose `w` is
+remapped between Minimum and Maximum: `w' = minimum + w · (maximum - minimum)`.
+
+- **Strength is linear** — `plain-strength-50`: P (0, 100, 0) at 50 % moves every clone up by 50.
+- **Relative** adds the values: position `+ P w`, scale `+ S w` (a clone of scale 1 with Scale 2 gets 3:
+  `plain-scale`, axis length 3.0), rotation `Rot(R w)` on top of the clone's, weight `+ weight_transform w`
+  (`plain-weight`: 0.5), colour as E6.
+- **Absolute**, **Remap**: with Position P (0, 100, 0) and default Minimum/Maximum both give exactly the
+  Relative result (`plain-absolute`, `plain-remap`: y 100 ... 300). So the position delta is added in all
+  three modes. The other channels in Absolute mode move towards the value, `old + (value - old) w` (as for
+  Absolute Scale, E5); Remap and Minimum/Maximum values other than 0/100 % are **parity-pending**, as is
+  every Absolute channel except position (O22 notes list "Remap with changed Minimum/Maximum" as not
+  checked). Minimum and Maximum do nothing in Relative and Absolute (**parity-pending**).
+
+## E4. Spaces, position and rotation
+
+`Transform Space` picks the axes `F` (a rotation) in which the position delta and rotation are expressed:
+
+- `node`: the clone's own axes (its matrix columns, normalised);
+- `object`: the cloner's axes, i.e. the identity in cloner space;
+- `effector`: the effector node's axes relative to the cloner, `normalised(cloner_world⁻¹ · effector_world)`.
+
+Position: `pos += F (P w)`. Rotation: `M3 = F · Rot(R w) · Fᵀ · M3` (the delta turns about the space's axes;
+`Rot` is the HPB rotation of TRANSFORM.md §3, `Ry(-h) Rx(-p) Rz(-b)`; for the node space this is `M3 · Rot` when
+the clone is not scaled). Scale does not enter `F`, so a scaled clone moves by `P w`, not `P w · scale`:
+`two-effectors-swapped` (scale 3 first, then P (0, 100, 0)) gives y 100 ... 300, equal to `two-effectors`.
+
+Proofs: `plain-rotation` (R.H 90 degrees: first clone x axis (0, 0, 1), z axis (-1, 0, 0), positions kept);
+`plain-effector-space` (effector rotated H 90 degrees, P along its Y axis: no change; a P in another direction
+would show the rotation: **parity-pending**, the node-space and object-space formulas of a rotated clone are
+too, no sample has a rotated clone with P set). Only the position and rotation use the space; scale
+always acts along the clone's own axes (**parity-pending**).
+
+## E5. Scale
+
+With Scale on: the value is `scale_value` on all three axes if Uniform Scale is on, else `S`. For the clone's
+axis length `l`: Relative `l + value w`, Absolute (Absolute Scale on, or Transform Mode Absolute)
+`l + (value - l) w`. The column is scaled by `new / l` (zero-length axes are left alone). Proof: `plain-scale`
+(Relative, uniform 2: 3.0). Absolute Scale is **parity-pending** (own reading: the value is the final scale).
+
+## E6. Colour
+
+`Color Mode`: `off` leaves the colour; `custom_color` blends towards `color`; `fields_color` blends towards the
+colour channel of the falloff field list (the field's Color, FIELDS.md F2) and does nothing when the list is
+empty; `effector_color` is `Unsupported` (nothing observed). The blend is `c + (target - c) · k` with
+`k = clamp(value · (strength if use_alpha_strength else 1), 0, 1)`.
+
+Proofs: `plain-color` (Custom Color red: every clone (1, 0, 0), `use_alpha_strength` on, strength 100 %);
+`plain-field-linear` (Linear field, Y+, length 100, clones at y = 0, 50, 100 have field value 0.5, 0.75, 1;
+the field colour (0.192, 0.434, 0.2336) gives (0.596, 0.717, 0.6168), (0.394, 0.5755, 0.4252), (0.192, 0.434,
+0.2336) = `1 + (c - 1) · value`); `plain-field-spherical` (value 1 clones take the field colour, value 0 stay
+white). Whether the effector strength scales the colour only through `use_alpha_strength` is **parity-pending**
+(every colour sample has strength 100 %).
+
+## E7. Weight, U, V, visibility
+
+`weight += weight_transform · w` (`plain-weight`: 0.5), `uvw.x += u_transform · w`, `uvw.y += v_transform · w`
+(own design, **parity-pending**: no UV sample). Visibility on hides a clone whose `w < 0.5` (own design,
+**parity-pending**: every sample has Visibility off). `modify_clone` is stored only.
+
+## E8. Field falloff in the Plain cases
+
+`plain-field-spherical`: a Spherical field (size 100, inner offset 50 %) at (0, 100, 0): clones at y = 50, 100, 150
+have value 1 (moved up by 100: y 150, 200, 250), the clones at 0 and 200 value 0 (stay at 0 and 200).
+`plain-field-linear`: positions y 50, 125, 200, 250, 300 = `y + 100 · value`. The empty list is value 1
+(`linear-plain`: every clone moves by the full 100). The Linear field default direction in the app is X+, so a clone
+column at x = 0 has value 0.5 (`linear-plain-field`: y + 50).
+
+The field's colour channel is its `Color` parameter (a constant colour, white by default; F2 adds
+the `color` parameter). Colour of a multi-layer list and the colour-mode variants of the fields are 072.
+
+## E9. Parity
+
+Test: `crates/generators/tests/cloner_parity.rs::plain_effector_cases_match_the_reference` rebuilds the 14 cloner
+cases whose effectors are all Plain (`linear-plain`, `linear-plain-field`, `plain-absolute`, `plain-color`,
+`plain-effector-space`, `plain-field-linear`, `plain-field-spherical`, `plain-remap`, `plain-rotation`,
+`plain-scale`, `plain-strength-50`, `plain-weight`, `two-effectors`, `two-effectors-swapped`), with the
+effectors linked through the `effectors` list and the fields through `fields`, and compares the clone data
+(level B) and the expanded mesh (level A) like C10.
+
+Matched: **14 of 14** Plain cases, each at both levels (clone data and expanded mesh): 13 through the case
+files (`linear-plain`, `plain-absolute`, `plain-color`, `plain-effector-space`, `plain-field-linear`,
+`plain-field-spherical`, `plain-remap`, `plain-rotation`, `plain-scale`, `plain-strength-50`, `plain-weight`,
+`two-effectors`, `two-effectors-swapped`) and `linear-plain-field` by its own test
+(`linear_plain_field_matches_with_the_default_linear_field`): its `case.toml` has **no field table**, only the
+description (a Linear field with defaults, only layer), so the test builds the default Linear field at the
+origin. The position and the expanded mesh are checked on their own (y + 50 for x = 0); the field's Color was
+not recorded either, so it is read back from the samples with the E6 rule (`1 + (c - 1) · 0.5` per channel),
+which makes the colour part a consistency check, not an independent match. `PLAIN_KNOWN_MISMATCH` is empty.
+The earlier test (C10) still runs the same 19 + 35 + 12 split and is unchanged. Other tests:
+`crates/clone-engine/tests/effectors.rs` (spaces with a rotated clone, scale, Remap, visibility, weight/UV,
+`Unsupported`), `crates/generators/tests/cloner_parity.rs` (list order and the link checks),
+`crates/app/tests/cloner.rs` (`object.create` + `param.set` link, undo, save/load), `crates/script/tests/script.rs`.
+
+## E10. Open data that would settle the parity-pending rules
+
+One small cloner case each (Linear, count 5, step (0, 50, 0), 20 cm cube):
+
+- Node / Object / Effector space with a rotated clone: Step Rotation H 90 degrees and P (50, 0, 0); the effector
+  rotated H 90 degrees with P (50, 0, 0); Rotation R.P 45 degrees in each space.
+- Absolute mode with Rotation (R.H 45 degrees), Scale (S 2 and Absolute Scale on and off) and Weight Transform 50 %.
+- Remap with Minimum 20 %, Maximum 80 %, P (0, 100, 0) (clone 0 to 4 with values 0 and 1 and a field).
+- Colour: Custom Color red at Strength 50 % with Use Alpha/Strength on and off; Fields Color with a field value of
+  0.5 at Strength 50 %; Effector Color; Blending Mode Add / Multiply.
+- U Transform and V Transform 50 % with the Display = UV overlay; Visibility on with a Linear field (values 0.25 and
+  0.75), and with strength 50 %.
+- The Linear field of `linear-plain-field`: its case file holds no `[params.effector.field]` table; re-observe it with the field's Color recorded (the colour of the app's new field is not white).
+- Two effectors where the order changes the result: Plain Absolute Scale 2 then Plain Relative Scale 1.
+- The per-effector strength on the cloner (the "Plain" field of the cloner) at 50 %.

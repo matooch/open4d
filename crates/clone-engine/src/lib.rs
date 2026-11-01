@@ -5,16 +5,20 @@
 //! crate evaluates the prototypes and expands the clones to geometry.
 
 mod data;
+mod effector;
 mod grid;
 mod honeycomb;
 mod linear;
 mod node;
+mod plain;
 mod radial;
 mod rng;
 mod settings;
 
 pub use data::{CloneData, CloneItem};
+pub use effector::{Effector, EffectorCtx, apply_effectors, effector_from_node};
 pub use node::{CLONER, CloneToolset, cloner_type, settings_from_params};
+pub use plain::{ColorMode, PLAIN, Plain, Space, TransformMode, plain_type};
 pub use rng::SplitMix64;
 pub use settings::*;
 

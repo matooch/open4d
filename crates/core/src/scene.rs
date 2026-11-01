@@ -234,9 +234,10 @@ impl Scene {
             return 0;
         }
         let Some(n) = self.node(id) else { return 0 };
-        let links = n.params.values().filter_map(|v| match v {
-            Value::Link(Some(t)) => Some(*t),
-            _ => None,
+        let links = n.params.values().flat_map(|v| match v {
+            Value::Link(Some(t)) => vec![*t],
+            Value::LinkList(ts) => ts.clone(),
+            _ => Vec::new(),
         });
         let deps: Vec<NodeId> = n
             .children

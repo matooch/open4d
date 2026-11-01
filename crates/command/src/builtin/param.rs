@@ -91,6 +91,19 @@ fn value_from_json(desc: &ParamDesc, v: &Value) -> Result<Param, CommandError> {
                 v.as_u64().ok_or_else(|| wrong("a node id or null"))?,
             ))),
         },
+        ParamKind::LinkList { .. } => {
+            let items = v.as_array().ok_or_else(|| wrong("an array of node ids"))?;
+            Param::LinkList(
+                items
+                    .iter()
+                    .map(|i| {
+                        i.as_u64()
+                            .map(NodeId)
+                            .ok_or_else(|| wrong("an array of node ids"))
+                    })
+                    .collect::<Result<_, _>>()?,
+            )
+        }
         ParamKind::IndexList => {
             let items = v.as_array().ok_or_else(|| wrong("an array"))?;
             Param::IndexList(

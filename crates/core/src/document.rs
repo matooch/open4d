@@ -295,6 +295,27 @@ impl Tx<'_> {
                 )));
             }
         }
+        if let (ParamKind::LinkList { accepts }, Value::LinkList(targets)) = (&desc.kind, &value) {
+            for target in targets {
+                let target = *target;
+                if target == id {
+                    return Err(EditError::InvalidLink(
+                        "a node cannot link to itself".into(),
+                    ));
+                }
+                if !self.scene.contains(target) {
+                    return Err(EditError::InvalidLink(format!(
+                        "node {target} does not exist"
+                    )));
+                }
+                let category = self.scene.node_type(target).map(|t| t.category);
+                if !accepts.is_empty() && !category.is_some_and(|c| accepts.contains(&c)) {
+                    return Err(EditError::InvalidLink(format!(
+                        "node {target} has category {category:?}, expected one of {accepts:?}"
+                    )));
+                }
+            }
+        }
         self.push(Edit::SetParam {
             id,
             param: param.to_string(),
