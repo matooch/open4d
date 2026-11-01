@@ -54,7 +54,7 @@ implementers can avoid collisions.
 | 054 | [Smoothing deformer, Displacer, Polygon Reduction, Bevel deformer](../agents/tasks/054-smoothing-displacer-reduction-bevel.md) | D | 050, 125 | waiting: O19 | modifiers, modeling |
 | 055 | [Spline Wrap, Spline and Spline Rail deformers](../agents/tasks/055-spline-deformers.md) | D | 050, 028 | waiting: O19, O45 | modifiers |
 | 056 | [Mesh (cage), Surface, Camera, Collision, Jiggle, Delta Mush, Correction deformers](../agents/tasks/056-mesh-surface-camera-collision-jiggle-deltamush-correction.md) | D | 050 | waiting: O45 | modifiers |
-| 057 | [Fields framework + Linear, Spherical, Box + Remapping](../agents/tasks/057-fields-framework.md) | D | 050 | ready | fields |
+| 057 | [Fields framework + Linear, Spherical, Box + Remapping](../agents/tasks/057-fields-framework.md) | D | 050 | done (27/27 samples; remap order and Step/Quadratic parity-pending, see FIELDS.md F5) | fields |
 | 058 | [Field types II: Cylinder, Cone, Torus, Capsule, Radial, Random](../agents/tasks/058-field-types-2.md) | D | 057, 063 | ready | fields, noise |
 | 059 | [Field lists: layers, blend modes, groups, Formula and Shader fields](../agents/tasks/059-field-lists.md) | D | 057, 052 | ready | fields |
 | 060 | [Field modifier layers: Freeze, Decay, Delay, Remap, Curve, Colorize, Step](../agents/tasks/060-field-modifier-layers.md) | D | 059 | waiting: O49 | fields |

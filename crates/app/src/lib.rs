@@ -15,6 +15,7 @@ use forge_command::{
     Timeline, register_editor_commands,
 };
 use forge_core::{Document, EvalCtx, NodeId, Registry, RegistryError, Scene, SceneSettings};
+use forge_fields::FieldToolset;
 use forge_generators::{Primitives, evaluate};
 use forge_geometry::PolyMesh;
 use forge_io::export_scene;
@@ -31,6 +32,7 @@ pub fn default_registry() -> Result<Registry, RegistryError> {
     registry.install(&Primitives)?;
     registry.install(&Deformers)?;
     registry.install(&CloneToolset)?;
+    registry.install(&FieldToolset)?;
     Ok(registry)
 }
 

@@ -2,6 +2,16 @@
 name = "forge-fields"
 version.workspace = true
 edition.workspace = true
+description = "Fields: values in space, Linear / Spherical / Box, Remapping, field lists (docs/specs/FIELDS.md)."
+
+[dependencies]
+forge-core = { path = "../core" }
+glam = "0.34"
+thiserror = "2"
+
+[dev-dependencies]
+forge-parity-harness = { path = "../parity-harness" }
+toml = "1"
 
 [lints]
 workspace = true

@@ -11,7 +11,7 @@
   Bevel deformer, Spline Wrap.
 - [ ] **Deformers IV:** Spline, Spline Rail, Mesh (cage), Surface, Camera, Collision,
   Jiggle, Delta Mush, Correction.
-- [ ] **Fields:**
+- [ ] **Fields** (brief 057: framework, Linear, Spherical, Box and the Remapping tab done, docs/specs/FIELDS.md):
   - object types Linear, Spherical, Box, Cylinder, Cone, Torus, Capsule, Radial, Random,
     Formula, Shader, Group;
   - the Remapping tab (strength, invert, inner offset, min/max, clamps, contour modes:

@@ -9,6 +9,7 @@ forge-anim = { path = "../anim" }
 forge-clone-engine = { path = "../clone-engine" }
 forge-command = { path = "../command" }
 forge-core = { path = "../core" }
+forge-fields = { path = "../fields" }
 forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }
 forge-modeling = { path = "../modeling" }

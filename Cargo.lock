@@ -1267,6 +1267,7 @@ dependencies = [
  "forge-clone-engine",
  "forge-command",
  "forge-core",
+ "forge-fields",
  "forge-generators",
  "forge-geometry",
  "forge-io",
@@ -1344,6 +1345,13 @@ dependencies = [
 [[package]]
 name = "forge-fields"
 version = "0.1.0"
+dependencies = [
+ "forge-core",
+ "forge-parity-harness",
+ "glam",
+ "thiserror 2.0.21",
+ "toml",
+]
 
 [[package]]
 name = "forge-generators"

@@ -1,6 +1,6 @@
 # 057 · Fields framework + Linear, Spherical, Box + Remapping
 
-Status: ready · Area: D · Depends on: 050 · Observations: O7, O11 · Touches: fields
+Status: done · Area: D · Depends on: 050 · Observations: O7, O11 · Touches: fields
 
 ## Goal
 The field system exists. The three basic fields and the Remapping tab match every O7/O11 sample case at level B.
@@ -18,9 +18,9 @@ The field system exists. The three basic fields and the Remapping tab match ever
 - The parity test builds the field from `case.toml`, samples the 729 points, and compares with `compare_samples`.
 
 ## Done when
-- [ ] FIELDS.md spec.
-- [ ] O7 and O11 field cases match.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] FIELDS.md spec.
+- [x] O7 and O11 field cases match.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -29,10 +29,11 @@ The field system exists. The three basic fields and the Remapping tab match ever
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- Result: `forge-fields` has the `Field` trait (`sample(p_world, &EvalCtx) -> FieldSample`, `sample_many`), `ShapeField` (shape + Remapping tab + inverse world matrix), `FieldList` (layers top to bottom, layer strength, Normal blend, empty list = value 1) and `field_from_node` / `FieldList::from_nodes`. Node types `forge.field.linear`, `forge.field.spherical`, `forge.field.box` (category Field, all parameters are descriptors) are registered by `FieldToolset`, installed in `forge_app::default_registry`. Tests: `crates/fields/tests/fields_parity.rs` (27/27 cases exact, tolerance 1e-5), `remap.rs` (5), `crates/app/tests/fields.rs` (5; object.create, param.set, undo, save/load). `KNOWN_MISMATCH` and unsupported lists are empty; the other 30 cases of `tests/golden/fields` are types and layers of 058/059. Deformer falloff is not wired (061).
+- Rules derived (docs/specs/FIELDS.md): ramp `t`: Linear `0.5 + p_a/(2 length)` (`linear-defaults`, `-length`, `-direction-x`, `-rotated`), Spherical `1 - |p|/radius` (`spherical-radius`, `-scaled`, `-moved`), Box `1 - max |p_i|/size_i` (`box-defaults`, `box-size`); inner offset `t >= 1-i ? 1 : t/(1-i)` (`spherical-inner-0/-80`, `linear-inner-50`, `box-inner-0`); invert `1-v` (`spherical-remap-invert`); `min + v (max-min)` (`spherical-remap-minmax`); strength multiplies (`spherical-strength-50`, `layer-opacity-50` for the layer strength); step with 1 step maps 0.5 to 1 (`spherical-interp-step`), step/quantize 4 (`spherical-steps-4`, `-quantize-4`); Clip to Shape changes nothing on the grid (`linear-clip`, `spherical-clip`).
+- Parity-pending (data cannot tell apart): order of invert, min/max and strength; Min/Max as remap or as clamp; where the clamps act; Step formula (`ceil` chosen) and whether Quantize differs (`floor(v n + 0.5)` chosen); Quadratic shape (symmetric ease, identity at curve 0 since `spherical-remap-contour` keeps 0.5) and the Curve parameter; Clip to Shape before/after remap; Remapping off; Mirror Graph; Inner Offset 100 %; zero sizes; Curve contour (Unsupported); colour and direction channels. Settling data are tabulated in FIELDS.md F5 (for example Spherical Inner Offset 0 % with Min 20 % / Max 80 %, or with Step 4, or with Invert plus Strength 50 %).
+- Deviations: none from the design decisions. The Normal blend of a `FieldList` (lerp by layer strength) is minimal; 059 owns the other blend modes and checks `blend-normal`. `layer-opacity-50` is run here because it needs only layer strength.
+- Files changed: crates/fields (Cargo.toml, src/{lib,node,remap,shape}.rs, tests/{fields_parity,remap}.rs), crates/app (Cargo.toml, src/lib.rs, tests/fields.rs), Cargo.lock, docs/specs/FIELDS.md, docs/parity/STATUS.md, docs/roadmap/BACKLOG.md, docs/roadmap/areas/D-deformers-fields.md, this brief.
+- Open data: see FIELDS.md F5.
+- Gate: `GATE: 783 tests passed, 0 failed`; `cleanroom: ok`; `ok: 471 cases`; `GATE: all passed`.
