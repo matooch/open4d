@@ -2,6 +2,7 @@
 name = "forge-io"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "File formats: Wavefront OBJ import and export (docs/specs/IO.md)."
 
 [dependencies]

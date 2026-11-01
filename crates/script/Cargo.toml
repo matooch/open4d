@@ -2,6 +2,7 @@
 name = "forge-script"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Rhai scripting: sandboxed engine and bindings over the command registry (docs/specs/SCRIPTING.md)."
 
 [dependencies]

@@ -2,6 +2,7 @@
 name = "forge-ui"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Editor shell: docking layout, object tree, attribute panel, timeline, theme, embedded viewport."
 
 [dependencies]

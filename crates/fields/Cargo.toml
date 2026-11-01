@@ -2,6 +2,7 @@
 name = "forge-fields"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Fields: values in space, Linear / Spherical / Box, Remapping, field lists (docs/specs/FIELDS.md)."
 
 [dependencies]

@@ -2,6 +2,7 @@
 name = "forge-studio"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "The Forge3D editor application."
 
 [dependencies]

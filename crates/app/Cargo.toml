@@ -2,6 +2,7 @@
 name = "forge-app"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Headless application core: documents, commands, evaluation and export without a window (docs/specs/APP.md)."
 
 [dependencies]

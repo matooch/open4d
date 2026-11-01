@@ -2,6 +2,7 @@
 name = "forge-command"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Command registry: every user action as a named, typed, undoable command (docs/specs/COMMANDS.md)."
 
 [dependencies]

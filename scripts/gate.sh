@@ -17,6 +17,11 @@ if command -v python3 >/dev/null 2>&1; then
 else
   echo "GATE: python3 not found, skipping the Python client tests"
 fi
+if command -v cargo-deny >/dev/null 2>&1; then
+  cargo deny check || { echo "GATE: cargo deny failed"; fail=1; }
+else
+  echo "GATE: cargo-deny not installed, skipping (cargo install cargo-deny --locked)"
+fi
 cargo run -q -p forge-cleanroom || { echo "GATE: cleanroom failed"; fail=1; }
 cargo run -q -p forge-parity-harness --bin golden -- check || { echo "GATE: golden check failed"; fail=1; }
 [ "$fail" = 0 ] && echo "GATE: all passed" || echo "GATE: FAILED"

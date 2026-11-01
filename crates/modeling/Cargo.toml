@@ -2,6 +2,7 @@
 name = "forge-modeling"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Modeling tools as pure functions on polygon meshes: Extrude, Extrude Inner, Bevel (docs/specs/MODELING.md)."
 
 [dependencies]

@@ -2,6 +2,7 @@
 name = "forge-cli"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "The forge command-line tool: headless scene work for people and agents (docs/specs/CLI.md)."
 
 [lib]

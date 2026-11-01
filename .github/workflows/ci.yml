@@ -7,13 +7,23 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# The toolchain is pinned in rust-toolchain.toml (channel 1.99.1); every job below installs
+# that same version via dtolnay/rust-toolchain@1.99.1. Bump both together.
 jobs:
+  # Licences, RustSec advisories, duplicate versions and sources (deny.toml, brief 174).
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
   # Clean-room scan: pure file scanning, so Linux only.
   cleanroom:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
       - run: cargo run --quiet -p forge-cleanroom -- .
 
@@ -22,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
       - run: cargo build -p forge-rpc --bin forge-rpc-serve
       - run: python3 -m unittest discover -t . -s tests -v
@@ -53,7 +63,7 @@ jobs:
       FORGE_REQUIRE_GPU: ${{ matrix.require_gpu }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.99.1
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2

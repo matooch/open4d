@@ -1,6 +1,6 @@
 # 174 · Toolchain pin and cargo-deny
 
-Status: ready · Area: N · Depends on: – · Observations: – · Touches: root
+Status: done · Area: N · Depends on: – · Observations: – · Touches: root
 
 ## Goal
 Pin the stable toolchain and add cargo-deny (licences MIT/Apache-compatible, advisories, duplicates).
@@ -13,8 +13,8 @@ Pin the stable toolchain and add cargo-deny (licences MIT/Apache-compatible, adv
 - `rust-toolchain.toml` pinned to the CI version; deny.toml; CI job. Update gate.sh to run cargo-deny when installed.
 
 ## Done when
-- [ ] CI runs cargo-deny; gate passes.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] CI runs cargo-deny; gate passes.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -24,9 +24,12 @@ Pin the stable toolchain and add cargo-deny (licences MIT/Apache-compatible, adv
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: no tests added (config only). `cargo deny check` passes (advisories, bans, licenses, sources ok; 20 duplicate-version warnings).
+- Toolchain: `rust-toolchain.toml` pins 1.99.1 (clippy, rustfmt, minimal profile); workspace `rust-version = "1.99"`. All CI jobs use `dtolnay/rust-toolchain@1.99.1`; bump both together.
+- deny.toml policy: licences allow MIT, Apache-2.0 (+LLVM-exception), BSD-2/3, ISC, Zlib, Unicode-3.0, MPL-2.0. Exceptions: `epaint_default_fonts` (OFL-1.1, Ubuntu-font-1.0: bundled egui font files) and `tiny-keccak` (CC0-1.0, public domain). Advisories: vulnerabilities deny; unmaintained (workspace crates only) and yanked warn. Bans: multiple versions warn, no skip list. Sources: crates.io only, no git.
+- CI: new `deny` job (EmbarkStudios/cargo-deny-action@v2). gate.sh runs `cargo deny check` when installed, else prints a skip line.
+- License: `license = "MIT OR Apache-2.0"` in workspace.package, inherited by every crate; LICENSE-MIT and LICENSE-APACHE added.
+- Deviations: none.
+- Files changed: rust-toolchain.toml, deny.toml, LICENSE-MIT, LICENSE-APACHE, Cargo.toml, all crate Cargo.toml, ci.yml, gate.sh, this brief, BACKLOG.md.
+- Open questions: none.
+- Gate: ends `GATE: all passed`.

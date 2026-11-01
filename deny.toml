@@ -1,0 +1,49 @@
+# cargo-deny policy (brief 174, DECISIONS.md D10).
+# Our code is MIT OR Apache-2.0; every dependency must be permissive. Run: cargo deny check
+
+[graph]
+all-features = true
+
+[licenses]
+confidence-threshold = 0.9
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "MPL-2.0",
+]
+# Crate-specific exceptions, each with its reason. Keep this list short.
+exceptions = [
+    # egui's bundled fonts: the code is MIT/Apache; the font files are OFL-1.1 (Hack/Noto
+    # emoji) and Ubuntu-font-1.0. Both are free font licences that allow redistribution
+    # embedded in a binary; neither is a copyleft on our code.
+    { allow = ["OFL-1.1", "Ubuntu-font-1.0"], crate = "epaint_default_fonts" },
+    # CC0-1.0 is a public-domain dedication (pulled in via egui -> ahash -> const-random).
+    { allow = ["CC0-1.0"], crate = "tiny-keccak" },
+]
+
+[advisories]
+# RustSec database. Vulnerabilities always fail. Unmaintained / unsound / yanked crates
+# only warn: they are mostly transitive (GUI stack) and not actionable here; review the
+# warnings when bumping dependencies.
+version = 2
+unmaintained = "workspace"
+yanked = "warn"
+ignore = []
+
+[bans]
+# Duplicate versions of one crate come from the GUI/GPU stack; warn, do not fail.
+multiple-versions = "warn"
+wildcards = "allow"
+skip = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

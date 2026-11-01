@@ -2,6 +2,7 @@
 name = "forge-mcp"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "MCP server (stdio) for the Forge3D editor or a headless app (docs/specs/RPC.md section 8)."
 
 [lib]

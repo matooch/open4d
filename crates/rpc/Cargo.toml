@@ -2,6 +2,7 @@
 name = "forge-rpc"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "JSON-RPC 2.0 server for the running editor and a Rust client (docs/specs/RPC.md)."
 
 [dependencies]

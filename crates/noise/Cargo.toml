@@ -2,6 +2,7 @@
 name = "forge-noise"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Seeded, deterministic 3D/4D noise: Perlin, value, simplex, Worley, fractals, domain warp (docs/specs/NOISE.md)."
 
 [dependencies]
