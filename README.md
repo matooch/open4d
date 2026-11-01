@@ -1,7 +1,7 @@
 # Forge3D (open4d)
 
-A native Linux, Rust reimplementation of a classic DCC application. See `CLAUDE.md` and
-`docs/` for the plan, specs and rules.
+A native Rust reimplementation of a classic DCC application for Linux, macOS and Windows. See `CLAUDE.md` and
+`docs/` for the rules and specs; the full plan is `docs/roadmap/README.md`.
 
 ## Use Forge3D from an AI agent (MCP)
 
