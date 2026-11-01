@@ -350,3 +350,125 @@ fn rpc_without_an_editor_is_a_user_error() {
             .contains("cannot connect")
     );
 }
+
+fn example(name: &str) -> String {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/scripts")
+        .join(name)
+        .to_string_lossy()
+        .into_owned()
+}
+
+#[test]
+fn run_builds_a_scene_and_saves_only_on_request() {
+    let d = dir("run");
+    let out = d.join("out.forge");
+    let (code, v) = json_run(&["run", &example("cube_grid.rhai"), "--save", s(&out)]);
+    assert_eq!(code, 0, "{v}");
+    assert_eq!(v["ok"], true);
+    assert_eq!(v["output"], json!(["built 27 cubes"]));
+    assert_eq!(v["commands"], 110);
+    assert_eq!(v["saved"], s(&out));
+    let (_, info) = json_run(&["info", s(&out)]);
+    let grid = &info["roots"][0];
+    assert_eq!(grid["name"], "Grid");
+    assert_eq!(grid["children"].as_array().unwrap().len(), 27);
+
+    // a plain run is a dry run
+    let (code, v) = json_run(&["run", &example("animated_sphere.rhai")]);
+    assert_eq!(code, 0, "{v}");
+    assert_eq!(v["saved"], Value::Null);
+    assert!(v["value"].is_u64());
+}
+
+#[test]
+fn run_on_an_existing_scene_with_text_output() {
+    let d = dir("run-scene");
+    let scene = cube_scene(&d);
+    let script = d.join("s.rhai");
+    std::fs::write(
+        &script,
+        r#"
+        for id in scene().nodes() { print(`${id}: ${scene().node(id).name}`); }
+        set_param(scene().nodes()[0], "size_x", 10.0);
+        "#,
+    )
+    .unwrap();
+    let before = std::fs::read(&scene).unwrap();
+    let out = forge()
+        .args(["run", s(&script), "--scene", &scene])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(String::from_utf8(out.stdout).unwrap(), "1: Cube\n");
+    assert_eq!(std::fs::read(&scene).unwrap(), before, "dry run");
+    // --save may overwrite the input
+    assert_eq!(
+        json_run(&["run", s(&script), "--scene", &scene, "--save", &scene]).0,
+        0
+    );
+    let (_, info) = json_run(&["info", &scene]);
+    assert_eq!(info["roots"][0]["params"]["size_x"], 10.0);
+}
+
+#[test]
+fn run_failures_are_exit_1_and_save_nothing() {
+    let d = dir("run-fail");
+    let out = d.join("out.forge");
+    for (name, src) in [
+        ("syntax.rhai", "create(\"forge.cube\");\nlet = ;"),
+        (
+            "runtime.rhai",
+            "create(\"forge.cube\");\nset_param(99, \"size_x\", 1.0);",
+        ),
+        ("limit.rhai", "create(\"forge.cube\"); loop { }"),
+    ] {
+        let script = d.join(name);
+        std::fs::write(&script, src).unwrap();
+        let res = forge()
+            .args(["run", s(&script), "--save", s(&out)])
+            .output()
+            .unwrap();
+        assert_eq!(res.status.code(), Some(1), "{name}");
+        let err = String::from_utf8(res.stderr).unwrap();
+        assert!(err.contains(name) && err.contains("line "), "{name}: {err}");
+        assert!(!out.exists(), "{name} saved");
+    }
+    let err = forge()
+        .args(["run", s(&d.join("limit.rhai"))])
+        .output()
+        .unwrap();
+    assert!(
+        String::from_utf8(err.stderr)
+            .unwrap()
+            .contains("operation limit")
+    );
+    // JSON error body
+    let (code, v) = json_run(&["run", s(&d.join("runtime.rhai"))]);
+    assert_eq!(code, 1);
+    assert_eq!(v["ok"], false);
+    // missing script: 1; missing scene: 2
+    assert_eq!(json_run(&["run", s(&d.join("none.rhai"))]).0, 1);
+    assert_eq!(
+        json_run(&[
+            "run",
+            &example("cube_grid.rhai"),
+            "--scene",
+            s(&d.join("none.forge"))
+        ])
+        .0,
+        2
+    );
+}
+
+#[test]
+fn run_prints_output_before_a_failure_on_stderr() {
+    let d = dir("run-partial");
+    let script = d.join("p.rhai");
+    std::fs::write(&script, "print(\"before\"); run(\"no.such_command\");").unwrap();
+    let res = forge().args(["run", s(&script)]).output().unwrap();
+    assert_eq!(res.status.code(), Some(1));
+    let err = String::from_utf8(res.stderr).unwrap();
+    assert!(err.starts_with("before\n"), "{err}");
+    assert!(res.stdout.is_empty());
+}

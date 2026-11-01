@@ -481,6 +481,44 @@ impl Document {
         }
     }
 
+    /// Number of undo steps.
+    pub fn undo_depth(&self) -> usize {
+        self.history.undo.len()
+    }
+
+    /// Merges the undo steps recorded after the first `depth` into one step named `label`
+    /// (docs/specs/CORE.md §4). No-op if the stack is shorter than `depth`.
+    pub fn group_undo_since(&mut self, depth: usize, label: &str) {
+        self.history.merge_key = None;
+        if self.history.undo.len() <= depth {
+            return;
+        }
+        let mut newer = self.history.undo.split_off(depth).into_iter();
+        let mut first = newer.next().expect("at least one newer step");
+        for step in newer {
+            first.edits.extend(step.edits);
+        }
+        first.label = label.to_string();
+        self.history.undo.push(first);
+    }
+
+    /// Reverts and discards every undo step above `depth`, leaving no redo entries.
+    /// Returns false (and does nothing) if the stack is shorter than `depth`.
+    pub fn rollback_to(&mut self, depth: usize) -> bool {
+        self.history.merge_key = None;
+        if self.history.undo.len() < depth {
+            return false;
+        }
+        if self.history.undo.len() > depth {
+            while self.history.undo.len() > depth {
+                let t = self.history.undo.pop().expect("longer than depth");
+                Self::toggle(&mut self.scene, t);
+            }
+            self.history.redo.clear();
+        }
+        true
+    }
+
     fn toggle(scene: &mut Scene, t: Transaction) -> Transaction {
         let edits = t.edits.into_iter().rev().map(|e| apply(scene, e)).collect();
         Transaction {

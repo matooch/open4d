@@ -36,10 +36,22 @@ pub enum Panel {
     Attributes,
     Timeline,
     Coordinates,
+    Script,
 }
 
 impl Panel {
-    pub const ALL: [Panel; 5] = [
+    /// Every panel, in Window menu order.
+    pub const ALL: [Panel; 6] = [
+        Panel::Viewport,
+        Panel::ObjectTree,
+        Panel::Attributes,
+        Panel::Timeline,
+        Panel::Coordinates,
+        Panel::Script,
+    ];
+
+    /// The panels `Dock::default()` opens; the others open from the Window menu.
+    pub const DEFAULT: [Panel; 5] = [
         Panel::Viewport,
         Panel::ObjectTree,
         Panel::Attributes,
@@ -54,6 +66,7 @@ impl Panel {
             Panel::Attributes => "Attributes",
             Panel::Timeline => "Timeline",
             Panel::Coordinates => "Coordinates",
+            Panel::Script => "Script Manager",
         }
     }
 
@@ -64,6 +77,7 @@ impl Panel {
             Panel::Attributes => Area::RightBottom,
             Panel::Timeline => Area::Bottom,
             Panel::Coordinates => Area::Bottom,
+            Panel::Script => Area::Bottom,
         }
     }
 }
@@ -84,7 +98,7 @@ impl Default for Dock {
         let mut d = Dock {
             areas: Default::default(),
         };
-        for p in Panel::ALL {
+        for p in Panel::DEFAULT {
             d.areas[p.default_area() as usize].tabs.push(p);
         }
         d

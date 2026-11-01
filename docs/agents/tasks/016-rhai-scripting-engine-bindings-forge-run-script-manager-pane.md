@@ -1,6 +1,6 @@
 # 016 · Rhai scripting: engine, bindings, `forge run`, Script Manager panel
 
-Status: ready · Area: A · Depends on: 012 · Observations: – · Touches: script (new), apps/forge, ui
+Status: done · Area: A · Depends on: 012 · Observations: – · Touches: script (new), apps/forge, ui
 
 ## Goal
 Users and agents can write scripts that build and edit scenes. Scripts run from the CLI and from a Script Manager panel in the editor.
@@ -19,9 +19,9 @@ Users and agents can write scripts that build and edit scenes. Scripts run from 
 - Example scripts in `examples/scripts/` (cube grid, animated sphere). They also serve as tests.
 
 ## Done when
-- [ ] Spec `docs/specs/SCRIPTING.md` with the binding reference.
-- [ ] Tests run every example script headlessly and check the resulting scene.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Spec `docs/specs/SCRIPTING.md` with the binding reference.
+- [x] Tests run every example script headlessly and check the resulting scene.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Out of scope
 Rhai plugin packages (N/184), script nodes (H/108).
@@ -34,9 +34,11 @@ Rhai plugin packages (N/184), script nodes (H/108).
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: new crate `forge-script` (rhai pinned `=1.27.0`, MIT OR Apache-2.0; features `no_module`, `no_time`; transitive `smartstring` is MPL-2.0). 29 script tests, 4 CLI tests, 6 UI tests, 3 core undo tests, 1 app test (`key.set`). No parity cases (own design).
+- API (docs/specs/SCRIPTING.md): `run(id[, #{args}])`, `commands()`, `create(type[, name])`, `set_param`, `set_transform`, `scene()` (`nodes/roots/find/find_all/node/selection/len`, `fps/start/end`), node handles (`id/name/type/parent()/children()/param()/params()`), `frame()`/`frame(n)`, `vec3` with operators, `deg`/`to_deg`, `rand(seed)` (SplitMix64: `float/range/int`), `print`/`debug`.
+- Undo: one run is one `Run Script` step (`Document::group_undo_since`); a failed run is rolled back (`Document::rollback_to`), leaving no redo. `edit.undo/redo`, `file.new/open/save/save_as/import_obj` are refused in scripts; `file.export_*` allowed.
+- Sandbox: no modules/imports, `eval` disabled, no clock; limits 5 000 000 operations, 10 s, 10 000 commands, call depth 48, expr depth 64/32, string 1 MiB, array/map 100 000. Limits are not catchable by `try/catch`.
+- Deviations: (1) added the command `key.set {node, track, frame, value}` (COMMANDS.md): `key.record` keys the evaluated value so an animated example could not be authored with the existing commands. (2) Added `Document::undo_depth/group_undo_since/rollback_to` (CORE.md §4) and exported `forge_rpc::settings_path`. (3) The Script panel is closed by default (`Panel::DEFAULT`) so the existing default layout and its tests are unchanged. (4) `forge run` has no timeout flag; defaults only.
+- Files changed: crates/script/**, examples/scripts/*.rhai, docs/specs/{SCRIPTING,CLI,COMMANDS,CORE,UI}.md, apps/forge, crates/{core,command,rpc,app (tests),ui}.
+- Open questions: RPC/MCP `script.run` (needs the `rpc.allow_scripts` setting) is left for a later brief; script-supplied arguments for `forge run` are not defined.
+- Gate: `GATE: 529 tests passed, 0 failed` / `GATE: all passed`.

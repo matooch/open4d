@@ -161,3 +161,51 @@ fn merge_window_ends_on_other_actions() {
     .unwrap();
     assert_eq!(doc.history().undo_labels().len(), 5);
 }
+
+#[test]
+fn group_undo_since_merges_steps_into_one() {
+    let mut doc = common::doc();
+    let before = snap(&doc);
+    let start = doc.undo_depth();
+    let steps = scripted(&mut doc);
+    let after = steps.last().unwrap().clone();
+    assert_eq!(doc.undo_depth(), start + 8);
+    doc.group_undo_since(start, "Run Script");
+    assert_eq!(doc.undo_depth(), start + 1);
+    assert_eq!(doc.history().undo_labels(), ["Run Script"]);
+    assert_eq!(snap(&doc), after);
+    assert!(doc.undo());
+    assert_eq!(snap(&doc), before);
+    assert!(!doc.undo());
+    assert!(doc.redo());
+    assert_eq!(snap(&doc), after);
+}
+
+#[test]
+fn group_undo_since_edge_cases() {
+    let mut doc = common::doc();
+    doc.group_undo_since(0, "x"); // empty: no-op
+    assert_eq!(doc.undo_depth(), 0);
+    doc.transact("one", |tx| tx.create("forge.null", None, None))
+        .unwrap();
+    doc.group_undo_since(0, "renamed"); // one step is renamed
+    assert_eq!(doc.history().undo_labels(), ["renamed"]);
+    doc.group_undo_since(5, "x"); // history shorter than depth: no-op
+    assert_eq!(doc.history().undo_labels(), ["renamed"]);
+}
+
+#[test]
+fn rollback_to_reverts_and_drops_steps() {
+    let mut doc = common::doc();
+    doc.transact("keep", |tx| tx.create("forge.null", None, None))
+        .unwrap();
+    let kept = snap(&doc);
+    let depth = doc.undo_depth();
+    scripted(&mut doc);
+    assert!(doc.rollback_to(depth));
+    assert_eq!(snap(&doc), kept);
+    assert_eq!(doc.undo_depth(), depth);
+    assert!(doc.history().redo_labels().is_empty());
+    assert!(!doc.rollback_to(depth + 3), "shorter than depth: refused");
+    assert_eq!(snap(&doc), kept);
+}

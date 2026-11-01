@@ -33,10 +33,12 @@ built with `EditorState::new(Arc<Registry>)`. `mode` is `EditMode::Model` at sta
 ## 2. Dock model (`dock`)
 
 Areas: `Left, RightTop, RightBottom, Bottom, Center`. Panels: `Viewport, ObjectTree,
-Attributes, Timeline`. Each area holds an ordered tab list and an active index; each
+Attributes, Timeline, Coordinates, Script` (the Script Manager, §10, default area Bottom). Each area holds an ordered tab list and an active index; each
 panel appears at most once in the whole dock.
 - `Dock::default()` (our layout): Center [Viewport], RightTop [ObjectTree],
-  RightBottom [Attributes], Bottom [Timeline], Left [].
+  RightBottom [Attributes], Bottom [Timeline, Coordinates], Left []. The Script Manager
+  is closed by default (`Panel::DEFAULT` lists the panels a default layout opens); the
+  Window menu opens it.
 - `area_of(panel)`, `tabs(area)`, `active(area) -> Option<Panel>`.
 - `move_panel(panel, to)`: removes it from its area (fixing that area's active index:
   stays on the same panel if possible, else clamps), appends to `to`, makes it
@@ -181,3 +183,22 @@ and "Reset layout".
 
 UI tests (egui_kittest, no GPU): create via the Create menu, select in the tree,
 edit an attribute, undo, and move a panel via the Window menu.
+
+## 10. Script Manager (`script_panel`)
+
+Window > "Script Manager panel" (default area Bottom, closed by default). Contents:
+- a multi-line monospace `TextEdit` for the source, with a **Run** button (also Ctrl+Enter
+  while the editor has focus) and a **Clear** button for the console;
+- an **Open...** and **Save...** pair (native dialogs, like File, loading/saving the
+  source text; the panel's source is not part of the scene);
+- the output console below: `print` lines, then for a failure the message in the error
+  colour (`line N: ...`), for a success a dim line `ran N command(s)`;
+- a recent-scripts list (paths, newest first, at most 10), stored in the settings file under
+  `scripts.recent` (a JSON array of strings; same file as `rpc.*`, RPC.md §2). Clicking
+  an entry loads the file into the editor. Opening, saving or running a file adds it.
+A run is `forge_script::run_script` on the editor's context with the default limits
+(SCRIPTING.md): one undo step, rolled back on failure. The panel state (source, console,
+recent list) lives in `EditorState::script` (`ScriptPanelState`) so tests can drive it:
+`run_source(&mut self, &mut App-like)`. Tests (egui_kittest, no GPU): open the panel via
+the Window menu, set a source, click Run, see the output and the created node, undo it
+in one step; a failing script shows its error and changes nothing.

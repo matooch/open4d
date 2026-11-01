@@ -18,7 +18,7 @@ GPU. The code lives in a library (`forge_cli::run`) so the editor binary can for
   the message on stderr. Every success object has `"ok": true`.
 - Node ids are integers. Angles are degrees, percent as shown (COMMANDS.md §4).
 - Exit codes: `0` ok; `1` user error (bad arguments, unknown command id or node, a command
-  that refuses, unwritable output, a stub subcommand, a failed `rpc` call); `2` the scene file cannot be read
+  that refuses, unwritable output, a stub subcommand, a failed `rpc` call, a failed script); `2` the scene file cannot be read
   or loaded; `3` internal error (a bug or panic).
 - Frames are integers, clamped to the scene's range (APP.md §2).
 
@@ -82,8 +82,19 @@ Calls a method of a running editor over JSON-RPC (RPC.md; methods in RPC.md §4)
 printed. No editor listening, a wrong token, an unknown method or a failing call is exit 1
 with the message.
 
-### `forge run <script.rhai> [--scene s]`, `forge render`
-Stubs. They print `<name> is not available yet (brief 016 / area K)` and exit 1.
+### `forge run <script.rhai> [--scene s] [--save out.forge]`
+Runs a Rhai script (SCRIPTING.md) on the scene `--scene` (default: an empty scene) with the
+default sandbox limits. `print` output goes to stdout, one line each (text mode). The
+scene is written only with `--save <path>` (so a plain run is a dry run; the path may be
+the input file). The whole run is one undo step, which has no effect on the saved file.
+JSON: `{"ok": true, "script": "<path>", "output": [lines], "value": <last expression>,
+"commands": n, "saved": "<path>"|null}`. Text mode prints the output lines, then nothing
+else. A failed script (syntax error, runtime error, limit) saves nothing and is exit 1;
+the message reads `<script>: line N: <message>` and the printed lines go to stderr. A script
+file that cannot be read is exit 1; a scene that cannot be loaded is exit 2.
+
+### `forge render`
+Stub. It prints `render is not available yet (area K)` and exits 1.
 
 ## 3. Editor forwarding
 
@@ -103,5 +114,9 @@ and exits with its code. Without `--headless` the editor starts.
 - `file.export_obj` of an animated scene writes the evaluated frame (`crates/app/tests`).
 - `forge rpc` against an in-process server (port 0): version, `command.run`, `eval.mesh`,
   `--port/--token`, wrong token, unknown method, bad `--params`, no editor (exit 1).
+- `forge run`: a script that builds a scene with `--save` (the file loads and has the
+  nodes); no `--save` leaves the scene file unchanged; `--scene` input; `--json` output;
+  a syntax error, a runtime error and an operation-limit stop are exit 1 and save
+  nothing; a missing script file is exit 1; a missing scene is exit 2.
 - A closed stdout pipe (`forge --json commands | head -c 300`) is exit 0 without a panic:
   output goes through a locked stdout handle and `BrokenPipe` is a quiet success.

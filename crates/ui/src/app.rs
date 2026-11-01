@@ -610,6 +610,9 @@ impl Editor {
             Panel::Attributes => self.attributes_ui(ui),
             Panel::Timeline => self.timeline_ui(ui),
             Panel::Coordinates => self.coordinates_ui(ui),
+            Panel::Script => {
+                crate::script_panel::script_panel_ui(ui, &mut self.state, self.dialogs.as_mut())
+            }
         }
     }
 

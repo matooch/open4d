@@ -15,6 +15,8 @@ pub enum FileKind {
     Scene,
     /// Wavefront OBJ, `.obj`.
     Obj,
+    /// A Rhai script, `.rhai`.
+    Script,
 }
 
 impl FileKind {
@@ -22,6 +24,7 @@ impl FileKind {
         match self {
             FileKind::Scene => "forge",
             FileKind::Obj => "obj",
+            FileKind::Script => "rhai",
         }
     }
 
@@ -29,6 +32,7 @@ impl FileKind {
         match self {
             FileKind::Scene => "Forge3D scene",
             FileKind::Obj => "Wavefront OBJ",
+            FileKind::Script => "Rhai script",
         }
     }
 }

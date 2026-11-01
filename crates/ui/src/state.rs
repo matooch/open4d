@@ -10,6 +10,7 @@ use forge_viewport::camera::{Camera, Handedness};
 use forge_viewport::render::Shading;
 
 use crate::dock::Dock;
+use crate::script_panel::ScriptPanelState;
 
 pub use forge_command::NodeSelection;
 
@@ -21,6 +22,8 @@ pub struct EditorState {
     pub dock: Dock,
     pub camera: Camera,
     pub shading: Shading,
+    /// Script Manager source, console and recent list (docs/specs/UI.md §10).
+    pub script: ScriptPanelState,
 }
 
 impl Deref for EditorState {
@@ -57,6 +60,7 @@ impl EditorState {
             dock: Dock::default(),
             camera: Self::default_camera(),
             shading: Shading::SmoothWire,
+            script: ScriptPanelState::default(),
         }
     }
 }

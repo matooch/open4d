@@ -165,6 +165,7 @@ fn brief_command_ids_exist() {
         "file.export_obj",
         "key.record",
         "key.delete_at_frame",
+        "key.set",
         "timeline.set_frame",
         "timeline.play",
         "timeline.stop",

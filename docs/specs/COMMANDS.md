@@ -116,6 +116,7 @@ touch history.
 | `file.export_obj` | `path`, `selected?` | `{objects}` | no |
 | `key.record` | - | `{keys}` | yes |
 | `key.delete_at_frame` | - | `{keys}` | yes |
+| `key.set` | `node`, `track`, `frame`, `value` | null | yes |
 | `key.jump` | `forward` | `{frame}` | no |
 | `key.autokey` | `enabled?` (absent toggles) | `{enabled}` | no |
 | `timeline.set_frame` | `frame` | `{frame}` | no |
@@ -146,6 +147,12 @@ Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and A
   exactly its stored geometry.
 - `key.*`, `timeline.*`: ANIM.md §2; `timeline.set_frame` and `step` clamp to the project
   range. `timeline.settings` merges steps like before (`timeline-settings` key).
+- `key.set`: writes one Spline key (ANIM.md §1) on `track` (an animatable float parameter id
+  or `<vec3 parameter>.<x|y|z>`, e.g. `transform.pos.x`) at `frame` (time `frame / fps`,
+  any integer) with `value` in display units (angle tracks in degrees, percent as shown);
+  an existing key at that time is replaced. One step "Set Key". Unknown node or track is
+  `Failed`. Added for scripting (brief 016): `key.record` keys the *evaluated* value, so it
+  cannot author different values at different frames.
 - `transform.set`: sets only the given components of the object's pos/rot/scale in one step
   ("Set Transform"); it does not write animation keys (autokey is a gizmo/attribute
   panel feature; replaying a gizmo drag as a command comes with brief 012+).

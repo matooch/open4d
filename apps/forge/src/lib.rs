@@ -85,11 +85,15 @@ enum Sub {
     },
     /// List the command registry with argument schemas.
     Commands,
-    /// Run a script (not available yet).
+    /// Run a Rhai script on a scene (docs/specs/SCRIPTING.md).
     Run {
         script: String,
+        /// Scene to run on (default: an empty scene).
         #[arg(long)]
         scene: Option<String>,
+        /// Write the resulting scene here (a plain run is a dry run).
+        #[arg(long)]
+        save: Option<String>,
     },
     /// Call a method of a running editor over JSON-RPC (docs/specs/RPC.md).
     Rpc {
@@ -245,7 +249,11 @@ fn execute(command: Sub) -> Outcome {
             save,
         } => cmd(&scene, &command, &args, save),
         Sub::Commands => commands(),
-        Sub::Run { .. } => Err(stub("run", "brief 016")),
+        Sub::Run {
+            script,
+            scene,
+            save,
+        } => run_script_file(&script, scene.as_deref(), save.as_deref()),
         Sub::Rpc {
             method,
             params,
@@ -472,6 +480,36 @@ fn cmd(path: &str, id: &str, args: &str, save: bool) -> Outcome {
     Ok(Out {
         text: result.to_string(),
         json: json!({"command": id, "result": result, "saved": save}),
+    })
+}
+
+fn run_script_file(script: &str, scene: Option<&str>, save: Option<&str>) -> Outcome {
+    let source = std::fs::read_to_string(script)
+        .map_err(|e| user(format!("cannot read script {script}: {e}")))?;
+    let mut app = match scene {
+        Some(path) => open(path)?.0,
+        None => App::new_default(),
+    };
+    let commands = app.commands.clone();
+    let report = forge_script::run_script(
+        &mut app,
+        &commands,
+        &source,
+        &forge_script::ScriptOptions::default(),
+    )
+    .map_err(|failure| {
+        for line in &failure.output {
+            eprintln!("{line}");
+        }
+        user(format!("{script}: {failure}"))
+    })?;
+    if let Some(path) = save {
+        app.save(path).map_err(|e| user(e.to_string()))?;
+    }
+    Ok(Out {
+        text: report.output.join("\n"),
+        json: json!({"script": script, "output": report.output, "value": report.value,
+            "commands": report.commands, "saved": save}),
     })
 }
 

@@ -12,7 +12,7 @@ mod protocol;
 mod server;
 
 pub use client::{Client, ClientError, MeshData};
-pub use config::{DEFAULT_PORT, RpcSettings, ct_eq};
+pub use config::{DEFAULT_PORT, RpcSettings, ct_eq, settings_path};
 pub use host::{Host, dispatch};
 pub use protocol::{RpcError, code};
 pub use server::{

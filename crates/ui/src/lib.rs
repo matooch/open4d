@@ -12,6 +12,7 @@ pub mod components;
 pub mod coordinates;
 pub mod dock;
 pub mod manipulate;
+pub mod script_panel;
 pub mod state;
 pub mod theme;
 pub mod timeline;
@@ -137,6 +138,7 @@ pub fn run_with_rpc(registry: Arc<Registry>, rpc: Option<forge_rpc::Inbox>) -> e
         Box::new(move |cc| {
             theme::Theme::default().apply(&cc.egui_ctx);
             let mut state = state::EditorState::new(registry);
+            state.script.use_settings_file(forge_rpc::settings_path());
             if let Some(inbox) = &rpc {
                 let ctx = cc.egui_ctx.clone();
                 inbox.set_wake(move || ctx.request_repaint());

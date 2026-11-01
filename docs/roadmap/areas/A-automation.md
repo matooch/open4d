@@ -28,7 +28,7 @@ gets the "agents build things in the app for me" capability early.
   - notifications: `scene.changed`, `frame.changed`, `selection.changed`.
 - [ ] **MCP server** `forge-mcp`: stdio MCP. Each command becomes an MCP tool with its
   JSON schema. It connects to a running editor over RPC, or starts a headless core.
-- [ ] **Rhai scripting**:
+- [x] **Rhai scripting**:
   - an engine with bindings for the command layer, scene queries and maths types;
   - `forge run script.rhai`;
   - a Script Manager panel (edit, run, console);

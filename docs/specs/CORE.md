@@ -159,6 +159,13 @@ Transactions:
   the first). Undo, redo, or any other transaction ends the merge window. For slider
   drags.
 - `history().undo_labels()` lists labels oldest first.
+- Grouping (SCRIPTING.md §2): `undo_depth()` is the number of undo steps.
+  `group_undo_since(depth, label)` merges every step recorded after `depth` into one step
+  with that label (edits in their original order); no steps newer than `depth` (or a stack
+  shorter than `depth`, the history having been replaced) is a no-op; exactly one newer
+  step is only renamed. `rollback_to(depth) -> bool` reverts every step
+  above `depth` and drops them, clearing the redo stack if anything was reverted
+  (false, nothing done, if the stack is shorter than `depth`). Both end the merge window.
 
 ## 5. Dirty tracking and evaluation cache (`cache`)
 

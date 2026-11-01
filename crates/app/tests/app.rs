@@ -227,3 +227,37 @@ fn export_obj_command_writes_the_evaluated_frame() {
     let min_x = at15.positions.iter().map(|p| p[0]).fold(f64::MAX, f64::min);
     assert!((min_x - 50.0).abs() < 1e-4, "{min_x}");
 }
+
+#[test]
+fn key_set_writes_keys_in_display_units() {
+    let mut app = App::new_default();
+    let cube = create(&mut app, "forge.cube");
+    app.run(
+        "timeline.settings",
+        json!({"fps": 30, "start": 0, "end": 60}),
+    )
+    .unwrap();
+    let steps = app.doc.history().undo_labels().len();
+    for (frame, x) in [(0, 0.0), (30, 90.0)] {
+        app.run(
+            "key.set",
+            json!({"node": cube.0, "track": "transform.rot.x", "frame": frame, "value": x}),
+        )
+        .unwrap();
+    }
+    assert_eq!(app.doc.history().undo_labels().len(), steps + 2);
+    let track = &app.doc.scene().node(cube).unwrap().tracks["transform.rot.x"];
+    assert_eq!(track.keys.len(), 2);
+    assert!((track.keys[1].time - 1.0).abs() < 1e-12);
+    assert!((track.keys[1].value - std::f64::consts::FRAC_PI_2).abs() < 1e-12);
+    for bad in [
+        json!({"node": 99, "track": "transform.pos.x", "frame": 0, "value": 1.0}),
+        json!({"node": cube.0, "track": "nope", "frame": 0, "value": 1.0}),
+        json!({"node": cube.0, "track": "transform.pos", "frame": 0, "value": 1.0}),
+    ] {
+        assert!(matches!(
+            app.run("key.set", bad),
+            Err(CommandError::Failed(_))
+        ));
+    }
+}

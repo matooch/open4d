@@ -1,6 +1,6 @@
 //! timeline.*, key.*
 
-use forge_core::SceneSettings;
+use forge_core::{Key, NodeId, SceneSettings, Target, parse_target};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -49,6 +49,43 @@ struct AutokeyArgs {
     enabled: Option<bool>,
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct KeySetArgs {
+    node: u64,
+    /// Track: an animatable float parameter id, or `<vec3 param>.<x|y|z>`
+    /// (`transform.pos.x`, `transform.rot.y`, `transform.scale.z`).
+    track: String,
+    /// Frame of the key (any integer; fps comes from the project).
+    frame: i64,
+    /// Value in display units (degrees for angles, percent as shown).
+    value: f64,
+}
+
+fn key_set(ctx: &mut dyn CommandContext, a: KeySetArgs) -> Result<Value, CommandError> {
+    let id = NodeId(a.node);
+    if !a.value.is_finite() {
+        return Err(CommandError::InvalidArgs("value must be finite".into()));
+    }
+    let scene = ctx.doc().scene();
+    let node = scene
+        .node(id)
+        .ok_or_else(|| CommandError::Failed(format!("unknown node {id}")))?;
+    let ty = scene
+        .registry()
+        .get(&node.type_id)
+        .ok_or_else(|| CommandError::Failed(format!("unknown type {}", node.type_id)))?;
+    let param = match parse_target(&a.track, |p| ty.find_param(p)).map_err(CommandError::failed)? {
+        Target::Float(p) | Target::Component(p, _) => p,
+    };
+    let unit = ty.find_param(&param).map(|d| d.ui.unit).unwrap_or_default();
+    let time = a.frame as f64 / f64::from(scene.settings().fps);
+    let key = Key::new(time, super::param::stored(unit, a.value));
+    ctx.doc_mut()
+        .transact("Set Key", |tx| tx.set_key(id, &a.track, key))?;
+    Ok(Value::Null)
+}
+
 fn frame(ctx: &dyn CommandContext) -> Value {
     json!({"frame": ctx.timeline().current})
 }
@@ -80,6 +117,15 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
             }
             Ok(frame(c))
         },
+    )?;
+    r.register_fn(
+        spec(
+            "key.set",
+            "Set Key",
+            true,
+            || json!({"node": 1, "track": "transform.pos.x", "frame": 10, "value": 100.0}),
+        ),
+        key_set,
     )?;
     r.register_fn(
         spec("key.autokey", "Autokey", false, || json!({"enabled": true})),

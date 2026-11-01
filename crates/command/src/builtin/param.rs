@@ -50,7 +50,7 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
 }
 
 /// Display units (degrees, percent) to stored units (radians, fractions).
-fn stored(unit: Unit, v: f64) -> f64 {
+pub(super) fn stored(unit: Unit, v: f64) -> f64 {
     match unit {
         Unit::Angle => v.to_radians(),
         Unit::Percent => v / 100.0,

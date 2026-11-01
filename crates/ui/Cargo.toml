@@ -15,6 +15,7 @@ forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }
 forge-io = { path = "../io" }
 forge-rpc = { path = "../rpc" }
+forge-script = { path = "../script" }
 forge-viewport = { path = "../viewport" }
 glam = "0.34"
 png = "0.18"
