@@ -139,6 +139,7 @@ touch history.
 | `timeline.settings` | `fps`, `start`, `end` | null | yes |
 | `transform.set` | `node`, `pos?`, `rot?` (degrees), `scale?` | null | yes |
 | `param.set` | `node`, `param`, `value` | null | yes |
+| `param.edit` | `param`, `value`, `nodes?`, `component?`, `gesture?` | `{changed}` | yes |
 
 Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and ANIM.md §2):
 
@@ -175,6 +176,15 @@ Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and A
   and color, string/enum id, link (node id or null), index list (array of integers). Mesh
   parameters are `Failed("unsupported")`. Numbers are clamped into the hard range by the document (CORE.md §2); a type
   mismatch or unknown parameter is `Failed` and changes nothing.
+
+- `param.edit` (registered by forge-app, UI.md §12): the attribute manager's edit. Like
+  `param.set` (display units, same conversion) but for several objects in one transaction
+  ("Set <label>"); `nodes` absent means the selection; objects whose type lacks the
+  parameter, or has it with another kind than the first object that has it, are skipped, and
+  no match is `Failed`. It writes through the animation rules (autokey, rule 5, ANIM.md
+  §2.4). `component` (0..2, vec3 only) makes `value` one number that replaces just that
+  component of each object's current value. `gesture` merges edits with the same number and
+  objects into one undo step (`drag:<ids>:<param>:<gesture>`).
 
 ## 7. Tests
 

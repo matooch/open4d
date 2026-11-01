@@ -12,9 +12,7 @@ use glam::DVec3;
 use serde_json::{Value as Json, json};
 
 use crate::animate::{AnimEdit, KeyState, key_frames, key_states};
-use crate::attributes::{
-    Gesture, Widget, apply_edit_anim, attribute_rows, from_display, to_display, unit_suffix,
-};
+use crate::attributes::{Gesture, Widget, attribute_rows_multi};
 use crate::commands::{category_label, create_menu, execute};
 use crate::component_edit::{ComponentDrag, pivot_view, pivot_world};
 use crate::components::{
@@ -102,6 +100,8 @@ pub struct Editor {
     renaming: Option<(NodeId, String)>,
     /// Name field buffer in the attribute panel.
     name_edit: Option<(NodeId, String)>,
+    /// The attribute manager tab shown (UI.md §12).
+    attr_tab: String,
     /// Counter for drag/typing gestures (each is one undo step).
     gesture_seq: u64,
     gesture: Option<u64>,
@@ -141,6 +141,7 @@ impl Editor {
             viewport: ViewportPanel::default(),
             renaming: None,
             name_edit: None,
+            attr_tab: String::new(),
             gesture_seq: 0,
             gesture: None,
             viewport_hot: false,
@@ -189,15 +190,6 @@ impl Editor {
                 false
             }
         }
-    }
-
-    fn edit(&mut self, id: NodeId, param: &str, value: Value, gesture: Gesture) {
-        let ctx = self.state.anim_ctx();
-        self.state.status =
-            match apply_edit_anim(&mut self.state.doc, id, param, value, gesture, Some(&ctx)) {
-                Ok(()) => String::new(),
-                Err(e) => e.to_string(),
-            };
     }
 
     /// A gesture id for a continuous interaction: new on start, reused while it lasts.
@@ -1554,7 +1546,17 @@ impl Editor {
             return;
         };
         let shown = self.state.evaluated();
-        let Some(view) = attribute_rows(&shown, id) else {
+        // The active object first, then the other selected ones (multi-edit).
+        let mut ids = vec![id];
+        ids.extend(
+            self.state
+                .selection
+                .nodes
+                .iter()
+                .copied()
+                .filter(|n| *n != id),
+        );
+        let Some(view) = attribute_rows_multi(&shown, &ids) else {
             ui.weak("Nothing selected");
             return;
         };
@@ -1573,25 +1575,42 @@ impl Editor {
             } else if !r.has_focus() {
                 *buf = view.name.clone();
             }
+            if view.count > 1 {
+                ui.weak(format!("{} objects", view.count));
+            }
         });
         if let Some(name) = rename {
             self.run(("object.rename", json!({"node": id.0, "name": name})));
         }
+        let tabs = view.tabs();
+        if !tabs.contains(&self.attr_tab) {
+            self.attr_tab = tabs.first().cloned().unwrap_or_default();
+        }
+        if tabs.len() > 1 {
+            ui.horizontal(|ui| {
+                for t in &tabs {
+                    if ui.selectable_label(*t == self.attr_tab, t).clicked() {
+                        self.attr_tab = t.clone();
+                    }
+                }
+            });
+        }
         ui.separator();
+        let tab = self.attr_tab.clone();
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
                 ui.add_enabled_ui(view.editable, |ui| {
-                    for (group, rows) in &view.groups {
+                    for (group, rows) in view.groups_of(&tab) {
                         egui::CollapsingHeader::new(group)
                             .default_open(true)
                             .show(ui, |ui| {
-                                egui::Grid::new(("attrs", group))
+                                egui::Grid::new(("attrs", &tab, group))
                                     .num_columns(2)
                                     .spacing([12.0, 4.0])
                                     .show(ui, |ui| {
                                         for row in rows {
-                                            self.attribute_row(ui, id, row, &marks);
+                                            self.attribute_row(ui, &shown, id, row, &marks);
                                             ui.end_row();
                                         }
                                     });
@@ -1601,167 +1620,55 @@ impl Editor {
             });
     }
 
+    /// One row: key marker slot + label, then the widget of its kind. A change runs
+    /// `param.edit` on every selected object (one undo step; a scrub merges into one).
     fn attribute_row(
         &mut self,
         ui: &mut Ui,
+        scene: &forge_core::Scene,
         id: NodeId,
         row: &crate::attributes::AttrRow,
         marks: &std::collections::BTreeMap<String, KeyState>,
     ) {
-        if row.widget == Widget::Checkbox {
-            ui.label("");
-            let mut b = row.value == Value::Bool(true);
-            if ui.checkbox(&mut b, &row.label).changed() {
-                self.edit(id, &row.param, Value::Bool(b), Gesture::Commit);
-            }
-            return;
-        }
-        let animatable = matches!(
-            row.widget,
-            Widget::FloatDrag { .. } | Widget::Vec3Drag { .. }
-        );
-        let label = ui
-            .horizontal(|ui| {
-                if animatable {
+        use crate::widgets::{self, Cx, Phase};
+        let cx_label = if row.widget == Widget::Checkbox {
+            ui.make_persistent_id(("attr", id, &row.param))
+        } else {
+            // Brief 097 attaches the keyframe click and context menu to this slot's response.
+            ui.horizontal(|ui| {
+                if row.animatable
+                    && matches!(
+                        row.widget,
+                        Widget::FloatDrag { .. } | Widget::Vec3Drag { .. }
+                    )
+                {
                     key_marker(ui, marks.get(&row.param).copied(), &row.label);
                 }
                 ui.label(&row.label)
             })
-            .inner;
-        let mut edited: Option<(Value, Gesture)> = None;
-        match (&row.widget, &row.value) {
-            (Widget::IntDrag { min, max }, Value::Int(v)) => {
-                let mut x = *v;
-                let r = ui
-                    .add(egui::DragValue::new(&mut x).range(*min..=*max))
-                    .labelled_by(label.id);
-                if r.changed() {
-                    let g = if r.dragged() {
-                        self.gesture_for(r.drag_started())
-                    } else {
-                        Gesture::Commit
-                    };
-                    edited = Some((Value::Int(x), g));
-                }
+            .inner
+            .id
+        };
+        let cx = Cx {
+            scene,
+            node: id,
+            label: cx_label,
+        };
+        if let Some(edit) = widgets::show(ui, &cx, row) {
+            let gesture = match edit.phase {
+                Phase::Commit => None,
+                Phase::Drag { started } => match self.gesture_for(started) {
+                    Gesture::Drag(n) => Some(n),
+                    Gesture::Commit => None,
+                },
+            };
+            let mut nodes: Vec<NodeId> = self.state.selection.nodes.iter().copied().collect();
+            if !nodes.contains(&id) {
+                nodes.insert(0, id);
             }
-            (Widget::FloatDrag { unit, .. }, Value::Float(v)) => {
-                let mut d = to_display(*unit, *v);
-                let r = ui
-                    .add(
-                        egui::DragValue::new(&mut d)
-                            .speed(0.01)
-                            .suffix(unit_suffix(*unit)),
-                    )
-                    .labelled_by(label.id);
-                if r.changed() {
-                    let g = if r.dragged() {
-                        self.gesture_for(r.drag_started())
-                    } else {
-                        Gesture::Commit
-                    };
-                    edited = Some((Value::Float(from_display(*unit, d)), g));
-                }
-            }
-            (Widget::Vec3Drag { unit, .. }, Value::Vec3(v)) => {
-                let mut d = v.map(|c| to_display(*unit, c));
-                ui.horizontal(|ui| {
-                    for (axis, c) in ["X", "Y", "Z"].iter().zip(d.iter_mut()) {
-                        let r = ui
-                            .add(
-                                egui::DragValue::new(c)
-                                    .speed(0.01)
-                                    .prefix(format!("{axis} ")),
-                            )
-                            .labelled_by(label.id);
-                        if r.changed() {
-                            let g = if r.dragged() {
-                                self.gesture_for(r.drag_started())
-                            } else {
-                                Gesture::Commit
-                            };
-                            edited = Some((Value::Vec3([0.0; 3]), g));
-                        }
-                    }
-                });
-                if let Some((_, g)) = edited {
-                    edited = Some((Value::Vec3(d.map(|c| from_display(*unit, c))), g));
-                }
-            }
-            (Widget::Color, Value::Color(c)) => {
-                let mut rgb = c.map(|x| x as f32);
-                if ui.color_edit_button_rgb(&mut rgb).changed() {
-                    let g = self.gesture_for(false);
-                    edited = Some((Value::Color(rgb.map(f64::from)), g));
-                }
-            }
-            (Widget::Combo { options }, Value::Enum(cur)) => {
-                let current = options
-                    .iter()
-                    .find(|o| o.id == *cur)
-                    .map_or(cur.as_str(), |o| o.label.as_str());
-                egui::ComboBox::from_id_salt(("combo", id, &row.param))
-                    .selected_text(current)
-                    .show_ui(ui, |ui| {
-                        for o in options {
-                            if ui.selectable_label(o.id == *cur, &o.label).clicked() {
-                                edited = Some((Value::Enum(o.id.clone()), Gesture::Commit));
-                            }
-                        }
-                    })
-                    .response
-                    .labelled_by(label.id);
-            }
-            (Widget::Text, Value::String(s)) => {
-                let mut buf = s.clone();
-                let r = ui.text_edit_singleline(&mut buf).labelled_by(label.id);
-                if r.changed() {
-                    let g = self.gesture_for(r.gained_focus());
-                    edited = Some((Value::String(buf), g));
-                }
-            }
-            (Widget::Link { accepts }, Value::Link(target)) => {
-                let scene = self.state.doc.scene();
-                let name_of = |t: NodeId| {
-                    scene
-                        .node(t)
-                        .map_or(format!("(missing {t})"), |n| n.name.clone())
-                };
-                let current = target.map_or("None".to_string(), name_of);
-                let candidates: Vec<(NodeId, String)> =
-                    tree_rows(scene, &scene_all_expanded(scene))
-                        .into_iter()
-                        .filter(|r| r.id != id)
-                        .filter(|r| {
-                            accepts.is_empty()
-                                || scene
-                                    .node_type(r.id)
-                                    .is_some_and(|t| accepts.contains(&t.category))
-                        })
-                        .map(|r| (r.id, r.name))
-                        .collect();
-                egui::ComboBox::from_id_salt(("link", id, &row.param))
-                    .selected_text(current)
-                    .show_ui(ui, |ui| {
-                        if ui.selectable_label(target.is_none(), "None").clicked() {
-                            edited = Some((Value::Link(None), Gesture::Commit));
-                        }
-                        for (cid, name) in candidates {
-                            if ui.selectable_label(*target == Some(cid), name).clicked() {
-                                edited = Some((Value::Link(Some(cid)), Gesture::Commit));
-                            }
-                        }
-                    })
-                    .response
-                    .labelled_by(label.id);
-            }
-            (_, value) => {
-                ui.weak(format!("{value:?}"));
-            }
+            self.run(("param.edit", edit.args(&row.param, &nodes, gesture)));
         }
-        if let Some((value, gesture)) = edited {
-            self.edit(id, &row.param, value, gesture);
-        }
-        if ui.input(|i| i.pointer.any_released()) && !ui.ctx().dragged_id().is_some() {
+        if ui.input(|i| i.pointer.any_released()) && ui.ctx().dragged_id().is_none() {
             self.gesture = None;
         }
     }
@@ -1915,14 +1822,4 @@ fn key_marker(ui: &mut Ui, state: Option<KeyState>, name: &str) {
         fill,
         egui::Stroke::new(1.5, Theme::default().accent),
     ));
-}
-
-/// Every node expanded, for listing link candidates.
-fn scene_all_expanded(scene: &forge_core::Scene) -> std::collections::BTreeSet<NodeId> {
-    let mut out = std::collections::BTreeSet::new();
-    for r in scene.roots() {
-        out.insert(*r);
-        out.extend(scene.descendants(*r));
-    }
-    out
 }

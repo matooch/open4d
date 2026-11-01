@@ -124,3 +124,4 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `file_save_as` | Save As. Not an undoable edit. Runs command `file.save_as`. |
 | `file_import_obj` | Import OBJ. Undoable editing command. Runs command `file.import_obj`. |
 | `file_export_obj` | Export OBJ. Not an undoable edit. Runs command `file.export_obj`. |
+| `param_edit` | Edit Parameter. Undoable editing command. Runs command `param.edit`. |

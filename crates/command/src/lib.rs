@@ -9,7 +9,7 @@ pub mod schema;
 mod state;
 mod timeline;
 
-pub use builtin::register_editor_commands;
+pub use builtin::{display_to_stored, param_value_from_json, register_editor_commands};
 pub use context::CommandContext;
 pub use error::CommandError;
 pub use registry::{

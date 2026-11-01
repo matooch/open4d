@@ -4,6 +4,7 @@
 //! and no GPU. The editor and every automation front end build on it.
 
 pub mod animate;
+pub mod param_edit;
 pub mod query;
 pub mod select;
 
@@ -40,6 +41,7 @@ pub fn default_registry() -> Result<Registry, RegistryError> {
 pub fn default_command_registry() -> CommandRegistry {
     let mut commands = CommandRegistry::new();
     register_editor_commands(&mut commands).expect("built-in command ids are unique");
+    param_edit::register(&mut commands).expect("param.edit is unique");
     commands
 }
 

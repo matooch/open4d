@@ -79,6 +79,10 @@ Display units (**parity-pending**): `Angle` shows degrees, `Percent` shows ×100
 "%", others raw. `to_display(unit, v)` / `from_display(unit, v)` are exact inverses
 for these factors; ranges are converted too.
 
+Groups may name a tab, `"Tab/Group"` (§12); `attribute_rows_multi(scene, ids)` is the
+multi-object form and `attribute_rows` is its one-object case. `Widget::LinkList {accepts}`
+is added; `AttrRow` also holds `mixed`, `mixed_axes`, `step`, `animatable`.
+
 Edits: `apply_edit(doc, id, param, value, gesture)`; `Gesture::Commit` → one
 `transact("Set <label>")`; `Gesture::Drag(n)` → `transact_merged` keyed
 `"drag:<id>:<param>:<n>"`, so one continuous drag is one undo step. Validation
@@ -242,3 +246,45 @@ command goes to the status bar like any other.
 
 Not in the palette yet (no registry command exists): snapping, workplane, axis mode.
 Pointer-driven tools (cuts, bridge, pen) stay in the Mesh menu.
+
+## 12. Attribute manager (`attributes`, `widgets`; brief 150)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G4 (docs/parity/GUI-SESSIONS.md)
+is unanswered, so **tabs look, scrub modifiers, arrow behaviour and widget look are
+parity-pending**. Every row is derived from a `ParamDesc`; nothing is hand-laid per type.
+
+Tabs and groups: `UiHint.group` is `"Tab/Group"` (split at the first `/`) or just `"Group"`
+(tab `Basic`; empty group is `Parameters`). `AttributeView.tabs()` lists tabs in
+first-appearance order, `groups_of(tab)` the groups of one; a tab bar is drawn only with two
+or more tabs, groups are collapsible. The shown tab is editor state (`attr_tab`); a tab
+that no longer exists falls back to the first.
+
+Widgets, one module per kind in `widgets/`: `float` (scrub, display units), `int` (scrub,
+range), `boolean` (checkbox with the row label), `enumeration` (drop-down), `vector` (X, Y, Z
+scrub fields), `colour` (picker), `string` (single line), `link` (drop-down, clear, accepts an
+object dragged from the object manager), `link_list` (one line per entry with move up/down
+and remove, an "Add..." drop-down, drop target), `readonly` (mesh and index-list summaries,
+unknown types). Spline-curve, gradient and field-list parameter kinds do not exist yet; their
+widgets are added with the kind (briefs 064 and later). A widget returns an `Edit`
+(display-unit JSON, optional vec3 component, `Phase::Commit | Drag`); the editor runs
+`param.edit` (COMMANDS.md §6) on every selected object. A commit is one undo step; a scrub,
+colour drag or typing run shares a gesture number and merges into one.
+
+Scrubbing (`widgets::scrub`, pure): the base step is `UiHint.step` (display units per pixel)
+else 1 for ints, 0.1 for angle and percent, 0.01 otherwise. Shift = 10 times finer, Ctrl = 10
+times coarser, any other combination (including Alt, which navigates the viewport) = base.
+Clicking a field types a value; Up/Down arrows in a focused field add one step. Values are
+shown and edited in display units (degrees, percent, UI.md §4).
+
+Multi-edit: the rows are those of the active object whose id and kind exist in every other
+selected object's type. A row is `mixed` when values differ (vec3: per component, `mixed_axes`).
+A mixed number shows "mixed", a checkbox is indeterminate, a drop-down shows "(mixed)", a
+string is empty with a hint, a colour has a "mixed" note, a list shows the active object's.
+Other widgets show the active object's value. A set applies to all selected objects in one
+undo step; a vec3 component edit keeps each object's other components.
+
+Keyframe hook (097 does the feature): every animatable float/vec3 row has a 12 px marker slot
+left of its label (`key_marker`, filled = key here, hollow = animated, ANIM.md §2.5); 097
+attaches click and context menu to that slot. `AttrRow.animatable` mirrors the descriptor.
+
+Not in this brief: lock/unlock, history back/forward, the field-list widget.

@@ -23,6 +23,7 @@ pub mod timeline;
 pub mod tools;
 pub mod tree;
 pub mod viewport_panel;
+pub mod widgets;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

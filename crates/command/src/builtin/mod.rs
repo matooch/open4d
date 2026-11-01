@@ -14,6 +14,7 @@ mod file;
 mod mesh;
 mod object;
 mod param;
+pub use param::{stored as display_to_stored, value_from_json as param_value_from_json};
 mod timeline;
 mod tools;
 

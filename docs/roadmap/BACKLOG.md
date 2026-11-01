@@ -147,7 +147,7 @@ implementers can avoid collisions.
 | 147 | [Familiar default layout: command bar, tool palette, manager arrangement](../agents/tasks/147-default-layout.md) | L | 011 | done (parity-pending G1) | ui |
 | 148 | [Icon set and icon atlas](../agents/tasks/148-icon-set.md) | L | 147 | ready | ui |
 | 149 | [Object manager parity: columns, dots, tags, drag/drop, search, context menus](../agents/tasks/149-object-manager.md) | L | 147 | ready | ui |
-| 150 | [Attribute manager parity: tabs, widgets, multi-edit, keyframe dots, history](../agents/tasks/150-attribute-manager.md) | L | 147 | ready | ui |
+| 150 | [Attribute manager parity: tabs, widgets, multi-edit, keyframe dots, history](../agents/tasks/150-attribute-manager.md) | L | 147 | done (parity-pending G4) | ui |
 | 151 | [Coordinates manager modes](../agents/tasks/151-coordinates-manager.md) | L | 150 | ready | ui |
 | 152 | [Key map: defaults, customisation editor](../agents/tasks/152-key-map.md) | L | 011 | ready | ui |
 | 153 | [Viewport navigation parity (keys, mouse, frame commands, views)](../agents/tasks/153-viewport-navigation.md) | L | 152 | ready | viewport, ui |

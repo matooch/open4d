@@ -2,7 +2,7 @@
 
 # Command reference
 
-65 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+66 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -71,6 +71,7 @@
 | [`file.save_as`](#filesave_as) | Save As | no | `file_save_as` |
 | [`file.import_obj`](#fileimport_obj) | Import OBJ | yes | `file_import_obj` |
 | [`file.export_obj`](#fileexport_obj) | Export OBJ | no | `file_export_obj` |
+| [`param.edit`](#paramedit) | Edit Parameter | yes | `param_edit` |
 
 ## `object`
 
@@ -651,6 +652,20 @@ Set Parameter. One undo step.
 | `value` | any | yes | Bool, number, `[x, y, z]`, string, node id or null, or an array of indices. Angles are degrees and percentages are as shown (50 is 50 %). |
 
 Example: `forge cmd scene.forge param.set --args '{"node":1,"param":"size","value":2.5}'`
+
+### `param.edit`
+
+Edit Parameter. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `param` | string | yes | Parameter id. |
+| `value` | any | yes | As for `param.set` (degrees, percent as shown). With `component`, one number. |
+| `component` | integer or null | no | Vec3 parameters only: set just this component (0, 1, 2) and keep the others of each object. |
+| `gesture` | integer or null | no | Edits with the same gesture number merge into one undo step (a scrub or colour drag). |
+| `nodes` | array of integer or null | no | Objects to edit; absent means the current selection. Objects whose type lacks the parameter (or has it with another kind) are skipped. |
+
+Example: `forge cmd scene.forge param.edit --args '{"gesture":1,"nodes":[1],"param":"size","value":2.5}'`
 
 
 ## `key`

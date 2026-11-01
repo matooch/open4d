@@ -50,7 +50,7 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
 }
 
 /// Display units (degrees, percent) to stored units (radians, fractions).
-pub(super) fn stored(unit: Unit, v: f64) -> f64 {
+pub fn stored(unit: Unit, v: f64) -> f64 {
     match unit {
         Unit::Angle => v.to_radians(),
         Unit::Percent => v / 100.0,
@@ -74,7 +74,7 @@ fn triple(v: &Value) -> Result<[f64; 3], CommandError> {
 }
 
 /// Converts JSON by the parameter kind (docs/specs/COMMANDS.md §6, `param.set`).
-fn value_from_json(desc: &ParamDesc, v: &Value) -> Result<Param, CommandError> {
+pub fn value_from_json(desc: &ParamDesc, v: &Value) -> Result<Param, CommandError> {
     let unit = desc.ui.unit;
     let wrong = |what: &str| CommandError::InvalidArgs(format!("{}: expected {what}", desc.id));
     Ok(match &desc.kind {
