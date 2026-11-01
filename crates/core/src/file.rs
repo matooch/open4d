@@ -269,8 +269,11 @@ pub fn save_with(scene: &Scene, opts: &SaveOptions) -> Vec<u8> {
         settings: scene.settings(),
         roots,
     };
-    let text = ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default())
-        .expect("scene data always serializes");
+    let text = ron::ser::to_string_pretty(
+        &file,
+        ron::ser::PrettyConfig::default().new_line("\n".to_string()),
+    )
+    .expect("scene data always serializes");
     let mut out = text.into_bytes();
     if !w.chunks.is_empty() {
         out.extend_from_slice(MARKER);
