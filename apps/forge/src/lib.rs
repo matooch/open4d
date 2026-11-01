@@ -10,10 +10,11 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
+use forge_app::query::node_json;
 use forge_app::{App, AppError};
-use forge_core::Unit;
-use forge_core::{NodeId, Scene, Value};
+use forge_core::{NodeId, Scene};
 use forge_generators::is_consumed;
+use forge_rpc::{Client, RpcSettings};
 use serde_json::{Map, json};
 
 type Json = serde_json::Value;
@@ -90,11 +91,18 @@ enum Sub {
         #[arg(long)]
         scene: Option<String>,
     },
-    /// Call a running editor (not available yet).
+    /// Call a method of a running editor over JSON-RPC (docs/specs/RPC.md).
     Rpc {
         method: String,
+        /// JSON object with the method parameters.
         #[arg(long)]
         params: Option<String>,
+        /// Editor port (default: FORGE_RPC_PORT, the settings file, then 7323).
+        #[arg(long)]
+        port: Option<u16>,
+        /// Token (default: FORGE_RPC_TOKEN or the settings file). Visible in `ps`.
+        #[arg(long)]
+        token: Option<String>,
     },
     /// Render an image (not available yet).
     Render,
@@ -238,13 +246,41 @@ fn execute(command: Sub) -> Outcome {
         } => cmd(&scene, &command, &args, save),
         Sub::Commands => commands(),
         Sub::Run { .. } => Err(stub("run", "brief 016")),
-        Sub::Rpc { .. } => Err(stub("rpc", "brief 014")),
+        Sub::Rpc {
+            method,
+            params,
+            port,
+            token,
+        } => rpc(&method, params.as_deref(), port, token),
         Sub::Render => Err(stub("render", "area K")),
     }
 }
 
 fn stub(name: &str, when: &str) -> Fail {
     user(format!("{name} is not available yet ({when})"))
+}
+
+fn rpc(method: &str, params: Option<&str>, port: Option<u16>, token: Option<String>) -> Outcome {
+    let params: Json = match params {
+        Some(text) => serde_json::from_str(text)
+            .map_err(|e| user(format!("--params is not valid JSON: {e}")))?,
+        None => json!({}),
+    };
+    let settings = RpcSettings::from_environment();
+    let port = port.unwrap_or(settings.port);
+    let token = token.or(settings.token);
+    let mut client = Client::connect(port, token.as_deref()).map_err(|e| {
+        user(format!(
+            "cannot connect to the editor on port {port}: {e} (is it running with RPC enabled?)"
+        ))
+    })?;
+    let result = client
+        .call(method, params)
+        .map_err(|e| user(e.to_string()))?;
+    Ok(Out {
+        text: serde_json::to_string_pretty(&result).unwrap_or_default(),
+        json: json!({"method": method, "result": result}),
+    })
 }
 
 /// Loads a scene file; load warnings go to stderr.
@@ -275,65 +311,6 @@ fn new(path: &str, force: bool) -> Outcome {
         json: json!({"path": path}),
         text: format!("created {path}"),
     })
-}
-
-/// A stored value in the units the commands use (degrees, percent).
-fn display_value(value: &Value, unit: Unit) -> Json {
-    let scale = |v: f64| match unit {
-        Unit::Angle => v.to_degrees(),
-        Unit::Percent => v * 100.0,
-        _ => v,
-    };
-    match value {
-        Value::Bool(b) => json!(b),
-        Value::Int(i) => json!(i),
-        Value::Float(f) => json!(scale(*f)),
-        Value::Vec3(v) => json!(v.map(scale)),
-        Value::Color(c) => json!(c),
-        Value::Enum(s) | Value::String(s) => json!(s),
-        Value::Link(l) => json!(l.map(|n| n.0)),
-        Value::Mesh(m) => json!({"points": m.points.len(), "polys": m.polys.len()}),
-        Value::IndexList(i) => json!(i),
-    }
-}
-
-fn node_json(scene: &Scene, id: NodeId) -> Json {
-    let Some(node) = scene.node(id) else {
-        return Json::Null;
-    };
-    let descs = scene
-        .node_type(id)
-        .map(|t| t.params.as_slice())
-        .unwrap_or(&[]);
-    let mut params = Map::new();
-    for (name, value) in &node.params {
-        let unit = descs
-            .iter()
-            .find(|d| &d.id == name)
-            .map(|d| d.ui.unit)
-            .unwrap_or_default();
-        params.insert(name.clone(), display_value(value, unit));
-    }
-    let mut out = Map::new();
-    out.insert("id".into(), json!(id.0));
-    out.insert("type".into(), json!(node.type_id));
-    out.insert("name".into(), json!(node.name));
-    out.insert("params".into(), Json::Object(params));
-    if !node.tags.is_empty() {
-        let tags: Vec<Json> = node.tags.iter().map(|t| node_json(scene, *t)).collect();
-        out.insert("tags".into(), json!(tags));
-    }
-    if !node.tracks.is_empty() {
-        out.insert(
-            "animated".into(),
-            json!(node.tracks.keys().collect::<Vec<_>>()),
-        );
-    }
-    if !node.is_tag() {
-        let children: Vec<Json> = node.children.iter().map(|c| node_json(scene, *c)).collect();
-        out.insert("children".into(), json!(children));
-    }
-    Json::Object(out)
 }
 
 fn tree_text(scene: &Scene, id: NodeId, depth: usize, out: &mut String) {

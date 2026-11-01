@@ -61,6 +61,9 @@ rows. It dereferences to `App`, so `state.doc`, `state.selection`, `state.timeli
 the rest keep working. Its `CommandContext` forwards to `App`, and adds the view hooks.
 `File > New` resets the `App` (keeping the command set) and the view state except the dock.
 
+`forge_app::query` (`node_json`, `display_value`) holds the JSON view of nodes shared by
+`forge info` (CLI.md) and the RPC methods `scene.get` / `node.get` (RPC.md §4).
+
 ## 4. Tests (`crates/app/tests/app.rs`)
 
 - Open a saved scene file and read it back.

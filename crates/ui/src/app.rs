@@ -118,6 +118,8 @@ pub struct Editor {
     /// save or load, and the last window title sent.
     dialogs: Box<dyn Dialogs>,
     sent_title: String,
+    /// Requests from the RPC server, run between frames (docs/specs/RPC.md §5).
+    rpc: Option<forge_rpc::Inbox>,
 }
 
 impl eframe::App for Editor {
@@ -145,7 +147,13 @@ impl Editor {
             rect_drag: None,
             dialogs: Box::new(NativeDialogs),
             sent_title: String::new(),
+            rpc: None,
         }
+    }
+
+    /// Serves the RPC server's queued requests from now on, one batch per frame.
+    pub fn attach_rpc(&mut self, inbox: forge_rpc::Inbox) {
+        self.rpc = Some(inbox);
     }
 
     /// Runs a command; an error goes to the status bar. True if it succeeded.
@@ -181,6 +189,13 @@ impl Editor {
 
     /// Draws the whole editor. `rs` is `None` without a GPU (tests).
     pub fn show(&mut self, ui: &mut Ui, rs: Option<&egui_wgpu::RenderState>) {
+        // RPC jobs run here, before anything is drawn: one command is one undo step.
+        if let Some(inbox) = self.rpc.take() {
+            if inbox.drain(&mut self.state) > 0 {
+                ui.ctx().request_repaint();
+            }
+            self.rpc = Some(inbox);
+        }
         self.update_playback(ui.ctx());
         self.shortcuts(ui.ctx());
         let title = self.window_title();

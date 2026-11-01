@@ -18,7 +18,7 @@ GPU. The code lives in a library (`forge_cli::run`) so the editor binary can for
   the message on stderr. Every success object has `"ok": true`.
 - Node ids are integers. Angles are degrees, percent as shown (COMMANDS.md §4).
 - Exit codes: `0` ok; `1` user error (bad arguments, unknown command id or node, a command
-  that refuses, unwritable output, a stub subcommand); `2` the scene file cannot be read
+  that refuses, unwritable output, a stub subcommand, a failed `rpc` call); `2` the scene file cannot be read
   or loaded; `3` internal error (a bug or panic).
 - Frames are integers, clamped to the scene's range (APP.md §2).
 
@@ -74,8 +74,16 @@ an optional `nodes` list must be given it explicitly.
 Lists the registry. Text: `id  label` per line. JSON:
 `{"ok": true, "commands": [{"id", "label", "undoable", "args_schema": {..}}]}`.
 
-### `forge run <script.rhai> [--scene s]`, `forge rpc <method> [--params JSON]`, `forge render`
-Stubs. They print `<name> is not available yet (brief 016 / 014 / area K)` and exit 1.
+### `forge rpc <method> [--params JSON] [--port N] [--token T]`
+Calls a method of a running editor over JSON-RPC (RPC.md; methods in RPC.md §4).
+`--params` is a JSON object (default `{}`). Port and token default to `FORGE_RPC_PORT` /
+`FORGE_RPC_TOKEN`, then the settings file, then 7323 / none. JSON:
+`{"ok": true, "method": "...", "result": <value>}`; text output is the result pretty
+printed. No editor listening, a wrong token, an unknown method or a failing call is exit 1
+with the message.
+
+### `forge run <script.rhai> [--scene s]`, `forge render`
+Stubs. They print `<name> is not available yet (brief 016 / area K)` and exit 1.
 
 ## 3. Editor forwarding
 
@@ -93,3 +101,7 @@ and exits with its code. Without `--headless` the editor starts.
 - Exit codes: unknown command id and bad args exit 1, missing scene exits 2, stubs exit 1;
   `cmd` without `--save` leaves the file unchanged; JSON errors carry the code.
 - `file.export_obj` of an animated scene writes the evaluated frame (`crates/app/tests`).
+- `forge rpc` against an in-process server (port 0): version, `command.run`, `eval.mesh`,
+  `--port/--token`, wrong token, unknown method, bad `--params`, no editor (exit 1).
+- A closed stdout pipe (`forge --json commands | head -c 300`) is exit 0 without a panic:
+  output goes through a locked stdout handle and `BrokenPipe` is a quiet success.

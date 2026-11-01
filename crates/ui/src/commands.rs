@@ -15,6 +15,19 @@ pub fn execute(s: &mut EditorState, id: &str, args: Value) -> Result<Value, Stri
     registry.run(s, id, args).map_err(|e| e.to_string())
 }
 
+/// RPC requests run with the editor's own context, so view commands act on the window
+/// (docs/specs/RPC.md §5).
+impl forge_rpc::Host for EditorState {
+    fn app(&self) -> &forge_app::App {
+        &self.app
+    }
+
+    fn run_command(&mut self, id: &str, args: Value) -> Result<Value, forge_command::CommandError> {
+        let registry = self.app.commands.clone();
+        registry.run(self, id, args)
+    }
+}
+
 /// The viewport shading for a command argument.
 pub fn shading_of(m: ShadingMode) -> Shading {
     match m {

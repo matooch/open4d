@@ -1250,6 +1250,7 @@ dependencies = [
  "forge-core",
  "forge-generators",
  "forge-parity-harness",
+ "forge-rpc",
  "serde_json",
 ]
 
@@ -1366,11 +1367,23 @@ name = "forge-render-gpu"
 version = "0.1.0"
 
 [[package]]
+name = "forge-rpc"
+version = "0.1.0"
+dependencies = [
+ "forge-app",
+ "forge-command",
+ "forge-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "forge-studio"
 version = "0.1.0"
 dependencies = [
  "forge-app",
  "forge-cli",
+ "forge-rpc",
  "forge-ui",
 ]
 
@@ -1389,6 +1402,7 @@ dependencies = [
  "forge-geometry",
  "forge-io",
  "forge-modifiers",
+ "forge-rpc",
  "forge-viewport",
  "glam",
  "png",

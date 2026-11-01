@@ -191,11 +191,7 @@ fn exit_codes() {
         forge().arg("bogus").output().unwrap().status.code(),
         Some(1)
     );
-    for stub in [
-        vec!["run", "x.rhai"],
-        vec!["rpc", "scene.get"],
-        vec!["render"],
-    ] {
+    for stub in [vec!["run", "x.rhai"], vec!["render"]] {
         assert_eq!(json_run(&stub).0, 1, "{stub:?}");
     }
     // 2: scene cannot be loaded
@@ -237,4 +233,120 @@ fn closed_stdout_pipe_is_a_quiet_success() {
         assert!(!stderr.contains("panicked"), "{stderr}");
         assert_eq!(out.status.code(), Some(0), "{stderr}");
     }
+}
+
+/// `forge rpc` against a server started in this process (port 0, token in the environment).
+#[test]
+fn rpc_calls_a_running_server() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let (mut server, inbox) = forge_rpc::Server::start(forge_rpc::ServerConfig {
+        port: 0,
+        token: Some("cli-token".into()),
+        insecure_local: false,
+    })
+    .unwrap();
+    let port = server.port().to_string();
+    let stop = Arc::new(AtomicBool::new(false));
+    let flag = stop.clone();
+    let pump = std::thread::spawn(move || {
+        let mut app = forge_app::App::new_default();
+        inbox.run_until(&mut app, &flag);
+    });
+    let rpc = |extra: &[&str], token: Option<&str>| {
+        let mut cmd = forge();
+        cmd.env("FORGE_SETTINGS", "/nonexistent/forge-settings.json")
+            .env_remove("FORGE_RPC_TOKEN")
+            .env("FORGE_RPC_PORT", &port);
+        if let Some(t) = token {
+            cmd.env("FORGE_RPC_TOKEN", t);
+        }
+        let out = cmd.arg("--json").arg("rpc").args(extra).output().unwrap();
+        let text = String::from_utf8(out.stdout).unwrap();
+        (
+            out.status.code().unwrap(),
+            serde_json::from_str::<Value>(&text).unwrap(),
+        )
+    };
+
+    let (code, out) = rpc(&["app.version"], Some("cli-token"));
+    assert_eq!(code, 0, "{out}");
+    assert_eq!(out["method"], "app.version");
+    assert_eq!(out["result"]["name"], "forge3d");
+
+    let params = json!({"id": "object.create", "args": {"type": "forge.cube"}}).to_string();
+    let (code, out) = rpc(&["command.run", "--params", &params], Some("cli-token"));
+    assert_eq!(code, 0, "{out}");
+    let node = out["result"]["result"]["node"].as_u64().unwrap();
+    let (code, out) = rpc(
+        &["eval.mesh", "--params", &json!({"node": node}).to_string()],
+        Some("cli-token"),
+    );
+    assert_eq!(code, 0, "{out}");
+    assert_eq!(out["result"]["points"].as_array().unwrap().len(), 8);
+
+    // --port and --token flags work without the environment.
+    let out = forge()
+        .env("FORGE_SETTINGS", "/nonexistent/forge-settings.json")
+        .env_remove("FORGE_RPC_TOKEN")
+        .env_remove("FORGE_RPC_PORT")
+        .args([
+            "--json",
+            "rpc",
+            "timeline.get",
+            "--port",
+            &port,
+            "--token",
+            "cli-token",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0));
+
+    // A wrong token and an unknown method are user errors (exit 1) carrying the message.
+    let (code, out) = rpc(&["app.version"], Some("wrong"));
+    assert_eq!((code, out["ok"].clone()), (1, json!(false)));
+    assert!(
+        out["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("unauthorized")
+    );
+    let (code, out) = rpc(&["no.such"], Some("cli-token"));
+    assert_eq!(code, 1);
+    assert!(
+        out["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("unknown method")
+    );
+    let (code, _) = rpc(&["app.version", "--params", "{oops"], Some("cli-token"));
+    assert_eq!(code, 1);
+
+    stop.store(true, Ordering::SeqCst);
+    server.shutdown();
+    pump.join().unwrap();
+}
+
+#[test]
+fn rpc_without_an_editor_is_a_user_error() {
+    // A port that was just free: nothing listens on it.
+    let port = {
+        let l = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        l.local_addr().unwrap().port().to_string()
+    };
+    let out = forge()
+        .env("FORGE_SETTINGS", "/nonexistent/forge-settings.json")
+        .args(["--json", "rpc", "app.version", "--port", &port])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let body: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("cannot connect")
+    );
 }

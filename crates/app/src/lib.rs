@@ -4,6 +4,7 @@
 //! and no GPU. The editor and every automation front end build on it.
 
 pub mod animate;
+pub mod query;
 pub mod select;
 
 use std::sync::Arc;

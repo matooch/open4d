@@ -119,6 +119,11 @@ fn sample_hierarchy(state: &mut state::EditorState) {
 
 /// Opens the editor window and runs until it is closed.
 pub fn run(registry: Arc<Registry>) -> eframe::Result {
+    run_with_rpc(registry, None)
+}
+
+/// Like [`run`], serving the RPC server's requests between frames (docs/specs/RPC.md).
+pub fn run_with_rpc(registry: Arc<Registry>, rpc: Option<forge_rpc::Inbox>) -> eframe::Result {
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         viewport: egui::ViewportBuilder::default()
@@ -132,6 +137,10 @@ pub fn run(registry: Arc<Registry>) -> eframe::Result {
         Box::new(move |cc| {
             theme::Theme::default().apply(&cc.egui_ctx);
             let mut state = state::EditorState::new(registry);
+            if let Some(inbox) = &rpc {
+                let ctx = cc.egui_ctx.clone();
+                inbox.set_wake(move || ctx.request_repaint());
+            }
             let app: Box<dyn eframe::App> = match std::env::var("FORGE_SCREENSHOT") {
                 Ok(path) => {
                     sample_hierarchy(&mut state);
@@ -142,7 +151,13 @@ pub fn run(registry: Arc<Registry>) -> eframe::Result {
                         done: Arc::new(AtomicBool::new(false)),
                     })
                 }
-                Err(_) => Box::new(app::Editor::new(state)),
+                Err(_) => {
+                    let mut editor = app::Editor::new(state);
+                    if let Some(inbox) = rpc {
+                        editor.attach_rpc(inbox);
+                    }
+                    Box::new(editor)
+                }
             };
             Ok(app)
         }),
