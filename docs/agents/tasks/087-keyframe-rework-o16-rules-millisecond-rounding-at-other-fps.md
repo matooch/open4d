@@ -1,6 +1,6 @@
 # 087 · Keyframe rework: O16 rules (millisecond rounding at other fps; tangent at uneven monotone keys)
 
-Status: ready · Area: G · Depends on: – · Observations: O16 · Touches: anim
+Status: done · Area: G · Depends on: – · Observations: O16 · Touches: anim
 
 ## Goal
 The three keyframe cases O16 broke match: `fps-24`, `dense-quarter` and `mono-uneven`. Remove them from `KNOWN_MISMATCH`, and make every other keyframe case keep matching.
@@ -32,10 +32,10 @@ New tangent modes (089).
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- Result: 24/24 keyframe cases exact (max error 2.3e-13), `KNOWN_MISMATCH` empty, `UNSUPPORTED` empty. Tests added in `crates/anim/tests/rules.rs` (mean slope at a monotone key; 1 s span symmetric at 24 fps); `KNOWN_MISMATCH` emptied.
+- Rules derived: (1) slope at a monotone middle key is the mean of the two segment slopes, `mono-uneven` (5.5 from 10 and 1; fitted exactly, handle 50/9), clamp proven by `mono-steep` and `mono-steep-rev`. (2) Millisecond time rounding is right at 24/25/30 fps; the 2.7e-4 misses were exact-tie samples, decided by the stored handle lengths (multiples of 4e-7 s, read from `tangents.json`): proven by `fps-24`, `dense-quarter`, `two-keys`, `four-keys`. Parity-pending: the grid unit at spans that are not whole seconds, and the grid handles being used only for ties.
+- Deviations: `tangents.json` is not ground truth for slopes (it shows a third of the left chord at every key, also at extremes); used only for handle lengths. Three hypotheses were not needed per case (time base and solver unchanged).
+- Files: crates/anim/src/interp.rs, crates/anim/tests/{keyframes_parity,rules}.rs, docs/specs/ANIM.md, docs/parity/STATUS.md, docs/roadmap/BACKLOG.md, this brief.
+- Open: an observation at a non-whole-second span and another fps (e.g. 24 fps, 10 frames) would settle the grid unit in seconds vs frames.
+- Gate: see commit.

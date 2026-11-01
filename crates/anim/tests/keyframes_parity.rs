@@ -10,14 +10,7 @@ use forge_parity_harness::{GoldenCase, Samples, compare_samples, discover_cases}
 const UNSUPPORTED: &[&str] = &[];
 
 /// Cases we evaluate but that differ, pinned so a fix shows up.
-const KNOWN_MISMATCH: &[&str] = &[
-    // O16 (docs/parity/keyframes-3.md) broke two parity-pending rules of ANIM.md §1:
-    // the millisecond time rounding (2.7e-4 at quarter frames and at 24 fps) and the
-    // tangent at a monotone key between uneven spans. Rework brief 09b fixes them.
-    "keyframes/dense-quarter",
-    "keyframes/fps-24",
-    "keyframes/mono-uneven",
-];
+const KNOWN_MISMATCH: &[&str] = &[];
 
 fn number(v: &toml::Value) -> f64 {
     v.as_float()

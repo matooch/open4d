@@ -1,8 +1,8 @@
 # Animation — keyframe tracks and interpolation (`crates/anim`, data in `crates/core`)
 
-Sources: docs/parity/keyframes.md (O2, 9 cases) and docs/parity/keyframes-2.md (O12, 8
-cases), golden folder `tests/golden/keyframes/` (17 cases, 19 sample files, level B,
-tolerance 1e-4). Every rule below cites the case that shows it. The exact curve was
+Sources: docs/parity/keyframes.md (O2, 9 cases), docs/parity/keyframes-2.md (O12, 8
+cases) and docs/parity/keyframes-3.md (O16, 7 cases), golden folder
+`tests/golden/keyframes/` (24 cases, 26 sample files, level B, tolerance 1e-4). Every rule below cites the case that shows it. The exact curve was
 derived from those samples; nothing was read from the reference app beyond them.
 
 ## 1. Tracks and their evaluation
@@ -37,7 +37,8 @@ validate first (`EditError::Track`), are undoable, and stamp the node's revision
 ### 1.4 Evaluation time
 `value_at(track, time_seconds)`:
 1. **Time resolution** (cases `two-keys`, `long-span`, `scale-1000`, `negative`,
-   `mixed-interp`): the reference evaluates at times rounded to whole milliseconds,
+   `mixed-interp`; confirmed at 24, 25 and 30 fps by `fps-24`, `fps-25`,
+   `dense-quarter`): the reference evaluates at times rounded to whole milliseconds,
    `t = round(time · 1000) / 1000`. Frame 1 at 30 fps reads as 0.990 frames, frame 2 as
    2.010. This is a ±0.01 frame time error the samples show on every curve (up to 0.05
    in value on a 0→100 rise), so it is reproduced; it is the same for all interpolations
@@ -79,12 +80,17 @@ longer one does not fit.
 last keys have slope 0 (an ease). A middle key with `(v − v_prev)·(v_next − v) ≤ 0` (a
 local extreme or a plateau edge) has slope 0: `three-keys` peaks at exactly 100,
 `plateau` holds 100 between its equal keys, `four-keys` has a flat valley. Any other
-middle key has the central difference `m = (v_next − v_prev) / (t_next − t_prev)`
-(`three-keys-monotone`: 2.5 per frame, exact), limited so that neither handle's value
+middle key (monotone) has the **mean of the two segment slopes**
+`m = ((v − v_prev)/l + (v_next − v)/r) / 2`, limited so that neither handle's value
 offset exceeds its segment's rise: `|m|·h ≤ min(|v − v_prev|, |v_next − v|)` (no
-overshoot). The clamp and the central-difference weighting for uneven spacing at a
-monotone key are **parity-pending**: no case has a monotone middle key with uneven
-spacing, and the clamp never triggers in the data.
+overshoot). `mono-uneven` (spans 10 and 50 frames, rises 100 and 50) fits slope 5.5 per
+frame exactly with handle 50/9, which is the mean of 10 and 1; the central difference
+2.5 (brief 09) was wrong for uneven spans and is the same as the mean for equal spans
+(`three-keys-monotone`). The clamp is proven by `mono-steep` (mean 5, limit 1) and
+`mono-steep-rev`. The `tangents.json` read-back of `mono-uneven` and `many-keys` was
+**not** used as ground truth for slopes: it shows a third of the left chord at every
+key (also at extremes, whose evaluated slope is 0), so it is a display value; its
+handle lengths are used only for tie breaking below.
 
 Handle positions do not depend on the neighbours' interpolation (`mixed-interp`).
 
@@ -94,11 +100,31 @@ reference finds `s` by bisection with a fixed number of halvings and returns the
 of the final interval. With 19 halvings the value matches every sample to ≤ 3·10⁻¹⁰
 (18 or 20 halvings leave errors of 1.4·10⁻⁴ and 7·10⁻⁵). The result is a sawtooth in the
 time domain of 2⁻¹⁹ of the segment (5.7·10⁻⁵ frames for 30 frames), which is why
-`two-keys` reads 50.000143 at frame 15 instead of 50. `x(mid) < t` goes up. An exact
-tie (`|x(mid) − t| ≤ 10⁻¹² · span`) goes up when `mid ≥ 0.5` and down otherwise, which
-reproduces `two-keys` frame 15 and `four-keys` frames 15 (up) and 45 (down); read-back
-handle lengths a hair above a third explain this (**parity-pending**: three tie
-samples).
+`two-keys` reads 50.000143 at frame 15 instead of 50. `x(mid) < t` goes up.
+
+**Ties** (O16: `fps-24`, `dense-quarter`, `four-keys`, `two-keys`). When `x(mid) = t`
+exactly (`|x(mid) − t| ≤ 10⁻¹² · span`; at 24 fps frames 3, 6, 9, 15, 18, 21 are
+whole-millisecond times at dyadic fractions of the 1 s span) the direction is set by
+the stored handle lengths, not by the curve position. The read-back `tangents.json`
+shows handle times that are whole multiples of 4·10⁻⁷ s, a hair off a third (9.999996
+of 30 frames, 6.666672 of 20, 2.333328 of 7, 2.000004 of 6, 5.333328 of 16, 3.999996 of
+12, 6.333336 of 19: all equal `round(third / 4e-7 s) · 4e-7 s`). With handle error `d`
+(grid handle = third − `d`), `x(s) = span·s − 3·d·s(1−s)(1−2s)`, so a shorter handle
+(`d > 0`) puts the tie below `t` for `s < ½` (go up) and above it for `s > ½` (go
+down); a longer one does the opposite. 1 s spans have shorter handles (fps-24 ties:
+s 0.125, 0.25, 0.375 up; 0.625, 0.75, 0.875 down; `two-keys`), a 20-frame span a longer
+one (`four-keys` frame 15, s 0.75, up; frame 45, s 0.25, down). The rule: decide a tie
+with `x` built from the grid handles; if that is a tie too (the centre of a symmetric
+curve) go up. The grid handles are used **only** for this decision: sampling `y` and
+non-tie decisions use exact thirds (using the grid everywhere leaves errors of 4·10⁻⁶
+in `three-keys-monotone`, while exact thirds match to 10⁻¹⁴). This replaces brief 09's
+`mid ≥ 0.5` tie rule. **Parity-pending**: the grid unit is inferred in seconds (all
+O16 spans are whole seconds at 24 and 30 fps), so a non-whole-second span at another
+fps might differ.
+
+**Time rounding** stays at whole milliseconds at every fps: `fps-25` and `fps-24`
+match with it once ties follow the handles (the 2.7·10⁻⁴ misses of brief 09 were all
+tie samples, not time-rounding errors; `dense-quarter`, `fps-24`).
 
 ### 1.6 Animated scenes (`forge-anim::scene_at`)
 `scene_at(&Scene, time) -> Scene` copies the scene and sets every tracked parameter to

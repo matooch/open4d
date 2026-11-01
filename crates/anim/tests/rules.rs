@@ -271,3 +271,26 @@ fn scene_at_combines_components_and_a_float_param() {
         Some(&Value::Vec3([0.0, 0.0, -5.0]))
     );
 }
+
+/// ANIM.md §1.5: the slope at a monotone middle key is the mean of the two segment
+/// slopes (`mono-uneven`: spans 10 and 50, slopes 10 and 1, so 5.5 and not the central
+/// difference 2.5); sampled next to the key the curve rises at that slope.
+#[test]
+fn monotone_middle_key_slope_is_the_mean_of_segment_slopes() {
+    let t = track(&[(0.0, 0.0), (10.0, 100.0), (60.0, 150.0)]);
+    let eps = 0.01;
+    let rise = (at(&t, 10.0 + eps) - at(&t, 10.0 - eps)) / (2.0 * eps);
+    assert!((rise - 5.5).abs() < 0.05, "slope {rise}");
+}
+
+/// ANIM.md §1.5: the same curve is symmetric in time at a whole-second span at any fps
+/// up to the 19-step sawtooth (`fps-24`, `dense-quarter`, `two-keys`).
+#[test]
+fn one_second_span_gives_the_same_curve_at_24_and_30_fps() {
+    let a = Track::new(vec![Key::new(0.0, 0.0), Key::new(1.0, 100.0)]);
+    for k in 1..24 {
+        let t = f64::from(k) / 24.0;
+        let v = value_at(&a, t);
+        assert!((v + value_at(&a, 1.0 - t) - 100.0).abs() < 1e-3);
+    }
+}
