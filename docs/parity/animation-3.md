@@ -18,6 +18,8 @@ Unblocks: G/088, 096.
 | pla | a cube made editable, point 0 moved by (0, 100, 0) and keyed with point-level animation at frame 30 (keyed at frame 0 at rest) | `mesh.obj` at frame 15 |
 | euler-cross | a cube's rotation H keyed 170° at 0 and −170° at 30 | `rot_h`: does it go the long way (−340°) or the short way? |
 | quaternion | the same, with the track's interpolation set to quaternion (if the option exists) | rot_h, rot_p, rot_b |
+| tie-span-24 | follow-up from brief 087: document fps 24; a cube's position X keyed 0 at frame 0 and 100 at frame 10 (auto tangents), sampled at every frame 0–10 | `pos_x`; settles whether the handle-time grid is in seconds or frames |
+| tie-span-30 | the same at fps 30, keys at frames 0 and 7 | `pos_x` |
 | generator-param | a Bend's strength keyed 0 at 0 and 90 at 30, on the O9 cube | `mesh.obj` at frame 15 |
 
 ## Notes
