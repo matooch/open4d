@@ -615,3 +615,17 @@ fn bad_argument_types_are_runtime_errors() {
     let e = fail(&mut app, "vec3(1, 2, \"z\")");
     assert_eq!(e.kind, FailureKind::Runtime);
 }
+
+#[test]
+fn modeling_tools_are_commands_for_scripts() {
+    // docs/specs/MODELING.md §0.1: the same command a tool's Apply button runs
+    let mut app = App::new_default();
+    let src = r#"
+        run("object.create", #{ type: "forge.cube" });
+        run("mesh.make_editable");
+        let r = run("mesh.extrude", #{ polys: [4], settings: #{ offset: 50.0, subdivision: 2 } });
+        [r.points, r.polys]
+    "#;
+    let report = ok(&mut app, src);
+    assert_eq!(report.value, json!([20, 18]));
+}

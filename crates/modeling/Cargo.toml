@@ -1,0 +1,20 @@
+[package]
+name = "forge-modeling"
+version.workspace = true
+edition.workspace = true
+description = "Modeling tools as pure functions on polygon meshes: Extrude, Extrude Inner (docs/specs/MODELING.md)."
+
+[dependencies]
+forge-core = { path = "../core" }
+forge-geometry = { path = "../geometry" }
+glam = "0.34"
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+forge-generators = { path = "../generators" }
+forge-parity-harness = { path = "../parity-harness" }
+toml = "1"
+
+[lints]
+workspace = true

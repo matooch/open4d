@@ -17,6 +17,7 @@ pub mod script_panel;
 pub mod state;
 pub mod theme;
 pub mod timeline;
+pub mod tools;
 pub mod tree;
 pub mod viewport_panel;
 

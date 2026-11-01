@@ -12,11 +12,13 @@ mod mesh;
 mod object;
 mod param;
 mod timeline;
+mod tools;
 
 /// Registers every built-in command, in a fixed order.
 pub fn register_editor_commands(r: &mut CommandRegistry) -> Result<(), CommandError> {
     object::register(r)?;
     mesh::register(r)?;
+    tools::register(r)?;
     param::register(r)?;
     timeline::register(r)?;
     file::register(r)?;

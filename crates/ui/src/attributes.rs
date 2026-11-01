@@ -54,7 +54,7 @@ pub struct AttributeView {
 
 const DEFAULT_GROUP: &str = "Parameters";
 
-fn widget(kind: &ParamKind, unit: Unit) -> Widget {
+pub(crate) fn widget(kind: &ParamKind, unit: Unit) -> Widget {
     match kind {
         ParamKind::Bool => Widget::Checkbox,
         ParamKind::Int { min, max } => Widget::IntDrag {
@@ -203,4 +203,24 @@ pub fn apply_edit_anim(
         Gesture::Commit => doc.transact(&label, edit),
         Gesture::Drag(n) => doc.transact_merged(&label, &format!("drag:{id}:{param}:{n}"), edit),
     }
+}
+
+/// Attribute rows for a tool's settings, valued from `values` (docs/specs/MODELING.md §0.2).
+pub fn tool_rows(
+    params: Vec<forge_core::ParamDesc>,
+    values: &forge_modeling::Settings,
+) -> Vec<AttrRow> {
+    params
+        .into_iter()
+        .filter(|d| !d.ui.hidden)
+        .map(|d| AttrRow {
+            value: values
+                .get(&d.id)
+                .cloned()
+                .unwrap_or_else(|| d.default.clone()),
+            widget: widget(&d.kind, d.ui.unit),
+            param: d.id,
+            label: d.label,
+        })
+        .collect()
 }

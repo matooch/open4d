@@ -2,7 +2,7 @@
 
 # Command reference
 
-35 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+37 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -24,6 +24,8 @@
 | [`transform.set`](#transformset) | Set Transform | yes | `transform_set` |
 | [`mesh.make_editable`](#meshmake_editable) | Make Editable | yes | `mesh_make_editable` |
 | [`mesh.current_state_to_object`](#meshcurrent_state_to_object) | Current State to Object | yes | `mesh_current_state_to_object` |
+| [`mesh.extrude`](#meshextrude) | Extrude | yes | `mesh_extrude` |
+| [`mesh.extrude_inner`](#meshextrude_inner) | Extrude Inner | yes | `mesh_extrude_inner` |
 | [`param.set`](#paramset) | Set Parameter | yes | `param_set` |
 | [`key.record`](#keyrecord) | Record | yes | `key_record` |
 | [`key.delete_at_frame`](#keydelete_at_frame) | Delete Keys | yes | `key_delete_at_frame` |
@@ -227,6 +229,30 @@ Current State to Object. One undo step.
 | `nodes` | array of integer or null | no | Node ids; the current selection when absent. |
 
 Example: `forge cmd scene.forge mesh.current_state_to_object --args '{}'`
+
+### `mesh.extrude`
+
+Extrude. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.extrude --args '{"polys":[0],"settings":{"offset":10.0}}'`
+
+### `mesh.extrude_inner`
+
+Extrude Inner. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.extrude_inner --args '{"polys":[0],"settings":{"offset":10.0}}'`
 
 
 ## `param`

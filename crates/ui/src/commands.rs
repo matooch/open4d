@@ -118,6 +118,7 @@ impl CommandContext for EditorState {
     fn reset_document(&mut self, doc: Document, path: Option<String>, full: bool) {
         self.app.reset(doc, path, full);
         self.expanded.clear();
+        self.tool = None;
         if full {
             // File > New: everything but the dock layout starts over.
             self.camera = EditorState::default_camera();

@@ -77,6 +77,8 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `transform_set` | Set Transform. Undoable editing command. Runs command `transform.set`. |
 | `mesh_make_editable` | Make Editable. Undoable editing command. Runs command `mesh.make_editable`. |
 | `mesh_current_state_to_object` | Current State to Object. Undoable editing command. Runs command `mesh.current_state_to_object`. |
+| `mesh_extrude` | Extrude. Undoable editing command. Runs command `mesh.extrude`. |
+| `mesh_extrude_inner` | Extrude Inner. Undoable editing command. Runs command `mesh.extrude_inner`. |
 | `param_set` | Set Parameter. Undoable editing command. Runs command `param.set`. |
 | `key_record` | Record. Undoable editing command. Runs command `key.record`. |
 | `key_delete_at_frame` | Delete Keys. Undoable editing command. Runs command `key.delete_at_frame`. |

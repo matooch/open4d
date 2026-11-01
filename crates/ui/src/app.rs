@@ -114,6 +114,8 @@ pub struct Editor {
     component_drag: Option<(Drag, ComponentDrag, u64)>,
     /// The rectangle select in progress, `[x0, y0, x1, y1]` in render pixels.
     rect_drag: Option<[f64; 4]>,
+    /// The interactive drag of the active modeling tool (docs/specs/MODELING.md §0.2).
+    tool_drag: Option<crate::tools::ToolDrag>,
     /// File menu (docs/specs/IO.md §2): dialogs, current file, revision at the last
     /// save or load, and the last window title sent.
     dialogs: Box<dyn Dialogs>,
@@ -145,6 +147,7 @@ impl Editor {
             gizmo_drag: None,
             component_drag: None,
             rect_drag: None,
+            tool_drag: None,
             dialogs: Box::new(NativeDialogs),
             sent_title: String::new(),
             rpc: None,
@@ -445,6 +448,14 @@ impl Editor {
                     ui.close();
                 }
             });
+            ui.menu_button("Mesh", |ui| {
+                for tool in crate::tools::tools() {
+                    if ui.button(tool.label()).clicked() {
+                        crate::tools::activate_tool(&mut self.state, tool.id());
+                        ui.close();
+                    }
+                }
+            });
             ui.menu_button("Create", |ui| {
                 for (cat, items) in create_menu(self.state.doc.scene().registry()) {
                     ui.menu_button(category_label(cat), |ui| {
@@ -670,6 +681,8 @@ impl Editor {
         }
         let gizmo = self.current_gizmo();
         let shown = self.state.evaluated();
+        // a live tool preview replaces the target's mesh in the drawn scene only
+        let shown = crate::tools::with_preview(&self.state, &shown).unwrap_or(shown);
         let tex = self.viewport.render(
             rs,
             size,
@@ -780,6 +793,25 @@ impl Editor {
             return;
         };
         let (x, y) = to_pixels(pos);
+        if self.state.tool.is_some() && crate::tools::tool_target(&self.state).is_some() {
+            // an active tool takes the primary drag: vertical distance sets the offset
+            if response.drag_started_by(egui::PointerButton::Primary) {
+                self.tool_drag = crate::tools::ToolDrag::begin(&self.state, y, h);
+            }
+            if let Some(drag) = self.tool_drag {
+                if response.dragged_by(egui::PointerButton::Primary) {
+                    drag.update(&mut self.state, y);
+                }
+                if response.drag_stopped() {
+                    self.tool_drag = None;
+                    self.state.status.clear();
+                    if let Err(e) = drag.finish(&mut self.state) {
+                        self.state.status = e;
+                    }
+                }
+                return;
+            }
+        }
         let cam = self.state.camera;
         let snap_step = |mode: GizmoMode| {
             modifiers.command.then_some(match mode {
@@ -1080,7 +1112,102 @@ impl Editor {
         }
     }
 
+    /// The active modeling tool: its settings, Reset Values, Apply (MODELING.md §0.2).
+    fn tool_ui(&mut self, ui: &mut Ui) {
+        let Some(ts) = &self.state.tool else {
+            return;
+        };
+        let label = ts.tool().label();
+        let rows = crate::attributes::tool_rows(ts.tool().settings(), ts.values());
+        ui.heading(label);
+        let (mut reset, mut apply, mut done) = (false, false, false);
+        ui.horizontal(|ui| {
+            reset = ui.button("Reset Values").clicked();
+            apply = ui.button("Apply").clicked();
+            done = ui.button("Done").clicked();
+        });
+        let mut edits: Vec<(String, Value)> = Vec::new();
+        egui::ScrollArea::vertical()
+            .id_salt("tool_scroll")
+            .max_height(240.0)
+            .show(ui, |ui| {
+                egui::Grid::new("tool_settings")
+                    .num_columns(2)
+                    .spacing([12.0, 4.0])
+                    .show(ui, |ui| {
+                        for row in &rows {
+                            match (&row.widget, &row.value) {
+                                (Widget::Checkbox, Value::Bool(b)) => {
+                                    ui.label("");
+                                    let mut on = *b;
+                                    if ui.checkbox(&mut on, &row.label).changed() {
+                                        edits.push((row.param.clone(), Value::Bool(on)));
+                                    }
+                                }
+                                (Widget::IntDrag { min, max }, Value::Int(v)) => {
+                                    let name = ui.label(&row.label);
+                                    let mut x = *v;
+                                    if ui
+                                        .add(egui::DragValue::new(&mut x).range(*min..=*max))
+                                        .labelled_by(name.id)
+                                        .changed()
+                                    {
+                                        edits.push((row.param.clone(), Value::Int(x)));
+                                    }
+                                }
+                                (Widget::FloatDrag { .. }, Value::Float(v)) => {
+                                    let name = ui.label(&row.label);
+                                    let mut x = *v;
+                                    if ui
+                                        .add(egui::DragValue::new(&mut x).speed(0.1))
+                                        .labelled_by(name.id)
+                                        .changed()
+                                    {
+                                        edits.push((row.param.clone(), Value::Float(x)));
+                                    }
+                                }
+                                _ => continue,
+                            }
+                            ui.end_row();
+                        }
+                    });
+            });
+        let mut error = None;
+        if let Some(ts) = self.state.tool.as_mut() {
+            for (id, v) in edits {
+                if let Err(e) = ts.set(&id, v) {
+                    error = Some(e);
+                }
+            }
+            if reset {
+                ts.reset();
+            }
+        }
+        if let Some(e) = error {
+            self.state.status = e;
+        }
+        if apply {
+            self.run_tool();
+        }
+        if done {
+            crate::tools::deactivate_tool(&mut self.state);
+            self.tool_drag = None;
+        }
+        ui.separator();
+    }
+
+    /// Applies the active tool through its command; an error goes to the status bar.
+    fn run_tool(&mut self) {
+        self.state.status.clear();
+        if let Err(e) = crate::tools::apply_tool(&mut self.state) {
+            self.state.status = e;
+        }
+    }
+
     fn attributes_ui(&mut self, ui: &mut Ui) {
+        if self.state.tool.is_some() {
+            self.tool_ui(ui);
+        }
         let Some(id) = self.state.selection.active else {
             ui.weak("Nothing selected");
             return;

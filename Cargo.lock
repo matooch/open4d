@@ -1310,7 +1310,9 @@ version = "0.1.0"
 dependencies = [
  "forge-core",
  "forge-generators",
+ "forge-geometry",
  "forge-io",
+ "forge-modeling",
  "forge-modifiers",
  "schemars",
  "serde",
@@ -1378,6 +1380,20 @@ dependencies = [
  "forge-command",
  "forge-rpc",
  "serde_json",
+]
+
+[[package]]
+name = "forge-modeling"
+version = "0.1.0"
+dependencies = [
+ "forge-core",
+ "forge-generators",
+ "forge-geometry",
+ "forge-parity-harness",
+ "glam",
+ "serde_json",
+ "thiserror 2.0.21",
+ "toml",
 ]
 
 [[package]]
@@ -1468,6 +1484,7 @@ dependencies = [
  "forge-generators",
  "forge-geometry",
  "forge-io",
+ "forge-modeling",
  "forge-modifiers",
  "forge-rpc",
  "forge-script",

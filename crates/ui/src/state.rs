@@ -12,6 +12,7 @@ use forge_viewport::render::Shading;
 use crate::dock::Dock;
 use crate::screenshot::OffscreenGpu;
 use crate::script_panel::ScriptPanelState;
+use crate::tools::ToolState;
 
 pub use forge_command::NodeSelection;
 
@@ -27,6 +28,8 @@ pub struct EditorState {
     pub script: ScriptPanelState,
     /// The headless GPU device `viewport.screenshot` renders with (RPC.md §10.2).
     pub offscreen: OffscreenGpu,
+    /// The active modeling tool and its values (docs/specs/MODELING.md §0.2).
+    pub tool: Option<ToolState>,
 }
 
 impl Deref for EditorState {
@@ -65,6 +68,7 @@ impl EditorState {
             shading: Shading::SmoothWire,
             script: ScriptPanelState::default(),
             offscreen: OffscreenGpu::default(),
+            tool: None,
         }
     }
 }

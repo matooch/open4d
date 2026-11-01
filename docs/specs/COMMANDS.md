@@ -106,6 +106,7 @@ touch history.
 | `view.toggle_expanded` | `node` | null | no |
 | `mesh.make_editable` | `nodes?` | `{made, skipped}` | yes |
 | `mesh.current_state_to_object` | `nodes?` | `{made, skipped}` | yes |
+| `mesh.extrude` `mesh.extrude_inner` | `node?`, `polys?`, `settings?` (MODELING.md §0.1) | `{node, points, polys, selected}` | yes |
 | `select.mode` | `mode` model, points, edges, polys | null | no |
 | `select.all` `select.none` `select.invert` `select.grow` `select.shrink` | - | null | yes |
 | `file.new` | - | null | no |
