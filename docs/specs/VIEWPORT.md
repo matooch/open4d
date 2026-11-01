@@ -162,3 +162,31 @@ Drags: `Drag::begin(gizmo, handle, cam, x, y, w, h) -> Option<Drag>`, then
 - GPU tests run when an adapter exists; if none, they print a skip notice unless
   `FORGE_REQUIRE_GPU=1` is set, in which case they fail. CI installs a software
   Vulkan driver (lavapipe) and sets it.
+
+## 7. Navigation (`nav`; brief 153)
+
+Pure functions from a `Camera` to a new `Camera` (no GPU, no egui). Sources: own design from
+docs/roadmap/areas/L-ui.md; GUI session G2 §2 (docs/parity/GUI-SESSIONS.md) is unanswered, so
+**every direction, speed, margin and view orientation here is parity-pending G2**. Pixel
+arguments are in the viewport's own pixels, y down.
+
+| Function | Rule |
+|---|---|
+| `orbit_drag(cam, dx, dy)` | `orbit(−ORBIT_RAD_PER_PX·dx, +ORBIT_RAD_PER_PX·dy)`, `ORBIT_RAD_PER_PX = 0.01`. The pivot (`target`) and `distance` are unchanged; pitch clamps as in §1. |
+| `pan_drag(cam, dx, dy, h)` | `Camera::pan`. The pivot moves inside the view plane (its offset has no `forward` component), by `wpp` per pixel. |
+| `dolly_drag(cam, dx)` | `dolly(exp(−DOLLY_PER_PX·dx))`, `DOLLY_PER_PX = 0.01`: dragging right moves closer. Pivot unchanged. |
+| `wheel_factor(s)` | `WHEEL_BASE^s`, `WHEEL_BASE = 0.999`, `s` in points, positive = zoom in. |
+| `zoom_at(cam, cursor, size, f)` | Dolly by `f` and move the pivot so the point of the pivot plane (the plane through `target` facing the camera) that is under `cursor` stays under it. With `o = (cursor.x − w/2, h/2 − cursor.y)·wpp` taken before the dolly, `target += (right·o.x + up·o.y)·(1 − f)`. Exact for perspective and orthographic. `f ≤ 0` leaves the camera unchanged. Wheel zoom uses it; the Alt+secondary dolly drag zooms about the view centre (`dolly_drag`). |
+| `frame_box(cam, min, max, aspect)` | World box → pivot at its centre, radius `r = FRAME_MARGIN · half diagonal`, `FRAME_MARGIN = 1.1`. Perspective: `distance = r / sin(min(fov_y, fov_x)/2)` with `tan(fov_x/2) = aspect · tan(fov_y/2)`, so the bounding sphere fits in both directions. Orthographic: `height = 2r · max(1, 1/aspect)`, `distance = max(distance, 2r)`. Yaw, pitch and projection kind are kept. A degenerate box (`r < 1e-9`, a single point) only recentres. |
+| `view_camera(cam, view)` | `StandardView` = `Perspective, Front, Back, Left, Right, Top, Bottom`. The pivot is kept. The axis views switch to orthographic with `height` chosen so the apparent size at the pivot is unchanged (`2·distance·tan(fov_y/2)` when coming from perspective) and use `look_along`: Right = eye on world +X, Left = −X, Top = +Y, Bottom = −Y, Front = the world side the default editor camera sits on (−Z in a left-handed world, +Z in a right-handed one), Back = the opposite. `Perspective` returns to a perspective projection (`fov_y` 45°, `distance = height / (2·tan(fov_y/2))` when coming from orthographic) at the default orientation `DEFAULT_YAW = 0.68`, `DEFAULT_PITCH = 0.52`; if the camera is already perspective it is returned unchanged. |
+
+Not covered (follow-up): the 4-view toggle needs several viewports (brief 157 and later); the
+panel keeps one viewport.
+
+Tests (crates/viewport/tests/nav.rs): orbit keeps pivot and distance and clamps pitch; pan
+keeps distance and the offset is perpendicular to `forward`, content follows the cursor
+(`project` of the old pivot moves by `(dx, dy)` pixels); dolly scales distance (and `height`)
+and is the inverse for `1/f`; zoom-at keeps the pivot-plane point under the cursor fixed in
+pixels (perspective and orthographic, off-centre cursors, both handednesses); frame fits all
+eight corners of boxes inside the viewport for wide and tall aspects and both projections;
+frame of a point recentres only; each standard view's eye side and forward vector.

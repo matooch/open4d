@@ -26,6 +26,8 @@ pub struct EditorState {
     pub expanded: BTreeSet<NodeId>,
     pub dock: Dock,
     pub camera: Camera,
+    /// Width / height of the viewport as last drawn; the frame commands fit to it.
+    pub view_aspect: f64,
     pub shading: Shading,
     /// Script Manager source, console and recent list (docs/specs/UI.md §10).
     pub script: ScriptPanelState,
@@ -75,6 +77,7 @@ impl EditorState {
             expanded: BTreeSet::new(),
             dock: Dock::default(),
             camera: Self::default_camera(),
+            view_aspect: 16.0 / 9.0,
             shading: Shading::SmoothWire,
             script: ScriptPanelState::default(),
             offscreen: OffscreenGpu::default(),

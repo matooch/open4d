@@ -4,10 +4,11 @@ use std::sync::Arc;
 
 use forge_core::{Document, NodeId, Scene};
 use forge_modeling::ComponentSettings;
+use serde_json::Value;
 
 use crate::state::{
-    GizmoModeArg, GizmoSpaceArg, ModeArg, NodeSelection, SelectExtra, SelectOp, ShadingMode,
-    UiRequest,
+    CameraSet, GizmoModeArg, GizmoSpaceArg, ModeArg, NodeSelection, SelectExtra, SelectOp,
+    ShadingMode, UiRequest, ViewArg,
 };
 use crate::timeline::Timeline;
 
@@ -57,6 +58,15 @@ pub trait CommandContext {
     // View-only state; headless contexts ignore it.
     fn set_shading(&mut self, _shading: ShadingMode) {}
     fn frame_all(&mut self) {}
+    /// Frames the selected nodes and their descendants (all when none has geometry).
+    fn frame_selected(&mut self) {}
+    fn set_view(&mut self, _view: ViewArg) {}
+    /// Applies validated camera fields.
+    fn set_camera(&mut self, _set: CameraSet) {}
+    /// The camera as JSON (`view.get_camera`); null without a viewport.
+    fn camera_info(&self) -> Value {
+        Value::Null
+    }
     fn toggle_expanded(&mut self, _node: NodeId) {}
     fn set_gizmo_mode(&mut self, _mode: GizmoModeArg) {}
     /// Sets the gizmo space; `None` toggles between object and world.

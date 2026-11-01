@@ -10,10 +10,28 @@ use forge_geometry::selection::Selection;
 use forge_viewport::camera::Camera;
 use forge_viewport::gizmo::Gizmo;
 use forge_viewport::grid::grid_lines;
+use forge_viewport::nav;
 use forge_viewport::render::{DrawMesh, Frame, MeshBuffers, Palette, Renderer, Settings, Shading};
 
 use crate::components::{EditMode, display_selection, stored_selection};
 use crate::theme::Theme;
+
+/// What a held navigation key makes a primary drag do (UI.md §6.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavMode {
+    Pan,
+    Dolly,
+    Orbit,
+}
+
+impl NavMode {
+    /// The hold keys: X pan, C dolly, V orbit (own design, parity-pending G2).
+    pub const KEYS: [(egui::Key, NavMode); 3] = [
+        (egui::Key::X, NavMode::Pan),
+        (egui::Key::C, NavMode::Dolly),
+        (egui::Key::V, NavMode::Orbit),
+    ];
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct NavInput {
@@ -21,10 +39,21 @@ pub struct NavInput {
     pub middle: bool,
     pub secondary: bool,
     pub alt: bool,
+    /// A navigation hold key that is down.
+    pub held: Option<NavMode>,
     /// Pointer motion this frame, in points.
     pub drag: [f32; 2],
     /// Wheel motion this frame, in points (positive = away from the user).
     pub scroll: f32,
+    /// Pointer position relative to the viewport's top-left corner, in points.
+    pub cursor: [f32; 2],
+}
+
+impl NavInput {
+    /// True while a navigation gesture owns the pointer (no selection or gizmo then).
+    pub fn navigating(&self) -> bool {
+        self.alt || self.held.is_some()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -32,20 +61,27 @@ pub enum NavAction {
     None,
     Orbit(f64, f64),
     Pan(f64, f64),
+    /// Drag distance in points; right moves closer.
     Dolly(f64),
+    /// Wheel zoom: distance factor and the cursor it zooms toward.
+    ZoomAt(f64, [f64; 2]),
 }
 
-/// Our default bindings (parity-pending).
+/// Our default bindings (parity-pending G2; UI.md §6.1).
 pub fn nav_action(i: &NavInput) -> NavAction {
     let (dx, dy) = (i.drag[0] as f64, i.drag[1] as f64);
+    let held = |m: NavMode| i.primary && i.held == Some(m);
     if i.scroll != 0.0 {
-        NavAction::Dolly(0.999f64.powf(i.scroll as f64))
-    } else if i.middle {
+        NavAction::ZoomAt(
+            nav::wheel_factor(i.scroll as f64),
+            [i.cursor[0] as f64, i.cursor[1] as f64],
+        )
+    } else if i.middle || held(NavMode::Pan) {
         NavAction::Pan(dx, dy)
-    } else if i.alt && i.primary {
-        NavAction::Orbit(-0.01 * dx, 0.01 * dy)
-    } else if i.alt && i.secondary {
-        NavAction::Dolly((-0.01 * dx).exp())
+    } else if (i.alt && i.primary) || held(NavMode::Orbit) {
+        NavAction::Orbit(dx, dy)
+    } else if (i.alt && i.secondary) || held(NavMode::Dolly) {
+        NavAction::Dolly(dx)
     } else {
         NavAction::None
     }
@@ -82,13 +118,15 @@ fn palette_color(c: egui::Color32) -> [f32; 3] {
     [c.r(), c.g(), c.b()].map(|v| v as f32 / 255.0)
 }
 
-pub fn apply_nav(cam: &mut Camera, action: NavAction, viewport_h: f64) {
-    match action {
-        NavAction::None => {}
-        NavAction::Orbit(yaw, pitch) => cam.orbit(yaw, pitch),
-        NavAction::Pan(dx, dy) => cam.pan(dx, dy, viewport_h),
-        NavAction::Dolly(f) => cam.dolly(f),
-    }
+/// Applies a gesture to the camera. `size` is the viewport in the same units as the drag.
+pub fn apply_nav(cam: &mut Camera, action: NavAction, size: [f64; 2]) {
+    *cam = match action {
+        NavAction::None => return,
+        NavAction::Orbit(dx, dy) => nav::orbit_drag(cam, dx, dy),
+        NavAction::Pan(dx, dy) => nav::pan_drag(cam, dx, dy, size[1]),
+        NavAction::Dolly(dx) => nav::dolly_drag(cam, dx),
+        NavAction::ZoomAt(f, cursor) => nav::zoom_at(cam, cursor, size, f),
+    };
 }
 
 struct Target {

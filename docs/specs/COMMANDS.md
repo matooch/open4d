@@ -107,6 +107,10 @@ touch history.
 | `edit.redo` | - | `{done}` | no |
 | `view.shading` | `mode` smooth, flat, wire, smooth_wire, flat_wire | null | no |
 | `view.frame_all` | - | null | no |
+| `view.frame_selected` | - | null | no |
+| `view.set_view` | `view` perspective, front, back, left, right, top, bottom | null | no |
+| `view.set_camera` | `target?` [x,y,z] world, `distance?`, `yaw?`, `pitch?` (degrees), `projection?` perspective, orthographic, `fov?` (degrees), `height?` (orthographic) | null | no |
+| `view.get_camera` | - | `{target, eye, distance, yaw, pitch, projection, fov?, height?}` | no |
 | `view.gizmo_mode` | `mode` move, rotate, scale | null | no |
 | `view.gizmo_space` | `space?` object, world (absent toggles) | null | no |
 | `object.begin_rename` | - | null | no |
@@ -181,6 +185,21 @@ Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and A
   `CommandContext::request_ui(UiRequest)`, which the editor window serves after the command
   returns (file dialogs, unsaved-changes prompt, inline rename); headless contexts fail with
   `needs the editor window`. `view.gizmo_*` are view-only no-ops headless.
+- `view.frame_all`, `view.frame_selected`, `view.set_view`, `view.set_camera`, `view.get_camera`
+  (brief 153, VIEWPORT.md §7, UI.md §6.1): camera commands. They change view state only and
+  are **not undoable** (`undoable` false, no document history step), like `view.shading`:
+  the camera is not part of the document, so Ctrl+Z never moves it. Frame all fits every
+  visible mesh object (nodes drawn by the viewport) of the evaluated scene; frame selected
+  fits the selected nodes and their descendants (selected nodes without any geometry recentre on
+  their world positions, keeping the distance); with nothing selected it frames all. With no geometry
+  at all, `view.frame_all` resets the default camera as before. Both use the viewport's last
+  aspect ratio. `view.set_camera` changes only the given fields and validates: `distance`
+  and `height` > 0, `fov` in (1, 170) degrees, `pitch` clamped to the camera limit, finite
+  numbers; errors are `Failed` and change nothing. `target` is in world coordinates; `yaw`
+  and `pitch` are the camera's display-space angles in degrees (they equal the world angles
+  in a right-handed world). `view.get_camera` reads the same fields back (`eye` in world
+  space), so an agent can drive the camera and check it. Headless contexts (no viewport)
+  ignore the setters and answer `view.get_camera` with null.
 - `key.*`, `timeline.*`: ANIM.md §2; `timeline.set_frame` and `step` clamp to the project
   range. `timeline.settings` merges steps like before (`timeline-settings` key).
 - `key.set`: writes one Spline key (ANIM.md §1) on `track` (an animatable float parameter id

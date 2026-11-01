@@ -112,8 +112,7 @@ FrameAll = `view.frame_all`).
 - `SetMode(mode)`: sets `EditorState.mode`; nothing else changes.
 - `Select(cmd)`: Select All / Deselect All / Invert / Grow / Shrink on the current mode's
   set (EDITABLE.md §2.5); one "Select" transaction for a component set.
-- `FrameAll`: no geometry yet → resets the camera to default (placeholder until
-  Phase 5).
+- `FrameAll`: fits the visible geometry (§6.1); with no geometry resets the camera to default.
 
 `create_menu(registry) -> Vec<(Category, Vec<(type_id, label)>)>`: placeable
 categories only (hierarchy + Tag), in `Category` order, types sorted by label; types
@@ -134,17 +133,51 @@ nodes use the selection colour. GPU meshes are rebuilt only when `Scene::revisio
 the selection changes; nodes whose build is unsupported are skipped. Without a wgpu render state (tests) it shows a
 "Viewport unavailable" label.
 
-Navigation `nav_action(input) -> NavAction` (**parity-pending**, ours):
+### 6.1 Navigation (brief 153)
+
+Camera maths is pure and lives in `forge_viewport::nav` (VIEWPORT.md §7). The panel only
+turns pointer input into calls. GUI session G2 §2 is unanswered: **all directions, speeds and
+keys below are parity-pending, ours.** `nav_action(input) -> NavAction` with
+`NavInput { primary, middle, secondary, alt, held: Option<NavMode>, drag, scroll, cursor }`:
 
 | Input | Action |
 |---|---|
-| wheel `s` (points) | `Dolly(0.999^s)`, `s > 0` zooms in |
-| Alt + primary drag `(dx, dy)` | `Orbit(−0.01·dx, 0.01·dy)` radians |
-| middle drag, or Alt + middle drag | `Pan(dx, dy)` pixels |
-| Alt + secondary drag | `Dolly(exp(−0.01·dx))` |
+| wheel `s` (points) at pointer `c` | `ZoomAt(0.999^s, c)`: zoom toward the cursor, `s > 0` zooms in |
+| Alt + primary drag, or hold `V` + primary drag | `Orbit(dx, dy)` |
+| middle drag (with or without Alt), or Alt + middle, or hold `X` + primary drag | `Pan(dx, dy)` |
+| Alt + secondary drag, or hold `C` + primary drag | `Dolly(dx)`, about the view centre |
 | anything else | `None` |
 
-Wheel takes precedence over drags in the same frame.
+Wheel takes precedence over drags in the same frame. `NavMode` = `Pan | Dolly | Orbit` for the
+held keys. The brief's "1/2/3 key + drag" is replaced by the hold keys X / C / V: 1 to 5 are the
+shading keys of the key map (§14.2) and a press of `1` would change the shading, so the digit
+keys cannot also be navigation modifiers. The hold keys are plain modifiers read from the
+keyboard state (a key held with no Mod/Alt/Shift while the pointer is over the viewport), not
+chords; they are not in the key map and are listed here only. While Alt or a hold key is down the viewport does no selection, rubber band or gizmo
+interaction.
+
+Navigation works even without a wgpu render state (it is evaluated before the "Viewport
+unavailable" early return), so it is testable with egui_kittest.
+
+The viewport stores its aspect ratio (`EditorState.view_aspect`, width / height, default 16/9)
+each frame; the frame commands use it.
+
+Key-map bindings (UI.md §14.2) for the commands of COMMANDS.md §6: `H` = `view.frame_all`,
+`S` = `view.frame_selected`, `Mod+1` .. `Mod+7` = `view.set_view` perspective, front, right,
+top, back, left, bottom. (`F1`..`F5` of the area design collide with `F2` rename; Mod+digit is
+free.) View > menu entries: Frame all, Frame selected, and a "View" submenu with the seven
+views, each showing its chord.
+
+Tests (crates/ui/tests/navigation.rs): the input mapping of every gesture and hold key, `apply_nav`;
+`view.frame_all` / `view.frame_selected` fit the bounds (aspect-aware), nothing selected frames
+all, a selected null recentres, an empty scene resets; `view.set_view`, `view.set_camera`
+(partial update, validation, pitch clamp) and `view.get_camera`; camera commands add no undo
+step and Ctrl+Z leaves the camera alone; egui_kittest (no GPU): Alt + left/middle/right drags
+orbit / pan / dolly, a held `V` turns a plain drag into an orbit (and not without it), the
+wheel zooms toward the cursor, `H`, `S`, `Mod+4`, `Mod+1` run their commands.
+
+Undo: camera moves, frames and view switches are **not** undo steps (the camera is view state,
+not document state; COMMANDS.md §6). Gestures and `view.*` commands never touch the history.
 
 Component modes (EDITABLE.md §2): the header of the viewport holds four toggle buttons
 "Model", "Points", "Edges", "Polygons" (`EditorState.mode`). With a component target, left
@@ -423,6 +456,8 @@ Default bindings (all parity-pending, ours):
 | 1 .. 5 | `view.shading` smooth, flat, wire, smooth_wire, flat_wire |
 | W / E / R | `view.gizmo_mode` move / rotate / scale |
 | Q | `view.gizmo_space` (toggle) |
+| H / S | `view.frame_all` / `view.frame_selected` (brief 153) |
+| Mod+1 .. Mod+7 | `view.set_view` perspective, front, right, top, back, left, bottom (brief 153) |
 | K / Shift+K | `key.record` / `key.autokey` |
 | Space (viewport scope) | `timeline.toggle_play` |
 | Comma / Period | `timeline.step` delta -1 / +1 |

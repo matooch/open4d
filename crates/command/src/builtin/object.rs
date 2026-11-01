@@ -13,8 +13,8 @@ use crate::context::CommandContext;
 use crate::error::CommandError;
 use crate::registry::CommandRegistry;
 use crate::state::{
-    ConvertMode, GizmoModeArg, GizmoSpaceArg, ModeArg, SelectExtra, SelectOp, ShadingMode,
-    UiRequest,
+    CameraSet, ConvertMode, GizmoModeArg, GizmoSpaceArg, ModeArg, SelectExtra, SelectOp,
+    ShadingMode, UiRequest, ViewArg,
 };
 
 #[derive(Deserialize, JsonSchema)]
@@ -100,6 +100,44 @@ struct EnableArgs {
 #[serde(deny_unknown_fields)]
 struct ShadingArgs {
     mode: ShadingMode,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ViewArgs {
+    view: ViewArg,
+}
+
+/// Checks the numbers of `view.set_camera` (docs/specs/COMMANDS.md §6).
+fn check_camera(a: &CameraSet) -> Result<(), CommandError> {
+    let finite = |name: &str, v: Option<f64>| match v {
+        Some(v) if !v.is_finite() => Err(CommandError::Failed(format!("{name} must be finite"))),
+        _ => Ok(()),
+    };
+    for (name, v) in [("distance", a.distance), ("yaw", a.yaw), ("pitch", a.pitch)] {
+        finite(name, v)?;
+    }
+    finite("fov", a.fov)?;
+    finite("height", a.height)?;
+    if let Some(t) = a.target
+        && t.iter().any(|v| !v.is_finite())
+    {
+        return Err(CommandError::Failed("target must be finite".into()));
+    }
+    if a.distance.is_some_and(|d| d <= 0.0) {
+        return Err(CommandError::Failed(
+            "distance must be greater than 0".into(),
+        ));
+    }
+    if a.height.is_some_and(|h| h <= 0.0) {
+        return Err(CommandError::Failed("height must be greater than 0".into()));
+    }
+    if a.fov.is_some_and(|f| !(1.0..170.0).contains(&f)) {
+        return Err(CommandError::Failed(
+            "fov must be between 1 and 170 degrees".into(),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -271,6 +309,38 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
     register_plain(r, "view.frame_all", "Frame All", false, |c| {
         c.frame_all();
         Ok(Value::Null)
+    })?;
+    register_plain(r, "view.frame_selected", "Frame Selected", false, |c| {
+        c.frame_selected();
+        Ok(Value::Null)
+    })?;
+    r.register_fn(
+        spec(
+            "view.set_view",
+            "Set View",
+            false,
+            || json!({"view": "top"}),
+        ),
+        |c, a: ViewArgs| {
+            c.set_view(a.view);
+            Ok(Value::Null)
+        },
+    )?;
+    r.register_fn(
+        spec(
+            "view.set_camera",
+            "Set Camera",
+            false,
+            || json!({"target": [0.0, 0.0, 0.0], "distance": 500.0, "yaw": 30.0, "pitch": 20.0}),
+        ),
+        |c, a: CameraSet| {
+            check_camera(&a)?;
+            c.set_camera(a);
+            Ok(Value::Null)
+        },
+    )?;
+    register_plain(r, "view.get_camera", "Get Camera", false, |c| {
+        Ok(c.camera_info())
     })?;
     r.register_fn(
         spec(

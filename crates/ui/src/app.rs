@@ -27,7 +27,7 @@ use crate::manipulate::apply_drag_anim;
 use crate::object_manager::ObjectManager;
 use crate::state::EditorState;
 use crate::theme::Theme;
-use crate::viewport_panel::{NavInput, SceneView, ViewportPanel, apply_nav, nav_action};
+use crate::viewport_panel::{NavInput, NavMode, SceneView, ViewportPanel, apply_nav, nav_action};
 
 mod files;
 
@@ -57,6 +57,17 @@ fn select_cmd(op: SelectCmd) -> Cmd {
         SelectCmd::Shrink => "select.shrink",
     })
 }
+
+/// The `view.set_view` entries of the View menu.
+const VIEWS: [(&str, &str); 7] = [
+    ("Perspective", "perspective"),
+    ("Front", "front"),
+    ("Right", "right"),
+    ("Top", "top"),
+    ("Back", "back"),
+    ("Left", "left"),
+    ("Bottom", "bottom"),
+];
 
 fn shading_cmd(shading: Shading) -> Cmd {
     (
@@ -551,10 +562,32 @@ impl Editor {
                     "Gizmo axes: world",
                 );
                 ui.separator();
-                if ui.button("Frame all").clicked() {
-                    self.run(cmd("view.frame_all"));
-                    ui.close();
+                for (label, command) in [
+                    ("Frame all", cmd("view.frame_all")),
+                    ("Frame selected", cmd("view.frame_selected")),
+                ] {
+                    let mut button = egui::Button::new(label);
+                    if let Some(sc) = self.chord_text(ui.ctx(), &command) {
+                        button = button.shortcut_text(sc);
+                    }
+                    if ui.add(button).clicked() {
+                        self.run(command);
+                        ui.close();
+                    }
                 }
+                ui.menu_button("Camera view", |ui| {
+                    for (label, view) in VIEWS {
+                        let command: Cmd = ("view.set_view", json!({"view": view}));
+                        let mut button = egui::Button::new(label);
+                        if let Some(sc) = self.chord_text(ui.ctx(), &command) {
+                            button = button.shortcut_text(sc);
+                        }
+                        if ui.add(button).clicked() {
+                            self.run(command);
+                            ui.close();
+                        }
+                    }
+                });
             });
             ui.menu_button("Window", |ui| {
                 for p in Panel::ALL {
@@ -762,35 +795,53 @@ impl Editor {
         let rect = ui.available_rect_before_wrap();
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         self.viewport_hot = response.hovered() || response.has_focus();
-        let Some(rs) = rs else {
-            ui.put(rect, egui::Label::new("Viewport unavailable"));
-            return;
+        let typing = ui.ctx().egui_wants_keyboard_input();
+        // the response reads the input itself, so ask it before locking the input
+        let drag = if response.dragged() {
+            response.drag_delta().into()
+        } else {
+            [0.0, 0.0]
         };
+        let over = response.hovered();
         let input = ui.ctx().input(|i| NavInput {
             primary: i.pointer.primary_down(),
             middle: i.pointer.middle_down(),
             secondary: i.pointer.secondary_down(),
             alt: i.modifiers.alt,
-            drag: if response.dragged() {
-                response.drag_delta().into()
-            } else {
-                [0.0, 0.0]
-            },
-            scroll: if response.hovered() {
-                i.smooth_scroll_delta.y
-            } else {
-                0.0
-            },
+            held: NavMode::KEYS
+                .iter()
+                .find(|(k, _)| {
+                    !typing && i.key_down(*k) && !i.modifiers.command && !i.modifiers.alt
+                })
+                .map(|(_, m)| *m),
+            drag,
+            scroll: if over { i.smooth_scroll_delta.y } else { 0.0 },
+            cursor: i
+                .pointer
+                .hover_pos()
+                .map_or([0.0, 0.0], |p| (p - rect.min).into()),
         });
         let action = nav_action(&input);
-        apply_nav(&mut self.state.camera, action, rect.height() as f64);
+        let view_size = [rect.width() as f64, rect.height() as f64];
+        apply_nav(&mut self.state.camera, action, view_size);
+        if view_size[1] > 0.0 {
+            self.state.view_aspect = view_size[0] / view_size[1];
+        }
+        let Some(rs) = rs else {
+            // not selectable: a selectable label would take the pointer from the navigation
+            ui.put(
+                rect,
+                egui::Label::new("Viewport unavailable").selectable(false),
+            );
+            return;
+        };
 
         let ppp = ui.ctx().pixels_per_point();
         let size = [
             (rect.width() * ppp).round() as u32,
             (rect.height() * ppp).round() as u32,
         ];
-        if input.alt {
+        if input.navigating() {
             self.rect_drag = None;
         } else {
             self.viewport_interaction(ui, &response, rect, ppp, size);

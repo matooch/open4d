@@ -182,6 +182,8 @@ fn nav(
         alt,
         drag,
         scroll,
+        cursor: [7.0, 9.0],
+        ..NavInput::default()
     })
 }
 
@@ -189,7 +191,7 @@ fn nav(
 fn navigation_bindings() {
     assert_eq!(
         nav(true, false, false, true, [10.0, -4.0], 0.0),
-        NavAction::Orbit(-0.1, -0.04)
+        NavAction::Orbit(10.0, -4.0)
     );
     assert_eq!(
         nav(false, true, false, false, [3.0, 2.0], 0.0),
@@ -199,14 +201,15 @@ fn navigation_bindings() {
         nav(false, true, false, true, [3.0, 2.0], 0.0),
         NavAction::Pan(3.0, 2.0)
     );
-    let NavAction::Dolly(f) = nav(false, false, true, true, [100.0, 0.0], 0.0) else {
-        panic!()
-    };
-    assert!((f - (-1.0f64).exp()).abs() < 1e-12);
-    let NavAction::Dolly(z) = nav(true, false, false, true, [5.0, 5.0], 120.0) else {
+    assert_eq!(
+        nav(false, false, true, true, [100.0, 0.0], 0.0),
+        NavAction::Dolly(100.0)
+    );
+    let NavAction::ZoomAt(z, at) = nav(true, false, false, true, [5.0, 5.0], 120.0) else {
         panic!("wheel wins")
     };
     assert!((z - 0.999f64.powf(120.0)).abs() < 1e-12 && z < 1.0);
+    assert_eq!(at, [7.0, 9.0]);
     assert_eq!(
         nav(true, false, false, false, [5.0, 5.0], 0.0),
         NavAction::None

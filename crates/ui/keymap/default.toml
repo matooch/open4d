@@ -101,6 +101,50 @@ chord = "5"
 command = "view.shading"
 args = { mode = "flat_wire" }
 
+# View: framing and named views (brief 153)
+[[bind]]
+chord = "H"
+command = "view.frame_all"
+
+[[bind]]
+chord = "S"
+command = "view.frame_selected"
+
+[[bind]]
+chord = "Mod+1"
+command = "view.set_view"
+args = { view = "perspective" }
+
+[[bind]]
+chord = "Mod+2"
+command = "view.set_view"
+args = { view = "front" }
+
+[[bind]]
+chord = "Mod+3"
+command = "view.set_view"
+args = { view = "right" }
+
+[[bind]]
+chord = "Mod+4"
+command = "view.set_view"
+args = { view = "top" }
+
+[[bind]]
+chord = "Mod+5"
+command = "view.set_view"
+args = { view = "back" }
+
+[[bind]]
+chord = "Mod+6"
+command = "view.set_view"
+args = { view = "left" }
+
+[[bind]]
+chord = "Mod+7"
+command = "view.set_view"
+args = { view = "bottom" }
+
 # Gizmo
 [[bind]]
 chord = "W"

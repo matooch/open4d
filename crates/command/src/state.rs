@@ -139,6 +139,46 @@ pub enum GizmoSpaceArg {
     World,
 }
 
+/// A named camera view (`view.set_view`; mirrors the viewport's `StandardView`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewArg {
+    Perspective,
+    Front,
+    Back,
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+/// Projection kind of `view.set_camera`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectionArg {
+    Perspective,
+    Orthographic,
+}
+
+/// The fields `view.set_camera` may change; absent fields are kept.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CameraSet {
+    /// Pivot point in world coordinates.
+    pub target: Option<[f64; 3]>,
+    /// Pivot to eye distance, greater than 0.
+    pub distance: Option<f64>,
+    /// Display-space yaw in degrees.
+    pub yaw: Option<f64>,
+    /// Display-space pitch in degrees (clamped just short of straight up/down).
+    pub pitch: Option<f64>,
+    pub projection: Option<ProjectionArg>,
+    /// Vertical field of view in degrees, between 1 and 170 (perspective).
+    pub fov: Option<f64>,
+    /// Visible world height, greater than 0 (orthographic).
+    pub height: Option<f64>,
+}
+
 /// Something only the editor window can do (file dialogs, inline rename). A command asks
 /// for it through [`crate::CommandContext::request_ui`]; headless contexts refuse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

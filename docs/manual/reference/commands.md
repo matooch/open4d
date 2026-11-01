@@ -2,7 +2,7 @@
 
 # Command reference
 
-77 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+81 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -21,6 +21,10 @@
 | [`view.gizmo_space`](#viewgizmo_space) | Gizmo Space | no | `view_gizmo_space` |
 | [`object.begin_rename`](#objectbegin_rename) | Rename Active | no | `object_begin_rename` |
 | [`view.frame_all`](#viewframe_all) | Frame All | no | `view_frame_all` |
+| [`view.frame_selected`](#viewframe_selected) | Frame Selected | no | `view_frame_selected` |
+| [`view.set_view`](#viewset_view) | Set View | no | `view_set_view` |
+| [`view.set_camera`](#viewset_camera) | Set Camera | no | `view_set_camera` |
+| [`view.get_camera`](#viewget_camera) | Get Camera | no | `view_get_camera` |
 | [`view.toggle_expanded`](#viewtoggle_expanded) | Expand / Collapse | no | `view_toggle_expanded` |
 | [`select.mode`](#selectmode) | Selection Mode | no | `select_mode` |
 | [`select.all`](#selectall) | Select All | yes | `select_all` |
@@ -268,6 +272,50 @@ Frame All. Not an undoable edit.
 No arguments.
 
 Example: `forge cmd scene.forge view.frame_all --args '{}'`
+
+### `view.frame_selected`
+
+Frame Selected. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge view.frame_selected --args '{}'`
+
+### `view.set_view`
+
+Set View. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `view` | `"perspective"` \| `"front"` \| `"back"` \| `"left"` \| `"right"` \| `"top"` \| `"bottom"` | yes | A named camera view (`view.set_view`; mirrors the viewport's `StandardView`). |
+
+Example: `forge cmd scene.forge view.set_view --args '{"view":"top"}'`
+
+### `view.set_camera`
+
+Set Camera. Not an undoable edit.
+
+The fields `view.set_camera` may change; absent fields are kept.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `distance` | number or null | no | Pivot to eye distance, greater than 0. |
+| `fov` | number or null | no | Vertical field of view in degrees, between 1 and 170 (perspective). |
+| `height` | number or null | no | Visible world height, greater than 0 (orthographic). |
+| `pitch` | number or null | no | Display-space pitch in degrees (clamped just short of straight up/down). |
+| `projection` | `"perspective"` \| `"orthographic"` \| null | no |  |
+| `target` | array of number (length 3) or null | no | Pivot point in world coordinates. |
+| `yaw` | number or null | no | Display-space yaw in degrees. |
+
+Example: `forge cmd scene.forge view.set_camera --args '{"distance":500.0,"pitch":20.0,"target":[0.0,0.0,0.0],"yaw":30.0}'`
+
+### `view.get_camera`
+
+Get Camera. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge view.get_camera --args '{}'`
 
 ### `view.toggle_expanded`
 

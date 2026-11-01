@@ -150,7 +150,7 @@ implementers can avoid collisions.
 | 150 | [Attribute manager parity: tabs, widgets, multi-edit, keyframe dots, history](../agents/tasks/150-attribute-manager.md) | L | 147 | done (parity-pending G4; follow-up: lock/history, tool panel on shared widgets) | ui |
 | 151 | [Coordinates manager modes](../agents/tasks/151-coordinates-manager.md) | L | 150 | ready | ui |
 | 152 | [Key map: defaults, customisation editor](../agents/tasks/152-key-map.md) | L | 011 | done (parity-pending G2) | ui |
-| 153 | [Viewport navigation parity (keys, mouse, frame commands, views)](../agents/tasks/153-viewport-navigation.md) | L | 152 | ready | viewport, ui |
+| 153 | [Viewport navigation parity (keys, mouse, frame commands, views)](../agents/tasks/153-viewport-navigation.md) | L | 152 | done (parity-pending G2) | viewport, ui |
 | 154 | [Content browser (own presets) and recent files](../agents/tasks/154-content-browser.md) | L | 163 | ready | ui |
 | 155 | [Preferences window and settings storage](../agents/tasks/155-preferences.md) | L | 175 | waiting: O29 | ui |
 | 156 | [Layout save/load and workspaces](../agents/tasks/156-layouts-workspaces.md) | L | 147 | ready | ui |

@@ -2,8 +2,8 @@
 //! them against the editor state and implements the command context for it.
 
 use forge_command::{
-    CommandContext, GizmoModeArg, GizmoSpaceArg, ModeArg, NodeSelection, SelectExtra, SelectOp,
-    ShadingMode, Timeline, UiRequest,
+    CameraSet, CommandContext, GizmoModeArg, GizmoSpaceArg, ModeArg, NodeSelection, SelectExtra,
+    SelectOp, ShadingMode, Timeline, UiRequest, ViewArg,
 };
 use forge_core::{Category, Document, NodeId, Registry};
 use forge_viewport::gizmo::{GizmoMode, Space as GizmoSpace};
@@ -167,8 +167,23 @@ impl CommandContext for EditorState {
     }
 
     fn frame_all(&mut self) {
-        // No geometry yet (Phase 5): reset to the default view.
-        self.camera = EditorState::default_camera();
+        self.frame_all_geometry();
+    }
+
+    fn frame_selected(&mut self) {
+        self.frame_selected_nodes();
+    }
+
+    fn set_view(&mut self, view: ViewArg) {
+        self.show_view(view);
+    }
+
+    fn set_camera(&mut self, set: CameraSet) {
+        self.apply_camera_set(set);
+    }
+
+    fn camera_info(&self) -> Value {
+        self.camera_json()
     }
 
     fn set_gizmo_mode(&mut self, mode: GizmoModeArg) {

@@ -74,6 +74,10 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `view_gizmo_space` | Gizmo Space. Not an undoable edit. Runs command `view.gizmo_space`. |
 | `object_begin_rename` | Rename Active. Not an undoable edit. Runs command `object.begin_rename`. |
 | `view_frame_all` | Frame All. Not an undoable edit. Runs command `view.frame_all`. |
+| `view_frame_selected` | Frame Selected. Not an undoable edit. Runs command `view.frame_selected`. |
+| `view_set_view` | Set View. Not an undoable edit. Runs command `view.set_view`. |
+| `view_set_camera` | Set Camera. Not an undoable edit. Runs command `view.set_camera`. |
+| `view_get_camera` | Get Camera. Not an undoable edit. Runs command `view.get_camera`. |
 | `view_toggle_expanded` | Expand / Collapse. Not an undoable edit. Runs command `view.toggle_expanded`. |
 | `select_mode` | Selection Mode. Not an undoable edit. Runs command `select.mode`. |
 | `select_all` | Select All. Undoable editing command. Runs command `select.all`. |
