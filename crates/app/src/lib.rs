@@ -177,7 +177,17 @@ impl App {
     /// Writes the scene evaluated at the current frame as OBJ: all of it, or the listed
     /// nodes with their descendants. Returns the object count.
     pub fn export_obj(&self, path: &str, roots: Option<&[NodeId]>) -> Result<usize, AppError> {
-        let scene = self.evaluated();
+        self.export_obj_at(path, roots, self.timeline.current)
+    }
+
+    /// [`App::export_obj`] for the scene evaluated at `frame`; the timeline does not move.
+    pub fn export_obj_at(
+        &self,
+        path: &str,
+        roots: Option<&[NodeId]>,
+        frame: i64,
+    ) -> Result<usize, AppError> {
+        let scene = self.eval.get(self.doc.scene(), frame);
         let objects = export_scene(&scene, roots);
         if objects.is_empty() {
             return Err(AppError::NothingToExport);

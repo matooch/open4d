@@ -95,5 +95,24 @@ class BadServers(unittest.TestCase):
         self.check(b'{"jsonrpc":"2.0","id":1}\n', "neither result")
 
 
+class NotificationsOnTheWire(unittest.TestCase):
+    def test_notifications_before_a_response_are_queued_not_mistaken_for_it(self):
+        reply = (b'{"jsonrpc":"2.0","method":"frame.changed","params":{"frame":3}}\n'
+                 b'{"jsonrpc":"2.0","method":"scene.changed","params":{"revision":9}}\n'
+                 b'{"jsonrpc":"2.0","id":1,"result":{"ok":true}}\n')
+        s = FakeServer(reply)
+        seen = []
+        try:
+            with Client(s.port, "t", timeout=5) as c:
+                c.on_notification(lambda method, params: seen.append((method, params)))
+                self.assertEqual(c.version(), {"ok": True})
+                first = c.next_notification(timeout=1)
+                self.assertEqual((first.method, first.params), ("frame.changed", {"frame": 3}))
+                self.assertEqual(c.next_notification(timeout=1).method, "scene.changed")
+        finally:
+            s.close()
+        self.assertEqual([m for m, _ in seen], ["frame.changed", "scene.changed"])
+
+
 if __name__ == "__main__":
     unittest.main()

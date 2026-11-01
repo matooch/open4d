@@ -26,6 +26,10 @@ impl forge_rpc::Host for EditorState {
         let registry = self.app.commands.clone();
         registry.run(self, id, args)
     }
+
+    fn screenshot(&mut self, width: u32, height: u32) -> Result<Vec<u8>, String> {
+        crate::screenshot::render_png(self, width, height)
+    }
 }
 
 /// The viewport shading for a command argument.

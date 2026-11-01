@@ -1,8 +1,11 @@
 """The RPC client (docs/specs/RPC.md section 9). Standard library only."""
 
+import base64
+import collections
 import json
 import socket
 import threading
+import time
 
 from . import config
 from .errors import ConnectionFailed, ForgeError, RpcError, Unauthorized
@@ -31,6 +34,10 @@ class Mesh(object):
     def __repr__(self):
         return "Mesh(node=%r, frame=%r, points=%d, polys=%d)" % (
             self.node, self.frame, len(self.points), len(self.polys))
+
+
+Notification = collections.namedtuple("Notification", ["method", "params"])
+Notification.__doc__ = "A server notification such as ``frame.changed`` (docs/specs/RPC.md section 10)."
 
 
 def method_name(command_id):
@@ -75,7 +82,10 @@ class Client(object):
         self._commands = None
         self._by_method = None
         self._sock = None
+        self._timeout = timeout
         self._buf = b""
+        self._notes = collections.deque()
+        self._callback = None
         try:
             self._sock = socket.create_connection((host, port), timeout=timeout)
         except OSError as e:
@@ -101,10 +111,20 @@ class Client(object):
     def __repr__(self):
         return "Client(port=%r)" % (self.port,)
 
-    def _read_line(self):
+    def _read_line(self, deadline=None):
+        """The next line; ``None`` if ``deadline`` (a monotonic time) passes first."""
         while b"\n" not in self._buf:
+            if deadline is not None:
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    return None
+                self._sock.settimeout(left)
             try:
                 chunk = self._sock.recv(65536)
+            except socket.timeout:
+                if deadline is not None:
+                    return None
+                raise ConnectionFailed("connection error: timed out")
             except OSError as e:
                 raise ConnectionFailed("connection error: %s" % (e,))
             if not chunk:
@@ -112,6 +132,25 @@ class Client(object):
             self._buf += chunk
         line, self._buf = self._buf.split(b"\n", 1)
         return line
+
+    @staticmethod
+    def _parse(line):
+        try:
+            msg = json.loads(line.decode("utf-8"))
+        except ValueError:
+            raise ConnectionFailed("the server sent a line that is not JSON")
+        if not isinstance(msg, dict):
+            raise ConnectionFailed("the server sent a response that is not an object")
+        return msg
+
+    def _note(self, msg):
+        """Queues a notification and tells the callback; returns the notification."""
+        note = Notification(msg["method"], msg.get("params") or {})
+        self._notes.append(note)
+        callback = self._callback
+        if callback is not None:
+            callback(note.method, note.params)
+        return note
 
     def call(self, method, params=None):
         """Sends one request and returns its ``result``."""
@@ -125,16 +164,19 @@ class Client(object):
                 req["token"] = self._token
             data = json.dumps(req, separators=(",", ":"), ensure_ascii=True).encode("utf-8") + b"\n"
             try:
+                self._sock.settimeout(self._timeout)
                 self._sock.sendall(data)
             except OSError as e:
                 raise ConnectionFailed("connection error: %s" % (e,))
-            line = self._read_line()
-        try:
-            resp = json.loads(line.decode("utf-8"))
-        except ValueError:
-            raise ConnectionFailed("the server sent a line that is not JSON")
-        if not isinstance(resp, dict):
-            raise ConnectionFailed("the server sent a response that is not an object")
+            while True:
+                if self._sock is None:
+                    raise ConnectionFailed("the client is closed")
+                self._sock.settimeout(self._timeout)
+                resp = self._parse(self._read_line())
+                if "id" not in resp and isinstance(resp.get("method"), str):
+                    self._note(resp)
+                    continue
+                break
         err = resp.get("error")
         if err is not None:
             if not isinstance(err, dict):
@@ -172,6 +214,80 @@ class Client(object):
             params["frame"] = frame
         r = self.call("eval.mesh", params)
         return Mesh(r["node"], r["frame"], r["points"], r["polys"])
+
+    # -- notifications, screenshots, jobs ---------------------------------------------
+
+    def subscribe(self, *kinds):
+        """Receive notifications of ``kinds`` (``scene``, ``frame``, ``selection``,
+        ``commands``; none given means all). Returns the subscription."""
+        return self.call("events.subscribe", {"kinds": list(kinds)} if kinds else {})["kinds"]
+
+    def unsubscribe(self, *kinds):
+        return self.call("events.unsubscribe", {"kinds": list(kinds)} if kinds else {})["kinds"]
+
+    def on_notification(self, callback):
+        """Calls ``callback(method, params)`` for every notification read from now on
+        (on the thread that reads it); ``None`` removes it. Notifications are also queued
+        for ``next_notification``."""
+        self._callback = callback
+
+    def next_notification(self, timeout=None):
+        """The next queued or arriving :class:`Notification`; ``None`` after ``timeout``
+        seconds (``None`` waits forever). Notifications arrive only while a call or this
+        method reads the socket."""
+        deadline = None if timeout is None else time.monotonic() + timeout
+        with self._lock:
+            while True:
+                if self._notes:
+                    return self._notes.popleft()
+                if self._sock is None:
+                    raise ConnectionFailed("the client is closed")
+                if deadline is None:
+                    self._sock.settimeout(None)
+                line = self._read_line(deadline)
+                if line is None:
+                    return None
+                msg = self._parse(line)
+                if "id" in msg or not isinstance(msg.get("method"), str):
+                    raise ConnectionFailed("unexpected response while waiting for a notification")
+                self._note(msg)
+
+    def screenshot(self, width=None, height=None):
+        """A PNG of the editor's viewport as ``bytes`` (``RpcError`` -32000 without a viewport)."""
+        params = {}
+        if width is not None:
+            params["width"] = width
+        if height is not None:
+            params["height"] = height
+        return base64.b64decode(self.call("viewport.screenshot", params)["data"])
+
+    def job_start(self, kind, **args):
+        """Starts a long job; returns its id. Progress arrives as ``job.progress``
+        notifications, the end as ``job.finished``."""
+        return self.call("job.start", {"kind": kind, "args": args})["job_id"]
+
+    def job_cancel(self, id):
+        return self.call("job.cancel", {"id": id})
+
+    def jobs(self):
+        return self.call("job.list")["jobs"]
+
+    def job_wait(self, id, timeout=None, on_progress=None):
+        """Waits for job ``id`` to end; returns the ``job.finished`` params
+        (``state`` is ``done``, ``cancelled`` or ``failed``). ``on_progress(fraction,
+        message)`` is called for its progress. Raises ``ForgeError`` on timeout."""
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while True:
+            left = None if deadline is None else max(0.0, deadline - time.monotonic())
+            note = self.next_notification(left)
+            if note is None:
+                raise ForgeError("job %s did not finish in time" % (id,))
+            if note.params.get("id") != id:
+                continue
+            if note.method == "job.progress" and on_progress is not None:
+                on_progress(note.params["fraction"], note.params["message"])
+            elif note.method == "job.finished":
+                return note.params
 
     # -- commands -----------------------------------------------------------------------
 

@@ -1,8 +1,9 @@
 //! The blocking Rust client (docs/specs/RPC.md §6).
 
+use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
@@ -44,11 +45,22 @@ pub struct MeshData {
     pub polys: Vec<Vec<u32>>,
 }
 
+/// A server notification (docs/specs/RPC.md §10.1).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Notification {
+    pub method: String,
+    pub params: Value,
+}
+
 pub struct Client {
     reader: BufReader<TcpStream>,
     writer: TcpStream,
     token: Option<String>,
     next_id: u64,
+    /// Bytes of a line not yet complete.
+    pending: Vec<u8>,
+    /// Notifications read while waiting for a response.
+    notifications: VecDeque<Notification>,
 }
 
 impl Client {
@@ -64,6 +76,8 @@ impl Client {
             writer,
             token: token.filter(|t| !t.is_empty()).map(String::from),
             next_id: 1,
+            pending: Vec::new(),
+            notifications: VecDeque::new(),
         })
     }
 
@@ -82,13 +96,86 @@ impl Client {
         self.read_response(id)
     }
 
-    fn read_response(&mut self, id: u64) -> Result<Value, ClientError> {
-        let mut line = String::new();
-        if self.reader.read_line(&mut line)? == 0 {
-            return Err(ClientError::Protocol("connection closed".into()));
+    /// The next complete line. `Ok(None)` when `deadline` passes first; partial data stays
+    /// buffered for the next call.
+    fn read_line(&mut self, deadline: Option<Instant>) -> Result<Option<String>, ClientError> {
+        loop {
+            if let Some(pos) = self.pending.iter().position(|b| *b == b'\n') {
+                let rest = self.pending.split_off(pos + 1);
+                let line = std::mem::replace(&mut self.pending, rest);
+                return String::from_utf8(line)
+                    .map(Some)
+                    .map_err(|_| ClientError::Protocol("not UTF-8".into()));
+            }
+            let wait = match deadline {
+                Some(d) => {
+                    let left = d.saturating_duration_since(Instant::now());
+                    if left.is_zero() {
+                        return Ok(None);
+                    }
+                    left
+                }
+                None => Duration::from_secs(60),
+            };
+            self.writer.set_read_timeout(Some(wait))?;
+            match self.reader.fill_buf() {
+                Ok([]) => return Err(ClientError::Protocol("connection closed".into())),
+                Ok(chunk) => {
+                    let n = chunk.len();
+                    self.pending.extend_from_slice(chunk);
+                    self.reader.consume(n);
+                }
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                    ) =>
+                {
+                    if deadline.is_some() {
+                        return Ok(None);
+                    }
+                    return Err(ClientError::Io(e));
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(e.into()),
+            }
         }
-        let response: Value = serde_json::from_str(&line)
+    }
+
+    /// The next notification, from the queue or the socket; `None` after `timeout`.
+    pub fn next_notification(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<Option<Notification>, ClientError> {
+        if let Some(n) = self.notifications.pop_front() {
+            return Ok(Some(n));
+        }
+        let deadline = Instant::now() + timeout;
+        let Some(line) = self.read_line(Some(deadline))? else {
+            return Ok(None);
+        };
+        let value: Value = serde_json::from_str(&line)
             .map_err(|e| ClientError::Protocol(format!("not JSON: {e}")))?;
+        match as_notification(&value) {
+            Some(n) => Ok(Some(n)),
+            None => Err(ClientError::Protocol(format!(
+                "unexpected response while waiting for a notification: {value}"
+            ))),
+        }
+    }
+
+    fn read_response(&mut self, id: u64) -> Result<Value, ClientError> {
+        let response: Value = loop {
+            let line = self
+                .read_line(None)?
+                .ok_or_else(|| ClientError::Protocol("connection closed".into()))?;
+            let value: Value = serde_json::from_str(&line)
+                .map_err(|e| ClientError::Protocol(format!("not JSON: {e}")))?;
+            match as_notification(&value) {
+                Some(n) => self.notifications.push_back(n),
+                None => break value,
+            }
+        };
         if let Some(error) = response.get("error") {
             // A null id is a connection-level refusal (too many connections, too large).
             return Err(ClientError::Rpc {
@@ -144,7 +231,63 @@ impl Client {
         Ok(MeshData { points, polys })
     }
 
+    /// Adds `kinds` to this connection's subscription; returns the subscription.
+    pub fn subscribe(&mut self, kinds: &[&str]) -> Result<Vec<String>, ClientError> {
+        self.events("events.subscribe", kinds)
+    }
+
+    pub fn unsubscribe(&mut self, kinds: &[&str]) -> Result<Vec<String>, ClientError> {
+        self.events("events.unsubscribe", kinds)
+    }
+
+    fn events(&mut self, method: &str, kinds: &[&str]) -> Result<Vec<String>, ClientError> {
+        let r = self.call(method, json!({ "kinds": kinds }))?;
+        Ok(r["kinds"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|k| k.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
+    /// A PNG of the editor's viewport (`viewport.screenshot`).
+    pub fn screenshot(&mut self, width: u32, height: u32) -> Result<Vec<u8>, ClientError> {
+        let r = self.call(
+            "viewport.screenshot",
+            json!({"width": width, "height": height}),
+        )?;
+        r["data"]
+            .as_str()
+            .and_then(crate::base64::decode)
+            .ok_or_else(|| ClientError::Protocol("viewport.screenshot: bad data".into()))
+    }
+
+    /// Starts a long job; returns its id.
+    pub fn job_start(&mut self, kind: &str, args: Value) -> Result<u64, ClientError> {
+        let r = self.call("job.start", json!({"kind": kind, "args": args}))?;
+        r["job_id"]
+            .as_u64()
+            .ok_or_else(|| ClientError::Protocol("job.start: no job_id".into()))
+    }
+
+    pub fn job_cancel(&mut self, id: u64) -> Result<Value, ClientError> {
+        self.call("job.cancel", json!({"id": id}))
+    }
+
     pub fn timeline_get(&mut self) -> Result<Value, ClientError> {
         self.call("timeline.get", json!({}))
     }
+}
+
+/// A line with a `method` and no `id` is a notification.
+fn as_notification(value: &Value) -> Option<Notification> {
+    if value.get("id").is_some() {
+        return None;
+    }
+    Some(Notification {
+        method: value.get("method")?.as_str()?.to_string(),
+        params: value.get("params").cloned().unwrap_or(Value::Null),
+    })
 }

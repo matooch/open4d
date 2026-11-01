@@ -5,6 +5,9 @@
 //! through `forge_rpc::Client`) or an in-process app ([`HeadlessBackend`]).
 
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use forge_app::App;
 use forge_rpc::{Client, ClientError, RpcSettings, dispatch};
@@ -24,6 +27,11 @@ pub struct CallError {
 /// Where the RPC methods (RPC.md section 4) are answered.
 pub trait Backend {
     fn call(&mut self, method: &str, params: Value) -> Result<Value, CallError>;
+
+    /// Whether the command list can change while the server runs (the editor can).
+    fn supports_list_changed(&self) -> bool {
+        false
+    }
 }
 
 /// An in-process app, no editor and no port.
@@ -70,6 +78,10 @@ impl EditorBackend {
 }
 
 impl Backend for EditorBackend {
+    fn supports_list_changed(&self) -> bool {
+        true
+    }
+
     fn call(&mut self, method: &str, params: Value) -> Result<Value, CallError> {
         if self.client.is_none() {
             let client = Client::connect(self.port, self.token.as_deref()).map_err(|e| {
@@ -110,6 +122,7 @@ enum Target {
     Scene,
     Node,
     MeshSummary,
+    Screenshot,
     /// An alias for a command, or a command itself.
     Command(String),
 }
@@ -126,6 +139,12 @@ fn object_schema(schema: &Value) -> Value {
     } else {
         json!({"type": "object", "properties": {"value": schema}, "required": ["value"]})
     }
+}
+
+/// An MCP image content block from a `viewport.screenshot` result.
+fn image_result(shot: &Value) -> Value {
+    json!({"content": [{"type": "image", "data": shot["data"], "mimeType": "image/png"}],
+        "isError": false})
 }
 
 /// Counts and the bounding box of an `eval.mesh` result.
@@ -189,6 +208,15 @@ fn builtin_tools() -> Vec<ToolDef> {
             Target::MeshSummary,
         ),
         def(
+            "viewport_screenshot",
+            "Render the editor's viewport (current camera, shading and frame) and return it as a PNG image. Needs the editor window's machine to have a GPU; headless servers report an error.",
+            json!({"type": "object", "properties": {
+                "width": {"type": "integer", "minimum": 1, "maximum": 4096, "description": "pixels, default 800"},
+                "height": {"type": "integer", "minimum": 1, "maximum": 4096, "description": "pixels, default 600"}},
+                "additionalProperties": false}),
+            Target::Screenshot,
+        ),
+        def(
             "export_obj",
             "Write the scene evaluated at the current frame as a Wavefront OBJ file (alias of file_export_obj).",
             json!({"type": "object", "properties": {
@@ -213,6 +241,8 @@ pub struct Server<B: Backend> {
     backend: B,
     tools: Option<Vec<ToolDef>>,
     index: HashMap<String, usize>,
+    /// Set by the thread that watches the editor: the cached tool list is stale.
+    stale: Arc<AtomicBool>,
 }
 
 fn error_reply(id: Value, code: i64, message: impl Into<String>) -> Value {
@@ -229,7 +259,13 @@ impl<B: Backend> Server<B> {
             backend,
             tools: None,
             index: HashMap::new(),
+            stale: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// The flag that makes the next `tools/list` or `tools/call` reload the command list.
+    pub fn stale_flag(&self) -> Arc<AtomicBool> {
+        self.stale.clone()
     }
 
     /// Handles one input line; the reply line, or `None` for notifications and blank input.
@@ -286,13 +322,18 @@ impl<B: Backend> Server<B> {
     }
 
     fn initialize(&self, params: &Value) -> Value {
+        let tools_capability = if self.backend.supports_list_changed() {
+            json!({"listChanged": true})
+        } else {
+            json!({})
+        };
         let version = params["protocolVersion"]
             .as_str()
             .filter(|v| PROTOCOL_VERSIONS.contains(v))
             .unwrap_or(PROTOCOL_VERSIONS[0]);
         json!({
             "protocolVersion": version,
-            "capabilities": {"tools": {}},
+            "capabilities": {"tools": tools_capability},
             "serverInfo": {"name": "forge-mcp", "version": env!("CARGO_PKG_VERSION")},
             "instructions": "Forge3D scene tools. One tool per editor command (object_create, param_set, ...) plus scene_get, node_get, eval_mesh_summary, export_obj and frame_set. Node ids come from scene_get and from command results. Every editing command is one undo step (edit_undo).",
         })
@@ -300,6 +341,9 @@ impl<B: Backend> Server<B> {
 
     /// Builds the tool list from the backend once; later calls reuse it.
     fn load_tools(&mut self) -> Result<(), (i64, String)> {
+        if self.stale.swap(false, Ordering::SeqCst) {
+            self.tools = None;
+        }
         if self.tools.is_some() {
             return Ok(());
         }
@@ -376,15 +420,52 @@ impl<B: Backend> Server<B> {
                 .backend
                 .call("eval.mesh", arguments)
                 .map(|m| mesh_summary(&m)),
+            Target::Screenshot => self
+                .backend
+                .call("viewport.screenshot", arguments)
+                .map(|r| image_result(&r)),
             Target::Command(id) => self
                 .backend
                 .call("command.run", json!({"id": id, "args": arguments}))
                 .map(|r| r["result"].clone()),
         };
         Ok(match outcome {
+            Ok(v) if v.get("content").is_some() && v.get("isError").is_some() => v,
             Ok(v) => tool_result(v.to_string(), false),
             Err(e) => tool_result(e.message, true),
         })
+    }
+}
+
+/// Follows the editor's command list on a second RPC connection. Calls `on_change` when
+/// the editor reports `commands.changed`, and after reconnecting to an editor it had lost
+/// (it may have restarted with other commands). Retries every second until `stop`. Meant
+/// to run on its own thread.
+pub fn watch_command_changes(
+    port: u16,
+    token: Option<String>,
+    stop: &AtomicBool,
+    on_change: impl Fn(),
+) {
+    let mut connected_before = false;
+    while !stop.load(Ordering::SeqCst) {
+        let connected = Client::connect(port, token.as_deref())
+            .and_then(|mut c| c.subscribe(&["commands"]).map(|_| c));
+        let Ok(mut client) = connected else {
+            std::thread::sleep(Duration::from_secs(1));
+            continue;
+        };
+        if connected_before {
+            on_change();
+        }
+        connected_before = true;
+        while !stop.load(Ordering::SeqCst) {
+            match client.next_notification(Duration::from_millis(250)) {
+                Ok(Some(n)) if n.method == "commands.changed" => on_change(),
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
     }
 }
 
@@ -396,6 +477,16 @@ mod tests {
     fn names_replace_dots() {
         assert_eq!(tool_name("object.create"), "object_create");
         assert_eq!(tool_name("view.frame_all"), "view_frame_all");
+    }
+
+    #[test]
+    fn a_screenshot_becomes_an_image_block() {
+        let r = image_result(&json!({"width": 1, "height": 1, "format": "png", "data": "AAAA"}));
+        assert_eq!(r["isError"], false);
+        assert_eq!(
+            r["content"][0],
+            json!({"type": "image", "data": "AAAA", "mimeType": "image/png"})
+        );
     }
 
     #[test]
@@ -426,8 +517,8 @@ mod tests {
         let commands = App::new_default().commands.len();
         assert_eq!(
             tools.len(),
-            commands + 5,
-            "every command plus the 5 builtins"
+            commands + 6,
+            "every command plus the 6 builtins"
         );
         let mut names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
         names.sort();

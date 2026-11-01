@@ -1,19 +1,25 @@
 //! Drives the `forge-mcp` binary over stdio (docs/specs/RPC.md section 8.5).
 
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::Receiver;
 use std::thread::JoinHandle;
+use std::time::Duration;
 
-use forge_app::App;
-use forge_rpc::{Server, ServerConfig};
+use forge_app::{App, default_command_registry};
+use forge_command::{CommandError, CommandSpec};
+use forge_rpc::{Client, Host, Server, ServerConfig};
 use serde_json::{Value, json};
 
 struct Mcp {
     child: Child,
     stdin: Option<ChildStdin>,
-    stdout: BufReader<ChildStdout>,
+    /// Lines the child wrote to stdout, read by a thread so waits can time out.
+    lines: Receiver<String>,
+    /// Notifications that arrived while a request waited for its reply.
+    notes: Vec<Value>,
     next: u64,
 }
 
@@ -33,10 +39,20 @@ impl Mcp {
         let mut child = cmd.spawn().unwrap();
         let stdin = child.stdin.take();
         let stdout = BufReader::new(child.stdout.take().unwrap());
+        let (tx, lines) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            for line in stdout.lines() {
+                let Ok(line) = line else { break };
+                if tx.send(line).is_err() {
+                    break;
+                }
+            }
+        });
         Mcp {
             child,
             stdin,
-            stdout,
+            lines,
+            notes: Vec::new(),
             next: 1,
         }
     }
@@ -49,12 +65,17 @@ impl Mcp {
     }
 
     fn recv(&mut self) -> Value {
-        let mut line = String::new();
-        assert!(
-            self.stdout.read_line(&mut line).unwrap() > 0,
-            "server closed"
-        );
+        let line = self
+            .lines
+            .recv_timeout(Duration::from_secs(30))
+            .expect("server closed or silent");
         serde_json::from_str(&line).unwrap()
+    }
+
+    /// The next line within `timeout`, if any.
+    fn recv_within(&mut self, timeout: Duration) -> Option<Value> {
+        let line = self.lines.recv_timeout(timeout).ok()?;
+        Some(serde_json::from_str(&line).unwrap())
     }
 
     fn request(&mut self, method: &str, params: Value) -> Value {
@@ -63,9 +84,15 @@ impl Mcp {
         self.send_raw(
             &json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}).to_string(),
         );
-        let reply = self.recv();
-        assert_eq!(reply["id"], json!(id));
-        reply
+        loop {
+            let reply = self.recv();
+            if reply.get("id").is_none() && reply.get("method").is_some() {
+                self.notes.push(reply);
+                continue;
+            }
+            assert_eq!(reply["id"], json!(id));
+            return reply;
+        }
     }
 
     fn initialize(&mut self) -> Value {
@@ -306,6 +333,33 @@ struct Editor {
     pump: Option<JoinHandle<()>>,
 }
 
+/// An `App` host whose command `test.swap_commands` adds a command to the registry.
+struct SwapHost(App);
+
+impl Host for SwapHost {
+    fn app(&self) -> &App {
+        &self.0
+    }
+
+    fn run_command(&mut self, id: &str, args: Value) -> Result<Value, CommandError> {
+        if id == "test.swap_commands" {
+            let mut commands = default_command_registry();
+            commands.register_fn(
+                CommandSpec {
+                    id: "test.hello",
+                    label: "Hello",
+                    undoable: false,
+                    sample: || json!({}),
+                },
+                |_c, _a: Value| Ok(json!({"hello": true})),
+            )?;
+            self.0.commands = Arc::new(commands);
+            return Ok(json!({}));
+        }
+        self.0.run(id, args)
+    }
+}
+
 impl Editor {
     fn start(token: &str) -> Editor {
         let (server, inbox) = Server::start(ServerConfig {
@@ -317,8 +371,8 @@ impl Editor {
         let stop = Arc::new(AtomicBool::new(false));
         let flag = stop.clone();
         let pump = std::thread::spawn(move || {
-            let mut app = App::new_default();
-            inbox.run_until(&mut app, &flag);
+            let mut host = SwapHost(App::new_default());
+            inbox.run_until(&mut host, &flag);
         });
         Editor {
             server,
@@ -394,4 +448,50 @@ fn editor_mode_reports_a_wrong_token_and_a_missing_editor_as_tool_errors() {
     assert!(err);
     assert!(msg.as_str().unwrap().contains("cannot connect"));
     assert_eq!(gone.request("ping", json!({}))["result"], json!({}));
+}
+
+#[test]
+fn editor_mode_announces_a_changed_tool_list() {
+    let editor = Editor::start("list-token");
+    let port = editor.server.port();
+    let mut mcp = Mcp::spawn(
+        &["--port", &port.to_string()],
+        &[("FORGE_RPC_TOKEN", "list-token")],
+    );
+    let init = mcp.initialize();
+    assert_eq!(init["result"]["capabilities"]["tools"]["listChanged"], true);
+    assert!(!tool_names(&mut mcp).contains(&"test_hello".to_string()));
+
+    // The watcher connects in the background: keep changing the registry until it
+    // has seen one change (every swap installs a new registry).
+    let mut rpc = Client::connect(port, Some("list-token")).unwrap();
+    let mut announced = None;
+    for _ in 0..100 {
+        rpc.command_run("test.swap_commands", json!({})).unwrap();
+        if let Some(m) = mcp.recv_within(Duration::from_millis(100)) {
+            announced = Some(m);
+            break;
+        }
+    }
+    let note = announced.expect("notifications/tools/list_changed");
+    assert_eq!(note["method"], "notifications/tools/list_changed");
+    assert!(note.get("id").is_none());
+    assert!(tool_names(&mut mcp).contains(&"test_hello".to_string()));
+    let (err, hello) = mcp.tool("test_hello", json!({}));
+    assert!(!err, "{hello}");
+    assert_eq!(hello["hello"], true);
+}
+
+#[test]
+fn headless_has_no_list_changes_and_no_viewport() {
+    let mut mcp = Mcp::spawn(&["--headless"], &[]);
+    let init = mcp.initialize();
+    assert_eq!(init["result"]["capabilities"]["tools"], json!({}));
+    assert!(tool_names(&mut mcp).contains(&"viewport_screenshot".to_string()));
+    let (err, msg) = mcp.tool("viewport_screenshot", json!({"width": 64, "height": 48}));
+    assert!(err);
+    assert!(msg.as_str().unwrap().contains("viewport"), "{msg}");
+    let (err, _) = mcp.tool("viewport_screenshot", json!({"width": 0}));
+    assert!(err);
+    assert_eq!(mcp.request("ping", json!({}))["result"], json!({}));
 }

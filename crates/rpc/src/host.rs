@@ -14,6 +14,11 @@ pub trait Host {
     fn app(&self) -> &App;
     /// Runs a registry command with the host's own context (the editor adds view hooks).
     fn run_command(&mut self, id: &str, args: Value) -> Result<Value, CommandError>;
+    /// Renders the viewport offscreen and returns a PNG of exactly `width` x `height`.
+    /// Hosts without a viewport keep this default (docs/specs/RPC.md §10.2).
+    fn screenshot(&mut self, _width: u32, _height: u32) -> Result<Vec<u8>, String> {
+        Err("this host has no viewport (viewport.screenshot needs the editor)".to_string())
+    }
 }
 
 impl Host for App {
@@ -71,6 +76,16 @@ struct MeshParams {
     node: u64,
     frame: Option<i64>,
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScreenshotParams {
+    width: Option<u32>,
+    height: Option<u32>,
+}
+
+/// Largest side of a screenshot, in pixels.
+pub const MAX_SCREENSHOT_SIDE: u32 = 4096;
 
 /// Runs `method` with `params` (an object) on `host`.
 pub fn dispatch(host: &mut dyn Host, method: &str, params: Value) -> Result<Value, RpcError> {
@@ -133,6 +148,21 @@ pub fn dispatch(host: &mut dyn Host, method: &str, params: Value) -> Result<Valu
             Ok(json!({"frame": app.timeline.current, "fps": settings.fps,
                 "start": settings.start, "end": settings.end,
                 "playing": app.timeline.playing, "autokey": app.autokey}))
+        }
+        "viewport.screenshot" => {
+            let p: ScreenshotParams = parse(method, params)?;
+            let (w, h) = (p.width.unwrap_or(800), p.height.unwrap_or(600));
+            if !(1..=MAX_SCREENSHOT_SIDE).contains(&w) || !(1..=MAX_SCREENSHOT_SIDE).contains(&h) {
+                return Err(RpcError::invalid_params(format!(
+                    "width and height must be 1 to {MAX_SCREENSHOT_SIDE}"
+                )));
+            }
+            let png = host
+                .screenshot(w, h)
+                .map_err(|m| RpcError::failed("viewport", m))?;
+            Ok(
+                json!({"width": w, "height": h, "format": "png", "data": crate::base64::encode(&png)}),
+            )
         }
         other => Err(RpcError::new(
             code::METHOD_NOT_FOUND,

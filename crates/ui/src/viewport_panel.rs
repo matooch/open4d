@@ -63,7 +63,7 @@ pub struct SceneView<'a> {
 }
 
 /// Base colour of selected objects (our palette).
-const SELECTED_TINT: [f32; 3] = [0.95, 0.62, 0.30];
+pub(crate) const SELECTED_TINT: [f32; 3] = [0.95, 0.62, 0.30];
 
 /// Side of a drawn point in component mode, in pixels.
 const POINT_SIZE: f32 = 7.0;

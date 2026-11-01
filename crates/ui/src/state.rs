@@ -10,6 +10,7 @@ use forge_viewport::camera::{Camera, Handedness};
 use forge_viewport::render::Shading;
 
 use crate::dock::Dock;
+use crate::screenshot::OffscreenGpu;
 use crate::script_panel::ScriptPanelState;
 
 pub use forge_command::NodeSelection;
@@ -24,6 +25,8 @@ pub struct EditorState {
     pub shading: Shading,
     /// Script Manager source, console and recent list (docs/specs/UI.md §10).
     pub script: ScriptPanelState,
+    /// The headless GPU device `viewport.screenshot` renders with (RPC.md §10.2).
+    pub offscreen: OffscreenGpu,
 }
 
 impl Deref for EditorState {
@@ -61,6 +64,7 @@ impl EditorState {
             camera: Self::default_camera(),
             shading: Shading::SmoothWire,
             script: ScriptPanelState::default(),
+            offscreen: OffscreenGpu::default(),
         }
     }
 }

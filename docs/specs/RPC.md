@@ -15,8 +15,8 @@ Every method is a thin layer over `forge_app::App` and the command registry
   A request must not contain a raw newline (JSON escapes them).
 - Request: `{"jsonrpc":"2.0","id":1,"method":"scene.get","params":{},"token":"..."}`.
   `id` is a number or string; `params` is an object (or absent); `token` is a string
-  (extension to JSON-RPC 2.0, see §2). A request without `id` is invalid (no
-  notifications yet, brief 018).
+  (extension to JSON-RPC 2.0, see §2). A request without `id` is invalid: clients send no
+  notifications. The server does send them (§10).
 - Success: `{"jsonrpc":"2.0","id":1,"result":<value>}`.
 - Failure: `{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"..."}}`. `id` is
   `null` when the request could not be parsed. Responses come in request order, one per
@@ -70,6 +70,9 @@ tests use it.) The file holds a secret: create it with mode 0600.
   requests (including bad ones) get -32002 and do not run.
 - At most 4 connections at once; a fifth gets -32004 and is closed.
 - A connection that sends nothing for 10 minutes is closed.
+- At most 1024 notifications wait for a connection to read them. A client that falls
+  further behind is disconnected (it never slows the editor down).
+- At most 8 jobs run at once (§10.3).
 
 ## 4. Methods
 
@@ -85,6 +88,9 @@ integers.
 | `node.get` | `{"id": n}` | the node object (same shape), -32000 if unknown |
 | `eval.mesh` | `{"node": n, "frame": f}` (`frame` optional: the current frame) | `{"node","frame","points":[[x,y,z]],"polys":[[i...]]}` in world space, animation and deformers applied (`App::eval_mesh`); the timeline does not move |
 | `timeline.get` | - | `{"frame","fps","start","end","playing","autokey"}` |
+| `viewport.screenshot` | `{"width": n, "height": n}` (both optional, default 800x600, 1 to 4096) | `{"width","height","format":"png","data":<base64>}` (§10.2) |
+| `events.subscribe` / `events.unsubscribe` | `{"kinds": [str]}` | `{"kinds": [str]}`, the subscription after the call (§10.1) |
+| `job.start` / `job.cancel` / `job.list` | see §10.3 | see §10.3 |
 
 `command.run` runs the command registry's handler with the editor's own context, so view
 commands (`view.shading`, ...) act on the open window. `file.*` commands take explicit
@@ -216,7 +222,8 @@ Claude Desktop config.
 - Editor mode against a `forge_rpc::Server` on port 0 with a token (pump thread with an
   `App`): tools work through the RPC client; a wrong token and a missing editor are
   `isError`.
-- Unit tests: name mapping and collisions, schema wrapping, bbox.
+- Unit tests: name mapping and collisions, schema wrapping, bbox. (Brief 018 adds
+  `viewport_screenshot` and `listChanged`: §10.4, §10.5.)
 
 ## 9. Python client (`python/forge_py`, package `forge_py`) and `forge-rpc-serve`
 
@@ -236,6 +243,7 @@ embedded and nothing is imported from the editor.
   is checked. Errors: `ForgeError` (base); `ConnectionFailed` (cannot connect, socket
   closed, bad response line); `RpcError(code, message, data)` for a JSON-RPC error, with
   the subclass `Unauthorized` for -32001.
+- Notifications, screenshots and jobs: §10.4.
 - Queries: `version()`, `commands()` (the `command.list` entries), `scene()`,
   `node(id)`, `timeline()`, `eval_mesh(node, frame=None)` returning a `Mesh` (`node`,
   `frame`, `points` as `[x, y, z]` lists, `polys`, `bbox()` as `(min, max)` or `None`).
@@ -276,3 +284,123 @@ available the gate and CI skip with a message.
 - Unit tests without a server: name mapping, schema checking, settings resolution
   (environment beats the file, empty token is none), a fake socket server for a mismatched
   response id and a non-JSON line.
+
+## 10. Notifications, screenshot and jobs (brief 018)
+
+Source: our own design (A-automation.md, brief 018); the notification form is JSON-RPC 2.0
+(a request object without `id`). Nothing here is **parity-pending**.
+
+### 10.1 Notifications and subscriptions
+A notification is one line `{"jsonrpc":"2.0","method":"frame.changed","params":{"frame":12}}`:
+no `id`, no `token`, never answered. Notifications may arrive at any time, including
+between a request and its response; a client reads every line and tells responses
+(`id`) from notifications (`method`, no `id`). A command's own response and the
+notifications it causes can come in either order.
+
+| kind | notification | params | sent when |
+|---|---|---|---|
+| `scene` | `scene.changed` | `{"revision": n}` | the scene revision changed (any edit, undo, load) |
+| `frame` | `frame.changed` | `{"frame": n}` | the current frame changed (command, playback, UI) |
+| `selection` | `selection.changed` | `{"nodes": [ids]}` | the object selection changed; ids ascending |
+| `commands` | `commands.changed` | `{"count": n}` | the command list changed (a command was added or the registry replaced) |
+
+- `events.subscribe {"kinds": ["scene","frame"]}` adds kinds to this connection's
+  subscription; `kinds` absent means all four. `events.unsubscribe {"kinds": [...]}` removes
+  them (absent: all). Both return `{"kinds": [...]}` (sorted) and are idempotent. An unknown
+  kind is -32602. A new connection has no subscription. The subscription ends with the
+  connection. Both methods need the token like any request and are answered by the
+  connection itself, not queued for the editor.
+- Detection: the thread that owns the document compares revision, frame, selection and
+  command list with the last values it saw, once per `Inbox::drain` (before and after the
+  queued requests, i.e. once or twice per editor frame) and once per iteration of
+  `Inbox::run_until`. Several changes between two checks are one notification each kind,
+  carrying the latest value (events are coalesced, never replayed). The first check only
+  records the baseline. The change that a subscription follows is therefore reported only
+  if it happened after the first drain.
+- A subscription asked for through `dispatch` alone (the MCP headless backend) does not
+  exist: there is no connection. `events.*` and `job.*` answer -32601 there.
+
+### 10.2 `viewport.screenshot`
+- `width`, `height` default to 800 and 600; outside 1 to 4096 is -32602.
+- The editor renders the current scene offscreen through the viewport renderer
+  (`forge_viewport::render`, the same pipelines as the window): the editor's camera and
+  shading, the grid, selected objects tinted, no gizmo, at the current frame. The result is
+  an 8-bit RGBA PNG of exactly the requested size, base64 (standard alphabet, padded) in
+  `data`. It uses its own headless wgpu device, created on the first call.
+- Hosts without a viewport (`forge-rpc-serve`, the MCP headless backend, a machine with no
+  GPU adapter) answer -32000 with `data.kind == "viewport"` and a message that says why
+  (`no GPU adapter: ...` or `this host has no viewport`). Nothing else is affected.
+
+### 10.3 Jobs
+A job is a long task run in slices on the thread that owns the document: each
+`Inbox::drain` (one per editor frame) or `run_until` iteration runs one slice of each
+active job after the queued requests, so requests, edits and cancel stay responsive and
+a job never runs during a draw. A slice that takes long blocks the editor for that long;
+kinds are written with small slices.
+
+- `job.start {"kind": str, "args": object}` returns `{"job_id": n}` at once (ids are 1, 2,
+  ... per server). Unknown kind: -32602; bad `args`: -32602; a start that cannot work
+  (directory not creatable): -32000; 8 jobs already running: -32000 (`data.kind == "job"`).
+- After each slice the starting connection gets `job.progress`
+  `{"id": n, "fraction": 0..1, "message": str}` (no subscription needed; fraction never
+  decreases). When the job ends it gets `job.finished`
+  `{"id": n, "state": "done"|"cancelled"|"failed", "result": <value>?, "error": str?}`,
+  `result` for done, `error` for failed. Progress comes before finished, and nothing after.
+  If the connection is gone the job still runs; `job.list` shows it.
+- `job.cancel {"id": n}` stops the job before its next slice: `{"id": n, "cancelled": true}`
+  for a running job (it then ends with `job.finished` state `cancelled`; work already
+  done stays, e.g. written files), `{"id": n, "cancelled": false, "state": ...}` for a job
+  that already ended. Unknown id: -32000 (`data.kind == "job"`).
+- `job.list` returns `{"jobs": [{"id","kind","state","fraction","message"}]}`: running jobs
+  and the last 32 ended ones, ascending by id; `state` is `running` or an end state.
+- Kind `export.obj_sequence`, args `{"dir": str, "start"?: n, "end"?: n, "step"?: n,
+  "prefix"?: str}`: writes the scene evaluated at each frame from `start` to `end`
+  (default the project range; `step` at least 1, default 1) as `<dir>/<prefix><frame>.obj`
+  (`prefix` default `frame_`, the frame zero padded to 4 digits). One frame per slice;
+  `dir` is created. `start > end` or `step < 1`: -32602. Result `{"files": n, "dir": str}`.
+  An empty scene makes the job `failed` ("nothing to export"). The timeline does not move.
+
+### 10.4 Clients, MCP and Python
+- `forge_rpc::Client` keeps notifications it meets while waiting for a response in a queue;
+  `next_notification(timeout)` returns the next one (`Notification {method, params}`) or
+  `None` on timeout. Helpers: `subscribe(&[kinds])`, `unsubscribe`, `screenshot(w, h) ->
+  Vec<u8>` (decoded PNG), `job_start`, `job_cancel`. `forge_rpc::base64` is the encoder and
+  decoder both sides use.
+- `forge-mcp` in editor mode keeps a second RPC connection subscribed to `commands`. When
+  `commands.changed` arrives, and after it reconnects to an editor it had lost, it drops
+  its cached tool list and writes `{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}`
+  to stdout; `initialize` then reports `"tools": {"listChanged": true}` (headless: `{}`,
+  nothing ever changes). A new built-in tool `viewport_screenshot {width?, height?}`
+  returns an MCP image content block `{"type":"image","data":<base64>,"mimeType":"image/png"}`;
+  without a viewport it is an `isError` result.
+- `forge_py.Client`: `subscribe(*kinds)`, `unsubscribe(*kinds)`, `on_notification(callback)`
+  (called with `(method, params)` for every notification read, on the thread reading it),
+  `next_notification(timeout=None)` (a `Notification(method, params)` or `None`),
+  `screenshot(width=None, height=None)` returning PNG `bytes`, `job_start(kind, **args)`
+  returning the id, `job_cancel(id)`, `jobs()`, and `job_wait(id, timeout=None,
+  on_progress=None)` returning the `job.finished` params. Notifications are read only
+  while a call or `next_notification` waits; there is no background thread.
+
+### 10.5 Tests
+- `crates/rpc/tests/notifications.rs`: subscribe to `frame`, run `timeline.set_frame`,
+  receive `frame.changed` with the frame; `scene` after an edit and after undo;
+  `selection`; no event for an unsubscribed kind or after `events.unsubscribe`; a second
+  connection without subscription receives nothing; unknown kind is -32602; `commands`
+  after the registry is replaced; a notification between request and response does not
+  confuse `call`. A unit test (`hub.rs`) shows a reader that falls behind by 1024
+  notifications is dropped and never blocks the publisher.
+- Same file: jobs. `export.obj_sequence` of a cube over 5 frames: progress with rising
+  fractions ending at 1, `job.finished` done, five files; a 100000-frame job cancelled
+  after its first progress ends `cancelled` with far fewer files; `job.list`; bad args;
+  other connections get no job notifications.
+- `viewport.screenshot` on a host without viewport: -32000 `viewport`; bad size -32602.
+- `crates/ui/tests/rpc.rs`: through `EditorState`, a screenshot of a cube is a PNG of the
+  requested size whose centre differs from its corner. Skipped without a GPU adapter
+  unless `FORGE_REQUIRE_GPU=1`, in which case a missing adapter fails the test (Linux CI
+  has lavapipe). Bad sizes are -32602 regardless of the GPU.
+- `crates/mcp/tests/stdio.rs`: editor mode emits `notifications/tools/list_changed` when
+  the host replaces its command list, and the next `tools/list` has the new tool;
+  `viewport_screenshot` headless is `isError`.
+- `python/forge_py/tests`: subscribe, `timeline_set_frame`, `next_notification` gets
+  `frame.changed`; callback; `job_start` + `job_wait`; `screenshot` against
+  `forge-rpc-serve` is an `RpcError` -32000.

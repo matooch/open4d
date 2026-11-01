@@ -1373,6 +1373,7 @@ name = "forge-mcp"
 version = "0.1.0"
 dependencies = [
  "forge-app",
+ "forge-command",
  "forge-rpc",
  "serde_json",
 ]

@@ -12,6 +12,7 @@ pub mod components;
 pub mod coordinates;
 pub mod dock;
 pub mod manipulate;
+pub mod screenshot;
 pub mod script_panel;
 pub mod state;
 pub mod theme;

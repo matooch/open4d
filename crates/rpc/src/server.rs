@@ -8,10 +8,12 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::config::ct_eq;
 use crate::host::{Host, dispatch};
+use crate::hub::{Hub, Kind, Registration, notification};
+use crate::jobs::{self, State, Step, Table};
 use crate::protocol::{RpcError, code, failure, success};
 
 /// Longest accepted request line, in bytes.
@@ -21,7 +23,8 @@ pub const MAX_CONNECTIONS: usize = 4;
 
 const IDLE_TIMEOUT: Duration = Duration::from_secs(600);
 const REPLY_TIMEOUT: Duration = Duration::from_secs(30);
-const TICK: Duration = Duration::from_millis(100);
+/// How often a connection thread looks for notifications to write.
+const TICK: Duration = Duration::from_millis(20);
 /// Jobs the UI thread runs per frame.
 const JOBS_PER_DRAIN: usize = 16;
 
@@ -57,6 +60,8 @@ impl std::fmt::Display for StartError {
 impl std::error::Error for StartError {}
 
 struct Job {
+    /// The connection that sent the request (owner of a job it starts).
+    conn: u64,
     method: String,
     params: Value,
     reply: Sender<Result<Value, RpcError>>,
@@ -68,6 +73,36 @@ type Wake = Arc<dyn Fn() + Send + Sync>;
 pub struct Inbox {
     rx: Receiver<Job>,
     wake: Arc<Mutex<Option<Wake>>>,
+    hub: Arc<Hub>,
+    jobs: Mutex<Table>,
+    watch: Mutex<Watch>,
+}
+
+/// What the notifications compare against (docs/specs/RPC.md §10.1).
+#[derive(Default)]
+struct Watch {
+    seen: Option<Seen>,
+}
+
+#[derive(Clone, PartialEq)]
+struct Seen {
+    revision: u64,
+    frame: i64,
+    selected: Vec<u64>,
+    /// Identity and size of the command registry.
+    commands: (usize, usize),
+}
+
+impl Seen {
+    fn of(host: &dyn Host) -> Seen {
+        let app = host.app();
+        Seen {
+            revision: app.doc.scene().revision(),
+            frame: app.timeline.current,
+            selected: app.selection.nodes.iter().map(|n| n.0).collect(),
+            commands: (Arc::as_ptr(&app.commands) as usize, app.commands.len()),
+        }
+    }
 }
 
 impl Inbox {
@@ -76,46 +111,195 @@ impl Inbox {
         *self.wake.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(wake));
     }
 
-    /// Runs the queued jobs (at most 16) on `host` and sends their replies. Returns how
-    /// many ran. A panicking method becomes an internal error, not a dead editor.
+    /// Runs the queued requests (at most 16) on `host` and sends their replies, runs one
+    /// slice of each long job and sends the notifications. Returns how much work was done
+    /// (requests plus job slices); the editor repaints while it is not zero. A panicking
+    /// method becomes an internal error, not a dead editor.
     pub fn drain(&self, host: &mut dyn Host) -> usize {
+        self.watch(host);
         let mut ran = 0;
         while ran < JOBS_PER_DRAIN {
             match self.rx.try_recv() {
                 Ok(job) => {
-                    run_job(host, job);
+                    self.run_job(host, job);
                     ran += 1;
                 }
                 Err(_) => break,
             }
         }
+        ran += self.step_jobs(host);
+        self.watch(host);
         ran
     }
 
-    /// Serves jobs on the calling thread until `stop` is set (headless hosts, tests).
+    /// Serves requests on the calling thread until `stop` is set (headless hosts, tests).
     pub fn run_until(&self, host: &mut dyn Host, stop: &AtomicBool) {
         while !stop.load(Ordering::SeqCst) {
-            match self.rx.recv_timeout(Duration::from_millis(20)) {
-                Ok(job) => run_job(host, job),
+            self.watch(host);
+            let wait = if self.has_jobs() { 2 } else { 20 };
+            match self.rx.recv_timeout(Duration::from_millis(wait)) {
+                Ok(job) => self.run_job(host, job),
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => break,
             }
+            self.step_jobs(host);
+            self.watch(host);
         }
+    }
+
+    fn has_jobs(&self) -> bool {
+        !self
+            .jobs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .active
+            .is_empty()
+    }
+
+    /// Sends a notification for every kind whose value changed since the last look.
+    fn watch(&self, host: &dyn Host) {
+        let now = Seen::of(host);
+        let mut watch = self.watch.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(before) = watch.seen.replace(now.clone()) else {
+            return;
+        };
+        if before.revision != now.revision {
+            let m = notification("scene.changed", json!({"revision": now.revision}));
+            self.hub.publish(Kind::Scene, &m);
+        }
+        if before.frame != now.frame {
+            let m = notification("frame.changed", json!({"frame": now.frame}));
+            self.hub.publish(Kind::Frame, &m);
+        }
+        if before.selected != now.selected {
+            let m = notification("selection.changed", json!({"nodes": now.selected}));
+            self.hub.publish(Kind::Selection, &m);
+        }
+        if before.commands != now.commands {
+            let m = notification("commands.changed", json!({"count": now.commands.1}));
+            self.hub.publish(Kind::Commands, &m);
+        }
+    }
+
+    fn run_job(&self, host: &mut dyn Host, job: Job) {
+        let Job {
+            conn,
+            method,
+            params,
+            reply,
+        } = job;
+        let result = catch_unwind(AssertUnwindSafe(|| match method.as_str() {
+            "job.start" | "job.cancel" | "job.list" => self.job_method(host, conn, &method, params),
+            _ => dispatch(host, &method, params),
+        }))
+        .unwrap_or_else(|_| Err(RpcError::new(code::INTERNAL, "internal error")));
+        let _ = reply.send(result);
+    }
+
+    fn job_method(
+        &self,
+        host: &dyn Host,
+        conn: u64,
+        method: &str,
+        params: Value,
+    ) -> Result<Value, RpcError> {
+        let mut table = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
+        let field = |name: &str| params.get(name).cloned();
+        let only = |allowed: &[&str]| -> Result<(), RpcError> {
+            match params
+                .as_object()
+                .and_then(|o| o.keys().find(|k| !allowed.contains(&k.as_str())))
+            {
+                Some(k) => Err(RpcError::invalid_params(format!(
+                    "{method}: unknown field {k}"
+                ))),
+                None => Ok(()),
+            }
+        };
+        match method {
+            "job.start" => {
+                only(&["kind", "args"])?;
+                let kind = field("kind")
+                    .and_then(|k| k.as_str().map(String::from))
+                    .ok_or_else(|| {
+                        RpcError::invalid_params("job.start: \"kind\" must be a string")
+                    })?;
+                let args = match field("args") {
+                    None | Some(Value::Null) => json!({}),
+                    Some(a @ Value::Object(_)) => a,
+                    Some(_) => {
+                        return Err(RpcError::invalid_params(
+                            "job.start: \"args\" must be an object",
+                        ));
+                    }
+                };
+                let job = jobs::make_job(host.app(), &kind, args)?;
+                let id = table.start(&kind, conn, job)?;
+                Ok(json!({ "job_id": id }))
+            }
+            "job.cancel" => {
+                only(&["id"])?;
+                let id = field("id").and_then(|v| v.as_u64()).ok_or_else(|| {
+                    RpcError::invalid_params("job.cancel: \"id\" must be an integer")
+                })?;
+                table.cancel(id)
+            }
+            _ => {
+                only(&[])?;
+                Ok(table.list())
+            }
+        }
+    }
+
+    /// One slice of every active job; notifications go to the connection that started it.
+    fn step_jobs(&self, host: &dyn Host) -> usize {
+        let mut table = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
+        let active = std::mem::take(&mut table.active);
+        let slices = active.len();
+        for mut a in active {
+            let finished = |a: &jobs::Active, state: State, extra: Value| {
+                let mut p = json!({"id": a.id, "state": state.name()});
+                p.as_object_mut()
+                    .expect("object")
+                    .extend(extra.as_object().cloned().unwrap_or_default());
+                self.hub.send_to(a.conn, &notification("job.finished", p));
+            };
+            if a.cancel {
+                finished(&a, State::Cancelled, json!({}));
+                table.end(a, State::Cancelled);
+                continue;
+            }
+            let step = catch_unwind(AssertUnwindSafe(|| a.job.step(host.app())))
+                .unwrap_or_else(|_| Step::Failed("internal error".to_string()));
+            match step {
+                Step::Progress { fraction, message } => {
+                    a.fraction = fraction.max(a.fraction);
+                    a.message = message;
+                    let p = json!({"id": a.id, "fraction": a.fraction, "message": a.message});
+                    self.hub.send_to(a.conn, &notification("job.progress", p));
+                    table.active.push(a);
+                }
+                Step::Done(result) => {
+                    a.fraction = 1.0;
+                    a.message = "done".to_string();
+                    let p = json!({"id": a.id, "fraction": 1.0, "message": a.message});
+                    self.hub.send_to(a.conn, &notification("job.progress", p));
+                    finished(&a, State::Done, json!({ "result": result }));
+                    table.end(a, State::Done);
+                }
+                Step::Failed(error) => {
+                    a.message = error.clone();
+                    finished(&a, State::Failed, json!({ "error": error }));
+                    table.end(a, State::Failed);
+                }
+            }
+        }
+        slices
     }
 }
 
-fn run_job(host: &mut dyn Host, job: Job) {
-    let Job {
-        method,
-        params,
-        reply,
-    } = job;
-    let result = catch_unwind(AssertUnwindSafe(|| dispatch(host, &method, params)))
-        .unwrap_or_else(|_| Err(RpcError::new(code::INTERNAL, "internal error")));
-    let _ = reply.send(result);
-}
-
 struct Shared {
+    hub: Arc<Hub>,
     token: Option<String>,
     jobs: Sender<Job>,
     wake: Arc<Mutex<Option<Wake>>>,
@@ -143,7 +327,9 @@ impl Server {
         let (tx, rx) = mpsc::channel();
         let wake = Arc::new(Mutex::new(None));
         let stop = Arc::new(AtomicBool::new(false));
+        let hub = Arc::new(Hub::default());
         let shared = Arc::new(Shared {
+            hub: hub.clone(),
             token,
             jobs: tx,
             wake: wake.clone(),
@@ -159,7 +345,13 @@ impl Server {
                 stop,
                 accept: Some(accept),
             },
-            Inbox { rx, wake },
+            Inbox {
+                rx,
+                wake,
+                hub,
+                jobs: Mutex::new(Table::default()),
+                watch: Mutex::new(Watch::default()),
+            },
         ))
     }
 
@@ -299,6 +491,23 @@ enum After {
 }
 
 fn serve(stream: TcpStream, shared: &Shared) {
+    let registration = shared.hub.register();
+    let id = registration.id;
+    serve_connection(stream, shared, &registration);
+    shared.hub.unregister(id);
+}
+
+/// Writes the notifications that wait for this connection.
+fn flush_outbox(out: &mut TcpStream, registration: &Registration) -> bool {
+    while let Ok(message) = registration.outbox.try_recv() {
+        if write_line(out, &message).is_err() {
+            return false;
+        }
+    }
+    true
+}
+
+fn serve_connection(stream: TcpStream, shared: &Shared, registration: &Registration) {
     if stream.set_read_timeout(Some(TICK)).is_err() {
         return;
     }
@@ -311,6 +520,9 @@ fn serve(stream: TcpStream, shared: &Shared) {
     let mut bucket = Bucket::new();
     let mut last_activity = Instant::now();
     while !shared.stop.load(Ordering::SeqCst) {
+        if registration.kill.load(Ordering::SeqCst) || !flush_outbox(&mut out, registration) {
+            break;
+        }
         match read_line(&mut reader, &mut buf) {
             Ok(Read::Line) => {
                 last_activity = Instant::now();
@@ -321,7 +533,7 @@ fn serve(stream: TcpStream, shared: &Shared) {
                 if line.iter().all(u8::is_ascii_whitespace) {
                     continue;
                 }
-                let (response, after) = handle_line(&line, shared, &mut bucket);
+                let (response, after) = handle_line(&line, shared, registration.id, &mut bucket);
                 if write_line(&mut out, &response).is_err() || matches!(after, After::Close) {
                     break;
                 }
@@ -371,7 +583,7 @@ fn drain_input(reader: &mut BufReader<TcpStream>) {
 
 /// Validates one request line and runs it. Order: parse, shape and id, rate limit,
 /// token, method fields, dispatch.
-fn handle_line(line: &[u8], shared: &Shared, bucket: &mut Bucket) -> (Value, After) {
+fn handle_line(line: &[u8], shared: &Shared, conn: u64, bucket: &mut Bucket) -> (Value, After) {
     let null = Value::Null;
     let fail = |id: &Value, code: i64, message: &str| failure(id, &RpcError::new(code, message));
     let value: Value = match serde_json::from_slice(line) {
@@ -402,7 +614,7 @@ fn handle_line(line: &[u8], shared: &Shared, bucket: &mut Bucket) -> (Value, Aft
             return (fail(&id, code::UNAUTHORIZED, "unauthorized"), After::Close);
         }
     }
-    let result = run_request(&request, shared);
+    let result = run_request(&request, shared, conn);
     let response = match result {
         Ok(v) => success(&id, v),
         Err(e) => failure(&id, &e),
@@ -410,7 +622,11 @@ fn handle_line(line: &[u8], shared: &Shared, bucket: &mut Bucket) -> (Value, Aft
     (response, After::Continue)
 }
 
-fn run_request(request: &Map<String, Value>, shared: &Shared) -> Result<Value, RpcError> {
+fn run_request(
+    request: &Map<String, Value>,
+    shared: &Shared,
+    conn: u64,
+) -> Result<Value, RpcError> {
     if request.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
         return Err(RpcError::new(
             code::INVALID_REQUEST,
@@ -426,8 +642,12 @@ fn run_request(request: &Map<String, Value>, shared: &Shared) -> Result<Value, R
         Some(p @ Value::Object(_)) => p.clone(),
         Some(_) => return Err(RpcError::invalid_params("\"params\" must be an object")),
     };
+    if method == "events.subscribe" || method == "events.unsubscribe" {
+        return events_method(shared, conn, method, &params);
+    }
     let (reply, wait) = mpsc::channel();
     let job = Job {
+        conn,
         method: method.to_string(),
         params,
         reply,
@@ -455,4 +675,45 @@ fn run_request(request: &Map<String, Value>, shared: &Shared) -> Result<Value, R
             "the editor dropped the request",
         )),
     }
+}
+
+/// `events.subscribe` and `events.unsubscribe` (docs/specs/RPC.md §10.1), answered by the
+/// connection thread: the subscription belongs to the connection.
+fn events_method(
+    shared: &Shared,
+    conn: u64,
+    method: &str,
+    params: &Value,
+) -> Result<Value, RpcError> {
+    let object = params.as_object().expect("params is an object");
+    if let Some(k) = object.keys().find(|k| k.as_str() != "kinds") {
+        return Err(RpcError::invalid_params(format!(
+            "{method}: unknown field {k}"
+        )));
+    }
+    let kinds: Vec<Kind> = match object.get("kinds") {
+        None | Some(Value::Null) => Kind::ALL.to_vec(),
+        Some(Value::Array(list)) => list
+            .iter()
+            .map(|v| {
+                v.as_str().and_then(Kind::parse).ok_or_else(|| {
+                    RpcError::invalid_params(format!(
+                        "{method}: unknown kind {v} (known: scene, frame, selection, commands)"
+                    ))
+                })
+            })
+            .collect::<Result<_, _>>()?,
+        Some(_) => {
+            return Err(RpcError::invalid_params(format!(
+                "{method}: \"kinds\" must be an array of strings"
+            )));
+        }
+    };
+    let now = if method == "events.subscribe" {
+        shared.hub.subscribe(conn, &kinds)
+    } else {
+        shared.hub.unsubscribe(conn, &kinds)
+    };
+    let names: Vec<&str> = now.iter().map(|k| k.name()).collect();
+    Ok(json!({ "kinds": names }))
 }

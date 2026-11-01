@@ -7,7 +7,7 @@ A native Rust reimplementation of a classic DCC application for Linux, macOS and
 
 `forge-mcp` is a Model Context Protocol server (stdio). Every editor command becomes a
 tool (`object_create`, `param_set`, ...), plus `scene_get`, `node_get`,
-`eval_mesh_summary`, `export_obj` and `frame_set`. Spec: `docs/specs/RPC.md` section 8.
+`eval_mesh_summary`, `export_obj`, `frame_set` and `viewport_screenshot`. Spec: `docs/specs/RPC.md` section 8.
 
 Build it: `cargo build --release -p forge-mcp` (binary `target/release/forge-mcp`).
 

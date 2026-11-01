@@ -69,6 +69,24 @@ sends any RPC method.
 Errors: `ForgeError` (base), `ConnectionFailed`, `RpcError(code, message, data)` and its
 subclass `Unauthorized` (wrong or missing token).
 
+## Notifications, screenshots, jobs
+
+```python
+forge.subscribe("frame", "selection")      # also "scene", "commands"; none = all
+forge.timeline_set_frame(frame=12)
+note = forge.next_notification(timeout=5)   # Notification(method="frame.changed", params={"frame": 12})
+forge.on_notification(lambda method, params: print(method, params))
+
+open("view.png", "wb").write(forge.screenshot(800, 600))   # needs the editor window's GPU
+
+job = forge.job_start("export.obj_sequence", dir="/tmp/seq", start=0, end=90)
+done = forge.job_wait(job, on_progress=lambda fraction, message: print(fraction, message))
+forge.job_cancel(job)                       # stops a running job
+```
+
+Notifications are read while a call or `next_notification` waits; there is no background
+thread. `forge-rpc-serve` has no viewport, so `screenshot` is an `RpcError` there.
+
 ## Tests
 
 ```sh

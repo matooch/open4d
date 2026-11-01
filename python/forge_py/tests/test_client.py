@@ -1,6 +1,8 @@
 """Tests against a real forge-rpc-serve (docs/specs/RPC.md section 9.3)."""
 
+import os
 import socket
+import tempfile
 import unittest
 
 from forge_py import Client, ConnectionFailed, RpcError, Unauthorized
@@ -128,6 +130,69 @@ class Errors(LiveTest):
     def test_attribute_error(self):
         with self.assertRaises(AttributeError):
             self.forge.no_such_command
+
+
+class Notifications(LiveTest):
+    def test_frame_change_is_received(self):
+        self.assertEqual(self.forge.subscribe("frame"), ["frame"])
+        self.forge.timeline_set_frame(frame=9)
+        note = self.forge.next_notification(timeout=10)
+        self.assertEqual((note.method, note.params), ("frame.changed", {"frame": 9}))
+        self.assertIsNone(self.forge.next_notification(timeout=0.2))
+
+    def test_callback_and_unsubscribe(self):
+        got = []
+        self.forge.on_notification(lambda method, params: got.append((method, params)))
+        self.forge.subscribe("frame", "selection")
+        self.assertEqual(self.forge.unsubscribe("frame"), ["selection"])
+        node = self.cube()
+        self.forge.timeline_set_frame(frame=4)
+        note = self.forge.next_notification(timeout=10)
+        self.assertEqual((note.method, note.params), ("selection.changed", {"nodes": [node]}))
+        self.assertEqual(got, [("selection.changed", {"nodes": [node]})])
+        self.assertIsNone(self.forge.next_notification(timeout=0.2))
+
+    def test_bad_kind(self):
+        with self.assertRaises(RpcError) as cm:
+            self.forge.subscribe("nope")
+        self.assertEqual(cm.exception.code, -32602)
+
+    def test_screenshot_needs_a_viewport(self):
+        with self.assertRaises(RpcError) as cm:
+            self.forge.screenshot(64, 48)
+        self.assertEqual(cm.exception.code, -32000)
+        self.assertEqual(cm.exception.data["kind"], "viewport")
+        self.assertEqual(self.forge.version()["name"], "forge3d")
+
+
+class Jobs(LiveTest):
+    def test_sequence_export_reports_progress_and_finishes(self):
+        self.cube()
+        with tempfile.TemporaryDirectory() as tmp:
+            job = self.forge.job_start("export.obj_sequence", dir=tmp, start=0, end=3)
+            progress = []
+            done = self.forge.job_wait(job, timeout=20, on_progress=lambda f, m: progress.append(f))
+            self.assertEqual(done["state"], "done")
+            self.assertEqual(done["result"]["files"], 4)
+            self.assertEqual(progress[-1], 1.0)
+            self.assertEqual(progress, sorted(progress))
+            self.assertEqual(len(os.listdir(tmp)), 4)
+        self.assertEqual(self.forge.jobs()[-1]["state"], "done")
+
+    def test_cancel(self):
+        self.cube()
+        with tempfile.TemporaryDirectory() as tmp:
+            job = self.forge.job_start("export.obj_sequence", dir=tmp, start=0, end=100000)
+            self.assertEqual(self.forge.next_notification(timeout=10).method, "job.progress")
+            self.assertTrue(self.forge.job_cancel(job)["cancelled"])
+            done = self.forge.job_wait(job, timeout=20)
+            self.assertEqual(done["state"], "cancelled")
+            self.assertLess(len(os.listdir(tmp)), 100000)
+
+    def test_bad_job(self):
+        with self.assertRaises(RpcError) as cm:
+            self.forge.job_start("no.such.kind")
+        self.assertEqual(cm.exception.code, -32602)
 
 
 class Connection(unittest.TestCase):
