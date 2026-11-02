@@ -11,8 +11,9 @@
   - Arc (arc, sector, segment, ring), n-Side, Star, Flower, 4-Side, Cogwheel, Cycloid,
     Profile, Cissoid, Formula, Text;
   - Circle ellipse and ring options; Rectangle rounding;
-  - every Intermediate Points mode (None, Natural, Uniform, Adaptive, Subdivided), with
-    R25's per-spline defaults.
+  - (done in brief 038) every Intermediate Points mode (None, Natural, Uniform, Adaptive,
+    Subdivided) in `spline_sampling.rs`; circle and helix default to Uniform. Arc will too
+    (brief 037).
 - [x] **Generators (partial):** Subdivision Surface, Boole, Symmetry, Array, Connect,
   Instance, Extrude, Lathe, Loft, Sweep.
 - [ ] **Remaining generators:** Metaball, Atom Array, Spline Mask.

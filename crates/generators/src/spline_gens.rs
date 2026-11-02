@@ -184,7 +184,7 @@ pub fn extrude(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMe
     let ty = extrude_type();
     let p = Params { ty: &ty, values };
     no_fillets(&p)?;
-    let ring = curve.points(5f64.to_radians());
+    let ring = curve.points();
     let n = ring.len();
     let sub = p.int("subdivision");
     let mv = match p.get("movement") {
@@ -226,7 +226,7 @@ pub fn lathe(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMesh
     if p.float("movement") != 0.0 || (p.float("scaling") - 100.0).abs() > 1e-9 {
         return Err(BuildError::Unsupported("lathe movement/scaling"));
     }
-    let profile = curve.points(5f64.to_radians());
+    let profile = curve.points();
     let m = profile.len();
     let (angle, seg) = (p.float("angle"), p.int("subdivision"));
     let full = (angle.abs() - std::f64::consts::TAU).abs() < 1e-9;
@@ -405,8 +405,8 @@ pub fn sweep(
             "sweep options other than the defaults",
         ));
     }
-    let shape = profile.points(5f64.to_radians());
-    let route = path.points(5f64.to_radians());
+    let shape = profile.points();
+    let route = path.points();
     let (n, m) = (route.len(), shape.len());
     if n < 2 {
         return Err(BuildError::Unsupported("sweep along a single point"));

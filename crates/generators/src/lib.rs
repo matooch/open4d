@@ -17,6 +17,7 @@ mod round;
 mod solids;
 mod sphere;
 mod spline_gens;
+pub mod spline_sampling;
 pub mod splines;
 mod subdivision;
 
