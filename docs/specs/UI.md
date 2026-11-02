@@ -237,6 +237,22 @@ Behaviour, data and rules: docs/specs/ANIM.md §2. Panel summary (own design,
   field, and the label of the current time.
 - Row 3: a frame strip. Click or drag scrubs the current frame; the playhead and one tick
   per key frame of the selected objects are drawn by us.
+- Time controls (brief 094, own design, **parity-pending G5**), added to the two button rows so
+  the panel keeps its height (view tests depend on the pane geometry): at the end of row 1 a
+  "Playback mode" combo (Once, Loop, Ping-Pong), an "Every frame" checkbox (off = real-time with
+  frame dropping) and a "Time display" combo (Frames, SMPTE, Seconds); at the end of row 2 a
+  "Preview range" checkbox with "Preview start" / "Preview end" fields (while on) and the buttons
+  "Add Marker", "Previous Marker", "Next Marker". The label after the frame field shows the
+  current time (seconds in Frames display, else the chosen format). The FPS field runs
+  `timeline.set_fps` (keys keep their seconds, ranges and markers convert); Start and End run
+  `timeline.settings`.
+- The 30 pt strip keeps its ruler and key ticks (ticks now start 10 pt from the top). The top
+  10 pt are the marker lane: each marker is a flag in its colour with its name (label "Marker
+  <name>"): click goes to its frame, drag moves it (`marker.move`), the context menu has the
+  name, "Color <name>" entries and "Delete Marker". The preview range shades the outside of the
+  strip, draws an accent band along the bottom and two handles (labels "Preview start handle" and
+  "Preview end handle"; dragging runs `timeline.set_preview`, the handles cannot cross). Keys M
+  and Alt+Comma / Alt+Period (ANIM.md §2.7).
 - `Timeline { current: 0, playing: false }` is editor state; start, end and fps live in
   the scene (`SceneSettings`, default 0, 90, 30). `set_current` clamps to the range.
 - The Attributes panel draws a marker left of every animatable row: filled diamond =
@@ -506,6 +522,8 @@ Default bindings (all parity-pending, ours):
 | K / Shift+K | `key.record` / `key.autokey` |
 | Space (viewport scope) | `timeline.toggle_play` |
 | Comma / Period | `timeline.step` delta -1 / +1 |
+| M | `marker.add` (brief 094) |
+| Alt+Comma / Alt+Period | `marker.jump` backward / forward (brief 094) |
 | Shift+Comma / Shift+Period | `key.jump` forward false / true |
 
 These are the old hard-coded keys of §5 and ANIM.md §2.7 unchanged, plus the rows for

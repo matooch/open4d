@@ -219,6 +219,31 @@ starts or the frame is set by hand. `update(now, settings)`: the frame is
 - `now` is `ctx.input(|i| i.time)`; the stepper itself takes it as an argument.
 - Stopping keeps the current frame. Changing fps or range while playing re-anchors.
 
+### 2.6a Playback modes and the playback range (brief 094, own design, **parity-pending G5**)
+The stepper is `Timeline::update_with(now, &Playback)`; `update(now, &settings)` is the
+Loop, real-time, project-range case of it (§2.6). `Playback { lo, hi, fps, mode,
+drop_frames }`, built by `Playback::of(settings, time)`:
+- **Playback range** `lo..=hi` = the preview range (§2.9) when one is set, else the project
+  range. A current frame outside it is pulled to the nearest end at the next update.
+- **Position function** (pure, `Playback::frame_after(from, steps) -> (frame, finished)`):
+  with `len = hi - lo + 1` and `u = (from - lo) + steps`:
+  - `Once`: `lo + min(u, len - 1)`; `finished` when `u >= len - 1` and `steps > 0`. The
+    frame stays on `hi` and `playing` becomes false.
+  - `Loop`: `lo + u mod len` (the §2.6 rule).
+  - `PingPong`: `period = 2 (len - 1)`, `p = u mod period`, frame `lo + p` for `p < len`,
+    else `lo + period - p`. Each end is shown once per turn (0 1 2 3 2 1 0 1 ...); a range of
+    one frame stays put. Playback always starts forward from the current frame.
+- **Steps** come from the injected clock `now` (seconds):
+  - *Real-time* (`drop_frames = true`, the default): `steps = floor((now - t0) * fps)` since
+    the anchor `(t0, from)`; a slow tick skips frames, the clock rate never changes.
+  - *Every frame* (`drop_frames = false`): one step at most per update, taken when `1/fps`
+    has passed since the previous step (`due = last + 1/fps`; `last = due` when the update
+    is less than one frame late, else `last = now`). A slow tick plays slower than real time
+    and never skips; there is no catch-up burst.
+- The first update after `play`, a manual frame change or an fps / range / mode change only
+  anchors (the frame does not change), as in §2.6.
+- `timeline.play` in `Once` mode with the current frame on `hi` first jumps to `lo`.
+
 ### 2.7 Shortcuts (own design, parity-pending; none clashes with the existing ones)
 Existing: Ctrl/Cmd+O, S, Shift+S, A, Shift+A, Z, Shift+Z, Y, Delete, 1-5 (shading),
 W/E/R/Q (gizmo), F2 (rename). New, all inactive while a text field has the keyboard:
@@ -230,6 +255,8 @@ W/E/R/Q (gizmo), F2 (rename). New, all inactive while a text field has the keybo
 | Space | Play / Stop, when the pointer is over the viewport |
 | `,` / `.` | previous / next frame |
 | Shift+`,` / Shift+`.` | previous / next key |
+| M | add a marker at the current frame (`marker.add`) |
+| Alt+`,` / Alt+`.` | previous / next marker (`marker.jump`) |
 
 ### 2.8 Make Editable and Current State to Object
 Both copy the source's `transform.*` **tracks** along with its `transform.*` params
@@ -237,6 +264,59 @@ Both copy the source's `transform.*` **tracks** along with its `transform.*` par
 other (generator) parameters have no counterpart on a polygon object and are dropped. The
 baked mesh uses the stored parameter values, not the values at the current frame
 (**parity-pending**).
+
+### 2.9 Time: settings, preview range, markers, fps conversion, display (brief 094)
+Sources: brief 087 (the rounding rules of §1.4), the area design G-animation.md. G5 §4
+(where preview range, markers and playback modes are set) is **unanswered**: the whole
+section is our own design and **parity-pending G5**; it is documented here so the
+observation can replace it rule by rule.
+
+**Data** (`forge-core::time`, saved in the scene, CORE.md §6.6): next to `SceneSettings`
+(fps, project range) the scene holds `TimeConfig`:
+| Field | Type, default | Meaning |
+|---|---|---|
+| `preview` | `Option<(i64, i64)>`, none | preview range, `start <= end`, inside the project range |
+| `mode` | `Once \| Loop \| PingPong`, `Loop` | what happens at the end of the playback range |
+| `drop_frames` | bool, true | true: real-time with frame dropping; false: every frame |
+| `display` | `Frames \| Smpte \| Seconds`, `Frames` | how times are written in the UI and in `text` fields |
+| `markers` | `Vec<Marker>`, empty | sorted by `(frame, id)` |
+`Marker { id: u64, frame: i64, name: String, color: [u8; 3] }`: `id` is unique in the scene,
+never reused while the marker exists (the next id is the highest + 1) and is the handle every
+command uses. Colours are `#rrggbb` in commands (default `#e0a030`); names may be empty.
+`Tx::set_time(TimeConfig)` validates (preview order and range, unique ids) and is one undoable edit that raises the scene revision.
+`Tx::set_settings` also clips the preview to the new project range (dropped when nothing is
+left) in the same step. `marker.add` and `marker.move` reject a frame outside the project range. Markers outside a shrunken range are kept, ignored by the jump, and
+shown again when the range grows.
+
+**fps conversion** (`timeline.set_fps`; the pure rule is `time::convert_frame`). Keys are
+stored in seconds (§1.1), so **keys never move**: after `fps` 30 to 24 the key at 0.5 s is
+at frame 12 and its value at every time is unchanged (the evaluation rounding of §1.4 is by
+time, not by frame, and is unchanged). A key may therefore sit between frames (10 at 30 fps
+is 0.3333 s = 8 at 24 fps; 1 at 30 fps is 0.8 at 24 fps). Frame-based data converts with the
+O16 rule (087): the time of frame `f` at the old rate is rounded to a whole millisecond,
+`ms = round_half_away(f * 1000 / old)`, and the new frame is `floor(ms * new / 1000 + 1/2)`
+(half rounds up), all in integer arithmetic. Converted: project start and end, preview start
+and end, every marker frame, the current frame (then clamped). Ranges keep `start <= end`
+(rounding is monotone). Converting back does not always restore the old frames (30 to 24 to 30 maps 3 to 2 to 2
+and 7 to 6 to 8); the command is one undo step, so undo is the way back. `timeline.settings` stays the raw edit:
+the numbers are frames as given and nothing is converted.
+
+**Display formats** (`time::format_time(frame, fps, display)`, non-drop-frame, always the
+time of the frame):
+- `Frames`: the frame number, `42`, `-3`.
+- `Smpte`: `HH:MM:SS:FF`, `FF = |frame| mod fps` zero padded to the digits of `fps - 1`
+  (at least 2), hours at least 2 digits, a leading `-` for negative frames:
+  frame 100 at 30 fps is `00:00:03:10`; frame 3600 at 24 fps is `00:02:30:00`.
+- `Seconds`: the millisecond-rounded time with three decimals and a unit, `1.400 s`.
+
+**Commands** (COMMANDS.md): `timeline.set_fps`, `timeline.set_preview`,
+`timeline.clear_preview`, `timeline.set_mode`, `timeline.set_frame_dropping`,
+`timeline.set_display`, `timeline.info` and `marker.add|remove|rename|move|set_color|list|jump`.
+Everything the panel does goes through them.
+
+**Marker jump** (`marker.jump {forward}`): the next marker is the one with the smallest frame
+`> current`, the previous the one with the largest frame `< current`, among markers inside
+the project range; none: the frame stays. Several markers on one frame count once.
 
 ## 3. Parity status
 

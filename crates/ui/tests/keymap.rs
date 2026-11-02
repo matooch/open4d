@@ -171,6 +171,9 @@ fn default_bindings_table() {
         ("Period", "timeline.step", r#"{"delta":1}"#),
         ("Shift+Comma", "key.jump", r#"{"forward":false}"#),
         ("Shift+Period", "key.jump", r#"{"forward":true}"#),
+        ("M", "marker.add", "{}"),
+        ("Alt+Comma", "marker.jump", r#"{"forward":false}"#),
+        ("Alt+Period", "marker.jump", r#"{"forward":true}"#),
     ];
     let want: Vec<(String, String, String)> = want
         .iter()

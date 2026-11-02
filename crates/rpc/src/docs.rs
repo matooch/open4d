@@ -69,7 +69,7 @@ pub const METHODS: &[MethodDoc] = &[
     MethodDoc {
         name: "timeline.get",
         params: "-",
-        result: r#"{"frame","fps","start","end","playing","autokey"}"#,
+        result: r#"{"frame","fps","start","end","playing","autokey","preview","mode","drop_frames","display","text","markers"}"#,
         summary: "Timeline state.",
     },
     MethodDoc {

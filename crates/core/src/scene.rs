@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use glam::DMat4;
 
 use crate::transform::Transform;
-use crate::{EditError, NodeType, Registry, Track, Value};
+use crate::{EditError, NodeType, Registry, TimeConfig, Track, Value};
 
 /// Highest revision handed out by [`Scene::with_params`] in this process.
 static LAST_UNIQUE_REV: AtomicU64 = AtomicU64::new(0);
@@ -120,6 +120,7 @@ pub struct Scene {
     next_id: u64,
     revision: u64,
     settings: SceneSettings,
+    time: TimeConfig,
 }
 
 impl Scene {
@@ -131,12 +132,18 @@ impl Scene {
             next_id: 1,
             revision: 0,
             settings: SceneSettings::default(),
+            time: TimeConfig::default(),
         }
     }
 
     /// Animation settings: fps and project range.
     pub fn settings(&self) -> SceneSettings {
         self.settings
+    }
+
+    /// Preview range, playback mode, display format and markers (ANIM.md §2.9).
+    pub fn time(&self) -> &TimeConfig {
+        &self.time
     }
 
     pub fn registry(&self) -> &Arc<Registry> {
@@ -317,6 +324,17 @@ impl Scene {
     pub(crate) fn replace_settings(&mut self, settings: SceneSettings) -> SceneSettings {
         self.revision += 1;
         std::mem::replace(&mut self.settings, settings)
+    }
+
+    /// Replaces the time configuration (already validated), raises the revision.
+    pub(crate) fn replace_time(&mut self, time: TimeConfig) -> TimeConfig {
+        self.revision += 1;
+        std::mem::replace(&mut self.time, time)
+    }
+
+    /// Sets the time configuration of a freshly loaded scene without touching the revision.
+    pub(crate) fn init_time(&mut self, time: TimeConfig) {
+        self.time = time;
     }
 
     /// Sets the settings of a freshly loaded scene without touching the revision.

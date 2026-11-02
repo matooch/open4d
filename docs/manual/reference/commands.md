@@ -2,7 +2,7 @@
 
 # Command reference
 
-87 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+101 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -82,6 +82,20 @@
 | [`timeline.toggle_play`](#timelinetoggle_play) | Play / Stop | no | `timeline_toggle_play` |
 | [`timeline.stop`](#timelinestop) | Stop | no | `timeline_stop` |
 | [`timeline.settings`](#timelinesettings) | Timeline Settings | yes | `timeline_settings` |
+| [`timeline.set_fps`](#timelineset_fps) | Set FPS | yes | `timeline_set_fps` |
+| [`timeline.set_preview`](#timelineset_preview) | Set Preview Range | yes | `timeline_set_preview` |
+| [`timeline.clear_preview`](#timelineclear_preview) | Clear Preview Range | yes | `timeline_clear_preview` |
+| [`timeline.set_mode`](#timelineset_mode) | Set Playback Mode | yes | `timeline_set_mode` |
+| [`timeline.set_frame_dropping`](#timelineset_frame_dropping) | Set Frame Dropping | yes | `timeline_set_frame_dropping` |
+| [`timeline.set_display`](#timelineset_display) | Set Time Display | yes | `timeline_set_display` |
+| [`timeline.info`](#timelineinfo) | Timeline Info | no | `timeline_info` |
+| [`marker.add`](#markeradd) | Add Marker | yes | `marker_add` |
+| [`marker.remove`](#markerremove) | Remove Marker | yes | `marker_remove` |
+| [`marker.rename`](#markerrename) | Rename Marker | yes | `marker_rename` |
+| [`marker.move`](#markermove) | Move Marker | yes | `marker_move` |
+| [`marker.set_color`](#markerset_color) | Set Marker Color | yes | `marker_set_color` |
+| [`marker.list`](#markerlist) | List Markers | no | `marker_list` |
+| [`marker.jump`](#markerjump) | Jump to Marker | no | `marker_jump` |
 | [`file.new`](#filenew) | New | no | `file_new` |
 | [`file.open`](#fileopen) | Open | no | `file_open` |
 | [`file.save`](#filesave) | Save | no | `file_save` |
@@ -968,6 +982,149 @@ Timeline Settings. One undo step.
 | `end` | integer | yes | Last frame of the project range. |
 
 Example: `forge cmd scene.forge timeline.settings --args '{"end":90,"fps":30,"start":0}'`
+
+### `timeline.set_fps`
+
+Set FPS. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `fps` | integer | yes | New frames per second, 1 to 240. Keys keep their seconds; the ranges, markers and the current frame are converted (ANIM.md §2.9). |
+
+Example: `forge cmd scene.forge timeline.set_fps --args '{"fps":24}'`
+
+### `timeline.set_preview`
+
+Set Preview Range. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `start` | integer | yes | First frame of the preview range, inside the project range. |
+| `end` | integer | yes | Last frame of the preview range, inside the project range. |
+
+Example: `forge cmd scene.forge timeline.set_preview --args '{"end":40,"start":10}'`
+
+### `timeline.clear_preview`
+
+Clear Preview Range. One undo step.
+
+No arguments.
+
+Example: `forge cmd scene.forge timeline.clear_preview --args '{}'`
+
+### `timeline.set_mode`
+
+Set Playback Mode. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `mode` | string | yes | `once`, `loop` or `ping_pong`. |
+
+Example: `forge cmd scene.forge timeline.set_mode --args '{"mode":"loop"}'`
+
+### `timeline.set_frame_dropping`
+
+Set Frame Dropping. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean | yes | true: real-time playback that drops frames; false: every frame is shown. |
+
+Example: `forge cmd scene.forge timeline.set_frame_dropping --args '{"enabled":true}'`
+
+### `timeline.set_display`
+
+Set Time Display. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `format` | string | yes | `frames`, `smpte` or `seconds`. |
+
+Example: `forge cmd scene.forge timeline.set_display --args '{"format":"frames"}'`
+
+### `timeline.info`
+
+Timeline Info. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge timeline.info --args '{}'`
+
+
+## `marker`
+
+### `marker.add`
+
+Add Marker. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `color` | string or null | no | Colour as `#rrggbb` (default `#e0a030`). |
+| `frame` | integer or null | no | Frame of the marker (default: the current frame), inside the project range. |
+| `name` | string or null | no | Name (default `Marker <id>`). |
+
+Example: `forge cmd scene.forge marker.add --args '{"color":"#e0a030","frame":10,"name":"Hit"}'`
+
+### `marker.remove`
+
+Remove Marker. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | integer | yes |  |
+
+Example: `forge cmd scene.forge marker.remove --args '{"id":1}'`
+
+### `marker.rename`
+
+Rename Marker. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `name` | string | yes |  |
+
+Example: `forge cmd scene.forge marker.rename --args '{"id":1,"name":"Hit"}'`
+
+### `marker.move`
+
+Move Marker. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `frame` | integer | yes | New frame, inside the project range. |
+
+Example: `forge cmd scene.forge marker.move --args '{"frame":20,"id":1}'`
+
+### `marker.set_color`
+
+Set Marker Color. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `color` | string | yes | `#rrggbb`. |
+
+Example: `forge cmd scene.forge marker.set_color --args '{"color":"#38c6e8","id":1}'`
+
+### `marker.list`
+
+List Markers. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge marker.list --args '{}'`
+
+### `marker.jump`
+
+Jump to Marker. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `forward` | boolean | yes | true: next key, false: previous key. |
+
+Example: `forge cmd scene.forge marker.jump --args '{"forward":true}'`
 
 
 ## `file`

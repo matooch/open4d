@@ -155,6 +155,20 @@ touch history.
 | `timeline.step` | `delta` | `{frame}` | no |
 | `timeline.play` / `timeline.stop` / `timeline.toggle_play` | - | null | no |
 | `timeline.settings` | `fps`, `start`, `end` | null | yes |
+| `timeline.set_fps` | `fps` (1-240): keys keep their seconds, ranges/markers/current frame convert (ANIM.md §2.9) | `{fps,start,end,frame}` | yes |
+| `timeline.set_preview` | `start`, `end` (inside the project range) | null | yes |
+| `timeline.clear_preview` | - | null | yes |
+| `timeline.set_mode` | `mode`: `once`, `loop`, `ping_pong` | null | yes |
+| `timeline.set_frame_dropping` | `enabled` (true: real-time, false: every frame) | null | yes |
+| `timeline.set_display` | `format`: `frames`, `smpte`, `seconds` | null | yes |
+| `timeline.info` | - | the timeline state (fps, range, preview, mode, display, frame, text, markers) | no |
+| `marker.add` | `frame?` (default current), `name?`, `color?` (`#rrggbb`) | `{id,frame}` | yes |
+| `marker.remove` | `id` | null | yes |
+| `marker.rename` | `id`, `name` | null | yes |
+| `marker.move` | `id`, `frame` (steps of one drag merge) | null | yes |
+| `marker.set_color` | `id`, `color` | null | yes |
+| `marker.list` | - | `{markers:[{id,frame,name,color}]}` | no |
+| `marker.jump` | `forward` | `{frame,found}` | no |
 | `transform.set` | `node`, `pos?`, `rot?` (degrees), `scale?` | null | yes |
 | `param.set` | `node`, `param`, `value` | null | yes |
 | `param.edit` | `param`, `value`, `nodes?`, `component?`, `gesture?` | `{changed}` | yes |

@@ -135,6 +135,20 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `timeline_toggle_play` | Play / Stop. Not an undoable edit. Runs command `timeline.toggle_play`. |
 | `timeline_stop` | Stop. Not an undoable edit. Runs command `timeline.stop`. |
 | `timeline_settings` | Timeline Settings. Undoable editing command. Runs command `timeline.settings`. |
+| `timeline_set_fps` | Set FPS. Undoable editing command. Runs command `timeline.set_fps`. |
+| `timeline_set_preview` | Set Preview Range. Undoable editing command. Runs command `timeline.set_preview`. |
+| `timeline_clear_preview` | Clear Preview Range. Undoable editing command. Runs command `timeline.clear_preview`. |
+| `timeline_set_mode` | Set Playback Mode. Undoable editing command. Runs command `timeline.set_mode`. |
+| `timeline_set_frame_dropping` | Set Frame Dropping. Undoable editing command. Runs command `timeline.set_frame_dropping`. |
+| `timeline_set_display` | Set Time Display. Undoable editing command. Runs command `timeline.set_display`. |
+| `timeline_info` | Timeline Info. Not an undoable edit. Runs command `timeline.info`. |
+| `marker_add` | Add Marker. Undoable editing command. Runs command `marker.add`. |
+| `marker_remove` | Remove Marker. Undoable editing command. Runs command `marker.remove`. |
+| `marker_rename` | Rename Marker. Undoable editing command. Runs command `marker.rename`. |
+| `marker_move` | Move Marker. Undoable editing command. Runs command `marker.move`. |
+| `marker_set_color` | Set Marker Color. Undoable editing command. Runs command `marker.set_color`. |
+| `marker_list` | List Markers. Not an undoable edit. Runs command `marker.list`. |
+| `marker_jump` | Jump to Marker. Not an undoable edit. Runs command `marker.jump`. |
 | `file_new` | New. Not an undoable edit. Runs command `file.new`. |
 | `file_open` | Open. Not an undoable edit. Runs command `file.open`. |
 | `file_save` | Save. Not an undoable edit. Runs command `file.save`. |

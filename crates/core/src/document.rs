@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use crate::scene::{Slot, SlotOwner, Subtree};
 use crate::{
-    Category, Key, NodeId, ParamError, ParamKind, Registry, Scene, SceneSettings, Track,
-    TrackError, Value, parse_target,
+    Category, Key, NodeId, ParamError, ParamKind, Registry, Scene, SceneSettings, TimeConfig,
+    Track, TrackError, Value, parse_target,
 };
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -33,6 +33,8 @@ pub enum EditError {
     Track(#[from] TrackError),
     #[error("invalid scene settings: {0}")]
     Settings(String),
+    #[error("invalid time settings: {0}")]
+    Time(String),
 }
 
 /// One primitive, invertible change.
@@ -64,6 +66,7 @@ enum Edit {
         track: Option<Track>,
     },
     SetSettings(SceneSettings),
+    SetTime(TimeConfig),
 }
 
 /// Applies `edit` (already validated) and returns its inverse.
@@ -108,6 +111,7 @@ fn apply(scene: &mut Scene, edit: Edit) -> Edit {
             }
         }
         Edit::SetSettings(settings) => Edit::SetSettings(scene.replace_settings(settings)),
+        Edit::SetTime(time) => Edit::SetTime(scene.replace_time(time)),
     }
 }
 
@@ -380,6 +384,40 @@ impl Tx<'_> {
     pub fn set_settings(&mut self, settings: SceneSettings) -> Result<(), EditError> {
         settings.check().map_err(EditError::Settings)?;
         self.push(Edit::SetSettings(settings));
+        // the preview range follows the project range (ANIM.md §2.9)
+        let time = self.scene().time().clone();
+        let clipped = time.clipped_preview(&settings);
+        if clipped != time.preview {
+            self.push(Edit::SetTime(TimeConfig {
+                preview: clipped,
+                ..time
+            }));
+        }
+        Ok(())
+    }
+
+    /// Sets fps, the project range and the time configuration together, so a frame-rate
+    /// conversion never passes through an invalid state (ANIM.md §2.9).
+    pub fn set_settings_and_time(
+        &mut self,
+        settings: SceneSettings,
+        mut time: TimeConfig,
+    ) -> Result<(), EditError> {
+        settings.check().map_err(EditError::Settings)?;
+        time.check(&settings).map_err(EditError::Time)?;
+        time.sort_markers();
+        self.push(Edit::SetSettings(settings));
+        self.push(Edit::SetTime(time));
+        Ok(())
+    }
+
+    /// Sets the preview range, playback mode, display format and markers (ANIM.md §2.9).
+    /// Markers are kept sorted by `(frame, id)`.
+    pub fn set_time(&mut self, mut time: TimeConfig) -> Result<(), EditError> {
+        time.check(&self.scene().settings())
+            .map_err(EditError::Time)?;
+        time.sort_markers();
+        self.push(Edit::SetTime(time));
         Ok(())
     }
 

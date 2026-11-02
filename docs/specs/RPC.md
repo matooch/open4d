@@ -89,7 +89,7 @@ integers.
 | `scene.get` | - | `{"fps","start","end","frame","nodes","selected":[ids],"roots":[node...]}` with the node shape of CLI.md `info` (params in user units, `tags`, `animated`, `children`) |
 | `node.get` | `{"id": n}` | the node object (same shape), -32000 if unknown |
 | `eval.mesh` | `{"node": n, "frame": f}` (`frame` optional: the current frame) | `{"node","frame","points":[[x,y,z]],"polys":[[i...]]}` in world space, animation and deformers applied (`App::eval_mesh`); the timeline does not move |
-| `timeline.get` | - | `{"frame","fps","start","end","playing","autokey"}` |
+| `timeline.get` | - | `{"frame","fps","start","end","playing","autokey","preview","mode","drop_frames","display","text","markers"}` (the fields of `timeline.info`, ANIM.md §2.9, plus `playing` and `autokey`) |
 | `viewport.screenshot` | `{"width": n, "height": n}` (both optional, default 800x600, 1 to 4096) | `{"width","height","format":"png","data":<base64>}` (§10.2) |
 | `events.subscribe` / `events.unsubscribe` | `{"kinds": [str]}` | `{"kinds": [str]}`, the subscription after the call (§10.1) |
 | `job.start` / `job.cancel` / `job.list` | see §10.3 | see §10.3 |

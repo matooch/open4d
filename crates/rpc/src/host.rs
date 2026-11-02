@@ -144,10 +144,9 @@ pub fn dispatch(host: &mut dyn Host, method: &str, params: Value) -> Result<Valu
         "timeline.get" => {
             parse::<Empty>(method, params)?;
             let app = host.app();
-            let settings = app.settings();
-            Ok(json!({"frame": app.timeline.current, "fps": settings.fps,
-                "start": settings.start, "end": settings.end,
-                "playing": app.timeline.playing, "autokey": app.autokey}))
+            let mut state = forge_command::timeline_state(app.doc.scene(), &app.timeline);
+            state["autokey"] = json!(app.autokey);
+            Ok(state)
         }
         "viewport.screenshot" => {
             let p: ScreenshotParams = parse(method, params)?;
