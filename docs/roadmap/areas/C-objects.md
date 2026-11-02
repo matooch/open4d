@@ -6,14 +6,15 @@
   tube, capsule, pyramid. R25 defaults are applied (brief 07).
 - [ ] **Remaining solid primitives:** Platonic (6 types), Oil Tank, Polygon, Figure,
   Landscape.
-- [x] **Spline primitives (partial):** circle, rectangle, helix.
+- [x] **Spline primitives:** circle (ellipse, ring), rectangle (rounding), helix, Arc
+  (arc, sector), n-Side, Star, Flower, 4-Side (diamond, kite), Cycloid (cycloid,
+  epicycloid), Profile (H), Cissoid (brief 037).
 - [ ] **Remaining spline primitives:**
-  - Arc (arc, sector, segment, ring), n-Side, Star, Flower, 4-Side, Cogwheel, Cycloid,
-    Profile, Cissoid, Formula, Text;
-  - Circle ellipse and ring options; Rectangle rounding;
-  - (done in brief 038) every Intermediate Points mode (None, Natural, Uniform, Adaptive,
-    Subdivided) in `spline_sampling.rs`; circle and helix default to Uniform. Arc will too
-    (brief 037).
+  - Cogwheel and Formula are registered but `Unsupported` (tooth outline not derived;
+    expression library of brief 052); Text;
+  - unobserved options: Arc segment/ring, 4-Side parallelogram/trapezium, Profile L/T/U/Z,
+    Cissoid lemniscate/strophoid, Hypocycloid, Reverse;
+  - (done in brief 038) every Intermediate Points mode in `spline_sampling.rs`.
 - [x] **Generators (partial):** Subdivision Surface, Boole, Symmetry, Array, Connect,
   Instance, Extrude, Lathe, Loft, Sweep.
 - [ ] **Remaining generators:** Metaball, Atom Array, Spline Mask.

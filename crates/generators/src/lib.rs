@@ -17,6 +17,7 @@ mod round;
 mod solids;
 mod sphere;
 mod spline_gens;
+mod spline_prims;
 pub mod spline_sampling;
 pub mod splines;
 mod subdivision;
@@ -82,6 +83,9 @@ impl Plugin for Primitives {
         r.register(splines::circle_type())?;
         r.register(splines::rectangle_type())?;
         r.register(splines::helix_type())?;
+        for id in spline_prims::TYPES {
+            r.register(spline_prims::node_type(id).expect("listed spline type"))?;
+        }
         r.register(spline_gens::extrude_type())?;
         r.register(spline_gens::lathe_type())?;
         r.register(spline_gens::loft_type())?;

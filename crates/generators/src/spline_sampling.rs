@@ -109,38 +109,94 @@ pub fn add_params(t: NodeType, default: Interpolation) -> NodeType {
 }
 
 /// How far (as a fraction of the whole spline) an open spline's last Uniform point falls
-/// short of its end (observed, `arc-defaults` and `helix-uniform`).
+/// short of its end, in arc length (observed, `arc-defaults`, `arc-angles` and `helix-uniform`).
 const UNIFORM_END_SHORTFALL: f64 = 1e-4;
 
 /// The spline's points as the generators consume them: each segment's start point and its
 /// interior samples, then the end point of an open spline (a closed one doesn't repeat
-/// its first point). Straight (`linear`) splines get no interior samples.
+/// its first point). Straight (`linear`) splines get no interior samples. Uniform spaces
+/// its points over the whole spline instead ([`uniform_points`]).
 pub fn sample(curve: &Curve, s: &Sampling) -> Vec<DVec3> {
+    if s.mode == Interpolation::Uniform && s.number > 0 && !curve.linear {
+        return uniform_points(curve, s.number);
+    }
     let mut out = Vec::new();
     for seg in &curve.segments {
         out.push(seg[0]);
-        if !curve.linear {
+        if !curve.linear && !is_straight(seg) {
             out.extend(interior(seg, s).into_iter().map(|t| Curve::bezier(seg, t)));
         }
     }
     if !curve.closed {
         let last = curve.segments.last().expect("a spline has a segment");
-        let shifted = s.mode == Interpolation::Uniform && s.number > 0 && !curve.linear;
-        if shifted {
-            let t = (1.0 - UNIFORM_END_SHORTFALL * curve.segments.len() as f64).max(0.0);
-            out.push(Curve::bezier(last, t));
-        } else {
-            out.push(last[3]);
-        }
+        out.push(last[3]);
     }
     out
+}
+
+/// A straight piece: handles on the thirds of its chord (`splines::line`) or on its end
+/// points (`splines::straight`).
+fn is_straight(seg: &[DVec3; 4]) -> bool {
+    let chord = seg[3] - seg[0];
+    let near = |a: DVec3, b: DVec3| (a - b).length() < 1e-9;
+    (near(seg[1], seg[0] + chord / 3.0) && near(seg[2], seg[0] + chord * (2.0 / 3.0)))
+        || (near(seg[1], seg[0]) && near(seg[2], seg[3]))
+}
+
+/// Pieces of the polyline that measures a segment's length (§6.2).
+const LENGTH_PIECES: usize = 50;
+
+/// Uniform (§6.2): `segments * (number + 1)` equal steps of arc length over the **whole**
+/// spline (a closed spline keeps all of them, an open one gets the end point too), whatever
+/// its segments' lengths. Lengths are measured on the polyline through every segment at
+/// `t = k/50` and the parameter is interpolated linearly inside a piece.
+fn uniform_points(curve: &Curve, number: usize) -> Vec<DVec3> {
+    let n_seg = curve.segments.len();
+    let mut table = vec![0.0];
+    for seg in &curve.segments {
+        let mut prev = seg[0];
+        for k in 1..=LENGTH_PIECES {
+            let q = Curve::bezier(seg, k as f64 / LENGTH_PIECES as f64);
+            let last = *table.last().expect("table starts with 0");
+            table.push(last + (q - prev).length());
+            prev = q;
+        }
+    }
+    let total = *table.last().expect("table starts with 0");
+    let steps = n_seg * (number + 1);
+    let count = if curve.closed { steps } else { steps + 1 };
+    (0..count)
+        .map(|k| {
+            // the open end falls a ten-thousandth of the length short
+            let target = if k == steps {
+                total * (1.0 - UNIFORM_END_SHORTFALL)
+            } else {
+                total * k as f64 / steps as f64
+            };
+            let hi = table
+                .partition_point(|l| *l < target)
+                .clamp(1, n_seg * LENGTH_PIECES);
+            let (l0, l1) = (table[hi - 1], table[hi]);
+            let f = if l1 > l0 {
+                (target - l0) / (l1 - l0)
+            } else {
+                0.0
+            };
+            let piece = hi - 1;
+            let (seg, local) = (piece / LENGTH_PIECES, piece % LENGTH_PIECES);
+            Curve::bezier(
+                &curve.segments[seg],
+                (local as f64 + f) / LENGTH_PIECES as f64,
+            )
+        })
+        .collect()
 }
 
 /// Interior sample parameters of one curved segment.
 fn interior(seg: &[DVec3; 4], s: &Sampling) -> Vec<f64> {
     match s.mode {
         Interpolation::None => Vec::new(),
-        Interpolation::Uniform => uniform_params(seg, s.number),
+        Interpolation::Uniform => natural_params(s.number),
         Interpolation::Natural => natural_params(s.number),
         Interpolation::Adaptive => adaptive_params(seg, s.angle),
         Interpolation::Subdivided => {
@@ -158,66 +214,47 @@ fn turn_between(a: DVec3, b: DVec3) -> f64 {
     a.angle_between(b)
 }
 
-/// Adaptive (§6.2): walk t in steps of 1/50, accumulating the tangent's turn, and emit a
-/// sample once it reaches `angle`; the last interior sample is placed one step before the
-/// end.
+/// Adaptive (§6.2): walk `t` in steps of 1/50 and emit a sample once the tangent differs
+/// from the tangent at the previous sample by `angle`. A candidate that would leave less than
+/// `angle` of turn to the segment's end is replaced by the midpoint (on the 1/50 grid) of
+/// the previous sample and the end.
 fn adaptive_params(seg: &[DVec3; 4], angle: f64) -> Vec<f64> {
     const FINE: usize = 50;
-    let mut out = Vec::new();
-    let (mut last, mut turned, mut prev) = (0.0, 0.0, Curve::tangent(seg, 0.0));
-    for k in 1..FINE {
+    // a handle sitting on its point has no direction: look slightly inside
+    let dir = |k: usize| {
         let t = k as f64 / FINE as f64;
         let d = Curve::tangent(seg, t);
-        turned += turn_between(prev, d);
-        prev = d;
-        if turned + 1e-12 >= angle {
-            let step = t - last;
-            if t + step > 1.0 + 1e-9 {
-                out.push(1.0 - step);
-                return out;
-            }
-            out.push(t);
-            last = t;
-            turned = 0.0;
+        if d.length_squared() > 1e-24 {
+            return d;
         }
+        Curve::tangent(seg, if k == 0 { 1e-3 } else { 1.0 - 1e-3 })
+    };
+    // turn still to come after step k, summed over the remaining steps
+    let steps: Vec<f64> = (0..FINE)
+        .map(|k| turn_between(dir(k), dir(k + 1)))
+        .collect();
+    let remaining = |k: usize| steps[k..].iter().sum::<f64>();
+    let mut out = Vec::new();
+    let (mut last, mut last_dir) = (0usize, dir(0));
+    for k in 1..FINE {
+        let d = dir(k);
+        let piece = turn_between(last_dir, d);
+        if piece + 1e-12 < angle {
+            continue;
+        }
+        // the new sample, and the tangent the next one is measured against
+        let at = if remaining(k) + 1e-12 < piece {
+            (last + FINE) / 2
+        } else {
+            k
+        };
+        if at > last {
+            out.push(at as f64 / FINE as f64);
+            last = at;
+        }
+        last_dir = d;
     }
     out
-}
-
-/// Uniform (§6.2): `number` samples at equal arc length inside the segment, so the
-/// segment's two ends stay put and its `number + 1` pieces are equally long. The length is
-/// that of the polyline through the segment at `t = k/50` and `t` is interpolated linearly
-/// between those vertices (observed: `circle-uniform` matches to 5e-7 with 50, not with
-/// 40 or 64 pieces or an exact length).
-fn uniform_params(seg: &[DVec3; 4], number: usize) -> Vec<f64> {
-    const PIECES: usize = 50;
-    if number == 0 {
-        return Vec::new();
-    }
-    let mut table = vec![0.0];
-    let mut prev = seg[0];
-    for k in 1..=PIECES {
-        let q = Curve::bezier(seg, k as f64 / PIECES as f64);
-        table.push(table[k - 1] + (q - prev).length());
-        prev = q;
-    }
-    let total = table[PIECES];
-    if total <= 0.0 {
-        return natural_params(number);
-    }
-    (1..=number)
-        .map(|k| {
-            let target = total * k as f64 / (number + 1) as f64;
-            let hi = table.partition_point(|l| *l < target).clamp(1, PIECES);
-            let (l0, l1) = (table[hi - 1], table[hi]);
-            let f = if l1 > l0 {
-                (target - l0) / (l1 - l0)
-            } else {
-                0.0
-            };
-            ((hi - 1) as f64 + f) / PIECES as f64
-        })
-        .collect()
 }
 
 /// Natural (§6.2, parity-pending): `number` samples at equal steps of the segment's own

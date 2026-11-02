@@ -34,7 +34,7 @@ implementers can avoid collisions.
 | 034 | [Multi-object component editing; numeric component coordinates](../agents/tasks/034-multi-object-component-editing.md) | B | 006 | ready | ui |
 | 035 | [Platonic, Oil Tank, Polygon and Figure primitives](../agents/tasks/035-platonic-oiltank-polygon-figure.md) | C | 033 | done | generators |
 | 036 | [Landscape primitive](../agents/tasks/036-landscape.md) | C | 063 | ready | generators, noise |
-| 037 | [Spline primitives II](../agents/tasks/037-spline-primitives-2.md) | C | 038 | ready | generators |
+| 037 | [Spline primitives II](../agents/tasks/037-spline-primitives-2.md) | C | 038 | done | generators |
 | 038 | [Intermediate Points modes and R25 per-spline defaults](../agents/tasks/038-intermediate-points.md) | C | – | done | generators, geometry |
 | 039 | [Text spline (fonts)](../agents/tasks/039-text-spline.md) | C | 038 | waiting: O48 | generators, text (new) |
 | 040 | [Metaball generator](../agents/tasks/040-metaball.md) | C | 083 | waiting: O20 | generators, volume |
