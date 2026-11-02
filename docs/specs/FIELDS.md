@@ -258,3 +258,10 @@ unknown, and a 9x9x9 grid at spacing 75 cannot pin them.
 | Random Noise: feature size, octaves, seed hashing | | a Random field sampled on a 1-unit line (`x` from 0 to 400, step 1) for Perlin and seeds 0, 1 |
 | Random Space None, Sorted mode, Animation Speed | | Space None; Sorted on a cloner; Animation Speed 100 % at times 0 and 1 s |
 | Noise types without a literature definition (16) | | one line sample for each type |
+
+## F-UI. Disabled field rows (brief 079)
+
+A field node whose object state `object.enabled` is false (TRANSFORM.md §2, UI.md §16.1) is
+left out by `FieldList::from_nodes`: the layer does not exist, so the remaining layers (or the
+empty list, value 1) decide. The enable box in a field list writes `object.enabled` of the
+field node. Own design, parity-pending G4.

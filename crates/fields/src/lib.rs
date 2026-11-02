@@ -177,7 +177,7 @@ impl FieldList {
         FieldList::default()
     }
 
-    /// A list of the given field nodes, top to bottom; each layer's strength is the
+    /// A list of the given field nodes, top to bottom (disabled ones left out); each layer's strength is the
     /// node's `layer_strength` (100 % by default).
     pub fn from_nodes(
         scene: &Scene,
@@ -185,6 +185,8 @@ impl FieldList {
     ) -> Result<FieldList, FieldError> {
         let layers = ids_top_to_bottom
             .iter()
+            // A field switched off in the list (`object.enabled`) is not a layer (spec F-UI).
+            .filter(|id| forge_core::visibility::own(scene, **id).2)
             .map(|id| {
                 field_from_node(scene, *id).map(|field| {
                     let mut layer = Layer::new(field);

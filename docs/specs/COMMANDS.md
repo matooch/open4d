@@ -101,6 +101,7 @@ touch history.
 | `object.reparent` | `node`, `parent?` (null = root) | null | yes |
 | `object.move` | `nodes?` (selection), `parent?` (null = root), `index?` (position among the parent's children without the moved nodes; absent = last) | `{moved}` | yes |
 | `object.group` | `nodes?`, `name?` (default "Null") | `{node}` | yes |
+| `object.create_cloner` | `nodes?` (selection), `name?` (default "Cloner") | `{node}` | yes |
 | `object.visibility` | `nodes?`, `editor?`, `render?` each `default`\|`on`\|`off` (at least one) | null | yes |
 | `object.enable` | `nodes?`, `enabled` | null | yes |
 | `edit.undo` | - | `{done}` | no |
@@ -114,6 +115,7 @@ touch history.
 | `view.lighting` | `mode` headlight, rig | null | no |
 | `view.shadows` | `enabled` | null | no |
 | `view.antialias` | `enabled` | null | no |
+| `view.clone_display` | `indices?`, `axes?` (at least one) | null | no |
 | `view.set_camera` | `target?` [x,y,z] world, `distance?`, `yaw?`, `pitch?` (degrees), `projection?` perspective, orthographic, `fov?` (degrees), `height?` (orthographic) | null | no |
 | `view.get_camera` | - | `{target, eye, distance, yaw, pitch, projection, fov?, height?}` | no |
 | `view.gizmo_mode` | `mode` move, rotate, scale | null | no |
@@ -178,6 +180,11 @@ with it); the rest keep the order given and end up consecutively at `index`; one
 a cycle fails and changes nothing. `object.group` creates a `forge.null` under the first
 node's parent at the first node's position (after the group's nodes are removed) and moves
 the nodes into it in the order given (nested ones dropped as above), then selects the group.
+`object.create_cloner` (brief 079, UI.md §16.2) creates a `forge.cloner` (with the smoothing
+tag, like `object.create`) under the first top-level node's parent at its position, moves the
+nodes (nested ones dropped, as `object.group`) into it in the order given and selects it, in one
+undo step "Create Cloner". With no nodes it creates an empty cloner. `view.clone_display`
+(UI.md §16.3) switches the viewport's clone index and axes overlay; view state only.
 `object.visibility` / `object.enable` write the `object.*` params (TRANSFORM.md §2) of every
 named node in one undo step; tags and non-hierarchy nodes are skipped.
 

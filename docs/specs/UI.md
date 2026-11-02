@@ -614,3 +614,95 @@ first), a line "Autosaved work may be offered in the recovery window." when
 `recoverable_count() > 0`, and the buttons **Open folder** (opens the crash folder with the
 system file browser: `xdg-open` / `open` / `explorer`) and **Dismiss**. Either button marks the
 reports seen and closes the window. Tests inject a folder opener (`CrashNotice::set_opener`).
+
+## 16. Clone toolset UI (`widgets::link_list`, `clone_overlay`, `commands`; brief 079)
+
+Sources: own design from docs/roadmap/areas/E-clone-toolset.md and the link-list model of
+brief 068; GUI session G4 (docs/parity/GUI-SESSIONS.md) is unanswered, so **the look of the
+list rows, the Create menu grouping and the overlay style are parity-pending G4**. The wording
+is "cloner", "clone toolset", "effector".
+
+### 16.1 Link list rows
+
+The cloner's `effectors` list, an effector's `fields` list and a deformer's `fields` list are
+all `LinkList` parameters drawn by `widgets::link_list` (UI.md §12). One row per entry:
+
+`[x] name   [strength]   ^  v  x`
+
+- **Enable box** (`Enable <name>`): shown when the entry node has an `enabled` parameter
+  (effectors, deformers) or else the object state `object.enabled` (fields, TRANSFORM.md §2).
+  It edits that parameter **on the entry node**, not on the list's owner. A disabled entry
+  keeps its place in the list and is skipped when the list is applied (effector: no
+  effect, MOGRAPH.md E1; field: the layer is left out of the `FieldList`, FIELDS.md F2).
+- **Strength** (`Strength <name>`, percent): shown when the entry node has the `layer_strength`
+  parameter (every field node, FIELDS.md; brief 061 stored a row's layer strength there). It
+  edits `layer_strength` of the entry node. Own design, parity-pending: the strength belongs
+  to the node, so a field used by two lists has one strength in both (real per-row storage
+  comes with brief 059).
+- `^` / `v` (`Move <name> up/down`) reorder: the new list order is the order the effectors
+  or layers apply in (effectors in list order, MOGRAPH.md E1; layers top to bottom).
+- `x` (`Remove <name>`) removes the entry from the list only; the node stays in the scene.
+- The "Add..." drop-down lists the objects the parameter accepts that are not in the list; it
+  is also the **drop target** for an object dragged from the object manager (the dragged
+  node is appended; a node already in the list is ignored).
+
+Every change is one `param.edit` command: a list edit on the list's owner (all selected
+objects of that type), an enable or strength edit on the entry node. `Edit` carries an
+optional `target` (`param`, `node`) for the latter. One undo step per click.
+
+### 16.2 Create menu and "Cloner from selection"
+
+The Create menu starts with a **Clone toolset** submenu (`clone_toolset_menu`, pure): the
+cloner, **Cloner from Selection**, every registered effector type, every registered field
+type, in that order, taken from the registry (so a new effector or field type appears with
+no UI change). The usual per-category submenus stay.
+
+`Cloner from Selection` runs `object.create_cloner` (COMMANDS.md §6): the selected objects
+become children of a new cloner placed where the first selected object was, and the cloner
+is selected. The children are the cloner's prototypes (MOGRAPH.md C3). Selected effectors
+and fields are not prototypes: the effectors are put in the cloner's `effectors` list (in
+selection order) and fields are left alone. With nothing selected the command creates an
+empty cloner.
+
+### 16.3 Clone display
+
+The cloner's existing `viewport_mode` parameter (Off, Points, Matrix, Bounding Box, Object)
+keeps drawing the clone geometry for every value (the other values are not wired yet,
+**parity-pending**); `matrix` additionally turns the axes overlay on for that cloner. Two
+view options (not undoable, `view.clone_display`, `Views.clone_indices`,
+`Views.clone_axes`; View menu **Clone Indices**, **Clone Axes**):
+
+- **Indices**: the index of each visible clone, drawn at its projected origin.
+- **Axes**: the clone's X, Y, Z axes as red, green, blue lines of 24 px (the Matrix-style
+  display); also drawn for a cloner whose `viewport_mode` is `matrix`.
+
+Both apply to the selected cloners only. `clone_overlay::clone_marks` is pure: it takes the
+clone data, the cloner's world matrix, the camera and the viewport size and returns the
+marks (clone index, screen position, axis end points), skipping hidden clones, clones behind
+the camera and clones outside the viewport, and at most `MAX_MARKS` (2000) marks, lowest
+indices first, so the overlay stays interactive with 10 000 clones. The editor paints the marks
+with the egui painter after the viewport image.
+
+### 16.4 Viewport instancing
+
+Cloners are drawn by GPU instancing (VIEWPORT.md §10.8): `scene_draw_items_at` returns
+`DrawItem::Instanced` for every cloner `cloner_instances` can show, and the instance buffer
+is rebuilt only when the cloner's content changes. Effector and field edits change the clone
+data, so they rebuild it; selection changes do not. Nothing in 079 expands geometry for
+display. Cloners with enabled deformer children keep the expanded fallback (VIEWPORT.md §10).
+
+### 16.5 Tests
+
+`crates/ui/tests/clone_ui.rs`: egui_kittest on the full registry.
+
+- Cloner from selection: children and selection, one undo step restores the scene.
+- Effectors: add by the list, add by dragging an effector from the object manager, remove.
+- Reorder: with a Plain and a second effector whose rotation and scale differ, the clone
+  matrices after swapping the order differ from before (the order matters, O14
+  `two-effectors`), and swap back restores them; undo of each step.
+- Enable box: the effector stops acting (clone matrices equal the no-effector ones) and undo
+  brings it back; the same for a field row; the strength box edits `layer_strength` and the
+  clone result follows.
+- Pure: Create menu entries, `clone_marks` (counts, hidden clones, cap, behind camera,
+  projection), the 10 000 clone instance data builds and culls.
+- Instancing: a cloner of 10 000 clones is one `DrawItem::Instanced`.

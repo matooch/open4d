@@ -65,6 +65,8 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `object_reparent` | Move. Undoable editing command. Runs command `object.reparent`. |
 | `object_move` | Move Objects. Undoable editing command. Runs command `object.move`. |
 | `object_group` | Group Objects. Undoable editing command. Runs command `object.group`. |
+| `object_create_cloner` | Create Cloner from Selection. Undoable editing command. Runs command `object.create_cloner`. |
+| `view_clone_display` | Clone Display. Not an undoable edit. Runs command `view.clone_display`. |
 | `object_visibility` | Visibility. Undoable editing command. Runs command `object.visibility`. |
 | `object_enable` | Enable. Undoable editing command. Runs command `object.enable`. |
 | `edit_undo` | Undo. Not an undoable edit. Runs command `edit.undo`. |

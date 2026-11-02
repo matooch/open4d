@@ -76,6 +76,8 @@ pub trait CommandContext {
     fn set_lighting(&mut self, _lighting: LightingArg) {}
     fn set_shadows(&mut self, _on: bool) {}
     fn set_antialias(&mut self, _on: bool) {}
+    /// Switches the clone index and axes overlay (`None` keeps a setting).
+    fn set_clone_display(&mut self, _indices: Option<bool>, _axes: Option<bool>) {}
     /// Applies validated camera fields.
     fn set_camera(&mut self, _set: CameraSet) {}
     /// The camera as JSON (`view.get_camera`); null without a viewport.

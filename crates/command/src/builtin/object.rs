@@ -134,6 +134,24 @@ struct LightingArgs {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+struct CloneArgs {
+    /// Objects that become the cloner's children; the current selection when absent.
+    nodes: Option<Vec<u64>>,
+    /// Name of the new cloner (default: the type's name).
+    name: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct CloneDisplayArgs {
+    /// Show the index of each clone of the selected cloners.
+    indices: Option<bool>,
+    /// Show the axes of each clone of the selected cloners.
+    axes: Option<bool>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct EnabledArgs {
     enabled: bool,
 }
@@ -274,6 +292,32 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
             || json!({"nodes": [2, 3], "name": "Group"}),
         ),
         group,
+    )?;
+    r.register_fn(
+        spec(
+            "object.create_cloner",
+            "Create Cloner from Selection",
+            true,
+            || json!({"nodes": [2, 3], "name": "Cloner"}),
+        ),
+        create_cloner,
+    )?;
+    r.register_fn(
+        spec(
+            "view.clone_display",
+            "Clone Display",
+            false,
+            || json!({"indices": true, "axes": false}),
+        ),
+        |c, a: CloneDisplayArgs| {
+            if a.indices.is_none() && a.axes.is_none() {
+                return Err(CommandError::InvalidArgs(
+                    "view.clone_display needs `indices` and/or `axes`".into(),
+                ));
+            }
+            c.set_clone_display(a.indices, a.axes);
+            Ok(Value::Null)
+        },
     )?;
     r.register_fn(
         spec(
@@ -561,6 +605,56 @@ fn create(ctx: &mut dyn CommandContext, a: CreateArgs) -> Result<Value, CommandE
         })?;
     ctx.selection_mut().click(id);
     Ok(json!({"node": id.0}))
+}
+
+/// The type id of the cloner (the command crate does not depend on the clone engine).
+const CLONER: &str = "forge.cloner";
+
+/// `object.create_cloner` (docs/specs/UI.md §16.2): a cloner where the first chosen object
+/// was, the chosen objects as its children; chosen effectors are linked in its effector list
+/// instead (they are not prototypes). One undo step.
+fn create_cloner(ctx: &mut dyn CommandContext, a: CloneArgs) -> Result<Value, CommandError> {
+    let ids = target_nodes(ctx, a.nodes);
+    let scene = ctx.doc().scene();
+    if scene.registry().get(CLONER).is_none() {
+        return Err(CommandError::failed("the clone toolset is not installed"));
+    }
+    let category = |id: NodeId| scene.node_type(id).map(|t| t.category);
+    let effectors: Vec<NodeId> = top_level(scene, &ids)
+        .into_iter()
+        .filter(|id| category(*id) == Some(Category::Effector))
+        .collect();
+    let nodes: Vec<NodeId> = top_level(scene, &ids)
+        .into_iter()
+        .filter(|id| !matches!(category(*id), Some(Category::Effector | Category::Field)))
+        .collect();
+    let (parent, index) = match nodes.first().copied() {
+        Some(first) => {
+            let parent = scene.node(first).and_then(|n| n.parent);
+            let index = siblings(scene, parent).iter().position(|s| *s == first);
+            (parent, index)
+        }
+        None => (None, None),
+    };
+    let smooth = scene.registry().get(forge_core::smoothing::TAG).is_some();
+    let cloner = ctx.doc_mut().transact("Create Cloner", |tx| {
+        let c = tx.create(CLONER, parent, index)?;
+        if smooth {
+            tx.attach_tag(forge_core::smoothing::TAG, c, None)?;
+        }
+        if let Some(name) = &a.name {
+            tx.rename(c, name)?;
+        }
+        for id in &nodes {
+            tx.move_node(*id, Some(c), None)?;
+        }
+        if !effectors.is_empty() {
+            tx.set_param(c, "effectors", Param::LinkList(effectors.clone()))?;
+        }
+        Ok(c)
+    })?;
+    ctx.selection_mut().click(cloner);
+    Ok(json!({"node": cloner.0}))
 }
 
 fn delete(ctx: &mut dyn CommandContext, a: NodesArgs) -> Result<Value, CommandError> {

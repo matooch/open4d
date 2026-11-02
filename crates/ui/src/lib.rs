@@ -8,6 +8,7 @@ pub use forge_app::animate;
 pub mod attributes;
 pub mod autosave;
 pub mod building;
+pub mod clone_overlay;
 pub mod commands;
 pub mod component_edit;
 pub mod components;

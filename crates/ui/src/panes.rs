@@ -37,6 +37,9 @@ pub struct Views {
     pub lighting: LightingArg,
     pub shadows: bool,
     pub antialias: bool,
+    /// Clone index and axes overlay of the selected cloners (UI.md §16.3).
+    pub clone_indices: bool,
+    pub clone_axes: bool,
     saved: [PaneState; 4],
     /// Panes whose camera was never changed: they follow the perspective pane when the
     /// four-view layout opens.
@@ -52,6 +55,8 @@ impl Views {
             lighting: LightingArg::Headlight,
             shadows: true,
             antialias: true,
+            clone_indices: false,
+            clone_axes: false,
             saved: Pane::ALL.map(|p| PaneState {
                 camera: pane_camera(p, base),
                 shading: if p == Pane::Perspective {

@@ -15,7 +15,8 @@ use serde_json::{Value as Json, json};
 
 use crate::animate::{AnimEdit, KeyState, key_frames, key_states};
 use crate::attributes::{Gesture, Widget, attribute_rows_multi};
-use crate::commands::{category_label, create_menu, execute};
+use crate::clone_overlay::{OverlayOptions, selected_cloner_marks};
+use crate::commands::{category_label, clone_toolset_menu, create_menu, execute};
 use crate::component_edit::{ComponentDrag, pivot_view, pivot_world};
 use crate::components::{
     ClickModifiers, EditMode, SelectCmd, target as component_target, viewport_click, viewport_rect,
@@ -522,6 +523,16 @@ impl Editor {
                 }
             });
             ui.menu_button("Create", |ui| {
+                ui.menu_button("Clone toolset", |ui| {
+                    let entries = clone_toolset_menu(self.state.doc.scene().registry());
+                    for entry in entries {
+                        if ui.button(&entry.label).clicked() {
+                            self.run((entry.command, entry.args));
+                            ui.close();
+                        }
+                    }
+                });
+                ui.separator();
                 for (cat, items) in create_menu(self.state.doc.scene().registry()) {
                     ui.menu_button(category_label(cat), |ui| {
                         for (type_id, label) in items {
@@ -861,6 +872,21 @@ impl Editor {
             "Anti-aliasing",
             ("view.antialias", json!({"enabled": !v.antialias})),
         );
+        ui.separator();
+        item(
+            ui,
+            self,
+            v.clone_indices,
+            "Clone Indices",
+            ("view.clone_display", json!({"indices": !v.clone_indices})),
+        );
+        item(
+            ui,
+            self,
+            v.clone_axes,
+            "Clone Axes",
+            ("view.clone_display", json!({"axes": !v.clone_axes})),
+        );
         for c in runs {
             self.run(c);
         }
@@ -1022,6 +1048,7 @@ impl Editor {
                 egui::StrokeKind::Inside,
             );
         }
+        self.paint_clone_overlay(ui, &shown, pane, rect);
         let label = SHADINGS
             .iter()
             .find(|(s, _)| *s == self.state.pane_shading(pane))
@@ -1068,6 +1095,55 @@ impl Editor {
                 4.0,
                 Theme::default().component_selection,
             );
+        }
+    }
+
+    /// Clone indices and axes of the selected cloners (UI.md §16.3), painted over the image.
+    fn paint_clone_overlay(
+        &self,
+        ui: &Ui,
+        scene: &forge_core::Scene,
+        pane: Pane,
+        rect: egui::Rect,
+    ) {
+        let v = &self.state.views;
+        let marks = selected_cloner_marks(
+            scene,
+            &self.state.selection.nodes,
+            &forge_core::EvalCtx::at_frame(
+                self.state.timeline.current,
+                f64::from(scene.settings().fps),
+            ),
+            &self.state.pane_camera(pane),
+            [f64::from(rect.width()), f64::from(rect.height())],
+            OverlayOptions {
+                indices: v.clone_indices,
+                axes: v.clone_axes,
+            },
+        );
+        let painter = ui.painter().with_clip_rect(rect);
+        let at = |p: [f32; 2]| rect.min + egui::vec2(p[0], p[1]);
+        let colours = [
+            egui::Color32::from_rgb(230, 70, 70),
+            egui::Color32::from_rgb(80, 200, 90),
+            egui::Color32::from_rgb(80, 130, 240),
+        ];
+        for mark in &marks {
+            if let Some(axes) = mark.axes {
+                for (end, colour) in axes.iter().zip(colours) {
+                    painter
+                        .line_segment([at(mark.origin), at(*end)], egui::Stroke::new(1.5, colour));
+                }
+            }
+            if v.clone_indices {
+                painter.text(
+                    at(mark.origin) + egui::vec2(3.0, -3.0),
+                    egui::Align2::LEFT_BOTTOM,
+                    mark.index.to_string(),
+                    egui::FontId::proportional(11.0),
+                    Theme::default().weak_text,
+                );
+            }
         }
     }
 

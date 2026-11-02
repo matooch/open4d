@@ -2,7 +2,7 @@
 
 # Command reference
 
-101 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+103 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -12,6 +12,8 @@
 | [`object.reparent`](#objectreparent) | Move | yes | `object_reparent` |
 | [`object.move`](#objectmove) | Move Objects | yes | `object_move` |
 | [`object.group`](#objectgroup) | Group Objects | yes | `object_group` |
+| [`object.create_cloner`](#objectcreate_cloner) | Create Cloner from Selection | yes | `object_create_cloner` |
+| [`view.clone_display`](#viewclone_display) | Clone Display | no | `view_clone_display` |
 | [`object.visibility`](#objectvisibility) | Visibility | yes | `object_visibility` |
 | [`object.enable`](#objectenable) | Enable | yes | `object_enable` |
 | [`edit.undo`](#editundo) | Undo | no | `edit_undo` |
@@ -175,6 +177,17 @@ Group Objects. One undo step.
 
 Example: `forge cmd scene.forge object.group --args '{"name":"Group","nodes":[2,3]}'`
 
+### `object.create_cloner`
+
+Create Cloner from Selection. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string or null | no | Name of the new cloner (default: the type's name). |
+| `nodes` | array of integer or null | no | Objects that become the cloner's children; the current selection when absent. |
+
+Example: `forge cmd scene.forge object.create_cloner --args '{"name":"Cloner","nodes":[2,3]}'`
+
 ### `object.visibility`
 
 Visibility. One undo step.
@@ -207,53 +220,18 @@ No arguments.
 Example: `forge cmd scene.forge object.begin_rename --args '{}'`
 
 
-## `edit`
-
-### `edit.undo`
-
-Undo. Not an undoable edit.
-
-No arguments.
-
-Example: `forge cmd scene.forge edit.undo --args '{}'`
-
-### `edit.redo`
-
-Redo. Not an undoable edit.
-
-No arguments.
-
-Example: `forge cmd scene.forge edit.redo --args '{}'`
-
-### `edit.soft_selection`
-
-Soft Selection. Not an undoable edit.
-
-| Argument | Type | Required | Description |
-|---|---|---|---|
-| `curve` | array of number | no |  |
-| `distance` | `"volume"` \| `"surface"` | no |  |
-| `enabled` | boolean | no |  |
-| `falloff` | `"linear"` \| `"dome"` \| `"bell"` \| `"spline"` | no |  |
-| `radius` | number | no |  |
-
-Example: `forge cmd scene.forge edit.soft_selection --args '{"enabled":true,"falloff":"bell","radius":100.0}'`
-
-### `edit.symmetry`
-
-Symmetry. Not an undoable edit.
-
-| Argument | Type | Required | Description |
-|---|---|---|---|
-| `axis` | `"x"` \| `"y"` \| `"z"` | no |  |
-| `enabled` | boolean | no |  |
-| `offset` | number | no |  |
-| `tolerance` | number | no |  |
-
-Example: `forge cmd scene.forge edit.symmetry --args '{"axis":"x","enabled":true}'`
-
-
 ## `view`
+
+### `view.clone_display`
+
+Clone Display. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `axes` | boolean or null | no | Show the axes of each clone of the selected cloners. |
+| `indices` | boolean or null | no | Show the index of each clone of the selected cloners. |
+
+Example: `forge cmd scene.forge view.clone_display --args '{"axes":false,"indices":true}'`
 
 ### `view.shading`
 
@@ -398,6 +376,52 @@ Expand / Collapse. Not an undoable edit.
 | `node` | integer | yes |  |
 
 Example: `forge cmd scene.forge view.toggle_expanded --args '{"node":1}'`
+
+
+## `edit`
+
+### `edit.undo`
+
+Undo. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge edit.undo --args '{}'`
+
+### `edit.redo`
+
+Redo. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge edit.redo --args '{}'`
+
+### `edit.soft_selection`
+
+Soft Selection. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `curve` | array of number | no |  |
+| `distance` | `"volume"` \| `"surface"` | no |  |
+| `enabled` | boolean | no |  |
+| `falloff` | `"linear"` \| `"dome"` \| `"bell"` \| `"spline"` | no |  |
+| `radius` | number | no |  |
+
+Example: `forge cmd scene.forge edit.soft_selection --args '{"enabled":true,"falloff":"bell","radius":100.0}'`
+
+### `edit.symmetry`
+
+Symmetry. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `axis` | `"x"` \| `"y"` \| `"z"` | no |  |
+| `enabled` | boolean | no |  |
+| `offset` | number | no |  |
+| `tolerance` | number | no |  |
+
+Example: `forge cmd scene.forge edit.symmetry --args '{"axis":"x","enabled":true}'`
 
 
 ## `select`

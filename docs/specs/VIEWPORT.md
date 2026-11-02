@@ -506,6 +506,10 @@ cloners returned as `DrawItem::Instanced` when `cloner_instances` gives instance
 itself is unchanged and expands, for bounds, tests and export). The panel keeps two `RevisionCache`s
 (meshes, instance sets) and refreshes them when the scene revision, selection or component state changes (§10.2).
 
+Brief 079 (UI.md §16.4) adds no draw path: the clone UI edits parameters, the revision hash
+changes with the clone data, and the overlay for clone indices and axes is drawn by the egui
+painter above the viewport image (UI.md §16.3), not by the renderer.
+
 ### 10.9 Tests
 
 crates/viewport/tests/performance.rs (pure): frustum plane extraction (a point inside / outside each plane,

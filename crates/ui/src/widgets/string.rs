@@ -19,6 +19,7 @@ pub fn show(ui: &mut egui::Ui, cx: &Cx, row: &AttrRow) -> Option<Edit> {
     r.changed().then(|| Edit {
         value: json!(buf),
         component: None,
+        target: None,
         phase: Phase::Drag {
             started: r.gained_focus(),
         },
