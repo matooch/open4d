@@ -21,6 +21,7 @@ pub fn show(ui: &mut egui::Ui, _cx: &Cx, row: &AttrRow) -> Option<Edit> {
     r.inner.changed().then(|| Edit {
         value: json!(rgb.map(f64::from)),
         component: None,
+        target: None,
         phase: Phase::Drag { started: false },
     })
 }

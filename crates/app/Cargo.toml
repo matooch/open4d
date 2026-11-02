@@ -16,6 +16,7 @@ forge-geometry = { path = "../geometry" }
 forge-modeling = { path = "../modeling" }
 forge-io = { path = "../io" }
 forge-modifiers = { path = "../modifiers" }
+forge-nodes = { path = "../nodes" }
 forge-platform = { path = "../platform" }
 glam = "0.34"
 schemars = "1"

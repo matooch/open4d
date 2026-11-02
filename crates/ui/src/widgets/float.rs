@@ -27,6 +27,7 @@ pub fn show(ui: &mut egui::Ui, cx: &Cx, row: &AttrRow, unit: Unit) -> Option<Edi
     changed.then(|| Edit {
         value: json!(d),
         component: None,
+        target: None,
         phase: if r.dragged() {
             Phase::Drag {
                 started: r.drag_started(),

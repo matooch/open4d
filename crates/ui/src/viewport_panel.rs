@@ -2,19 +2,28 @@
 //! (docs/specs/UI.md §6).
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use eframe::egui_wgpu;
 use forge_core::{EvalCtx, NodeId, Scene};
+use forge_generators::ClonerInstances;
 use forge_geometry::PolyMesh;
 use forge_geometry::selection::Selection;
+use forge_viewport::cache::{
+    RevisionCache, combine, instances_revision, mesh_revision, selection_revision,
+};
 use forge_viewport::camera::Camera;
 use forge_viewport::gizmo::Gizmo;
 use forge_viewport::grid::grid_lines;
+use forge_viewport::instancing::InstanceInput;
+use forge_viewport::lod::lod_proxy;
 use forge_viewport::nav;
 use forge_viewport::panes::Pane;
 use forge_viewport::render::{
-    DrawMesh, Frame, MeshBuffers, Palette, RenderTargets, Renderer, Settings, Shading,
+    DrawInstanced, DrawMesh, Frame, InstanceSet, MeshBuffers, Palette, RenderTargets, Renderer,
+    Settings, Shading,
 };
+use glam::DMat4;
 
 use crate::components::{EditMode, display_selection, stored_selection};
 use crate::theme::Theme;
@@ -147,15 +156,75 @@ struct Target {
 pub struct ViewportPanel {
     renderer: Option<Renderer>,
     targets: [Option<Target>; 4],
-    /// GPU meshes of the scene's generator nodes, keyed by scene revision and selection.
-    meshes: Option<SceneMeshes>,
+    /// The drawn items, rebuilt when the scene revision, selection or component state changes.
+    items: Option<SceneItems>,
+    /// Uploaded meshes and instance sets, reused while a node's content is unchanged.
+    cache: GpuCache,
 }
 
-struct SceneMeshes {
+struct SceneItems {
     revision: u64,
     selection: BTreeSet<NodeId>,
     component: Option<(NodeId, EditMode)>,
-    items: Vec<(MeshBuffers, [f32; 3])>,
+    items: Vec<GpuItem>,
+}
+
+/// An uploaded drawable with its base colour.
+#[derive(Clone)]
+pub enum GpuItem {
+    Mesh(Arc<MeshBuffers>, [f32; 3]),
+    Instanced(Arc<InstanceSet>, [f32; 3]),
+}
+
+/// Uploaded meshes and instance sets per node, keyed by the content revision
+/// (docs/specs/VIEWPORT.md §10.2).
+#[derive(Default)]
+pub struct GpuCache {
+    pub meshes: RevisionCache<NodeId, Arc<MeshBuffers>>,
+    pub instances: RevisionCache<NodeId, Arc<InstanceSet>>,
+}
+
+/// Meshes with more triangles than this get a LOD proxy when proxies are on.
+pub const LOD_MIN_TRIS: usize = 50_000;
+/// Clustering cells per axis of the proxies.
+pub const LOD_CELLS: u32 = 24;
+
+/// One drawable object of the scene.
+pub enum DrawItem {
+    /// World-space geometry.
+    Mesh {
+        id: NodeId,
+        mesh: PolyMesh,
+        selected: bool,
+        smoothing: Option<f64>,
+    },
+    /// A cloner drawn by GPU instancing: prototypes and clones in cloner space, `world` places
+    /// the cloner.
+    Instanced {
+        id: NodeId,
+        instances: Box<ClonerInstances>,
+        world: DMat4,
+        selected: bool,
+        smoothing: Option<f64>,
+    },
+}
+
+impl DrawItem {
+    pub fn id(&self) -> NodeId {
+        match self {
+            DrawItem::Mesh { id, .. } | DrawItem::Instanced { id, .. } => *id,
+        }
+    }
+}
+
+/// The per-clone arrays of a cloner as the viewport reads them.
+pub fn instance_input(i: &ClonerInstances) -> InstanceInput<'_> {
+    InstanceInput {
+        matrices: &i.clones.matrices,
+        colors: &i.clones.colors,
+        visible: &i.clones.visible,
+        child: &i.clones.child,
+    }
 }
 
 /// World-space meshes of every generator node, with whether each is selected.
@@ -167,12 +236,9 @@ pub fn scene_meshes(
     scene_meshes_at(scene, selected, &EvalCtx::default())
 }
 
-/// [`scene_meshes`] evaluated with `ctx` (time, fps, seed).
-pub fn scene_meshes_at(
-    scene: &Scene,
-    selected: &BTreeSet<NodeId>,
-    ctx: &EvalCtx,
-) -> Vec<(NodeId, PolyMesh, bool, Option<f64>)> {
+/// The nodes drawn as objects, in scene order: generator inputs consumed by their parent and
+/// hidden or disabled objects are left out (SUBDIVISION.md §4, UI.md §13.1).
+fn drawn_nodes(scene: &Scene) -> Vec<NodeId> {
     let mut out = Vec::new();
     for root in scene.roots() {
         for id in std::iter::once(*root).chain(scene.descendants(*root)) {
@@ -184,19 +250,202 @@ pub fn scene_meshes_at(
             if !forge_core::visibility::editor_visible(scene, id) {
                 continue;
             }
-            let (Ok(Some(mut mesh)), Some(m)) = (
-                forge_generators::evaluate(scene, id, ctx),
-                scene.world_matrix(id),
-            ) else {
-                continue;
-            };
-            for p in &mut mesh.points {
-                *p = m.transform_point3(*p);
-            }
-            let smoothing = forge_core::smoothing::smoothing_angle(scene, id);
-            out.push((id, mesh, selected.contains(&id), smoothing));
+            out.push(id);
         }
     }
+    out
+}
+
+/// [`scene_meshes`] evaluated with `ctx` (time, fps, seed). Cloners are expanded to geometry
+/// (export, bounds, tests); the viewport itself uses [`scene_draw_items_at`].
+pub fn scene_meshes_at(
+    scene: &Scene,
+    selected: &BTreeSet<NodeId>,
+    ctx: &EvalCtx,
+) -> Vec<(NodeId, PolyMesh, bool, Option<f64>)> {
+    let mut out = Vec::new();
+    for id in drawn_nodes(scene) {
+        let (Ok(Some(mut mesh)), Some(m)) = (
+            forge_generators::evaluate(scene, id, ctx),
+            scene.world_matrix(id),
+        ) else {
+            continue;
+        };
+        for p in &mut mesh.points {
+            *p = m.transform_point3(*p);
+        }
+        let smoothing = forge_core::smoothing::smoothing_angle(scene, id);
+        out.push((id, mesh, selected.contains(&id), smoothing));
+    }
+    out
+}
+
+/// What the viewport draws: [`scene_meshes_at`] with every cloner that
+/// `forge_generators::cloner_instances` can show returned as instances instead of expanded
+/// geometry (docs/specs/VIEWPORT.md §10.8).
+pub fn scene_draw_items_at(
+    scene: &Scene,
+    selected: &BTreeSet<NodeId>,
+    ctx: &EvalCtx,
+) -> Vec<DrawItem> {
+    let mut out = Vec::new();
+    for id in drawn_nodes(scene) {
+        let Some(world) = scene.world_matrix(id) else {
+            continue;
+        };
+        let smoothing = forge_core::smoothing::smoothing_angle(scene, id);
+        let is_selected = selected.contains(&id);
+        if let Ok(Some(instances)) = forge_generators::cloner_instances(scene, id, ctx) {
+            out.push(DrawItem::Instanced {
+                id,
+                instances: Box::new(instances),
+                world,
+                selected: is_selected,
+                smoothing,
+            });
+            continue;
+        }
+        let Ok(Some(mut mesh)) = forge_generators::evaluate(scene, id, ctx) else {
+            continue;
+        };
+        for p in &mut mesh.points {
+            *p = world.transform_point3(*p);
+        }
+        out.push(DrawItem::Mesh {
+            id,
+            mesh,
+            selected: is_selected,
+            smoothing,
+        });
+    }
+    out
+}
+
+/// Options of [`upload_items`].
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UploadSettings {
+    /// Build LOD proxies for large meshes (docs/specs/VIEWPORT.md §10.6).
+    pub lod_proxies: bool,
+}
+
+fn triangle_estimate(mesh: &PolyMesh) -> usize {
+    mesh.polys.iter().map(|p| p.len().saturating_sub(2)).sum()
+}
+
+fn smoothing_bits(s: Option<f64>) -> u64 {
+    s.map_or(u64::MAX, f64::to_bits)
+}
+
+/// Uploads `items`, reusing the cache entries whose content revision is unchanged
+/// (docs/specs/VIEWPORT.md §10.2); entries of nodes that are no longer drawn are dropped.
+pub fn upload_items(
+    cache: &mut GpuCache,
+    device: &wgpu::Device,
+    scene: &Scene,
+    items: Vec<DrawItem>,
+    component: Option<(NodeId, EditMode)>,
+    palette: &Palette,
+    opts: UploadSettings,
+) -> Vec<GpuItem> {
+    let live: BTreeSet<NodeId> = items.iter().map(DrawItem::id).collect();
+    let lod_flag = u64::from(opts.lod_proxies);
+    let out = items
+        .into_iter()
+        .map(|item| match item {
+            DrawItem::Mesh {
+                id,
+                mesh,
+                selected,
+                smoothing,
+            } => {
+                let target = component.filter(|(t, _)| *t == id);
+                let shown = target.map(|(_, mode)| {
+                    (
+                        mode,
+                        display_selection(&mesh, &stored_selection(scene, id), mode),
+                    )
+                });
+                // the colour is not part of the buffers: selecting an object uploads nothing
+                let mut rev = combine(mesh_revision(&mesh), smoothing_bits(smoothing));
+                rev = combine(rev, lod_flag);
+                if let Some((mode, sel)) = &shown {
+                    rev = combine(combine(rev, *mode as u64 + 1), selection_revision(sel));
+                }
+                let buffers = cache.meshes.get_or_insert_with(id, rev, || {
+                    Arc::new(match &shown {
+                        Some((mode, sel)) => {
+                            let build = if *mode == EditMode::Points {
+                                MeshBuffers::with_device
+                            } else {
+                                MeshBuffers::with_device_no_points
+                            };
+                            build(device, &mesh, sel, smoothing)
+                        }
+                        None => {
+                            let mut b = MeshBuffers::with_device_no_points(
+                                device,
+                                &mesh,
+                                &Selection::default(),
+                                smoothing,
+                            );
+                            if opts.lod_proxies && triangle_estimate(&mesh) > LOD_MIN_TRIS {
+                                b.set_lod(MeshBuffers::with_device_no_points(
+                                    device,
+                                    &lod_proxy(&mesh, LOD_CELLS),
+                                    &Selection::default(),
+                                    smoothing,
+                                ));
+                            }
+                            b
+                        }
+                    })
+                });
+                let color = if selected && target.is_none() {
+                    SELECTED_TINT
+                } else {
+                    palette.object
+                };
+                GpuItem::Mesh(buffers, color)
+            }
+            DrawItem::Instanced {
+                id,
+                instances,
+                world,
+                selected,
+                smoothing,
+            } => {
+                let input = instance_input(&instances);
+                let protos: Vec<u64> = instances.prototypes.iter().map(mesh_revision).collect();
+                let rev = combine(
+                    combine(
+                        instances_revision(&protos, &input, &world),
+                        smoothing_bits(smoothing),
+                    ),
+                    lod_flag,
+                );
+                let set = cache.instances.get_or_insert_with(id, rev, || {
+                    let mut set =
+                        InstanceSet::new(device, &instances.prototypes, smoothing, &input, &world);
+                    if opts.lod_proxies {
+                        for (i, p) in instances.prototypes.iter().enumerate() {
+                            if triangle_estimate(p) > LOD_MIN_TRIS {
+                                set.set_proto_lod(device, i, &lod_proxy(p, LOD_CELLS), smoothing);
+                            }
+                        }
+                    }
+                    Arc::new(set)
+                });
+                let color = if selected {
+                    SELECTED_TINT
+                } else {
+                    palette.object
+                };
+                GpuItem::Instanced(set, color)
+            }
+        })
+        .collect();
+    cache.meshes.retain(|k| live.contains(k));
+    cache.instances.retain(|k| live.contains(k));
     out
 }
 
@@ -275,59 +524,46 @@ impl ViewportPanel {
         if component.is_some() {
             palette.selection = palette_color(Theme::default().component_selection);
         }
-        if self.meshes.as_ref().is_none_or(|m| {
+        if self.items.as_ref().is_none_or(|m| {
             m.revision != scene.revision() || m.selection != *selected || m.component != component
         }) {
-            let items = scene_meshes_at(scene, selected, &ctx)
-                .into_iter()
-                .map(|(id, mesh, sel, smoothing)| {
-                    match component.filter(|(target, _)| *target == id) {
-                        // the component target: plain colour, its components highlighted
-                        Some((_, mode)) => {
-                            let shown =
-                                display_selection(&mesh, &stored_selection(scene, id), mode);
-                            let build = if mode == EditMode::Points {
-                                MeshBuffers::with_device
-                            } else {
-                                MeshBuffers::with_device_no_points
-                            };
-                            (build(device, &mesh, &shown, smoothing), palette.object)
-                        }
-                        None => {
-                            let color = if sel { SELECTED_TINT } else { palette.object };
-                            let buffers = MeshBuffers::with_device_no_points(
-                                device,
-                                &mesh,
-                                &Selection::default(),
-                                smoothing,
-                            );
-                            (buffers, color)
-                        }
-                    }
-                })
-                .collect();
-            self.meshes = Some(SceneMeshes {
+            let items = upload_items(
+                &mut self.cache,
+                device,
+                scene,
+                scene_draw_items_at(scene, selected, &ctx),
+                component,
+                &palette,
+                UploadSettings {
+                    lod_proxies: base.lod_px > 0.0,
+                },
+            );
+            self.items = Some(SceneItems {
                 revision: scene.revision(),
                 selection: selected.clone(),
                 component,
                 items,
             });
         }
-        let draw: Vec<DrawMesh> = self
-            .meshes
-            .iter()
-            .flat_map(|m| &m.items)
-            .map(|(mesh, color)| DrawMesh {
-                mesh,
-                color: *color,
-            })
-            .collect();
+        let (mut draw, mut draw_instanced) = (Vec::new(), Vec::new());
+        for item in self.items.iter().flat_map(|m| &m.items) {
+            match item {
+                GpuItem::Mesh(mesh, color) => draw.push(DrawMesh {
+                    mesh,
+                    color: *color,
+                }),
+                GpuItem::Instanced(set, color) => {
+                    draw_instanced.push(DrawInstanced { set, color: *color })
+                }
+            }
+        }
         let t = self.targets[pane.index()]
             .as_ref()
             .expect("target created above");
         let grid = grid_lines(cam, size[1] as f64);
         let frame = Frame {
             meshes: &draw,
+            instanced: &draw_instanced,
             grid: Some(&grid),
             gizmo,
             settings: Settings {

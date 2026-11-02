@@ -23,6 +23,8 @@ pub struct ObjectManager {
     pub renaming: Option<(NodeId, String)>,
     /// The search text (UI.md §13.5).
     pub filter: String,
+    /// An expression tag that was double-clicked; the editor opens the Node Editor on it.
+    pub open_tag: Option<NodeId>,
     /// Last pointer position seen during a drag (the release frame may have none).
     last_pointer: Option<Pos2>,
 }
@@ -194,8 +196,18 @@ impl ObjectManager {
                 }
             });
             ui.weak(&row.type_label);
-            for (_, tag) in &row.tags {
-                ui.weak(format!("[{tag}]"));
+            for (tag_id, tag) in &row.tags {
+                let text = RichText::new(format!("[{tag}]")).weak();
+                let r = ui.add(egui::Label::new(text).sense(Sense::click()));
+                if r.double_clicked()
+                    && st
+                        .doc
+                        .scene()
+                        .node(*tag_id)
+                        .is_some_and(|n| n.type_id == forge_nodes::TAG)
+                {
+                    self.open_tag = Some(*tag_id);
+                }
             }
             // Dots and tick, right aligned (UI.md §13.1).
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {

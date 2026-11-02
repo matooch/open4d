@@ -1,0 +1,132 @@
+//! The expression tag: a scene node that owns a graph and writes parameters each
+//! evaluation (docs/specs/NODES.md section 5).
+
+use forge_core::{
+    Category, NodeId, NodeType, ParamDesc, Plugin, Registry, RegistryError, Scene, Value,
+};
+
+use crate::graph::{Graph, GraphError};
+use crate::registry::{EvalEnv, NodeRegistry, ParamWrite};
+
+/// Node type id of the expression tag.
+pub const TAG: &str = "forge.expression";
+/// The parameter that holds the graph JSON.
+pub const GRAPH_PARAM: &str = "graph";
+
+pub fn tag_type() -> NodeType {
+    NodeType::new(TAG, "Expression", Category::Tag)
+        .param(ParamDesc::bool("enabled", "Enabled", true))
+        .param(ParamDesc::string(GRAPH_PARAM, "Graph", &Graph::new().to_json()).hidden())
+}
+
+/// Installs the expression tag type.
+pub struct NodesToolset;
+
+impl Plugin for NodesToolset {
+    fn id(&self) -> &str {
+        "forge.nodes"
+    }
+
+    fn register(&self, registry: &mut Registry) -> Result<(), RegistryError> {
+        registry.register(tag_type())
+    }
+}
+
+/// Something that went wrong with one expression tag during a pass. Never fatal.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Diagnostic {
+    pub tag: NodeId,
+    pub message: String,
+}
+
+/// The graph stored in an expression tag.
+pub fn load_graph(scene: &Scene, tag: NodeId) -> Result<Graph, String> {
+    let node = scene
+        .node(tag)
+        .ok_or_else(|| format!("node {tag} does not exist"))?;
+    if node.type_id != TAG {
+        return Err(format!("node {tag} is not an expression tag"));
+    }
+    match node.params.get(GRAPH_PARAM) {
+        Some(Value::String(text)) => Graph::from_json(text).map_err(|e: GraphError| e.to_string()),
+        _ => Err(format!("node {tag} has no graph parameter")),
+    }
+}
+
+/// Tags of a scene in document order: an object, its tags in order, then its children.
+fn expression_tags(scene: &Scene) -> Vec<NodeId> {
+    let mut out = Vec::new();
+    let mut stack: Vec<NodeId> = scene.roots().iter().rev().copied().collect();
+    while let Some(id) = stack.pop() {
+        let Some(node) = scene.node(id) else { continue };
+        out.extend(
+            node.tags
+                .iter()
+                .copied()
+                .filter(|t| scene.node(*t).is_some_and(|n| n.type_id == TAG)),
+        );
+        stack.extend(node.children.iter().rev());
+    }
+    out
+}
+
+/// Evaluates one tag against `scene`; the writes and diagnostics it produced.
+pub fn evaluate_tag(
+    scene: &Scene,
+    registry: &NodeRegistry,
+    tag: NodeId,
+    seconds: f64,
+) -> Result<Vec<ParamWrite>, String> {
+    let graph = load_graph(scene, tag)?;
+    let host = scene.node(tag).and_then(|n| n.host);
+    let env = EvalEnv {
+        scene: Some(scene),
+        seconds,
+        fps: f64::from(scene.settings().fps),
+        host,
+        limits: Default::default(),
+    };
+    graph
+        .evaluate(registry, &env)
+        .map(|e| e.writes)
+        .map_err(|e| e.to_string())
+}
+
+/// Runs every enabled expression tag in document order, applying each tag's writes before
+/// the next tag runs. Returns the changed copy of the scene and what went wrong.
+pub fn apply_expressions_with(
+    scene: &Scene,
+    registry: &NodeRegistry,
+    seconds: f64,
+) -> (Scene, Vec<Diagnostic>) {
+    let tags = expression_tags(scene);
+    let mut out = scene.clone();
+    let mut diagnostics = Vec::new();
+    for tag in tags {
+        let enabled = !matches!(out.param(tag, "enabled"), Some(Value::Bool(false)));
+        if !enabled {
+            continue;
+        }
+        match evaluate_tag(&out, registry, tag, seconds) {
+            Err(message) => diagnostics.push(Diagnostic { tag, message }),
+            Ok(writes) if writes.is_empty() => {}
+            Ok(writes) => {
+                let overrides = writes.into_iter().map(|w| (w.node, w.param, w.value));
+                let (next, skipped) = out.with_params(overrides);
+                out = next;
+                for (node, param, error) in skipped {
+                    diagnostics.push(Diagnostic {
+                        tag,
+                        message: format!("write to {param:?} of node {node} skipped: {error}"),
+                    });
+                }
+            }
+        }
+    }
+    (out, diagnostics)
+}
+
+/// [`apply_expressions_with`] using the built-in node registry.
+pub fn apply_expressions(scene: &Scene, seconds: f64) -> (Scene, Vec<Diagnostic>) {
+    apply_expressions_with(scene, NodeRegistry::builtin(), seconds)
+}

@@ -2,7 +2,7 @@
 
 # Command reference
 
-87 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+112 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -12,6 +12,8 @@
 | [`object.reparent`](#objectreparent) | Move | yes | `object_reparent` |
 | [`object.move`](#objectmove) | Move Objects | yes | `object_move` |
 | [`object.group`](#objectgroup) | Group Objects | yes | `object_group` |
+| [`object.create_cloner`](#objectcreate_cloner) | Create Cloner from Selection | yes | `object_create_cloner` |
+| [`view.clone_display`](#viewclone_display) | Clone Display | no | `view_clone_display` |
 | [`object.visibility`](#objectvisibility) | Visibility | yes | `object_visibility` |
 | [`object.enable`](#objectenable) | Enable | yes | `object_enable` |
 | [`edit.undo`](#editundo) | Undo | no | `edit_undo` |
@@ -82,6 +84,20 @@
 | [`timeline.toggle_play`](#timelinetoggle_play) | Play / Stop | no | `timeline_toggle_play` |
 | [`timeline.stop`](#timelinestop) | Stop | no | `timeline_stop` |
 | [`timeline.settings`](#timelinesettings) | Timeline Settings | yes | `timeline_settings` |
+| [`timeline.set_fps`](#timelineset_fps) | Set FPS | yes | `timeline_set_fps` |
+| [`timeline.set_preview`](#timelineset_preview) | Set Preview Range | yes | `timeline_set_preview` |
+| [`timeline.clear_preview`](#timelineclear_preview) | Clear Preview Range | yes | `timeline_clear_preview` |
+| [`timeline.set_mode`](#timelineset_mode) | Set Playback Mode | yes | `timeline_set_mode` |
+| [`timeline.set_frame_dropping`](#timelineset_frame_dropping) | Set Frame Dropping | yes | `timeline_set_frame_dropping` |
+| [`timeline.set_display`](#timelineset_display) | Set Time Display | yes | `timeline_set_display` |
+| [`timeline.info`](#timelineinfo) | Timeline Info | no | `timeline_info` |
+| [`marker.add`](#markeradd) | Add Marker | yes | `marker_add` |
+| [`marker.remove`](#markerremove) | Remove Marker | yes | `marker_remove` |
+| [`marker.rename`](#markerrename) | Rename Marker | yes | `marker_rename` |
+| [`marker.move`](#markermove) | Move Marker | yes | `marker_move` |
+| [`marker.set_color`](#markerset_color) | Set Marker Color | yes | `marker_set_color` |
+| [`marker.list`](#markerlist) | List Markers | no | `marker_list` |
+| [`marker.jump`](#markerjump) | Jump to Marker | no | `marker_jump` |
 | [`file.new`](#filenew) | New | no | `file_new` |
 | [`file.open`](#fileopen) | Open | no | `file_open` |
 | [`file.save`](#filesave) | Save | no | `file_save` |
@@ -93,6 +109,15 @@
 | [`file.import_obj`](#fileimport_obj) | Import OBJ | yes | `file_import_obj` |
 | [`file.export_obj`](#fileexport_obj) | Export OBJ | no | `file_export_obj` |
 | [`param.edit`](#paramedit) | Edit Parameter | yes | `param_edit` |
+| [`graph.add_node`](#graphadd_node) | Add Graph Node | yes | `graph_add_node` |
+| [`graph.remove`](#graphremove) | Remove Graph Node | yes | `graph_remove` |
+| [`graph.connect`](#graphconnect) | Connect Graph Ports | yes | `graph_connect` |
+| [`graph.disconnect`](#graphdisconnect) | Disconnect Graph Port | yes | `graph_disconnect` |
+| [`graph.set_value`](#graphset_value) | Set Graph Value | yes | `graph_set_value` |
+| [`graph.move`](#graphmove) | Move Graph Nodes | yes | `graph_move` |
+| [`graph.get`](#graphget) | Get Graph | no | `graph_get` |
+| [`graph.node_types`](#graphnode_types) | List Graph Node Types | no | `graph_node_types` |
+| [`graph.evaluate`](#graphevaluate) | Evaluate Graph | no | `graph_evaluate` |
 
 ## `object`
 
@@ -161,6 +186,17 @@ Group Objects. One undo step.
 
 Example: `forge cmd scene.forge object.group --args '{"name":"Group","nodes":[2,3]}'`
 
+### `object.create_cloner`
+
+Create Cloner from Selection. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string or null | no | Name of the new cloner (default: the type's name). |
+| `nodes` | array of integer or null | no | Objects that become the cloner's children; the current selection when absent. |
+
+Example: `forge cmd scene.forge object.create_cloner --args '{"name":"Cloner","nodes":[2,3]}'`
+
 ### `object.visibility`
 
 Visibility. One undo step.
@@ -193,53 +229,18 @@ No arguments.
 Example: `forge cmd scene.forge object.begin_rename --args '{}'`
 
 
-## `edit`
-
-### `edit.undo`
-
-Undo. Not an undoable edit.
-
-No arguments.
-
-Example: `forge cmd scene.forge edit.undo --args '{}'`
-
-### `edit.redo`
-
-Redo. Not an undoable edit.
-
-No arguments.
-
-Example: `forge cmd scene.forge edit.redo --args '{}'`
-
-### `edit.soft_selection`
-
-Soft Selection. Not an undoable edit.
-
-| Argument | Type | Required | Description |
-|---|---|---|---|
-| `curve` | array of number | no |  |
-| `distance` | `"volume"` \| `"surface"` | no |  |
-| `enabled` | boolean | no |  |
-| `falloff` | `"linear"` \| `"dome"` \| `"bell"` \| `"spline"` | no |  |
-| `radius` | number | no |  |
-
-Example: `forge cmd scene.forge edit.soft_selection --args '{"enabled":true,"falloff":"bell","radius":100.0}'`
-
-### `edit.symmetry`
-
-Symmetry. Not an undoable edit.
-
-| Argument | Type | Required | Description |
-|---|---|---|---|
-| `axis` | `"x"` \| `"y"` \| `"z"` | no |  |
-| `enabled` | boolean | no |  |
-| `offset` | number | no |  |
-| `tolerance` | number | no |  |
-
-Example: `forge cmd scene.forge edit.symmetry --args '{"axis":"x","enabled":true}'`
-
-
 ## `view`
+
+### `view.clone_display`
+
+Clone Display. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `axes` | boolean or null | no | Show the axes of each clone of the selected cloners. |
+| `indices` | boolean or null | no | Show the index of each clone of the selected cloners. |
+
+Example: `forge cmd scene.forge view.clone_display --args '{"axes":false,"indices":true}'`
 
 ### `view.shading`
 
@@ -384,6 +385,52 @@ Expand / Collapse. Not an undoable edit.
 | `node` | integer | yes |  |
 
 Example: `forge cmd scene.forge view.toggle_expanded --args '{"node":1}'`
+
+
+## `edit`
+
+### `edit.undo`
+
+Undo. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge edit.undo --args '{}'`
+
+### `edit.redo`
+
+Redo. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge edit.redo --args '{}'`
+
+### `edit.soft_selection`
+
+Soft Selection. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `curve` | array of number | no |  |
+| `distance` | `"volume"` \| `"surface"` | no |  |
+| `enabled` | boolean | no |  |
+| `falloff` | `"linear"` \| `"dome"` \| `"bell"` \| `"spline"` | no |  |
+| `radius` | number | no |  |
+
+Example: `forge cmd scene.forge edit.soft_selection --args '{"enabled":true,"falloff":"bell","radius":100.0}'`
+
+### `edit.symmetry`
+
+Symmetry. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `axis` | `"x"` \| `"y"` \| `"z"` | no |  |
+| `enabled` | boolean | no |  |
+| `offset` | number | no |  |
+| `tolerance` | number | no |  |
+
+Example: `forge cmd scene.forge edit.symmetry --args '{"axis":"x","enabled":true}'`
 
 
 ## `select`
@@ -969,6 +1016,149 @@ Timeline Settings. One undo step.
 
 Example: `forge cmd scene.forge timeline.settings --args '{"end":90,"fps":30,"start":0}'`
 
+### `timeline.set_fps`
+
+Set FPS. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `fps` | integer | yes | New frames per second, 1 to 240. Keys keep their seconds; the ranges, markers and the current frame are converted (ANIM.md §2.9). |
+
+Example: `forge cmd scene.forge timeline.set_fps --args '{"fps":24}'`
+
+### `timeline.set_preview`
+
+Set Preview Range. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `start` | integer | yes | First frame of the preview range, inside the project range. |
+| `end` | integer | yes | Last frame of the preview range, inside the project range. |
+
+Example: `forge cmd scene.forge timeline.set_preview --args '{"end":40,"start":10}'`
+
+### `timeline.clear_preview`
+
+Clear Preview Range. One undo step.
+
+No arguments.
+
+Example: `forge cmd scene.forge timeline.clear_preview --args '{}'`
+
+### `timeline.set_mode`
+
+Set Playback Mode. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `mode` | string | yes | `once`, `loop` or `ping_pong`. |
+
+Example: `forge cmd scene.forge timeline.set_mode --args '{"mode":"loop"}'`
+
+### `timeline.set_frame_dropping`
+
+Set Frame Dropping. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean | yes | true: real-time playback that drops frames; false: every frame is shown. |
+
+Example: `forge cmd scene.forge timeline.set_frame_dropping --args '{"enabled":true}'`
+
+### `timeline.set_display`
+
+Set Time Display. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `format` | string | yes | `frames`, `smpte` or `seconds`. |
+
+Example: `forge cmd scene.forge timeline.set_display --args '{"format":"frames"}'`
+
+### `timeline.info`
+
+Timeline Info. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge timeline.info --args '{}'`
+
+
+## `marker`
+
+### `marker.add`
+
+Add Marker. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `color` | string or null | no | Colour as `#rrggbb` (default `#e0a030`). |
+| `frame` | integer or null | no | Frame of the marker (default: the current frame), inside the project range. |
+| `name` | string or null | no | Name (default `Marker <id>`). |
+
+Example: `forge cmd scene.forge marker.add --args '{"color":"#e0a030","frame":10,"name":"Hit"}'`
+
+### `marker.remove`
+
+Remove Marker. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | integer | yes |  |
+
+Example: `forge cmd scene.forge marker.remove --args '{"id":1}'`
+
+### `marker.rename`
+
+Rename Marker. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `name` | string | yes |  |
+
+Example: `forge cmd scene.forge marker.rename --args '{"id":1,"name":"Hit"}'`
+
+### `marker.move`
+
+Move Marker. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `frame` | integer | yes | New frame, inside the project range. |
+
+Example: `forge cmd scene.forge marker.move --args '{"frame":20,"id":1}'`
+
+### `marker.set_color`
+
+Set Marker Color. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | integer | yes |  |
+| `color` | string | yes | `#rrggbb`. |
+
+Example: `forge cmd scene.forge marker.set_color --args '{"color":"#38c6e8","id":1}'`
+
+### `marker.list`
+
+List Markers. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge marker.list --args '{}'`
+
+### `marker.jump`
+
+Jump to Marker. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `forward` | boolean | yes | true: next key, false: previous key. |
+
+Example: `forge cmd scene.forge marker.jump --args '{"forward":true}'`
+
 
 ## `file`
 
@@ -1064,4 +1254,114 @@ Export OBJ. Not an undoable edit.
 | `selected` | boolean | no | Export only the selected objects. Default: `false`. |
 
 Example: `forge cmd scene.forge file.export_obj --args '{"path":"model.obj","selected":false}'`
+
+
+## `graph`
+
+### `graph.add_node`
+
+Add Graph Node. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes | The expression tag that owns the graph. |
+| `type` | string | yes | Node type id, e.g. `math.add` (see `graph.node_types`). |
+| `pos` | array of number (length 2) or null | no | Editor position `[x, y]` of the new node. |
+| `values` | object or null | no | Constants of unconnected inputs by port id. |
+
+Example: `forge cmd scene.forge graph.add_node --args '{"pos":[40.0,80.0],"tag":1,"type":"math.add","values":{"b":2.0}}'`
+
+### `graph.remove`
+
+Remove Graph Node. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes |  |
+| `node` | integer or null | no | Graph node id. |
+| `nodes` | array of integer or null | no | Several graph node ids, removed in one undo step. |
+
+Example: `forge cmd scene.forge graph.remove --args '{"nodes":[1,2],"tag":1}'`
+
+### `graph.connect`
+
+Connect Graph Ports. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes |  |
+| `from_node` | integer | yes |  |
+| `from_port` | string | yes | Output port id. |
+| `to_node` | integer | yes |  |
+| `to_port` | string | yes | Input port id. |
+| `release_node` | integer or null | no | An input whose link is removed in the same step (moving a link between inputs). |
+| `release_port` | string or null | no |  |
+
+Example: `forge cmd scene.forge graph.connect --args '{"from_node":1,"from_port":"out","release_node":2,"release_port":"b","tag":1,"to_node":2,"to_port":"a"}'`
+
+### `graph.disconnect`
+
+Disconnect Graph Port. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes |  |
+| `to_node` | integer | yes |  |
+| `to_port` | string | yes |  |
+
+Example: `forge cmd scene.forge graph.disconnect --args '{"tag":1,"to_node":2,"to_port":"a"}'`
+
+### `graph.set_value`
+
+Set Graph Value. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes |  |
+| `node` | integer | yes |  |
+| `port` | string | yes | Input port id. |
+| `value` | any | yes | A number, bool, `[x, y, z]`, 16 numbers, string or node id, by the port type. |
+| `gesture` | integer or null | no | Edits with the same gesture number merge into one undo step (a drag of a number). |
+
+Example: `forge cmd scene.forge graph.set_value --args '{"gesture":1,"node":1,"port":"b","tag":1,"value":2.5}'`
+
+### `graph.move`
+
+Move Graph Nodes. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes |  |
+| `moves` | array of object | yes | New absolute editor positions. |
+| `gesture` | integer or null | no | Moves with the same gesture number merge into one undo step (one drag). |
+
+Example: `forge cmd scene.forge graph.move --args '{"gesture":1,"moves":[{"node":1,"x":10.0,"y":20.0}],"tag":1}'`
+
+### `graph.get`
+
+Get Graph. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes |  |
+
+Example: `forge cmd scene.forge graph.get --args '{"tag":1}'`
+
+### `graph.node_types`
+
+List Graph Node Types. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge graph.node_types --args '{}'`
+
+### `graph.evaluate`
+
+Evaluate Graph. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes |  |
+
+Example: `forge cmd scene.forge graph.evaluate --args '{"tag":1}'`
 

@@ -1,15 +1,15 @@
 //! Gizmo drags → transform params, and object picking (docs/specs/MANIPULATE.md §3, §5).
 
 use forge_core::transform::{self, Transform, hpb_from_rotation, rotation_part};
-use forge_core::{Document, EditError, NodeId, Scene, Tx, Value};
+use forge_core::{Document, EditError, EvalCtx, NodeId, Scene, Tx, Value};
 use forge_viewport::camera::Camera;
 use forge_viewport::gizmo::DragDelta;
-use forge_viewport::picking::pick_poly;
+use forge_viewport::picking::{pick_instances, pick_poly};
 use glam::DMat3;
 
 use crate::animate::{AnimEdit, unchanged, write_param};
 use crate::attributes::Gesture;
-use crate::viewport_panel::scene_meshes;
+use crate::viewport_panel::{DrawItem, instance_input, scene_draw_items_at};
 
 /// Writes the three transform params. With `anim` the params that already hold the
 /// shown value are skipped and animated ones get keys (docs/specs/ANIM.md §2.4); without
@@ -93,12 +93,40 @@ pub fn apply_drag_anim(
     }
 }
 
-/// The generator node whose world-space mesh is nearest under the cursor.
-pub fn pick_node(scene: &Scene, cam: &Camera, x: f64, y: f64, w: f64, h: f64) -> Option<NodeId> {
+/// What a pick hit: the object and, for an instanced cloner, the clone under the cursor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PickHit {
+    pub node: NodeId,
+    /// Clone index (into the cloner's clone data) when `node` is a cloner drawn by instancing.
+    pub clone: Option<u32>,
+}
+
+/// The object nearest under the cursor; cloners are picked through their instances without
+/// expanding the clone geometry (docs/specs/VIEWPORT.md §10.7).
+pub fn pick_object(scene: &Scene, cam: &Camera, x: f64, y: f64, w: f64, h: f64) -> Option<PickHit> {
     let ray = cam.ray(x, y, w, h);
-    scene_meshes(scene, &Default::default())
+    scene_draw_items_at(scene, &Default::default(), &EvalCtx::default())
         .into_iter()
-        .filter_map(|(id, mesh, _, _)| pick_poly(&mesh, &ray).map(|hit| (hit.t, id)))
+        .filter_map(|item| match item {
+            DrawItem::Mesh { id, mesh, .. } => pick_poly(&mesh, &ray).map(|hit| (hit.t, id, None)),
+            DrawItem::Instanced {
+                id,
+                instances,
+                world,
+                ..
+            } => pick_instances(
+                &instances.prototypes,
+                &instance_input(&instances),
+                &world,
+                &ray,
+            )
+            .map(|hit| (hit.t, id, Some(hit.clone))),
+        })
         .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
-        .map(|(_, id)| id)
+        .map(|(_, node, clone)| PickHit { node, clone })
+}
+
+/// The generator node whose world-space mesh (or instance) is nearest under the cursor.
+pub fn pick_node(scene: &Scene, cam: &Camera, x: f64, y: f64, w: f64, h: f64) -> Option<NodeId> {
+    pick_object(scene, cam, x, y, w, h).map(|hit| hit.node)
 }

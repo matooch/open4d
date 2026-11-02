@@ -101,6 +101,7 @@ touch history.
 | `object.reparent` | `node`, `parent?` (null = root) | null | yes |
 | `object.move` | `nodes?` (selection), `parent?` (null = root), `index?` (position among the parent's children without the moved nodes; absent = last) | `{moved}` | yes |
 | `object.group` | `nodes?`, `name?` (default "Null") | `{node}` | yes |
+| `object.create_cloner` | `nodes?` (selection), `name?` (default "Cloner") | `{node}` | yes |
 | `object.visibility` | `nodes?`, `editor?`, `render?` each `default`\|`on`\|`off` (at least one) | null | yes |
 | `object.enable` | `nodes?`, `enabled` | null | yes |
 | `edit.undo` | - | `{done}` | no |
@@ -114,6 +115,7 @@ touch history.
 | `view.lighting` | `mode` headlight, rig | null | no |
 | `view.shadows` | `enabled` | null | no |
 | `view.antialias` | `enabled` | null | no |
+| `view.clone_display` | `indices?`, `axes?` (at least one) | null | no |
 | `view.set_camera` | `target?` [x,y,z] world, `distance?`, `yaw?`, `pitch?` (degrees), `projection?` perspective, orthographic, `fov?` (degrees), `height?` (orthographic) | null | no |
 | `view.get_camera` | - | `{target, eye, distance, yaw, pitch, projection, fov?, height?}` | no |
 | `view.gizmo_mode` | `mode` move, rotate, scale | null | no |
@@ -138,6 +140,14 @@ touch history.
 | `select.all` `select.none` `select.invert` `select.grow` `select.shrink` `select.connected` | - | null | yes |
 | `select.convert` | `to` points, edges, polys; `mode?` strict, tolerant (EDITABLE.md §2.8) | null | yes |
 | `select.loop` `select.ring` | `across?` 0 or 1 (EDITABLE.md §2.8) | null | yes |
+| `graph.add_node` | `tag`, `type`, `values?`, `pos?` (NODES.md §6) | `{node}` | yes |
+| `graph.remove` | `tag`, `node?`, `nodes?` | `{removed_links}` | yes |
+| `graph.connect` | `tag`, `from_node`, `from_port`, `to_node`, `to_port`, `release_node?`, `release_port?` (type and cycle checked) | `{replaced}` | yes |
+| `graph.move` | `tag`, `moves` (`{node, x, y}` list), `gesture?` | `{moved}` | yes (a gesture merges) |
+| `graph.disconnect` | `tag`, `to_node`, `to_port` | null | yes |
+| `graph.set_value` | `tag`, `node`, `port`, `value`, `gesture?` | null | yes (a gesture merges) |
+| `graph.get` `graph.evaluate` | `tag` | graph / dry-run result | no |
+| `graph.node_types` | - | `{types}` | no |
 | `file.new` | - | null | no |
 | `file.open` | `path` | `{warnings}` | no |
 | `file.save` | `path?` (default: current file) | `{path}` | no |
@@ -155,6 +165,20 @@ touch history.
 | `timeline.step` | `delta` | `{frame}` | no |
 | `timeline.play` / `timeline.stop` / `timeline.toggle_play` | - | null | no |
 | `timeline.settings` | `fps`, `start`, `end` | null | yes |
+| `timeline.set_fps` | `fps` (1-240): keys keep their seconds, ranges/markers/current frame convert (ANIM.md §2.9) | `{fps,start,end,frame}` | yes |
+| `timeline.set_preview` | `start`, `end` (inside the project range) | null | yes |
+| `timeline.clear_preview` | - | null | yes |
+| `timeline.set_mode` | `mode`: `once`, `loop`, `ping_pong` | null | yes |
+| `timeline.set_frame_dropping` | `enabled` (true: real-time, false: every frame) | null | yes |
+| `timeline.set_display` | `format`: `frames`, `smpte`, `seconds` | null | yes |
+| `timeline.info` | - | the timeline state (fps, range, preview, mode, display, frame, text, markers) | no |
+| `marker.add` | `frame?` (default current), `name?`, `color?` (`#rrggbb`) | `{id,frame}` | yes |
+| `marker.remove` | `id` | null | yes |
+| `marker.rename` | `id`, `name` | null | yes |
+| `marker.move` | `id`, `frame` (steps of one drag merge) | null | yes |
+| `marker.set_color` | `id`, `color` | null | yes |
+| `marker.list` | - | `{markers:[{id,frame,name,color}]}` | no |
+| `marker.jump` | `forward` | `{frame,found}` | no |
 | `transform.set` | `node`, `pos?`, `rot?` (degrees), `scale?` | null | yes |
 | `param.set` | `node`, `param`, `value` | null | yes |
 | `param.edit` | `param`, `value`, `nodes?`, `component?`, `gesture?` | `{changed}` | yes |
@@ -164,6 +188,11 @@ with it); the rest keep the order given and end up consecutively at `index`; one
 a cycle fails and changes nothing. `object.group` creates a `forge.null` under the first
 node's parent at the first node's position (after the group's nodes are removed) and moves
 the nodes into it in the order given (nested ones dropped as above), then selects the group.
+`object.create_cloner` (brief 079, UI.md §16.2) creates a `forge.cloner` (with the smoothing
+tag, like `object.create`) under the first top-level node's parent at its position, moves the
+nodes (nested ones dropped, as `object.group`) into it in the order given and selects it, in one
+undo step "Create Cloner". With no nodes it creates an empty cloner. `view.clone_display`
+(UI.md §16.3) switches the viewport's clone index and axes overlay; view state only.
 `object.visibility` / `object.enable` write the `object.*` params (TRANSFORM.md §2) of every
 named node in one undo step; tags and non-hierarchy nodes are skipped.
 

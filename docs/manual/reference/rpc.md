@@ -20,7 +20,7 @@ Command-shaped work goes through `command.run`; the command ids and arguments ar
 | `scene.get` | - | `{"fps","start","end","frame","nodes","selected","roots"}` | Project settings, selection and the node tree with parameters in user units. |
 | `node.get` | `{"id": int}` | `node object` | One node (type, parameters, tags, animated tracks, children). |
 | `eval.mesh` | `{"node": int, "frame"?: int}` | `{"node","frame","points","polys"}` | The node's evaluated mesh in world space; the timeline does not move. |
-| `timeline.get` | - | `{"frame","fps","start","end","playing","autokey"}` | Timeline state. |
+| `timeline.get` | - | `{"frame","fps","start","end","playing","autokey","preview","mode","drop_frames","display","text","markers"}` | Timeline state. |
 | `viewport.screenshot` | `{"width"?: int, "height"?: int}` | `{"width","height","format":"png","data": base64}` | Renders the editor viewport offscreen (1 to 4096 per side, default 800x600). Needs a viewport and a GPU. |
 | `events.subscribe` | `{"kinds"?: [str]}` | `{"kinds": [str]}` | Subscribes this connection to notification kinds (`scene`, `frame`, `selection`, `commands`; absent means all). |
 | `events.unsubscribe` | `{"kinds"?: [str]}` | `{"kinds": [str]}` | Removes kinds from the subscription (absent means all). |

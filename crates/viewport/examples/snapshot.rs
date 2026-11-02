@@ -71,6 +71,7 @@ fn main() {
         ..Gizmo::default()
     };
     let frame = Frame {
+        instanced: &[],
         meshes: &meshes,
         grid: Some(&grid),
         gizmo: Some(&gizmo),

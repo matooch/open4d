@@ -191,6 +191,16 @@ Transactions:
   drops entries for deleted nodes. `clear()`.
 - Undo produces new revisions, so caches recompute after undo (conservative, correct).
 
+### 5a. Evaluation order of one frame (area H, brief 108; refined by brief 111)
+
+`forge-app` builds the evaluated scene of a frame in this order: (1) animation tracks,
+`scene_at`; (2) expression tags, `forge_nodes::apply_expressions`, in document order (an
+object, its tags in order, then its children), each tag seeing the writes of the earlier
+ones; (3) generators and deformers, which read the evaluated scene when geometry is asked
+for; (4) dynamics (later). An expression therefore overrides an animated value of the same
+parameter and every generator sees the expression's output. Priorities between expression tags
+and constraints/IK are brief 111. Details: NODES.md section 5.
+
 ## 6. Native scene file (`file`)
 
 RON text, deterministic (same scene → byte-identical output):
@@ -198,8 +208,9 @@ RON text, deterministic (same scene → byte-identical output):
 ```ron
 (
     format: "forge3d-scene",
-    version: 6,
+    version: 7,
     settings: (fps: 30, start: 0, end: 90),
+    time: (preview: None, mode: Loop, drop_frames: true, display: Frames, markers: []),
     roots: [
         (id: 1, type_id: "forge.null", name: "Null", params: {}, tracks: {}, tags: [], children: []),
     ],
@@ -319,6 +330,8 @@ the same logical scene.
 | 3 -> 4 | keyframe `tracks` per node | nothing (a missing `tracks` is empty) |
 | 4 -> 5 | scene `settings` | nothing (absent settings read as the defaults) |
 | 5 -> 6 | see §6.4 | nothing (additive) |
+| 6 -> 7 | scene `time` (§6.6) | nothing (an absent `time` reads as the defaults) |
+| 7 -> 8 | `forge.expression` tag (§6.7) | nothing (the graph is a string parameter) |
 
 Missing params of known types take their defaults on load (§6), so params added by later
 builds need no step.
@@ -348,3 +361,22 @@ path is whatever the user gave, normally absolute.
 - `file::external_refs(&Scene) -> Vec<ExternalRef { node, param, path }>` lists the references
   (for "collect files" and missing-file reports).
 - Nodes of unknown types keep their values untouched.
+
+### 6.6 Version 7: time configuration (brief 094)
+
+Adds `time: (preview: .., mode: .., drop_frames: .., display: .., markers: [..])` at the top
+level, after `settings` (ANIM.md §2.9). `preview` is `None` or `Some((start, end))`; `mode` is
+`Once | Loop | PingPong`; `display` is `Frames | Smpte | Seconds`; a marker is `(id: 1, frame:
+10, name: "Hit", color: (224, 160, 48))`. Every field has a serde default, so a version 1-6 file
+loads with `TimeConfig::default()` and step 6 -> 7 has nothing to rewrite. `save` always writes
+the field. A `time` block that does not validate (preview order or outside the project range,
+duplicate marker ids) loads as the defaults with a warning, like `settings`. Older builds reject a
+version 7 file with `UnsupportedVersion`. The fixture `scene-v7.forge` pins the bytes.
+
+### 6.7 Version 8: expression tag (brief 108)
+
+Declares the `forge.expression` tag type (NODES.md section 5). Its graph is the hidden string
+parameter `graph` (JSON), so the file schema does not change and step 7 -> 8 has nothing to
+rewrite; a version 7 file loads unchanged and saves as version 8. Older builds reject a version 8
+file with `UnsupportedVersion` instead of loading a scene whose expressions they could not run.
+The fixtures `scene-v8*.forge` pin the current bytes; `scene-v7*.forge` stay as the old build wrote them.

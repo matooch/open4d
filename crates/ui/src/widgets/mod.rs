@@ -38,6 +38,9 @@ pub struct Edit {
     /// Vec3: the one component `value` (a number) sets.
     pub component: Option<u8>,
     pub phase: Phase,
+    /// An edit of another object's parameter than the row's (a list entry's enable box or
+    /// strength, UI.md §16.1): the node and the parameter id.
+    pub target: Option<(NodeId, String)>,
 }
 
 impl Edit {
@@ -46,11 +49,24 @@ impl Edit {
             value,
             component: None,
             phase: Phase::Commit,
+            target: None,
+        }
+    }
+
+    /// A single-step edit of `param` on the one object `node`.
+    pub fn on_node(node: NodeId, param: &str, value: Value) -> Edit {
+        Edit {
+            target: Some((node, param.to_string())),
+            ..Edit::commit(value)
         }
     }
 
     /// Arguments of `param.edit` for the objects `nodes`.
     pub fn args(&self, param: &str, nodes: &[NodeId], gesture: Option<u64>) -> Value {
+        let (param, nodes) = match &self.target {
+            Some((node, p)) => (p.as_str(), std::slice::from_ref(node)),
+            None => (param, nodes),
+        };
         let mut a = json!({
             "param": param,
             "value": self.value,

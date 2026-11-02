@@ -10,6 +10,7 @@ pub mod schema;
 mod state;
 mod timeline;
 
+pub use builtin::timeline_state;
 pub use builtin::{display_to_stored, param_value_from_json, register_editor_commands};
 pub use context::CommandContext;
 pub use error::CommandError;
@@ -20,4 +21,4 @@ pub use state::{
     CameraSet, ConvertMode, GizmoModeArg, GizmoSpaceArg, LayoutArg, LightingArg, ModeArg,
     NodeSelection, PaneArg, ProjectionArg, SelectExtra, SelectOp, ShadingMode, UiRequest, ViewArg,
 };
-pub use timeline::Timeline;
+pub use timeline::{Playback, Timeline};

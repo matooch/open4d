@@ -227,3 +227,17 @@ args = { forward = false }
 chord = "Shift+Period"
 command = "key.jump"
 args = { forward = true }
+
+[[bind]]
+chord = "M"
+command = "marker.add"
+
+[[bind]]
+chord = "Alt+Comma"
+command = "marker.jump"
+args = { forward = false }
+
+[[bind]]
+chord = "Alt+Period"
+command = "marker.jump"
+args = { forward = true }

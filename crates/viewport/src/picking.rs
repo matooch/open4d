@@ -232,3 +232,86 @@ pub fn rect_select(
         Element::Polys => forge_geometry::selection::points_to_polys(mesh, &inside, mode),
     }
 }
+
+/// The clone hit by [`pick_instances`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct InstanceHit {
+    pub clone: u32,
+    pub proto: u32,
+    pub poly: u32,
+    /// World ray parameter.
+    pub t: f64,
+}
+
+/// Slab test of the ray against a box; the entry/exit parameters bracket a hit.
+fn ray_hits_box(origin: DVec3, dir: DVec3, lo: DVec3, hi: DVec3) -> bool {
+    let (mut t0, mut t1) = (f64::NEG_INFINITY, f64::INFINITY);
+    for k in 0..3 {
+        if dir[k].abs() < 1e-300 {
+            if origin[k] < lo[k] || origin[k] > hi[k] {
+                return false;
+            }
+            continue;
+        }
+        let (a, b) = ((lo[k] - origin[k]) / dir[k], (hi[k] - origin[k]) / dir[k]);
+        t0 = t0.max(a.min(b));
+        t1 = t1.min(a.max(b));
+    }
+    t0 <= t1 && t1 >= 0.0
+}
+
+/// Nearest clone under the ray, without expanding the geometry (docs/specs/VIEWPORT.md §10.7).
+/// Clone `i` shows `prototypes[input.child[i]]` placed by `world · input.matrices[i]`.
+pub fn pick_instances(
+    prototypes: &[PolyMesh],
+    input: &crate::instancing::InstanceInput,
+    world: &glam::DMat4,
+    ray: &Ray,
+) -> Option<InstanceHit> {
+    let tris: Vec<Tris> = prototypes.iter().map(triangulate).collect();
+    let boxes: Vec<Option<(DVec3, DVec3)>> = prototypes
+        .iter()
+        .map(|m| {
+            let first = *m.points.first()?;
+            Some(
+                m.points
+                    .iter()
+                    .fold((first, first), |(a, b), p| (a.min(*p), b.max(*p))),
+            )
+        })
+        .collect();
+    let mut best: Option<InstanceHit> = None;
+    for i in 0..input.len() {
+        if !input.visible.get(i).copied().unwrap_or(true) {
+            continue;
+        }
+        let proto = input.child.get(i).copied().unwrap_or(0) as usize;
+        let Some(Some((lo, hi))) = boxes.get(proto) else {
+            continue;
+        };
+        let m = *world * input.matrices[i];
+        if m.determinant().abs() < 1e-18 {
+            continue;
+        }
+        let inv = m.inverse();
+        // unnormalised direction: `t` stays the world ray parameter
+        let local = Ray {
+            origin: inv.transform_point3(ray.origin),
+            dir: inv.transform_vector3(ray.dir),
+        };
+        if !ray_hits_box(local.origin, local.dir, *lo, *hi) {
+            continue;
+        }
+        if let Some((poly, t)) = nearest_hit(&prototypes[proto], &tris[proto], &local)
+            && best.is_none_or(|b| t < b.t)
+        {
+            best = Some(InstanceHit {
+                clone: i as u32,
+                proto: proto as u32,
+                poly,
+                t,
+            });
+        }
+    }
+    best
+}

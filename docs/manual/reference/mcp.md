@@ -65,6 +65,8 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `object_reparent` | Move. Undoable editing command. Runs command `object.reparent`. |
 | `object_move` | Move Objects. Undoable editing command. Runs command `object.move`. |
 | `object_group` | Group Objects. Undoable editing command. Runs command `object.group`. |
+| `object_create_cloner` | Create Cloner from Selection. Undoable editing command. Runs command `object.create_cloner`. |
+| `view_clone_display` | Clone Display. Not an undoable edit. Runs command `view.clone_display`. |
 | `object_visibility` | Visibility. Undoable editing command. Runs command `object.visibility`. |
 | `object_enable` | Enable. Undoable editing command. Runs command `object.enable`. |
 | `edit_undo` | Undo. Not an undoable edit. Runs command `edit.undo`. |
@@ -135,6 +137,20 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `timeline_toggle_play` | Play / Stop. Not an undoable edit. Runs command `timeline.toggle_play`. |
 | `timeline_stop` | Stop. Not an undoable edit. Runs command `timeline.stop`. |
 | `timeline_settings` | Timeline Settings. Undoable editing command. Runs command `timeline.settings`. |
+| `timeline_set_fps` | Set FPS. Undoable editing command. Runs command `timeline.set_fps`. |
+| `timeline_set_preview` | Set Preview Range. Undoable editing command. Runs command `timeline.set_preview`. |
+| `timeline_clear_preview` | Clear Preview Range. Undoable editing command. Runs command `timeline.clear_preview`. |
+| `timeline_set_mode` | Set Playback Mode. Undoable editing command. Runs command `timeline.set_mode`. |
+| `timeline_set_frame_dropping` | Set Frame Dropping. Undoable editing command. Runs command `timeline.set_frame_dropping`. |
+| `timeline_set_display` | Set Time Display. Undoable editing command. Runs command `timeline.set_display`. |
+| `timeline_info` | Timeline Info. Not an undoable edit. Runs command `timeline.info`. |
+| `marker_add` | Add Marker. Undoable editing command. Runs command `marker.add`. |
+| `marker_remove` | Remove Marker. Undoable editing command. Runs command `marker.remove`. |
+| `marker_rename` | Rename Marker. Undoable editing command. Runs command `marker.rename`. |
+| `marker_move` | Move Marker. Undoable editing command. Runs command `marker.move`. |
+| `marker_set_color` | Set Marker Color. Undoable editing command. Runs command `marker.set_color`. |
+| `marker_list` | List Markers. Not an undoable edit. Runs command `marker.list`. |
+| `marker_jump` | Jump to Marker. Not an undoable edit. Runs command `marker.jump`. |
 | `file_new` | New. Not an undoable edit. Runs command `file.new`. |
 | `file_open` | Open. Not an undoable edit. Runs command `file.open`. |
 | `file_save` | Save. Not an undoable edit. Runs command `file.save`. |
@@ -146,3 +162,12 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `file_import_obj` | Import OBJ. Undoable editing command. Runs command `file.import_obj`. |
 | `file_export_obj` | Export OBJ. Not an undoable edit. Runs command `file.export_obj`. |
 | `param_edit` | Edit Parameter. Undoable editing command. Runs command `param.edit`. |
+| `graph_add_node` | Add Graph Node. Undoable editing command. Runs command `graph.add_node`. |
+| `graph_remove` | Remove Graph Node. Undoable editing command. Runs command `graph.remove`. |
+| `graph_connect` | Connect Graph Ports. Undoable editing command. Runs command `graph.connect`. |
+| `graph_disconnect` | Disconnect Graph Port. Undoable editing command. Runs command `graph.disconnect`. |
+| `graph_set_value` | Set Graph Value. Undoable editing command. Runs command `graph.set_value`. |
+| `graph_move` | Move Graph Nodes. Undoable editing command. Runs command `graph.move`. |
+| `graph_get` | Get Graph. Not an undoable edit. Runs command `graph.get`. |
+| `graph_node_types` | List Graph Node Types. Not an undoable edit. Runs command `graph.node_types`. |
+| `graph_evaluate` | Evaluate Graph. Not an undoable edit. Runs command `graph.evaluate`. |

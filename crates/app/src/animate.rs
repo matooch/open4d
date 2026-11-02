@@ -78,7 +78,11 @@ impl Evaluated {
         {
             return c.scene.clone();
         }
-        let evaluated = Arc::new(scene_at(scene, frame_time(frame, fps)));
+        let time = frame_time(frame, fps);
+        // Order (docs/specs/NODES.md section 5): tracks, then expression tags; generators
+        // read the result.
+        let animated = scene_at(scene, time);
+        let evaluated = Arc::new(forge_nodes::apply_expressions(&animated, time).0);
         *cache = Some(Cached {
             key,
             scene: evaluated.clone(),

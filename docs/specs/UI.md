@@ -237,6 +237,22 @@ Behaviour, data and rules: docs/specs/ANIM.md §2. Panel summary (own design,
   field, and the label of the current time.
 - Row 3: a frame strip. Click or drag scrubs the current frame; the playhead and one tick
   per key frame of the selected objects are drawn by us.
+- Time controls (brief 094, own design, **parity-pending G5**), added to the two button rows so
+  the panel keeps its height (view tests depend on the pane geometry): at the end of row 1 a
+  "Playback mode" combo (Once, Loop, Ping-Pong), an "Every frame" checkbox (off = real-time with
+  frame dropping) and a "Time display" combo (Frames, SMPTE, Seconds); at the end of row 2 a
+  "Preview range" checkbox with "Preview start" / "Preview end" fields (while on) and the buttons
+  "Add Marker", "Previous Marker", "Next Marker". The label after the frame field shows the
+  current time (seconds in Frames display, else the chosen format). The FPS field runs
+  `timeline.set_fps` (keys keep their seconds, ranges and markers convert); Start and End run
+  `timeline.settings`.
+- The 30 pt strip keeps its ruler and key ticks (ticks now start 10 pt from the top). The top
+  10 pt are the marker lane: each marker is a flag in its colour with its name (label "Marker
+  <name>"): click goes to its frame, drag moves it (`marker.move`), the context menu has the
+  name, "Color <name>" entries and "Delete Marker". The preview range shades the outside of the
+  strip, draws an accent band along the bottom and two handles (labels "Preview start handle" and
+  "Preview end handle"; dragging runs `timeline.set_preview`, the handles cannot cross). Keys M
+  and Alt+Comma / Alt+Period (ANIM.md §2.7).
 - `Timeline { current: 0, playing: false }` is editor state; start, end and fps live in
   the scene (`SceneSettings`, default 0, 90, 30). `set_current` clamps to the range.
 - The Attributes panel draws a marker left of every animatable row: filled diamond =
@@ -506,6 +522,8 @@ Default bindings (all parity-pending, ours):
 | K / Shift+K | `key.record` / `key.autokey` |
 | Space (viewport scope) | `timeline.toggle_play` |
 | Comma / Period | `timeline.step` delta -1 / +1 |
+| M | `marker.add` (brief 094) |
+| Alt+Comma / Alt+Period | `marker.jump` backward / forward (brief 094) |
 | Shift+Comma / Shift+Period | `key.jump` forward false / true |
 
 These are the old hard-coded keys of §5 and ANIM.md §2.7 unchanged, plus the rows for
@@ -596,3 +614,217 @@ first), a line "Autosaved work may be offered in the recovery window." when
 `recoverable_count() > 0`, and the buttons **Open folder** (opens the crash folder with the
 system file browser: `xdg-open` / `open` / `explorer`) and **Dismiss**. Either button marks the
 reports seen and closes the window. Tests inject a folder opener (`CrashNotice::set_opener`).
+
+## 16. Clone toolset UI (`widgets::link_list`, `clone_overlay`, `commands`; brief 079)
+
+Sources: own design from docs/roadmap/areas/E-clone-toolset.md and the link-list model of
+brief 068; GUI session G4 (docs/parity/GUI-SESSIONS.md) is unanswered, so **the look of the
+list rows, the Create menu grouping and the overlay style are parity-pending G4**. The wording
+is "cloner", "clone toolset", "effector".
+
+### 16.1 Link list rows
+
+The cloner's `effectors` list, an effector's `fields` list and a deformer's `fields` list are
+all `LinkList` parameters drawn by `widgets::link_list` (UI.md §12). One row per entry:
+
+`[x] name   [strength]   ^  v  x`
+
+- **Enable box** (`Enable <name>`): shown when the entry node has an `enabled` parameter
+  (effectors, deformers) or else the object state `object.enabled` (fields, TRANSFORM.md §2).
+  It edits that parameter **on the entry node**, not on the list's owner. A disabled entry
+  keeps its place in the list and is skipped when the list is applied (effector: no
+  effect, MOGRAPH.md E1; field: the layer is left out of the `FieldList`, FIELDS.md F2).
+- **Strength** (`Strength <name>`, percent): shown when the entry node has the `layer_strength`
+  parameter (every field node, FIELDS.md; brief 061 stored a row's layer strength there). It
+  edits `layer_strength` of the entry node. Own design, parity-pending: the strength belongs
+  to the node, so a field used by two lists has one strength in both (real per-row storage
+  comes with brief 059).
+- `^` / `v` (`Move <name> up/down`) reorder: the new list order is the order the effectors
+  or layers apply in (effectors in list order, MOGRAPH.md E1; layers top to bottom).
+- `x` (`Remove <name>`) removes the entry from the list only; the node stays in the scene.
+- The "Add..." drop-down lists the objects the parameter accepts that are not in the list; it
+  is also the **drop target** for an object dragged from the object manager (the dragged
+  node is appended; a node already in the list is ignored).
+
+Every change is one `param.edit` command: a list edit on the list's owner (all selected
+objects of that type), an enable or strength edit on the entry node. `Edit` carries an
+optional `target` (`param`, `node`) for the latter. One undo step per click.
+
+### 16.2 Create menu and "Cloner from selection"
+
+The Create menu starts with a **Clone toolset** submenu (`clone_toolset_menu`, pure): the
+cloner, **Cloner from Selection**, every registered effector type, every registered field
+type, in that order, taken from the registry (so a new effector or field type appears with
+no UI change). The usual per-category submenus stay.
+
+`Cloner from Selection` runs `object.create_cloner` (COMMANDS.md §6): the selected objects
+become children of a new cloner placed where the first selected object was, and the cloner
+is selected. The children are the cloner's prototypes (MOGRAPH.md C3). Selected effectors
+and fields are not prototypes: the effectors are put in the cloner's `effectors` list (in
+selection order) and fields are left alone. With nothing selected the command creates an
+empty cloner.
+
+### 16.3 Clone display
+
+The cloner's existing `viewport_mode` parameter (Off, Points, Matrix, Bounding Box, Object)
+keeps drawing the clone geometry for every value (the other values are not wired yet,
+**parity-pending**); `matrix` additionally turns the axes overlay on for that cloner. Two
+view options (not undoable, `view.clone_display`, `Views.clone_indices`,
+`Views.clone_axes`; View menu **Clone Indices**, **Clone Axes**):
+
+- **Indices**: the index of each visible clone, drawn at its projected origin.
+- **Axes**: the clone's X, Y, Z axes as red, green, blue lines of 24 px (the Matrix-style
+  display); also drawn for a cloner whose `viewport_mode` is `matrix`.
+
+Both apply to the selected cloners only. `clone_overlay::clone_marks` is pure: it takes the
+clone data, the cloner's world matrix, the camera and the viewport size and returns the
+marks (clone index, screen position, axis end points), skipping hidden clones, clones behind
+the camera and clones outside the viewport, and at most `MAX_MARKS` (2000) marks, lowest
+indices first, so the overlay stays interactive with 10 000 clones. The editor paints the marks
+with the egui painter after the viewport image.
+
+### 16.4 Viewport instancing
+
+Cloners are drawn by GPU instancing (VIEWPORT.md §10.8): `scene_draw_items_at` returns
+`DrawItem::Instanced` for every cloner `cloner_instances` can show, and the instance buffer
+is rebuilt only when the cloner's content changes. Effector and field edits change the clone
+data, so they rebuild it; selection changes do not. Nothing in 079 expands geometry for
+display. Cloners with enabled deformer children keep the expanded fallback (VIEWPORT.md §10).
+
+### 16.5 Tests
+
+`crates/ui/tests/clone_ui.rs`: egui_kittest on the full registry.
+
+- Cloner from selection: children and selection, one undo step restores the scene.
+- Effectors: add by the list, add by dragging an effector from the object manager, remove.
+- Reorder: with a Plain and a second effector whose rotation and scale differ, the clone
+  matrices after swapping the order differ from before (the order matters, O14
+  `two-effectors`), and swap back restores them; undo of each step.
+- Enable box: the effector stops acting (clone matrices equal the no-effector ones) and undo
+  brings it back; the same for a field row; the strength box edits `layer_strength` and the
+  clone result follows.
+- Pure: Create menu entries, `clone_marks` (counts, hidden clones, cap, behind camera,
+  projection), the 10 000 clone instance data builds and culls.
+- Instancing: a cloner of 10 000 clones is one `DrawItem::Instanced`.
+
+## 17. Node editor (`node_canvas`, `node_editor`; brief 109)
+
+Sources: project design (docs/roadmap/areas/H-rigging.md "Node expressions"), NODES.md, the
+public node-graph editor literature. **Everything here is own design, parity-pending G6**
+(the owner has not described the classic editor's node look or how nodes are added); the look
+is deliberately plain and not modelled on any screenshot. Canvas decision: DECISIONS.md D17
+(our own canvas; `egui-snarl` needs egui 0.36).
+
+### 17.1 Two layers
+
+- `node_canvas` is a **generic** canvas. It knows nothing about expressions. It draws a
+  `CanvasModel` (a trait: the nodes with title, category, position and typed ports; the links;
+  `check_link(from, to) -> Result<(), String>`; the entries of the add menu) and returns
+  `CanvasAction`s (`AddNode`, `Move`, `Connect`, `Disconnect`, `Delete`, `SetConstant`). It never
+  changes the model. Node materials (brief 124) implement the same trait.
+- `node_editor` is the panel for expressions: `ExpressionModel` implements `CanvasModel` over a
+  `forge_nodes::Graph` read from the tag, and `run_action` turns each action into one `graph.*`
+  command (all edits are registry commands, one undo step each).
+
+### 17.2 Panel
+
+`Panel::NodeEditor`, title "Node Editor", default area Centre as a tab next to the viewport,
+closed by default; opened from Window > "Node Editor panel" and by **double-clicking an
+expression tag** (`[Expression]`, the `forge.expression` tags) in the object manager, which also
+selects that tag in the panel. The header has a combo "Expression tag" listing every
+`forge.expression` tag as `<object name> / <tag name>`, a **Add expression tag** button (runs
+`object.create` with type `forge.expression` on the active object; it is disabled without an
+active object) and the evaluation message. With no tag chosen the panel shows the first
+expression tag on the active object, else the first in the scene, else a hint.
+The chosen tag is panel state (`EditorState::node_editor`), not saved. The canvas view (pan, zoom)
+and the selection are kept per tag while the editor runs.
+
+### 17.3 Canvas model (pure, unit-tested in `node_canvas`)
+
+World units. `View { pan, zoom }`: `screen = rect.min + pan + world * zoom`. Zoom is clamped to
+0.25..2.5; `zoom_about(p, factor)` keeps the world point under `p` fixed.
+
+Node box (world): width 200, title bar 24, rows 22, padding 8. A node's height is
+`24 + 22 * (outputs + inputs) + 8`. **Outputs are listed first**, right aligned, with the port
+dot on the right edge; then the inputs, left aligned, with the dot on the left edge. Port dots
+are centred on the row at the edge, radius 5 (hit radius 10 screen pixels). `pos` is the box's
+top-left corner. Links are cubic Béziers from an output dot to an input dot with horizontal
+tangents of `max(40, |dx| / 2)`; the hit test samples 24 points.
+
+Hit testing, in priority: a port (within 10 px), then a node (the last drawn is on top),
+then a link (within 6 px of the sampled curve), then empty canvas. A node box selected by
+`nodes_in_rect` when it intersects the box-select rectangle.
+
+Colours (own design): port colour by type name: float blue, int teal, bool orange, vec3 yellow,
+colour magenta, matrix violet, string grey, node cyan, any white. A port is a filled dot when
+linked and a ring when free. Title bars take a hue from a hash of the category.
+
+### 17.4 Interactions
+
+| Gesture | Effect |
+|---|---|
+| Mouse wheel | zoom about the pointer (`factor = 1.0015^scroll`) |
+| Middle-drag, or Alt/Space + left-drag | pan |
+| Click a node | select it (Shift or Ctrl toggles) |
+| Click empty canvas | clear the selection |
+| Left-drag a node | move it and the other selected nodes (an unselected node becomes the selection); `Move` every frame with absolute positions, one gesture id per drag so the drag is **one undo step** |
+| Left-drag on empty canvas | box select (Shift adds) |
+| Left-drag from a port | draw a wire. From an output to an input, or from a free input to an output |
+| Left-drag from a **linked input** | picks the link up (it is drawn from its output to the pointer) |
+| Release on a port of the other side | `check_link`; accepted: `Connect` (a picked-up link is moved with `release_*`, one step); refused: nothing changes and the reason is shown |
+| Release on empty canvas | a picked-up link is removed (`Disconnect`); a new wire is dropped |
+| While dragging a wire | the port under the pointer gets a green ring if the link is allowed, a red one with the reason next to the pointer if it is not |
+| Right-click or double-click empty canvas | the add menu at that point |
+| Right-click a node | menu: Delete node (all selected nodes if it is selected), Disconnect inputs |
+| Right-click a link | menu: Disconnect |
+| Delete or Backspace (pointer over the canvas) | delete the selected nodes (one step). Delete is bound to `object.delete`; while the pointer is over the node editor the key goes to the canvas instead |
+| Esc | closes the menu / cancels the wire drag |
+
+Add menu: a window with a search field ("Search nodes") and the node types from
+`graph.node_types`, grouped by category, each entry a button `Label (type.id)`. The search is a
+case-insensitive substring match on id, label and category; no match shows "No match". Choosing
+an entry adds the node at the menu's position (`AddNode`) and closes the menu.
+
+Constant values: every input that has no link shows an inline editor in its row: Float and Int a
+drag value, Bool a check box, String a text box, Vec3 and Colour three drag values. Matrix, Node and
+Any inputs show their value as text (no editor); Text edits commit when the box loses focus
+(Enter or a click elsewhere), one step per committed text. Editing runs `graph.set_value`; a drag of a
+number is one gesture and one undo step. The editors are drawn at normal size and only when the
+zoom is 0.75 or more; below that the row shows the value as text.
+
+Refusals: the reason is the graph's own error text (`cannot connect float to node`, `the link
+would close a cycle through ...`), shown on the canvas bottom line and in the status bar until the
+next interaction.
+
+### 17.5 Live values
+
+The panel keeps a dry-run result from `graph.evaluate` (NODES.md §6) for the chosen tag and
+refreshes it when the scene revision, the current frame or the tag changes (so it follows
+playback and edits). Each output port row shows its value to the right of its label (floats to 3
+decimals, Vec3 as `(x, y, z)`, Bool `true`/`false`, strings quoted and cut at 16 characters,
+matrices as `mat4`, nodes as `#id` or `none`); a linked input shows the value of its source. If
+the evaluation fails, no values are shown and the header shows the error (`graph node 3: ...`).
+Values come from every node (the dry run evaluates all nodes), including ones no sink needs.
+
+### 17.6 Node positions
+
+`pos` of each graph node is stored in the graph JSON (NODES.md §6). `Move` becomes `graph.move`
+(gesture-merged), `AddNode` `graph.add_node` with `pos`. Positions have no effect on evaluation,
+but they are part of the tag's `graph` parameter, so moving a node is an edit of the document
+(dirty marker, one undo step per drag).
+
+### 17.7 Tests
+
+- `crates/ui/src/node_canvas.rs`, `node_editor.rs` (unit): view transforms and round trip, zoom
+  about a point and its clamp, node and port geometry, hit testing of ports (radius at any zoom),
+  nodes (z-order), links, box selection, Bézier sampling, menu filtering, value formatting,
+  constants by port type, menu entries from `graph.node_types`.
+- `crates/ui/tests/node_editor.rs` (egui_kittest on the full editor): open from the Window menu and
+  by double-click on the tag; add a node through the search menu (filter, pick) and undo; connect
+  two nodes by dragging (one step) and undo; a refused connection (type) changes nothing and shows
+  its reason, also a cycle; moving a node by dragging is one undo step and the position is saved in
+  the graph and survives undo/redo; the verdict (green/red) on the port under a dragged wire; picking up a link and dropping it on empty canvas disconnects;
+  moving a link to another input is one step; box select and Delete remove nodes (one step, links
+  go); a value edit (`graph.set_value`); live values appear on ports; and the expression
+  built in the editor drives the scene (a cube's position follows the graph after the edits, and
+  after undo returns).

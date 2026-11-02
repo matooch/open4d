@@ -8,15 +8,17 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Category, MeshData, Node, NodeId, Registry, Scene, SceneSettings, Track, Value, parse_target,
+    Category, MeshData, Node, NodeId, Registry, Scene, SceneSettings, TimeConfig, Track, Value,
+    parse_target,
 };
 
 pub const FORMAT: &str = "forge3d-scene";
 /// Version 2 added `Value::Mesh`, version 3 `Value::IndexList`, version 4 keyframe
 /// tracks, version 5 the scene settings, version 6 declares link lists and the hidden
-/// `object.*` params and adds the chunk section and file reference params. Older files
-/// still load, through [`MIGRATIONS`].
-pub const VERSION: u32 = 6;
+/// `object.*` params and adds the chunk section and file reference params, version 7 the
+/// time configuration (markers, preview range, playback mode), version 8 the expression
+/// tag and its graph parameter (brief 108). Older files still load, through [`MIGRATIONS`].
+pub const VERSION: u32 = 8;
 
 /// A value whose binary payload is at least this many bytes is written as a chunk by
 /// [`save_with`] (CORE.md §6.2): 42 mesh points or 256 indices.
@@ -34,6 +36,8 @@ pub struct SceneFile {
     version: u32,
     #[serde(default)]
     settings: SceneSettings,
+    #[serde(default)]
+    time: TimeConfig,
     roots: Vec<NodeRecord>,
 }
 
@@ -48,6 +52,8 @@ pub const MIGRATIONS: &[Migration] = &[
     migrate_3_to_4,
     migrate_4_to_5,
     migrate_5_to_6,
+    migrate_6_to_7,
+    migrate_7_to_8,
 ];
 
 /// Version 2 added `Value::Mesh`: additive, nothing to rewrite.
@@ -73,6 +79,17 @@ fn migrate_4_to_5(_: &mut SceneFile) -> Vec<String> {
 /// Version 6 declares `LinkList` values and `object.*` params that builds since brief 068
 /// already wrote under version 5; missing params take their defaults on load.
 fn migrate_5_to_6(_: &mut SceneFile) -> Vec<String> {
+    Vec::new()
+}
+
+/// Version 7 added `time`: a missing field is read as the defaults by serde.
+fn migrate_6_to_7(_: &mut SceneFile) -> Vec<String> {
+    Vec::new()
+}
+
+/// Version 8 declares the `forge.expression` tag, whose graph is a string parameter:
+/// nothing to rewrite.
+fn migrate_7_to_8(_: &mut SceneFile) -> Vec<String> {
     Vec::new()
 }
 
@@ -267,6 +284,7 @@ pub fn save_with(scene: &Scene, opts: &SaveOptions) -> Vec<u8> {
         format: FORMAT.to_string(),
         version: VERSION,
         settings: scene.settings(),
+        time: scene.time().clone(),
         roots,
     };
     let text = ron::ser::to_string_pretty(
@@ -347,12 +365,27 @@ pub fn load_with(
     for r in file.roots {
         loader.node(r, Place::Child(None))?;
     }
-    match file.settings.check() {
-        Ok(()) => loader.scene.init_settings(file.settings),
+    let settings = match file.settings.check() {
+        Ok(()) => file.settings,
+        Err(e) => {
+            loader
+                .report
+                .warnings
+                .push(format!("scene settings: {e}; reset to the defaults"));
+            SceneSettings::default()
+        }
+    };
+    loader.scene.init_settings(settings);
+    match file.time.check(&settings) {
+        Ok(()) => {
+            let mut time = file.time;
+            time.sort_markers();
+            loader.scene.init_time(time);
+        }
         Err(e) => loader
             .report
             .warnings
-            .push(format!("scene settings: {e}; reset to the defaults")),
+            .push(format!("scene time: {e}; reset to the defaults")),
     }
     let next = loader.seen.last().map_or(1, |id| id.0 + 1);
     loader.scene.set_next_id(next);
@@ -805,6 +838,7 @@ mod tests {
             format: FORMAT.into(),
             version: 2,
             settings: SceneSettings::default(),
+            time: TimeConfig::default(),
             roots: Vec::new(),
         };
         let notes = migrate(&mut file, &steps, 4);

@@ -9,6 +9,7 @@ mod param;
 mod registry;
 mod scene;
 pub mod smoothing;
+pub mod time;
 mod track;
 pub mod transform;
 pub mod visibility;
@@ -22,4 +23,5 @@ pub use param::{
 };
 pub use registry::{Category, NodeType, Plugin, Registry, RegistryError};
 pub use scene::{Node, NodeId, Scene, SceneSettings};
+pub use time::{Marker, PlayMode, TimeConfig, TimeDisplay};
 pub use track::{Interp, Key, Target, Track, TrackError, parse_target};

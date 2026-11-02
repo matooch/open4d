@@ -10,13 +10,16 @@ eframe = { version = "0.37", default-features = false, features = ["wgpu", "defa
 egui = "0.37"
 forge-anim = { path = "../anim" }
 forge-app = { path = "../app" }
+forge-clone-engine = { path = "../clone-engine" }
 forge-command = { path = "../command" }
 forge-core = { path = "../core" }
 forge-platform = { path = "../platform" }
+forge-fields = { path = "../fields" }
 forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }
 forge-io = { path = "../io" }
 forge-modeling = { path = "../modeling" }
+forge-nodes = { path = "../nodes" }
 forge-rpc = { path = "../rpc" }
 forge-script = { path = "../script" }
 forge-viewport = { path = "../viewport" }

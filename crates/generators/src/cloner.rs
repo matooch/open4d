@@ -4,7 +4,9 @@
 
 use std::collections::BTreeMap;
 
-use forge_clone_engine::{CLONER, CloneError, apply_effectors, generate, settings_from_params};
+use forge_clone_engine::{
+    CLONER, CloneData, CloneError, apply_effectors, generate, settings_from_params,
+};
 use forge_core::{EvalCtx, NodeId, Scene, Value};
 use forge_geometry::PolyMesh;
 
@@ -36,12 +38,14 @@ pub fn prototypes_of(scene: &Scene, id: NodeId) -> Vec<NodeId> {
         .collect()
 }
 
-pub(crate) fn evaluate_cloner(
+/// The prototypes (local meshes, child transform baked in unless Reset Coordinates) and the
+/// clone data with the children assigned; `None` when there is no prototype geometry.
+fn build_instances(
     scene: &Scene,
     id: NodeId,
     values: &BTreeMap<String, Value>,
     ctx: &EvalCtx,
-) -> Result<Option<PolyMesh>, BuildError> {
+) -> Result<Option<ClonerInstances>, BuildError> {
     let settings = settings_from_params(values);
     let mut clones = generate(&settings, ctx).map_err(map_error)?;
     apply_effectors(scene, id, &mut clones, ctx).map_err(map_error)?;
@@ -64,6 +68,51 @@ pub(crate) fn evaluate_cloner(
     clones
         .assign_children(protos.len(), settings.clones_mode)
         .map_err(map_error)?;
+    Ok(Some(ClonerInstances {
+        prototypes: protos,
+        clones,
+    }))
+}
+
+/// What a cloner shows: one mesh per prototype and the clone data (matrices in cloner space,
+/// colours, visibility, prototype index). The expansion to geometry (C3) and the viewport's GPU
+/// instancing (VIEWPORT.md §10.1) both read this.
+#[derive(Debug, Clone)]
+pub struct ClonerInstances {
+    pub prototypes: Vec<PolyMesh>,
+    pub clones: CloneData,
+}
+
+/// The cloner `id` as prototypes plus clone data, for display without expanding geometry.
+/// `Ok(None)` means "expand instead": not a cloner, no prototype geometry, or enabled
+/// deformer children (they deform the combined mesh, which instancing cannot show).
+pub fn cloner_instances(
+    scene: &Scene,
+    id: NodeId,
+    ctx: &EvalCtx,
+) -> Result<Option<ClonerInstances>, BuildError> {
+    let Some(node) = scene.node(id).filter(|n| n.type_id == TYPE) else {
+        return Ok(None);
+    };
+    if !crate::deformer_children(scene, id).is_empty() {
+        return Ok(None);
+    }
+    build_instances(scene, id, &node.params, ctx)
+}
+
+pub(crate) fn evaluate_cloner(
+    scene: &Scene,
+    id: NodeId,
+    values: &BTreeMap<String, Value>,
+    ctx: &EvalCtx,
+) -> Result<Option<PolyMesh>, BuildError> {
+    let Some(ClonerInstances {
+        prototypes: protos,
+        clones,
+    }) = build_instances(scene, id, values, ctx)?
+    else {
+        return Ok(None);
+    };
     let mut out = PolyMesh::default();
     for i in 0..clones.len() {
         if !clones.visible[i] {

@@ -15,7 +15,8 @@ use serde_json::{Value as Json, json};
 
 use crate::animate::{AnimEdit, KeyState, key_frames, key_states};
 use crate::attributes::{Gesture, Widget, attribute_rows_multi};
-use crate::commands::{category_label, create_menu, execute};
+use crate::clone_overlay::{OverlayOptions, selected_cloner_marks};
+use crate::commands::{category_label, clone_toolset_menu, create_menu, execute};
 use crate::component_edit::{ComponentDrag, pivot_view, pivot_world};
 use crate::components::{
     ClickModifiers, EditMode, SelectCmd, target as component_target, viewport_click, viewport_rect,
@@ -326,8 +327,9 @@ impl Editor {
             return;
         }
         let now = ctx.input(|i| i.time);
-        let settings = self.state.settings();
-        self.state.timeline.update(now, &settings);
+        let scene = self.state.doc.scene();
+        let playback = forge_command::Playback::of(&scene.settings(), scene.time());
+        self.state.timeline.update_with(now, &playback);
         ctx.request_repaint();
     }
 
@@ -346,6 +348,12 @@ impl Editor {
         let hot = self.viewport_hot;
         let presses = ctx.input_mut(|i| self.state.keys.map.take_presses(i, hot));
         for (id, args) in presses {
+            // Delete over the node editor deletes nodes, not objects (UI.md §17.4).
+            if id == "object.delete" && self.state.node_editor.canvas.hot {
+                self.state.node_editor.canvas.delete_requested = true;
+                ctx.request_repaint();
+                continue;
+            }
             self.run_id(&id, args);
         }
     }
@@ -521,6 +529,16 @@ impl Editor {
                 }
             });
             ui.menu_button("Create", |ui| {
+                ui.menu_button("Clone toolset", |ui| {
+                    let entries = clone_toolset_menu(self.state.doc.scene().registry());
+                    for entry in entries {
+                        if ui.button(&entry.label).clicked() {
+                            self.run((entry.command, entry.args));
+                            ui.close();
+                        }
+                    }
+                });
+                ui.separator();
                 for (cat, items) in create_menu(self.state.doc.scene().registry()) {
                     ui.menu_button(category_label(cat), |ui| {
                         for (type_id, label) in items {
@@ -695,6 +713,7 @@ impl Editor {
             Panel::Script => {
                 crate::script_panel::script_panel_ui(ui, &mut self.state, self.dialogs.as_mut())
             }
+            Panel::NodeEditor => crate::node_editor::node_editor_ui(ui, &mut self.state),
         }
     }
 
@@ -860,6 +879,21 @@ impl Editor {
             "Anti-aliasing",
             ("view.antialias", json!({"enabled": !v.antialias})),
         );
+        ui.separator();
+        item(
+            ui,
+            self,
+            v.clone_indices,
+            "Clone Indices",
+            ("view.clone_display", json!({"indices": !v.clone_indices})),
+        );
+        item(
+            ui,
+            self,
+            v.clone_axes,
+            "Clone Axes",
+            ("view.clone_display", json!({"axes": !v.clone_axes})),
+        );
         for c in runs {
             self.run(c);
         }
@@ -1021,6 +1055,7 @@ impl Editor {
                 egui::StrokeKind::Inside,
             );
         }
+        self.paint_clone_overlay(ui, &shown, pane, rect);
         let label = SHADINGS
             .iter()
             .find(|(s, _)| *s == self.state.pane_shading(pane))
@@ -1067,6 +1102,55 @@ impl Editor {
                 4.0,
                 Theme::default().component_selection,
             );
+        }
+    }
+
+    /// Clone indices and axes of the selected cloners (UI.md §16.3), painted over the image.
+    fn paint_clone_overlay(
+        &self,
+        ui: &Ui,
+        scene: &forge_core::Scene,
+        pane: Pane,
+        rect: egui::Rect,
+    ) {
+        let v = &self.state.views;
+        let marks = selected_cloner_marks(
+            scene,
+            &self.state.selection.nodes,
+            &forge_core::EvalCtx::at_frame(
+                self.state.timeline.current,
+                f64::from(scene.settings().fps),
+            ),
+            &self.state.pane_camera(pane),
+            [f64::from(rect.width()), f64::from(rect.height())],
+            OverlayOptions {
+                indices: v.clone_indices,
+                axes: v.clone_axes,
+            },
+        );
+        let painter = ui.painter().with_clip_rect(rect);
+        let at = |p: [f32; 2]| rect.min + egui::vec2(p[0], p[1]);
+        let colours = [
+            egui::Color32::from_rgb(230, 70, 70),
+            egui::Color32::from_rgb(80, 200, 90),
+            egui::Color32::from_rgb(80, 130, 240),
+        ];
+        for mark in &marks {
+            if let Some(axes) = mark.axes {
+                for (end, colour) in axes.iter().zip(colours) {
+                    painter
+                        .line_segment([at(mark.origin), at(*end)], egui::Stroke::new(1.5, colour));
+                }
+            }
+            if v.clone_indices {
+                painter.text(
+                    at(mark.origin) + egui::vec2(3.0, -3.0),
+                    egui::Align2::LEFT_BOTTOM,
+                    mark.index.to_string(),
+                    egui::FontId::proportional(11.0),
+                    Theme::default().weak_text,
+                );
+            }
         }
     }
 
@@ -1435,6 +1519,9 @@ impl Editor {
 
     fn tree_ui(&mut self, ui: &mut Ui) {
         let cmds = self.objects.show(ui, &mut self.state);
+        if let Some(tag) = self.objects.open_tag.take() {
+            self.state.open_node_editor(tag);
+        }
         for c in cmds {
             self.run(c);
         }
@@ -1719,7 +1806,6 @@ impl Editor {
 
     fn timeline_ui(&mut self, ui: &mut Ui) {
         let settings = self.state.settings();
-        let theme = Theme::default();
         let ids: Vec<NodeId> = self.state.selection.nodes.iter().copied().collect();
         let mut cmds: Vec<Cmd> = Vec::new();
         ui.horizontal_wrapped(|ui| {
@@ -1744,8 +1830,10 @@ impl Editor {
             if ui.button("Delete Keys").clicked() {
                 cmds.push(cmd("key.delete_at_frame"));
             }
+            ui.separator();
+            crate::timeline::playback_controls(ui, self.state.doc.scene(), &mut cmds);
         });
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let mut next = settings;
             let l = ui.label("Start");
             ui.add(egui::DragValue::new(&mut next.start).range(i64::MIN..=settings.end))
@@ -1756,7 +1844,9 @@ impl Editor {
             let l = ui.label("FPS");
             ui.add(egui::DragValue::new(&mut next.fps).range(1..=240))
                 .labelled_by(l.id);
-            if next != settings {
+            if next.fps != settings.fps {
+                cmds.push(("timeline.set_fps", json!({"fps": next.fps})));
+            } else if next != settings {
                 cmds.push((
                     "timeline.settings",
                     json!({"fps": next.fps, "start": next.start, "end": next.end}),
@@ -1771,69 +1861,17 @@ impl Editor {
             if r.changed() {
                 cmds.push(("timeline.set_frame", json!({"frame": frame})));
             }
-            ui.weak(format!(
-                "{:.3} s",
-                crate::animate::frame_time(frame, settings.fps)
-            ));
+            ui.weak(crate::timeline::time_label(frame, self.state.doc.scene()));
+            ui.separator();
+            crate::timeline::range_controls(ui, self.state.doc.scene(), &mut cmds);
         });
-        // frame strip: click or drag scrubs; ticks mark the selected objects' keys
-        let width = ui.available_width().max(60.0);
-        let (rect, response) =
-            ui.allocate_exact_size(egui::vec2(width, 30.0), Sense::click_and_drag());
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Slider, true, "Frame strip"));
-        let span = (settings.end - settings.start).max(1) as f32;
-        let (x0, x1) = (rect.left() + 8.0, rect.right() - 8.0);
-        let to_x = |f: f64| x0 + (f as f32 - settings.start as f32) / span * (x1 - x0);
-        if (response.dragged() || response.clicked())
-            && let Some(pos) = response.interact_pointer_pos()
-        {
-            let f = settings.start as f32 + (pos.x - x0) / (x1 - x0) * span;
-            cmds.push(("timeline.set_frame", json!({"frame": f.round() as i64})));
-        }
-        let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 2.0, theme.faint);
-        let step = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 5000]
-            .into_iter()
-            .find(|s| (*s as f32 / span) * (x1 - x0) >= 40.0)
-            .unwrap_or(10000);
-        let first = settings.start.div_euclid(step) * step;
-        for f in (first..=settings.end).step_by(step as usize) {
-            if f < settings.start {
-                continue;
-            }
-            let x = to_x(f as f64);
-            painter.line_segment(
-                [
-                    egui::pos2(x, rect.bottom() - 6.0),
-                    egui::pos2(x, rect.bottom()),
-                ],
-                egui::Stroke::new(1.0, theme.weak_text),
-            );
-            painter.text(
-                egui::pos2(x + 2.0, rect.bottom() - 7.0),
-                egui::Align2::LEFT_BOTTOM,
-                f.to_string(),
-                egui::FontId::proportional(10.0),
-                theme.weak_text,
-            );
-        }
-        for f in key_frames(self.state.doc.scene(), &ids) {
-            if f < settings.start as f64 - 1e-6 || f > settings.end as f64 + 1e-6 {
-                continue;
-            }
-            let x = to_x(f);
-            painter.line_segment(
-                [
-                    egui::pos2(x, rect.top() + 2.0),
-                    egui::pos2(x, rect.top() + 12.0),
-                ],
-                egui::Stroke::new(2.0, theme.accent),
-            );
-        }
-        let x = to_x(self.state.timeline.current as f64);
-        painter.line_segment(
-            [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
-            egui::Stroke::new(1.5, theme.component_selection),
+        let keys = key_frames(self.state.doc.scene(), &ids);
+        crate::timeline::strip(
+            ui,
+            self.state.doc.scene(),
+            self.state.timeline.current,
+            &keys,
+            &mut cmds,
         );
         for c in cmds {
             self.run(c);

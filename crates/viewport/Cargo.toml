@@ -14,6 +14,13 @@ wgpu = "30"
 
 [dev-dependencies]
 png = "0.18"
+# Benchmarks (docs/specs/VIEWPORT.md §10.10); no plotting or parallel features, so the
+# dependency set stays small and permissive (deny.toml).
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "performance"
+harness = false
 
 [lints]
 workspace = true

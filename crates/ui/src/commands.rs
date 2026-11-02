@@ -222,6 +222,15 @@ impl CommandContext for EditorState {
         self.views.antialias = on;
     }
 
+    fn set_clone_display(&mut self, indices: Option<bool>, axes: Option<bool>) {
+        if let Some(on) = indices {
+            self.views.clone_indices = on;
+        }
+        if let Some(on) = axes {
+            self.views.clone_axes = on;
+        }
+    }
+
     fn set_camera(&mut self, set: CameraSet) {
         self.apply_camera_set(set);
     }
@@ -277,6 +286,42 @@ pub fn create_menu(registry: &Registry) -> Vec<(Category, Vec<(String, String)>)
     out.sort_by_key(|(c, _)| *c);
     for (_, items) in &mut out {
         items.sort_by(|a, b| a.1.cmp(&b.1));
+    }
+    out
+}
+
+/// One entry of the Create > Clone toolset submenu: the command that creates it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolsetEntry {
+    pub label: String,
+    pub command: &'static str,
+    pub args: Value,
+}
+
+/// The Create > Clone toolset submenu (docs/specs/UI.md §16.2): the cloner, Cloner from
+/// Selection, then every registered effector and field type, taken from the registry.
+pub fn clone_toolset_menu(registry: &Registry) -> Vec<ToolsetEntry> {
+    let create = |id: &str, label: &str| ToolsetEntry {
+        label: label.to_string(),
+        command: "object.create",
+        args: serde_json::json!({"type": id}),
+    };
+    let mut out = Vec::new();
+    if let Some(t) = registry.get(forge_clone_engine::CLONER) {
+        out.push(create(&t.id, &t.label));
+        out.push(ToolsetEntry {
+            label: "Cloner from Selection".into(),
+            command: "object.create_cloner",
+            args: serde_json::json!({}),
+        });
+    }
+    for category in [Category::Effector, Category::Field] {
+        let mut types: Vec<_> = registry
+            .types()
+            .filter(|t| t.category == category && t.in_create_menu)
+            .collect();
+        types.sort_by(|a, b| a.label.cmp(&b.label));
+        out.extend(types.into_iter().map(|t| create(&t.id, &t.label)));
     }
     out
 }

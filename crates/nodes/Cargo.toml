@@ -1,0 +1,25 @@
+[package]
+name = "forge-nodes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Typed node-graph engine for expressions: ports, registry, topological evaluation, expression tag, graph commands (docs/specs/NODES.md)."
+
+[dependencies]
+forge-command = { path = "../command" }
+forge-core = { path = "../core" }
+forge-noise = { path = "../noise" }
+glam = "0.34"
+# Same pin and features as forge-script (SCRIPTING.md section 4): no modules, no clock.
+rhai = { version = "=1.27.0", features = ["no_module", "no_time"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+forge-app = { path = "../app" }
+forge-script = { path = "../script" }
+
+[lints]
+workspace = true

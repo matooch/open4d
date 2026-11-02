@@ -93,6 +93,7 @@ fn brightness(c: [f64; 3]) -> f64 {
 
 fn render(gpu: &Gpu, cam: &Camera, meshes: &[DrawMesh], settings: Settings) -> Image {
     let frame = Frame {
+        instanced: &[],
         meshes,
         grid: None,
         gizmo: None,
