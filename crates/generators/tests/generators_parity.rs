@@ -68,7 +68,7 @@ fn generators_match_the_reference() {
                 Ok(generator)
             })
             .unwrap();
-        let mesh = match evaluate(doc.scene(), generator) {
+        let mesh = match evaluate(doc.scene(), generator, &forge_core::EvalCtx::default()) {
             Err(forge_generators::BuildError::Unsupported(what)) => {
                 println!("{key}: unsupported ({what})");
                 unsupported.insert(key);

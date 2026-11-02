@@ -1,0 +1,14 @@
+// Written by the build of format version 5 (adds scene settings); never regenerate.
+(
+    format: "forge3d-scene",
+    version: 5,
+    settings: (fps: 24, start: 0, end: 48),
+    roots: [
+        (id: 1, type_id: "forge.null", name: "Root", params: {}, tags: [], children: [
+            (id: 2, type_id: "test.box", name: "Box", params: {"size": Float(3.0), "segments": Int(4)}, tracks: {"size": (keys: [(time: 0.0, value: 1.0, interp: Spline), (time: 2.0, value: 5.0, interp: Linear)])}, tags: [
+                (id: 4, type_id: "test.sel", name: "Sel", params: {"set": String("a")}, tags: [], children: []),
+            ], children: []),
+            (id: 3, type_id: "test.poly", name: "Poly", params: {"mesh": Mesh((points: [(0.0, 0.0, 0.0), (1.5, 0.0, 0.0), (1.5, 0.1, 1e-9), (0.0, 2.0, 0.0)], polys: [[0, 1, 2, 3], [0, 1, 2]])), "selection.points": IndexList([1, 3])}, tags: [], children: []),
+        ]),
+    ],
+)

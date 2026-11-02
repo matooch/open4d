@@ -94,7 +94,8 @@ fn build_case(reg: &Arc<Registry>, feature: &str, params: &Table) -> Result<Mesh
             Ok(generator)
         })
         .unwrap();
-    let mesh = evaluate(doc.scene(), generator)?.expect("geometry");
+    let mesh =
+        evaluate(doc.scene(), generator, &forge_core::EvalCtx::default())?.expect("geometry");
     let world = doc.scene().local_transform(generator).unwrap().matrix();
     Ok(Mesh {
         positions: mesh

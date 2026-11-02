@@ -1,0 +1,169 @@
+name: release
+
+# Builds installable packages for Linux, macOS and Windows (brief 176, DECISIONS D11).
+#   - Push a tag `v*` (it must equal the workspace.package version): builds everything and
+#     publishes a GitHub Release with the packages, SHA256SUMS and a generated changelog.
+#   - Run manually (workflow_dispatch): builds everything and uploads workflow artifacts.
+#     With dry_run = true (default) nothing is published; set it to false to publish a
+#     Release for the selected ref (the version still comes from Cargo.toml, tag name is
+#     `v<version>`).
+# Packaging scripts live in scripts/release/ and can be run locally (docs/RELEASING.md).
+# Signing is brief 177: the sign-hooks scripts are called already and skip without secrets.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and upload artifacts only; do not create a GitHub Release"
+        type: boolean
+        default: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history + tags for the changelog
+      - id: v
+        name: Read workspace version and check the tag
+        run: |
+          version=$(sh scripts/release/version.sh)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match workspace version v$version" >&2
+            exit 1
+          fi
+      - name: Generate changelog
+        run: |
+          mkdir -p dist
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            sh scripts/release/changelog.sh "$GITHUB_REF_NAME" > dist/CHANGELOG.md
+          else
+            sh scripts/release/changelog.sh HEAD > dist/CHANGELOG.md
+          fi
+          cat dist/CHANGELOG.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: dist/CHANGELOG.md
+
+  linux:
+    needs: prepare
+    # Oldest hosted LTS image, so the binaries run on older glibc.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: Swatinem/rust-cache@v2
+      - name: System libraries (egui/winit/wgpu need xkbcommon, X11, Wayland)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libx11-dev libxcb1-dev \
+            libxcb-xkb-dev libwayland-dev libgl1-mesa-dev
+      - run: cargo build --release --locked -p forge-studio -p forge-cli -p forge-mcp -p forge-rpc
+      - name: Package (tar.gz + AppImage)
+        run: sh scripts/release/package-linux.sh target/release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: |
+            dist/*.tar.gz
+            dist/*.AppImage
+          if-no-files-found: error
+
+  macos:
+    needs: prepare
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - name: Build both architectures
+        run: |
+          for t in x86_64-apple-darwin aarch64-apple-darwin; do
+            cargo build --release --locked --target "$t" \
+              -p forge-studio -p forge-cli -p forge-mcp -p forge-rpc
+          done
+      - name: Package (universal2 .app in .dmg)
+        run: sh scripts/release/package-macos.sh target/x86_64-apple-darwin/release target/aarch64-apple-darwin/release
+        # Signing hook (brief 177): MACOS_* secrets are read by scripts/release/sign-hooks.sh.
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-universal2
+          path: |
+            dist/*.dmg
+            dist/*-cli.tar.gz
+          if-no-files-found: error
+
+  windows:
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked -p forge-studio -p forge-cli -p forge-mcp -p forge-rpc
+      - name: Package (zip)
+        shell: pwsh
+        run: ./scripts/release/package-windows.ps1 -BinDir target\release -Dist dist
+        # Signing hook (brief 177): WINDOWS_CERT_PFX is read by scripts/release/sign-hooks.ps1.
+        env:
+          WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+      # MSI (cargo-wix / WiX) is a documented follow-up: docs/RELEASING.md.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: dist/*.zip
+          if-no-files-found: error
+
+  publish:
+    needs: [prepare, linux, macos, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the Release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist-parts
+          merge-multiple: true
+      - name: Collect and checksum
+        run: |
+          mkdir -p dist
+          cp dist-parts/* dist/
+          sh scripts/release/checksums.sh dist
+          ls -l dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle
+          path: dist/*
+      - name: Publish GitHub Release
+        # Tag pushes always publish; manual runs publish only when dry_run is false.
+        if: github.event_name == 'push' || inputs.dry_run == false
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', needs.prepare.outputs.version) }}
+          name: Forge3D ${{ needs.prepare.outputs.version }}
+          body_path: dist/CHANGELOG.md
+          files: |
+            dist/*.tar.gz
+            dist/*.AppImage
+            dist/*.dmg
+            dist/*.zip
+            dist/SHA256SUMS
+          fail_on_unmatched_files: false

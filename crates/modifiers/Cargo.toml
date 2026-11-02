@@ -2,12 +2,14 @@
 name = "forge-modifiers"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [lints]
 workspace = true
 
 [dependencies]
 forge-core = { path = "../core" }
+forge-fields = { path = "../fields" }
 forge-geometry = { path = "../geometry" }
 glam = "0.34"
 

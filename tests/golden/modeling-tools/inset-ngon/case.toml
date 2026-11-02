@@ -1,0 +1,22 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-2.md"
+description = "Default cube made editable with 2 x 1 x 1 segments; Extrude Inner on the 2 top polygons, offset 20, Create N-gons on (other settings at their Reset Values defaults)"
+mesh = "mesh.obj"
+
+[params]
+tool = "inset"
+segments = [2, 1, 1]
+select_polys = [6, 7]
+
+[params.settings]
+offset = 20.0
+offset_variation = 0.0
+subdivision = 0
+create_ngons = true
+preserve_groups = true
+maximum_angle_deg = 89.0
+realtime_update = true
+
+[import]
+scale = 1.0
+flip_z = false

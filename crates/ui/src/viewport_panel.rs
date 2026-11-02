@@ -4,16 +4,37 @@
 use std::collections::BTreeSet;
 
 use eframe::egui_wgpu;
-use forge_core::{NodeId, Scene};
+use forge_core::{EvalCtx, NodeId, Scene};
 use forge_geometry::PolyMesh;
 use forge_geometry::selection::Selection;
 use forge_viewport::camera::Camera;
 use forge_viewport::gizmo::Gizmo;
 use forge_viewport::grid::grid_lines;
-use forge_viewport::render::{DrawMesh, Frame, MeshBuffers, Palette, Renderer, Settings, Shading};
+use forge_viewport::nav;
+use forge_viewport::panes::Pane;
+use forge_viewport::render::{
+    DrawMesh, Frame, MeshBuffers, Palette, RenderTargets, Renderer, Settings, Shading,
+};
 
 use crate::components::{EditMode, display_selection, stored_selection};
 use crate::theme::Theme;
+
+/// What a held navigation key makes a primary drag do (UI.md §6.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavMode {
+    Pan,
+    Dolly,
+    Orbit,
+}
+
+impl NavMode {
+    /// The hold keys: X pan, C dolly, V orbit (own design, parity-pending G2).
+    pub const KEYS: [(egui::Key, NavMode); 3] = [
+        (egui::Key::X, NavMode::Pan),
+        (egui::Key::C, NavMode::Dolly),
+        (egui::Key::V, NavMode::Orbit),
+    ];
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct NavInput {
@@ -21,10 +42,21 @@ pub struct NavInput {
     pub middle: bool,
     pub secondary: bool,
     pub alt: bool,
+    /// A navigation hold key that is down.
+    pub held: Option<NavMode>,
     /// Pointer motion this frame, in points.
     pub drag: [f32; 2],
     /// Wheel motion this frame, in points (positive = away from the user).
     pub scroll: f32,
+    /// Pointer position relative to the viewport's top-left corner, in points.
+    pub cursor: [f32; 2],
+}
+
+impl NavInput {
+    /// True while a navigation gesture owns the pointer (no selection or gizmo then).
+    pub fn navigating(&self) -> bool {
+        self.alt || self.held.is_some()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -32,20 +64,27 @@ pub enum NavAction {
     None,
     Orbit(f64, f64),
     Pan(f64, f64),
+    /// Drag distance in points; right moves closer.
     Dolly(f64),
+    /// Wheel zoom: distance factor and the cursor it zooms toward.
+    ZoomAt(f64, [f64; 2]),
 }
 
-/// Our default bindings (parity-pending).
+/// Our default bindings (parity-pending G2; UI.md §6.1).
 pub fn nav_action(i: &NavInput) -> NavAction {
     let (dx, dy) = (i.drag[0] as f64, i.drag[1] as f64);
+    let held = |m: NavMode| i.primary && i.held == Some(m);
     if i.scroll != 0.0 {
-        NavAction::Dolly(0.999f64.powf(i.scroll as f64))
-    } else if i.middle {
+        NavAction::ZoomAt(
+            nav::wheel_factor(i.scroll as f64),
+            [i.cursor[0] as f64, i.cursor[1] as f64],
+        )
+    } else if i.middle || held(NavMode::Pan) {
         NavAction::Pan(dx, dy)
-    } else if i.alt && i.primary {
-        NavAction::Orbit(-0.01 * dx, 0.01 * dy)
-    } else if i.alt && i.secondary {
-        NavAction::Dolly((-0.01 * dx).exp())
+    } else if (i.alt && i.primary) || held(NavMode::Orbit) {
+        NavAction::Orbit(dx, dy)
+    } else if (i.alt && i.secondary) || held(NavMode::Dolly) {
+        NavAction::Dolly(dx)
     } else {
         NavAction::None
     }
@@ -58,10 +97,12 @@ pub struct SceneView<'a> {
     pub gizmo: Option<&'a Gizmo>,
     /// The component target and the mode being edited (EDITABLE.md §2.6).
     pub component: Option<(NodeId, EditMode)>,
+    /// Evaluation context of the shown frame.
+    pub ctx: EvalCtx,
 }
 
 /// Base colour of selected objects (our palette).
-const SELECTED_TINT: [f32; 3] = [0.95, 0.62, 0.30];
+pub(crate) const SELECTED_TINT: [f32; 3] = [0.95, 0.62, 0.30];
 
 /// Side of a drawn point in component mode, in pixels.
 const POINT_SIZE: f32 = 7.0;
@@ -71,6 +112,9 @@ pub fn component_shading(shading: Shading) -> Shading {
     match shading {
         Shading::Smooth => Shading::SmoothWire,
         Shading::Flat => Shading::FlatWire,
+        // faces plus edges, in the closest look to the chosen mode
+        Shading::Quick | Shading::BoundingBox => Shading::SmoothWire,
+        Shading::Constant => Shading::HiddenLine,
         other => other,
     }
 }
@@ -80,27 +124,29 @@ fn palette_color(c: egui::Color32) -> [f32; 3] {
     [c.r(), c.g(), c.b()].map(|v| v as f32 / 255.0)
 }
 
-pub fn apply_nav(cam: &mut Camera, action: NavAction, viewport_h: f64) {
-    match action {
-        NavAction::None => {}
-        NavAction::Orbit(yaw, pitch) => cam.orbit(yaw, pitch),
-        NavAction::Pan(dx, dy) => cam.pan(dx, dy, viewport_h),
-        NavAction::Dolly(f) => cam.dolly(f),
-    }
+/// Applies a gesture to the camera. `size` is the viewport in the same units as the drag.
+pub fn apply_nav(cam: &mut Camera, action: NavAction, size: [f64; 2]) {
+    *cam = match action {
+        NavAction::None => return,
+        NavAction::Orbit(dx, dy) => nav::orbit_drag(cam, dx, dy),
+        NavAction::Pan(dx, dy) => nav::pan_drag(cam, dx, dy, size[1]),
+        NavAction::Dolly(dx) => nav::dolly_drag(cam, dx),
+        NavAction::ZoomAt(f, cursor) => nav::zoom_at(cam, cursor, size, f),
+    };
 }
 
 struct Target {
     size: [u32; 2],
-    color: wgpu::Texture,
-    depth: wgpu::Texture,
+    targets: RenderTargets,
     texture_id: egui::TextureId,
 }
 
-/// Offscreen render target registered with egui, recreated on resize.
+/// Offscreen render targets registered with egui (one per pane), recreated on resize or when
+/// the sample count changes.
 #[derive(Default)]
 pub struct ViewportPanel {
     renderer: Option<Renderer>,
-    target: Option<Target>,
+    targets: [Option<Target>; 4],
     /// GPU meshes of the scene's generator nodes, keyed by scene revision and selection.
     meshes: Option<SceneMeshes>,
 }
@@ -118,6 +164,15 @@ pub fn scene_meshes(
     scene: &Scene,
     selected: &BTreeSet<NodeId>,
 ) -> Vec<(NodeId, PolyMesh, bool, Option<f64>)> {
+    scene_meshes_at(scene, selected, &EvalCtx::default())
+}
+
+/// [`scene_meshes`] evaluated with `ctx` (time, fps, seed).
+pub fn scene_meshes_at(
+    scene: &Scene,
+    selected: &BTreeSet<NodeId>,
+    ctx: &EvalCtx,
+) -> Vec<(NodeId, PolyMesh, bool, Option<f64>)> {
     let mut out = Vec::new();
     for root in scene.roots() {
         for id in std::iter::once(*root).chain(scene.descendants(*root)) {
@@ -125,8 +180,12 @@ pub fn scene_meshes(
             if forge_generators::is_consumed(scene, id) {
                 continue;
             }
+            // hidden or disabled objects are not drawn (UI.md §13.1)
+            if !forge_core::visibility::editor_visible(scene, id) {
+                continue;
+            }
             let (Ok(Some(mut mesh)), Some(m)) = (
-                forge_generators::evaluate(scene, id),
+                forge_generators::evaluate(scene, id, ctx),
                 scene.world_matrix(id),
             ) else {
                 continue;
@@ -142,13 +201,16 @@ pub fn scene_meshes(
 }
 
 impl ViewportPanel {
-    /// Renders the scene at `size` pixels and returns the egui texture to show.
+    /// Renders the scene into `pane`'s target at `size` pixels and returns the egui texture to
+    /// show. `base` carries the pane's shading, lighting, shadows and anti-aliasing
+    /// (`panes::display_settings`); the panel adds the component-mode overrides.
     pub fn render(
         &mut self,
         rs: &egui_wgpu::RenderState,
+        pane: Pane,
         size: [u32; 2],
         cam: &Camera,
-        shading: Shading,
+        base: Settings,
         view: SceneView,
     ) -> egui::TextureId {
         let SceneView {
@@ -156,47 +218,40 @@ impl ViewportPanel {
             selected,
             gizmo,
             component,
+            ctx,
         } = view;
         let device = &rs.device;
-        let renderer = self
+        let samples = base.msaa.samples();
+        if self
             .renderer
-            .get_or_insert_with(|| Renderer::new(device, wgpu::TextureFormat::Rgba8Unorm));
-        let size = [size[0].max(1), size[1].max(1)];
-        if self.target.as_ref().is_none_or(|t| t.size != size) {
-            let extent = wgpu::Extent3d {
-                width: size[0],
-                height: size[1],
-                depth_or_array_layers: 1,
-            };
-            let make = |label, format, usage, view_formats: &'static [wgpu::TextureFormat]| {
-                device.create_texture(&wgpu::TextureDescriptor {
-                    label: Some(label),
-                    size: extent,
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage,
-                    view_formats,
-                })
-            };
-            let color = make(
-                "viewport color",
+            .as_ref()
+            .is_none_or(|r| r.samples() != samples)
+        {
+            self.renderer = Some(Renderer::with_samples(
+                device,
                 wgpu::TextureFormat::Rgba8Unorm,
-                wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-                &[],
-            );
-            let depth = make(
-                "viewport depth",
-                wgpu::TextureFormat::Depth32Float,
-                wgpu::TextureUsages::RENDER_ATTACHMENT,
-                &[],
+                samples,
+            ));
+        }
+        let renderer = self.renderer.as_ref().expect("renderer created above");
+        let size = [size[0].max(1), size[1].max(1)];
+        let slot = &mut self.targets[pane.index()];
+        if slot
+            .as_ref()
+            .is_none_or(|t| t.size != size || t.targets.samples != samples)
+        {
+            let targets = RenderTargets::new(
+                device,
+                size[0],
+                size[1],
+                samples,
+                wgpu::TextureUsages::TEXTURE_BINDING,
             );
             // egui samples the unorm view as-is, so palette values display as authored
             // (matching the offscreen snapshot PNGs).
-            let view = color.create_view(&Default::default());
+            let view = targets.color.create_view(&Default::default());
             let mut egui_renderer = rs.renderer.write();
-            let texture_id = match &self.target {
+            let texture_id = match &*slot {
                 Some(old) => {
                     egui_renderer.update_egui_texture_from_wgpu_texture(
                         device,
@@ -210,10 +265,9 @@ impl ViewportPanel {
                     egui_renderer.register_native_texture(device, &view, wgpu::FilterMode::Nearest)
                 }
             };
-            self.target = Some(Target {
+            *slot = Some(Target {
                 size,
-                color,
-                depth,
+                targets,
                 texture_id,
             });
         }
@@ -224,7 +278,7 @@ impl ViewportPanel {
         if self.meshes.as_ref().is_none_or(|m| {
             m.revision != scene.revision() || m.selection != *selected || m.component != component
         }) {
-            let items = scene_meshes(scene, selected)
+            let items = scene_meshes_at(scene, selected, &ctx)
                 .into_iter()
                 .map(|(id, mesh, sel, smoothing)| {
                     match component.filter(|(target, _)| *target == id) {
@@ -268,9 +322,9 @@ impl ViewportPanel {
                 color: *color,
             })
             .collect();
-        let t = self.target.as_ref().expect("target created above");
-        let color_view = t.color.create_view(&Default::default());
-        let depth_view = t.depth.create_view(&Default::default());
+        let t = self.targets[pane.index()]
+            .as_ref()
+            .expect("target created above");
         let grid = grid_lines(cam, size[1] as f64);
         let frame = Frame {
             meshes: &draw,
@@ -278,26 +332,18 @@ impl ViewportPanel {
             gizmo,
             settings: Settings {
                 shading: if component.is_some() {
-                    component_shading(shading)
+                    component_shading(base.shading)
                 } else {
-                    shading
+                    base.shading
                 },
                 show_points: component.is_some_and(|(_, m)| m == EditMode::Points),
                 point_size: POINT_SIZE,
                 palette,
+                ..base
             },
         };
         let mut encoder = device.create_command_encoder(&Default::default());
-        renderer.render(
-            device,
-            &mut encoder,
-            &color_view,
-            &depth_view,
-            size[0],
-            size[1],
-            cam,
-            &frame,
-        );
+        renderer.render_to(device, &mut encoder, &t.targets, cam, &frame);
         rs.queue.submit([encoder.finish()]);
         t.texture_id
     }

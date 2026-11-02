@@ -1,0 +1,42 @@
+feature = "cloner"
+observation = "docs/parity/effectors-3.md"
+description = "Grid Array cloner Count (3,3,3) Size (30,30,30), 20 cm cube child, Push Apart effector, Iterations 5"
+mesh = "mesh.obj"
+
+[params]
+mode = "grid"
+clones_mode = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = [3.0, 3.0, 3.0]
+grid_mode = "Per-Step"
+size = [30.0, 30.0, 30.0]
+form = "Cubic"
+fill_percent = 100.0
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+uv_orientation = "Z+"
+weight_percent = 0.0
+animation_mode = "Play"
+push_apart_percent = 100.0
+effector_count = 1
+document_frame = 0
+
+[params.effector]
+type = "push_apart"
+name = "Push Apart"
+strength_percent = 100.0
+selection = ""
+mode = "Push Apart"
+radius = 100.0
+iterations = 5
+deformation = "Off"
+
+[import]
+scale = 1.0
+flip_z = false

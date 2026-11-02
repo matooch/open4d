@@ -1,0 +1,8 @@
+feature = "keyframes"
+observation = "docs/parity/keyframes-3.md"
+description = "Overshoot clamp: shallow segment, then a steep one"
+
+[params]
+param = "pos_x"
+fps = 30
+keys = [[0, 0], [30, 10], [60, 300]]

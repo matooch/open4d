@@ -28,6 +28,7 @@ evaluation of real node types (Phases 5+).
 | `Link` | `Option<NodeId>` | reference to another node |
 | `Mesh` | `Arc<MeshData>` | an editable polygon mesh (see below) |
 | `IndexList` | `Vec<u32>` | a sorted set of element indices (component selections) |
+| `LinkList` | `Vec<NodeId>` | an ordered list of node references (a cloner's effector list, an effector's field list); order is meaningful |
 
 `ParamDesc { id, label, kind, default, ui, animatable }`:
 - `id`: non-empty, chars `[a-z0-9_.]`, unique within its node type. Stable forever:
@@ -35,7 +36,7 @@ evaluation of real node types (Phases 5+).
 - `kind: ParamKind`: `Bool`, `Int { min, max }`, `Float { min, max }`,
   `Vec3 { min, max }` (per component), `Color`, `Enum { options }` (each option
   `{ id, label }`, ids unique, at least one), `String`, `Link { accepts }` (list of
-  categories; empty = any), `Mesh`, `IndexList`.
+  categories; empty = any), `LinkList { accepts }` (the same for each entry), `Mesh`, `IndexList`.
 - `ui: UiHint { group, unit, soft_min, soft_max, step, hidden }`. `unit` ∈
   `None | Distance | Angle | Percent | Time`. UI-only; never affects validation.
 - `animatable`: defaults to true for `Int/Float/Vec3/Color/Bool`, false otherwise.
@@ -51,7 +52,7 @@ evaluation of real node types (Phases 5+).
   default, is `hidden()` and `animatable(false)`. Core does not know what the indices refer to.
 - Builders: `ParamDesc::float(id, label, default)`, `.int`, `.bool`, `.vec3`,
   `.color`, `.enumeration(id, label, default_id, &[(id, label)])`, `.string`,
-  `.link(id, label, accepts)`, `.mesh(id, label)`, `.index_list(id, label)`, then `.range(min, max)`, `.unit(u)`, `.group(g)`,
+  `.link(id, label, accepts)`, `.link_list(id, label, accepts)`, `.mesh(id, label)`, `.index_list(id, label)`, then `.range(min, max)`, `.unit(u)`, `.group(g)`,
   `.soft_range(a, b)`, `.step(s)`, `.hidden()`, `.animatable(bool)`.
 
 `ParamDesc::validate(Value) -> Result<Value, ParamError>`:
@@ -69,6 +70,12 @@ evaluation of real node types (Phases 5+).
    tests/golden/cone), and Make Editable must keep the face lists exactly.
 7. `IndexList`: the list is **sorted ascending and deduplicated** (not an error). No range
    check (the kind does not know the element count).
+8. `LinkList`: the order is kept; a node twice in the list is `ParamError::DuplicateLink`.
+   `Tx::set_param` checks every entry like a `Link` (exists, not the node itself, accepted
+   category) and `param.set` takes an array of node ids. The default is the empty list and the
+   parameter is not animatable. Targets count for `deep_revision`. Brief 068 added it for
+   the clone toolset (MOGRAPH.md E1). The file version did not change for it at first; version 6
+   (§6.4) declares it, and §6.3 says how files written in between load.
 
 ## 2. Node types and the plugin registry (`registry`)
 
@@ -94,7 +101,8 @@ it has no other effect (such nodes can still be created by code and loaded from 
 - `Registry::with_builtins()` registers `forge.null` (Object; only the transform params).
   It also registers the `forge.smoothing` tag (docs/specs/SMOOTHING.md §2).
 - Hierarchy types get `transform.pos/rot/scale` prepended; `transform.*` ids are
-  reserved (`RegistryError::ReservedParam`). See docs/specs/TRANSFORM.md §2.
+  reserved (`RegistryError::ReservedParam`), and so is `object.*` (visibility and enable
+  flags, brief 149). See docs/specs/TRANSFORM.md §2.
 
 `trait Plugin { fn id(&self) -> &str; fn register(&self, r: &mut Registry) -> Result<(), RegistryError>; }`
 
@@ -159,6 +167,13 @@ Transactions:
   the first). Undo, redo, or any other transaction ends the merge window. For slider
   drags.
 - `history().undo_labels()` lists labels oldest first.
+- Grouping (SCRIPTING.md §2): `undo_depth()` is the number of undo steps.
+  `group_undo_since(depth, label)` merges every step recorded after `depth` into one step
+  with that label (edits in their original order); no steps newer than `depth` (or a stack
+  shorter than `depth`, the history having been replaced) is a no-op; exactly one newer
+  step is only renamed. `rollback_to(depth) -> bool` reverts every step
+  above `depth` and drops them, clearing the redo stack if anything was reverted
+  (false, nothing done, if the stack is shorter than `depth`). Both end the merge window.
 
 ## 5. Dirty tracking and evaluation cache (`cache`)
 
@@ -183,7 +198,7 @@ RON text, deterministic (same scene → byte-identical output):
 ```ron
 (
     format: "forge3d-scene",
-    version: 5,
+    version: 6,
     settings: (fps: 30, start: 0, end: 90),
     roots: [
         (id: 1, type_id: "forge.null", name: "Null", params: {}, tracks: {}, tags: [], children: []),
@@ -227,3 +242,109 @@ RON text, deterministic (same scene → byte-identical output):
   the defaults; saved settings that do not validate (`fps` outside 1..=240, `start > end`)
   load as the defaults with a warning. Older builds reject a version 5 file with
   `UnsupportedVersion`.
+
+### 6.1 Layout, header and the two entry points (brief 163)
+
+A native file is one of:
+- **Text file**: the RON document above and nothing else. This is the form of every file of
+  versions 1-5 and of any version 6 file whose large values are small enough (§6.2). It is
+  deterministic and diff-friendly; `save(&Scene) -> String` always writes this form.
+- **Chunked file**: the same RON document, then the marker line `\n%%FORGE-CHUNKS 1\n`, then
+  the chunk section. Text writers escape line breaks inside strings, so the first occurrence
+  of the marker is always the real one. The header is the first two RON fields,
+  `format: "forge3d-scene"` and `version: N`; a reader needs nothing else to pick the
+  migration path.
+
+API (`forge_core::file`):
+- `save(&Scene) -> String` and `load(Arc<Registry>, &str)`: text only. `load` fails with
+  `LoadError::Chunk` if the text refers to a chunk (it has no chunk section).
+- `save_with(&Scene, &SaveOptions) -> Vec<u8>` and `load_with(Arc<Registry>, &[u8],
+  &LoadOptions) -> Result<(Scene, LoadReport), LoadError>`: text or chunked files, external
+  references (§6.5). `SaveOptions { base_dir: Option<PathBuf>, chunk_min_bytes: usize }`
+  (default: no base dir, `CHUNK_MIN_BYTES`); `LoadOptions { base_dir: Option<PathBuf>,
+  check_external: bool }` (default: none, false).
+- `load_bytes(Arc<Registry>, &[u8])` = `load_with` with the default options. **It is the
+  fuzz entry point (brief 182)**: a pure function of its bytes (no file or clock access),
+  total (every input gives `Ok` or `Err`, never a panic, never an allocation larger than the
+  input allows: every count is checked against the bytes that remain before anything is
+  allocated), and `save_with(load_bytes(b))` is valid input again.
+- The file commands (`file.open`, `file.save`, autosave) use `save_with`/`load_with` with
+  `base_dir` set to the file's directory.
+
+### 6.2 Binary chunks
+
+Only values whose binary payload is at least `CHUNK_MIN_BYTES` = 1024 bytes go into a
+chunk, and only the kinds below. Everything smaller stays inline text, so small scenes and
+all hand-edited files stay readable and a diff of a big scene still shows its structure
+(names, params, tracks); only the large arrays become opaque. 1024 bytes is 42 mesh points,
+or 256 indices: about where the text form (roughly 3-4 times the binary size) starts to
+dominate a file.
+
+In the RON, the value is replaced by `MeshChunk(i)` or `IndexListChunk(i)` (`i` = chunk
+number, 0-based, numbered in the order the nodes and their params are written, so the file
+stays deterministic). Chunk section, all integers little-endian:
+
+```
+count: u32
+count x { kind: u8, len: u64, hash: u64 (FNV-1a 64 of the payload), payload: len bytes }
+```
+Kinds: `1` mesh = `points: u32`, `polys: u32`, `points x 3 x f64` (raw IEEE bits), then per
+polygon `corners: u32` and that many `u32` indices; `2` index list = `n: u32`, `n x u32`.
+Values are stored exactly as in memory, so a round trip is bit-identical for every f64
+(`-0.0` and subnormals included; the text form also keeps the bits, via the shortest
+round-trip printing of the `ron` crate, which the tests check). Other kinds are reserved for
+per-point data and caches: a new large value kind gets the next kind number and a version
+bump. Errors (all `LoadError::Chunk`): marker without a valid section, a chunk running past
+the end, a hash mismatch, a trailing byte after the last chunk, an unknown kind, a
+reference to a missing chunk, a chunk of the wrong kind for the reference. Unreferenced chunks
+are ignored with a warning. Validation of the loaded values (mesh indices, finite floats) is
+the normal load validation of §1.
+
+### 6.3 Migrations
+
+`VERSION` is the version written; `MIGRATIONS[v - 1]` is the function that turns a version
+`v` document into a version `v + 1` document (a pure function of the parsed document that
+returns warnings for anything it had to drop; they go to the load report). A file of version `v < VERSION` runs steps `v` ...
+`VERSION - 1` in order, then loads like a current file. Version 0 and versions above `VERSION`
+are `UnsupportedVersion`. Rules for a new bump: append one function, raise `VERSION`, add a
+fixture `crates/core/tests/fixtures/scene-v<old>.forge` that the previous build would have
+written (never regenerated), and extend the fixture test. The tests check that the table has
+one step per version and that every version from 1 to `VERSION` has a fixture that loads to
+the same logical scene.
+
+| Step | What changed | What the step does |
+|---|---|---|
+| 1 -> 2 | `Value::Mesh` added | nothing (additive) |
+| 2 -> 3 | `Value::IndexList` added | nothing (additive) |
+| 3 -> 4 | keyframe `tracks` per node | nothing (a missing `tracks` is empty) |
+| 4 -> 5 | scene `settings` | nothing (absent settings read as the defaults) |
+| 5 -> 6 | see §6.4 | nothing (additive) |
+
+Missing params of known types take their defaults on load (§6), so params added by later
+builds need no step.
+
+### 6.4 Version 6
+
+Declares what builds between brief 068 and brief 163 already wrote under version 5:
+`Value::LinkList` (brief 068, this paragraph was a known gap) and the hidden `object.*`
+params (brief 149; a file without them loads with the defaults). A version 5 file that
+contains `LinkList(...)` values is a valid file and migrates unchanged. Version 6 also
+introduces the chunk section (§6.2) and file reference params (§6.5). Older builds reject a
+version 6 file with `UnsupportedVersion`.
+
+### 6.5 External file references
+
+A parameter is a file reference when its descriptor says so (`ParamDesc::file_path(id, label,
+default)`, `UiHint.file_ref`); its value is a `Value::String`, empty for "none". In memory the
+path is whatever the user gave, normally absolute.
+- **Save** with `base_dir`: an absolute path is written relative to `base_dir` with `/`
+  separators and `..` segments when needed (lexical, no file system access), so a project folder
+  can be moved or shared. A path that cannot be made relative (another drive or root) or that
+  is already relative is written as is.
+- **Load** with `base_dir`: a relative path is joined to `base_dir` and normalised lexically
+  (`.` and `x/..` removed); the param then holds that absolute path. With `check_external` a
+  path that does not exist adds the warning `node N: external file "..." not found` (the value
+  is kept, so a later save keeps the link). Without `base_dir`, values are not touched.
+- `file::external_refs(&Scene) -> Vec<ExternalRef { node, param, path }>` lists the references
+  (for "collect files" and missing-file reports).
+- Nodes of unknown types keep their values untouched.

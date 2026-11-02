@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use forge_core::{Category, NodeId, NodeType, ParamDesc, Scene, Unit, Value};
+use forge_core::{Category, EvalCtx, NodeId, NodeType, ParamDesc, Scene, Unit, Value};
 use forge_geometry::PolyMesh;
 use glam::DVec3;
 
@@ -95,14 +95,19 @@ pub fn inputs_of(scene: &Scene, id: NodeId) -> Vec<NodeId> {
     node.children
         .iter()
         .copied()
-        .filter(|c| matches!(evaluate_geometry(scene, *c), Ok(Some(_)) | Err(_)))
+        .filter(|c| {
+            matches!(
+                evaluate_geometry(scene, *c, &EvalCtx::default()),
+                Ok(Some(_)) | Err(_)
+            )
+        })
         .take(take)
         .collect()
 }
 
 /// An input's mesh placed by its local transform.
-fn placed(scene: &Scene, child: NodeId) -> Result<Option<PolyMesh>, BuildError> {
-    let Some(mut mesh) = evaluate(scene, child)? else {
+fn placed(scene: &Scene, child: NodeId, ctx: &EvalCtx) -> Result<Option<PolyMesh>, BuildError> {
+    let Some(mut mesh) = evaluate(scene, child, ctx)? else {
         return Ok(None);
     };
     let m = scene.local_transform(child).expect("child exists").matrix();
@@ -117,6 +122,7 @@ pub(crate) fn evaluate_modeling(
     id: NodeId,
     type_id: &str,
     values: &BTreeMap<String, Value>,
+    ctx: &EvalCtx,
 ) -> Result<Option<PolyMesh>, BuildError> {
     if type_id == INSTANCE {
         let ty = instance_type();
@@ -129,7 +135,7 @@ pub(crate) fn evaluate_modeling(
                 return Ok(None);
             };
             if node.type_id != INSTANCE {
-                return evaluate(scene, r);
+                return evaluate(scene, r, ctx);
             }
             if seen.contains(&r) {
                 return Ok(None);
@@ -144,7 +150,7 @@ pub(crate) fn evaluate_modeling(
     }
     let mut inputs = Vec::new();
     for c in inputs_of(scene, id) {
-        if let Some(m) = placed(scene, c)? {
+        if let Some(m) = placed(scene, c, ctx)? {
             inputs.push(m);
         }
     }

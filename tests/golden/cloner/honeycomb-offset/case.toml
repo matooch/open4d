@@ -1,0 +1,36 @@
+feature = "cloner"
+observation = "docs/parity/cloner-3.md"
+description = "Honeycomb cloner, Count 3 x 2, Offset Direction Width, Offset 25 percent, 20 cm cube child"
+mesh = "mesh.obj"
+
+[params]
+mode = "honeycomb"
+clones_mode = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+orientation = "Z (XY)"
+offset_direction = "Width"
+offset_percent = 25.0
+offset_variation_percent = 0.0
+perpendicular_variation_percent = 0.0
+seed = 123456
+count_width = 3
+count_height = 2
+honeycomb_mode = "Per Step"
+size_width = 346.4101616
+size_height = 300.0
+form = "Square"
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+animation_mode = "Play"
+effector_count = 0
+
+[import]
+scale = 1.0
+flip_z = false

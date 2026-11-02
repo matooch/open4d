@@ -1,0 +1,30 @@
+[package]
+name = "forge-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Headless application core: documents, commands, evaluation and export without a window (docs/specs/APP.md)."
+
+[dependencies]
+forge-anim = { path = "../anim" }
+forge-clone-engine = { path = "../clone-engine" }
+forge-command = { path = "../command" }
+forge-core = { path = "../core" }
+forge-fields = { path = "../fields" }
+forge-generators = { path = "../generators" }
+forge-geometry = { path = "../geometry" }
+forge-modeling = { path = "../modeling" }
+forge-io = { path = "../io" }
+forge-modifiers = { path = "../modifiers" }
+glam = "0.34"
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+forge-parity-harness = { path = "../parity-harness" }
+toml = "1"
+
+[lints]
+workspace = true

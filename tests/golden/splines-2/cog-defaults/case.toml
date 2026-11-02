@@ -1,0 +1,48 @@
+feature = "splines-2"
+observation = "docs/parity/splines-2.md"
+description = "Cogwheel spline, all parameters at their R25 defaults"
+mesh = "mesh.obj"
+
+[params]
+extrude_offset = 20.0
+caps = false
+
+[params.input]
+type = "cogwheel_spline"
+legacy_mode = false
+show_guides = false
+guide_color = [1.0, 0.913725, 0.498039]
+teeth_type = "involute"
+teeth = 20
+lock_radius = false
+teeth_orientation = 0.0
+undercut = false
+root_radius = 180.0
+addendum_radius = 220.0
+pitch_radius = 200.0
+module = 20.0
+diametral_pitch = 0.05
+dedendum = 20.0
+pressure_angle = 20.0
+radial_ratio = 1.5
+witness_ratio = 10.0
+undercut_ratio = 10.0
+inner_type = "none"
+inner_orientation = 0.0
+invert = false
+center_hole = true
+hole_radius = 15.0
+cutout = false
+cutout_depth = 10.0
+cutout_width = 10.0
+cutout_orientation = 0.0
+plane = "xy"
+reverse = false
+intermediate = "adaptive"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+[import]
+scale = 1.0
+flip_z = false

@@ -2,6 +2,7 @@
 
 mod common;
 
+use serde_json::json;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -14,7 +15,7 @@ use forge_generators::{POLYGON, SELECTION_EDGES, SELECTION_POINTS, SELECTION_POL
 use forge_geometry::PolyMesh;
 use forge_geometry::selection::IndexSet;
 use forge_ui::app::Editor;
-use forge_ui::commands::{Command, execute};
+use forge_ui::commands::execute;
 use forge_ui::components::{
     ClickModifiers, EditMode, SelectCmd, SelectOp, apply_click, display_selection, pick_component,
     pick_mesh, rect_components, selection_of, stored_selection, target, viewport_click,
@@ -45,10 +46,15 @@ const CMD: ClickModifiers = ClickModifiers {
 fn setup(mode: EditMode) -> (EditorState, NodeId) {
     let mut st = state();
     create(&mut st, "forge.cube");
-    execute(&mut st, Command::MakeEditable).unwrap();
+    execute(&mut st, "mesh.make_editable", json!({})).unwrap();
     let id = st.selection.active.unwrap();
     assert_eq!(st.doc.scene().node(id).unwrap().type_id, POLYGON);
-    execute(&mut st, Command::SetMode(mode)).unwrap();
+    execute(
+        &mut st,
+        "select.mode",
+        json!({"mode": forge_command::ModeArg::from(mode)}),
+    )
+    .unwrap();
     (st, id)
 }
 
@@ -280,7 +286,7 @@ fn edges_and_polygons_are_clicked_into_their_own_sets() {
     click_at(&mut st, mid, NONE);
     assert_eq!(sel(&st, id, EditMode::Edges), set(&[e as u32]));
 
-    execute(&mut st, Command::SetMode(EditMode::Polys)).unwrap();
+    execute(&mut st, "select.mode", json!({"mode": "polys"})).unwrap();
     let f = (0..m.polys.len())
         .find(|f| m.polys[*f].contains(&near))
         .unwrap();
@@ -341,14 +347,14 @@ fn rectangle_select_takes_the_visible_elements_in_one_transaction() {
     assert!(sel(&st, id, EditMode::Points).is_empty());
 
     // edges and polygons need all their points inside and visible
-    execute(&mut st, Command::SetMode(EditMode::Edges)).unwrap();
+    execute(&mut st, "select.mode", json!({"mode": "edges"})).unwrap();
     viewport_rect(&mut st, whole, SIZE, NONE).unwrap();
     assert_eq!(
         sel(&st, id, EditMode::Edges).len(),
         9,
         "12 minus the 3 at the far corner"
     );
-    execute(&mut st, Command::SetMode(EditMode::Polys)).unwrap();
+    execute(&mut st, "select.mode", json!({"mode": "polys"})).unwrap();
     viewport_rect(&mut st, whole, SIZE, NONE).unwrap();
     let polys = sel(&st, id, EditMode::Polys);
     assert_eq!(polys.len(), 3);
@@ -365,12 +371,12 @@ fn undo_and_redo_restore_the_previous_selection() {
     let all = sel(&st, id, EditMode::Points);
     assert_eq!(all.len(), 7);
 
-    execute(&mut st, Command::Undo).unwrap();
+    execute(&mut st, "edit.undo", json!({})).unwrap();
     assert_eq!(sel(&st, id, EditMode::Points), set(&[near]));
-    execute(&mut st, Command::Undo).unwrap();
+    execute(&mut st, "edit.undo", json!({})).unwrap();
     assert!(sel(&st, id, EditMode::Points).is_empty());
-    execute(&mut st, Command::Redo).unwrap();
-    execute(&mut st, Command::Redo).unwrap();
+    execute(&mut st, "edit.redo", json!({})).unwrap();
+    execute(&mut st, "edit.redo", json!({})).unwrap();
     assert_eq!(sel(&st, id, EditMode::Points), all);
     assert_eq!(st.mode, EditMode::Points, "undo does not change the mode");
 }
@@ -380,9 +386,9 @@ fn the_selection_survives_save_and_load() {
     let (mut st, id) = setup(EditMode::Points);
     let m = mesh_of(&st, id);
     viewport_rect(&mut st, [0.0, 0.0, W, H], SIZE, NONE).unwrap();
-    execute(&mut st, Command::SetMode(EditMode::Edges)).unwrap();
+    execute(&mut st, "select.mode", json!({"mode": "edges"})).unwrap();
     viewport_rect(&mut st, [0.0, 0.0, W, H], SIZE, NONE).unwrap();
-    execute(&mut st, Command::SetMode(EditMode::Polys)).unwrap();
+    execute(&mut st, "select.mode", json!({"mode": "polys"})).unwrap();
     viewport_rect(&mut st, [0.0, 0.0, W, H], SIZE, NONE).unwrap();
     let want = stored_selection(st.doc.scene(), id);
     assert_eq!(
@@ -418,7 +424,7 @@ fn the_selection_survives_save_and_load() {
 fn a_version_2_file_without_selection_params_loads_with_empty_sets() {
     let mut st = state();
     create(&mut st, "forge.cube");
-    execute(&mut st, Command::MakeEditable).unwrap();
+    execute(&mut st, "mesh.make_editable", json!({})).unwrap();
     let id = st.selection.active.unwrap();
     let text = file::save(st.doc.scene());
     // strip the selection params and claim version 2
@@ -443,7 +449,7 @@ fn without_a_polygon_target_clicks_pick_objects() {
     let mut st = state();
     let cube = create(&mut st, "forge.cube");
     st.selection.clear();
-    execute(&mut st, Command::SetMode(EditMode::Points)).unwrap();
+    execute(&mut st, "select.mode", json!({"mode": "points"})).unwrap();
     assert_eq!(target(&st), None);
     let steps = undo_steps(&st);
     // the centre of the (non-editable) cube
@@ -473,8 +479,8 @@ fn picking_uses_the_deformed_mesh_and_stores_base_indices() {
     r.install(&forge_generators::Primitives).unwrap();
     r.install(&forge_modifiers::Deformers).unwrap();
     let mut st = EditorState::new(Arc::new(r));
-    execute(&mut st, Command::Create("forge.cube".into())).unwrap();
-    execute(&mut st, Command::MakeEditable).unwrap();
+    execute(&mut st, "object.create", json!({"type": "forge.cube"})).unwrap();
+    execute(&mut st, "mesh.make_editable", json!({})).unwrap();
     let id = st.selection.active.unwrap();
     let base = mesh_of(&st, id);
     st.doc
@@ -484,7 +490,7 @@ fn picking_uses_the_deformed_mesh_and_stores_base_indices() {
             tx.set_param(d, "strength", Value::Float(100.0))
         })
         .unwrap();
-    execute(&mut st, Command::SetMode(EditMode::Points)).unwrap();
+    execute(&mut st, "select.mode", json!({"mode": "points"})).unwrap();
     let deformed = mesh_of(&st, id);
     assert_eq!(deformed.polys, base.polys, "topology is unchanged");
     let (near, _) = near_far(&st, &deformed);
@@ -510,7 +516,16 @@ fn picking_uses_the_deformed_mesh_and_stores_base_indices() {
 #[test]
 fn select_all_none_invert_grow_and_shrink_act_on_the_current_set() {
     let (mut st, id) = setup(EditMode::Points);
-    let run = |st: &mut EditorState, c| execute(st, Command::Select(c)).unwrap();
+    let run = |st: &mut EditorState, c: SelectCmd| {
+        let id = match c {
+            SelectCmd::All => "select.all",
+            SelectCmd::None => "select.none",
+            SelectCmd::Invert => "select.invert",
+            SelectCmd::Grow => "select.grow",
+            SelectCmd::Shrink => "select.shrink",
+        };
+        execute(st, id, json!({})).unwrap()
+    };
     let pts = |st: &EditorState| sel(st, id, EditMode::Points);
 
     run(&mut st, SelectCmd::All);
@@ -538,7 +553,7 @@ fn select_all_none_invert_grow_and_shrink_act_on_the_current_set() {
     );
 
     // edges: an edge touches 4 others on a cube
-    execute(&mut st, Command::SetMode(EditMode::Edges)).unwrap();
+    execute(&mut st, "select.mode", json!({"mode": "edges"})).unwrap();
     st.doc
         .transact("sel", |tx| {
             tx.set_param(id, SELECTION_EDGES, Value::IndexList(vec![3]))
@@ -552,7 +567,7 @@ fn select_all_none_invert_grow_and_shrink_act_on_the_current_set() {
     assert_eq!(sel(&st, id, EditMode::Edges).len(), 12);
 
     // polygons: a face has 4 edge-neighbours
-    execute(&mut st, Command::SetMode(EditMode::Polys)).unwrap();
+    execute(&mut st, "select.mode", json!({"mode": "polys"})).unwrap();
     st.doc
         .transact("sel", |tx| {
             tx.set_param(id, SELECTION_POLYS, Value::IndexList(vec![2]))
@@ -582,7 +597,7 @@ fn select_commands_without_a_target_and_in_model_mode() {
     let (mut st, id) = setup(EditMode::Points);
     st.selection.clear();
     assert_eq!(
-        execute(&mut st, Command::Select(SelectCmd::All)),
+        execute(&mut st, "select.all", json!({})),
         Err("select a polygon object".to_string())
     );
     assert!(sel(&st, id, EditMode::Points).is_empty());
@@ -591,16 +606,16 @@ fn select_commands_without_a_target_and_in_model_mode() {
     let mut st = state();
     let a = create(&mut st, "forge.cube");
     let b = create(&mut st, "forge.null");
-    execute(&mut st, Command::SetMode(EditMode::Model)).unwrap();
+    execute(&mut st, "select.mode", json!({"mode": "model"})).unwrap();
     st.selection.clear();
-    execute(&mut st, Command::Select(SelectCmd::All)).unwrap();
+    execute(&mut st, "select.all", json!({})).unwrap();
     assert_eq!(st.selection.nodes, BTreeSet::from([a, b]));
-    execute(&mut st, Command::Select(SelectCmd::Invert)).unwrap();
+    execute(&mut st, "select.invert", json!({})).unwrap();
     assert!(st.selection.nodes.is_empty());
     st.selection.click(a);
-    execute(&mut st, Command::Select(SelectCmd::Invert)).unwrap();
+    execute(&mut st, "select.invert", json!({})).unwrap();
     assert_eq!(st.selection.nodes, BTreeSet::from([b]));
-    execute(&mut st, Command::Select(SelectCmd::None)).unwrap();
+    execute(&mut st, "select.none", json!({})).unwrap();
     assert!(st.selection.nodes.is_empty());
 }
 

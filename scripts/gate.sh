@@ -11,6 +11,17 @@ log="${TMPDIR:-${TEMP:-/tmp}}/forge-gate-tests.log"
 to=""; command -v timeout >/dev/null 2>&1 && to="timeout 900"; [ -z "$to" ] && command -v gtimeout >/dev/null 2>&1 && to="gtimeout 900"
 FORGE_REQUIRE_GPU=1 $to cargo test --workspace > "$log" 2>&1 || { echo "GATE: tests failed (log: $log)"; grep -B2 -A12 "panicked" "$log" | head -60; fail=1; }
 grep "^test result" "$log" | awk '{p+=$4; f+=$6} END {print "GATE: " p " tests passed, " f " failed"}'
+if command -v python3 >/dev/null 2>&1; then
+  # Python client tests (brief 017) run against a real forge-rpc-serve built above.
+  cargo build -q -p forge-rpc --bin forge-rpc-serve && (cd python/forge_py && python3 -m unittest discover -t . -s tests) || { echo "GATE: python tests failed"; fail=1; }
+else
+  echo "GATE: python3 not found, skipping the Python client tests"
+fi
+if command -v cargo-deny >/dev/null 2>&1; then
+  cargo deny check || { echo "GATE: cargo deny failed"; fail=1; }
+else
+  echo "GATE: cargo-deny not installed, skipping (cargo install cargo-deny --locked)"
+fi
 cargo run -q -p forge-cleanroom || { echo "GATE: cleanroom failed"; fail=1; }
 cargo run -q -p forge-parity-harness --bin golden -- check || { echo "GATE: golden check failed"; fail=1; }
 [ "$fail" = 0 ] && echo "GATE: all passed" || echo "GATE: FAILED"

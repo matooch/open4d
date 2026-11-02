@@ -3,7 +3,9 @@
 use std::sync::Arc;
 
 use forge_core::transform::PREFIX;
-use forge_core::{Category, EditError, MeshData, NodeId, NodeType, ParamDesc, Scene, Tx, Value};
+use forge_core::{
+    Category, EditError, EvalCtx, MeshData, NodeId, NodeType, ParamDesc, Scene, Tx, Value,
+};
 use forge_geometry::PolyMesh;
 use glam::DVec3;
 
@@ -169,8 +171,8 @@ pub fn make_editable(tx: &mut Tx, id: NodeId) -> Result<NodeId, EditableError> {
     if node.type_id == TYPE {
         return Ok(id);
     }
-    let mesh =
-        evaluate_geometry(scene, id)?.ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?;
+    let mesh = evaluate_geometry(scene, id, &EvalCtx::default())?
+        .ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?;
     let (parent, index) = index_of(scene, id).ok_or(EditError::UnknownNode(id))?;
     let (consumed, kept): (Vec<NodeId>, Vec<NodeId>) =
         node.children.iter().partition(|c| is_consumed(scene, **c));
@@ -186,6 +188,27 @@ pub fn make_editable(tx: &mut Tx, id: NodeId) -> Result<NodeId, EditableError> {
     Ok(new)
 }
 
+/// Split (docs/specs/MODELING.md §4.7): a polygon object right after the polygon object `id`
+/// (same parent, transform, tags) holding `mesh`, named `<name>.N` with the lowest free `N`.
+pub fn spawn_split(tx: &mut Tx, id: NodeId, mesh: &PolyMesh) -> Result<NodeId, EditableError> {
+    let scene = tx.scene();
+    let (parent, index) = index_of(scene, id).ok_or(EditError::UnknownNode(id))?;
+    let base = name_of(scene, id);
+    let taken: std::collections::BTreeSet<String> = scene
+        .roots()
+        .iter()
+        .flat_map(|r| std::iter::once(*r).chain(scene.descendants(*r)))
+        .filter_map(|n| scene.node(n).map(|n| n.name.clone()))
+        .collect();
+    let name = (1..)
+        .map(|n| format!("{base}.{n}"))
+        .find(|candidate| !taken.contains(candidate))
+        .unwrap_or_else(|| base.clone());
+    let new = spawn_like(tx, id, id, parent, index + 1, mesh)?;
+    tx.rename(new, &name)?;
+    Ok(new)
+}
+
 /// Current State to Object (EDITABLE.md §1.3): a new polygon object right after `id`
 /// holding its mesh with deformers applied; `id` is untouched. Returns the new id.
 pub fn current_state_to_object(tx: &mut Tx, id: NodeId) -> Result<NodeId, EditableError> {
@@ -193,7 +216,8 @@ pub fn current_state_to_object(tx: &mut Tx, id: NodeId) -> Result<NodeId, Editab
     if scene.node(id).is_none_or(|n| n.is_tag()) {
         return Err(EditableError::NoMesh(name_of(scene, id)));
     }
-    let mut mesh = evaluate(scene, id)?.ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?;
+    let mut mesh = evaluate(scene, id, &EvalCtx::default())?
+        .ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?;
     let (parent, index) = index_of(scene, id).ok_or(EditError::UnknownNode(id))?;
     // Deformers inherited from a geometry-less parent would deform the copy again under
     // that parent: put it after the parent instead, in the parent's space (§1.3).

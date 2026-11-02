@@ -127,6 +127,6 @@ fn keyframes_match_the_reference() {
     assert_eq!(mismatched, expected_mismatch, "mismatching cases");
     let expected_unsupported: Vec<String> = UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, expected_unsupported);
-    assert_eq!(matched.len() + mismatched.len() + unsupported.len(), 17);
-    assert_eq!(files, 19);
+    assert_eq!(matched.len() + mismatched.len() + unsupported.len(), 24);
+    assert_eq!(files, 26);
 }

@@ -13,7 +13,7 @@ use forge_ui::animate::{
 };
 use forge_ui::app::Editor;
 use forge_ui::attributes::{Gesture, apply_edit_anim};
-use forge_ui::commands::{Command, execute};
+use forge_ui::commands::execute;
 use forge_ui::coordinates::{Row, Space, set_coord_anim};
 use forge_ui::manipulate::apply_drag_anim;
 use forge_ui::state::EditorState;
@@ -21,6 +21,7 @@ use forge_ui::timeline::Timeline;
 use forge_ui::viewport_panel::scene_meshes;
 use forge_viewport::gizmo::DragDelta;
 use glam::DVec3;
+use serde_json::json;
 
 fn ctx(frame: i64, autokey: bool) -> AnimCtx {
     AnimCtx {
@@ -53,8 +54,16 @@ fn undo_len(st: &EditorState) -> usize {
     st.doc.history().undo_labels().len()
 }
 
+fn settings(st: &mut EditorState, s: SceneSettings) -> Result<serde_json::Value, String> {
+    execute(
+        st,
+        "timeline.settings",
+        json!({"fps": s.fps, "start": s.start, "end": s.end}),
+    )
+}
+
 fn go(st: &mut EditorState, frame: i64) {
-    execute(st, Command::SetFrame(frame)).unwrap();
+    execute(st, "timeline.set_frame", json!({"frame": frame})).unwrap();
 }
 
 fn edit(st: &mut EditorState, id: NodeId, param: &str, v: Value, autokey: bool, g: Gesture) {
@@ -86,7 +95,7 @@ fn record_makes_nine_tracks_per_object_in_one_undo_step() {
     st.selection.toggle(b);
     go(&mut st, 15);
     let before = undo_len(&st);
-    execute(&mut st, Command::RecordKeys).unwrap();
+    execute(&mut st, "key.record", json!({})).unwrap();
     assert_eq!(undo_len(&st), before + 1, "one undo step");
     assert_eq!(st.doc.history().undo_labels().last(), Some(&"Record"));
     for id in [a, b] {
@@ -104,9 +113,9 @@ fn record_makes_nine_tracks_per_object_in_one_undo_step() {
     }
     // recorded values are the object's current ones: scale 1, position 0
     assert_eq!(keys(&st, a, "transform.scale.y")[0].1, 1.0);
-    execute(&mut st, Command::Undo).unwrap();
+    execute(&mut st, "edit.undo", json!({})).unwrap();
     assert!(tracks(&st, a).is_empty() && tracks(&st, b).is_empty());
-    execute(&mut st, Command::Redo).unwrap();
+    execute(&mut st, "edit.redo", json!({})).unwrap();
     assert_eq!(tracks(&st, a).len(), 9);
 }
 
@@ -143,14 +152,14 @@ fn record_writes_the_evaluated_value_and_keeps_an_existing_keys_interpolation() 
         })
         .unwrap();
     go(&mut st, 15);
-    execute(&mut st, Command::RecordKeys).unwrap();
+    execute(&mut st, "key.record", json!({})).unwrap();
     let k = keys(&st, id, "transform.pos.x");
     assert_eq!(k.len(), 3);
     assert_eq!(k[1].0, 15.0);
     assert!((k[1].1 - 50.0).abs() < 1e-3, "{k:?}"); // spline midpoint of 0..100
     // recording again on the same frame replaces, keeps Linear when it was there
     go(&mut st, 0);
-    execute(&mut st, Command::RecordKeys).unwrap();
+    execute(&mut st, "key.record", json!({})).unwrap();
     assert_eq!(keys(&st, id, "transform.pos.x")[0].2, Interp::Linear);
     assert_eq!(keys(&st, id, "transform.pos.x").len(), 3);
 }
@@ -158,17 +167,17 @@ fn record_writes_the_evaluated_value_and_keeps_an_existing_keys_interpolation() 
 #[test]
 fn record_needs_a_recordable_selection() {
     let mut st = state();
-    assert!(execute(&mut st, Command::RecordKeys).is_err());
+    assert!(execute(&mut st, "key.record", json!({})).is_err());
     let b = create(&mut st, "test.box");
     create(&mut st, "test.sel"); // a tag on the box; the box stays the selection
     let tag = st.doc.scene().node(b).unwrap().tags[0];
     st.selection.click(tag);
     assert!(
-        execute(&mut st, Command::RecordKeys).is_err(),
+        execute(&mut st, "key.record", json!({})).is_err(),
         "tags have no transform"
     );
     st.selection.click(b);
-    assert!(execute(&mut st, Command::RecordKeys).is_ok());
+    assert!(execute(&mut st, "key.record", json!({})).is_ok());
     assert_eq!(undo_len(&st), 3, "create, tag, record");
 }
 
@@ -363,7 +372,7 @@ fn a_drag_with_autokey_is_one_undo_step_and_keys_only_what_moved() {
         keys(&st, id, "transform.pos.x"),
         [(12.0, 35.0, Interp::Spline)]
     );
-    execute(&mut st, Command::Undo).unwrap();
+    execute(&mut st, "edit.undo", json!({})).unwrap();
     assert!(tracks(&st, id).is_empty());
 }
 
@@ -453,24 +462,24 @@ fn previous_and_next_key_follow_the_selected_objects_only() {
         st.selection.click(id);
         for f in frames {
             go(&mut st, f);
-            execute(&mut st, Command::RecordKeys).unwrap();
+            execute(&mut st, "key.record", json!({})).unwrap();
         }
     }
     st.selection.click(a);
     go(&mut st, 0);
     let mut seen = Vec::new();
     for _ in 0..3 {
-        execute(&mut st, Command::JumpKey(true)).unwrap();
+        execute(&mut st, "key.jump", json!({"forward": true})).unwrap();
         seen.push(st.timeline.current);
     }
     assert_eq!(seen, [10, 40, 40], "no key after 40: stays");
-    execute(&mut st, Command::JumpKey(false)).unwrap();
+    execute(&mut st, "key.jump", json!({"forward": false})).unwrap();
     assert_eq!(st.timeline.current, 10);
-    execute(&mut st, Command::JumpKey(false)).unwrap();
+    execute(&mut st, "key.jump", json!({"forward": false})).unwrap();
     assert_eq!(st.timeline.current, 10);
     st.selection.toggle(b);
     go(&mut st, 11);
-    execute(&mut st, Command::JumpKey(true)).unwrap();
+    execute(&mut st, "key.jump", json!({"forward": true})).unwrap();
     assert_eq!(st.timeline.current, 25);
     let frames = key_frames(st.doc.scene(), &[a, b]);
     assert_eq!(frames, [10.0, 25.0, 40.0, 70.0]);
@@ -489,11 +498,11 @@ fn delete_keys_removes_the_current_frame_in_one_step() {
     let a = create(&mut st, "forge.null");
     for f in [0, 10] {
         go(&mut st, f);
-        execute(&mut st, Command::RecordKeys).unwrap();
+        execute(&mut st, "key.record", json!({})).unwrap();
     }
     let n = undo_len(&st);
     go(&mut st, 10);
-    execute(&mut st, Command::DeleteKeys).unwrap();
+    execute(&mut st, "key.delete_at_frame", json!({})).unwrap();
     assert_eq!(undo_len(&st), n + 1);
     assert_eq!(st.doc.history().undo_labels().last(), Some(&"Delete Keys"));
     for t in RECORD_TRACKS {
@@ -501,12 +510,12 @@ fn delete_keys_removes_the_current_frame_in_one_step() {
     }
     // deleting the last key of a track removes the track; nothing on the frame: no step
     go(&mut st, 0);
-    execute(&mut st, Command::DeleteKeys).unwrap();
+    execute(&mut st, "key.delete_at_frame", json!({})).unwrap();
     assert!(tracks(&st, a).is_empty());
     let n = undo_len(&st);
-    execute(&mut st, Command::DeleteKeys).unwrap();
+    execute(&mut st, "key.delete_at_frame", json!({})).unwrap();
     assert_eq!(undo_len(&st), n);
-    execute(&mut st, Command::Undo).unwrap();
+    execute(&mut st, "edit.undo", json!({})).unwrap();
     assert_eq!(tracks(&st, a).len(), 9);
 }
 
@@ -656,16 +665,16 @@ fn settings_are_an_undoable_command_and_move_the_current_frame_into_range() {
         start: 0,
         end: 40,
     };
-    execute(&mut st, Command::SetSettings(s)).unwrap();
+    settings(&mut st, s).unwrap();
     assert_eq!(st.settings(), s);
     assert_eq!(st.timeline.current, 40);
-    assert!(execute(&mut st, Command::SetSettings(SceneSettings { fps: 0, ..s })).is_err());
+    assert!(settings(&mut st, SceneSettings { fps: 0, ..s }).is_err());
     assert_eq!(st.settings(), s);
-    execute(&mut st, Command::Undo).unwrap();
+    execute(&mut st, "edit.undo", json!({})).unwrap();
     assert_eq!(st.settings(), SceneSettings::default());
     go(&mut st, 500);
     assert_eq!(st.timeline.current, 90);
-    execute(&mut st, Command::StepFrame(-1)).unwrap();
+    execute(&mut st, "timeline.step", json!({"delta": -1})).unwrap();
     assert_eq!(st.timeline.current, 89);
 }
 
@@ -673,17 +682,17 @@ fn settings_are_an_undoable_command_and_move_the_current_frame_into_range() {
 fn save_and_load_keep_tracks_fps_and_range() {
     let mut st = state();
     let id = create(&mut st, "forge.cube");
-    execute(
+    settings(
         &mut st,
-        Command::SetSettings(SceneSettings {
+        SceneSettings {
             fps: 25,
             start: -5,
             end: 125,
-        }),
+        },
     )
     .unwrap();
     go(&mut st, 20);
-    execute(&mut st, Command::RecordKeys).unwrap();
+    execute(&mut st, "key.record", json!({})).unwrap();
     st.doc
         .transact("step", |tx| {
             tx.set_key(
@@ -719,7 +728,7 @@ fn opening_a_file_through_the_editor_resets_the_frame_and_keeps_the_animation() 
     let mut e = Editor::new(state());
     let id = create(&mut e.state, "forge.null");
     go(&mut e.state, 30);
-    execute(&mut e.state, Command::RecordKeys).unwrap();
+    execute(&mut e.state, "key.record", json!({})).unwrap();
     assert!(e.save_to(&path));
     let mut other = Editor::new(state());
     go(&mut other.state, 50);
@@ -751,13 +760,13 @@ fn animated_cube(st: &mut EditorState) -> NodeId {
 
 #[test]
 fn make_editable_and_current_state_copy_transform_tracks_only() {
-    for command in [Command::MakeEditable, Command::CurrentStateToObject] {
+    for command in ["mesh.make_editable", "mesh.current_state_to_object"] {
         let mut st = state();
         let src = animated_cube(&mut st);
         let before = st.doc.scene().node(src).unwrap().tracks.clone();
         assert!(before.contains_key("transform.pos.x"));
         st.selection.click(src);
-        execute(&mut st, command.clone()).unwrap();
+        execute(&mut st, command, json!({})).unwrap();
         let new = st.selection.active.unwrap();
         let node = st.doc.scene().node(new).unwrap();
         assert_eq!(node.type_id, "forge.polygon");
@@ -770,7 +779,7 @@ fn make_editable_and_current_state_copy_transform_tracks_only() {
         assert_eq!(got, want, "{command:?}");
         assert_eq!(node.tracks["transform.pos.x"], before["transform.pos.x"]);
         // still one undo step
-        execute(&mut st, Command::Undo).unwrap();
+        execute(&mut st, "edit.undo", json!({})).unwrap();
         assert!(st.doc.scene().node(new).is_none());
     }
 }

@@ -1,7 +1,9 @@
 # Observation queue (run by the observer, unattended)
 
-The planner adds jobs here; the observer works through them **top to bottom** without
-waiting for anyone. Playbook: [../agents/OBSERVER.md](../agents/OBSERVER.md). Each job is one
+The planner and reviewers add jobs here; the observer works through them **top to bottom**
+without waiting for anyone. Each run starts with `git pull origin main` and pushes to the
+`observations` branch ([../agents/OBSERVER.md](../agents/OBSERVER.md) §6). The order follows the implementation waves in
+[../roadmap/README.md](../roadmap/README.md). Playbook: [../agents/OBSERVER.md](../agents/OBSERVER.md). Each job is one
 form in this folder. Status values: `todo`, `in-progress`, `done`, `partial` (some cases
 missing, reason in the form), `blocked` (nothing could be done, reason in the form),
 `gui-only` (needs a human at the GUI: skip it in unattended runs).
@@ -20,8 +22,54 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O13 | Fields II (more types, layers) | [fields-2.md](fields-2.md) | `tests/golden/fields/` samples | done |
 | O14 | Effectors II | [effectors-2.md](effectors-2.md) | `tests/golden/cloner/` samples | done |
 | O15 | Re-checks II (sweep caps, extrude bevel) | [rechecks-2.md](rechecks-2.md) | `tests/golden/rechecks/` meshes | done |
-| O16 | Keyframes III (confirm brief 09's fitted rules) | [keyframes-3.md](keyframes-3.md) | `tests/golden/keyframes/` samples | todo |
+| O16 | Keyframes III (confirm brief 09's fitted rules) | [keyframes-3.md](keyframes-3.md) | `tests/golden/keyframes/` samples | done |
+| O25 | Modeling tools II (U4) | [modeling-tools-2.md](modeling-tools-2.md) | `tests/golden/modeling-tools/` meshes | partial |
+| O26 | Selection commands (U4) | [selection-ops.md](selection-ops.md) | `tests/golden/selection-ops/` meshes + selection.json | partial |
+| O24 | Deformer falloff through fields | [deformer-falloff.md](deformer-falloff.md) | `tests/golden/deformer-falloff/` meshes | done |
+| O23 | Fields III (blend modes, more types) | [fields-3.md](fields-3.md) | `tests/golden/fields/` samples | done |
+| O22 | Effectors III | [effectors-3.md](effectors-3.md) | `tests/golden/cloner/` samples + meshes | done |
+| O21 | Cloner III | [cloner-3.md](cloner-3.md) | `tests/golden/cloner/` samples + meshes | done |
+| O17 | Spline primitives II | [splines-2.md](splines-2.md) | `tests/golden/splines-2/` meshes | done |
+| O18 | Primitives III | [primitives-3.md](primitives-3.md) | `tests/golden/<object>/` meshes | done |
+| O58 | Modeling tools III (020/021 follow-ups) | [modeling-tools-3.md](modeling-tools-3.md) | `tests/golden/modeling-tools/` meshes | todo |
+| O20 | Generators III | [generators-3.md](generators-3.md) | `tests/golden/<generator>/` meshes | todo |
+| O19 | Deformers III | [deformers-3.md](deformers-3.md) | `tests/golden/<deformer>/` meshes | todo |
+| O45 | Deformers IV | [deformers-4.md](deformers-4.md) | `tests/golden/<deformer>/` meshes | todo |
+| O46 | Spline tools and editable splines | [spline-tools.md](spline-tools.md) | `tests/golden/spline-tools/` meshes | todo |
+| O56 | Caps and bevel tab | [caps-bevel.md](caps-bevel.md) | `tests/golden/caps-bevel/` meshes | todo |
+| O48 | Text spline | [text.md](text.md) | `tests/golden/text/` meshes | todo |
+| O49 | Fields IV: modifier layers, vertex maps | [fields-4.md](fields-4.md) | `tests/golden/fields/` samples + meshes | todo |
+| O42 | Shaders on a UV grid | [shaders.md](shaders.md) | `tests/golden/shaders/` samples | todo |
+| O27 | Animation II (tracks, tags) | [animation-2.md](animation-2.md) | `tests/golden/animation-2/` samples | todo |
+| O38 | F-curves: tangents and behaviours | [fcurves.md](fcurves.md) | `tests/golden/keyframes/` samples | todo |
+| O53 | Animation III: more track types | [animation-3.md](animation-3.md) | `tests/golden/animation-3/` samples + meshes | todo |
+| O31 | Clone-toolset generators II | [clone-generators-2.md](clone-generators-2.md) | meshes + samples | todo |
+| O50 | Clone toolset III | [clone-toolset-3.md](clone-toolset-3.md) | cloner/, clone-spline/, tracer/ | todo |
+| O32 | Volume builder and mesher | [volumes.md](volumes.md) | `tests/golden/volumes/` meshes | todo |
+| O33 | Volumes II: filters, sources, VDB | [volumes-2.md](volumes-2.md) | `tests/golden/volumes/` meshes + .vdb | todo |
+| O34 | Rigging I: joints and skinning | [rigging.md](rigging.md) | `tests/golden/rigging/` meshes | todo |
+| O35 | Rigging II: IK | [ik.md](ik.md) | `tests/golden/ik/` samples + meshes | todo |
+| O36 | Constraints | [constraints.md](constraints.md) | `tests/golden/constraints/` samples + meshes | todo |
+| O37 | Pose Morph | [pose-morph.md](pose-morph.md) | `tests/golden/pose-morph/` meshes | todo |
+| O54 | Tags II | [tags-2.md](tags-2.md) | `tests/golden/tags-2/` | todo |
+| O28 | UV coordinates and projection | [uv-projection.md](uv-projection.md) | `tests/golden/uv/` meshes | todo |
+| O29 | Scene, camera, light, material, render defaults | [scene-defaults.md](scene-defaults.md) | form only | todo |
+| O30 | Render references | [render-reference.md](render-reference.md) | `tests/golden/render/` PNG + meshes | todo |
+| O43 | Material renders | [material-renders.md](material-renders.md) | `tests/golden/render/` PNG + meshes | todo |
+| O57 | Camera projection | [camera.md](camera.md) | `tests/golden/camera/` PNG + meshes | todo |
+| O44 | Exchange references (FBX, glTF, Alembic, STL, PLY) | [exchange.md](exchange.md) | `tests/golden/exchange/` | todo |
+| O39 | Dynamics: rigid bodies | [dynamics.md](dynamics.md) | `tests/golden/dynamics/` samples + meshes | todo |
+| O40 | Particles and forces | [particles.md](particles.md) | `tests/golden/particles/` samples + meshes | todo |
+| O41 | Soft bodies and connectors | [soft-bodies.md](soft-bodies.md) | `tests/golden/soft-bodies/` samples + meshes | todo |
 | O10 | Selection and tool behaviour in the GUI | (form comes with batch 10) | form only | gui-only |
+| G1 | GUI session: layout and managers | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G1 | answers in GUI-SESSIONS.md | gui-only |
+| G2 | GUI session: shortcuts and navigation | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G2 | answers in GUI-SESSIONS.md | gui-only |
+| G3 | GUI session: interactive modeling and selection | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G3 | answers in GUI-SESSIONS.md | gui-only |
+| G4 | GUI session: attribute widgets and field lists | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G4 | answers in GUI-SESSIONS.md | gui-only |
+| G5 | GUI session: timeline, dope sheet, F-curves | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G5 | answers in GUI-SESSIONS.md | gui-only |
+| G6 | GUI session: rigging tools | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G6 | answers in GUI-SESSIONS.md | gui-only |
+| G7 | GUI session: materials and UV | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G7 | answers in GUI-SESSIONS.md | gui-only |
+| G8 | GUI session: viewport and picture viewer | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G8 | answers in GUI-SESSIONS.md | gui-only |
 
 ## Rules for the unattended loop
 
@@ -35,7 +83,36 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 5. **Commit and push after every job** (only `docs/parity/` and `tests/golden/`):
    `Observation: <job name> (<O#>, N cases)`, then `git push origin HEAD`. Data is safe the
    moment it is pushed; a stopped run loses at most one job.
-6. If the bridge stops answering (`ping` fails twice, 30 s apart): commit and push what is
-   finished, mark the current row `partial` with the reason, and stop.
-7. When no `todo` row is left: print a summary (jobs done, cases per job, everything marked
+6. **Bridge health first.** Before starting a job, run `ping` **and** an
+   `execute_python_script` probe of `1 + 1`. If either fails twice, 30 s apart, the app is
+   stuck (often a modal dialog). Then do NOT mark the job partial: leave its row `todo`,
+   change nothing in the repo, create the file `/Users/bigman/forge-observer/STOP`
+   containing the error text, and stop. The overnight loop checks for that file and ends
+   the run, so one stuck app doesn't burn through the whole queue. If the bridge fails in
+   the middle of a job, commit and push what is finished, mark the row `partial` with the
+   reason, create the STOP file, and stop.
+7. **Every case writes output**: a `mesh.obj` or a `samples*.json` (or both). A case with
+   neither breaks a test that pins the list of output-less cases. Information without
+   output (defaults, tree notes) goes into the form, not into `tests/golden/`. O29 is a
+   form-only job and writes no case folders.
+8. **A case that can't be done** (the tool can't be driven by script, an option doesn't
+   exist): write the reason in the form's Notes, skip it, and carry on. Never stop the
+   whole run for one case. A job where most cases fail is `partial`.
+9. Folder and key names must stay clear of the reference app's and its maker's names
+   (the cleanroom check fails on them). Use the feature names the forms give.
+10. **Crash safety.** Before each case, write its name to
+    `/Users/bigman/forge-observer/CURRENT_CASE`. After the case's files are written, delete
+    that file. Commit and push after every **5 cases** within a job, not only at its end,
+    so a crash loses at most a few cases.
+    At the start of a run, if `CURRENT_CASE` exists, the app crashed during that case in the
+    previous run: record "crashed the app" for that case in its form's Notes, skip it for
+    good, delete `CURRENT_CASE`, and continue the job from the next case. Cases already in
+    `tests/golden/` from the previous run are kept; don't redo them.
+11. **One command per probe; no dialogs.** Run a single modeling or selection command per
+    `execute_python_script` call, then `ping` before the next one. Never run a command
+    whose menu name ends in `…` (it opens a dialog and blocks or crashes the app). Never
+    start an interactive tool that waits for mouse input (Loop/Path Cut, Knife, Loop and
+    Ring Selection, sculpt brushes). Write those cases off in Notes as "needs the GUI"
+    (O10 territory) and move on.
+12. When no `todo` row is left: print a summary (jobs done, cases per job, everything marked
    `TODO`, `partial` or `blocked`) and stop.

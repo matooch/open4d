@@ -2,19 +2,29 @@
 name = "forge-ui"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Editor shell: docking layout, object tree, attribute panel, timeline, theme, embedded viewport."
 
 [dependencies]
 eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "accesskit", "x11", "wayland"] }
 egui = "0.37"
 forge-anim = { path = "../anim" }
+forge-app = { path = "../app" }
+forge-command = { path = "../command" }
 forge-core = { path = "../core" }
+forge-platform = { path = "../platform" }
 forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }
 forge-io = { path = "../io" }
+forge-modeling = { path = "../modeling" }
+forge-rpc = { path = "../rpc" }
+forge-script = { path = "../script" }
 forge-viewport = { path = "../viewport" }
 glam = "0.34"
 png = "0.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
 # Native file dialogs; the default backend is the XDG desktop portal on Linux (no GTK).
 rfd = "0.17"
 wgpu = "30"

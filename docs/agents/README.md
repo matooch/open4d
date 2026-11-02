@@ -8,6 +8,11 @@ model can pick up a role by reading the right documents.
 | **Planner** | the main (cloud) session | picks the next features from [PLAN.md](../PLAN.md), writes observation forms (`docs/parity/<feature>.md`), briefs the observer, reads the golden data, writes **task briefs** (`docs/agents/tasks/`), reviews hand-back reports and diffs, opens PRs | writes production code for features that have a brief (it reviews instead) |
 | **Observer** | a session on the owner's Mac that drives the reference app (R25) through the MCP bridge, GUI as fallback ([OBSERVER.md](OBSERVER.md)) | fills observation forms, exports golden cases and `samples.json` to `tests/golden/`, commits locally on the batch branch | touches code, specs or tests; opens the app's install folders or resource files ([CLEANROOM.md](../CLEANROOM.md)) |
 | **Implementer** | a local session on the owner's Mac (Claude Sonnet 5.5), **without** the MCP bridge | follows [IMPLEMENTER.md](IMPLEMENTER.md) for one task brief at a time: derive → spec → tests → code → gate → report | edits golden data or observation files; drives the reference app; loosens tolerances; pushes or merges |
+| **Reviewer** | any session (cloud or local) | checks newly pushed observations against their forms, writes the `## Review` section, adds follow-up forms to QUEUE, flips `waiting` briefs to `ready` ([REVIEWER.md](REVIEWER.md)) | edits golden data; implements |
+| **Lead** | the planner session, or any session asked to integrate | merges `observations` and brief PRs into `main` after the gate, keeps pinned counts current ([PIPELINE.md](PIPELINE.md)) | skips the gate; force-pushes `main` |
+
+The full no-back-and-forth pipeline (observe → review → implement → integrate) is in
+[PIPELINE.md](PIPELINE.md); the backlog of every brief is [../roadmap/BACKLOG.md](../roadmap/BACKLOG.md).
 
 ## The loop
 

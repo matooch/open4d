@@ -9,6 +9,15 @@ pub const TICKS_PER_SECOND: f64 = 1000.0;
 /// Number of bisection halvings used to find the curve parameter (ANIM.md §1.6).
 const BISECTION_STEPS: u32 = 19;
 
+/// Handle lengths live on a grid of this many seconds (ANIM.md §1.5, read-back of
+/// `tangents.json`: every handle is a whole multiple of 4e-7 s).
+pub const HANDLE_GRID: f64 = 4e-7;
+
+/// Rounds a handle length (seconds) to the nearest multiple of [`HANDLE_GRID`].
+fn quantize_handle(len: f64) -> f64 {
+    (len / HANDLE_GRID).round() * HANDLE_GRID
+}
+
 /// Rounds a time in seconds to the evaluation resolution.
 pub fn quantize_time(time: f64) -> f64 {
     (time * TICKS_PER_SECOND).round() / TICKS_PER_SECOND
@@ -88,11 +97,11 @@ fn tangent(keys: &[Key], i: usize) -> Tangent {
     let slope = if dl * dr <= 0.0 {
         0.0
     } else {
-        // Central difference, limited so neither handle leaves the value range of its
-        // segment (no overshoot).
-        let central = (n.value - p.value) / (n.time - p.time);
+        // Mean of the two segment slopes (ANIM.md §1.5; `mono-uneven`: 5.5 from 10 and 1),
+        // limited so neither handle leaves the value range of its segment (no overshoot).
+        let mean = 0.5 * (dl / l + dr / r);
         let limit = (dl.abs() / len).min(dr.abs() / len);
-        central.abs().min(limit).copysign(central)
+        mean.abs().min(limit).copysign(mean)
     };
     Tangent {
         left: len,
@@ -116,18 +125,29 @@ fn spline_segment(keys: &[Key], i: usize, t: f64) -> f64 {
         b.value - tb.slope * tb.left,
         b.value,
     ];
+    // The same time polynomial with the handle lengths on the reference's grid; it only
+    // decides exact ties (below).
+    let grid_xs = [
+        a.time,
+        a.time + quantize_handle(ta.right),
+        b.time - quantize_handle(tb.left),
+        b.time,
+    ];
     // Bisection on the curve parameter; the answer is the middle of the final interval.
-    // An exact tie (x(mid) == t, e.g. the mid-point of a symmetric curve) goes to the
-    // upper half when mid >= 0.5 and to the lower half otherwise: the reference's handles
-    // are a hair longer than a third of the span, which pushes ties away from the centre
-    // (ANIM.md §1.6, cases `two-keys`, `four-keys`).
+    // `x(mid) < t` goes up. When `x(mid)` equals `t` to rounding, the stored handles
+    // decide: their lengths are on a grid of 4e-7 s, a hair off a third of the span, and
+    // `x(s) = span·s − 3·d·s(1−s)(1−2s)` moves the tie below or above `t` by their error
+    // `d` (`fps-24`, `dense-quarter`: 1 s span, shorter handle, ties below the centre go
+    // up and above it go down; `four-keys`: longer handle, the other way round). A tie
+    // that is exact on the grid too (the centre of a symmetric curve) goes up.
     let tie = 1e-12 * (b.time - a.time);
     let (mut lo, mut hi) = (0.0f64, 1.0f64);
     for _ in 0..BISECTION_STEPS {
         let mid = 0.5 * (lo + hi);
         let x = bezier(xs, mid);
         let up = if (x - t).abs() <= tie {
-            mid >= 0.5
+            let xg = bezier(grid_xs, mid);
+            if (xg - t).abs() <= tie { true } else { xg < t }
         } else {
             x < t
         };

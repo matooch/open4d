@@ -51,6 +51,14 @@ Every type in a hierarchy category (`Category::is_hierarchy`) gets three paramet
 - A plugin type declaring any param id starting with `transform.` is rejected with
   `RegistryError::ReservedParam`.
 - Non-hierarchy types (tags, materials, …) get none.
+- After those, hierarchy types also get three **object state** params (group `"Object"`,
+  brief 149, UI.md §13; hidden from the attribute manager, whose job the object manager's dots and tick do): `object.editor_vis` and `object.render_vis` (enum `default` /
+  `on` / `off`, default `default`; labels "Visible in Editor", "Visible in Renderer") and
+  `object.enabled` (bool, default true, label "Active"). The `object.` prefix is reserved
+  like `transform.`. `forge_core::visibility` resolves them: `editor_visible(scene, id)`,
+  `render_visible(scene, id)` (a node is visible iff every ancestor is enabled and the
+  nearest `on`/`off` setting walking up from the node is `on`, or none is set) and
+  `enabled(scene, id)` (own flag and all ancestors').
 
 ## 3. Math (`forge_core::transform`)
 

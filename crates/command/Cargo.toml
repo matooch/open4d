@@ -1,0 +1,24 @@
+[package]
+name = "forge-command"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Command registry: every user action as a named, typed, undoable command (docs/specs/COMMANDS.md)."
+
+[dependencies]
+forge-core = { path = "../core" }
+forge-generators = { path = "../generators" }
+forge-geometry = { path = "../geometry" }
+forge-io = { path = "../io" }
+forge-modeling = { path = "../modeling" }
+glam = "0.34"
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+forge-modifiers = { path = "../modifiers" }
+
+[lints]
+workspace = true

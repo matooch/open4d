@@ -1,5 +1,11 @@
 # Plan
 
+> **The full project plan now lives in [roadmap/README.md](roadmap/README.md)** (areas A–N,
+> decisions, waves, acceptance scenarios S1–S10) with every brief listed in
+> [roadmap/BACKLOG.md](roadmap/BACKLOG.md). Briefs 01–10 below are done; new work is
+> numbered 011–185 and old U/P item numbers are superseded by the area briefs (for
+> example the familiar layout is now brief 147). This file keeps the history.
+
 Parity target: the reference app **R25** (R25.010, macOS, observed through the MCP
 bridge: [agents/OBSERVER.md](agents/OBSERVER.md)). Golden data before batch 08 came from
 R20 on Windows. O1 showed R25 builds the **same geometry** (9/13 byte-equivalent after

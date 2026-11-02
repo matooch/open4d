@@ -1,0 +1,25 @@
+feature = "splines-2"
+observation = "docs/parity/splines-2.md"
+description = "4-Side with the second Type option (Kite)"
+mesh = "mesh.obj"
+
+[params]
+extrude_offset = 20.0
+caps = false
+
+[params.input]
+type = "fourside_spline"
+fourside_type = "kite"
+a = 200.0
+b = 100.0
+angle = 30.0
+plane = "xy"
+reverse = false
+intermediate = "adaptive"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+[import]
+scale = 1.0
+flip_z = false

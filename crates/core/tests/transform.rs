@@ -18,10 +18,20 @@ fn hierarchy_types_get_transform_params_first() {
     let r = common::registry();
     let null = r.get("forge.null").unwrap();
     let ids: Vec<&str> = null.params.iter().map(|p| p.id.as_str()).collect();
-    assert_eq!(ids, ["transform.pos", "transform.rot", "transform.scale"]);
+    assert_eq!(
+        ids,
+        [
+            "transform.pos",
+            "transform.rot",
+            "transform.scale",
+            "object.editor_vis",
+            "object.render_vis",
+            "object.enabled"
+        ]
+    );
     let bx = r.get("test.box").unwrap();
     assert_eq!(bx.params[0].id, "transform.pos");
-    assert_eq!(bx.params[3].id, "size");
+    assert_eq!(bx.params[6].id, "size");
     let rot = &null.params[1];
     assert_eq!(
         (rot.label.as_str(), rot.ui.unit, rot.ui.group.as_str()),

@@ -2,6 +2,7 @@
 //! (vertex and face orders come from docs/parity/{plane,cube,sphere}.md).
 
 mod boole;
+mod cloner;
 mod cube;
 mod lathe;
 mod modeling;
@@ -16,17 +17,18 @@ pub mod splines;
 mod subdivision;
 
 pub use boole::{boole, inputs_of as boole_inputs_of};
+pub use cloner::{clone_data, prototypes_of as cloner_prototypes};
 pub use modeling::{array, connect, inputs_of as modeling_inputs_of, symmetry};
 pub use polygon::{
     EditableError, SELECTION_EDGES, SELECTION_POINTS, SELECTION_POLYS, TYPE as POLYGON,
-    current_state_to_object, from_poly_mesh, make_editable, to_poly_mesh,
+    current_state_to_object, from_poly_mesh, make_editable, spawn_split, to_poly_mesh,
 };
 pub use spline_gens::{extrude, lathe, loft, spline_inputs_of, sweep};
 pub use subdivision::{input_of, subdivide, subdivide_with_creases};
 
 use std::collections::BTreeMap;
 
-use forge_core::{NodeId, NodeType, Plugin, Registry, RegistryError, Scene, Value};
+use forge_core::{EvalCtx, NodeId, NodeType, Plugin, Registry, RegistryError, Scene, Value};
 use forge_geometry::PolyMesh;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -159,12 +161,13 @@ pub fn build(type_id: &str, values: &BTreeMap<String, Value>) -> Result<PolyMesh
 /// `Ok(None)` for nodes without geometry.
 ///
 /// The node's enabled deformer children are applied to the mesh in tree order
-/// (docs/specs/MODIFIERS.md §0), so callers see the deformed object.
-pub fn evaluate(scene: &Scene, id: NodeId) -> Result<Option<PolyMesh>, BuildError> {
-    let mut mesh = evaluate_geometry(scene, id)?;
+/// (docs/specs/MODIFIERS.md §0), so callers see the deformed object. `ctx` carries the
+/// time, fps and seed (MODIFIERS.md §8).
+pub fn evaluate(scene: &Scene, id: NodeId, ctx: &EvalCtx) -> Result<Option<PolyMesh>, BuildError> {
+    let mut mesh = evaluate_geometry(scene, id, ctx)?;
     if let Some(mesh) = mesh.as_mut() {
         for d in deformer_children(scene, id) {
-            forge_modifiers::apply_deformer(scene, d, id, &mut mesh.points);
+            forge_modifiers::apply_deformer(scene, d, id, &mut mesh.points, ctx);
         }
     }
     Ok(mesh)
@@ -172,7 +175,11 @@ pub fn evaluate(scene: &Scene, id: NodeId) -> Result<Option<PolyMesh>, BuildErro
 
 /// [`evaluate`] without the deformers: used where only the presence of geometry
 /// matters (the input probes of subdivision, the modeling generators and boole).
-pub(crate) fn evaluate_geometry(scene: &Scene, id: NodeId) -> Result<Option<PolyMesh>, BuildError> {
+pub(crate) fn evaluate_geometry(
+    scene: &Scene,
+    id: NodeId,
+    ctx: &EvalCtx,
+) -> Result<Option<PolyMesh>, BuildError> {
     let Some(node) = scene.node(id) else {
         return Ok(None);
     };
@@ -182,19 +189,22 @@ pub(crate) fn evaluate_geometry(scene: &Scene, id: NodeId) -> Result<Option<Poly
             ty: &ty,
             values: &node.params,
         };
-        return subdivision::evaluate_subdivision(scene, id, &p);
+        return subdivision::evaluate_subdivision(scene, id, &p, ctx);
     }
     if node.type_id == polygon::TYPE {
         return Ok(Some(polygon::stored_mesh(scene, id)));
     }
     if node.type_id == boole::TYPE {
-        return boole::evaluate_boole(scene, id);
+        return boole::evaluate_boole(scene, id, ctx);
+    }
+    if node.type_id == cloner::TYPE {
+        return cloner::evaluate_cloner(scene, id, &node.params, ctx);
     }
     if spline_gens::spline_input_count(&node.type_id).is_some() {
         return spline_gens::evaluate_spline_gen(scene, id, &node.type_id, &node.params);
     }
     if modeling::input_count(&node.type_id).is_some() || node.type_id == modeling::INSTANCE {
-        return modeling::evaluate_modeling(scene, id, &node.type_id, &node.params);
+        return modeling::evaluate_modeling(scene, id, &node.type_id, &node.params, ctx);
     }
     match build(&node.type_id, &node.params) {
         Ok(mesh) => Ok(Some(mesh)),
@@ -245,6 +255,7 @@ fn produces_geometry(type_id: &str) -> bool {
     types().iter().any(|t| t.id == type_id)
         || type_id == subdivision::TYPE
         || type_id == boole::TYPE
+        || type_id == cloner::TYPE
         || type_id == polygon::TYPE
         || type_id == modeling::INSTANCE
         || modeling::input_count(type_id).is_some()
@@ -264,6 +275,7 @@ pub fn is_consumed(scene: &Scene, id: NodeId) -> bool {
     match p.type_id.as_str() {
         subdivision::TYPE => input_of(scene, p.id) == Some(id),
         boole::TYPE => boole::inputs_of(scene, p.id).contains(&id),
+        cloner::TYPE => cloner::prototypes_of(scene, p.id).contains(&id),
         t if modeling::input_count(t).is_some() => modeling::inputs_of(scene, p.id).contains(&id),
         t if spline_gens::spline_input_count(t).is_some() => {
             spline_gens::spline_inputs_of(scene, p.id).contains(&id)

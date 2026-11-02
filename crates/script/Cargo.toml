@@ -1,0 +1,22 @@
+[package]
+name = "forge-script"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Rhai scripting: sandboxed engine and bindings over the command registry (docs/specs/SCRIPTING.md)."
+
+[dependencies]
+forge-app = { path = "../app" }
+forge-command = { path = "../command" }
+forge-core = { path = "../core" }
+# Pinned (MIT OR Apache-2.0). `no_module`: no `import`, so no file access from scripts;
+# `no_time`: no clock, so scripts stay deterministic. Default features stay otherwise.
+rhai = { version = "=1.27.0", features = ["no_module", "no_time"] }
+serde_json = "1"
+
+[dev-dependencies]
+# Only the API drift test reads the registered function signatures.
+rhai = { version = "=1.27.0", features = ["metadata"] }
+
+[lints]
+workspace = true

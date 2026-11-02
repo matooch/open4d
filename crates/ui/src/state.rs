@@ -1,93 +1,66 @@
 //! Editor state and node selection (docs/specs/UI.md §1).
 
 use std::collections::BTreeSet;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-use forge_core::{Document, NodeId, Registry, Scene, SceneSettings};
+use forge_app::App;
+use forge_command::UiRequest;
+use forge_core::{NodeId, Registry};
 use forge_viewport::camera::{Camera, Handedness};
+use forge_viewport::gizmo::{GizmoMode, Space as GizmoSpace};
 use forge_viewport::render::Shading;
 
-use crate::animate::{AnimCtx, Evaluated};
-use crate::components::EditMode;
 use crate::dock::Dock;
-use crate::timeline::Timeline;
+use crate::keymap::KeyMapState;
+use crate::panes::{DEFAULT_SHADING, Views};
+use crate::screenshot::OffscreenGpu;
+use crate::script_panel::ScriptPanelState;
+use crate::tools::ToolState;
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct NodeSelection {
-    pub nodes: BTreeSet<NodeId>,
-    pub active: Option<NodeId>,
-    pub anchor: Option<NodeId>,
-}
+pub use forge_command::NodeSelection;
 
-impl NodeSelection {
-    pub fn clear(&mut self) {
-        *self = NodeSelection::default();
-    }
-
-    /// Selects only `id`.
-    pub fn click(&mut self, id: NodeId) {
-        self.nodes = BTreeSet::from([id]);
-        self.active = Some(id);
-        self.anchor = Some(id);
-    }
-
-    /// Adds or removes `id` (Ctrl-click).
-    pub fn toggle(&mut self, id: NodeId) {
-        if self.nodes.remove(&id) {
-            self.active = self.nodes.last().copied();
-        } else {
-            self.nodes.insert(id);
-            self.active = Some(id);
-        }
-        self.anchor = Some(id);
-    }
-
-    /// Selects the visible rows from the anchor to `id` (Shift-click).
-    pub fn range(&mut self, id: NodeId, rows: &[NodeId]) {
-        let (Some(anchor), Some(to)) = (self.anchor, rows.iter().position(|r| *r == id)) else {
-            return self.click(id);
-        };
-        let Some(from) = rows.iter().position(|r| *r == anchor) else {
-            return self.click(id);
-        };
-        let (lo, hi) = (from.min(to), from.max(to));
-        self.nodes = rows[lo..=hi].iter().copied().collect();
-        self.active = Some(id);
-    }
-
-    /// Drops nodes that no longer exist.
-    pub fn retain_existing(&mut self, scene: &Scene) {
-        self.nodes.retain(|id| scene.contains(*id));
-        let gone = |id: &mut Option<NodeId>| {
-            if id.is_some_and(|i| !scene.contains(i)) {
-                *id = None;
-            }
-        };
-        gone(&mut self.active);
-        gone(&mut self.anchor);
-        if self.active.is_none() {
-            self.active = self.nodes.last().copied();
-        }
-    }
-}
-
+/// The application core plus the state only a window needs.
 pub struct EditorState {
-    pub doc: Document,
-    pub selection: NodeSelection,
+    /// Document, selection, timeline, commands, evaluation cache (docs/specs/APP.md).
+    pub app: App,
     pub expanded: BTreeSet<NodeId>,
     pub dock: Dock,
+    /// The active pane's camera and shading are these two fields; the other panes' are in
+    /// `views` (docs/specs/UI.md §6.2).
     pub camera: Camera,
+    /// Width / height of the viewport as last drawn; the frame commands fit to it.
+    pub view_aspect: f64,
     pub shading: Shading,
-    /// Current frame and playback; fps and range are scene settings.
-    pub timeline: Timeline,
-    /// Autokey: edits of animatable parameters write keys (docs/specs/ANIM.md §2.4).
-    pub autokey: bool,
-    /// The scene at the current frame, cached.
-    pub eval: Evaluated,
-    /// Last message for the status bar (errors from failed edits).
-    pub status: String,
-    /// What viewport clicks select (docs/specs/EDITABLE.md §2.2). Not saved, not undoable.
-    pub mode: EditMode,
+    /// Viewport layout, active and maximised pane, lighting options and the other panes.
+    pub views: Views,
+    /// Script Manager source, console and recent list (docs/specs/UI.md §10).
+    pub script: ScriptPanelState,
+    /// The headless GPU device `viewport.screenshot` renders with (RPC.md §10.2).
+    pub offscreen: OffscreenGpu,
+    /// The active modeling tool and its values (docs/specs/MODELING.md §0.2).
+    pub tool: Option<ToolState>,
+    /// Key chords to commands, defaults and overrides (docs/specs/UI.md §14).
+    pub keys: KeyMapState,
+    /// The viewport gizmo's mode and axes (`view.gizmo_mode`, `view.gizmo_space`).
+    pub gizmo_mode: GizmoMode,
+    pub gizmo_space: GizmoSpace,
+    /// Window actions that commands asked for; the editor serves them after the command.
+    pub ui_requests: Vec<UiRequest>,
+}
+
+impl Deref for EditorState {
+    type Target = App;
+
+    fn deref(&self) -> &App {
+        &self.app
+    }
+}
+
+impl DerefMut for EditorState {
+    fn deref_mut(&mut self) -> &mut App {
+        &mut self.app
+    }
 }
 
 impl EditorState {
@@ -103,45 +76,22 @@ impl EditorState {
         }
     }
 
-    /// fps and range of the document.
-    pub fn settings(&self) -> SceneSettings {
-        self.doc.scene().settings()
-    }
-
-    /// Time context for animation edits.
-    pub fn anim_ctx(&self) -> AnimCtx {
-        AnimCtx {
-            frame: self.timeline.current,
-            fps: self.settings().fps,
-            autokey: self.autokey,
-        }
-    }
-
-    /// The scene at the current frame: what the viewport and the panels show.
-    pub fn evaluated(&self) -> Arc<Scene> {
-        self.eval.get(self.doc.scene(), self.timeline.current)
-    }
-
-    /// Keeps the current frame inside the project range (after undo, load, range edits).
-    pub fn sync_timeline(&mut self) {
-        let settings = self.settings();
-        self.timeline.clamp_to(&settings);
-    }
-
     pub fn new(registry: Arc<Registry>) -> EditorState {
-        let camera = Self::default_camera();
         EditorState {
-            doc: Document::new(registry),
-            selection: NodeSelection::default(),
+            app: App::new(registry),
             expanded: BTreeSet::new(),
             dock: Dock::default(),
-            camera,
-            shading: Shading::SmoothWire,
-            timeline: Timeline::default(),
-            autokey: false,
-            eval: Evaluated::default(),
-            status: String::new(),
-            mode: EditMode::default(),
+            camera: Self::default_camera(),
+            view_aspect: 16.0 / 9.0,
+            shading: DEFAULT_SHADING,
+            views: Views::new(&Self::default_camera()),
+            script: ScriptPanelState::default(),
+            offscreen: OffscreenGpu::default(),
+            tool: None,
+            keys: KeyMapState::default(),
+            gizmo_mode: GizmoMode::Translate,
+            gizmo_space: GizmoSpace::Object,
+            ui_requests: Vec::new(),
         }
     }
 }

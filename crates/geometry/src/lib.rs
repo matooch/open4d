@@ -6,6 +6,7 @@ pub mod halfedge;
 pub mod mesh;
 pub mod normals;
 pub mod selection;
+pub mod selection_ops;
 pub mod spline;
 pub mod subdivide;
 pub mod triangulate;

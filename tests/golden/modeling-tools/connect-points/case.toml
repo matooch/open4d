@@ -1,0 +1,13 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-2.md"
+description = "Default cube made editable; points 0 and 3 (a diagonal of one face) selected and the Connect Points/Edges command run"
+mesh = "mesh.obj"
+
+[params]
+tool = "connect_points"
+segments = [1, 1, 1]
+select_points = [0, 3]
+
+[import]
+scale = 1.0
+flip_z = false

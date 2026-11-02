@@ -1,0 +1,15 @@
+feature = "selection-ops"
+observation = "docs/parity/selection-ops.md"
+description = "Cube made editable with 4 x 4 x 4 segments; the whole front face (16 polygons) selected, then the Shrink Selection menu command run once"
+mesh = "mesh.obj"
+
+[params]
+segments = [4, 4, 4]
+command = "Shrink Selection"
+start_points = []
+start_edges = []
+start_polys = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+
+[import]
+scale = 1.0
+flip_z = false

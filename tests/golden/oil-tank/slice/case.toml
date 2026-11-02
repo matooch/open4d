@@ -1,0 +1,22 @@
+feature = "oil-tank"
+observation = "docs/parity/primitives-3.md"
+description = "Oil Tank with Slice on and To 270 degrees"
+mesh = "mesh.obj"
+
+[params]
+radius = 100.0
+height = 200.0
+height_segments = 4
+cap_height = 25.0
+cap_segments = 4
+rotation_segments = 16
+orientation = "plus_y"
+slice = true
+slice_from = 0.0
+slice_to = 270.0
+regular_grid = false
+grid_width = 10.0
+
+[import]
+scale = 1.0
+flip_z = false

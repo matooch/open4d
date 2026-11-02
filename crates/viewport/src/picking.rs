@@ -151,6 +151,51 @@ pub fn pick_edge(
     best.map(|(_, _, i)| i)
 }
 
+/// An edge under the cursor and where along it (docs/specs/MODELING.md §5.5).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EdgeHit {
+    /// Edge id from `PolyMesh::edges`.
+    pub edge: u32,
+    /// Position along the edge from its lower to its higher point, in `[0, 1]`: the point of
+    /// the edge's line closest to the cursor ray.
+    pub t: f64,
+}
+
+/// Parameter on the line `a + t (b - a)` of the point closest to `ray`, clamped to `[0, 1]`.
+pub fn closest_on_edge(ray: &Ray, a: DVec3, b: DVec3) -> f64 {
+    let (d1, d2) = (ray.dir, b - a);
+    let r = ray.origin - a;
+    let (a11, a12, a22) = (d1.dot(d1), d1.dot(d2), d2.dot(d2));
+    let det = a11 * a22 - a12 * a12;
+    if det.abs() < 1e-18 {
+        return 0.5;
+    }
+    // minimise |r + s d1 - t d2|^2 over s, t: [a11 -a12; -a12 a22][s t] = [-r.d1, r.d2]
+    let (b1, b2) = (-r.dot(d1), r.dot(d2));
+    ((a11 * b2 + a12 * b1) / det).clamp(0.0, 1.0)
+}
+
+/// [`pick_edge`] plus the position along the edge under the cursor.
+#[allow(clippy::too_many_arguments)] // see pick_point
+pub fn pick_edge_param(
+    mesh: &PolyMesh,
+    cam: &Camera,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    radius_px: f64,
+    visible_only: bool,
+) -> Option<EdgeHit> {
+    let edge = pick_edge(mesh, cam, x, y, w, h, radius_px, visible_only)?;
+    let e = mesh.edges()[edge as usize];
+    let (a, b) = (mesh.points[e.0 as usize], mesh.points[e.1 as usize]);
+    Some(EdgeHit {
+        edge,
+        t: closest_on_edge(&cam.ray(x, y, w, h), a, b),
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Element {
     Points,

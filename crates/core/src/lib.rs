@@ -3,6 +3,7 @@
 
 mod cache;
 mod document;
+mod eval;
 pub mod file;
 mod param;
 mod registry;
@@ -10,9 +11,11 @@ mod scene;
 pub mod smoothing;
 mod track;
 pub mod transform;
+pub mod visibility;
 
 pub use cache::EvalCache;
 pub use document::{Document, EditError, History, Tx};
+pub use eval::EvalCtx;
 pub use file::{LoadError, LoadReport};
 pub use param::{
     EnumOption, MeshData, ParamDesc, ParamError, ParamKind, RangeValue, UiHint, Unit, Value,

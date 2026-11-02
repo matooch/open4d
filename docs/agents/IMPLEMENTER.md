@@ -18,7 +18,9 @@ names. Do not push, merge, or open PRs: the planner does that.
    code, never delete a failing case. Unmatched cases go into the test's `UNSUPPORTED` or
    `KNOWN_MISMATCH` list with a reason in the spec (§5 below).
 5. `cargo clippy -- -D warnings` and `cargo test` must pass before each commit; run
-   `sh scripts/gate.sh` before the final commit of a task.
+   `sh scripts/gate.sh` before the final commit of a task. If you add or change a command,
+   CLI flag, RPC method or script function, regenerate the reference with
+   `cargo run -p forge-cli -- docs --out docs/manual/reference` (the docs test fails otherwise).
 6. No `unsafe` without a `// SAFETY:` comment; deterministic math only.
 
 ## 1. Environment

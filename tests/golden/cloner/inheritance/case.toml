@@ -1,0 +1,78 @@
+feature = "cloner"
+observation = "docs/parity/effectors-3.md"
+description = "Linear cloner Count 5 P step (0,50,0), 20 cm cube child, Inheritance effector with a second Radial cloner (Count 5, 20 cm cube child) as its Object, other values default. The mesh holds both cloners"
+mesh = "mesh.obj"
+
+[params]
+mode = "linear"
+clones_mode = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = 5
+offset = 0
+linear_mode = "Per Step"
+amount_percent = 100.0
+transform_position = [0.0, 50.0, 0.0]
+transform_scale_percent = [100.0, 100.0, 100.0]
+transform_rotation_deg = [0.0, 0.0, 0.0]
+step_mode = "Single Value"
+step_size_percent = 100.0
+step_rotation_deg = [0.0, 0.0, 0.0]
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+animation_mode = "Play"
+inheritance_percent = 100.0
+effector_count = 1
+document_frame = 0
+
+[params.effector]
+type = "inheritance"
+name = "Inheritance"
+strength_percent = 100.0
+selection = ""
+inheritance_mode = "Direct"
+object = "Cloner.1"
+morph_motion_object = false
+falloff_based = false
+transform_space = "Generator"
+animation = "To (In)"
+loop_animation = false
+position = true
+rotation = true
+scale = true
+deformation = "Off"
+
+[params.effector.inherit_cloner]
+name = "Cloner.1"
+mode = "Radial"
+clones_mode = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = 5
+radius = 50.0
+plane = "XZ"
+align = true
+start_angle_deg = 0.0
+end_angle_deg = 360.0
+offset_deg = 0.0
+offset_variation_percent = 0.0
+offset_seed = 1234567
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+animation_mode = "Play"
+
+[import]
+scale = 1.0
+flip_z = false

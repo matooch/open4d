@@ -1,0 +1,8 @@
+feature = "keyframes"
+observation = "docs/parity/keyframes-3.md"
+description = "Time rounding and solver grid at quarter-frame spacing"
+
+[params]
+param = "pos_x"
+fps = 30
+keys = [[0, 0], [30, 100]]

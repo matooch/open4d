@@ -7,26 +7,72 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# The toolchain is pinned in rust-toolchain.toml (channel 1.99.1); every job below installs
+# that same version via dtolnay/rust-toolchain@1.99.1. Bump both together.
 jobs:
+  # Licences, RustSec advisories, duplicate versions and sources (deny.toml, brief 174).
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+  # Clean-room scan: pure file scanning, so Linux only.
   cleanroom:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: Swatinem/rust-cache@v2
       - run: cargo run --quiet -p forge-cleanroom -- .
 
-  check:
+  # Python client (brief 017): runs against a real forge-rpc-serve; the system python3.
+  python-client:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p forge-rpc --bin forge-rpc-serve
+      - run: python3 -m unittest discover -t . -s tests -v
+        working-directory: python/forge_py
+
+  # fmt + clippy + tests on every OS.
+  #
+  # GPU policy (FORGE_REQUIRE_GPU, read by crates/viewport/tests/render.rs):
+  #   Linux   = "1": Mesa lavapipe (software Vulkan) is installed, so a missing adapter is
+  #             a hard failure and the viewport render tests really run.
+  #   macOS   = unset: hosted runners may have no usable Metal device; GPU tests skip.
+  #   Windows = unset: wgpu's DX12 WARP adapter is not verified on hosted runners yet;
+  #             GPU tests skip cleanly. Set "1" once a run shows the tests executing.
+  check:
+    name: check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            require_gpu: "1"
+          - os: macos-latest
+            require_gpu: ""
+          - os: windows-latest
+            require_gpu: ""
+    env:
+      FORGE_REQUIRE_GPU: ${{ matrix.require_gpu }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.1
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-      # Software Vulkan (lavapipe) so the viewport's GPU render tests run, not skip.
-      - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
+      - name: Install software Vulkan (lavapipe)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
-        env:
-          FORGE_REQUIRE_GPU: "1"
+      - run: cargo test --workspace --no-fail-fast
+      - name: Golden-data check
+        if: runner.os == 'Linux'
+        run: cargo run -q -p forge-parity-harness --bin golden -- check

@@ -173,3 +173,8 @@ at a time, never inventing data, and a commit and push after every job. Cases wi
 numbers instead of meshes (`samples.json`) have no `mesh` line in `case.toml`. Cases with
 both have `mesh = "mesh.obj"`. The owner starts these runs with the tool allowlist from
 the planner, so the forbidden tools in §0 can't be called at all.
+
+**Branch (from the roadmap PR on):** start each run with `git pull origin main` (the
+queue and new forms land there), work on the `observations` branch, and push
+`origin observations`. A lead merges `observations` into `main` through a PR
+([PIPELINE.md](PIPELINE.md) §1). The old `batch-09` branch is retired once merged.

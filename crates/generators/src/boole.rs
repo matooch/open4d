@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use forge_core::{Category, NodeId, NodeType, ParamDesc, Scene, Unit, Value};
+use forge_core::{Category, EvalCtx, NodeId, NodeType, ParamDesc, Scene, Unit, Value};
 use forge_geometry::PolyMesh;
 use forge_geometry::boolean::{BoolOp, BoolOptions, boolean};
 
@@ -55,7 +55,12 @@ pub fn inputs_of(scene: &Scene, id: NodeId) -> Vec<NodeId> {
     node.children
         .iter()
         .copied()
-        .filter(|c| matches!(evaluate_geometry(scene, *c), Ok(Some(_)) | Err(_)))
+        .filter(|c| {
+            matches!(
+                evaluate_geometry(scene, *c, &EvalCtx::default()),
+                Ok(Some(_)) | Err(_)
+            )
+        })
         .take(2)
         .collect()
 }
@@ -85,11 +90,15 @@ pub fn boole(
     Ok(boolean(a, b, &opts).mesh)
 }
 
-pub(crate) fn evaluate_boole(scene: &Scene, id: NodeId) -> Result<Option<PolyMesh>, BuildError> {
+pub(crate) fn evaluate_boole(
+    scene: &Scene,
+    id: NodeId,
+    ctx: &EvalCtx,
+) -> Result<Option<PolyMesh>, BuildError> {
     let values = &scene.node(id).expect("boole exists").params;
     let mut meshes = Vec::new();
     for child in inputs_of(scene, id) {
-        let Some(mut mesh) = evaluate(scene, child)? else {
+        let Some(mut mesh) = evaluate(scene, child, ctx)? else {
             continue;
         };
         let m = scene.local_transform(child).expect("child exists").matrix();

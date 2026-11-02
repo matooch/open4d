@@ -1,0 +1,13 @@
+// Written by the build of format version 1 (first format: nodes, params, tags); never regenerate.
+(
+    format: "forge3d-scene",
+    version: 1,
+    roots: [
+        (id: 1, type_id: "forge.null", name: "Root", params: {}, tags: [], children: [
+            (id: 2, type_id: "test.box", name: "Box", params: {"size": Float(3.0), "segments": Int(4)}, tags: [
+                (id: 4, type_id: "test.sel", name: "Sel", params: {"set": String("a")}, tags: [], children: []),
+            ], children: []),
+            (id: 3, type_id: "test.poly", name: "Poly", params: {}, tags: [], children: []),
+        ]),
+    ],
+)

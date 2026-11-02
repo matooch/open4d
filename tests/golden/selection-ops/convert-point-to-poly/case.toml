@@ -1,0 +1,18 @@
+feature = "selection-ops"
+observation = "docs/parity/selection-ops.md"
+description = "Cube made editable with 2 x 2 x 2 segments; the 9 top points selected, then the Convert Selection command run from points to polygons (tolerant off). Only polygons with all 4 points selected are chosen; side polygons with 2 selected points are not. The source points stay selected"
+mesh = "mesh.obj"
+
+[params]
+segments = [2, 2, 2]
+command = "Convert Selection"
+start_points = [2, 5, 8, 11, 14, 17, 20, 23, 24]
+start_edges = []
+start_polys = []
+from = "points"
+to = "polygons"
+tolerant = false
+
+[import]
+scale = 1.0
+flip_z = false

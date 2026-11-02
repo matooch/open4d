@@ -2,11 +2,12 @@
 
 mod common;
 
+use serde_json::json;
 use std::collections::BTreeSet;
 
 use common::{create, state};
 use forge_core::NodeId;
-use forge_ui::commands::{Command, execute};
+use forge_ui::commands::execute;
 use forge_ui::dock::{Area, Dock, Panel};
 use forge_ui::state::NodeSelection;
 use forge_ui::theme::{Theme, contrast};
@@ -48,11 +49,11 @@ fn selection_drops_deleted_nodes() {
     let b = create(&mut st, "forge.null");
     st.selection.click(a);
     st.selection.toggle(b);
-    execute(&mut st, Command::DeleteSelected).unwrap();
+    execute(&mut st, "object.delete", json!({})).unwrap();
     assert!(st.selection.nodes.is_empty());
-    execute(&mut st, Command::Undo).unwrap();
+    execute(&mut st, "edit.undo", json!({})).unwrap();
     st.selection.click(b);
-    execute(&mut st, Command::Undo).unwrap(); // removes b's creation
+    execute(&mut st, "edit.undo", json!({})).unwrap(); // removes b's creation
     assert!(st.selection.nodes.is_empty() && st.selection.active.is_none());
 }
 
@@ -63,7 +64,8 @@ fn default_dock_layout_is_ours() {
     assert_eq!(d.tabs(Area::RightTop), [Panel::ObjectTree]);
     assert_eq!(d.tabs(Area::RightBottom), [Panel::Attributes]);
     assert_eq!(d.tabs(Area::Bottom), [Panel::Timeline, Panel::Coordinates]);
-    assert!(d.tabs(Area::Left).is_empty());
+    assert_eq!(d.tabs(Area::Left), [Panel::ToolPalette]);
+    assert_eq!(d.tabs(Area::Top), [Panel::CommandBar]);
     assert_eq!(d.area_of(Panel::Attributes), Some(Area::RightBottom));
 }
 
@@ -90,7 +92,7 @@ fn moving_and_closing_panels() {
     assert_eq!(d.active(Area::RightTop), Some(Panel::ObjectTree));
 
     d.move_panel(Panel::Attributes, Area::Left); // no-op
-    assert_eq!(d.tabs(Area::Left), [Panel::Attributes]);
+    assert_eq!(d.tabs(Area::Left), [Panel::ToolPalette, Panel::Attributes]);
 
     d.close(Panel::Timeline);
     assert_eq!(d.area_of(Panel::Timeline), None);
@@ -100,7 +102,7 @@ fn moving_and_closing_panels() {
     assert_eq!(d.area_of(Panel::Attributes), Some(Area::Left));
     // each panel appears once
     let all: Vec<Panel> = Area::ALL.iter().flat_map(|a| d.tabs(*a).to_vec()).collect();
-    assert_eq!(all.len(), 5);
+    assert_eq!(all.len(), 7);
 }
 
 #[test]
@@ -117,9 +119,14 @@ fn tree_rows_follow_hierarchy_and_expansion() {
     let mut st = state();
     let a = create(&mut st, "forge.null");
     let b = create(&mut st, "test.box");
-    execute(&mut st, Command::Reparent(b, Some(a))).unwrap();
+    execute(
+        &mut st,
+        "object.reparent",
+        json!({"node": b.0, "parent": a.0}),
+    )
+    .unwrap();
     st.selection.click(b);
-    execute(&mut st, Command::Create("test.sel".into())).unwrap(); // tag on b
+    execute(&mut st, "object.create", json!({"type": "test.sel"})).unwrap(); // tag on b
     let c = create(&mut st, "test.bend");
 
     let collapsed = tree_rows(st.doc.scene(), &BTreeSet::new());
@@ -175,6 +182,8 @@ fn nav(
         alt,
         drag,
         scroll,
+        cursor: [7.0, 9.0],
+        ..NavInput::default()
     })
 }
 
@@ -182,7 +191,7 @@ fn nav(
 fn navigation_bindings() {
     assert_eq!(
         nav(true, false, false, true, [10.0, -4.0], 0.0),
-        NavAction::Orbit(-0.1, -0.04)
+        NavAction::Orbit(10.0, -4.0)
     );
     assert_eq!(
         nav(false, true, false, false, [3.0, 2.0], 0.0),
@@ -192,14 +201,15 @@ fn navigation_bindings() {
         nav(false, true, false, true, [3.0, 2.0], 0.0),
         NavAction::Pan(3.0, 2.0)
     );
-    let NavAction::Dolly(f) = nav(false, false, true, true, [100.0, 0.0], 0.0) else {
-        panic!()
-    };
-    assert!((f - (-1.0f64).exp()).abs() < 1e-12);
-    let NavAction::Dolly(z) = nav(true, false, false, true, [5.0, 5.0], 120.0) else {
+    assert_eq!(
+        nav(false, false, true, true, [100.0, 0.0], 0.0),
+        NavAction::Dolly(100.0)
+    );
+    let NavAction::ZoomAt(z, at) = nav(true, false, false, true, [5.0, 5.0], 120.0) else {
         panic!("wheel wins")
     };
     assert!((z - 0.999f64.powf(120.0)).abs() < 1e-12 && z < 1.0);
+    assert_eq!(at, [7.0, 9.0]);
     assert_eq!(
         nav(true, false, false, false, [5.0, 5.0], 0.0),
         NavAction::None

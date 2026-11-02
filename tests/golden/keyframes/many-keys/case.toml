@@ -1,0 +1,8 @@
+feature = "keyframes"
+observation = "docs/parity/keyframes-3.md"
+description = "Mix of extremes, a plateau and uneven spans"
+
+[params]
+param = "pos_x"
+fps = 30
+keys = [[0, 0], [7, 40], [13, -20], [29, 80], [41, 80], [60, 0]]

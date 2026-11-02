@@ -47,6 +47,9 @@ pub enum Value {
     Enum(String),
     String(String),
     Link(Option<NodeId>),
+    /// An ordered list of links (the effector list of a cloner, a field list); order is
+    /// meaningful and a node appears at most once.
+    LinkList(Vec<NodeId>),
     Mesh(Arc<MeshData>),
     /// Element indices (a component selection), sorted ascending without duplicates once
     /// validated.
@@ -84,6 +87,10 @@ pub enum ParamKind {
     Link {
         accepts: Vec<Category>,
     },
+    /// Ordered list of links to nodes of the accepted categories; empty accepts any.
+    LinkList {
+        accepts: Vec<Category>,
+    },
     Mesh,
     IndexList,
 }
@@ -107,6 +114,9 @@ pub struct UiHint {
     pub soft_max: Option<f64>,
     pub step: Option<f64>,
     pub hidden: bool,
+    /// The value is a path to an external file (a `Value::String`); the scene file stores
+    /// it relative to its own folder (CORE.md §6.5).
+    pub file_ref: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -128,6 +138,8 @@ pub enum ParamError {
     NotFinite,
     #[error("value is out of range")]
     OutOfRange,
+    #[error("a node appears twice in the list")]
+    DuplicateLink,
     #[error("unknown enum option")]
     UnknownOption,
 }
@@ -226,11 +238,28 @@ impl ParamDesc {
         )
     }
 
+    /// A string param holding a path to an external file (empty: none).
+    pub fn file_path(id: &str, label: &str, default: &str) -> ParamDesc {
+        let mut d = Self::string(id, label, default);
+        d.ui.file_ref = true;
+        d
+    }
+
     pub fn link(id: &str, label: &str, accepts: &[Category]) -> ParamDesc {
         let kind = ParamKind::Link {
             accepts: accepts.to_vec(),
         };
         Self::new(id, label, kind, Value::Link(None))
+    }
+
+    /// An ordered list of links, empty by default.
+    pub fn link_list(id: &str, label: &str, accepts: &[Category]) -> ParamDesc {
+        let kind = ParamKind::LinkList {
+            accepts: accepts.to_vec(),
+        };
+        let mut d = Self::new(id, label, kind, Value::LinkList(Vec::new()));
+        d.animatable = false;
+        d
     }
 
     /// A hidden, non-animatable mesh parameter whose default is the empty mesh.
@@ -345,6 +374,14 @@ impl ParamDesc {
             }
             (ParamKind::String, v @ Value::String(_)) => Ok(v),
             (ParamKind::Link { .. }, v @ Value::Link(_)) => Ok(v),
+            (ParamKind::LinkList { .. }, Value::LinkList(list)) => {
+                let mut seen = std::collections::BTreeSet::new();
+                if list.iter().all(|n| seen.insert(*n)) {
+                    Ok(Value::LinkList(list))
+                } else {
+                    Err(ParamError::DuplicateLink)
+                }
+            }
             (ParamKind::Mesh, Value::Mesh(m)) => m.validate().map(|()| Value::Mesh(m)),
             (ParamKind::IndexList, Value::IndexList(mut list)) => {
                 list.sort_unstable();

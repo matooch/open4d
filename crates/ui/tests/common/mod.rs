@@ -1,10 +1,11 @@
 //! Synthetic node types for UI tests (not reference-app types).
 #![allow(dead_code)]
 
+use serde_json::json;
 use std::sync::Arc;
 
 use forge_core::{Category, NodeId, NodeType, ParamDesc, Plugin, Registry, RegistryError, Unit};
-use forge_ui::commands::{Command, execute};
+use forge_ui::commands::execute;
 use forge_ui::state::EditorState;
 
 pub struct TestPlugin;
@@ -72,6 +73,6 @@ pub fn state() -> EditorState {
 
 /// Creates a root node of `ty` and returns its id (it becomes the selection).
 pub fn create(s: &mut EditorState, ty: &str) -> NodeId {
-    execute(s, Command::Create(ty.into())).unwrap();
+    execute(s, "object.create", json!({"type": ty})).unwrap();
     s.selection.active.unwrap()
 }

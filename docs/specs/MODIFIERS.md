@@ -3,7 +3,7 @@
 - Common: Mode (limited/unlimited/within box), Size, Strength, Fit to Parent, Axis, Falloff/Fields, Order of evaluation (parent-child deformer stack), Deformer on generators vs editable mesh
 - Each: parameter list, defaults, math, golden mesh comparison.
 
-Bend, Twist, Taper, Bulge, Shear and Spherify are specified below (§0–6, §9). Sources:
+Bend, Twist, Taper, Bulge, Shear and Spherify are specified below (§0–6, §9); falloff is §10. Sources:
 docs/parity/{bend,twist,deformer-common,taper,bulge,shear,spherify}.md and their golden
 cases. Everything else is still a checklist item.
 
@@ -46,18 +46,24 @@ Status: draft · Source: docs/parity/{bend,twist,deformer-common,taper,bulge,she
     tangent to travel along: it holds the value at `t = 1` above the box, which is why
     Taper keeps its top scale there (`taper/strength`).
   - `within_box`: only points inside the box deform, everything else is unchanged —
-    on **all three axes**: `|x| ≤ size_x/2`, `|y| ≤ size_y/2`, `|z| ≤ size_z/2`
+    on **all three axes**: `|x| ≤ size_x/2`, `|y| ≤ size_y/2`, `|z| ≤ size_z/2`,
+    boundaries inclusive, all tested in the deformer's local space
     (`bend/mode-box`, `twist/mode-box`: the part above the box is not carried along;
     `bend/mode-box-narrow-x`: the `x = ±100` columns stay unmoved while `|x| ≤ 50`
     bends; `bend/mode-box-narrow-z`: all 90 vertices at `|z| = 100` exactly unmoved,
-    versus the 40 in `bend/mode-box` that are outside in y as well). One exception:
-    the whole deformation is **suppressed** when the box spans the parent object's x/z
-    extent in neither axis (`bend/mode-box-narrow`: size (100, 250, 100) against the
-    200 × 400 × 200 cube → the undeformed cube, although points lie inside the box;
-    with a (100, 400, 100) cube the box (120, 250, 150) does deform, so the threshold
-    follows the object's extent, not an absolute size). In `limited` the box's x/z
+    versus the 40 in `bend/mode-box` that are outside in y as well). Second rule, the
+    **suppression**: with `ex`, `ez` the x and z extents (max − min) of the object's
+    points in the deformer's local space, the whole deformation is skipped when
+    `size_x < ex` **and** `size_z < ez`, i.e. when the box spans the object in neither
+    axis (`bend/mode-box-narrow`: size (100, 250, 100) against the 200 × 400 × 200
+    cube → the undeformed cube, although points lie inside the box). "Spans" is
+    `size ≥ extent`: the interactive sweep in `docs/parity/bend.md` gives (100, 250, 200)
+    deforms (`size_z = ez`) and (120, 250, 190) does not. The threshold is relative to
+    the object (a 100 × 400 × 100 cube with box (120, 250, 150) bends), which is why it
+    uses the extent. Both rules apply to `within_box` only: in `limited` the box's x/z
     size is ignored (`deformer-common/on-plane`: points with |x|, |z| > 125 deform
-    normally).
+    normally). **Implemented for Bend only** (the one deformer observed); applying it to
+    the other deformers is **parity-pending** until a golden case narrows their box.
   - `unlimited`: the same rate continues below and above the box
     (`bend/mode-unlimited`: min y −299.40 = the arc at t = −0.3; `twist/mode-unlimited`:
     the corner (−100, −200, −100) → (−134.50, −200, −43.70) = a −27° turn).
@@ -77,8 +83,8 @@ Percent params (`strength`, `curvature`) carry `Unit::Percent` and store **the n
 the app shows** — 50 = 50 %, the convention of `end_scale` (GENERATORS2 §10) — and are
 divided by 100 in the maths.
 
-Fit to Parent (a button in the app) and the Falloff/Fields tab are **not implemented**
-(task: out of scope; no observation uses them).
+Fit to Parent (a button in the app) is **not implemented** (no observation uses it). The
+Falloff/Fields list is §10.
 
 ## 1. Bend (`forge.bend`)
 
@@ -158,7 +164,10 @@ matches with the same `R`.
 | `mode-box-narrow-z` | box (250, 250, 100): `within_box` gates per point on z (same bbox as `mode-box`, z = ±100 columns unmoved) |
 | `strength-zero` | α = 0 with angle 45° → the undeformed cube: a zero strength means no deformation regardless of the angle |
 
-`within_box` details (suppression and per-point x/z gating) are §0.
+`within_box` details (suppression and per-point x/z gating) are §0. In `bend.rs` the
+gate and the suppression are evaluated on the point in the deformer's local space
+**before** the `angle` rotation (the box is not turned by `angle`; `angle` with
+`within_box` was not observed: **parity-pending**).
 
 ## 2. Twist (`forge.twist`)
 
@@ -369,19 +378,31 @@ is byte-identical to `defaults`; `spherify/moved` centres the sphere on (50, 100
 | `radius` | radius 100 at 100 % → every point at distance 100 |
 | `moved` | the sphere follows the deformer's transform (centre (50, 100, 0)) |
 
+## 8. Evaluation context
+
+`forge_core::EvalCtx { time: f64, fps: f64, seed: u64 }` (seconds, frames per second, RNG
+seed) is passed to `forge_generators::evaluate(scene, id, &ctx)` and from there to
+`forge_modifiers::apply_deformer(scene, deformer, target, points, &ctx)`. The default is
+frame 0 at 30 fps with seed 0 (`EvalCtx::default()`), `EvalCtx::at_frame(frame, fps)`
+builds the context of a frame. Interactive callers pass the document time; no deformer
+reads the context yet (time-dependent deformers and effectors will), so results do not
+change. Source: own design (docs/roadmap/areas/D-deformers-fields.md).
+
 ## 9. Parity
 
-Test: `crates/modifiers/tests/deformers_parity.rs` — features `bend` (14 cases),
+Test: `crates/modifiers/tests/deformers_parity.rs` — features `deformer-falloff` (9) and `bend` (15 cases),
 `twist` (7), `deformer-common` (6), `taper` (8), `bulge` (7), `shear` (7) and
-`spherify` (5) — 54 in all — are rebuilt from their `case.toml` (`parent`, `hierarchy`,
+`spherify` (5) — 64 in all — are rebuilt from their `case.toml` (`parent`, `hierarchy`,
 `rot` degrees HPB, vec3 `size` are the keys the batch added; `level` maps to
 `level_view`) and compared with `export_weld` on both sides (GENERATORS2 §0).
 
 - `UNSUPPORTED`: none.
-- `KNOWN_MISMATCH` (observed, not derived yet): `bend/mode-box-narrow`,
-  `bend/mode-box-narrow-x`, `bend/mode-box-narrow-z` — our `within_box` gates only on
-  y (§0); the observed mode gates per point on x/y/z and suppresses the whole
-  deformation when the box spans the object's x/z extent in neither axis.
+- `KNOWN_MISMATCH`: none (the three `bend/mode-box-narrow*` cases matched once §0's
+  per-axis gate and suppression landed).
+- Feature `deformer-falloff` (9 cases, §10) is built as: the cube, a deformer child with
+  the case's parameters (`strength_deg` is `strength` in degrees, `keep_length` is
+  `keep_y_axis_length`, `alignment` is the fixed Y axis), the `[params.field]` field node
+  linked into `fields` (its `layer_strength_percent` is the node's `layer_strength`).
 - Evaluation order and placement rules are §0; the modifier maths are §1–§6.
 - Parity-pending (implemented, seen in one configuration only): sibling deformers below
   the object (§0), `fillet` together with
@@ -390,3 +411,66 @@ Test: `crates/modifiers/tests/deformers_parity.rs` — features `bend` (14 cases
   blend extrapolated *below* the box in `unlimited` (§3–§5 — every unlimited case has
   curvature 100, so only the quadratic term was seen outside the box), and Spherify at
   the origin / `radius` 0 (§6).
+
+## 10. Falloff through field lists (brief 061)
+
+Source: O24 [deformer-falloff.md](../parity/deformer-falloff.md), golden `tests/golden/deformer-falloff`
+(9 cases, level A); the field maths is [FIELDS.md](FIELDS.md).
+
+### Parameter
+
+Every deformer (Bend, Twist, Taper, Bulge, Shear, Spherify) has a `fields` param:
+`ParamKind::LinkList` accepting `Category::Field` nodes, **top to bottom**, default empty
+(label "Fields", group "Falloff"). The O24 deformer's list parameter is labelled "Field"
+on its Fields tab. The list row's *layer strength* (O24 `layer_strength_percent`) is the
+field node's `layer_strength` param (percent, default 100 %, see FIELDS.md F1): one field
+node is one row, which is all the data covers; real list rows (a field in several lists)
+come with brief 059.
+
+### Rule
+
+`FieldList::from_nodes` over the live field links of the list (a link to a deleted or
+non-field node is skipped). **An empty list means full effect** (`bend-empty-list`, no
+extra switch exists on the deformer, the list is simply empty).
+
+For a non-empty list, each point is deformed as usual and then blended with its undeformed
+position:
+
+```
+w  = FieldList::sample(world(p)).value       p = the point before this deformer, in the object's space
+p' = p + w · (deform(p) − p)
+```
+
+`world(p)` is the point taken with the **world matrix of the deformed object** (the
+parent of the deformer); the deformer's own position does not move the field. `w` is not
+clamped (a field value outside 0..1 extrapolates; fields clamp at their own Min/Max
+unless switched off). The weight is read at the point's position *before* the deformer,
+not after. A field that cannot be built (an option without derived rules, FIELDS.md) leaves
+the points unchanged. The rule applies to every deformer, after the mode rules of §0 (the
+blend sees the deformer's final per-point result, including `limited` carry-along and the
+`within_box` gates), and the stack order of §0 is unchanged (each deformer blends on its
+own list).
+
+### Cases
+
+| Case | Deformer | Field (list) | Rule it shows |
+|---|---|---|---|
+| `bend-empty-list` | Bend 90° | none | empty list = the full bend |
+| `bend-spherical` | Bend 90° | Spherical 200 at (0, 200, 0) | weight by position, inner offset 50 % |
+| `bend-spherical-inner` | the same | inner offset 0 % | the field's remapping drives the weight |
+| `bend-linear` | the same | Linear Y+ length 200 | |
+| `bend-box` | the same | Box (400, 200, 400) | |
+| `bend-field-strength-50` | the same | Spherical, layer strength 50 % | the layer strength scales the weight |
+| `twist-linear`, `taper-spherical`, `bulge-linear` | | | other deformers share the rule |
+
+### Parity-pending
+
+- Weight sampled at the point before the deformation (matched on all 8 field cases, whose
+  weights vary strongly across the displaced points): proven by the data, no alternative
+  open for the object-at-origin setup. With the deformed object **moved or rotated** away
+  from the origin, "world position" vs. "object-local position" is untested (all cases have the
+  cube at the origin): a Bend with the cube at (0, 100, 0) and the same Spherical field.
+- Rows beyond one layer (blend modes, FIELDS.md): brief 059.
+- A negative or >1 weight (Strength 200 % on the field) extrapolating vs. clamping: a Bend
+  with Strength 200 % and Clamp Max off.
+- Spherify's `p/|p|` with falloff at the origin (no data).

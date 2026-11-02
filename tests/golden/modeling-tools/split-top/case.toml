@@ -1,0 +1,13 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-2.md"
+description = "Default cube made editable; top polygon (4) selected and the Split menu command run: the original keeps all 6 polygons and a second object holds a copy of the selected polygon"
+mesh = "mesh.obj"
+
+[params]
+tool = "split"
+segments = [1, 1, 1]
+select_polys = [4]
+
+[import]
+scale = 1.0
+flip_z = false

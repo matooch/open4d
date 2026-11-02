@@ -1,0 +1,13 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-2.md"
+description = "Default cube made editable; all 8 points moved by (50, 0, 0), then the object selected and the Center Axis to menu command run at its defaults"
+mesh = "mesh.obj"
+
+[params]
+tool = "center_axis"
+segments = [1, 1, 1]
+move_points = [50, 0, 0]
+
+[import]
+scale = 1.0
+flip_z = false

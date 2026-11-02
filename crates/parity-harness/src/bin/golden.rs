@@ -12,6 +12,37 @@ use forge_parity_harness::{
     samples_info, validate_case,
 };
 
+/// Writes to stdout; a reader that closed the pipe early (`golden check | head -1`) is a
+/// quiet exit, like apps/forge, not a panic.
+fn emit(args: std::fmt::Arguments<'_>, newline: bool) {
+    use std::io::Write;
+    let mut out = std::io::stdout().lock();
+    let result = out.write_fmt(args).and_then(|()| {
+        if newline {
+            out.write_all(b"\n")
+        } else {
+            Ok(())
+        }
+    });
+    match result {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => std::process::exit(0),
+        Err(e) => {
+            eprintln!("error: cannot write to stdout: {e}");
+            std::process::exit(2);
+        }
+    }
+}
+
+macro_rules! out {
+    ($($arg:tt)*) => { emit(format_args!($($arg)*), false) };
+}
+
+macro_rules! outln {
+    () => { emit(format_args!(""), true) };
+    ($($arg:tt)*) => { emit(format_args!($($arg)*), true) };
+}
+
 const USAGE: &str =
     "usage: golden info <file.obj | samples.json | case-dir> | golden check [repo_root]";
 
@@ -26,9 +57,9 @@ fn info(path: &str) -> ExitCode {
     match parse_obj(&src) {
         Ok(mesh) => {
             let extras = obj_extras(&src);
-            print!("{}", mesh_info(&mesh));
-            println!("normals: {}", extras.normals);
-            println!("uvs: {}", extras.uvs);
+            out!("{}", mesh_info(&mesh));
+            outln!("normals: {}", extras.normals);
+            outln!("uvs: {}", extras.uvs);
             ExitCode::SUCCESS
         }
         Err(e) => {
@@ -48,7 +79,7 @@ fn info_samples(path: &str) -> ExitCode {
     };
     match parse_samples(&src) {
         Ok(s) => {
-            print!("{}", samples_info(&s));
+            out!("{}", samples_info(&s));
             ExitCode::SUCCESS
         }
         Err(e) => {
@@ -77,9 +108,9 @@ fn info_dir(dir: &str) -> ExitCode {
     let mut code = ExitCode::SUCCESS;
     for (i, name) in files.iter().enumerate() {
         if i > 0 {
-            println!();
+            outln!();
         }
-        println!("== {name}");
+        outln!("== {name}");
         let path = dir.join(name).to_string_lossy().into_owned();
         let one = if name.ends_with(".obj") {
             info(&path)
@@ -115,16 +146,16 @@ fn check(root: &str) -> ExitCode {
     let mut bad = false;
     for case in &cases {
         for p in validate_case(root, case) {
-            println!("{}/{}: {p}", case.feature, case.name);
+            outln!("{}/{}: {p}", case.feature, case.name);
             bad = true;
         }
     }
     if bad {
         ExitCode::from(1)
     } else {
-        println!("ok: {} cases", cases.len());
+        outln!("ok: {} cases", cases.len());
         for name in cases_without_output(&cases) {
-            println!("note: {name} has no mesh or samples file (tree or form only)");
+            outln!("note: {name} has no mesh or samples file (tree or form only)");
         }
         ExitCode::SUCCESS
     }

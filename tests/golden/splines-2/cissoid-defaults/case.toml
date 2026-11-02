@@ -1,0 +1,24 @@
+feature = "splines-2"
+observation = "docs/parity/splines-2.md"
+description = "Cissoid spline, all parameters at their R25 defaults"
+mesh = "mesh.obj"
+
+[params]
+extrude_offset = 20.0
+caps = false
+
+[params.input]
+type = "cissoid_spline"
+cissoid_type = "cissoid"
+width = 400.0
+tension = 2.0
+plane = "xy"
+reverse = false
+intermediate = "adaptive"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+[import]
+scale = 1.0
+flip_z = false
