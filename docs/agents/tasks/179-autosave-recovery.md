@@ -1,6 +1,6 @@
 # 179 · Autosave and recovery
 
-Status: ready · Area: N · Depends on: 175, 163 · Observations: – · Touches: app
+Status: done · Area: N · Depends on: 175, 163 · Observations: – · Touches: app
 
 ## Goal
 Periodic autosave and recovery after a crash.
@@ -12,8 +12,8 @@ Periodic autosave and recovery after a crash.
 - Write to a temp file then rename (atomic).
 
 ## Done when
-- [ ] Test: recovery offered after a simulated crash.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Test: recovery offered after a simulated crash.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -22,10 +22,14 @@ Periodic autosave and recovery after a crash.
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- Result: spec `docs/specs/PLATFORM.md` §7 (+ UI.md §15, COMMANDS.md). Pure logic in `forge_platform::autosave` (settings, naming, schedule, atomic write, entries, pruning, session markers, background `Writer`, `ManualClock`): 17 unit tests. `crates/ui/tests/autosave.rs`: 8 integration tests (schedule with a manual clock, disabled setting, command without a directory, save/new/clean exit removal, crash then recover with identical scene bytes through the kittest dialog, original path kept and Discard, damaged file, live session not offered). Command registry tests extended.
+- Policy: default every 300 s, only when the scene changed since the last save and since the last autosave; settings `autosave.{enabled,interval_seconds,max_files}` (defaults true/300/10) read once at start. Files in `<data>/autosave/` (or `FORGE_AUTOSAVE_DIR`): `<key>.forge.autosave` (native `save_with` bytes) + `.json` metadata; key `untitled-<session>` or `<stem>-<fnv1a64 of absolute path>`.
+- Crash detection: `sessions/<id>.lock` held with `File::try_lock` for the process life; an existing unlocked marker means a crash, a locked one a running instance; clean exit deletes it.
+- Recovery: window "Recover unsaved work" (Recover / Discard / Discard all); recover opens a dirty document with the original path, autosaves it again, then removes the old entry.
+- Threading: scene serialised on the UI thread, bytes written (temp + fsync + rename) by one ordered writer thread; prune after each write.
+- Commands: `file.autosave_now` (`wait?`), via new `CommandContext::autosave_now` (headless: "needs the editor window").
+- Deviations: none from the brief. Note: there is still no "save changes?" prompt on window close, so a clean exit discards the autosave of a dirty document as specified. Pending crashed entries can be pruned by later writes beyond `max_files`. Settings are not reloaded at runtime.
+- Files: crates/platform/{Cargo.toml,src/lib.rs,src/autosave.rs}, crates/command/src/{context.rs,builtin/file.rs}, crates/command/tests/registry.rs, crates/app/src/lib.rs, crates/ui/src/{autosave.rs,lib.rs,state.rs,commands.rs,app.rs,app/files.rs,app/recovery.rs}, crates/ui/tests/autosave.rs, docs/specs/{PLATFORM,UI,COMMANDS}.md, docs/manual/reference/*, BACKLOG, Cargo.lock.
+- Open questions: a close-window prompt for unsaved work (would make the clean-exit removal safe).
+- Gate: `cleanroom: ok` ... `GATE: all passed`.

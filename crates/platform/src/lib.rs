@@ -6,6 +6,8 @@
 //! folders, so every OS branch is testable on every host. [`dirs`] and [`settings_path`]
 //! feed them the real process environment and `directories::BaseDirs`.
 
+pub mod autosave;
+
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 

@@ -143,6 +143,7 @@ touch history.
 | `file.save` | `path?` (default: current file) | `{path}` | no |
 | `file.save_as` | `path` | `{path}` | no |
 | `file.open_dialog` `file.save_dialog` `file.save_as_dialog` | - | null | no |
+| `file.autosave_now` | `wait?` (flush the background write) | `{path, queued}` | no |
 | `file.import_obj` | `path` | `{nodes}` | yes |
 | `file.export_obj` | `path`, `selected?` | `{objects}` | no |
 | `key.record` | - | `{keys}` | yes |
@@ -177,6 +178,7 @@ Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and A
 - `mesh.*`: EDITABLE.md §1; skipped nodes (no mesh) are listed in `skipped` and in the
   status text. Empty selection is `Failed`.
 - `select.*`: EDITABLE.md §2.5 (model mode selects objects).
+- `file.autosave_now`: PLATFORM.md §7.8; needs the editor window (headless: `needs the editor window`).
 - `file.*`: IO.md §2. `file.new`/`file.open` replace the document and reset selection,
   timeline and expansion; the dock layout stays. Errors read `Open failed: ...`,
   `Save failed: ...`, `Import failed: ...`; an OBJ import without polygons fails with

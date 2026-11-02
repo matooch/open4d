@@ -222,6 +222,11 @@ impl App {
         self.saved_revision = self.doc.scene().revision();
     }
 
+    /// Marks the document as changed since the last save (a recovered autosave).
+    pub fn mark_unsaved(&mut self) {
+        self.saved_revision = u64::MAX;
+    }
+
     fn selected_ids(&self) -> Vec<NodeId> {
         self.selection.nodes.iter().copied().collect()
     }

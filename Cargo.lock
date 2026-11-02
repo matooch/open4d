@@ -1476,6 +1476,7 @@ name = "forge-platform"
 version = "0.1.0"
 dependencies = [
  "directories",
+ "serde_json",
  "tempfile",
 ]
 

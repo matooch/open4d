@@ -34,6 +34,7 @@ use crate::viewport_panel::{
 };
 
 mod files;
+mod recovery;
 
 pub use files::{Dialogs, FileKind, NativeDialogs, Unsaved};
 
@@ -134,6 +135,11 @@ pub struct Editor {
 impl eframe::App for Editor {
     fn ui(&mut self, ui: &mut Ui, frame: &mut eframe::Frame) {
         self.show(ui, frame.wgpu_render_state());
+    }
+
+    /// Clean exit: the session's autosaves and marker go (docs/specs/PLATFORM.md §7.6).
+    fn on_exit(&mut self) {
+        self.state.autosave.finish();
     }
 }
 
@@ -253,6 +259,7 @@ impl Editor {
             self.rpc = Some(inbox);
         }
         self.update_playback(ui.ctx());
+        self.autosave_frame(ui.ctx());
         self.shortcuts(ui.ctx());
         let title = self.window_title();
         if title != self.sent_title {

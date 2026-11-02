@@ -568,3 +568,13 @@ runs against the registry's argument schema; conflict rules for scopes; override
 file keeps unrelated keys. egui_kittest (no GPU): pressing each kind of default shortcut
 runs its command and Mod+Z undoes it; a rebind in the editor takes effect; a conflicting
 rebind asks first; Reset and Clear; a changed map is written to the settings file.
+
+## 15. Autosave and recovery (`autosave`, `app`; brief 179)
+
+Policy, files and crash detection: PLATFORM.md §7. `EditorState.autosave` owns the schedule,
+the background writer and the session marker; `Editor::show` calls `autosave.tick` once per
+frame, and `Editor`'s `on_exit` ends the session cleanly. When a crashed session left
+autosaves, `show` draws a window titled "Recover unsaved work" (an `egui::Window`, shown
+until the list is empty) with one row per entry (`Untitled` or the original path, the time,
+the size) and the buttons "Recover", "Discard" and "Discard all". `Editor::recover_autosave(i)`
+and `Editor::discard_autosave(i)` do what the buttons do (tests call them directly).

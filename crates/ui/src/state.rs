@@ -11,6 +11,7 @@ use forge_viewport::camera::{Camera, Handedness};
 use forge_viewport::gizmo::{GizmoMode, Space as GizmoSpace};
 use forge_viewport::render::Shading;
 
+use crate::autosave::Autosave;
 use crate::dock::Dock;
 use crate::keymap::KeyMapState;
 use crate::panes::{DEFAULT_SHADING, Views};
@@ -47,6 +48,8 @@ pub struct EditorState {
     pub gizmo_space: GizmoSpace,
     /// Window actions that commands asked for; the editor serves them after the command.
     pub ui_requests: Vec<UiRequest>,
+    /// Periodic autosave and the recovery list (docs/specs/PLATFORM.md §7).
+    pub autosave: Autosave,
 }
 
 impl Deref for EditorState {
@@ -92,6 +95,7 @@ impl EditorState {
             gizmo_mode: GizmoMode::Translate,
             gizmo_space: GizmoSpace::Object,
             ui_requests: Vec::new(),
+            autosave: Autosave::default(),
         }
     }
 }

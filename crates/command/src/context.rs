@@ -42,6 +42,12 @@ pub trait CommandContext {
     /// The frame of the previous or next key of the selected objects, if any.
     fn key_frame_near(&self, forward: bool) -> Option<i64>;
 
+    /// Queues an autosave of the document now (PLATFORM.md §7.8); `wait` flushes the write.
+    /// Returns the autosave file's path.
+    fn autosave_now(&mut self, _wait: bool) -> Result<String, String> {
+        Err("needs the editor window".into())
+    }
+
     /// Replaces the document (new or opened scene). `full` also resets view state.
     fn reset_document(&mut self, doc: Document, path: Option<String>, full: bool);
     /// The file the scene was last saved to or loaded from.

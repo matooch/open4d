@@ -6,6 +6,7 @@
 pub mod app;
 pub use forge_app::animate;
 pub mod attributes;
+pub mod autosave;
 pub mod building;
 pub mod commands;
 pub mod component_edit;
@@ -170,6 +171,9 @@ pub fn run_with_rpc(registry: Arc<Registry>, rpc: Option<forge_rpc::Inbox>) -> e
                     })
                 }
                 Err(_) => {
+                    state.autosave = autosave::Autosave::start_default(
+                        forge_platform::settings_path().as_deref(),
+                    );
                     let mut editor = app::Editor::new(state);
                     if let Some(inbox) = rpc {
                         editor.attach_rpc(inbox);

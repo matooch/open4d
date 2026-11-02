@@ -128,7 +128,7 @@ impl Editor {
 
     /// True if the current scene may be replaced: it is clean, or the user saved it or
     /// chose not to.
-    fn confirm_discard(&mut self) -> bool {
+    pub(super) fn confirm_discard(&mut self) -> bool {
         if !self.is_dirty() {
             return true;
         }
