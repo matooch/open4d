@@ -13,8 +13,9 @@ use forge_generators::{
 use forge_modifiers::Deformers;
 use forge_parity_harness::{Mesh, Tolerance, compare_geometric, compare_meshes, discover_cases};
 
-/// Same list as `parity.rs`: the cut faces are triangulated with an underived method.
-const CUT_GEOMETRIC: &[&str] = &["cone/slice", "torus/slice", "capsule/slice"];
+/// Same list as `parity.rs`: the cut faces of cocircular cuts are triangulated by the
+/// reference with ties decided by noise (GEOMETRY.md §6.1 R1).
+const CUT_GEOMETRIC: &[&str] = &["torus/slice", "capsule/slice"];
 
 const FEATURES: &[&str] = &[
     "plane", "cube", "sphere", "cylinder", "cone", "disc", "torus", "tube", "capsule", "pyramid",

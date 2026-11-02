@@ -30,7 +30,7 @@ implementers can avoid collisions.
 | 030 | [Make Editable follow-ups from O3](../agents/tasks/030-make-editable-followups.md) | B | 003, 028 | ready | generators, ui |
 | 031 | [Duplicate, Arrange, Randomize, Transfer, Array command](../agents/tasks/031-duplicate-arrange-array-command.md) | B | 011 | ready | ui, modeling |
 | 032 | [Snapping 2.0 and axis/pivot editing](../agents/tasks/032-snapping-pivot.md) | B | 006 | ready | viewport, ui |
-| 033 | [N-gon handling: reference triangulation order and edge visibility](../agents/tasks/033-ngon-triangulation-order.md) | B | – | ready | geometry, generators, viewport |
+| 033 | [N-gon handling: reference triangulation order and edge visibility](../agents/tasks/033-ngon-triangulation-order.md) | B | – | done | geometry, generators, viewport |
 | 034 | [Multi-object component editing; numeric component coordinates](../agents/tasks/034-multi-object-component-editing.md) | B | 006 | ready | ui |
 | 035 | [Platonic, Oil Tank, Polygon and Figure primitives](../agents/tasks/035-platonic-oiltank-polygon-figure.md) | C | 033 | ready | generators |
 | 036 | [Landscape primitive](../agents/tasks/036-landscape.md) | C | 063 | ready | generators, noise |

@@ -17,7 +17,7 @@ extrude `subdivision` 1–4000; lathe `subdivision` 1–4000, `scaling` ≥ 0; l
 **R25 defaults not supported yet** (the descriptor keeps the R20 value, since the build does
 not implement the R25 option and would return `Unsupported` or ignore it): circle and helix
 `intermediate` Uniform (R25) vs Adaptive (§6: only Adaptive 5° builds); loft `cap_type`
-N-gon (R25) vs Triangles (loft caps are always ear-clipped triangles, §9). O4 lists no `!` for
+N-gon (R25) vs Triangles (loft caps are always Delaunay triangles, §9). O4 lists no `!` for
 lathe and sweep `cap_type` (it records N-gon for R25 and, for lathe, N-gons for R20), but the
 R20 meshes show Triangles (§8, `lathe/angle`): left as Triangles, **to be re-observed**. The
 R25-only parameters (extrude Direction, bevel tabs, sweep rotation from/to, "use new
@@ -169,8 +169,10 @@ Params: `mesh_subdivision_u` 16 (R20: 30), `mesh_subdivision_v` 4 (R20: 10), `or
 - **Faces:** per row pair, `[r(j,i+1), r(j+1,i+1), r(j+1,i), r(j,i)]` (wound opposite to
   Extrude, and against the caps: the exported loft is not consistently oriented), i
   wrapping. Caps from the first ring (wound as the ring) and the last ring
-  (reversed), triangulated by the reference with an underived method; ours ear-clip,
-  and parity compares the caps geometrically (§11).
+  (reversed), the constrained Delaunay triangulation of the ring in the reference's
+  listing (GEOMETRY.md §6.1). `loft/defaults` is exact; `loft/three` differs in its end
+  cap by one exactly cocircular (mirror-symmetric) quad whose diagonal the export takes
+  the other way, so parity compares those caps geometrically (§11).
 
 ## 10. Sweep (`forge.sweep`)
 
@@ -201,8 +203,8 @@ their transforms; the profile is read in its XY coordinates).
 position, other keys that primitive's params) in a scene, evaluates the generator, and
 compares `export_weld` of ours and of the export strictly (topology, 1e-4); its
 `KNOWN_MISMATCH` list pins the two cases above that we build but don't match, and
-`CAP_GEOMETRIC` the loft cases whose caps are compared geometrically (all points and
-every face before the caps exactly).
+`CAP_GEOMETRIC` the loft case (`loft/three`) whose caps are compared geometrically (all
+points and every face before the caps exactly).
 
 ### 11.1 R25 drift cases and the R25 extrude cap order
 

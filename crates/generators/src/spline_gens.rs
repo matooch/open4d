@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use forge_core::{Category, NodeId, NodeType, ParamDesc, Scene, Unit, Value};
 use forge_geometry::PolyMesh;
-use forge_geometry::triangulate::triangulate_poly;
+use forge_geometry::triangulate::{triangulate_delaunay, triangulate_poly};
 use glam::DVec3;
 
 use crate::splines::{Curve, is_spline, placed_curve};
@@ -286,14 +286,14 @@ pub(crate) fn evaluate_spline_gen(
     }
 }
 
-/// Start and end caps of a ring `q` (closed outline) as ear-clipped triangles: the
-/// start wound like `q`, the end reversed (§9, §10; the reference's own triangulation
-/// is not derived).
+/// Start and end caps of a ring `q` (closed outline) as Delaunay triangles in the
+/// reference's listing: the start wound like `q`, the end reversed (§9, §10;
+/// GEOMETRY.md §6.1).
 fn triangle_caps(points: &[DVec3], start: &[u32], end: &[u32], p: &Params) -> Vec<Vec<u32>> {
     let mut out = Vec::new();
     if p.enumeration("cap_start") == "cap" {
         out.extend(
-            triangulate_poly(points, start)
+            triangulate_delaunay(points, start)
                 .into_iter()
                 .map(|t| t.to_vec()),
         );
@@ -301,7 +301,7 @@ fn triangle_caps(points: &[DVec3], start: &[u32], end: &[u32], p: &Params) -> Ve
     if p.enumeration("cap_end") == "cap" {
         let rev: Vec<u32> = end.iter().rev().copied().collect();
         out.extend(
-            triangulate_poly(points, &rev)
+            triangulate_delaunay(points, &rev)
                 .into_iter()
                 .map(|t| t.to_vec()),
         );

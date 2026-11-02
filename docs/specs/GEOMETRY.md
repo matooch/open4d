@@ -166,3 +166,64 @@ normal against the Newell normal).
   the remaining corners are fan-triangulated from the first remaining corner.
 - `triangulate(mesh) -> Vec<(u32, [u32; 3])>`: `(poly index, triangle)` for every
   polygon in order.
+
+### 6.1 Reference triangulation of cut and cap polygons (brief 033)
+
+Sources: the exported meshes of `tests/golden/{loft/defaults, loft/three, cone/slice,
+torus/slice, capsule/slice, platonic/type-dodeca}` and `rechecks/sweep-open-triangles`
+(parity observations O6, O18, `docs/parity/rechecks-2.md`); the algorithms are public
+(Lawson, "Software for C1 surface interpolation", 1977 for edge flips; Chew, "Constrained
+Delaunay triangulations", 1989). The ear clipper above stays the default of
+`triangulate_poly` (Boole, tools, viewport); the reference's own method has two parts,
+`triangulate_delaunay` (set of triangles) and an emission order.
+
+**R1. The triangle set is the constrained Delaunay triangulation of the polygon.**
+`loft/defaults` and `loft/three` (29-gon caps, sampled on a slightly wavy circle, so
+the in-circle tests are far from ties): all 26 interior edges of both exported caps satisfy
+the empty-circle test and our triangulation equals the export's. `cone/slice` (12-gon with
+collinear points, no ties): equal. Implementation: ear clip, then Lawson flips of
+interior edges whose opposite corner lies strictly inside the circumcircle (relative
+tolerance `1e-9`, determinant over the 4th power of the largest of the five edges involved), convex quads only.
+**R1 is not derivable for cocircular polygons** (`torus/slice`, `capsule/slice`, and every
+4-point cut): the exported torus cut contains edges that are *not* locally Delaunay on
+its own float32 coordinates (determinant noise of 1e-7 relative), so the reference decided on
+sub-float32 noise that the OBJ no longer carries. Ours keeps the ear-clip triangles on
+ties; those cases stay geometric (§10 of PRIMITIVES2.md). 4-point cuts keep the fixed
+pattern of PRIMITIVES2.md §2 (`cylinder/slice`, `tube/slice`).
+
+**R2. Emission order.** Positions `0..k-1` are the corners of the polygon in walk order
+(start cap: the ring as wound; end cap: reversed; start cut of a lathe: `Q` ascending,
+each triangle's winding then reversed). Triangles are listed by their lowest position `v`
+ascending; each is written `(v, a, b)` with `a -> b` counter-clockwise around `v` seen
+along the polygon normal, so it is wound like the polygon. Within the same `v` the triangles
+are listed by the angle of `a` around `v`, measured counter-clockwise from the direction
+"down" (world `-Y` projected into the polygon plane) over `[0, 2 pi)`; a neighbour exactly
+below `v` comes first. For a convex polygon this is ascending `(a, b)` unless a neighbour of
+`v` lies on or past the down direction, which rotates the group (proof: `torus/slice`,
+start and end cut, vertex 7: group `(7,11,15), (7,8,9), (7,9,11)`, because corner 11 is
+exactly below corner 7). Proof of the order rule independent of R1:
+`crates/geometry/tests/triangulate.rs` takes the exported triangle *sets* of the loft, cone
+and torus cuts, orders them with `order_triangles` and compares with the file order.
+Down for a polygon whose normal is parallel to `Y` (the loft caps) is `-Z`
+(**parity-pending**: the loft caps are insensitive to it).
+
+**R3. Platonic dodecahedron (`platonic/type-dodeca`).** Each pentagonal face is exported
+as a triangle and a quad (12 + 12 faces, triangles first). For a pentagon with corners
+`(t, n, a, b, p)` in face winding the triangle is the ear at `t`, written `[n, p, t]`
+(faces `0..11`), and the quad is `[p, n, a, b]` (faces `12..23`). The ear tip `t` of face
+`i` is vertex `i` (`i = 0..11`): a generator-side assignment of the 12 pentagons to the
+12 non-cube vertices, not a polygon-geometry rule (each pentagon has three such
+vertices), so it is listed in `tests/triangulate.rs` as the table that brief 035
+(Platonic primitive) builds from. `split_pentagon(ring, t) -> ([u32; 3], [u32; 4])`
+implements the written order.
+
+**R4. Not derived.** `rechecks/sweep-open-triangles` (36-gon circle caps of a Sweep) lists
+its 34 cap triangles per cap in an order that is neither R2 nor sorted (first corners
+`3, 19, 33, 6, 10, 35, 10, ...`); an exported set of cap triangles of a Sweep with a larger
+non-circular profile would settle whether Sweep caps use another method than Loft caps.
+
+### 6.2 Edge visibility
+
+The viewport draws `PolyMesh::edges()`, the polygon boundary edges, and never the diagonals
+of the triangulation used for shading and picking (`render.rs` builds its line buffer
+from `mesh.edges()`); a pentagon shows 5 edges, not 7.

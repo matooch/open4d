@@ -24,9 +24,10 @@ const UNSUPPORTED: &[&str] = &[];
 /// non-planar path twists less than parallel transport). Not understood yet.
 const KNOWN_MISMATCH: &[&str] = &["loft/mesh-subdivision", "sweep/helix"];
 
-/// Cases whose caps the reference triangulates with an underived method (GENERATORS2.md
-/// §9–10): exact except the trailing cap triangles, plus a geometric comparison.
-const CAP_GEOMETRIC: &[&str] = &["loft/defaults", "loft/three"];
+/// Cases whose caps contain an exactly cocircular quad that the reference splits the other
+/// way (GEOMETRY.md §6.1 R1; `loft/three` end cap, 2 of 54 cap triangles): exact except the
+/// trailing cap triangles, plus a geometric comparison.
+const CAP_GEOMETRIC: &[&str] = &["loft/three"];
 
 #[test]
 fn generators_match_the_reference() {

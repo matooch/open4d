@@ -3,7 +3,7 @@
 
 use forge_core::ParamDesc;
 use forge_geometry::PolyMesh;
-use forge_geometry::triangulate::triangulate_poly;
+use forge_geometry::triangulate::triangulate_delaunay;
 use glam::{DVec2, DVec3};
 
 use crate::Params;
@@ -156,14 +156,14 @@ pub(crate) fn lathe(
                     polys.push(vec![q[1], q[2], q[3]]);
                 }
             } else {
-                if start {
-                    q.reverse();
-                }
-                polys.extend(
-                    triangulate_poly(&points, &q)
-                        .into_iter()
-                        .map(|t| t.to_vec()),
-                );
+                // walk in ascending order; the start cut is listed wound the other way
+                polys.extend(triangulate_delaunay(&points, &q).into_iter().map(|t| {
+                    if start {
+                        vec![t[0], t[2], t[1]]
+                    } else {
+                        t.to_vec()
+                    }
+                }));
             }
         }
     }
