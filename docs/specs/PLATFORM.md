@@ -182,3 +182,114 @@ autosave regardless of the schedule, unless autosave has no directory (headless,
 folder: `Failed("needs the editor window")` headless, `Failed("autosave unavailable: ...")`).
 Returns `{"path", "queued": true}` (`wait` flushes first). It is not undoable and not a
 document change.
+
+## 8. Logging and crash reports (brief 178)
+
+Sources: the public docs of the `tracing` and `tracing-subscriber` crates, the Rust standard
+library docs (`std::panic::set_hook`, `std::backtrace::Backtrace`), the XDG Base Directory
+spec for the data folder (§1). No reference-app observation is involved; the policy is ours.
+
+The pure parts (level parsing, the rotating file, the in-memory tail, the report text, the
+"unseen report" bookkeeping) are in `forge_platform::logging` and `forge_platform::crash`; they
+take paths, strings and numbers as arguments. `forge_app::diagnostics::install` joins them to
+the process (log setup, panic hook, command history) and is called first thing by
+`forge-studio`, `forge-rpc-serve` and `forge-mcp`.
+
+### 8.1 Where
+
+- Logs: `<data>/logs/` (§1) unless `FORGE_LOG_DIR` names another directory. Current file
+  `forge.log`; rotated files `forge.log.1` (newest) ... `forge.log.<max_files>`.
+- Crash reports: `<data>/crashes/` unless `FORGE_CRASH_DIR` names another directory.
+
+Without a home folder and without the variables, no file is written (the in-memory tail and,
+in debug builds, stderr still work).
+
+### 8.2 Logging
+
+`tracing` events (`tracing::info!` etc.) with the `tracing-subscriber` `fmt` layer, no ANSI
+colours, one line per event: `<time> <LEVEL> <target>: <message>`.
+
+Level: the first of
+1. `FORGE_LOG` (environment),
+2. `log.level` in the settings file (§2),
+3. `info`.
+
+The value is a `tracing-subscriber` target filter: `debug`, or `warn,forge_ui=debug`. A value
+that does not parse falls back to the next source (an invalid `FORGE_LOG` is reported once as a
+warning in the log).
+
+Settings object `log` (all optional; wrong type or out-of-range values fall back to defaults,
+clamped where noted):
+
+| key | default | meaning |
+|---|---|---|
+| `log.level` | `"info"` | filter as above |
+| `log.max_bytes` | `1048576` | rotate when the next line would pass this size; clamped 1024 .. 1073741824 |
+| `log.max_files` | `5` | rotated files kept; clamped 1 .. 100 |
+
+Rotation (`RotatingFile`): a line is never split. Before a write that would make the current
+file larger than `max_bytes` (and the file is not empty) `forge.log.<max_files>` is deleted,
+`forge.log.<i>` becomes `forge.log.<i+1>`, `forge.log` becomes `forge.log.1`, and a fresh
+`forge.log` is opened. The file is opened in append mode so a restart continues it.
+
+Sinks: the file; the in-memory tail (the last 200 lines, used by the crash report); and stderr
+in debug builds (`cfg!(debug_assertions)`) or when `FORGE_LOG_STDERR=1`. **Nothing is ever
+written to stdout**: stdout belongs to the CLI output contract (CLI.md) and to the MCP
+protocol (RPC.md §8). `forge-cli` (`forge ...`) does not install logging: its `error:` /
+`warning:` lines on stderr are its documented user output, not diagnostics.
+
+Never logged: the RPC token. Events carry ids, paths and counts only.
+
+Converted from `eprintln!`: the editor's RPC start notices and screenshot failure, the RPC
+server's start and stop, command failures (debug level for each command run, warn level for a
+failed one). The startup banner `rpc: listening on ...` stays on stderr too (automation.md
+documents it).
+
+### 8.3 Command history
+
+`forge_command::history` keeps the last 50 command runs in a process-wide ring buffer:
+sequence number, command id and the arguments as compact JSON (cut at 2000 characters). It is
+filled in `CommandRegistry::run`, the one funnel for the editor, RPC, scripts and the CLI. The
+arguments are scene data and are kept as is, except that any object key whose name contains
+`token` (any case) has its value replaced by `"<redacted>"`.
+
+### 8.4 Crash report
+
+`install_hook` replaces the panic hook: it writes the report, logs it at error level, then
+calls the previous hook (so the default message and exit behaviour are unchanged). A panic
+inside the hook is not reported again (re-entrancy guard). The report is plain UTF-8 text,
+file name `crash-<session>-<n>.txt` where `<session>` is the process session id
+(`<unix seconds>-<pid>`, §7.2; the same id names the autosave session marker) and `<n>` is
+1, 2, ... if one process panics more than once.
+
+```
+Forge3D crash report
+Time: <YYYY-MM-DD HH:MM:SS> UTC (unix <n>)
+Application: <name> <version>
+Session: <session id>
+OS: <os> <arch>
+GPU: <adapter name, backend, driver> | unknown
+Thread: <name or unnamed>
+Panic: <message>
+Location: <file:line:column> | unknown
+
+Backtrace:
+<std::backtrace::Backtrace::force_capture text>
+
+Last <k> commands (oldest first):
+<seq> <id> <args json>
+
+Last <k> log lines (oldest first):
+<line>
+```
+
+The GPU line is set by the editor from the wgpu adapter once the window exists
+(`crash::set_gpu_info`). Every configured secret (the RPC token) is replaced by `<redacted>`
+everywhere in the text. Writing a report never fails the panic: errors are ignored.
+
+### 8.5 Next start
+
+`crash::unseen(dir)` lists the reports in the crash folder that are not named in
+`<dir>/.seen`. The editor shows a window "Forge3D crashed last time" (UI.md §15.2) with the
+report names, **Open folder** and **Dismiss**; both mark the listed reports as seen (they are
+not deleted). If the autosave recovery window (§7.7) has entries, the notice says so.

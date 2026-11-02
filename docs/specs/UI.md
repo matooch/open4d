@@ -587,3 +587,12 @@ before the close goes ahead: **Save** saves (Save As when the document has no fi
 dialog is cancelled the window stays open) and then closes, **Don't Save** closes (the clean
 exit removes the autosave), **Cancel** sends `ViewportCommand::CancelClose`. A clean document
 closes at once without a prompt.
+
+### 15.2 Crash report notice (`crash_notice`; brief 178)
+
+On start `CrashNotice::start_default` lists the unseen crash reports (PLATFORM.md §8.5). If
+there are any the window "Forge3D crashed last time" is shown: the report file names (newest
+first), a line "Autosaved work may be offered in the recovery window." when
+`recoverable_count() > 0`, and the buttons **Open folder** (opens the crash folder with the
+system file browser: `xdg-open` / `open` / `explorer`) and **Dismiss**. Either button marks the
+reports seen and closes the window. Tests inject a folder opener (`CrashNotice::set_opener`).

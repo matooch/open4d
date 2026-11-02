@@ -44,6 +44,12 @@ fn main() -> ExitCode {
             }
         }
     }
+    let token = RpcSettings::from_environment().token;
+    forge_app::diagnostics::install(
+        "forge-rpc-serve",
+        env!("CARGO_PKG_VERSION"),
+        token.iter().cloned().collect(),
+    );
     let mut app = App::new_default();
     if let Some(p) = &scene
         && let Err(e) = app.open(p)
@@ -51,7 +57,6 @@ fn main() -> ExitCode {
         eprintln!("forge-rpc-serve: cannot open {p}: {e}");
         return ExitCode::from(2);
     }
-    let token = RpcSettings::from_environment().token;
     let (server, inbox) = match Server::start(ServerConfig {
         port,
         token,
@@ -59,10 +64,12 @@ fn main() -> ExitCode {
     }) {
         Ok(s) => s,
         Err(e) => {
+            tracing::error!("cannot start the RPC server: {e:?}");
             eprintln!("forge-rpc-serve: cannot start: {e:?}");
             return ExitCode::from(1);
         }
     };
+    tracing::info!("serving on port {}", server.port());
     println!("FORGE_RPC_PORT={}", server.port());
     let _ = std::io::stdout().flush();
     // Stop when the parent closes our stdin, so a crashed test run leaves no server behind.

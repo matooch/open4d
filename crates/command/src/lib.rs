@@ -4,6 +4,7 @@
 mod builtin;
 mod context;
 mod error;
+pub mod history;
 mod registry;
 pub mod schema;
 mod state;

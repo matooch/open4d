@@ -154,6 +154,17 @@ access, a seeded `rand(seed)` for reproducible randomness, and limits on operati
 commands ([reference](reference/scripting.md)). More examples: `examples/scripts/`. The same
 engine runs in the editor's Script Manager panel.
 
+## Logs and crash reports
+
+The editor, `forge-rpc-serve` and `forge-mcp` write a rotating log, `forge.log`, to the `logs`
+folder of the per-user data directory (override with `FORGE_LOG_DIR`). The level is `info`;
+set `FORGE_LOG=debug` (or `warn,forge_ui=debug`) or `log.level` in the settings file to change
+it. Debug builds also print the log to stderr; `FORGE_LOG_STDERR=1` does it in a release
+build. Nothing is ever logged to stdout, so MCP and CLI output stay clean. If a program
+panics it writes a text report (version, system, GPU, backtrace, the last 50 commands and the
+last log lines, never the RPC token) to the `crashes` folder (`FORGE_CRASH_DIR`); the editor
+offers to open that folder on its next start.
+
 ## Acceptance scenarios
 
 Two scenarios from the roadmap run in CI and double as worked examples:

@@ -45,10 +45,21 @@ impl Autosave {
     /// Starts a session in `dir`: finds the crashed sessions' autosaves, then takes this
     /// session's marker.
     pub fn start(dir: PathBuf, settings: Settings, clock: Box<dyn Clock>) -> Autosave {
+        let session = session_id(clock.unix(), std::process::id());
+        Autosave::start_in_session(dir, settings, clock, session)
+    }
+
+    /// Like [`Autosave::start`] with an explicit session id, so a crash report and the
+    /// autosave marker of one process share it (PLATFORM.md §8.4).
+    pub fn start_in_session(
+        dir: PathBuf,
+        settings: Settings,
+        clock: Box<dyn Clock>,
+        session: String,
+    ) -> Autosave {
         let crashed = crashed_sessions(&dir);
         let pending = recoverable(&dir, &crashed);
         clear_stale_markers(&dir, &crashed, &pending);
-        let session = session_id(clock.unix(), std::process::id());
         let marker = SessionMarker::acquire(&dir, &session).ok();
         let writer = Writer::spawn(dir.clone(), settings.max_files);
         Autosave {
@@ -67,10 +78,11 @@ impl Autosave {
     /// The real directory, settings file and clock of this process.
     pub fn start_default(settings_file: Option<&Path>) -> Autosave {
         match forge_platform::autosave::autosave_dir() {
-            Some(dir) => Autosave::start(
+            Some(dir) => Autosave::start_in_session(
                 dir,
                 Settings::load(settings_file),
                 Box::new(SystemClock::new()),
+                forge_platform::crash::process_session().to_string(),
             ),
             None => Autosave::default(),
         }

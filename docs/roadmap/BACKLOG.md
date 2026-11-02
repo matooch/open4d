@@ -175,7 +175,7 @@ implementers can avoid collisions.
 | 175 | [Cross-platform settings, paths, fonts, file dialogs, modifiers](../agents/tasks/175-cross-platform-basics.md) | N | 173 | done | core, ui |
 | 176 | [Release workflow: AppImage, dmg, zip/MSI, checksums, changelog](../agents/tasks/176-release-workflow.md) | N | 173 | done (pending first tagged run) | .github |
 | 177 | [Signing and notarization hooks](../agents/tasks/177-signing-hooks.md) | N | 176 | ready | .github |
-| 178 | [Crash handler and logging](../agents/tasks/178-crash-logging.md) | N | 175 | ready | app |
+| 178 | [Crash handler and logging](../agents/tasks/178-crash-logging.md) | N | 175 | done | app |
 | 179 | [Autosave and recovery](../agents/tasks/179-autosave-recovery.md) | N | 175, 163 | done | app |
 | 180 | [Dependency-graph evaluation scheduler (parallel, dirty-only)](../agents/tasks/180-eval-scheduler.md) | N | 012 | ready | core |
 | 181 | [Benchmarks and S10 performance thresholds](../agents/tasks/181-benchmarks-s10.md) | N | 180, 144 | ready | benches |

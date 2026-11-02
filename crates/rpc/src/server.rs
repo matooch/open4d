@@ -188,11 +188,15 @@ impl Inbox {
             params,
             reply,
         } = job;
+        let method_name = method.clone();
         let result = catch_unwind(AssertUnwindSafe(|| match method.as_str() {
             "job.start" | "job.cancel" | "job.list" => self.job_method(host, conn, &method, params),
             _ => dispatch(host, &method, params),
         }))
-        .unwrap_or_else(|_| Err(RpcError::new(code::INTERNAL, "internal error")));
+        .unwrap_or_else(|_| {
+            tracing::error!(method = %method_name, "request handler panicked");
+            Err(RpcError::new(code::INTERNAL, "internal error"))
+        });
         let _ = reply.send(result);
     }
 
@@ -335,6 +339,7 @@ impl Server {
             wake: wake.clone(),
             stop: stop.clone(),
         });
+        tracing::info!(%addr, auth = shared.token.is_some(), "rpc server started");
         let accept = std::thread::Builder::new()
             .name("forge-rpc-accept".into())
             .spawn(move || accept_loop(listener, shared))
@@ -386,6 +391,7 @@ fn accept_loop(listener: TcpListener, shared: Arc<Shared>) {
             Ok((mut stream, _)) => {
                 let _ = stream.set_nonblocking(false);
                 if live.load(Ordering::SeqCst) >= MAX_CONNECTIONS {
+                    tracing::warn!("rejected a connection: too many connections");
                     let e = RpcError::new(code::TOO_MANY_CONNECTIONS, "too many connections");
                     let _ = write_line(&mut stream, &failure(&Value::Null, &e));
                     let _ = stream.shutdown(Shutdown::Both);
@@ -611,6 +617,7 @@ fn handle_line(line: &[u8], shared: &Shared, conn: u64, bucket: &mut Bucket) -> 
     if let Some(expected) = &shared.token {
         let given = request.get("token").and_then(Value::as_str).unwrap_or("");
         if !ct_eq(expected.as_bytes(), given.as_bytes()) {
+            tracing::warn!(conn, "rejected a request with a missing or wrong token");
             return (fail(&id, code::UNAUTHORIZED, "unauthorized"), After::Close);
         }
     }

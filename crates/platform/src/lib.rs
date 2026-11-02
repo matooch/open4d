@@ -7,6 +7,8 @@
 //! feed them the real process environment and `directories::BaseDirs`.
 
 pub mod autosave;
+pub mod crash;
+pub mod logging;
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

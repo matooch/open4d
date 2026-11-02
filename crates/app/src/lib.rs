@@ -4,6 +4,7 @@
 //! and no GPU. The editor and every automation front end build on it.
 
 pub mod animate;
+pub mod diagnostics;
 pub mod param_edit;
 pub mod query;
 pub mod select;

@@ -10,9 +10,19 @@ fn main() -> ExitCode {
         return forge_cli::run(args.into_iter().skip(1));
     }
     let insecure_local = args.iter().any(|a| a == "--rpc-insecure-local");
+    // Logging and the crash-report hook (PLATFORM.md §8); the RPC token never enters a report.
+    forge_app::diagnostics::install(
+        "forge-studio",
+        env!("CARGO_PKG_VERSION"),
+        forge_rpc::RpcSettings::from_environment()
+            .token
+            .into_iter()
+            .collect(),
+    );
     match run_editor(insecure_local) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
+            tracing::error!("editor failed: {e}");
             eprintln!("error: {e}");
             ExitCode::FAILURE
         }
@@ -44,10 +54,13 @@ fn start_rpc(insecure_local: bool) -> Option<(forge_rpc::Server, forge_rpc::Inbo
             } else {
                 "NO TOKEN (--rpc-insecure-local)"
             };
+            tracing::info!("rpc: listening on {} ({auth})", server.local_addr());
+            // The startup banner is documented (docs/manual/automation.md), so it stays.
             eprintln!("rpc: listening on {} ({auth})", server.local_addr());
             Some((server, inbox))
         }
         Err(e) => {
+            tracing::warn!("rpc: disabled: {e}");
             eprintln!("rpc: disabled: {e}");
             None
         }

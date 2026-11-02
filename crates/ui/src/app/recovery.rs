@@ -34,6 +34,8 @@ impl Editor {
             ctx.request_repaint_after(std::time::Duration::from_secs_f64(wait.clamp(1.0, 10.0)));
         }
         self.recovery_window(ctx);
+        let recoverable = self.recoverable_count();
+        self.state.crash_notice.show(ctx, recoverable);
     }
 
     fn recovery_window(&mut self, ctx: &egui::Context) {
