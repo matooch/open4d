@@ -216,6 +216,68 @@ impl Default for SpherifyParams {
     }
 }
 
+/// Parameters of `forge.squash_stretch` (MODIFIERS.md §7.1); percent params are the
+/// numbers the app shows.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SquashParams {
+    pub top: f64,
+    pub bottom: f64,
+    pub center: f64,
+    pub factor: f64,
+    pub expand: f64,
+    pub curvature: f64,
+    pub curvature_type: String,
+}
+
+impl Default for SquashParams {
+    fn default() -> Self {
+        SquashParams {
+            top: 100.0,
+            bottom: -100.0,
+            center: 0.0,
+            factor: 100.0,
+            expand: 100.0,
+            curvature: 100.0,
+            curvature_type: "square".to_string(),
+        }
+    }
+}
+
+/// Parameters of `forge.wrap` (MODIFIERS.md §7.2); angles are **radians**, percent
+/// params the numbers the app shows.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WrapParams {
+    pub width: f64,
+    pub height: f64,
+    pub radius: f64,
+    pub wrap: String,
+    pub longitude_start: f64,
+    pub longitude_end: f64,
+    pub latitude_start: f64,
+    pub latitude_end: f64,
+    pub movement: f64,
+    pub scale_z: f64,
+    pub tension: f64,
+}
+
+impl Default for WrapParams {
+    fn default() -> Self {
+        WrapParams {
+            width: 400.0,
+            height: 400.0,
+            radius: 200.0,
+            wrap: "cylindrical".to_string(),
+            longitude_start: 180f64.to_radians(),
+            longitude_end: 360f64.to_radians(),
+            latitude_start: -45f64.to_radians(),
+            latitude_end: 45f64.to_radians(),
+            movement: 0.0,
+            scale_z: 100.0,
+            tension: 100.0,
+        }
+    }
+}
+
 /// Reads a param of a node: the validated value, or the descriptor's default when the
 /// node never got one (every deformer type declares the params it reads).
 pub(crate) fn read(ty: &NodeType, params: &BTreeMap<String, Value>, id: &str) -> Value {
