@@ -46,6 +46,14 @@ Unblocks: PLAN phase 6, plus deeper coverage of the generators we already have.
 | loft/linear | Loft | the same | Linear Interpolation on |
 | lathe/partial | Lathe | default Rectangle at x 300 (so it doesn't cross the axis) | angle 180° |
 | lathe/movement | Lathe | the same | movement 200 |
+| platonic-f/seg3 | follow-up from brief 035: Platonic Hexahedron, Segments 3; then `-tetra-seg3` and `-octa-seg3` |
+| platonic-f/icosa-r1000 | Platonic Icosahedron, Radius 1000 |
+| platonic-f/bucky-r | Platonic Buckyball at Radius 1000 and at Radius 10 (two cases) |
+| platonic-f/seg2 | Platonic Buckyball, Segments 2; and Dodecahedron, Segments 2 |
+| oil-tank-f/cap | Oil Tank, Cap Height 50; then `-r50` with Radius 50 |
+| oil-tank-f/orient | Oil Tank, Orientation −Z; then `-grid` with Slice on and Regular Grid on |
+| polygon-f/tri-seg3 | Polygon primitive, Triangle on, Segments 3; then `-z` with Orientation +Z, and `-size` with Width 200, Height 50 |
+| figure-f/h90 | Figure, Height 90 (record only the bounding box in Notes; the mesh is not used for parity) |
 
 ## Notes
 TODO
