@@ -23,7 +23,9 @@ pub mod splines;
 mod subdivision;
 
 pub use boole::{boole, inputs_of as boole_inputs_of};
-pub use cloner::{clone_data, prototypes_of as cloner_prototypes};
+pub use cloner::{
+    ClonerInstances, clone_data, cloner_instances, prototypes_of as cloner_prototypes,
+};
 pub use modeling::{array, connect, inputs_of as modeling_inputs_of, symmetry};
 pub use polygon::{
     EditableError, SELECTION_EDGES, SELECTION_POINTS, SELECTION_POLYS, TYPE as POLYGON,

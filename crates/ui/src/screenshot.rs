@@ -6,13 +6,12 @@ use forge_viewport::camera::Camera;
 use forge_viewport::grid::grid_lines;
 use forge_viewport::panes::{PaneRect, arrange};
 use forge_viewport::render::{
-    DrawMesh, Frame, Gpu, MeshBuffers, Palette, Settings, render_to_rgba,
+    DrawInstanced, DrawMesh, Frame, Gpu, Palette, Settings, render_to_rgba,
 };
 
 use crate::panes::{PANE_GAP, display_settings, scene_lights};
 use crate::state::EditorState;
-use crate::viewport_panel::{SELECTED_TINT, scene_meshes_at};
-use forge_geometry::selection::Selection;
+use crate::viewport_panel::{GpuCache, GpuItem, UploadSettings, scene_draw_items_at, upload_items};
 
 /// A headless wgpu device made on first use. A failure to find an adapter is remembered,
 /// so a machine without a GPU does not retry on every call.
@@ -57,29 +56,31 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
     .collect();
     let gpu = state.offscreen.get()?;
     let palette = Palette::default();
-    let buffers: Vec<(MeshBuffers, [f32; 3])> = scene_meshes_at(&scene, &selected, &ctx)
-        .into_iter()
-        .map(|(_, mesh, sel, smoothing)| {
-            let color = if sel { SELECTED_TINT } else { palette.object };
-            let buffers = MeshBuffers::with_device_no_points(
-                &gpu.device,
-                &mesh,
-                &Selection::default(),
-                smoothing,
-            );
-            (buffers, color)
-        })
-        .collect();
-    let draw: Vec<DrawMesh> = buffers
-        .iter()
-        .map(|(mesh, color)| DrawMesh {
-            mesh,
-            color: *color,
-        })
-        .collect();
+    let items = upload_items(
+        &mut GpuCache::default(),
+        &gpu.device,
+        &scene,
+        scene_draw_items_at(&scene, &selected, &ctx),
+        None,
+        &palette,
+        UploadSettings::default(),
+    );
+    let (mut draw, mut draw_instanced) = (Vec::new(), Vec::new());
+    for item in &items {
+        match item {
+            GpuItem::Mesh(mesh, color) => draw.push(DrawMesh {
+                mesh,
+                color: *color,
+            }),
+            GpuItem::Instanced(set, color) => {
+                draw_instanced.push(DrawInstanced { set, color: *color })
+            }
+        }
+    }
     let rgba = if let [(_, camera, settings)] = &panes[..] {
         let grid = grid_lines(camera, f64::from(height));
         let frame = Frame {
+            instanced: &draw_instanced,
             meshes: &draw,
             grid: Some(&grid),
             gizmo: None,
@@ -93,6 +94,7 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
             let (w, h) = ((r.w as u32).max(1), (r.h as u32).max(1));
             let grid = grid_lines(camera, f64::from(h));
             let frame = Frame {
+                instanced: &draw_instanced,
                 meshes: &draw,
                 grid: Some(&grid),
                 gizmo: None,

@@ -69,6 +69,7 @@ fn close(a: [u8; 3], b: [u8; 3]) -> bool {
 
 fn render(gpu: &Gpu, cam: &Camera, meshes: &[DrawMesh], settings: Settings) -> Image {
     let frame = Frame {
+        instanced: &[],
         meshes,
         grid: None,
         gizmo: None,
@@ -224,6 +225,7 @@ fn grid_and_gizmo_overlays() {
         H,
         &cam,
         &Frame {
+            instanced: &[],
             meshes: &[],
             grid: Some(&grid),
             gizmo: None,
@@ -248,6 +250,7 @@ fn grid_and_gizmo_overlays() {
         H,
         &cam,
         &Frame {
+            instanced: &[],
             meshes: &[DrawMesh {
                 mesh: &mesh,
                 color: [0.7; 3],
@@ -281,6 +284,7 @@ fn rotate_gizmo_draws_rings() {
         H,
         &cam,
         &Frame {
+            instanced: &[],
             meshes: &[],
             grid: None,
             gizmo: Some(&gizmo),

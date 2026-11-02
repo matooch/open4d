@@ -14,9 +14,15 @@ use glam::{DMat4, DVec3};
 use wgpu::util::DeviceExt;
 
 use crate::camera::Camera;
+use crate::cull::{Frustum, union_aabb};
 use crate::gizmo::{Axis, Gizmo, GizmoMode, Plane};
 use crate::grid::{Grid, LineKind};
+use crate::instancing::{
+    DrawRange, INSTANCE_CHUNK, InstanceInput, InstanceLayout, InstanceRaw, LodView, build_layout,
+    visible_ranges,
+};
 use crate::lights::{self, AMBIENT, Light, LightKind, Lighting, MAX_LIGHTS};
+use crate::lod;
 
 const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -69,6 +75,11 @@ impl Gpu {
     /// tight tolerance only there (docs/specs/VIEWPORT.md §8.5).
     pub fn is_software(&self) -> bool {
         self.adapter_info.device_type == wgpu::DeviceType::Cpu
+    }
+
+    /// What the last offscreen frame rendered with `msaa` drew (draw calls, culling, LOD).
+    pub fn last_stats(&self, msaa: Msaa) -> FrameStats {
+        self.renderer_for(msaa).last_stats()
     }
 
     fn renderer_for(&self, msaa: Msaa) -> &Renderer {
@@ -127,6 +138,14 @@ fn point_bounds(points: &[DVec3]) -> Option<(DVec3, DVec3)> {
     }))
 }
 
+/// Box of f32 positions, padded one ulp-ish so conversions never shrink it.
+fn vertex_bounds(it: impl Iterator<Item = [f32; 3]>) -> Option<(DVec3, DVec3)> {
+    it.fold(None, |acc, p| {
+        let p = DVec3::new(f64::from(p[0]), f64::from(p[1]), f64::from(p[2]));
+        Some(acc.map_or((p, p), |(lo, hi)| (lo.min(p), hi.max(p))))
+    })
+}
+
 fn f3(v: DVec3) -> [f32; 3] {
     v.as_vec3().to_array()
 }
@@ -135,27 +154,116 @@ fn flag(b: bool) -> f32 {
     if b { 1.0 } else { 0.0 }
 }
 
-/// A vertex buffer and its vertex count; `None` when empty.
-struct Vertices(Option<(wgpu::Buffer, u32)>);
+/// Largest buffer `Vertices::new` creates; bigger data is split (docs/specs/VIEWPORT.md §10.3).
+const MAX_CHUNK_BYTES: usize = 64 << 20;
+
+/// One vertex buffer of a [`Vertices`] list with its vertex count and, for mesh chunks, the box
+/// of its positions.
+struct VChunk {
+    buf: wgpu::Buffer,
+    n: u32,
+    bounds: Option<(DVec3, DVec3)>,
+}
+
+/// Vertex data in one or more buffers; empty when there is nothing to draw.
+struct Vertices(Vec<VChunk>);
 
 impl Vertices {
+    /// Splits by `MAX_CHUNK_BYTES` only (multiples of 6 vertices, so no primitive straddles a
+    /// chunk); no bounds.
     fn new<T: Pod>(device: &wgpu::Device, label: &str, data: &[T]) -> Vertices {
-        if data.is_empty() {
-            return Vertices(None);
+        let per = (MAX_CHUNK_BYTES / size_of::<T>().max(1)) / 6 * 6;
+        Vertices(
+            data.chunks(per.max(6))
+                .map(|c| VChunk::new(device, label, c, None))
+                .collect(),
+        )
+    }
+
+    fn from_chunks(chunks: Vec<VChunk>) -> Vertices {
+        Vertices(chunks)
+    }
+
+    fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
+        for c in &self.0 {
+            pass.set_vertex_buffer(0, c.buf.slice(..));
+            pass.draw(0..c.n, 0..1);
         }
+    }
+
+    /// As [`Vertices::draw`], skipping chunks whose box is outside `frustum`; returns how many
+    /// chunks were skipped.
+    fn draw_culled(&self, pass: &mut wgpu::RenderPass<'_>, frustum: &Frustum) -> u32 {
+        let mut culled = 0;
+        for c in &self.0 {
+            if c.bounds
+                .is_some_and(|(lo, hi)| !frustum.intersects_aabb(lo, hi))
+            {
+                culled += 1;
+                continue;
+            }
+            pass.set_vertex_buffer(0, c.buf.slice(..));
+            pass.draw(0..c.n, 0..1);
+        }
+        culled
+    }
+
+    /// Draws every chunk once for the instances `range` (vertex buffer 1 must be set).
+    fn draw_instanced(&self, pass: &mut wgpu::RenderPass<'_>, range: std::ops::Range<u32>) {
+        for c in &self.0 {
+            pass.set_vertex_buffer(0, c.buf.slice(..));
+            pass.draw(0..c.n, range.clone());
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl VChunk {
+    fn new<T: Pod>(
+        device: &wgpu::Device,
+        label: &str,
+        data: &[T],
+        bounds: Option<(DVec3, DVec3)>,
+    ) -> VChunk {
         let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(label),
             contents: bytemuck::cast_slice(data),
             usage: wgpu::BufferUsages::VERTEX,
         });
-        Vertices(Some((buf, data.len() as u32)))
-    }
-
-    fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
-        if let Some((buf, n)) = &self.0 {
-            pass.set_vertex_buffer(0, buf.slice(..));
-            pass.draw(0..*n, 0..1);
+        VChunk {
+            buf,
+            n: data.len() as u32,
+            bounds,
         }
+    }
+}
+
+/// How a mesh is split into vertex buffers (docs/specs/VIEWPORT.md §10.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UploadOptions {
+    /// Triangles per vertex buffer (and line segments per edge buffer).
+    pub chunk_tris: usize,
+}
+
+/// Default triangles per chunk: 262 144 (31 MiB of triangle vertices).
+pub const DEFAULT_CHUNK_TRIS: usize = 262_144;
+
+impl Default for UploadOptions {
+    fn default() -> Self {
+        UploadOptions {
+            chunk_tris: DEFAULT_CHUNK_TRIS,
+        }
+    }
+}
+
+impl UploadOptions {
+    /// `chunk_tris` clamped so that one triangle buffer stays within half of the device limit.
+    fn tris_per_chunk(&self, device: &wgpu::Device) -> usize {
+        let cap = (device.limits().max_buffer_size / 2) as usize / (3 * size_of::<TriVertex>());
+        self.chunk_tris.clamp(1, cap.max(1))
     }
 }
 
@@ -167,12 +275,41 @@ pub struct MeshBuffers {
     /// Two triangles per point, for `Settings::point_size`.
     point_quads: Vertices,
     bounds: Option<(DVec3, DVec3)>,
+    /// A cheaper stand-in drawn for small objects (`Settings::lod_px`, §10.6).
+    lod: Option<Box<MeshBuffers>>,
+    triangle_count: usize,
 }
 
 impl MeshBuffers {
     /// Axis-aligned box of the mesh's points; `None` for a mesh without points.
     pub fn bounds(&self) -> Option<(DVec3, DVec3)> {
         self.bounds
+    }
+
+    /// Number of triangles uploaded.
+    pub fn triangle_count(&self) -> usize {
+        self.triangle_count
+    }
+
+    /// Number of vertex buffers holding the triangles.
+    pub fn triangle_chunks(&self) -> usize {
+        self.tris.0.len()
+    }
+
+    /// Attaches the proxy drawn when the object is small on screen (§10.6).
+    pub fn set_lod(&mut self, proxy: MeshBuffers) {
+        self.lod = Some(Box::new(proxy));
+    }
+
+    pub fn has_lod(&self) -> bool {
+        self.lod.is_some()
+    }
+
+    fn lod_or_self(&self, use_lod: bool) -> &MeshBuffers {
+        match (&self.lod, use_lod) {
+            (Some(l), true) => l,
+            _ => self,
+        }
     }
 }
 
@@ -190,7 +327,25 @@ impl MeshBuffers {
         selection: &Selection,
         smoothing: Option<f64>,
     ) -> MeshBuffers {
-        Self::build(d, mesh, selection, smoothing, true)
+        Self::build(
+            d,
+            mesh,
+            selection,
+            smoothing,
+            true,
+            UploadOptions::default(),
+        )
+    }
+
+    /// As [`MeshBuffers::with_device_no_points`] with explicit chunking (§10.3).
+    pub fn with_options(
+        d: &wgpu::Device,
+        mesh: &PolyMesh,
+        selection: &Selection,
+        smoothing: Option<f64>,
+        opts: UploadOptions,
+    ) -> MeshBuffers {
+        Self::build(d, mesh, selection, smoothing, false, opts)
     }
 
     /// As [`MeshBuffers::with_device`] without point buffers (the points are never drawn).
@@ -200,7 +355,14 @@ impl MeshBuffers {
         selection: &Selection,
         smoothing: Option<f64>,
     ) -> MeshBuffers {
-        Self::build(d, mesh, selection, smoothing, false)
+        Self::build(
+            d,
+            mesh,
+            selection,
+            smoothing,
+            false,
+            UploadOptions::default(),
+        )
     }
 
     fn build(
@@ -209,6 +371,7 @@ impl MeshBuffers {
         selection: &Selection,
         smoothing: Option<f64>,
         with_points: bool,
+        opts: UploadOptions,
     ) -> MeshBuffers {
         let smooth = match smoothing {
             Some(angle) => corner_normals(mesh, angle, Weighting::Angle),
@@ -223,33 +386,54 @@ impl MeshBuffers {
             .iter()
             .map(|p| poly_normal(&mesh.points, p))
             .collect();
-        let mut tris = Vec::new();
-        for (f, tri) in triangulate(mesh) {
-            let poly = &mesh.polys[f as usize];
-            let selected = flag(selection.polys.contains(f));
-            for v in tri {
-                let corner = poly
-                    .iter()
-                    .position(|c| *c == v)
-                    .expect("triangle vertex in polygon");
-                tris.push(TriVertex {
-                    pos: f3(mesh.points[v as usize]),
-                    flat_n: f3(flat[f as usize]),
-                    smooth_n: f3(smooth[f as usize][corner]),
-                    selected,
-                });
-            }
-        }
-        let edges: Vec<EdgeVertex> = mesh
-            .edges()
-            .iter()
+        // Chunked: each slice of triangles becomes vertices, is uploaded and dropped, so the CPU
+        // never holds the vertex data of the whole mesh (§10.3).
+        let per = opts.tris_per_chunk(d);
+        let tri_list = triangulate(mesh);
+        let tri_chunks: Vec<VChunk> = tri_list
+            .chunks(per)
+            .map(|slice| {
+                let mut tris = Vec::with_capacity(slice.len() * 3);
+                for (f, tri) in slice {
+                    let poly = &mesh.polys[*f as usize];
+                    let selected = flag(selection.polys.contains(*f));
+                    for v in tri {
+                        let corner = poly
+                            .iter()
+                            .position(|c| *c == *v)
+                            .expect("triangle vertex in polygon");
+                        tris.push(TriVertex {
+                            pos: f3(mesh.points[*v as usize]),
+                            flat_n: f3(flat[*f as usize]),
+                            smooth_n: f3(smooth[*f as usize][corner]),
+                            selected,
+                        });
+                    }
+                }
+                let bounds = vertex_bounds(tris.iter().map(|t| t.pos));
+                VChunk::new(d, "mesh tris", &tris, bounds)
+            })
+            .collect();
+        let triangle_count = tri_list.len();
+        drop(tri_list);
+        let all_edges = mesh.edges();
+        let edge_chunks: Vec<VChunk> = all_edges
+            .chunks(per)
             .enumerate()
-            .flat_map(|(id, e)| {
-                let selected = flag(selection.edges.contains(id as u32));
-                [e.0, e.1].map(|v| EdgeVertex {
-                    pos: f3(mesh.points[v as usize]),
-                    selected,
-                })
+            .map(|(k, slice)| {
+                let edges: Vec<EdgeVertex> = slice
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(i, e)| {
+                        let selected = flag(selection.edges.contains((k * per + i) as u32));
+                        [e.0, e.1].map(|v| EdgeVertex {
+                            pos: f3(mesh.points[v as usize]),
+                            selected,
+                        })
+                    })
+                    .collect();
+                let bounds = vertex_bounds(edges.iter().map(|e| e.pos));
+                VChunk::new(d, "mesh edges", &edges, bounds)
             })
             .collect();
         let (mut points, mut quads) = (Vec::new(), Vec::new());
@@ -273,11 +457,13 @@ impl MeshBuffers {
             }
         }
         MeshBuffers {
-            tris: Vertices::new(d, "mesh tris", &tris),
-            edges: Vertices::new(d, "mesh edges", &edges),
+            tris: Vertices::from_chunks(tri_chunks),
+            edges: Vertices::from_chunks(edge_chunks),
             points: Vertices::new(d, "mesh points", &points),
             point_quads: Vertices::new(d, "mesh point quads", &quads),
             bounds: point_bounds(&mesh.points),
+            lod: None,
+            triangle_count,
         }
     }
 }
@@ -457,6 +643,9 @@ pub struct Settings {
     /// Used by [`render_to_rgba`]; direct [`Renderer::render`] callers pick the sample count
     /// with their renderer and targets (§8.4).
     pub msaa: Msaa,
+    /// Objects (and instance chunks) whose projected diameter is below this many pixels draw
+    /// their LOD proxy when they have one; 0 = off (§10.6).
+    pub lod_px: f32,
 }
 
 impl Default for Settings {
@@ -470,6 +659,7 @@ impl Default for Settings {
             shadows: false,
             shadow_size: 1024,
             msaa: Msaa::Off,
+            lod_px: 0.0,
         }
     }
 }
@@ -480,8 +670,152 @@ pub struct DrawMesh<'a> {
     pub color: [f32; 3],
 }
 
+/// GPU data of one cloner: prototype meshes and an instance buffer (docs/specs/VIEWPORT.md §10.1).
+pub struct InstanceSet {
+    protos: Vec<MeshBuffers>,
+    buffer: Option<wgpu::Buffer>,
+    layout: InstanceLayout,
+}
+
+impl InstanceSet {
+    /// One `MeshBuffers` per prototype (smoothing as in [`MeshBuffers::with_device`]) and the
+    /// instance buffer for `input`, each clone placed by `world * matrix`.
+    pub fn new(
+        d: &wgpu::Device,
+        prototypes: &[PolyMesh],
+        smoothing: Option<f64>,
+        input: &InstanceInput,
+        world: &DMat4,
+    ) -> InstanceSet {
+        Self::with_chunk(d, prototypes, smoothing, input, world, INSTANCE_CHUNK)
+    }
+
+    /// As [`InstanceSet::new`] with an explicit culling chunk size.
+    pub fn with_chunk(
+        d: &wgpu::Device,
+        prototypes: &[PolyMesh],
+        smoothing: Option<f64>,
+        input: &InstanceInput,
+        world: &DMat4,
+        chunk: usize,
+    ) -> InstanceSet {
+        let protos: Vec<MeshBuffers> = prototypes
+            .iter()
+            .map(|m| MeshBuffers::with_device_no_points(d, m, &Selection::default(), smoothing))
+            .collect();
+        let bounds: Vec<_> = protos.iter().map(|p| p.bounds).collect();
+        let mut layout = build_layout(&bounds, input, world, chunk);
+        // an instance buffer must fit the device limit (1M clones are 64 MB)
+        let cap = (d.limits().max_buffer_size as usize / size_of::<InstanceRaw>()).max(1);
+        layout.raw.truncate(cap);
+        let buffer = (!layout.raw.is_empty()).then(|| {
+            d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("clone instances"),
+                contents: bytemuck::cast_slice(&layout.raw),
+                usage: wgpu::BufferUsages::VERTEX,
+            })
+        });
+        InstanceSet {
+            protos,
+            buffer,
+            layout,
+        }
+    }
+
+    /// Attaches a proxy mesh to prototype `proto` (§10.6).
+    pub fn set_proto_lod(
+        &mut self,
+        d: &wgpu::Device,
+        proto: usize,
+        proxy: &PolyMesh,
+        smoothing: Option<f64>,
+    ) {
+        if let Some(p) = self.protos.get_mut(proto) {
+            p.set_lod(MeshBuffers::with_device_no_points(
+                d,
+                proxy,
+                &Selection::default(),
+                smoothing,
+            ));
+        }
+    }
+
+    /// Draws `ranges` with the vertices `pick` selects from each prototype (its LOD proxy for
+    /// `lod` ranges). Returns the draw calls issued and the instances drawn.
+    fn draw_ranges(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        ranges: &[DrawRange],
+        pick: impl Fn(&MeshBuffers) -> &Vertices,
+    ) -> (u32, u64) {
+        let Some(buffer) = &self.buffer else {
+            return (0, 0);
+        };
+        pass.set_vertex_buffer(1, buffer.slice(..));
+        let (mut calls, mut instances) = (0, 0u64);
+        for r in ranges {
+            let Some(proto) = self.protos.get(r.proto as usize) else {
+                continue;
+            };
+            let verts = pick(proto.lod_or_self(r.lod));
+            if verts.is_empty() || r.first as usize >= self.layout.raw.len() {
+                continue;
+            }
+            let end = (r.first + r.count).min(self.layout.raw.len() as u32);
+            verts.draw_instanced(pass, r.first..end);
+            calls += verts.0.len() as u32;
+            instances += u64::from(end - r.first);
+        }
+        (calls, instances)
+    }
+
+    /// Number of instances in the buffer.
+    pub fn len(&self) -> usize {
+        self.layout.raw.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.layout.raw.is_empty()
+    }
+
+    pub fn layout(&self) -> &InstanceLayout {
+        &self.layout
+    }
+
+    pub fn prototype_count(&self) -> usize {
+        self.protos.len()
+    }
+
+    /// World box of all instances.
+    pub fn bounds(&self) -> Option<(DVec3, DVec3)> {
+        self.layout.bounds
+    }
+}
+
+/// One instance set to draw with a base colour (multiplied by each clone's colour).
+#[derive(Clone, Copy)]
+pub struct DrawInstanced<'a> {
+    pub set: &'a InstanceSet,
+    pub color: [f32; 3],
+}
+
+/// What the last frame of a [`Renderer`] drew (for tests and the benchmarks).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct FrameStats {
+    /// `draw` calls in the colour pass.
+    pub draw_calls: u32,
+    /// Instances in those calls.
+    pub instances_drawn: u64,
+    /// Meshes, vertex chunks and instance chunks skipped by the frustum test in the colour pass.
+    pub culled: u32,
+    /// Objects and instance ranges drawn with their LOD proxy.
+    pub lod_draws: u32,
+}
+
 pub struct Frame<'a> {
     pub meshes: &'a [DrawMesh<'a>],
+    /// Cloners drawn with GPU instancing, after the plain meshes (§10.1).
+    pub instanced: &'a [DrawInstanced<'a>],
     pub grid: Option<&'a Grid>,
     pub gizmo: Option<&'a Gizmo>,
     pub settings: Settings,
@@ -626,6 +960,9 @@ pub struct Renderer {
     light_layout: wgpu::BindGroupLayout,
     tri: wgpu::RenderPipeline,
     shadow: wgpu::RenderPipeline,
+    tri_inst: wgpu::RenderPipeline,
+    shadow_inst: wgpu::RenderPipeline,
+    edge_inst: wgpu::RenderPipeline,
     edge: wgpu::RenderPipeline,
     point: wgpu::RenderPipeline,
     point_quad: wgpu::RenderPipeline,
@@ -636,6 +973,7 @@ pub struct Renderer {
     dummy_shadow: ShadowMaps,
     /// The map set of the last shadowed frame, reused while size and layer count match.
     shadow_cache: Mutex<Option<std::sync::Arc<ShadowMaps>>>,
+    stats: Mutex<FrameStats>,
 }
 
 struct PipelineSpec<'a> {
@@ -744,6 +1082,16 @@ impl Renderer {
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &color_attrs,
         })];
+        let inst_attrs = wgpu::vertex_attr_array![
+            4 => Float32x4, 5 => Float32x4, 6 => Float32x4, 7 => Float32x4
+        ];
+        let inst_layout = wgpu::VertexBufferLayout {
+            array_stride: size_of::<InstanceRaw>() as u64,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &inst_attrs,
+        };
+        let tri_inst_buf = [tri_buf[0].clone(), Some(inst_layout.clone())];
+        let edge_inst_buf = [edge_buf[0].clone(), Some(inst_layout)];
         let make = |s: PipelineSpec| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(s.label),
@@ -795,36 +1143,40 @@ impl Renderer {
             depth_write,
             depth_compare,
         };
-        let shadow = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("shadow"),
-            layout: Some(&shadow_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_shadow"),
-                compilation_options: Default::default(),
-                buffers: &tri_buf,
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: TriangleList,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(Less),
-                stencil: Default::default(),
-                bias: wgpu::DepthBiasState {
-                    constant: 2,
-                    slope_scale: 2.0,
-                    clamp: 0.0,
+        let make_shadow = |label, entry, buffers: &[Option<wgpu::VertexBufferLayout>]| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&shadow_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some(entry),
+                    compilation_options: Default::default(),
+                    buffers,
                 },
-            }),
-            multisample: Default::default(),
-            fragment: None,
-            multiview_mask: None,
-            cache: None,
-        });
+                primitive: wgpu::PrimitiveState {
+                    topology: TriangleList,
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: Some(true),
+                    depth_compare: Some(Less),
+                    stencil: Default::default(),
+                    bias: wgpu::DepthBiasState {
+                        constant: 2,
+                        slope_scale: 2.0,
+                        clamp: 0.0,
+                    },
+                }),
+                multisample: Default::default(),
+                fragment: None,
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let shadow = make_shadow("shadow", "vs_shadow", &tri_buf);
+        let shadow_inst = make_shadow("shadow instanced", "vs_shadow_inst", &tri_inst_buf);
         let shadow_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("shadow sampler"),
             mag_filter: wgpu::FilterMode::Nearest,
@@ -844,6 +1196,25 @@ impl Renderer {
                 Less,
             )),
             shadow,
+            shadow_inst,
+            tri_inst: make(spec(
+                "tris instanced",
+                "vs_tri_inst",
+                "fs_tri",
+                &tri_inst_buf,
+                TriangleList,
+                true,
+                Less,
+            )),
+            edge_inst: make(spec(
+                "edges instanced",
+                "vs_edge_inst",
+                "fs_edge",
+                &edge_inst_buf,
+                LineList,
+                true,
+                LessEqual,
+            )),
             edge: make(spec(
                 "edges", "vs_edge", "fs_edge", &edge_buf, LineList, true, LessEqual,
             )),
@@ -870,7 +1241,13 @@ impl Renderer {
             shadow_sampler,
             dummy_shadow: ShadowMaps::new(device, 1, 1),
             shadow_cache: Mutex::new(None),
+            stats: Mutex::new(FrameStats::default()),
         }
+    }
+
+    /// What the last recorded frame drew.
+    pub fn last_stats(&self) -> FrameStats {
+        *self.stats.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Samples per pixel of the targets this renderer draws to.
@@ -994,6 +1371,21 @@ impl Renderer {
                 self.bind(device, uniforms(base, style.smooth, bias, style.unlit))
             })
             .collect();
+        let inst_groups: Vec<wgpu::BindGroup> = frame
+            .instanced
+            .iter()
+            .map(|m| {
+                let base = if style.hidden {
+                    pal.background
+                } else {
+                    m.color
+                };
+                let mut u = uniforms(base, style.smooth, bias, style.unlit);
+                // clone colours tint the fill, except in Hidden Line (background colour)
+                u.params[3] = flag(!style.hidden);
+                self.bind(device, u)
+            })
+            .collect();
         let plain = self.bind(device, uniforms(pal.object, false, 0.0, false));
         let grid = frame
             .grid
@@ -1005,6 +1397,11 @@ impl Renderer {
             let mut out = Vec::new();
             for m in frame.meshes {
                 if let Some(b) = m.mesh.bounds {
+                    box_vertices(&mut out, b, m.color);
+                }
+            }
+            for m in frame.instanced {
+                if let Some(b) = m.set.bounds() {
                     box_vertices(&mut out, b, m.color);
                 }
             }
@@ -1024,7 +1421,8 @@ impl Renderer {
             .meshes
             .iter()
             .filter_map(|m| m.mesh.bounds)
-            .reduce(|(a, b), (c, d)| (a.min(c), b.max(d)));
+            .chain(frame.instanced.iter().filter_map(|m| m.set.bounds()))
+            .reduce(union_aabb);
         let casting = s.shadows && fill && !style.unlit && !style.quick;
         let mut next_layer = 0u32;
         let layers: Vec<Option<(u32, DMat4)>> = light_list
@@ -1063,10 +1461,22 @@ impl Renderer {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
+                // casters outside the light volume cannot shadow anything in the map
+                let light_frustum = Frustum::from_view_proj(matrix);
                 pass.set_pipeline(&self.shadow);
                 pass.set_bind_group(0, &group, &[]);
                 for m in frame.meshes {
-                    m.mesh.tris.draw(&mut pass);
+                    if m.mesh
+                        .bounds
+                        .is_none_or(|(lo, hi)| light_frustum.intersects_aabb(lo, hi))
+                    {
+                        m.mesh.tris.draw_culled(&mut pass, &light_frustum);
+                    }
+                }
+                pass.set_pipeline(&self.shadow_inst);
+                for m in frame.instanced {
+                    let ranges = visible_ranges(&m.set.layout.chunks, &light_frustum, None);
+                    m.set.draw_ranges(&mut pass, &ranges, |p| &p.tris);
                 }
             }
         }
@@ -1101,29 +1511,102 @@ impl Renderer {
             multiview_mask: None,
         });
         pass.set_bind_group(1, &light_group, &[]);
+        let frustum = Frustum::from_view_proj(&cam.view_proj(width as f64 / height as f64));
+        let lod_px = f64::from(s.lod_px);
+        let view_h = f64::from(height);
+        let mut stats = FrameStats::default();
+        // meshes that survive the frustum test, with the level of detail they draw
+        let visible: Vec<(usize, &MeshBuffers)> = frame
+            .meshes
+            .iter()
+            .enumerate()
+            .filter_map(|(i, m)| {
+                if m.mesh
+                    .bounds
+                    .is_some_and(|(lo, hi)| !frustum.intersects_aabb(lo, hi))
+                {
+                    stats.culled += 1;
+                    return None;
+                }
+                let small = m
+                    .mesh
+                    .bounds
+                    .is_some_and(|(lo, hi)| lod::use_proxy(lo, hi, cam, view_h, lod_px));
+                if small && m.mesh.has_lod() {
+                    stats.lod_draws += 1;
+                }
+                Some((i, m.mesh.lod_or_self(small)))
+            })
+            .collect();
+        let lod_view = (lod_px > 0.0).then_some(LodView {
+            camera: cam,
+            viewport_h: view_h,
+            min_px: lod_px,
+        });
+        let ranges: Vec<Vec<DrawRange>> = frame
+            .instanced
+            .iter()
+            .map(|m| {
+                let all = m.set.layout.chunks.len() as u32;
+                let r = visible_ranges(&m.set.layout.chunks, &frustum, lod_view);
+                let kept: u32 = r
+                    .iter()
+                    .map(|r| {
+                        m.set
+                            .layout
+                            .chunks
+                            .iter()
+                            .filter(|c| c.first >= r.first && c.first < r.first + r.count)
+                            .count() as u32
+                    })
+                    .sum();
+                stats.culled += all - kept;
+                r
+            })
+            .collect();
+        let mut draw = |calls: u32, instances: u64| {
+            stats.draw_calls += calls;
+            stats.instances_drawn += instances;
+        };
         if fill {
             pass.set_pipeline(&self.tri);
-            for (m, group) in frame.meshes.iter().zip(&mesh_groups) {
+            for (i, mesh) in &visible {
+                pass.set_bind_group(0, &mesh_groups[*i], &[]);
+                stats.culled += mesh.tris.draw_culled(&mut pass, &frustum);
+                draw(mesh.tris.0.len() as u32, 0);
+            }
+            pass.set_pipeline(&self.tri_inst);
+            for ((m, group), r) in frame.instanced.iter().zip(&inst_groups).zip(&ranges) {
                 pass.set_bind_group(0, group, &[]);
-                m.mesh.tris.draw(&mut pass);
+                let (calls, n) = m.set.draw_ranges(&mut pass, r, |p| &p.tris);
+                draw(calls, n);
             }
         }
         if wire || s.show_points {
-            for (m, group) in frame.meshes.iter().zip(&mesh_groups) {
-                pass.set_bind_group(0, group, &[]);
+            for (i, mesh) in &visible {
+                pass.set_bind_group(0, &mesh_groups[*i], &[]);
                 if wire {
                     pass.set_pipeline(&self.edge);
-                    m.mesh.edges.draw(&mut pass);
+                    stats.culled += mesh.edges.draw_culled(&mut pass, &frustum);
                 }
                 if s.show_points && s.point_size > 0.0 {
                     pass.set_pipeline(&self.point_quad);
-                    m.mesh.point_quads.draw(&mut pass);
+                    mesh.point_quads.draw(&mut pass);
                 } else if s.show_points {
                     pass.set_pipeline(&self.point);
-                    m.mesh.points.draw(&mut pass);
+                    mesh.points.draw(&mut pass);
                 }
             }
         }
+        if wire {
+            pass.set_pipeline(&self.edge_inst);
+            for ((m, group), r) in frame.instanced.iter().zip(&inst_groups).zip(&ranges) {
+                pass.set_bind_group(0, group, &[]);
+                let (calls, n) = m.set.draw_ranges(&mut pass, r, |p| &p.edges);
+                draw(calls, n);
+            }
+        }
+        *self.stats.lock().unwrap_or_else(|e| e.into_inner()) = stats;
         pass.set_bind_group(0, &plain, &[]);
         if let Some(boxes) = &boxes {
             pass.set_pipeline(&self.grid);

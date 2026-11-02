@@ -342,3 +342,219 @@ Tests (crates/viewport/tests/panes.rs): `visible` for every layout/maximise comb
 even sizes and several gaps, quad corners, maximised and single give the full area; `pane_at` on
 rect interiors, edges and gaps; default cameras: Top looks down −Y (forward ≈ −Y), Front/Right are orthographic with the
 documented sides, Perspective is `base`, pivots equal.
+
+## 10. Performance: GPU instancing, upload cache, chunked upload, culling, LOD (brief 144)
+
+Sources: published literature only. U. Assarsson, T. Möller, "Optimized View Frustum Culling Algorithms
+for Bounding Boxes", JGT 5(1) (2000); G. Gribb, K. Hartmann, "Fast Extraction of Viewing Frustum Planes
+from the World-View-Projection Matrix" (2001); J. Arvo, "Transforming Axis-Aligned Bounding Boxes",
+Graphics Gems (1990); G. M. Morton, "A computer oriented geodetic data base" (1966, Z-order); J. Rossignac,
+P. Borrel, "Multi-resolution 3D approximations for rendering complex scenes" (1993, vertex clustering LOD);
+wgpu 30 public API docs (instance-rate vertex buffers, `draw(vertices, instances)`). Nothing here is a parity
+claim: the displayed image of an instanced cloner equals the expanded geometry (§10.7), and clone colours
+shown in the viewport are our own design (parity-pending G8). Related: clone data MOGRAPH.md C1/C3, the
+clone user interface is brief 079.
+
+### 10.1 Instanced clones (`instancing`)
+
+The cloner (`forge.cloner`) is drawn with one prototype mesh per child and one instance buffer, not
+with expanded geometry. Export, Make Editable, picking by mesh and every other consumer of
+`forge_generators::evaluate` still get the expanded mesh (MOGRAPH.md C3); only the display path changes.
+
+`forge_generators::cloner_instances(scene, id, ctx) -> Result<Option<ClonerInstances>, BuildError>` returns
+`ClonerInstances { prototypes: Vec<PolyMesh>, clones: CloneData }`: the prototypes exactly as the expansion
+uses them (child transform baked in unless Reset Coordinates), and the clone data after the effectors.
+`Ok(None)` means "expand instead": the node is not a cloner, it has no prototype, or it has enabled
+deformer children (a deformer deforms the combined mesh, which instancing cannot show). The expansion in
+`evaluate` and this function share one code path, so both agree.
+
+Per instance the GPU gets `InstanceRaw` (64 bytes, `repr(C)`): three rows of the affine matrix
+`world · clone.matrix` (`row_i = (m[i][0..3], translation_i)`, f32) and the clone colour (rgb, a = 1).
+The vertex shader computes `p' = rows · (p, 1)` and the normal with the cofactor matrix of the upper 3×3
+(`n' = [c1×c2, c2×c0, c0×c1] · n`, `c_k` = columns), which equals the inverse transpose up to a scale and a
+sign. Only the direction matters (the lighting is two-sided, §6), so non-uniform scale shades like the
+expanded mesh. Shadow, fill and edge pipelines each have an instanced variant (`vs_shadow_inst`,
+`vs_tri_inst`, `vs_edge_inst`); the fragment stages are shared.
+
+Known limit: a clone's smooth normals are the prototype's smooth normals transformed by the cofactor matrix,
+not re-averaged over the transformed geometry, so Smooth shading of a non-uniformly scaled clone differs slightly
+from the expanded mesh (Flat shading and uniform scale/rotation are exact; §10.9 tests use those). The shadow-map
+fit uses the union of the instance boxes, which is looser than the points' bounds for rotated clones.
+
+Displayed colour of a clone: `base · clone.color` (white clones, the default, leave the object colour
+unchanged; the base is the object or selection colour). Hidden Line ignores the clone colour (it draws
+the background colour). Edges keep the wire colour. Hidden clones (`visible = false`) and clones whose
+`child` has no prototype get no slot.
+
+`InstanceInput { matrices, colors, visible, child }` (borrowed slices of `CloneData`, f64) and
+`build_layout(proto_bounds, &input, &world, chunk) -> InstanceLayout` are pure and device-free:
+
+1. Visible clones with a prototype that has bounds are grouped by prototype (ascending), in clone order.
+2. Within a group the clones are ordered by the Morton code of the centre of their world bounding box
+   (10 bits per axis over the group's centre box; ties by clone index), so neighbours in the buffer are
+   neighbours in space.
+3. The ordered group is cut into chunks of `chunk` instances (`INSTANCE_CHUNK` = 2048). Each
+   `InstanceChunk { proto, first, count, min, max, max_radius }` has the union of the world boxes
+   (`transform_aabb`, Arvo) and the largest half-diagonal of a member box.
+4. `raw[slot]` is the GPU data, `clone_of_slot[slot]` the clone index of the slot (for diagnostics and
+   picking by slot), `bounds` the union of all chunk boxes.
+
+`InstanceSet::new(device, prototypes, smoothing, &input, &world)` uploads one `MeshBuffers` per prototype
+and one instance buffer; `Frame.instanced: &[DrawInstanced { set, color }]` draws them after the plain
+meshes. A draw issues one `draw(0..vertices, first..first+count)` per prototype chunk and visible range
+(§10.5), so 100 000 clones are about a hundred draw calls, not 100 000 meshes in one buffer.
+Bounding Box mode draws one box per instance set (the union of the chunk boxes).
+
+### 10.2 Mesh upload cache (`cache`)
+
+`RevisionCache<K, V>` keeps the uploaded GPU object of each key together with the revision it was built from.
+
+- `get_or_insert_with(key, revision, build)` returns the stored value if the key exists with the **same
+  revision**, counts a `hit`, and does not call `build`; otherwise it calls `build`, stores the result with
+  the new revision (replacing the old value), and counts an `upload`.
+- `retain(|key| …)` drops the entries of keys that are gone (deleted or hidden nodes); `clear()`.
+- `stats() -> CacheStats { uploads, hits }` are cumulative; `reset_stats()`.
+- The cache never inspects the value. A key is `(NodeId, kind)`.
+
+The revision of a node is the content hash of what the upload is made from: `mesh_revision(&PolyMesh)`
+(an FNV-1a style 64-bit hash over the point coordinate bits and the polygon vertex lists, with the point and polygon counts),
+mixed (`combine`) with the smoothing angle bits, and for a component-mode target with the shown selection
+(`selection_revision`). For a cloner the revision is `combine` of the prototype hashes, the instance
+count and a hash of the visible clones' matrices, colours and prototype indices. Rules that follow:
+
+| Change | Upload |
+|---|---|
+| Scene revision moves but a node's evaluated geometry is bit-identical (other node edited, time changed on a static node) | none for that node |
+| A node's parameter, transform, or deformer changes its world-space geometry | that node only |
+| Selecting or deselecting an object (colour only) | none |
+| Smoothing angle changes | that node |
+| Component target's selection or mode changes | that node |
+| Cloner: a clone matrix, colour, visibility or prototype changes | its instance set (prototype meshes are keyed separately and stay if unchanged) |
+| Node removed or hidden | its entry is dropped by `retain` |
+
+Evaluation (the CPU rebuild of the geometry) is not cached by this; the cache saves the normal generation,
+triangulation and upload (the expensive part for large meshes).
+
+### 10.3 Chunked upload (`render::UploadOptions`)
+
+A mesh is uploaded as several vertex buffers so that no buffer approaches the device limit
+(`max_buffer_size`, 256 MiB by default; a triangle vertex is 40 bytes) and so that the CPU never holds the
+vertex data of the whole mesh. `UploadOptions { chunk_tris }` (default `DEFAULT_CHUNK_TRIS` = 262 144
+triangles = 31 MiB; clamped so that one buffer fits `max_buffer_size / 2`): the triangulation (a list of
+`(polygon, [u32; 3])`) is processed in slices of `chunk_tris`, each slice is converted to vertices, uploaded
+and dropped. Edges use the same number of line segments per chunk. `MeshBuffers::with_options` sets the
+options; the other constructors use the default. A chunk records the box of its vertices, which §10.5 uses.
+A mesh with at most `chunk_tris` triangles has exactly one chunk and draws as before.
+
+### 10.4 Frustum maths (`cull`)
+
+- `Frustum::from_view_proj(m)` extracts six normalised planes (Gribb–Hartmann, depth range [0, 1]):
+  left `r3 + r0`, right `r3 − r0`, bottom `r3 + r1`, top `r3 − r1`, near `r2`, far `r3 − r2`
+  (`r_i` = row `i` of the matrix). A point is inside when `n·p + d ≥ 0` for every plane.
+- `Frustum::intersects_aabb(min, max)`: false only if the box lies entirely outside one plane (the corner
+  furthest along the plane normal is outside). It is conservative: it may keep a box that is
+  outside near a frustum corner, never rejects a box that touches the frustum. `intersects_sphere` likewise.
+- `transform_aabb(m, min, max)`: the box of the transformed box (Arvo), exact for the affine case.
+- Boxes are expanded by `1e-6 · max(1, extent)` before the test so a box on a plane is kept.
+- Culling never changes the image, only the work: the GPU clips the same volume.
+
+### 10.5 Culling and draw lists
+
+In the colour pass the renderer culls (a) every mesh by its bounds, then each vertex chunk of tris and edges
+by the chunk box, and (b) instance chunks by `InstanceChunk` box. `visible_ranges(chunks, frustum, lod)
+-> Vec<DrawRange { proto, first, count, lod }>` is the draw list: chunks that intersect the frustum, in
+buffer order, with adjacent chunks of the same prototype and LOD level merged into one range (fewer
+draws). In each shadow-map pass the same test uses the light's matrix (`shadow_matrix`), so off-screen
+casters that still shadow visible ground are drawn into the map, while casters outside the light volume
+are skipped. Points and point quads are not culled (component mode only, small).
+
+### 10.6 Level of detail (`lod`)
+
+Simple screen-size LOD, off by default. `Settings.lod_px` (f32, default 0 = off): an object (or, for
+instances, a chunk) whose projected diameter is below `lod_px` pixels draws its proxy instead of the full mesh.
+
+- `screen_diameter_px(radius, distance, cam, viewport_h)`: perspective `2·radius·h / (2·distance·tan(fov_y/2))`,
+  orthographic `2·radius·h / height`; `distance` is measured to the nearest point of the bounds (box
+  distance from the eye, at least 1e-9), and is `radius`-scale correct for a sphere of the box's half diagonal.
+- `lod_proxy(mesh, cells) -> PolyMesh`: vertex clustering. The bounding box is divided into
+  `cells³` cells (`cells ≥ 1`); every point maps to the cell of its position, the proxy point is the mean of
+  the points of the cell (cells in ascending index order), polygons are re-indexed, consecutive duplicate
+  corners removed, polygons with fewer than three distinct corners dropped. Deterministic; never adds
+  polygons; the result is within one cell size of the original.
+- `MeshBuffers::set_lod(proxy)` attaches the proxy buffers; `InstanceSet` takes one per prototype
+  (`set_proto_lod`). The editor builds a proxy (`LOD_CELLS` = 24) only for meshes with more than
+  `LOD_MIN_TRIS` (50 000) triangles and only when `lod_px > 0` (`UploadSettings.lod_proxies`). There is
+  no UI for `lod_px` yet, so the editor draws full detail; the hook is `Settings.lod_px`.
+- Instanced chunks choose per chunk (`max_radius` and the distance to the chunk box), so near clones keep
+  full detail and far ones use the proxy.
+
+### 10.7 Picking instanced clones
+
+`picking::pick_instances(prototypes, &input, &world, &ray) -> Option<InstanceHit { clone, proto, poly, t }>`:
+for each visible clone with a prototype, the ray is moved into prototype space with the inverse of
+`world · clone.matrix` (origin and the *unnormalised* direction, so `t` is the world ray parameter), the
+prototype box is tested with the slab method, then the prototype's triangles (`ray_triangle`). The
+nearest `t` wins; ties go to the lower clone index. Matrices that are singular (|det| < 1e-18) are
+skipped. The editor's `pick_node` is unchanged for callers (returns the cloner node); `manipulate::pick_object`
+returns `PickHit { node, clone: Option<u32> }` with the clone index when an instanced cloner was hit.
+Picking never expands the clone geometry.
+
+### 10.8 Editor integration
+
+`viewport_panel::scene_draw_items_at(scene, selected, ctx) -> Vec<DrawItem>` is `scene_meshes_at` with
+cloners returned as `DrawItem::Instanced` when `cloner_instances` gives instances (`scene_meshes_at`
+itself is unchanged and expands, for bounds, tests and export). The panel keeps two `RevisionCache`s
+(meshes, instance sets) and refreshes them when the scene revision, selection or component state changes (§10.2).
+
+### 10.9 Tests
+
+crates/viewport/tests/performance.rs (pure): frustum plane extraction (a point inside / outside each plane,
+perspective and orthographic), `intersects_aabb` accepts boxes straddling and touching a plane and rejects
+boxes outside each plane, `transform_aabb` equals the box of the eight transformed corners, `build_layout`
+(hidden clones skipped, grouping by prototype, chunk sizes, chunk boxes contain their members, deterministic order), `visible_ranges` (frustum
+rejects far chunks, merges adjacent, LOD flag), `RevisionCache` rules of §10.2, `lod_proxy`, `screen_diameter_px`,
+`pick_instances` (nearest clone, miss, scaled and rotated clones, hidden clone ignored, matches the brute-force
+expanded mesh pick). crates/viewport/tests/instancing.rs (software adapter; skips without one unless
+`FORGE_REQUIRE_GPU=1`): the instanced render equals the render of the expanded geometry within the baseline
+tolerance for Smooth, Flat, SmoothWire and Constant, with a lit rig and shadows, and with non-uniform scale;
+clone colours tint; hidden clones are not drawn; a camera looking away from the clones draws only the
+background; chunked meshes (tiny `chunk_tris`) render identically to one chunk; the LOD proxy replaces a tiny
+object. crates/generators/tests/cloner_instances.rs: instances agree with the expanded mesh, deformer children and
+non-cloners return `None`. crates/ui/tests/viewport_perf.rs: draw items, cache upload counts after
+an edit, picking returns the cloner and a clone index.
+
+### 10.10 Benchmarks (criterion; `cargo bench -p forge-viewport`)
+
+`crates/viewport/benches/performance.rs`. Not run by the gate (they take minutes); the numbers below are
+recorded for the S10 thresholds (docs/roadmap/README.md: 1 M polygons and 10 k clones stay interactive,
+≥ 20 fps, i.e. ≤ 50 ms per frame of CPU work on the editor side).
+
+Measured on the development container (software adapter llvmpipe, 256-bit; release build; median of
+criterion's interval). CPU rows are adapter independent. "Upload" rows are the CPU side plus wgpu buffer
+creation on llvmpipe; frame rows are the software rasteriser at 320 × 240, not a GPU.
+
+| Benchmark | 10 000 clones | 100 000 clones |
+|---|---|---|
+| `build_layout` (Morton order, chunks, 64-byte instances) | 2.7 ms | 38 ms |
+| `visible_ranges`, whole field in view (draw list) | 0.12 µs | 1.1 µs |
+| `visible_ranges`, close-up (most chunks culled) | 0.10 µs | 0.56 µs |
+| `instances_revision` (cache key) | 0.44 ms | 4.4 ms |
+| `pick_instances` (ray against every clone box) | 0.77 ms | 7.7 ms |
+| `InstanceSet::new` (layout + prototype + instance buffer upload) | 3.4 ms | 44 ms |
+| frame, instanced | 25 ms | 186 ms |
+| frame, same 10 000 clones as expanded geometry | 70 ms | – |
+| upload of the same 10 000 clones as expanded geometry | 103 ms | – |
+
+| Benchmark (1 002 528 triangles, 708 × 708 quads) | Time |
+|---|---|
+| `mesh_revision` (cache lookup cost) | 7.9 ms |
+| `MeshBuffers` build + upload, 4 chunks of 262 144 triangles | 0.98 s (one time, then cached) |
+
+Against S10 (≥ 20 fps, 10 k clones, 1 M polygons): per frame the editor-side CPU cost with an unchanged scene
+is the cache check only (a 1 M-triangle mesh: 7.9 ms for the content hash; 10 k clones: 0.4 ms), plus the draw
+list (microseconds) and one draw call per visible chunk (5 chunks for 10 000 clones). Re-uploading 10 k clones
+after an edit is 3.4 ms against 103 ms for the expanded mesh (30 ×), and the llvmpipe frame is 2.8 × faster.
+The 1 M-triangle upload (1 s) happens once per content change, not per frame. **Threshold proposed for brief 181:**
+instance layout + upload ≤ 10 ms per 10 000 clones, draw-list ≤ 0.1 ms, content hash ≤ 10 ms per 1 M triangles,
+on this container's CPU; regressions of more than 2 × fail. Real-GPU frame times are unmeasured (no GPU here).
+

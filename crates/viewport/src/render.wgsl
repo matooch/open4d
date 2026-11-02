@@ -7,7 +7,8 @@ struct Uniforms {
     wire: vec4<f32>,
     // unused (the lights are in group 1)
     light: vec4<f32>,
-    // x: 1 = smooth normals, y: depth bias in NDC (toward the camera), z: 1 = unlit
+    // x: 1 = smooth normals, y: depth bias in NDC (toward the camera), z: 1 = unlit,
+    // w: 1 = instanced draws multiply the base colour by the clone colour
     params: vec4<f32>,
     // x: half point size in pixels, y/z: NDC units per pixel (2/width, 2/height)
     point: vec4<f32>,
@@ -76,11 +77,39 @@ struct TriOut {
     @location(0) n: vec3<f32>,
     @location(1) @interpolate(flat) selected: f32,
     @location(2) wpos: vec3<f32>,
+    @location(3) @interpolate(flat) tint: vec3<f32>,
 };
+
+// Per-instance data of clones (docs/specs/VIEWPORT.md §10.1): rows of the affine matrix
+// (xyz linear part, w translation) and the clone colour.
+struct InstIn {
+    @location(4) r0: vec4<f32>,
+    @location(5) r1: vec4<f32>,
+    @location(6) r2: vec4<f32>,
+    @location(7) color: vec4<f32>,
+};
+
+fn inst_point(i: InstIn, p: vec3<f32>) -> vec3<f32> {
+    let h = vec4<f32>(p, 1.0);
+    return vec3<f32>(dot(i.r0, h), dot(i.r1, h), dot(i.r2, h));
+}
+
+// Cofactor matrix of the linear part times n: the inverse transpose up to scale and sign.
+fn inst_normal(i: InstIn, n: vec3<f32>) -> vec3<f32> {
+    let c0 = vec3<f32>(i.r0.x, i.r1.x, i.r2.x);
+    let c1 = vec3<f32>(i.r0.y, i.r1.y, i.r2.y);
+    let c2 = vec3<f32>(i.r0.z, i.r1.z, i.r2.z);
+    return cross(c1, c2) * n.x + cross(c2, c0) * n.y + cross(c0, c1) * n.z;
+}
 
 @vertex
 fn vs_shadow(v: TriIn) -> @builtin(position) vec4<f32> {
     return u.view_proj * vec4<f32>(v.pos, 1.0);
+}
+
+@vertex
+fn vs_shadow_inst(v: TriIn, i: InstIn) -> @builtin(position) vec4<f32> {
+    return u.view_proj * vec4<f32>(inst_point(i, v.pos), 1.0);
 }
 
 @vertex
@@ -90,6 +119,19 @@ fn vs_tri(v: TriIn) -> TriOut {
     o.wpos = v.pos;
     o.n = select(v.flat_n, v.smooth_n, u.params.x > 0.5);
     o.selected = v.selected;
+    o.tint = vec3<f32>(1.0);
+    return o;
+}
+
+@vertex
+fn vs_tri_inst(v: TriIn, i: InstIn) -> TriOut {
+    var o: TriOut;
+    let wpos = inst_point(i, v.pos);
+    o.clip = u.view_proj * vec4<f32>(wpos, 1.0);
+    o.wpos = wpos;
+    o.n = inst_normal(i, select(v.flat_n, v.smooth_n, u.params.x > 0.5));
+    o.selected = v.selected;
+    o.tint = mix(vec3<f32>(1.0), i.color.rgb, u.params.w);
     return o;
 }
 
@@ -97,7 +139,7 @@ fn vs_tri(v: TriIn) -> TriOut {
 fn fs_tri(i: TriOut) -> @location(0) vec4<f32> {
     let len = length(i.n);
     let n = select(vec3<f32>(0.0), i.n / len, len > 1e-8);
-    let base = select(u.base.rgb, u.selection.rgb, i.selected > 0.5);
+    let base = select(u.base.rgb, u.selection.rgb, i.selected > 0.5) * i.tint;
     if u.params.z > 0.5 {
         return vec4<f32>(base, 1.0);
     }
@@ -138,6 +180,15 @@ struct EdgeOut {
 fn vs_edge(v: EdgeIn) -> EdgeOut {
     var o: EdgeOut;
     o.clip = u.view_proj * vec4<f32>(v.pos, 1.0);
+    o.clip.z = o.clip.z - u.params.y * o.clip.w;
+    o.selected = v.selected;
+    return o;
+}
+
+@vertex
+fn vs_edge_inst(v: EdgeIn, i: InstIn) -> EdgeOut {
+    var o: EdgeOut;
+    o.clip = u.view_proj * vec4<f32>(inst_point(i, v.pos), 1.0);
     o.clip.z = o.clip.z - u.params.y * o.clip.w;
     o.selected = v.selected;
     return o;
