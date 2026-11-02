@@ -32,7 +32,7 @@ implementers can avoid collisions.
 | 032 | [Snapping 2.0 and axis/pivot editing](../agents/tasks/032-snapping-pivot.md) | B | 006 | ready | viewport, ui |
 | 033 | [N-gon handling: reference triangulation order and edge visibility](../agents/tasks/033-ngon-triangulation-order.md) | B | – | done | geometry, generators, viewport |
 | 034 | [Multi-object component editing; numeric component coordinates](../agents/tasks/034-multi-object-component-editing.md) | B | 006 | ready | ui |
-| 035 | [Platonic, Oil Tank, Polygon and Figure primitives](../agents/tasks/035-platonic-oiltank-polygon-figure.md) | C | 033 | ready | generators |
+| 035 | [Platonic, Oil Tank, Polygon and Figure primitives](../agents/tasks/035-platonic-oiltank-polygon-figure.md) | C | 033 | done | generators |
 | 036 | [Landscape primitive](../agents/tasks/036-landscape.md) | C | 063 | ready | generators, noise |
 | 037 | [Spline primitives II](../agents/tasks/037-spline-primitives-2.md) | C | 038 | ready | generators |
 | 038 | [Intermediate Points modes and R25 per-spline defaults](../agents/tasks/038-intermediate-points.md) | C | – | ready | generators, geometry |

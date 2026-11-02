@@ -4,13 +4,17 @@
 mod boole;
 mod cloner;
 mod cube;
+mod figure;
 mod lathe;
 mod modeling;
+mod oil_tank;
 mod plane;
 mod platonic;
 mod polygon;
+mod polygon_prim;
 mod pyramid;
 mod round;
+mod solids;
 mod sphere;
 mod spline_gens;
 pub mod splines;
@@ -43,7 +47,7 @@ pub enum BuildError {
 /// The primitive node types.
 pub struct Primitives;
 
-fn types() -> [NodeType; 10] {
+fn types() -> [NodeType; 14] {
     [
         plane::node_type(),
         cube::node_type(),
@@ -55,6 +59,10 @@ fn types() -> [NodeType; 10] {
         round::tube_type(),
         round::capsule_type(),
         pyramid::node_type(),
+        solids::node_type(),
+        oil_tank::node_type(),
+        polygon_prim::node_type(),
+        figure::node_type(),
     ]
 }
 
@@ -151,6 +159,10 @@ pub fn build(type_id: &str, values: &BTreeMap<String, Value>) -> Result<PolyMesh
         "forge.tube" => round::build_tube(&p),
         "forge.capsule" => round::build_capsule(&p),
         "forge.pyramid" => pyramid::build(&p),
+        "forge.platonic" => solids::build(&p),
+        "forge.oil_tank" => oil_tank::build(&p),
+        "forge.polygon_prim" => polygon_prim::build(&p),
+        "forge.figure" => figure::build(&p),
         _ => unreachable!("types() and build() list the same ids"),
     }
 }

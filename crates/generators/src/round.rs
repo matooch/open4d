@@ -9,13 +9,13 @@ use glam::DVec2;
 use crate::lathe::{Profile, lathe, orientation_param, oriented, slice_of, slice_params};
 use crate::{BuildError, Params};
 
-fn distance(id: &str, label: &str, default: f64) -> ParamDesc {
+pub(crate) fn distance(id: &str, label: &str, default: f64) -> ParamDesc {
     ParamDesc::float(id, label, default)
         .range(0.0, f64::MAX)
         .unit(Unit::Distance)
 }
 
-fn count(id: &str, label: &str, default: i64, min: i64) -> ParamDesc {
+pub(crate) fn count(id: &str, label: &str, default: i64, min: i64) -> ParamDesc {
     ParamDesc::int(id, label, default).range(min, 1000)
 }
 
