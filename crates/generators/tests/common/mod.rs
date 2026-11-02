@@ -86,6 +86,7 @@ pub fn typed_params(reg: &Registry, type_id: &str, raw: &Table) -> BTreeMap<Stri
                 }
                 (ParamKind::Float { .. }, toml::Value::Float(f)) => Value::Float(angle(desc, *f)),
                 (ParamKind::Enum { .. }, toml::Value::String(s)) => Value::Enum(s.clone()),
+                (ParamKind::String, toml::Value::String(s)) => Value::String(s.clone()),
                 (ParamKind::Vec3 { .. }, toml::Value::Array(a)) if a.len() == 3 => {
                     let f = |i: usize| a[i].as_float().or(a[i].as_integer().map(|x| x as f64));
                     Value::Vec3([f(0).unwrap(), f(1).unwrap(), f(2).unwrap()])
@@ -137,6 +138,11 @@ pub fn apply(
             (ParamKind::Float { .. }, toml::Value::Float(f)) => Value::Float(angle(desc, *f)),
             (ParamKind::Vec3 { .. }, v @ toml::Value::Array(_)) => vec3(v),
             (ParamKind::Enum { .. }, toml::Value::String(s)) => Value::Enum(s.clone()),
+            (ParamKind::String, toml::Value::String(s)) => Value::String(s.clone()),
+            (ParamKind::Color, v @ toml::Value::Array(_)) => match vec3(v) {
+                Value::Vec3(c) => Value::Color(c),
+                _ => unreachable!(),
+            },
             other => panic!("{type_id}.{k}: unexpected value {other:?}"),
         };
         tx.set_param(id, k, value).unwrap();

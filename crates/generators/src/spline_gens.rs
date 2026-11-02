@@ -184,7 +184,14 @@ pub fn extrude(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMe
     let ty = extrude_type();
     let p = Params { ty: &ty, values };
     no_fillets(&p)?;
-    let ring = curve.points();
+    let loops = curve.loops();
+    if loops.len() > 1 && (p.enumeration("cap_start") == "cap" || p.enumeration("cap_end") == "cap")
+    {
+        return Err(BuildError::Unsupported(
+            "caps of a spline with several loops",
+        ));
+    }
+    let ring: Vec<DVec3> = loops.iter().flatten().copied().collect();
     let n = ring.len();
     let sub = p.int("subdivision");
     let mv = match p.get("movement") {
@@ -196,12 +203,23 @@ pub fn extrude(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMe
         let off = mv * (j as f64 / sub as f64);
         points.extend(ring.iter().map(|&q| q + off));
     }
-    let r = |j: usize, i: usize| (j * n + i % n) as u32;
-    let spans = if curve.closed { n } else { n - 1 };
+    let r = |j: usize, i: usize| (j * n + i) as u32;
     let mut polys = Vec::new();
     for j in 0..sub {
-        for i in 0..spans {
-            polys.push(vec![r(j, i), r(j, i + 1), r(j + 1, i + 1), r(j + 1, i)]);
+        let mut start = 0;
+        for (l, lp) in loops.iter().enumerate() {
+            let m = lp.len();
+            let spans = if curve.closed { m } else { m - 1 };
+            for i in 0..spans {
+                let (a, b) = (start + i, start + (i + 1) % m);
+                // the further loops are holes: their faces wind the other way (`circle-ring`)
+                polys.push(if l == 0 {
+                    vec![r(j, a), r(j, b), r(j + 1, b), r(j + 1, a)]
+                } else {
+                    vec![r(j, a), r(j + 1, a), r(j + 1, b), r(j, b)]
+                });
+            }
+            start += m;
         }
     }
     if curve.closed {
@@ -277,6 +295,9 @@ pub(crate) fn evaluate_spline_gen(
     let Some(first) = curves.first() else {
         return Ok(None);
     };
+    if type_id != EXTRUDE && curves.iter().any(|c| !c.extra.is_empty()) {
+        return Err(BuildError::Unsupported("a spline with several loops"));
+    }
     match type_id {
         EXTRUDE => extrude(first, values).map(Some),
         LATHE => lathe(first, values).map(Some),

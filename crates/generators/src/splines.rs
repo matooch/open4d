@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use forge_core::{Category, NodeId, NodeType, ParamDesc, Scene, Unit, Value};
 use glam::DVec3;
 
+use crate::spline_prims;
 use crate::spline_sampling::{Interpolation, Sampling, add_params, sample};
 use crate::{BuildError, Params};
 
@@ -26,9 +27,32 @@ pub struct Curve {
     pub linear: bool,
     pub closed: bool,
     pub sampling: Sampling,
+    /// Further closed loops of the same spline (the inner circle of a Ring, the centre hole
+    /// of a Cogwheel): the reference reports them as extra segments of one spline.
+    pub extra: Vec<Curve>,
 }
 
 impl Curve {
+    pub fn new(segments: Vec<[DVec3; 4]>, linear: bool, closed: bool, sampling: Sampling) -> Curve {
+        Curve {
+            segments,
+            linear,
+            closed,
+            sampling,
+            extra: Vec::new(),
+        }
+    }
+
+    /// A polyline through `points` (closed ones join the last point to the first).
+    pub fn polyline(points: &[DVec3], closed: bool, sampling: Sampling) -> Curve {
+        let n = points.len();
+        let spans = if closed { n } else { n - 1 };
+        let segments = (0..spans)
+            .map(|i| line(points[i], points[(i + 1) % n]))
+            .collect();
+        Curve::new(segments, true, closed, sampling)
+    }
+
     pub(crate) fn bezier(seg: &[DVec3; 4], t: f64) -> DVec3 {
         let u = 1.0 - t;
         seg[0] * (u * u * u)
@@ -57,6 +81,13 @@ impl Curve {
         sample(self, &self.sampling)
     }
 
+    /// The point lists of the main loop and of every extra loop.
+    pub fn loops(&self) -> Vec<Vec<DVec3>> {
+        std::iter::once(self.points())
+            .chain(self.extra.iter().map(Curve::points))
+            .collect()
+    }
+
     pub fn transformed(&self, m: &glam::DMat4) -> Curve {
         Curve {
             segments: self
@@ -64,12 +95,13 @@ impl Curve {
                 .iter()
                 .map(|s| s.map(|p| m.transform_point3(p)))
                 .collect(),
+            extra: self.extra.iter().map(|c| c.transformed(m)).collect(),
             ..self.clone()
         }
     }
 }
 
-fn plane_param() -> ParamDesc {
+pub(crate) fn plane_param() -> ParamDesc {
     ParamDesc::enumeration(
         "plane",
         "Plane",
@@ -78,7 +110,7 @@ fn plane_param() -> ParamDesc {
     )
 }
 
-fn common(t: NodeType, default: Interpolation) -> NodeType {
+pub(crate) fn common(t: NodeType, default: Interpolation) -> NodeType {
     add_params(
         t.param(plane_param())
             .param(ParamDesc::bool("reverse", "Reverse", false)),
@@ -86,7 +118,7 @@ fn common(t: NodeType, default: Interpolation) -> NodeType {
     )
 }
 
-fn distance(id: &str, label: &str, default: f64) -> ParamDesc {
+pub(crate) fn distance(id: &str, label: &str, default: f64) -> ParamDesc {
     ParamDesc::float(id, label, default)
         .range(0.0, f64::MAX)
         .unit(Unit::Distance)
@@ -145,7 +177,7 @@ pub(crate) fn helix_type() -> NodeType {
 }
 
 pub(crate) fn is_spline(type_id: &str) -> bool {
-    matches!(type_id, CIRCLE | RECTANGLE | HELIX)
+    matches!(type_id, CIRCLE | RECTANGLE | HELIX) || spline_prims::node_type(type_id).is_some()
 }
 
 /// Maps the spline's XY frame to its plane (§6.1).
@@ -157,93 +189,208 @@ fn on_plane(plane: &str, p: DVec3) -> DVec3 {
     }
 }
 
-fn line(a: DVec3, b: DVec3) -> [DVec3; 4] {
+pub(crate) fn line(a: DVec3, b: DVec3) -> [DVec3; 4] {
     [a, a.lerp(b, 1.0 / 3.0), a.lerp(b, 2.0 / 3.0), b]
+}
+
+/// A straight piece of a curve that also has curved pieces: both handles sit on their end
+/// points, as the reference's closing chord does (`arc-sector`: its Uniform samples follow
+/// `3t^2 - 2t^3` along the chord, 7e-7). Pure polylines use [`line`] (they never get
+/// interior points).
+pub(crate) fn straight(a: DVec3, b: DVec3) -> [DVec3; 4] {
+    [a, a, b, b]
+}
+
+/// A smooth curve through `points` with the reference's automatic tangents: at a point the
+/// tangent runs along `next - previous` and both handles are a third of the shorter
+/// adjacent chord long; the two ends of an open curve use their single chord (fitted to
+/// the flower and cycloid exports, 7e-7). Coincident neighbours give a zero handle.
+pub(crate) fn auto_tangent_curve(points: &[DVec3], closed: bool, sampling: Sampling) -> Curve {
+    let n = points.len();
+    let handle = |i: usize| -> DVec3 {
+        let (prev, next) = if closed {
+            (points[(i + n - 1) % n], points[(i + 1) % n])
+        } else {
+            (points[i.saturating_sub(1)], points[(i + 1).min(n - 1)])
+        };
+        let dir = (next - prev).normalize_or_zero();
+        let len = if closed || (i > 0 && i + 1 < n) {
+            (points[i] - prev).length().min((next - points[i]).length())
+        } else {
+            (next - prev).length()
+        };
+        dir * (len / 3.0)
+    };
+    let spans = if closed { n } else { n - 1 };
+    let segments = (0..spans)
+        .map(|i| {
+            let j = (i + 1) % n;
+            [
+                points[i],
+                points[i] + handle(i),
+                points[j] - handle(j),
+                points[j],
+            ]
+        })
+        .collect();
+    Curve::new(segments, false, closed, sampling)
+}
+
+/// A quarter-turn style Bezier arc from `a` to `b` around `center`: the handles are tangent
+/// to the circle and `CIRCLE_KAPPA * radius * (turn / quarter turn)` long (circle quarters,
+/// the Arc, the fillets of rounded n-sides and rectangles all follow it).
+pub(crate) fn arc_segment(center: DVec3, radius: f64, from: f64, turn: f64) -> [DVec3; 4] {
+    let at = |a: f64| center + DVec3::new(a.cos(), a.sin(), 0.0) * radius;
+    let tan = |a: f64| DVec3::new(-a.sin(), a.cos(), 0.0);
+    let h = CIRCLE_KAPPA * radius * turn / std::f64::consts::FRAC_PI_2;
+    let to = from + turn;
+    [
+        at(from),
+        at(from) + tan(from) * h,
+        at(to) - tan(to) * h,
+        at(to),
+    ]
+}
+
+fn node_type_of(type_id: &str) -> Option<NodeType> {
+    match type_id {
+        CIRCLE => Some(circle_type()),
+        RECTANGLE => Some(rectangle_type()),
+        HELIX => Some(helix_type()),
+        other => spline_prims::node_type(other),
+    }
 }
 
 /// The spline of a spline-primitive node, in its local space.
 pub fn build_curve(type_id: &str, values: &BTreeMap<String, Value>) -> Result<Curve, BuildError> {
-    let ty = match type_id {
-        CIRCLE => circle_type(),
-        RECTANGLE => rectangle_type(),
-        HELIX => helix_type(),
-        _ => return Err(BuildError::UnknownType(type_id.to_string())),
-    };
+    let ty = node_type_of(type_id).ok_or_else(|| BuildError::UnknownType(type_id.to_string()))?;
     let p = Params { ty: &ty, values };
     let sampling = Sampling::from_params(&p);
     if p.bool("reverse") {
         return Err(BuildError::Unsupported("reversed spline"));
     }
     let mut curve = match type_id {
-        CIRCLE => {
-            if p.bool("ellipse") || p.bool("ring") {
-                return Err(BuildError::Unsupported("circle ellipse/ring"));
-            }
-            let r = p.float("radius");
-            let k = CIRCLE_KAPPA * r;
-            // quarters counter-clockwise from (r, 0)
-            let q = |a: DVec3, b: DVec3, ta: DVec3, tb: DVec3| [a, a + ta * k, b - tb * k, b];
-            let (e, n, w, s) = (
-                DVec3::new(r, 0.0, 0.0),
-                DVec3::new(0.0, r, 0.0),
-                DVec3::new(-r, 0.0, 0.0),
-                DVec3::new(0.0, -r, 0.0),
-            );
-            Curve {
-                segments: vec![
-                    q(e, n, DVec3::Y, -DVec3::X),
-                    q(n, w, -DVec3::X, -DVec3::Y),
-                    q(w, s, -DVec3::Y, DVec3::X),
-                    q(s, e, DVec3::X, DVec3::Y),
-                ],
-                linear: false,
-                closed: true,
-                sampling,
-            }
-        }
-        RECTANGLE => {
-            if p.bool("rounding") {
-                return Err(BuildError::Unsupported("rounded rectangle"));
-            }
-            let (w, h) = (p.float("width") / 2.0, p.float("height") / 2.0);
-            let c = [
-                DVec3::new(w, h, 0.0),
-                DVec3::new(-w, h, 0.0),
-                DVec3::new(-w, -h, 0.0),
-                DVec3::new(w, -h, 0.0),
-            ];
-            Curve {
-                segments: (0..4).map(|i| line(c[i], c[(i + 1) % 4])).collect(),
-                linear: true,
-                closed: true,
-                sampling,
-            }
-        }
-        _ => {
-            if (p.float("radial_bias") - 50.0).abs() > 1e-9
-                || (p.float("height_bias") - 50.0).abs() > 1e-9
-            {
-                return Err(BuildError::Unsupported("helix bias"));
-            }
-            let shape = HelixShape {
-                start_angle: p.float("start_angle"),
-                end_angle: p.float("end_angle"),
-                start_radius: p.float("start_radius"),
-                end_radius: p.float("end_radius"),
-                height: p.float("height"),
-            };
-            if sampling.mode == Interpolation::Adaptive {
-                shape.adaptive_polyline(p.int("subdivision") as f64, sampling)
-            } else {
-                shape.bezier(p.int("subdivision"), sampling)
-            }
-        }
+        CIRCLE => circle(&p, sampling)?,
+        RECTANGLE => rectangle(&p, sampling)?,
+        HELIX => helix(&p, sampling)?,
+        other => spline_prims::build(other, &p, sampling)?,
     };
     let plane = p.enumeration("plane");
-    for seg in &mut curve.segments {
-        *seg = seg.map(|q| on_plane(&plane, q));
+    if plane != "xy" {
+        let m = |c: &mut Curve| {
+            for seg in &mut c.segments {
+                *seg = seg.map(|q| on_plane(&plane, q));
+            }
+        };
+        m(&mut curve);
+        curve.extra.iter_mut().for_each(m);
     }
     Ok(curve)
+}
+
+fn circle_loop(rx: f64, ry: f64, sampling: Sampling) -> Curve {
+    let (kx, ky) = (CIRCLE_KAPPA * rx, CIRCLE_KAPPA * ry);
+    // quarters counter-clockwise from (rx, 0)
+    let ka = |t: DVec3| if t.x != 0.0 { kx } else { ky };
+    let q = |a: DVec3, b: DVec3, ta: DVec3, tb: DVec3| [a, a + ta * ka(ta), b - tb * ka(tb), b];
+    let (e, n, w, s) = (
+        DVec3::new(rx, 0.0, 0.0),
+        DVec3::new(0.0, ry, 0.0),
+        DVec3::new(-rx, 0.0, 0.0),
+        DVec3::new(0.0, -ry, 0.0),
+    );
+    Curve::new(
+        vec![
+            q(e, n, DVec3::Y, -DVec3::X),
+            q(n, w, -DVec3::X, -DVec3::Y),
+            q(w, s, -DVec3::Y, DVec3::X),
+            q(s, e, DVec3::X, DVec3::Y),
+        ],
+        false,
+        true,
+        sampling,
+    )
+}
+
+fn circle(p: &Params, sampling: Sampling) -> Result<Curve, BuildError> {
+    let ellipse = p.bool("ellipse");
+    if ellipse && p.bool("ring") {
+        return Err(BuildError::Unsupported("circle ellipse together with ring"));
+    }
+    let r = p.float("radius");
+    let mut curve = if ellipse {
+        circle_loop(r, p.float("radius_y"), sampling)
+    } else {
+        circle_loop(r, r, sampling)
+    };
+    if p.bool("ring") {
+        curve.extra.push(circle_loop(
+            p.float("inner_radius"),
+            p.float("inner_radius"),
+            sampling,
+        ));
+    }
+    Ok(curve)
+}
+
+fn rectangle(p: &Params, sampling: Sampling) -> Result<Curve, BuildError> {
+    let (w, h) = (p.float("width") / 2.0, p.float("height") / 2.0);
+    let c = [
+        DVec3::new(w, h, 0.0),
+        DVec3::new(-w, h, 0.0),
+        DVec3::new(-w, -h, 0.0),
+        DVec3::new(w, -h, 0.0),
+    ];
+    if !p.bool("rounding") {
+        return Ok(Curve::new(
+            (0..4).map(|i| line(c[i], c[(i + 1) % 4])).collect(),
+            true,
+            true,
+            sampling,
+        ));
+    }
+    // Quarter arcs at the four corners, each followed by the straight piece to the next
+    // corner, starting with the arc of the top right corner (spec §6.1).
+    let r = p.float("rounding_radius").min(w).min(h);
+    let mut segments = Vec::new();
+    let centers = [
+        DVec3::new(w - r, h - r, 0.0),
+        DVec3::new(-w + r, h - r, 0.0),
+        DVec3::new(-w + r, -h + r, 0.0),
+        DVec3::new(w - r, -h + r, 0.0),
+    ];
+    for (k, center) in centers.iter().enumerate() {
+        let arc = arc_segment(
+            *center,
+            r,
+            k as f64 * std::f64::consts::FRAC_PI_2,
+            std::f64::consts::FRAC_PI_2,
+        );
+        segments.push(arc);
+        let next = centers[(k + 1) % 4];
+        let next_start = arc_segment(next, r, (k + 1) as f64 * std::f64::consts::FRAC_PI_2, 0.0)[0];
+        segments.push(straight(arc[3], next_start));
+    }
+    Ok(Curve::new(segments, false, true, sampling))
+}
+
+fn helix(p: &Params, sampling: Sampling) -> Result<Curve, BuildError> {
+    if (p.float("radial_bias") - 50.0).abs() > 1e-9 || (p.float("height_bias") - 50.0).abs() > 1e-9
+    {
+        return Err(BuildError::Unsupported("helix bias"));
+    }
+    let shape = HelixShape {
+        start_angle: p.float("start_angle"),
+        end_angle: p.float("end_angle"),
+        start_radius: p.float("start_radius"),
+        end_radius: p.float("end_radius"),
+        height: p.float("height"),
+    };
+    Ok(if sampling.mode == Interpolation::Adaptive {
+        shape.adaptive_polyline(p.int("subdivision") as f64, sampling)
+    } else {
+        shape.bezier(p.int("subdivision"), sampling)
+    })
 }
 
 /// The helix curve `f(s) = (r cos a, r sin a, -height * s)`, `s` in `[0, 1]`, with the angle
@@ -291,9 +438,8 @@ impl HelixShape {
         let keep: Vec<usize> = (0..=n)
             .filter(|&i| n < 4 || (i != 1 && i != n - 1))
             .collect();
-        Curve {
-            segments: keep
-                .windows(2)
+        Curve::new(
+            keep.windows(2)
                 .map(|w| {
                     line(
                         self.at(w[0] as f64 / n as f64),
@@ -301,10 +447,10 @@ impl HelixShape {
                     )
                 })
                 .collect(),
-            linear: true,
-            closed: false,
+            true,
+            false,
             sampling,
-        }
+        )
     }
 
     /// R25 form (`splines-2/helix-uniform`): `n + 1` points at `s = i/n` with tangent handles
@@ -323,12 +469,7 @@ impl HelixShape {
                 [p0, p0 + handle(s0, len), p1 - handle(s1, len), p1]
             })
             .collect();
-        Curve {
-            segments,
-            linear: false,
-            closed: false,
-            sampling,
-        }
+        Curve::new(segments, false, false, sampling)
     }
 }
 

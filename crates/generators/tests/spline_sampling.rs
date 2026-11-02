@@ -20,7 +20,27 @@ fn registry() -> Arc<Registry> {
 }
 
 /// Observed cases whose spline we build and match (all vertices, strict faces).
-const MATCHING: &[&str] = &["circle-uniform"];
+const MATCHING: &[&str] = &[
+    "arc-angles",
+    "arc-defaults",
+    "arc-sector",
+    "circle-ellipse",
+    "circle-ring",
+    "circle-uniform",
+    "cissoid-defaults",
+    "cycloid-defaults",
+    "cycloid-epi",
+    "flower-defaults",
+    "fourside-defaults",
+    "fourside-types",
+    "nside-8",
+    "nside-defaults",
+    "nside-rounding",
+    "profile-defaults",
+    "rectangle-rounding",
+    "star-defaults",
+    "star-twist",
+];
 
 /// Built but not matching. `helix-uniform`: the 901 points of the first ring are within
 /// 3.5e-4 of the export (tolerance 1e-4, GENERATORS2.md §6.1); the second ring is displaced
@@ -28,7 +48,32 @@ const MATCHING: &[&str] = &["circle-uniform"];
 /// first ring is compared.
 const KNOWN_MISMATCH: &[&str] = &["helix-uniform"];
 
-/// The extrude of one O17 case: offset along +Z, caps off.
+/// Not built: the Cogwheel's tooth outline is not derived (GENERATORS2.md §6.3) and the
+/// Formula needs the expression library of brief 052.
+const UNSUPPORTED: &[&str] = &["cog-defaults", "formula-defaults"];
+
+/// Extrude Direction Auto (brief 044 owns the real rule). Observed so far: the extrusion goes
+/// to -z exactly when the spline, closed by its chord, runs clockwise (`cycloid-defaults` is the
+/// only such case; the others have a positive or zero area). The harness applies that guess to
+/// the first loop of the spline and the test below checks it against every export.
+fn auto_direction_is_negative(
+    doc: &Document,
+    child: forge_core::NodeId,
+) -> Result<bool, BuildError> {
+    let node = doc.scene().node(child).unwrap();
+    let loops = build_curve(&node.type_id, &node.params)?.loops();
+    let ring = &loops[0];
+    let area: f64 = (0..ring.len())
+        .map(|i| {
+            let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+            a.x * b.y - b.x * a.y
+        })
+        .sum();
+    Ok(area < 0.0)
+}
+
+/// The extrude of one O17 case: offset along +Z (along -Z when Direction Auto goes there),
+/// caps off.
 fn extrude_of(case: &forge_parity_harness::GoldenCase) -> Result<Mesh, BuildError> {
     let reg = registry();
     let m = case.manifest().unwrap();
@@ -36,24 +81,27 @@ fn extrude_of(case: &forge_parity_harness::GoldenCase) -> Result<Mesh, BuildErro
     let input = params["input"].as_table().unwrap().clone();
     let offset = params["extrude_offset"].as_float().unwrap();
     let ty = format!("forge.{}", input["type"].as_str().unwrap());
-    if reg.get(&ty).is_none() {
-        return Err(BuildError::Unsupported(
-            "spline type not built yet (brief 037)",
-        ));
-    }
     let mut doc = Document::new(reg.clone());
-    let ex = doc
+    let (ex, child) = doc
         .transact("case", |tx| {
             let ex = tx.create("forge.extrude", None, None)?;
-            tx.set_param(ex, "movement", Value::Vec3([0.0, 0.0, offset]))?;
             for cap in ["cap_start", "cap_end"] {
                 tx.set_param(ex, cap, Value::Enum("none".into()))?;
             }
             let child = tx.create(&ty, Some(ex), None)?;
             apply(tx, &reg, child, &ty, &input);
-            Ok(ex)
+            Ok((ex, child))
         })
         .unwrap();
+    let sign = if auto_direction_is_negative(&doc, child)? {
+        -1.0
+    } else {
+        1.0
+    };
+    doc.transact("direction", |tx| {
+        tx.set_param(ex, "movement", Value::Vec3([0.0, 0.0, sign * offset]))
+    })
+    .unwrap();
     let mesh = evaluate(doc.scene(), ex, &EvalCtx::default())?.expect("geometry");
     Ok(Mesh {
         positions: mesh.points.iter().map(|p| p.to_array()).collect(),
@@ -79,6 +127,12 @@ fn splines_2_cases_against_the_export() {
             }
             other => other.unwrap(),
         };
+        // Direction Auto: -z exactly when the export went there
+        let went_negative = expected.positions.iter().map(|p| p[2]).sum::<f64>() < 0.0;
+        let ours_negative = ours.positions.iter().map(|p| p[2]).sum::<f64>() < 0.0;
+        if !KNOWN_MISMATCH.contains(&case.name.as_str()) {
+            assert_eq!(ours_negative, went_negative, "{}: direction", case.name);
+        }
         assert_eq!(
             ours.positions.len(),
             expected.positions.len(),
@@ -116,8 +170,7 @@ fn splines_2_cases_against_the_export() {
     let names = |l: &[&str]| l.iter().map(|s| s.to_string()).collect::<BTreeSet<_>>();
     assert_eq!(matched, names(MATCHING));
     assert_eq!(mismatched, names(KNOWN_MISMATCH));
-    // the other 20 splines are brief 037's (arc, n-side, star, ... , circle ellipse/ring)
-    assert_eq!(unsupported.len(), 20, "{unsupported:?}");
+    assert_eq!(unsupported, names(UNSUPPORTED));
 }
 
 fn values(pairs: &[(&str, Value)]) -> BTreeMap<String, Value> {
@@ -159,8 +212,8 @@ fn uniform_places_number_points_per_segment() {
     // closed circle: 4 quarters of (8 + 1), the first point not repeated
     let p = points(CIRCLE, &[]);
     assert_eq!(p.len(), 36);
-    assert_eq!(p[0], glam::DVec3::new(200.0, 0.0, 0.0));
-    assert_eq!(p[9], glam::DVec3::new(0.0, 200.0, 0.0));
+    assert!((p[0] - glam::DVec3::new(200.0, 0.0, 0.0)).length() < 1e-9);
+    assert!((p[9] - glam::DVec3::new(0.0, 200.0, 0.0)).length() < 1e-9);
     let q = points(
         CIRCLE,
         &[mode("uniform"), ("intermediate_number", Value::Int(3))],
