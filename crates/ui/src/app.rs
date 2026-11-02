@@ -258,6 +258,11 @@ impl Editor {
             }
             self.rpc = Some(inbox);
         }
+        // Closing the window with unsaved changes asks first (UI.md §15).
+        if ui.ctx().input(|i| i.viewport().close_requested()) && !self.confirm_discard() {
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        }
         self.update_playback(ui.ctx());
         self.autosave_frame(ui.ctx());
         self.shortcuts(ui.ctx());

@@ -157,8 +157,8 @@ until then they stay, so a crash while the dialog is open offers the same entrie
   remove the autosave of the document that was replaced or saved (under its old key and its new
   key) and reset the schedule.
 - The window's clean exit (`App::on_exit`) flushes the writer, removes this session's
-  autosave files and deletes its marker. There is no "save changes?" prompt on close yet; an
-  open dirty document is therefore not kept (the same as before this brief).
+  autosave files and deletes its marker. Closing a dirty document first asks "save changes?" (UI.md §15.1), so work is
+  discarded only when the user chose Don't Save.
 
 ### 7.7 Recovery
 

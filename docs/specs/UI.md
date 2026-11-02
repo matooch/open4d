@@ -578,3 +578,12 @@ autosaves, `show` draws a window titled "Recover unsaved work" (an `egui::Window
 until the list is empty) with one row per entry (`Untitled` or the original path, the time,
 the size) and the buttons "Recover", "Discard" and "Discard all". `Editor::recover_autosave(i)`
 and `Editor::discard_autosave(i)` do what the buttons do (tests call them directly).
+
+### 15.1 Closing the window
+
+When the window is asked to close (`ViewportInfo::close_requested`) and the document is dirty,
+`Editor::show` asks the same "save changes?" question as File > New (`Dialogs::confirm_unsaved`)
+before the close goes ahead: **Save** saves (Save As when the document has no file; if that
+dialog is cancelled the window stays open) and then closes, **Don't Save** closes (the clean
+exit removes the autosave), **Cancel** sends `ViewportCommand::CancelClose`. A clean document
+closes at once without a prompt.

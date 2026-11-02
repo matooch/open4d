@@ -29,7 +29,7 @@ Periodic autosave and recovery after a crash.
 - Recovery: window "Recover unsaved work" (Recover / Discard / Discard all); recover opens a dirty document with the original path, autosaves it again, then removes the old entry.
 - Threading: scene serialised on the UI thread, bytes written (temp + fsync + rename) by one ordered writer thread; prune after each write.
 - Commands: `file.autosave_now` (`wait?`), via new `CommandContext::autosave_now` (headless: "needs the editor window").
-- Deviations: none from the brief. Note: there is still no "save changes?" prompt on window close, so a clean exit discards the autosave of a dirty document as specified. Pending crashed entries can be pruned by later writes beyond `max_files`. Settings are not reloaded at runtime.
+- Deviations: none from the brief. Follow-up: closing the window with a dirty document now asks Save / Don't Save / Cancel (UI.md §15.1; `crates/ui/tests/close.rs`). Pending crashed entries can be pruned by later writes beyond `max_files`. Settings are not reloaded at runtime.
 - Files: crates/platform/{Cargo.toml,src/lib.rs,src/autosave.rs}, crates/command/src/{context.rs,builtin/file.rs}, crates/command/tests/registry.rs, crates/app/src/lib.rs, crates/ui/src/{autosave.rs,lib.rs,state.rs,commands.rs,app.rs,app/files.rs,app/recovery.rs}, crates/ui/tests/autosave.rs, docs/specs/{PLATFORM,UI,COMMANDS}.md, docs/manual/reference/*, BACKLOG, Cargo.lock.
-- Open questions: a close-window prompt for unsaved work (would make the clean-exit removal safe).
+- Open questions: none.
 - Gate: `cleanroom: ok` ... `GATE: all passed`.
