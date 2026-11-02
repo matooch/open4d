@@ -4,6 +4,7 @@
 //! and no GPU. The editor and every automation front end build on it.
 
 pub mod animate;
+pub mod diagnostics;
 pub mod param_edit;
 pub mod query;
 pub mod select;
@@ -220,6 +221,11 @@ impl App {
         self.status.clear();
         self.file_path = path;
         self.saved_revision = self.doc.scene().revision();
+    }
+
+    /// Marks the document as changed since the last save (a recovered autosave).
+    pub fn mark_unsaved(&mut self) {
+        self.saved_revision = u64::MAX;
     }
 
     fn selected_ids(&self) -> Vec<NodeId> {

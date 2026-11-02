@@ -12,6 +12,7 @@ forge-core = { path = "../core" }
 forge-platform = { path = "../platform" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tracing = "0.1"
 
 [lints]
 workspace = true

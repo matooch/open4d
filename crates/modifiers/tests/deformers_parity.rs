@@ -1,5 +1,6 @@
 //! Parity: docs/specs/MODIFIERS.md §0–6 and §9 against
-//! tests/golden/{bend,twist,deformer-common,taper,bulge,shear,spherify,deformer-falloff}.
+//! tests/golden/{bend,twist,deformer-common,taper,bulge,shear,spherify,deformer-falloff,
+//! squash-stretch,wrap} (§7).
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -23,6 +24,8 @@ const FEATURES: &[&str] = &[
     "shear",
     "spherify",
     "deformer-falloff",
+    "squash-stretch",
+    "wrap",
 ];
 
 /// Observed cases not derived yet (MODIFIERS.md §9).
@@ -78,7 +81,9 @@ fn falloff_deformer_table(
                 .to_string(),
         };
         let v = match (k.as_str(), v) {
-            ("mode", toml::Value::String(m)) => toml::Value::String(m.to_lowercase()),
+            ("mode" | "curvature_type" | "wrap", toml::Value::String(m)) => {
+                toml::Value::String(m.to_lowercase())
+            }
             _ => v.clone(),
         };
         // Two keys of the same table may not collapse to one name.
@@ -246,9 +251,15 @@ fn build_case(
             let ty = type_id(input["type"].as_str().unwrap());
             let object = tx.create(&ty, None, None)?;
             apply(tx, reg, object, &ty, input);
-            let deformer_ty = type_id(feature);
+            // `squash-stretch` is `forge.squash_stretch`; the 051 cases use the O9 / O11
+            // keys (`*_percent`, `*_deg`), the same translation as the O24 cases.
+            let deformer_ty = type_id(&feature.replace('-', "_"));
             let deformer = tx.create(&deformer_ty, Some(object), None)?;
-            apply(tx, reg, deformer, &deformer_ty, params);
+            let table = match feature {
+                "squash-stretch" | "wrap" => falloff_deformer_table(params),
+                _ => params.clone(),
+            };
+            apply(tx, reg, deformer, &deformer_ty, &table);
             return Ok(object);
         }
 
@@ -351,5 +362,9 @@ fn deformers_match_the_reference() {
     let want: std::collections::BTreeSet<String> =
         UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 15 + 7 + 6 + 8 + 7 + 7 + 5 + 9, "{matched:?}");
+    assert_eq!(
+        matched.len(),
+        15 + 7 + 6 + 8 + 7 + 7 + 5 + 9 + 6 + 5,
+        "{matched:?}"
+    );
 }

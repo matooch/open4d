@@ -35,6 +35,16 @@ The base for the modifier cases is one Spherical field of size 200, with a modif
 | clip-invert | Spherical | Invert on, Clip to Shape on | clipping before or after remapping |
 | remap-off | Spherical | Enable Remapping off | value without remapping |
 | mirror-graph | Linear | Mirror Graph on (if offered) | |
+| cone-f/size | Cone | follow-up from brief 058: Height 200, Radius 50, on a 9×9×9 grid at spacing 25; then `cone-f/dir-yneg` with Direction Y− | exact cone extent and taper |
+| clip-f/shapes | Cylinder, Cone, Torus, Capsule (one case each) | Clip to Shape on and Invert on | clip rule for the new shapes |
+| capsule-f/unequal | Capsule | Top Radius 100, Bottom Radius 50; then `capsule-f/dir-yneg` | radius interpolation |
+| torus-f/thick | Torus | Thickness 100, samples spaced 25 within 200 of the ring | torus distance metric |
+| radial-f/combo | Radial | Start 45°, Start Transition 45°, End 270°, Offset 30°, Iterations 2; then `radial-f/axis-x` and `radial-f/axis-z` with the same settings | transitions, offset sign, iterations, axes |
+| random-f/perlin-line | Random (Noise mode, Perlin) | 201 samples along x from −100 to 100 at 1-unit steps, seed 0; then seed 1 | feature size, octaves, seed hashing |
+| random-f/space-none | Random | Space None | |
+| random-f/sorted | Random | mode Sorted | sorting rule |
+| random-f/speed-f30 | Random (Noise) | Animation Speed 100 %, sampled at frame 30 | time scale |
+| random-f/types | Random (Noise) | one 201-sample line per noise type the brief leaves unsupported (record the type name per case) | defines those noise types |
 
 ## Notes
 TODO

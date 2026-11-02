@@ -110,9 +110,16 @@ impl CommandRegistry {
         id: &str,
         args: Value,
     ) -> Result<Value, CommandError> {
-        self.get(id)
-            .ok_or_else(|| CommandError::Unknown(id.to_string()))?
-            .run(ctx, args)
+        crate::history::record(id, &args);
+        let handler = self
+            .get(id)
+            .ok_or_else(|| CommandError::Unknown(id.to_string()))?;
+        tracing::debug!(command = id, "run");
+        let result = handler.run(ctx, args);
+        if let Err(e) = &result {
+            tracing::warn!(command = id, error = %e, "command failed");
+        }
+        result
     }
 }
 

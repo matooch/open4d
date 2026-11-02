@@ -67,15 +67,16 @@ fn applied() -> Vec<(&'static str, &'static str, Value)> {
         ("lathe", "subdivision", i(32)),
         ("loft", "mesh_subdivision_u", i(16)),
         ("loft", "mesh_subdivision_v", i(4)),
+        // brief 038: Intermediate Points of the circle and helix are Uniform in R25
+        ("circle_spline", "intermediate", e("uniform")),
+        ("helix_spline", "intermediate", e("uniform")),
     ]
 }
 
 /// `!` rows not applied: (type, key, why).
 const NOT_APPLIED: &[(&str, &str)] = &[
-    ("circle_spline", "intermediate"), // R25 Uniform: the build only supports Adaptive 5°
-    ("helix_spline", "intermediate"),  // same
-    ("loft", "cap_type"),              // R25 N-gon: loft caps are always ear-clipped triangles
-                                       // no param of ours: the isoparm subdivisions
+    ("loft", "cap_type"), // R25 N-gon: loft caps are always ear-clipped triangles
+                          // no param of ours: the isoparm subdivisions
 ];
 
 #[test]
@@ -89,19 +90,13 @@ fn descriptors_have_the_r25_defaults() {
             .unwrap_or_else(|| panic!("{ty}.{key}"));
         assert_eq!(desc.default, want, "{ty}.{key}");
     }
-    // kept R20 defaults
-    for (ty, key, kept) in [
-        ("circle_spline", "intermediate", "adaptive"),
-        ("helix_spline", "intermediate", "adaptive"),
-        ("loft", "cap_type", "triangles"),
-    ] {
-        let desc = reg
-            .get(&format!("forge.{ty}"))
-            .unwrap()
-            .find_param(key)
-            .unwrap();
-        assert_eq!(desc.default, e(kept), "{ty}.{key}");
-    }
+    // kept R20 default
+    let desc = reg
+        .get("forge.loft")
+        .unwrap()
+        .find_param("cap_type")
+        .unwrap();
+    assert_eq!(desc.default, e("triangles"), "loft.cap_type");
 }
 
 #[test]
@@ -134,7 +129,7 @@ fn the_r20_overlay_is_the_old_value_of_every_row_and_never_the_new_one() {
         );
         rows += 1;
     }
-    assert_eq!(rows, 37);
+    assert_eq!(rows, 39);
     // the kept ones carry the R20 value too (a no-op while the descriptor keeps it)
     for (ty, key) in NOT_APPLIED {
         assert!(

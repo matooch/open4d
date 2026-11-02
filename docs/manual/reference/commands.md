@@ -2,7 +2,7 @@
 
 # Command reference
 
-86 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+87 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -86,6 +86,7 @@
 | [`file.open`](#fileopen) | Open | no | `file_open` |
 | [`file.save`](#filesave) | Save | no | `file_save` |
 | [`file.save_as`](#filesave_as) | Save As | no | `file_save_as` |
+| [`file.autosave_now`](#fileautosave_now) | Autosave Now | no | `file_autosave_now` |
 | [`file.open_dialog`](#fileopen_dialog) | Open... | no | `file_open_dialog` |
 | [`file.save_dialog`](#filesave_dialog) | Save | no | `file_save_dialog` |
 | [`file.save_as_dialog`](#filesave_as_dialog) | Save As... | no | `file_save_as_dialog` |
@@ -1008,6 +1009,16 @@ Save As. Not an undoable edit.
 | `path` | string | yes |  |
 
 Example: `forge cmd scene.forge file.save_as --args '{"path":"scene.forge"}'`
+
+### `file.autosave_now`
+
+Autosave Now. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `wait` | boolean | no | Wait until the background write finished. Default: `false`. |
+
+Example: `forge cmd scene.forge file.autosave_now --args '{}'`
 
 ### `file.open_dialog`
 

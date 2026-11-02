@@ -18,10 +18,10 @@ const FEATURES: &[&str] = &[
     "plane", "cube", "sphere", "cylinder", "cone", "disc", "torus", "tube", "capsule", "pyramid",
 ];
 
-/// Slices whose cut polygons the reference triangulates with an underived method
-/// (docs/specs/PRIMITIVES2.md §2, §10): exact except the trailing cut triangles, plus a
-/// geometric comparison of the whole mesh.
-const CUT_GEOMETRIC: &[&str] = &["cone/slice", "torus/slice", "capsule/slice"];
+/// Slices whose cut polygons are cocircular, so the reference's Delaunay ties are decided
+/// by noise (docs/specs/GEOMETRY.md §6.1 R1, PRIMITIVES2.md §2, §10): exact except the
+/// trailing cut triangles, plus a geometric comparison of the whole mesh.
+const CUT_GEOMETRIC: &[&str] = &["torus/slice", "capsule/slice"];
 
 fn registry() -> Registry {
     let mut r = Registry::with_builtins();

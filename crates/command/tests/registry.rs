@@ -183,6 +183,7 @@ fn brief_command_ids_exist() {
         "file.open_dialog",
         "file.save_dialog",
         "file.save_as_dialog",
+        "file.autosave_now",
         "timeline.stop",
         "timeline.settings",
         "transform.set",
@@ -427,6 +428,7 @@ fn window_commands_toggle_play_and_refuse_headless() {
         "file.open_dialog",
         "file.save_dialog",
         "file.save_as_dialog",
+        "file.autosave_now",
         "object.begin_rename",
     ] {
         match r.run(&mut c, id, json!({})) {

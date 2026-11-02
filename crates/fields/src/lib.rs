@@ -5,18 +5,30 @@
 //! take a [`FieldList`]. Field objects are scene nodes of category `Field`, registered by
 //! [`FieldToolset`].
 
+mod capsule;
+mod cone;
+mod cylinder;
 mod node;
+mod radial;
+mod random;
 mod remap;
 mod shape;
+mod torus;
 
 use forge_core::{EvalCtx, NodeId, Scene, Value};
 use glam::{DMat4, DVec3};
 
+pub use capsule::{CAPSULE, Capsule, capsule_type};
+pub use cone::{CONE, Cone, cone_type};
+pub use cylinder::{CYLINDER, Cylinder, cylinder_type};
 pub use node::{
     BOX, FieldToolset, LAYER_STRENGTH, LINEAR, SPHERICAL, box_type, linear_type, spherical_type,
 };
+pub use radial::{RADIAL, Radial, radial_type};
+pub use random::{NOISE_TYPES, RANDOM, RandomField, RandomMode, RandomSpace, random_type};
 pub use remap::{Contour, Remap};
 pub use shape::{Direction, Shape};
+pub use torus::{TORUS, Torus, torus_type};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum FieldError {
@@ -39,6 +51,14 @@ pub struct FieldSample {
 }
 
 impl FieldSample {
+    /// Normal blend of `s` over `self` by `strength`: `self += (s - self) * strength`.
+    fn blend_normal(&mut self, s: &FieldSample, strength: f64) {
+        self.value += (s.value - self.value) * strength;
+        self.color =
+            std::array::from_fn(|i| self.color[i] + (s.color[i] - self.color[i]) * strength);
+        self.direction += (s.direction - self.direction) * strength;
+    }
+
     pub fn from_value(value: f64) -> FieldSample {
         FieldSample {
             value,
@@ -118,9 +138,7 @@ impl Field for ShapeField {
 pub fn field_from_node(scene: &Scene, id: NodeId) -> Result<Box<dyn Field>, FieldError> {
     let node = scene.node(id).ok_or(FieldError::NotAField(id.0))?;
     let world = scene.world_matrix(id).ok_or(FieldError::NotAField(id.0))?;
-    let field = node::shape_field(&node.type_id, &node.params, world)
-        .ok_or(FieldError::NotAField(id.0))??;
-    Ok(Box::new(field))
+    node::build_field(&node.type_id, &node.params, world).ok_or(FieldError::NotAField(id.0))?
 }
 
 /// How a layer combines with the layers below it. Only Normal exists so far (059).
@@ -202,16 +220,24 @@ impl FieldList {
         for layer in self.layers.iter().rev() {
             let s = layer.field.sample(p_world, ctx);
             let BlendMode::Normal = layer.blend;
-            acc.value += (s.value - acc.value) * layer.strength;
-            acc.color = std::array::from_fn(|i| {
-                acc.color[i] + (s.color[i] - acc.color[i]) * layer.strength
-            });
-            acc.direction += (s.direction - acc.direction) * layer.strength;
+            acc.blend_normal(&s, layer.strength);
         }
         acc
     }
 
+    /// The list at many world positions; each layer samples the whole batch (a Sorted Random field
+    /// needs all points at once).
     pub fn sample_many(&self, points: &[DVec3], ctx: &EvalCtx) -> Vec<FieldSample> {
-        points.iter().map(|p| self.sample(*p, ctx)).collect()
+        if self.layers.is_empty() {
+            return vec![FieldSample::from_value(1.0); points.len()];
+        }
+        let mut acc = vec![FieldSample::from_value(0.0); points.len()];
+        for layer in self.layers.iter().rev() {
+            let BlendMode::Normal = layer.blend;
+            for (a, s) in acc.iter_mut().zip(layer.field.sample_many(points, ctx)) {
+                a.blend_normal(&s, layer.strength);
+            }
+        }
+        acc
     }
 }

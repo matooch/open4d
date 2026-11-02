@@ -148,7 +148,20 @@ impl CommandContext for EditorState {
         self.app.key_frame_near(forward)
     }
 
+    fn autosave_now(&mut self, wait: bool) -> Result<String, String> {
+        let path = self.app.file_path.clone();
+        let out = self
+            .autosave
+            .queue_now(self.app.doc.scene(), path.as_deref())?;
+        if wait && let Some(e) = self.autosave.flush().into_iter().next() {
+            return Err(e);
+        }
+        Ok(out)
+    }
+
     fn reset_document(&mut self, doc: Document, path: Option<String>, full: bool) {
+        self.autosave
+            .document_replaced(self.app.file_path.as_deref());
         self.app.reset(doc, path, full);
         self.expanded.clear();
         self.tool = None;
@@ -167,6 +180,8 @@ impl CommandContext for EditorState {
     }
 
     fn mark_saved(&mut self, path: String) {
+        self.autosave
+            .document_saved(self.app.file_path.as_deref(), &path);
         self.app.mark_saved(path);
     }
 

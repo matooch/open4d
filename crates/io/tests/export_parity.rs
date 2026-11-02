@@ -35,11 +35,12 @@ const UNSUPPORTED: &[&str] = &[];
 /// (GENERATORS2.md §9–10). Through the writer they still differ.
 const KNOWN_MISMATCH: &[&str] = &["loft/mesh-subdivision", "sweep/helix"];
 
-/// Exact except for trailing cut / cap triangles that the reference triangulates with an
-/// underived method, plus a geometric comparison: of the whole mesh for the slices
-/// (PRIMITIVES2.md §10), of the caps alone for the lofts (GENERATORS2.md §9–10).
-const CUT_GEOMETRIC: &[&str] = &["cone/slice", "torus/slice", "capsule/slice"];
-const CAP_GEOMETRIC: &[&str] = &["loft/defaults", "loft/three"];
+/// Exact except for trailing cut / cap triangles whose cocircular Delaunay ties the
+/// reference decides by noise (GEOMETRY.md §6.1 R1), plus a geometric comparison: of the
+/// whole mesh for the slices (PRIMITIVES2.md §10), of the caps alone for `loft/three`
+/// (GENERATORS2.md §9–10).
+const CUT_GEOMETRIC: &[&str] = &["torus/slice", "capsule/slice"];
+const CAP_GEOMETRIC: &[&str] = &["loft/three"];
 
 /// Generator cases compared after the harness's tolerant weld on both sides, as in
 /// `generators_parity.rs` (reference rounding noise creates near-duplicate points).

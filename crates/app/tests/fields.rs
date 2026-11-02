@@ -35,6 +35,12 @@ fn object_create_makes_each_field_with_descriptor_defaults() {
         ("forge.field.linear", 0.0),
         ("forge.field.spherical", 0.5),
         ("forge.field.box", 0.5),
+        ("forge.field.cylinder", 0.5),
+        ("forge.field.cone", 0.5),
+        ("forge.field.torus", 0.5),
+        ("forge.field.capsule", 0.5),
+        ("forge.field.radial", 0.0),
+        ("forge.field.random", 0.0),
     ] {
         let node = create(&mut app, ty);
         let t = app.doc.scene().registry().get(ty).unwrap().clone();
@@ -105,4 +111,41 @@ fn remapping_disabled_returns_the_raw_ramp_and_scene_round_trips() {
     let mut other = App::new_default();
     other.open(&path).unwrap();
     assert!((value_at(&other, f, DVec3::new(75.0, 0.0, 0.0)) - 0.25).abs() < 1e-12);
+}
+
+#[test]
+fn new_field_types_set_params_save_and_report_unsupported_noise() {
+    let mut app = App::new_default();
+    let cyl = create(&mut app, "forge.field.cylinder");
+    set(&mut app, cyl, "radius", json!(200.0));
+    set(&mut app, cyl, "height", json!(300.0));
+    let at = DVec3::new(0.0, 0.0, 100.0);
+    // Radius 200: ramp 1 - 100/200 = 0.5, inner offset 50 % makes it 1.
+    assert!((value_at(&app, cyl, at) - 1.0).abs() < 1e-12);
+    set(&mut app, cyl, "inner_offset", json!(0.0));
+    assert!((value_at(&app, cyl, at) - 0.5).abs() < 1e-12);
+    let rnd = create(&mut app, "forge.field.random");
+    set(&mut app, rnd, "random_mode", json!("random"));
+    let before = value_at(&app, rnd, at);
+    set(&mut app, rnd, "noise_type", json!("zada"));
+    assert_eq!(
+        value_at(&app, rnd, at),
+        before,
+        "Random mode ignores the noise type"
+    );
+    set(&mut app, rnd, "random_mode", json!("noise"));
+    let err = FieldList::from_nodes(app.doc.scene(), &[rnd])
+        .err()
+        .unwrap();
+    assert_eq!(err, FieldError::Unsupported("noise type"));
+    set(&mut app, rnd, "noise_type", json!("fbm"));
+    let noise = value_at(&app, rnd, at);
+    let dir = std::env::temp_dir().join(format!("forge-fields-new-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("fields.forge").to_string_lossy().into_owned();
+    app.save(&path).unwrap();
+    let mut other = App::new_default();
+    other.open(&path).unwrap();
+    assert_eq!(value_at(&other, rnd, at), noise);
+    assert!((value_at(&other, cyl, at) - 0.5).abs() < 1e-12);
 }

@@ -85,6 +85,15 @@ fn serve(backend: impl Backend, watch: Option<(u16, Option<String>)>) -> ExitCod
     ExitCode::SUCCESS
 }
 
+/// Log file and crash reports; stdout stays clean for the protocol (PLATFORM.md §8.2).
+fn install_diagnostics(token: Option<String>) {
+    forge_app::diagnostics::install(
+        "forge-mcp",
+        env!("CARGO_PKG_VERSION"),
+        token.into_iter().collect(),
+    );
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match parse_args(&args) {
@@ -97,10 +106,12 @@ fn main() -> ExitCode {
             ExitCode::from(2)
         }
         Ok(Some(Mode::Headless { scene })) => {
+            install_diagnostics(RpcSettings::from_environment().token);
             let mut app = App::new_default();
             if let Some(path) = scene
                 && let Err(e) = app.open(&path)
             {
+                tracing::error!("cannot open {path}: {e}");
                 eprintln!("forge-mcp: cannot open {path}: {e}");
                 return ExitCode::from(1);
             }
@@ -108,6 +119,7 @@ fn main() -> ExitCode {
         }
         Ok(Some(Mode::Editor { port })) => {
             let settings = RpcSettings::from_environment();
+            install_diagnostics(settings.token.clone());
             let port = port.unwrap_or(settings.port);
             let watch = Some((port, settings.token.clone()));
             serve(EditorBackend::new(port, settings.token), watch)

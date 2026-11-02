@@ -29,6 +29,8 @@ fn every_deformer_has_a_fields_list() {
         "forge.bulge",
         "forge.shear",
         "forge.spherify",
+        "forge.squash_stretch",
+        "forge.wrap",
     ] {
         let p = reg.get(id).unwrap().find_param("fields").unwrap();
         assert_eq!(p.default, Value::LinkList(vec![]), "{id}");

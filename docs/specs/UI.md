@@ -568,3 +568,31 @@ runs against the registry's argument schema; conflict rules for scopes; override
 file keeps unrelated keys. egui_kittest (no GPU): pressing each kind of default shortcut
 runs its command and Mod+Z undoes it; a rebind in the editor takes effect; a conflicting
 rebind asks first; Reset and Clear; a changed map is written to the settings file.
+
+## 15. Autosave and recovery (`autosave`, `app`; brief 179)
+
+Policy, files and crash detection: PLATFORM.md §7. `EditorState.autosave` owns the schedule,
+the background writer and the session marker; `Editor::show` calls `autosave.tick` once per
+frame, and `Editor`'s `on_exit` ends the session cleanly. When a crashed session left
+autosaves, `show` draws a window titled "Recover unsaved work" (an `egui::Window`, shown
+until the list is empty) with one row per entry (`Untitled` or the original path, the time,
+the size) and the buttons "Recover", "Discard" and "Discard all". `Editor::recover_autosave(i)`
+and `Editor::discard_autosave(i)` do what the buttons do (tests call them directly).
+
+### 15.1 Closing the window
+
+When the window is asked to close (`ViewportInfo::close_requested`) and the document is dirty,
+`Editor::show` asks the same "save changes?" question as File > New (`Dialogs::confirm_unsaved`)
+before the close goes ahead: **Save** saves (Save As when the document has no file; if that
+dialog is cancelled the window stays open) and then closes, **Don't Save** closes (the clean
+exit removes the autosave), **Cancel** sends `ViewportCommand::CancelClose`. A clean document
+closes at once without a prompt.
+
+### 15.2 Crash report notice (`crash_notice`; brief 178)
+
+On start `CrashNotice::start_default` lists the unseen crash reports (PLATFORM.md §8.5). If
+there are any the window "Forge3D crashed last time" is shown: the report file names (newest
+first), a line "Autosaved work may be offered in the recovery window." when
+`recoverable_count() > 0`, and the buttons **Open folder** (opens the crash folder with the
+system file browser: `xdg-open` / `open` / `explorer`) and **Dismiss**. Either button marks the
+reports seen and closes the window. Tests inject a folder opener (`CrashNotice::set_opener`).

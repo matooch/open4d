@@ -139,6 +139,7 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `file_open` | Open. Not an undoable edit. Runs command `file.open`. |
 | `file_save` | Save. Not an undoable edit. Runs command `file.save`. |
 | `file_save_as` | Save As. Not an undoable edit. Runs command `file.save_as`. |
+| `file_autosave_now` | Autosave Now. Not an undoable edit. Runs command `file.autosave_now`. |
 | `file_open_dialog` | Open.... Not an undoable edit. Runs command `file.open_dialog`. |
 | `file_save_dialog` | Save. Not an undoable edit. Runs command `file.save_dialog`. |
 | `file_save_as_dialog` | Save As.... Not an undoable edit. Runs command `file.save_as_dialog`. |

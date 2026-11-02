@@ -2,6 +2,12 @@
 
 use glam::DVec3;
 
+use crate::capsule::Capsule;
+use crate::cone::Cone;
+use crate::cylinder::Cylinder;
+use crate::radial::Radial;
+use crate::torus::Torus;
+
 /// A signed axis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Direction {
@@ -15,10 +21,30 @@ pub enum Shape {
     Linear { length: f64, direction: Direction },
     Spherical { radius: f64 },
     Box { size: DVec3 },
+    Cylinder(Cylinder),
+    Cone(Cone),
+    Torus(Torus),
+    Capsule(Capsule),
+    Radial(Radial),
+}
+
+/// The axial coordinate `a` (negated for a negative direction) and the distance `r` from the axis.
+pub(crate) fn axial_radial(p: DVec3, direction: Direction) -> (f64, f64) {
+    let a = if direction.negative {
+        -p[direction.axis]
+    } else {
+        p[direction.axis]
+    };
+    let (u, v) = match direction.axis {
+        0 => (p.y, p.z),
+        1 => (p.x, p.z),
+        _ => (p.x, p.y),
+    };
+    (a, u.hypot(v))
 }
 
 /// `|a| / b` with the zero cases defined: `0 / 0 = 0`, `a / 0 = inf`.
-fn ratio(a: f64, b: f64) -> f64 {
+pub(crate) fn ratio(a: f64, b: f64) -> f64 {
     if b > 0.0 {
         a.abs() / b
     } else if a == 0.0 {
@@ -64,6 +90,19 @@ impl Shape {
                     .max(ratio(p.z, size.z));
                 (1.0 - d).clamp(0.0, 1.0)
             }
+            Shape::Radial(r) => r.ramp(p),
+            _ => (1.0 - self.distance(p)).clamp(0.0, 1.0),
+        }
+    }
+
+    /// Normalised distance of the Cylinder, Cone, Torus and Capsule (0 inside, 1 on the surface).
+    fn distance(&self, p: DVec3) -> f64 {
+        match self {
+            Shape::Cylinder(s) => s.distance(p),
+            Shape::Cone(s) => s.distance(p),
+            Shape::Torus(s) => s.distance(p),
+            Shape::Capsule(s) => s.distance(p),
+            _ => 0.0,
         }
     }
 
@@ -78,6 +117,8 @@ impl Shape {
                     .max(ratio(p.z, size.z))
                     > 1.0
             }
+            Shape::Radial(r) => r.outside(p),
+            _ => self.distance(p) > 1.0,
         }
     }
 }

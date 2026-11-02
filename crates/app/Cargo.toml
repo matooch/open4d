@@ -16,6 +16,7 @@ forge-geometry = { path = "../geometry" }
 forge-modeling = { path = "../modeling" }
 forge-io = { path = "../io" }
 forge-modifiers = { path = "../modifiers" }
+forge-platform = { path = "../platform" }
 glam = "0.34"
 schemars = "1"
 serde = { version = "1", features = ["derive"] }
@@ -25,6 +26,8 @@ thiserror = "2"
 [dev-dependencies]
 forge-parity-harness = { path = "../parity-harness" }
 toml = "1"
+tempfile = "3"
+tracing = "0.1"
 
 [lints]
 workspace = true

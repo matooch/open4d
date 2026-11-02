@@ -3,8 +3,9 @@
 - Common: Mode (limited/unlimited/within box), Size, Strength, Fit to Parent, Axis, Falloff/Fields, Order of evaluation (parent-child deformer stack), Deformer on generators vs editable mesh
 - Each: parameter list, defaults, math, golden mesh comparison.
 
-Bend, Twist, Taper, Bulge, Shear and Spherify are specified below (§0–6, §9); falloff is §10. Sources:
-docs/parity/{bend,twist,deformer-common,taper,bulge,shear,spherify}.md and their golden
+Bend, Twist, Taper, Bulge, Shear, Spherify, Squash & Stretch and Wrap are specified below
+(§0–7, §9); falloff is §10. Sources:
+docs/parity/{bend,twist,deformer-common,taper,bulge,shear,spherify,deformers-2,followups-1}.md and their golden
 cases. Everything else is still a checklist item.
 
 Status: draft · Source: docs/parity/{bend,twist,deformer-common,taper,bulge,shear,spherify}.md
@@ -378,6 +379,130 @@ is byte-identical to `defaults`; `spherify/moved` centres the sphere on (50, 100
 | `radius` | radius 100 at 100 % → every point at distance 100 |
 | `moved` | the sphere follows the deformer's transform (centre (50, 100, 0)) |
 
+## 7. Squash & Stretch (`forge.squash_stretch`) and Wrap (`forge.wrap`)
+
+Source: O9 [deformers-2.md](../parity/deformers-2.md) (parameter tables, `squash-stretch/{defaults,
+factor,factor-big,bulge}`, `wrap/{defaults,cylindrical,angles}`) and O11
+[followups-1.md](../parity/followups-1.md) §3 (`squash-stretch/{expand-0,expand-200}`,
+`wrap/{spherical,width-90}`); golden `tests/golden/{squash-stretch,wrap}` (11 cases). Both
+carry the `fields` list of §10 and the `enabled` switch of §0. Neither has `size` or
+`mode`: Squash & Stretch has its own `top` / `bottom`, Wrap its `width` / `height` /
+`radius`. Case files use the observation's keys (`center_percent`, `longitude_start_deg`);
+the param ids drop the `_percent` / `_deg` suffix (percent params store the number the
+app shows, angles store radians).
+
+### 7.1 Squash & Stretch
+
+| Key | Label | Type | Default | Range |
+|---|---|---|---|---|
+| `top` | Top | float | 100 | ≥ 0 |
+| `bottom` | Bottom | float | −100 | ≤ 0 |
+| `center` | Center | percent | 0 | −100…100 |
+| `aspect` | Aspect | percent | 100 | – |
+| `factor` | Factor | percent | 100 | ≥ 0 |
+| `expand` | Expand | percent | 100 | ≥ 0 |
+| `smooth_start`, `smooth_end` | Smooth Start / End | percent | 0 | 0…100 |
+| `curvature` | Curvature | percent | 100 | 0…100 |
+| `curvature_type` | Type | enum | `square` | `square`, `cubic`, `quartic`, `custom`, `spline` |
+| `power` | Power | float | 2 | ≥ 0 |
+| `fields`, `enabled` | | | | §10, §0 |
+
+The curve of the `spline` type is not recorded (O9) and has no param yet.
+
+**Math.** In the deformer's local space, with `f = factor/100` (clamped to ≥ 1e-6),
+`e = expand/100`, `c = curvature/100`. Effective ends `Ht = top + ε`, `Hb = bottom − ε`
+with **ε = 0.005** and the pivot `y0 = center/100 · (Ht if center ≥ 0 else −Hb)` (0 for
+the default). The half-lengths of the two sides are `Lt = Ht − y0`, `Lb = y0 − Hb`.
+
+```
+u  = (y − y0)/Lt   for y ≥ y0,   (y − y0)/Lb   for y < y0           (−1…1 inside)
+g(u) = c·(1 − |u|ⁿ) + (1 − c)·(1 − |u|)      n = 2 square, 3 cubic, 4 quartic
+inside  (Hb ≤ y ≤ Ht): y' = y0 + (y − y0)·f ,  (x, z)' = (x, z)·(1 + e·(1/f − 1)·g(u))
+above   (y > Ht):      y' = y + Lt·(f − 1)      (x, z unchanged)
+below   (y < Hb):      y' = y − Lb·(f − 1)      (x, z unchanged)
+```
+
+The span between the ends is squashed uniformly (`y·f`), the volume is kept at
+`e = 100 %` by widening the middle by `1/f`, and the parts beyond the ends travel rigidly
+with the ends. `Expand` scales the widening, not the exponent (`expand-200` is ±300, not
+±400). `curvature` and `n` follow Bulge's blend (§4), whose shape the same Square type has.
+
+Why: `squash-stretch/factor` (f = ½, y rows −200…200 step 50): y' = −149.9975, −99.9975,
+−50, −25, 0, … = `y·f` inside, `y + 50.0025` outside (`Lt·(f − 1) = 100.005·½`); the x
+of the −50 row is 175.0025 = `100·(1 + 0.750025)`, `g = 1 − 0.5²` with `u = 50/100.005`;
+the −100 row has 100.01 (`u = 0.99995`, `g = 1.0e-4`). The ε explains both small offsets.
+`factor-big` (f = 1.5): y ±250.0025 = 200 + 50.0025, centre x scale 2/3. `defaults`
+(f = 1): the cube. `expand-0`: x stays ±100; `expand-200`: ±300. `bulge` is the
+same as `factor` (the observer used Expand = 100 % as the nearest setting).
+
+**Parity-pending (implemented, no data):**
+- `ε` as an additive 0.005 versus a factor 1.00005 (both give 100.005 for `top` = 100; a
+  case with `top` = 50 would tell).
+- `center` (the pivot formula, and that the squash pivots about it), and `aspect` (not
+  applied: it only has its default 100 %).
+- `smooth_start`, `smooth_end` (not applied: only 0 %), `curvature` < 100 % and the
+  `cubic` / `quartic` shapes (the exponent family is Bulge's by analogy).
+- **Unsupported (the points are left unchanged):** `custom` (uses `power`) and `spline`
+  types, which were not derived.
+
+### 7.2 Wrap
+
+| Key | Label | Type | Default | Range |
+|---|---|---|---|---|
+| `width` | Width | float | 400 | ≥ 0 |
+| `height` | Height | float | 400 | ≥ 0 |
+| `radius` | Radius | float | 200 | ≥ 0 |
+| `wrap` | Wrap | enum | `cylindrical` | `spherical`, `cylindrical` |
+| `longitude_start`, `longitude_end` | Longitude Start / End | angle | 180°, 360° | – |
+| `latitude_start`, `latitude_end` | Latitude Start / End | angle | −45°, 45° | −90°…90° |
+| `movement` | Movement | float | 0 | – |
+| `scale_z` | Scale Z | percent | 100 | 0…10000 |
+| `tension` | Tension | percent | 100 | 0…100 |
+| `fields`, `enabled` | | | | §10, §0 |
+
+**Math.** The plane `(x, y)` of the deformer's space is rolled onto the cylinder or sphere
+of `radius`, whose axis/centre sits at `z = radius`. With `d = radius − z·s` (`s` =
+`scale_z/100`; the distance from the axis, so the front face `z = −100` is 300 away),
+`lon = (lon_start + lon_end)/2 + (x + movement)/width·(lon_end − lon_start)`, and
+`φ = lon − 270°`:
+
+```
+cylindrical:  p' = (d·sin φ,  y,  radius − d·cos φ)                      (height unused)
+spherical:    θ = lat_mid + y/height·(lat_end − lat_start)
+              p' = (d·cosθ·sin φ,  d·sinθ,  radius − d·cosθ·cos φ)
+result = p + (tension/100)·(p' − p)
+```
+
+So the horizontal midpoint of the span (`lon` = 270° by default) faces −z, and `x` runs
+along the longitude with `width` ↔ the whole span. A zero `width` (or, spherical, zero
+`height`) leaves the points alone.
+
+Why: `wrap/defaults`: `x = −100, z = −100` → `φ = −45°`, `d = 300` →
+(−212.132, −12.132); `x = 0` → (0, −100); `x = −50` → (−114.805, −77.164) (= `d·sin 22.5°`,
+`200 − d·cos 22.5°`). `wrap/cylindrical` is the same file, `wrap/angles` (Height 300) too:
+height is unused cylindrically. `wrap/width-90` (End 270°): mid 225°, `x = −100` →
+`lon` 202.5°, `φ = −67.5°` → (−277.164, 85.195). `wrap/spherical`: `y = 200` →
+`θ = 45°` → (−150, 212.132, 50) = (`d·cos45·sin(−45°)`, `d·sin45`, `200 − d·cos45·cos45`);
+the `y = 0` row equals the cylindrical one.
+
+**Parity-pending (implemented, no data):** `movement` (taken as a shift of `x` in length
+units before the mapping), `scale_z` (scales `z` in `d`), `tension` (linear blend with the
+unwrapped point); latitude start/end other than ±45° (their mid and span), longitude
+mids other than 225° and 270° (the rule `φ = lon − 270°` was fitted on those two),
+`width` / `radius` other than the defaults (O9 notes they "did change the mesh").
+
+### Cases
+
+| Case | Rule it shows |
+|---|---|
+| `squash-stretch/defaults` | f = 1 → the undeformed cube |
+| `squash-stretch/factor`, `bulge` | f = ½: `y·f` inside, `±50.0025` outside, widening `1 + 0.75` at −50 |
+| `squash-stretch/factor-big` | f = 1.5: tall, y ±250.0025 |
+| `squash-stretch/expand-0`, `expand-200` | the widening scales with Expand (±100, ±300) |
+| `wrap/defaults`, `cylindrical`, `angles` | cylindrical roll of 180°, height unused |
+| `wrap/width-90` | the span is `lon_end − lon_start`, centred at its mid |
+| `wrap/spherical` | latitude from `y/height` over `lat` span |
+
 ## 8. Evaluation context
 
 `forge_core::EvalCtx { time: f64, fps: f64, seed: u64 }` (seconds, frames per second, RNG
@@ -391,8 +516,8 @@ change. Source: own design (docs/roadmap/areas/D-deformers-fields.md).
 ## 9. Parity
 
 Test: `crates/modifiers/tests/deformers_parity.rs` — features `deformer-falloff` (9) and `bend` (15 cases),
-`twist` (7), `deformer-common` (6), `taper` (8), `bulge` (7), `shear` (7) and
-`spherify` (5) — 64 in all — are rebuilt from their `case.toml` (`parent`, `hierarchy`,
+`twist` (7), `deformer-common` (6), `taper` (8), `bulge` (7), `shear` (7),
+`spherify` (5), `squash-stretch` (6, §7.1) and `wrap` (5, §7.2) — 75 in all — are rebuilt from their `case.toml` (`parent`, `hierarchy`,
 `rot` degrees HPB, vec3 `size` are the keys the batch added; `level` maps to
 `level_view`) and compared with `export_weld` on both sides (GENERATORS2 §0).
 
@@ -400,7 +525,7 @@ Test: `crates/modifiers/tests/deformers_parity.rs` — features `deformer-fallof
 - `KNOWN_MISMATCH`: none (the three `bend/mode-box-narrow*` cases matched once §0's
   per-axis gate and suppression landed).
 - Feature `deformer-falloff` (9 cases, §10) is built as: the cube, a deformer child with
-  the case's parameters (`strength_deg` is `strength` in degrees, `keep_length` is
+  the case's parameters (for the 051 features `squash-stretch` and `wrap` the same key translation applies: `*_percent`, `*_deg` suffixes dropped, option labels lower-cased, type `forge.squash_stretch`); (`strength_deg` is `strength` in degrees, `keep_length` is
   `keep_y_axis_length`, `alignment` is the fixed Y axis), the `[params.field]` field node
   linked into `fields` (its `layer_strength_percent` is the node's `layer_strength`).
 - Evaluation order and placement rules are §0; the modifier maths are §1–§6.
@@ -419,7 +544,7 @@ Source: O24 [deformer-falloff.md](../parity/deformer-falloff.md), golden `tests/
 
 ### Parameter
 
-Every deformer (Bend, Twist, Taper, Bulge, Shear, Spherify) has a `fields` param:
+Every deformer (Bend, Twist, Taper, Bulge, Shear, Spherify, Squash & Stretch, Wrap) has a `fields` param:
 `ParamKind::LinkList` accepting `Category::Field` nodes, **top to bottom**, default empty
 (label "Fields", group "Falloff"). The O24 deformer's list parameter is labelled "Field"
 on its Fields tab. The list row's *layer strength* (O24 `layer_strength_percent`) is the

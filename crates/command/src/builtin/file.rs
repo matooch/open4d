@@ -28,6 +28,14 @@ struct SaveArgs {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+struct AutosaveArgs {
+    /// Wait until the background write finished.
+    #[serde(default)]
+    wait: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct ExportArgs {
     path: String,
     /// Export only the selected objects.
@@ -73,6 +81,13 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
             || json!({"path": "scene.forge"}),
         ),
         |c, a: PathArgs| save_to(c, a.path),
+    )?;
+    r.register_fn(
+        spec("file.autosave_now", "Autosave Now", false, || json!({})),
+        |c, a: AutosaveArgs| {
+            let path = c.autosave_now(a.wait).map_err(CommandError::Failed)?;
+            Ok(json!({"path": path, "queued": true}))
+        },
     )?;
     for (id, label, request) in [
         ("file.open_dialog", "Open...", UiRequest::Open),

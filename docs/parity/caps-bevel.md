@@ -34,6 +34,12 @@ O4 noted that these tabs are shared by Extrude, Lathe, Loft and Sweep in R25.
 | bevel-inner | Bevel size 10 with "inside"/"outside" switched (if the option exists) |
 | lathe-caps | Lathe of a default Rectangle at x 300, angle 180°, caps on (default type) |
 | sweep-caps-bevel | Sweep with a default Circle profile on an open Arc path: caps on, bevel round 5 |
+| tri-ellipse-loft | follow-up from brief 033: Loft of two default Circles turned into ellipses (Radius X 200, Radius Y 100), caps on, type Triangles |
+| tri-loft-rotated | the same Loft, the second section rotated H 30° (start angle), Caps Type Triangles |
+| tri-slice-orient-x | a default Cylinder with Orientation +X and Slice on (0° to 270°), made editable |
+| tri-sweep-open | Sweep of a default Rectangle profile along an open Arc path, Caps Type Triangles |
+| tri-extrude-ngon | Extrude of a default 6-sided n-Side spline, Caps Type Triangles |
+| tri-dodeca-seg2 | a Platonic Dodecahedron with Segments 2, made editable |
 
 ## Notes
 TODO

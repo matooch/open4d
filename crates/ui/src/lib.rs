@@ -6,11 +6,13 @@
 pub mod app;
 pub use forge_app::animate;
 pub mod attributes;
+pub mod autosave;
 pub mod building;
 pub mod commands;
 pub mod component_edit;
 pub mod components;
 pub mod coordinates;
+pub mod crash_notice;
 pub mod cutting;
 pub mod dock;
 pub mod keymap;
@@ -54,7 +56,7 @@ impl eframe::App for ScreenshotApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(
                 egui::ScreenshotCallback::new(move |img| {
                     if let Err(e) = write_png(&path, &img) {
-                        eprintln!("screenshot failed: {e}");
+                        tracing::error!("screenshot failed: {e}");
                     }
                     done.store(true, Ordering::SeqCst);
                     repaint.request_repaint();
@@ -148,6 +150,13 @@ pub fn run_with_rpc(registry: Arc<Registry>, rpc: Option<forge_rpc::Inbox>) -> e
         options,
         Box::new(move |cc| {
             theme::Theme::default().apply(&cc.egui_ctx);
+            if let Some(rs) = &cc.wgpu_render_state {
+                let a = rs.adapter.get_info();
+                forge_platform::crash::set_gpu_info(format!(
+                    "{} ({:?}, driver {} {})",
+                    a.name, a.backend, a.driver, a.driver_info
+                ));
+            }
             let mut state = state::EditorState::new(registry);
             state
                 .script
@@ -170,6 +179,10 @@ pub fn run_with_rpc(registry: Arc<Registry>, rpc: Option<forge_rpc::Inbox>) -> e
                     })
                 }
                 Err(_) => {
+                    state.autosave = autosave::Autosave::start_default(
+                        forge_platform::settings_path().as_deref(),
+                    );
+                    state.crash_notice = crash_notice::CrashNotice::start_default();
                     let mut editor = app::Editor::new(state);
                     if let Some(inbox) = rpc {
                         editor.attach_rpc(inbox);

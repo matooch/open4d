@@ -43,6 +43,15 @@ Also export each as a case (`editable-circle`, `editable-rectangle`).
 | reverse | editable rectangle | Reverse Sequence |
 | subdivide | editable rectangle | Subdivide, 2 subdivisions |
 | cross-section | three editable circles at y 0, 100, 200, selected in order | Cross Section (if scriptable without a dialog) |
+| interp-f/none | follow-up from brief 038: a default Circle, Intermediate Points None, extruded (Offset 100) | – |
+| interp-f/natural | the same, Natural with Number 8; then `natural-3` with Number 3 | – |
+| interp-f/subdivided | the same, Subdivided with Angle 5° and Maximum Length 5; then `-a20` (Angle 20°) and `-l50` (Maximum Length 50) | – |
+| interp-f/uniform-small | the same, Uniform with Number 3; then `uniform-0` with Number 0 | – |
+| interp-f/adaptive-angle | the same, Adaptive with Angle 10°; then `-a20` with 20° | – |
+| interp-f/rect-uniform | a default Rectangle, Uniform 8, extruded | – |
+| interp-f/star-uniform | a default Star, Uniform 4, extruded (unequal segments) | – |
+| interp-f/helix-adaptive | a default Helix, Adaptive, swept with a small Circle (radius 5); then `-sub50` (Subdivision 50), `-end360` and `-end1080` (End Angle), `-bias` (Radial Bias 50 %, Height Bias 50 %) | – |
+| interp-f/helix-handles | a default Helix made editable: record the tangent (handle) vectors of points 0, 1 and 100 in Notes | form only |
 
 ## Notes
 TODO

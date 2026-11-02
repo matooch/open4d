@@ -14,12 +14,14 @@ a finite clamp that differs from the previous one: `array` `copies` 1–1000, `f
 `intermediate_max_length` ≥ 0.01; helix `radial_bias`, `height_bias` 0–100 %, `height` ≥ 0;
 extrude `subdivision` 1–4000; lathe `subdivision` 1–4000, `scaling` ≥ 0; loft
 `mesh_subdivision_u` / `_v` 2–4000; sweep `end_scale` ≥ 0.
-**R25 defaults not supported yet** (the descriptor keeps the R20 value, since the build does
-not implement the R25 option and would return `Unsupported` or ignore it): circle and helix
-`intermediate` Uniform (R25) vs Adaptive (§6: only Adaptive 5° builds); loft `cap_type`
-N-gon (R25) vs Triangles (loft caps are always ear-clipped triangles, §9). O4 lists no `!` for
+**R25 defaults not yet applied:** loft `cap_type`
+N-gon (R25) vs Triangles (loft caps are always Delaunay triangles, §9). The circle and helix
+`intermediate` default is **Uniform** (R25, [splines-2.md](../parity/splines-2.md); brief 038,
+§6.2); the R20 cases keep Adaptive through the `[circle_spline]` and `[helix_spline]` rows of
+`tests/defaults/r20.toml`. O4 lists no `!` for
 lathe and sweep `cap_type` (it records N-gon for R25 and, for lathe, N-gons for R20), but the
-R20 meshes show Triangles (§8, `lathe/angle`): left as Triangles, **to be re-observed**. The
+R20 meshes show Triangles (§8, `lathe/angle`): left as Triangles, **to be re-observed**.
+The
 R25-only parameters (extrude Direction, bevel tabs, sweep rotation from/to, "use new
 version" switches of cylinder and torus, tube and cone fillet defaults) are out of scope.
 
@@ -86,38 +88,76 @@ Spline primitives have no mesh of their own (they are not drawn as meshes yet).
 ## 6. Spline primitives (`forge.circle_spline`, `forge.rectangle_spline`, `forge.helix_spline`)
 
 Splines do not export (docs/parity/splines.md); everything below is derived from the
-spline-input generators' cases. Common params: `plane` enum `xy (default), zy, xz`;
-`reverse` false; `intermediate` enum `none, natural, uniform, adaptive (default),
-subdivided` (R25 default of the circle and helix: Uniform, **not supported yet**, §0a);
-`intermediate_number` 8; `intermediate_angle` 5° (radians stored);
-`intermediate_max_length` 5. Anything but Adaptive 5°, `reverse`, the circle's
-ellipse/ring, the rectangle's rounding and the helix biases → `Unsupported`.
+spline-input generators' cases (R20: `extrude`, `lathe`, `loft`, `sweep`) and from the
+O17 extrudes ([splines-2.md](../parity/splines-2.md), `tests/golden/splines-2`, caps off).
+Common params: `plane` enum `xy (default), zy, xz`; `reverse` false; the five
+Intermediate Points params of §6.2 (default **Uniform** for circle and helix, Adaptive for
+rectangle). The circle's ellipse/ring, the rectangle's rounding, the helix biases and
+`reverse` → `Unsupported` (brief 037 and later).
 
 ### 6.1 Shapes (in the XY frame, then the plane)
 - **Circle** `radius` 200: four cubic Bezier quarters counter-clockwise from `(r, 0)`
   through `(0, r)`, `(−r, 0)`, `(0, −r)`, handles of length `κ·r` along the tangents with
   **κ = 83/150 = 0.5533…** (fitted: every sample of `extrude/defaults` gives
-  0.5533333 to 7 digits, not the textbook 0.5523).
+  0.5533333 to 7 digits, not the textbook 0.5523; `splines-2/circle-uniform` agrees).
 - **Rectangle** `width`, `height` 400: lines through `(w/2, h/2), (−w/2, h/2),
   (−w/2, −h/2), (w/2, −h/2)`, closed (`extrude/rectangle`, `lathe/defaults`).
-- **Helix** (`start_radius`, `end_radius` 200, `start_angle` 0, `end_angle` 720°,
-  `height` 200, `subdivision` 100 per turn): the points `(r cos a, r sin a, −height·s)`
-  at `s = i/(subdivision·turns)` (rises along −Z: `sweep/helix` centre z −100), joined
-  by lines, **skipping the second and the second-to-last point** (observed: the default
-  helix path has 199 points at z = 0, −2, −3, …, −198, −200). **Parity-pending** for
-  other settings.
+- **Helix, Adaptive (R20 data)** (`start_radius`, `end_radius` 200, `start_angle` 0,
+  `end_angle` 720°, `height` 200, `subdivision` 100 per turn): the points
+  `(r cos a, r sin a, −height·s)` at `s = i/(subdivision·turns)` (rises along −Z:
+  `sweep/helix` centre z −100), joined by lines, **skipping the second and the
+  second-to-last point** (observed: the default helix path has 199 points at
+  z = 0, −2, −3, …, −198, −200). **Parity-pending** for other settings.
+- **Helix, every other mode (R25 data, `splines-2/helix-uniform`)**: a Bezier spline of
+  `subdivision + 1` points (101 for the default: the count is the total, not per turn) at
+  `s_i = i/subdivision`, on the same curve `f(s) = (r cos a, r sin a, −height·s)`,
+  `a = start_angle + (end_angle − start_angle)·s`, `r` linear in `s`. Point `i` has its
+  handles along `f(s_i + 1/N) − f(s_i − 1/N)` (the analytic curve is extended past the
+  ends, so the end points have handles too), each of length `L/3` with `L` the length of
+  the helix piece the handle belongs to (`√((rθ)² + Δz²)` for constant radius, 25.2125
+  per piece by default); out handle forward, in handle backward.
+  **Known mismatch (`helix-uniform`):** the 901 sampled points are within 3.5e-4 of the
+  export (tolerance 1e-4). The exported handles carry a small inward radial part
+  (−2.95e-4 on 8.377 tangential, −0.668 in z, the same for every piece) that this
+  direction/length rule misses, and the exported points drift by ≈1e-7 of their
+  parameter. Variants tried (true helix tangent, chord direction with arc/3 length (above), chord direction with chord/3
+  length; equal-`t` and equal-arc sampling; the best has 3.5e-4 error). The
+  adaptive helix of R25 is not observed, so the two helix forms are told apart by the
+  mode only (**parity-pending**).
 - **Plane:** `xy` as is; `xz` maps (x, y, z) → (x, −z, y) (the loft circles); `zy`
   (x, y, z) → (−z, y, x) (not observed).
 
-### 6.2 Adaptive points
-A spline's points are its segment start points (and the end point when open) plus, on
-curved segments, interior samples: walk t in steps of 1/50 accumulating the tangent's
-turn; emit t once the turn reaches the angle (5°) and restart the sum; the last interior
-sample is placed one step before the end (`1 − Δ`) instead of a sample that would leave
-less than one step. For the circle this gives t = 0.06·k (k = 1..15) and 0.94, i.e. 17
-points per quarter, 68 in all, for any radius (`extrude/defaults`, `lathe/circle`).
-The rule is fitted to 5° only (**parity-pending** for other angles). Lines get no
-interior samples.
+### 6.2 Intermediate Points (`spline_sampling.rs`)
+
+A spline is a list of cubic Bezier segments `[p0, c0, c1, p1]` (`linear` splines are
+straight pieces and get **no** intermediate points in any mode), closed or open, plus a
+`Sampling { mode, number, angle, max_length }` read from its params. `sample(curve)` gives
+the ordered point list the generators consume: for every segment its start point, then the
+segment's interior samples (parameters `t` in `(0, 1)`), and for an open spline the end
+point; a closed spline does not repeat its first point. Param ranges (O4/O17): `number` 0–5000
+(default 8), `angle` 0–90° (5°), `max_length` ≥ 0.01 (5). Number is used by Natural and
+Uniform, Angle by Adaptive and Subdivided, Maximum Length by Subdivided.
+
+| Mode | Interior samples of one curved segment | Evidence |
+|---|---|---|
+| None | none: only the spline's own points | – (**parity-pending**) |
+| Uniform | `number` samples at equal arc length inside each segment. The length is the polyline through the segment at `t = k/50`, and the sample's `t` is interpolated linearly between those vertices | `splines-2/circle-uniform` (36 points of 4 quarters; 5e-7 with 50 pieces, 3e-3 with an exact length, 2e-3 with 40, 3e-3 with 64), `helix-uniform` (900 steps, mismatch of §6.1 aside), `arc-defaults` (37 points of 4 segments) |
+| Natural | `number` samples at `t = k/(number + 1)` (equal steps of the segment's own parameter) | **parity-pending**: no case. Equal-`t` was the first reading of Uniform and is 1.4 off `circle-uniform`, so it is not Uniform; Natural takes it as the only other even spacing |
+| Adaptive | walk `t` in steps of 1/50 accumulating the tangent's turn; emit `t` once the turn reaches `angle` and restart the sum; the last interior sample is placed one step before the end (`1 − Δ`) instead of a sample that would leave less than one step. For the circle: `t = 0.06·k` (k = 1..15) and 0.94, i.e. 17 points per quarter, 68 in all, for any radius | `extrude/defaults`, `lathe/circle` (5° only; other angles **parity-pending**) |
+| Subdivided | the smallest `m` such that each of `m` equal-`t` pieces turns by at most `angle` and has a chord of at most `max_length`; samples at `t = k/m` | **parity-pending**: no case |
+
+- **Open end of Uniform:** the last point of an open spline is not the spline's end but its
+  parameter `1 − 10⁻⁴` of the whole spline (`u = 0.9999·segments`): `arc-defaults` ends
+  0.009° short of 90° (bbox x 199.96847), `helix-uniform` ends at 719.928° / z −199.97994
+  (= `t` 0.99 of the 100th piece). With `number = 0` Uniform behaves like None. The R20
+  Adaptive helix ends exactly on its end point (z −200), so the shortfall is taken as part
+  of Uniform (**parity-pending** for None/Natural/Subdivided, which keep the exact end).
+- Uniform is spaced per segment, not over the whole spline; every observed spline has equal
+  segments, so a global spacing would give the same points (**parity-pending**).
+- Uniform counts are per segment on **every** segment, so a closed circle gives
+  `4·(number + 1)` points and an open spline with `n` segments `n·(number + 1) + 1`.
+- `Number`, `Angle` and `Maximum Length` of a mode that does not use them are kept but have
+  no effect.
 
 ## 7. Extrude (`forge.extrude`)
 
@@ -169,8 +209,10 @@ Params: `mesh_subdivision_u` 16 (R20: 30), `mesh_subdivision_v` 4 (R20: 10), `or
 - **Faces:** per row pair, `[r(j,i+1), r(j+1,i+1), r(j+1,i), r(j,i)]` (wound opposite to
   Extrude, and against the caps: the exported loft is not consistently oriented), i
   wrapping. Caps from the first ring (wound as the ring) and the last ring
-  (reversed), triangulated by the reference with an underived method; ours ear-clip,
-  and parity compares the caps geometrically (§11).
+  (reversed), the constrained Delaunay triangulation of the ring in the reference's
+  listing (GEOMETRY.md §6.1). `loft/defaults` is exact; `loft/three` differs in its end
+  cap by one exactly cocircular (mirror-symmetric) quad whose diagonal the export takes
+  the other way, so parity compares those caps geometrically (§11).
 
 ## 10. Sweep (`forge.sweep`)
 
@@ -201,8 +243,8 @@ their transforms; the profile is read in its XY coordinates).
 position, other keys that primitive's params) in a scene, evaluates the generator, and
 compares `export_weld` of ours and of the export strictly (topology, 1e-4); its
 `KNOWN_MISMATCH` list pins the two cases above that we build but don't match, and
-`CAP_GEOMETRIC` the loft cases whose caps are compared geometrically (all points and
-every face before the caps exactly).
+`CAP_GEOMETRIC` the loft case (`loft/three`) whose caps are compared geometrically (all
+points and every face before the caps exactly).
 
 ### 11.1 R25 drift cases and the R25 extrude cap order
 

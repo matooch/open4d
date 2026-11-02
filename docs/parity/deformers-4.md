@@ -40,6 +40,18 @@ Record each deformer's parameter table once.
 | falloff/shear-spherical | Shear | O9 cube, Shear defaults with strength 50, a default Spherical field in its falloff list |
 | falloff/spherify-linear | Spherify | O9 cube, Spherify 100 %, a default Linear field in its falloff list |
 | falloff/field-child | Bend | O24 `bend-spherical`, with the Spherical field made a child of the Bend deformer |
+| squash-f/top-bottom | Squash & Stretch | follow-up from brief 051: O9 cube, Top 50, Bottom −150, Factor 50 % |
+| squash-f/center | Squash & Stretch | O9 cube, Factor 50 %, Center 50 % |
+| squash-f/aspect | Squash & Stretch | O9 cube, Factor 50 %, Aspect 50 % |
+| squash-f/smooth | Squash & Stretch | O9 cube, Factor 50 %, Smooth Start 50 %, Smooth End 50 % |
+| squash-f/curvature | Squash & Stretch | O9 cube, Factor 50 %, Curvature 50 %; then `-cubic` and `-quartic` with those types |
+| squash-f/custom | Squash & Stretch | O9 cube, Factor 50 %, type Custom, Power 3 |
+| wrap-f/movement | Wrap | O9 cube setup of `wrap/defaults`, Movement 100 |
+| wrap-f/scale-z | Wrap | same, Scale Z 50 % |
+| wrap-f/tension | Wrap | same, Tension 50 % |
+| wrap-f/latitude | Wrap | Spherical, Latitude 0° to 90° |
+| wrap-f/longitude | Wrap | Longitude 0° to 180° |
+| wrap-f/size | Wrap | Width 200, Radius 100; then `wrap-f/spherical-h200` with Spherical and Height 200 |
 
 ## Notes
 TODO

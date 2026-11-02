@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use forge_core::{Category, NodeId, NodeType, ParamDesc, Scene, Unit, Value};
 use glam::DVec3;
 
+use crate::spline_sampling::{Interpolation, Sampling, add_params, sample};
 use crate::{BuildError, Params};
 
 pub const CIRCLE: &str = "forge.circle_spline";
@@ -17,16 +18,18 @@ pub const HELIX: &str = "forge.helix_spline";
 /// `extrude/defaults`, not the textbook 0.5523).
 pub const CIRCLE_KAPPA: f64 = 83.0 / 150.0;
 
-/// A spline as cubic Bezier segments `[p0, c0, c1, p1]` (lines have `linear` set).
+/// A spline as cubic Bezier segments `[p0, c0, c1, p1]` (lines have `linear` set) with its
+/// Intermediate Points settings. Brief 037's primitives build one of these and nothing else.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Curve {
     pub segments: Vec<[DVec3; 4]>,
     pub linear: bool,
     pub closed: bool,
+    pub sampling: Sampling,
 }
 
 impl Curve {
-    fn bezier(seg: &[DVec3; 4], t: f64) -> DVec3 {
+    pub(crate) fn bezier(seg: &[DVec3; 4], t: f64) -> DVec3 {
         let u = 1.0 - t;
         seg[0] * (u * u * u)
             + seg[1] * (3.0 * u * u * t)
@@ -34,7 +37,7 @@ impl Curve {
             + seg[3] * (t * t * t)
     }
 
-    fn tangent(seg: &[DVec3; 4], t: f64) -> DVec3 {
+    pub(crate) fn tangent(seg: &[DVec3; 4], t: f64) -> DVec3 {
         let u = 1.0 - t;
         (seg[1] - seg[0]) * (3.0 * u * u)
             + (seg[2] - seg[1]) * (6.0 * u * t)
@@ -48,25 +51,10 @@ impl Curve {
         Self::bezier(&self.segments[i], s - i as f64)
     }
 
-    /// The spline's own points (Intermediate Points = Adaptive, 5°): the segment start
-    /// points plus, on curved segments, the observed adaptive samples (§6.2). Closed
-    /// splines don't repeat the first point.
-    pub fn points(&self, angle: f64) -> Vec<DVec3> {
-        let mut out = Vec::new();
-        for seg in &self.segments {
-            out.push(seg[0]);
-            if !self.linear {
-                out.extend(
-                    adaptive_params(seg, angle)
-                        .into_iter()
-                        .map(|t| Self::bezier(seg, t)),
-                );
-            }
-        }
-        if !self.closed {
-            out.push(self.segments.last().expect("non-empty")[3]);
-        }
-        out
+    /// The spline's points with its own Intermediate Points settings applied
+    /// ([`spline_sampling::sample`]).
+    pub fn points(&self) -> Vec<DVec3> {
+        sample(self, &self.sampling)
     }
 
     pub fn transformed(&self, m: &glam::DMat4) -> Curve {
@@ -81,32 +69,6 @@ impl Curve {
     }
 }
 
-/// Interior sample parameters of one curved segment (§6.2): walk t in steps of 1/50,
-/// accumulating the tangent's turn, and emit a sample once it reaches `angle`; the last
-/// interior sample is placed one step before the end.
-fn adaptive_params(seg: &[DVec3; 4], angle: f64) -> Vec<f64> {
-    const FINE: usize = 50;
-    let mut out = Vec::new();
-    let (mut last, mut turned, mut prev) = (0.0, 0.0, Curve::tangent(seg, 0.0));
-    for k in 1..FINE {
-        let t = k as f64 / FINE as f64;
-        let d = Curve::tangent(seg, t);
-        turned += prev.angle_between(d);
-        prev = d;
-        if turned + 1e-12 >= angle {
-            let step = t - last;
-            if t + step > 1.0 + 1e-9 {
-                out.push(1.0 - step);
-                return out;
-            }
-            out.push(t);
-            last = t;
-            turned = 0.0;
-        }
-    }
-    out
-}
-
 fn plane_param() -> ParamDesc {
     ParamDesc::enumeration(
         "plane",
@@ -116,32 +78,12 @@ fn plane_param() -> ParamDesc {
     )
 }
 
-fn common(t: NodeType) -> NodeType {
-    t.param(plane_param())
-        .param(ParamDesc::bool("reverse", "Reverse", false))
-        .param(ParamDesc::enumeration(
-            "intermediate",
-            "Intermediate points",
-            "adaptive",
-            &[
-                ("none", "None"),
-                ("natural", "Natural"),
-                ("uniform", "Uniform"),
-                ("adaptive", "Adaptive"),
-                ("subdivided", "Subdivided"),
-            ],
-        ))
-        .param(ParamDesc::int("intermediate_number", "Number", 8).range(0, 5000))
-        .param(
-            ParamDesc::float("intermediate_angle", "Angle", 5f64.to_radians())
-                .range(0.0, std::f64::consts::FRAC_PI_2)
-                .unit(Unit::Angle),
-        )
-        .param(
-            ParamDesc::float("intermediate_max_length", "Maximum length", 5.0)
-                .range(0.01, f64::MAX)
-                .unit(Unit::Distance),
-        )
+fn common(t: NodeType, default: Interpolation) -> NodeType {
+    add_params(
+        t.param(plane_param())
+            .param(ParamDesc::bool("reverse", "Reverse", false)),
+        default,
+    )
 }
 
 fn distance(id: &str, label: &str, default: f64) -> ParamDesc {
@@ -158,6 +100,7 @@ pub(crate) fn circle_type() -> NodeType {
             .param(distance("radius", "Radius", 200.0))
             .param(distance("radius_y", "Radius Y", 200.0))
             .param(distance("inner_radius", "Inner radius", 100.0)),
+        Interpolation::Uniform,
     )
 }
 
@@ -168,6 +111,7 @@ pub(crate) fn rectangle_type() -> NodeType {
             .param(distance("height", "Height", 400.0))
             .param(ParamDesc::bool("rounding", "Rounding", false))
             .param(distance("rounding_radius", "Radius", 50.0)),
+        Interpolation::Adaptive,
     )
 }
 
@@ -196,6 +140,7 @@ pub(crate) fn helix_type() -> NodeType {
                     .unit(Unit::Percent),
             )
             .param(ParamDesc::int("subdivision", "Subdivision", 100).range(3, 100_000)),
+        Interpolation::Uniform,
     )
 }
 
@@ -225,13 +170,7 @@ pub fn build_curve(type_id: &str, values: &BTreeMap<String, Value>) -> Result<Cu
         _ => return Err(BuildError::UnknownType(type_id.to_string())),
     };
     let p = Params { ty: &ty, values };
-    if p.enumeration("intermediate") != "adaptive"
-        || (p.float("intermediate_angle") - 5f64.to_radians()).abs() > 1e-12
-    {
-        return Err(BuildError::Unsupported(
-            "spline intermediate points other than Adaptive 5°",
-        ));
-    }
+    let sampling = Sampling::from_params(&p);
     if p.bool("reverse") {
         return Err(BuildError::Unsupported("reversed spline"));
     }
@@ -259,6 +198,7 @@ pub fn build_curve(type_id: &str, values: &BTreeMap<String, Value>) -> Result<Cu
                 ],
                 linear: false,
                 closed: true,
+                sampling,
             }
         }
         RECTANGLE => {
@@ -276,6 +216,7 @@ pub fn build_curve(type_id: &str, values: &BTreeMap<String, Value>) -> Result<Cu
                 segments: (0..4).map(|i| line(c[i], c[(i + 1) % 4])).collect(),
                 linear: true,
                 closed: true,
+                sampling,
             }
         }
         _ => {
@@ -284,23 +225,17 @@ pub fn build_curve(type_id: &str, values: &BTreeMap<String, Value>) -> Result<Cu
             {
                 return Err(BuildError::Unsupported("helix bias"));
             }
-            let (a0, a1) = (p.float("start_angle"), p.float("end_angle"));
-            let (r0, r1) = (p.float("start_radius"), p.float("end_radius"));
-            let turns = (a1 - a0).abs() / std::f64::consts::TAU;
-            let n = ((p.int("subdivision") as f64 * turns).round() as usize).max(1);
-            let pt = |i: usize| {
-                let s = i as f64 / n as f64;
-                let (a, r) = (a0 + (a1 - a0) * s, r0 + (r1 - r0) * s);
-                DVec3::new(r * a.cos(), r * a.sin(), -p.float("height") * s)
+            let shape = HelixShape {
+                start_angle: p.float("start_angle"),
+                end_angle: p.float("end_angle"),
+                start_radius: p.float("start_radius"),
+                end_radius: p.float("end_radius"),
+                height: p.float("height"),
             };
-            // Observed (`sweep/helix`): the points next to both ends are skipped.
-            let keep: Vec<usize> = (0..=n)
-                .filter(|&i| n < 4 || (i != 1 && i != n - 1))
-                .collect();
-            Curve {
-                segments: keep.windows(2).map(|w| line(pt(w[0]), pt(w[1]))).collect(),
-                linear: true,
-                closed: false,
+            if sampling.mode == Interpolation::Adaptive {
+                shape.adaptive_polyline(p.int("subdivision") as f64, sampling)
+            } else {
+                shape.bezier(p.int("subdivision"), sampling)
             }
         }
     };
@@ -309,6 +244,92 @@ pub fn build_curve(type_id: &str, values: &BTreeMap<String, Value>) -> Result<Cu
         *seg = seg.map(|q| on_plane(&plane, q));
     }
     Ok(curve)
+}
+
+/// The helix curve `f(s) = (r cos a, r sin a, -height * s)`, `s` in `[0, 1]`, with the angle
+/// and the radius linear in `s` (docs/specs/GENERATORS2.md §6.1).
+struct HelixShape {
+    start_angle: f64,
+    end_angle: f64,
+    start_radius: f64,
+    end_radius: f64,
+    height: f64,
+}
+
+impl HelixShape {
+    fn at(&self, s: f64) -> DVec3 {
+        let a = self.start_angle + (self.end_angle - self.start_angle) * s;
+        let r = self.start_radius + (self.end_radius - self.start_radius) * s;
+        DVec3::new(r * a.cos(), r * a.sin(), -self.height * s)
+    }
+
+    /// Speed `|f'(s)|`.
+    fn speed(&self, s: f64) -> f64 {
+        let da = self.end_angle - self.start_angle;
+        let r = self.start_radius + (self.end_radius - self.start_radius) * s;
+        let dr = self.end_radius - self.start_radius;
+        (dr * dr + r * r * da * da + self.height * self.height).sqrt()
+    }
+
+    /// Length of the piece `[s0, s1]` (Simpson, exact for a constant radius).
+    fn length(&self, s0: f64, s1: f64) -> f64 {
+        const N: usize = 16;
+        let h = (s1 - s0) / N as f64;
+        let mut sum = self.speed(s0) + self.speed(s1);
+        for k in 1..N {
+            let w = if k % 2 == 1 { 4.0 } else { 2.0 };
+            sum += w * self.speed(s0 + h * k as f64);
+        }
+        sum * h / 3.0
+    }
+
+    /// R20 form (`sweep/helix`, Adaptive): lines through `subdivision` points per turn, the
+    /// points next to both ends skipped.
+    fn adaptive_polyline(&self, subdivision: f64, sampling: Sampling) -> Curve {
+        let turns = (self.end_angle - self.start_angle).abs() / std::f64::consts::TAU;
+        let n = ((subdivision * turns).round() as usize).max(1);
+        let keep: Vec<usize> = (0..=n)
+            .filter(|&i| n < 4 || (i != 1 && i != n - 1))
+            .collect();
+        Curve {
+            segments: keep
+                .windows(2)
+                .map(|w| {
+                    line(
+                        self.at(w[0] as f64 / n as f64),
+                        self.at(w[1] as f64 / n as f64),
+                    )
+                })
+                .collect(),
+            linear: true,
+            closed: false,
+            sampling,
+        }
+    }
+
+    /// R25 form (`splines-2/helix-uniform`): `n + 1` points at `s = i/n` with tangent handles
+    /// along `f(s + 1/n) - f(s - 1/n)`, each a third of its piece's length long.
+    fn bezier(&self, n: usize, sampling: Sampling) -> Curve {
+        let d = 1.0 / n as f64;
+        let handle = |s: f64, piece: f64| {
+            let dir = (self.at(s + d) - self.at(s - d)).normalize_or_zero();
+            dir * (piece / 3.0)
+        };
+        let segments = (0..n)
+            .map(|i| {
+                let (s0, s1) = (i as f64 * d, (i + 1) as f64 * d);
+                let len = self.length(s0, s1);
+                let (p0, p1) = (self.at(s0), self.at(s1));
+                [p0, p0 + handle(s0, len), p1 - handle(s1, len), p1]
+            })
+            .collect();
+        Curve {
+            segments,
+            linear: false,
+            closed: false,
+            sampling,
+        }
+    }
 }
 
 /// A spline node's curve in its parent's space (placed by its local transform).

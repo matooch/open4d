@@ -42,9 +42,11 @@ and optionally **closed** (the last point connects back to the first).
   polygon `Q` = south, the profile, north (those present) at column 0 (start) and at
   column n (end). For `|Q| = 4` (`cylinder/slice`, `tube/slice`): start
   `[Q0, Q3, Q1], [Q1, Q3, Q2]`, end `[Q0, Q1, Q3], [Q1, Q2, Q3]`. Larger cut polygons are
-  triangulated by the reference with a method not derived here; ours ear-clips the
-  start as reversed `Q` and the end as `Q` (forge_geometry::triangulate_poly), and the
-  parity test compares those cases' cut faces **geometrically** (§10).
+  the constrained Delaunay triangulation of `Q`, listed as in GEOMETRY.md §6.1
+  (`forge_geometry::triangulate::triangulate_delaunay`, `Q` as walked; the start cut's
+  triangles are then wound the other way). Exact for `cone/slice`; `torus/slice` and
+  `capsule/slice` have cocircular cuts whose ties the reference decides by noise, so the
+  parity test compares those cut faces **geometrically** (§10).
 - `regular_grid = true` → `Unsupported` (not observed).
 
 ## 3. Cylinder (`forge.cylinder`)
@@ -145,6 +147,6 @@ Params: `size_x`, `size_y`, `size_z` 200, `segments` 1, `orientation`. Base corn
 ## 10. Parity tests
 
 `crates/generators/tests/parity.rs` covers these features too. Cases in its
-`CUT_GEOMETRIC` list (`cone/slice`, `torus/slice`, `capsule/slice`) must match every
+`CUT_GEOMETRIC` list (`torus/slice`, `capsule/slice`) must match every
 vertex and every face exactly except a trailing run of cut triangles, and the whole
 mesh must pass `compare_geometric`.

@@ -18,7 +18,7 @@ pub(crate) fn frequency(kind: &str, segments: usize) -> usize {
 }
 
 /// Base vertices (unit circumradius) and faces `(A, B, C)` of a triangle type, 0-based.
-fn triangle_solid(kind: &str) -> (Vec<DVec3>, Vec<[u32; 3]>) {
+pub(crate) fn triangle_solid(kind: &str) -> (Vec<DVec3>, Vec<[u32; 3]>) {
     match kind {
         "tetrahedron" => {
             let (s, c) = (8f64.sqrt() / 3.0, -1.0 / 3.0);
