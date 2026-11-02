@@ -348,6 +348,12 @@ impl Editor {
         let hot = self.viewport_hot;
         let presses = ctx.input_mut(|i| self.state.keys.map.take_presses(i, hot));
         for (id, args) in presses {
+            // Delete over the node editor deletes nodes, not objects (UI.md §17.4).
+            if id == "object.delete" && self.state.node_editor.canvas.hot {
+                self.state.node_editor.canvas.delete_requested = true;
+                ctx.request_repaint();
+                continue;
+            }
             self.run_id(&id, args);
         }
     }
@@ -707,6 +713,7 @@ impl Editor {
             Panel::Script => {
                 crate::script_panel::script_panel_ui(ui, &mut self.state, self.dialogs.as_mut())
             }
+            Panel::NodeEditor => crate::node_editor::node_editor_ui(ui, &mut self.state),
         }
     }
 
@@ -1512,6 +1519,9 @@ impl Editor {
 
     fn tree_ui(&mut self, ui: &mut Ui) {
         let cmds = self.objects.show(ui, &mut self.state);
+        if let Some(tag) = self.objects.open_tag.take() {
+            self.state.open_node_editor(tag);
+        }
         for c in cmds {
             self.run(c);
         }

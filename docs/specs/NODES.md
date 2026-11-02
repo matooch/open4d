@@ -171,14 +171,28 @@ All take `tag` (the id of a `forge.expression` node); every mutating command is 
 
 | id | arguments | result | undoable |
 |---|---|---|---|
-| `graph.add_node` | `tag`, `type`, `values?` (port id to JSON value) | `{node}` | yes |
-| `graph.remove` | `tag`, `node` | `{removed_links}` | yes |
-| `graph.connect` | `tag`, `from_node`, `from_port`, `to_node`, `to_port` | `{replaced}` | yes |
+| `graph.add_node` | `tag`, `type`, `values?` (port id to JSON value), `pos?` (`[x, y]`) | `{node}` | yes |
+| `graph.remove` | `tag`, `node?`, `nodes?` (one or a list, one undo step) | `{removed_links}` | yes |
+| `graph.connect` | `tag`, `from_node`, `from_port`, `to_node`, `to_port`, `release_node?`, `release_port?` | `{replaced}` | yes |
+| `graph.move` | `tag`, `moves` (list of `{node, x, y}`), `gesture?` | `{moved}` | yes |
 | `graph.disconnect` | `tag`, `to_node`, `to_port` | null | yes |
-| `graph.set_value` | `tag`, `node`, `port`, `value` | null | yes |
-| `graph.get` | `tag` | `{nodes: [{id, type, values}], links: [{from, to}], order}` (`order` is null if the graph has a cycle) | no |
+| `graph.set_value` | `tag`, `node`, `port`, `value`, `gesture?` | null | yes |
+| `graph.get` | `tag` | `{nodes: [{id, type, values, pos}], links: [{from, to}], order}` (`order` is null if the graph has a cycle) | no |
 | `graph.node_types` | - | the registered node types with their ports | no |
 | `graph.evaluate` | `tag` | `{outputs, writes, ran}` of a dry run of every node at the timeline's current frame, on the evaluated scene; changes nothing | no |
+
+**Editor additions (brief 109).** A graph node has an editor position `pos` (`[x, y]` in canvas
+units, default `[0, 0]`, saved in the graph JSON as `pos` only when it is not `[0, 0]`, so graphs
+that were never positioned keep their old text). It has no effect on evaluation. `graph.move`
+sets the positions of several nodes at once (absolute values; a non-finite number or an unknown
+node fails and changes nothing). `graph.add_node`
+`pos` places the new node. `graph.remove` takes `node` or `nodes` (at least one; all or none),
+removing every link that touches them in one step. `graph.connect` `release_node` and
+`release_port` name an input whose link is removed in the same step before the new link is made
+(moving a link from one input to another; if the connection is refused nothing changes, the
+released link stays). `gesture` (a number) on `graph.move` and `graph.set_value` merges edits
+with the same gesture, tag and nodes into one undo step (`graph-move:<tag>:<gesture>`,
+`graph-value:<tag>:<node>:<port>:<gesture>`), like `param.edit`.
 
 JSON values follow the port type: number (Float; Int needs an integer), bool, `[x, y, z]`
 (Vec3, Colour), 16 numbers (Matrix), string, node id or null (Node). For `Any` ports a JSON
@@ -208,3 +222,7 @@ evaluated). Step 7 -> 8 has nothing to rewrite.
 - `expression.rs` (headless `App`): an expression tag built only with commands moves a cube from time;
   an expression overrides a keyed value; order of two expressions; undo of each command; a failing graph is a
   diagnostic; save/load round trip; v7 file migration; evaluation by `App::evaluated` [§5-§7].
+- `crates/nodes/tests/editor_commands.rs` (brief 109): `pos` round trip and the unchanged JSON of
+  unpositioned graphs, `graph.move` (several nodes, one step, gesture merge, bad input changes nothing),
+  `graph.add_node` `pos`, `graph.remove` with a list, `graph.connect` with `release_*` (one step,
+  refusal keeps the old link), `graph.set_value` gesture merge, `graph.get` `pos`.

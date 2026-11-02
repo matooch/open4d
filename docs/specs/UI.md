@@ -706,3 +706,125 @@ display. Cloners with enabled deformer children keep the expanded fallback (VIEW
 - Pure: Create menu entries, `clone_marks` (counts, hidden clones, cap, behind camera,
   projection), the 10 000 clone instance data builds and culls.
 - Instancing: a cloner of 10 000 clones is one `DrawItem::Instanced`.
+
+## 17. Node editor (`node_canvas`, `node_editor`; brief 109)
+
+Sources: project design (docs/roadmap/areas/H-rigging.md "Node expressions"), NODES.md, the
+public node-graph editor literature. **Everything here is own design, parity-pending G6**
+(the owner has not described the classic editor's node look or how nodes are added); the look
+is deliberately plain and not modelled on any screenshot. Canvas decision: DECISIONS.md D17
+(our own canvas; `egui-snarl` needs egui 0.36).
+
+### 17.1 Two layers
+
+- `node_canvas` is a **generic** canvas. It knows nothing about expressions. It draws a
+  `CanvasModel` (a trait: the nodes with title, category, position and typed ports; the links;
+  `check_link(from, to) -> Result<(), String>`; the entries of the add menu) and returns
+  `CanvasAction`s (`AddNode`, `Move`, `Connect`, `Disconnect`, `Delete`, `SetConstant`). It never
+  changes the model. Node materials (brief 124) implement the same trait.
+- `node_editor` is the panel for expressions: `ExpressionModel` implements `CanvasModel` over a
+  `forge_nodes::Graph` read from the tag, and `run_action` turns each action into one `graph.*`
+  command (all edits are registry commands, one undo step each).
+
+### 17.2 Panel
+
+`Panel::NodeEditor`, title "Node Editor", default area Centre as a tab next to the viewport,
+closed by default; opened from Window > "Node Editor panel" and by **double-clicking an
+expression tag** (`[Expression]`, the `forge.expression` tags) in the object manager, which also
+selects that tag in the panel. The header has a combo "Expression tag" listing every
+`forge.expression` tag as `<object name> / <tag name>`, a **Add expression tag** button (runs
+`object.create` with type `forge.expression` on the active object; it is disabled without an
+active object) and the evaluation message. With no tag chosen the panel shows the first
+expression tag on the active object, else the first in the scene, else a hint.
+The chosen tag is panel state (`EditorState::node_editor`), not saved. The canvas view (pan, zoom)
+and the selection are kept per tag while the editor runs.
+
+### 17.3 Canvas model (pure, unit-tested in `node_canvas`)
+
+World units. `View { pan, zoom }`: `screen = rect.min + pan + world * zoom`. Zoom is clamped to
+0.25..2.5; `zoom_about(p, factor)` keeps the world point under `p` fixed.
+
+Node box (world): width 200, title bar 24, rows 22, padding 8. A node's height is
+`24 + 22 * (outputs + inputs) + 8`. **Outputs are listed first**, right aligned, with the port
+dot on the right edge; then the inputs, left aligned, with the dot on the left edge. Port dots
+are centred on the row at the edge, radius 5 (hit radius 10 screen pixels). `pos` is the box's
+top-left corner. Links are cubic Béziers from an output dot to an input dot with horizontal
+tangents of `max(40, |dx| / 2)`; the hit test samples 24 points.
+
+Hit testing, in priority: a port (within 10 px), then a node (the last drawn is on top),
+then a link (within 6 px of the sampled curve), then empty canvas. A node box selected by
+`nodes_in_rect` when it intersects the box-select rectangle.
+
+Colours (own design): port colour by type name: float blue, int teal, bool orange, vec3 yellow,
+colour magenta, matrix violet, string grey, node cyan, any white. A port is a filled dot when
+linked and a ring when free. Title bars take a hue from a hash of the category.
+
+### 17.4 Interactions
+
+| Gesture | Effect |
+|---|---|
+| Mouse wheel | zoom about the pointer (`factor = 1.0015^scroll`) |
+| Middle-drag, or Alt/Space + left-drag | pan |
+| Click a node | select it (Shift or Ctrl toggles) |
+| Click empty canvas | clear the selection |
+| Left-drag a node | move it and the other selected nodes (an unselected node becomes the selection); `Move` every frame with absolute positions, one gesture id per drag so the drag is **one undo step** |
+| Left-drag on empty canvas | box select (Shift adds) |
+| Left-drag from a port | draw a wire. From an output to an input, or from a free input to an output |
+| Left-drag from a **linked input** | picks the link up (it is drawn from its output to the pointer) |
+| Release on a port of the other side | `check_link`; accepted: `Connect` (a picked-up link is moved with `release_*`, one step); refused: nothing changes and the reason is shown |
+| Release on empty canvas | a picked-up link is removed (`Disconnect`); a new wire is dropped |
+| While dragging a wire | the port under the pointer gets a green ring if the link is allowed, a red one with the reason next to the pointer if it is not |
+| Right-click or double-click empty canvas | the add menu at that point |
+| Right-click a node | menu: Delete node (all selected nodes if it is selected), Disconnect inputs |
+| Right-click a link | menu: Disconnect |
+| Delete or Backspace (pointer over the canvas) | delete the selected nodes (one step). Delete is bound to `object.delete`; while the pointer is over the node editor the key goes to the canvas instead |
+| Esc | closes the menu / cancels the wire drag |
+
+Add menu: a window with a search field ("Search nodes") and the node types from
+`graph.node_types`, grouped by category, each entry a button `Label (type.id)`. The search is a
+case-insensitive substring match on id, label and category; no match shows "No match". Choosing
+an entry adds the node at the menu's position (`AddNode`) and closes the menu.
+
+Constant values: every input that has no link shows an inline editor in its row: Float and Int a
+drag value, Bool a check box, String a text box, Vec3 and Colour three drag values. Matrix, Node and
+Any inputs show their value as text (no editor); Text edits commit when the box loses focus
+(Enter or a click elsewhere), one step per committed text. Editing runs `graph.set_value`; a drag of a
+number is one gesture and one undo step. The editors are drawn at normal size and only when the
+zoom is 0.75 or more; below that the row shows the value as text.
+
+Refusals: the reason is the graph's own error text (`cannot connect float to node`, `the link
+would close a cycle through ...`), shown on the canvas bottom line and in the status bar until the
+next interaction.
+
+### 17.5 Live values
+
+The panel keeps a dry-run result from `graph.evaluate` (NODES.md §6) for the chosen tag and
+refreshes it when the scene revision, the current frame or the tag changes (so it follows
+playback and edits). Each output port row shows its value to the right of its label (floats to 3
+decimals, Vec3 as `(x, y, z)`, Bool `true`/`false`, strings quoted and cut at 16 characters,
+matrices as `mat4`, nodes as `#id` or `none`); a linked input shows the value of its source. If
+the evaluation fails, no values are shown and the header shows the error (`graph node 3: ...`).
+Values come from every node (the dry run evaluates all nodes), including ones no sink needs.
+
+### 17.6 Node positions
+
+`pos` of each graph node is stored in the graph JSON (NODES.md §6). `Move` becomes `graph.move`
+(gesture-merged), `AddNode` `graph.add_node` with `pos`. Positions have no effect on evaluation,
+but they are part of the tag's `graph` parameter, so moving a node is an edit of the document
+(dirty marker, one undo step per drag).
+
+### 17.7 Tests
+
+- `crates/ui/src/node_canvas.rs`, `node_editor.rs` (unit): view transforms and round trip, zoom
+  about a point and its clamp, node and port geometry, hit testing of ports (radius at any zoom),
+  nodes (z-order), links, box selection, Bézier sampling, menu filtering, value formatting,
+  constants by port type, menu entries from `graph.node_types`.
+- `crates/ui/tests/node_editor.rs` (egui_kittest on the full editor): open from the Window menu and
+  by double-click on the tag; add a node through the search menu (filter, pick) and undo; connect
+  two nodes by dragging (one step) and undo; a refused connection (type) changes nothing and shows
+  its reason, also a cycle; moving a node by dragging is one undo step and the position is saved in
+  the graph and survives undo/redo; the verdict (green/red) on the port under a dragged wire; picking up a link and dropping it on empty canvas disconnects;
+  moving a link to another input is one step; box select and Delete remove nodes (one step, links
+  go); a value edit (`graph.set_value`); live values appear on ports; and the expression
+  built in the editor drives the scene (a cube's position follows the graph after the edits, and
+  after undo returns).

@@ -52,6 +52,25 @@ fn commit(
         .map_err(CommandError::from)
 }
 
+/// Like [`commit`], merging into the previous step when `key` is the same.
+fn commit_merged(
+    ctx: &mut dyn CommandContext,
+    tag: u64,
+    label: &str,
+    graph: &Graph,
+    key: Option<&str>,
+) -> Result<(), CommandError> {
+    let Some(key) = key else {
+        return commit(ctx, tag, label, graph);
+    };
+    let text = graph.to_json();
+    ctx.doc_mut()
+        .transact_merged(label, key, |tx| {
+            tx.set_param(NodeId(tag), GRAPH_PARAM, Value::String(text))
+        })
+        .map_err(CommandError::from)
+}
+
 fn registry() -> &'static NodeRegistry {
     NodeRegistry::builtin()
 }
@@ -70,6 +89,8 @@ struct AddNodeArgs {
     type_id: String,
     /// Constants of unconnected inputs by port id.
     values: Option<BTreeMap<String, Json>>,
+    /// Editor position `[x, y]` of the new node.
+    pos: Option<[f64; 2]>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -77,7 +98,9 @@ struct AddNodeArgs {
 struct RemoveArgs {
     tag: u64,
     /// Graph node id.
-    node: u64,
+    node: Option<u64>,
+    /// Several graph node ids, removed in one undo step.
+    nodes: Option<Vec<u64>>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -90,6 +113,9 @@ struct ConnectArgs {
     to_node: u64,
     /// Input port id.
     to_port: String,
+    /// An input whose link is removed in the same step (moving a link between inputs).
+    release_node: Option<u64>,
+    release_port: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -109,6 +135,27 @@ struct SetValueArgs {
     port: String,
     /// A number, bool, `[x, y, z]`, 16 numbers, string or node id, by the port type.
     value: Json,
+    /// Edits with the same gesture number merge into one undo step (a drag of a number).
+    gesture: Option<u64>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct MoveItem {
+    /// Graph node id.
+    node: u64,
+    x: f64,
+    y: f64,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct MoveArgs {
+    tag: u64,
+    /// New absolute editor positions.
+    moves: Vec<MoveItem>,
+    /// Moves with the same gesture number merge into one undo step (one drag).
+    gesture: Option<u64>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -124,7 +171,7 @@ pub fn register_commands(r: &mut CommandRegistry) -> Result<(), CommandError> {
             "graph.add_node",
             "Add Graph Node",
             true,
-            || json!({"tag": 1, "type": "math.add", "values": {"b": 2.0}}),
+            || json!({"tag": 1, "type": "math.add", "values": {"b": 2.0}, "pos": [40.0, 80.0]}),
         ),
         add_node,
     )?;
@@ -133,7 +180,7 @@ pub fn register_commands(r: &mut CommandRegistry) -> Result<(), CommandError> {
             "graph.remove",
             "Remove Graph Node",
             true,
-            || json!({"tag": 1, "node": 1}),
+            || json!({"tag": 1, "nodes": [1, 2]}),
         ),
         remove,
     )?;
@@ -142,7 +189,7 @@ pub fn register_commands(r: &mut CommandRegistry) -> Result<(), CommandError> {
             "graph.connect",
             "Connect Graph Ports",
             true,
-            || json!({"tag": 1, "from_node": 1, "from_port": "out", "to_node": 2, "to_port": "a"}),
+            || json!({"tag": 1, "from_node": 1, "from_port": "out", "to_node": 2, "to_port": "a", "release_node": 2, "release_port": "b"}),
         ),
         connect,
     )?;
@@ -160,9 +207,18 @@ pub fn register_commands(r: &mut CommandRegistry) -> Result<(), CommandError> {
             "graph.set_value",
             "Set Graph Value",
             true,
-            || json!({"tag": 1, "node": 1, "port": "b", "value": 2.5}),
+            || json!({"tag": 1, "node": 1, "port": "b", "value": 2.5, "gesture": 1}),
         ),
         set_value,
+    )?;
+    r.register_fn(
+        spec(
+            "graph.move",
+            "Move Graph Nodes",
+            true,
+            || json!({"tag": 1, "moves": [{"node": 1, "x": 10.0, "y": 20.0}], "gesture": 1}),
+        ),
+        move_nodes,
     )?;
     r.register_fn(
         spec("graph.get", "Get Graph", false, || json!({"tag": 1})),
@@ -211,15 +267,27 @@ fn add_node(ctx: &mut dyn CommandContext, a: AddNodeArgs) -> Result<Json, Comman
             .set_value(registry(), id, port, value)
             .map_err(graph_error)?;
     }
+    if let Some(pos) = a.pos {
+        graph.set_position(id, pos).map_err(graph_error)?;
+    }
     commit(ctx, a.tag, "Add Graph Node", &graph)?;
     Ok(json!({"node": id.0}))
 }
 
 fn remove(ctx: &mut dyn CommandContext, a: RemoveArgs) -> Result<Json, CommandError> {
+    let ids: Vec<u64> = a
+        .node
+        .into_iter()
+        .chain(a.nodes.into_iter().flatten())
+        .collect();
+    if ids.is_empty() {
+        return Err(CommandError::InvalidArgs("give node or nodes".into()));
+    }
     let mut graph = read(ctx, a.tag)?;
-    let links = graph
-        .remove_node(GraphNodeId(a.node))
-        .map_err(graph_error)?;
+    let mut links = 0;
+    for id in ids {
+        links += graph.remove_node(GraphNodeId(id)).map_err(graph_error)?;
+    }
     commit(ctx, a.tag, "Remove Graph Node", &graph)?;
     Ok(json!({"removed_links": links}))
 }
@@ -228,6 +296,15 @@ fn connect(ctx: &mut dyn CommandContext, a: ConnectArgs) -> Result<Json, Command
     let mut graph = read(ctx, a.tag)?;
     let from = PortRef::new(GraphNodeId(a.from_node), &a.from_port);
     let to = PortRef::new(GraphNodeId(a.to_node), &a.to_port);
+    if let (Some(node), Some(port)) = (a.release_node, &a.release_port) {
+        graph
+            .disconnect(&PortRef::new(GraphNodeId(node), port))
+            .map_err(graph_error)?;
+    } else if a.release_node.is_some() != a.release_port.is_some() {
+        return Err(CommandError::InvalidArgs(
+            "give release_node and release_port together".into(),
+        ));
+    }
     let old = graph.connect(registry(), from, to).map_err(graph_error)?;
     commit(ctx, a.tag, "Connect Graph Ports", &graph)?;
     Ok(json!({"replaced": old.is_some()}))
@@ -253,8 +330,23 @@ fn set_value(ctx: &mut dyn CommandContext, a: SetValueArgs) -> Result<Json, Comm
     graph
         .set_value(registry(), GraphNodeId(a.node), &a.port, value)
         .map_err(graph_error)?;
-    commit(ctx, a.tag, "Set Graph Value", &graph)?;
+    let key = a
+        .gesture
+        .map(|g| format!("graph-value:{}:{}:{}:{g}", a.tag, a.node, a.port));
+    commit_merged(ctx, a.tag, "Set Graph Value", &graph, key.as_deref())?;
     Ok(Json::Null)
+}
+
+fn move_nodes(ctx: &mut dyn CommandContext, a: MoveArgs) -> Result<Json, CommandError> {
+    let mut graph = read(ctx, a.tag)?;
+    for m in &a.moves {
+        graph
+            .set_position(GraphNodeId(m.node), [m.x, m.y])
+            .map_err(graph_error)?;
+    }
+    let key = a.gesture.map(|g| format!("graph-move:{}:{g}", a.tag));
+    commit_merged(ctx, a.tag, "Move Graph Nodes", &graph, key.as_deref())?;
+    Ok(json!({"moved": a.moves.len()}))
 }
 
 fn get(ctx: &mut dyn CommandContext, a: TagArgs) -> Result<Json, CommandError> {
@@ -267,7 +359,7 @@ fn get(ctx: &mut dyn CommandContext, a: TagArgs) -> Result<Json, CommandError> {
                 .iter()
                 .map(|(k, v)| (k.clone(), v.to_json()))
                 .collect();
-            json!({"id": n.id.0, "type": n.type_id, "values": values})
+            json!({"id": n.id.0, "type": n.type_id, "values": values, "pos": n.pos})
         })
         .collect();
     let links: Vec<Json> = graph

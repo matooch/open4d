@@ -48,6 +48,13 @@ pub struct GraphNode {
     /// Constants of unconnected inputs.
     #[serde(default)]
     pub values: BTreeMap<String, PortValue>,
+    /// Editor position (canvas units); no effect on evaluation. Saved only when not `[0, 0]`.
+    #[serde(default, skip_serializing_if = "is_origin")]
+    pub pos: [f64; 2],
+}
+
+fn is_origin(p: &[f64; 2]) -> bool {
+    *p == [0.0, 0.0]
 }
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -205,9 +212,22 @@ impl Graph {
                 id,
                 type_id: type_id.to_string(),
                 values: BTreeMap::new(),
+                pos: [0.0, 0.0],
             },
         );
         Ok(id)
+    }
+
+    /// Sets the editor position of a node.
+    pub fn set_position(&mut self, id: GraphNodeId, pos: [f64; 2]) -> Result<(), GraphError> {
+        if !pos.iter().all(|c| c.is_finite()) {
+            return Err(GraphError::InvalidValue("position is not finite".into()));
+        }
+        self.nodes
+            .get_mut(&id)
+            .ok_or(GraphError::UnknownNode(id))?
+            .pos = pos;
+        Ok(())
     }
 
     /// Removes a node and every link that touches it; returns the number of links removed.

@@ -21,6 +21,8 @@ pub mod keymap_editor;
 pub mod layout;
 pub mod manipulate;
 pub mod navigation;
+pub mod node_canvas;
+pub mod node_editor;
 pub mod object_manager;
 pub mod panes;
 pub mod screenshot;

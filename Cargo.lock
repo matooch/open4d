@@ -1669,6 +1669,7 @@ dependencies = [
  "forge-io",
  "forge-modeling",
  "forge-modifiers",
+ "forge-nodes",
  "forge-platform",
  "forge-rpc",
  "forge-script",

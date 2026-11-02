@@ -167,6 +167,7 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `graph_connect` | Connect Graph Ports. Undoable editing command. Runs command `graph.connect`. |
 | `graph_disconnect` | Disconnect Graph Port. Undoable editing command. Runs command `graph.disconnect`. |
 | `graph_set_value` | Set Graph Value. Undoable editing command. Runs command `graph.set_value`. |
+| `graph_move` | Move Graph Nodes. Undoable editing command. Runs command `graph.move`. |
 | `graph_get` | Get Graph. Not an undoable edit. Runs command `graph.get`. |
 | `graph_node_types` | List Graph Node Types. Not an undoable edit. Runs command `graph.node_types`. |
 | `graph_evaluate` | Evaluate Graph. Not an undoable edit. Runs command `graph.evaluate`. |

@@ -2,7 +2,7 @@
 
 # Command reference
 
-111 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+112 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -114,6 +114,7 @@
 | [`graph.connect`](#graphconnect) | Connect Graph Ports | yes | `graph_connect` |
 | [`graph.disconnect`](#graphdisconnect) | Disconnect Graph Port | yes | `graph_disconnect` |
 | [`graph.set_value`](#graphset_value) | Set Graph Value | yes | `graph_set_value` |
+| [`graph.move`](#graphmove) | Move Graph Nodes | yes | `graph_move` |
 | [`graph.get`](#graphget) | Get Graph | no | `graph_get` |
 | [`graph.node_types`](#graphnode_types) | List Graph Node Types | no | `graph_node_types` |
 | [`graph.evaluate`](#graphevaluate) | Evaluate Graph | no | `graph_evaluate` |
@@ -1265,9 +1266,10 @@ Add Graph Node. One undo step.
 |---|---|---|---|
 | `tag` | integer | yes | The expression tag that owns the graph. |
 | `type` | string | yes | Node type id, e.g. `math.add` (see `graph.node_types`). |
+| `pos` | array of number (length 2) or null | no | Editor position `[x, y]` of the new node. |
 | `values` | object or null | no | Constants of unconnected inputs by port id. |
 
-Example: `forge cmd scene.forge graph.add_node --args '{"tag":1,"type":"math.add","values":{"b":2.0}}'`
+Example: `forge cmd scene.forge graph.add_node --args '{"pos":[40.0,80.0],"tag":1,"type":"math.add","values":{"b":2.0}}'`
 
 ### `graph.remove`
 
@@ -1276,9 +1278,10 @@ Remove Graph Node. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `tag` | integer | yes |  |
-| `node` | integer | yes | Graph node id. |
+| `node` | integer or null | no | Graph node id. |
+| `nodes` | array of integer or null | no | Several graph node ids, removed in one undo step. |
 
-Example: `forge cmd scene.forge graph.remove --args '{"node":1,"tag":1}'`
+Example: `forge cmd scene.forge graph.remove --args '{"nodes":[1,2],"tag":1}'`
 
 ### `graph.connect`
 
@@ -1291,8 +1294,10 @@ Connect Graph Ports. One undo step.
 | `from_port` | string | yes | Output port id. |
 | `to_node` | integer | yes |  |
 | `to_port` | string | yes | Input port id. |
+| `release_node` | integer or null | no | An input whose link is removed in the same step (moving a link between inputs). |
+| `release_port` | string or null | no |  |
 
-Example: `forge cmd scene.forge graph.connect --args '{"from_node":1,"from_port":"out","tag":1,"to_node":2,"to_port":"a"}'`
+Example: `forge cmd scene.forge graph.connect --args '{"from_node":1,"from_port":"out","release_node":2,"release_port":"b","tag":1,"to_node":2,"to_port":"a"}'`
 
 ### `graph.disconnect`
 
@@ -1316,8 +1321,21 @@ Set Graph Value. One undo step.
 | `node` | integer | yes |  |
 | `port` | string | yes | Input port id. |
 | `value` | any | yes | A number, bool, `[x, y, z]`, 16 numbers, string or node id, by the port type. |
+| `gesture` | integer or null | no | Edits with the same gesture number merge into one undo step (a drag of a number). |
 
-Example: `forge cmd scene.forge graph.set_value --args '{"node":1,"port":"b","tag":1,"value":2.5}'`
+Example: `forge cmd scene.forge graph.set_value --args '{"gesture":1,"node":1,"port":"b","tag":1,"value":2.5}'`
+
+### `graph.move`
+
+Move Graph Nodes. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes |  |
+| `moves` | array of object | yes | New absolute editor positions. |
+| `gesture` | integer or null | no | Moves with the same gesture number merge into one undo step (one drag). |
+
+Example: `forge cmd scene.forge graph.move --args '{"gesture":1,"moves":[{"node":1,"x":10.0,"y":20.0}],"tag":1}'`
 
 ### `graph.get`
 

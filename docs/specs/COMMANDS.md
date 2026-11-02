@@ -140,11 +140,12 @@ touch history.
 | `select.all` `select.none` `select.invert` `select.grow` `select.shrink` `select.connected` | - | null | yes |
 | `select.convert` | `to` points, edges, polys; `mode?` strict, tolerant (EDITABLE.md §2.8) | null | yes |
 | `select.loop` `select.ring` | `across?` 0 or 1 (EDITABLE.md §2.8) | null | yes |
-| `graph.add_node` | `tag`, `type`, `values?` (NODES.md §6) | `{node}` | yes |
-| `graph.remove` | `tag`, `node` | `{removed_links}` | yes |
-| `graph.connect` | `tag`, `from_node`, `from_port`, `to_node`, `to_port` (type and cycle checked) | `{replaced}` | yes |
+| `graph.add_node` | `tag`, `type`, `values?`, `pos?` (NODES.md §6) | `{node}` | yes |
+| `graph.remove` | `tag`, `node?`, `nodes?` | `{removed_links}` | yes |
+| `graph.connect` | `tag`, `from_node`, `from_port`, `to_node`, `to_port`, `release_node?`, `release_port?` (type and cycle checked) | `{replaced}` | yes |
+| `graph.move` | `tag`, `moves` (`{node, x, y}` list), `gesture?` | `{moved}` | yes (a gesture merges) |
 | `graph.disconnect` | `tag`, `to_node`, `to_port` | null | yes |
-| `graph.set_value` | `tag`, `node`, `port`, `value` | null | yes |
+| `graph.set_value` | `tag`, `node`, `port`, `value`, `gesture?` | null | yes (a gesture merges) |
 | `graph.get` `graph.evaluate` | `tag` | graph / dry-run result | no |
 | `graph.node_types` | - | `{types}` | no |
 | `file.new` | - | null | no |

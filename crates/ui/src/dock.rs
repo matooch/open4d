@@ -44,11 +44,12 @@ pub enum Panel {
     Timeline,
     Coordinates,
     Script,
+    NodeEditor,
 }
 
 impl Panel {
     /// Every panel, in Window menu order.
-    pub const ALL: [Panel; 8] = [
+    pub const ALL: [Panel; 9] = [
         Panel::CommandBar,
         Panel::ToolPalette,
         Panel::Viewport,
@@ -57,6 +58,7 @@ impl Panel {
         Panel::Timeline,
         Panel::Coordinates,
         Panel::Script,
+        Panel::NodeEditor,
     ];
 
     /// The panels `Dock::default()` opens; the others open from the Window menu.
@@ -80,6 +82,7 @@ impl Panel {
             Panel::Timeline => "Timeline",
             Panel::Coordinates => "Coordinates",
             Panel::Script => "Script Manager",
+            Panel::NodeEditor => "Node Editor",
         }
     }
 
@@ -93,6 +96,7 @@ impl Panel {
             Panel::Timeline => Area::Bottom,
             Panel::Coordinates => Area::Bottom,
             Panel::Script => Area::Bottom,
+            Panel::NodeEditor => Area::Center,
         }
     }
 }
@@ -183,6 +187,16 @@ impl Dock {
         let a = &mut self.areas[to as usize];
         a.tabs.push(panel);
         a.active = a.tabs.len() - 1;
+    }
+
+    /// Opens the panel if it is closed and makes it the shown tab of its area.
+    pub fn reveal(&mut self, panel: Panel) {
+        self.open(panel);
+        if let Some(area) = self.area_of(panel)
+            && let Some(i) = self.tabs(area).iter().position(|p| *p == panel)
+        {
+            self.set_active(area, i);
+        }
     }
 
     /// Reopens a closed panel in its default area.

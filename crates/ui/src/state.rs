@@ -15,6 +15,7 @@ use crate::autosave::Autosave;
 use crate::crash_notice::CrashNotice;
 use crate::dock::Dock;
 use crate::keymap::KeyMapState;
+use crate::node_editor::NodeEditorState;
 use crate::panes::{DEFAULT_SHADING, Views};
 use crate::screenshot::OffscreenGpu;
 use crate::script_panel::ScriptPanelState;
@@ -38,6 +39,8 @@ pub struct EditorState {
     pub views: Views,
     /// Script Manager source, console and recent list (docs/specs/UI.md §10).
     pub script: ScriptPanelState,
+    /// The Node Editor's tag, canvas and cache (docs/specs/UI.md §17).
+    pub node_editor: NodeEditorState,
     /// The headless GPU device `viewport.screenshot` renders with (RPC.md §10.2).
     pub offscreen: OffscreenGpu,
     /// The active modeling tool and its values (docs/specs/MODELING.md §0.2).
@@ -92,6 +95,7 @@ impl EditorState {
             shading: DEFAULT_SHADING,
             views: Views::new(&Self::default_camera()),
             script: ScriptPanelState::default(),
+            node_editor: NodeEditorState::default(),
             offscreen: OffscreenGpu::default(),
             tool: None,
             keys: KeyMapState::default(),
