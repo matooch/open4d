@@ -72,12 +72,14 @@ impl Dirs {
     }
 }
 
-/// An `XDG_*` value counts when non-empty and absolute (XDG Base Directory spec).
+/// An `XDG_*` value counts when non-empty and absolute (XDG Base Directory spec). XDG paths
+/// are POSIX paths, so "absolute" means rooted (`/...`) on every host: on Windows a rooted
+/// path without a drive is not `is_absolute`, which wrongly rejected `/x/cfg` there.
 fn xdg(env: &dyn Fn(&str) -> Option<OsString>, name: &str) -> Option<PathBuf> {
     env(name)
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
+        .filter(|p| p.has_root())
 }
 
 /// The application directories for `os`. Linux honours `XDG_CONFIG_HOME`, `XDG_DATA_HOME`
