@@ -252,7 +252,7 @@ fn doc_with_time() -> Document {
 fn markers_and_the_time_config_survive_a_save_and_load() {
     let doc = doc_with_time();
     let text = file::save(doc.scene());
-    assert!(text.contains("version: 7"), "{text}");
+    assert!(text.contains("version: 8"), "{text}");
     assert!(text.contains("preview: Some((4, 40))"), "{text}");
     let (loaded, report) = file::load(common::registry(), &text).unwrap();
     assert!(report.warnings.is_empty(), "{:?}", report.warnings);
@@ -290,7 +290,7 @@ fn an_invalid_time_block_loads_as_the_defaults_with_a_warning() {
         "(markers: [(id: 1, frame: 1, name: \"a\", color: (0, 0, 0)), (id: 1, frame: 2, name: \"b\", color: (0, 0, 0))])",
     ] {
         let text = format!(
-            r#"(format: "forge3d-scene", version: 7, settings: (fps: 30, start: 0, end: 90), time: {bad}, roots: [])"#
+            r#"(format: "forge3d-scene", version: 8, settings: (fps: 30, start: 0, end: 90), time: {bad}, roots: [])"#
         );
         let (scene, report) = file::load(common::registry(), &text).unwrap();
         assert_eq!(scene.time(), &TimeConfig::default(), "{bad}");
@@ -301,7 +301,7 @@ fn an_invalid_time_block_loads_as_the_defaults_with_a_warning() {
         );
     }
     // fields missing inside a time block take their defaults (drop_frames stays true)
-    let text = r#"(format: "forge3d-scene", version: 7, settings: (fps: 30, start: 0, end: 90), time: (mode: Once), roots: [])"#;
+    let text = r#"(format: "forge3d-scene", version: 8, settings: (fps: 30, start: 0, end: 90), time: (mode: Once), roots: [])"#;
     let (scene, report) = file::load(common::registry(), text).unwrap();
     assert!(report.warnings.is_empty());
     assert_eq!(scene.time().mode, PlayMode::Once);

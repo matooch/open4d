@@ -1384,6 +1384,7 @@ dependencies = [
  "forge-io",
  "forge-modeling",
  "forge-modifiers",
+ "forge-nodes",
  "forge-parity-harness",
  "forge-platform",
  "glam",
@@ -1547,6 +1548,23 @@ dependencies = [
  "forge-parity-harness",
  "glam",
  "toml",
+]
+
+[[package]]
+name = "forge-nodes"
+version = "0.1.0"
+dependencies = [
+ "forge-app",
+ "forge-command",
+ "forge-core",
+ "forge-noise",
+ "forge-script",
+ "glam",
+ "rhai",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

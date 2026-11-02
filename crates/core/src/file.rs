@@ -16,9 +16,9 @@ pub const FORMAT: &str = "forge3d-scene";
 /// Version 2 added `Value::Mesh`, version 3 `Value::IndexList`, version 4 keyframe
 /// tracks, version 5 the scene settings, version 6 declares link lists and the hidden
 /// `object.*` params and adds the chunk section and file reference params, version 7 the
-/// time configuration (markers, preview range, playback mode). Older files still load,
-/// through [`MIGRATIONS`].
-pub const VERSION: u32 = 7;
+/// time configuration (markers, preview range, playback mode), version 8 the expression
+/// tag and its graph parameter (brief 108). Older files still load, through [`MIGRATIONS`].
+pub const VERSION: u32 = 8;
 
 /// A value whose binary payload is at least this many bytes is written as a chunk by
 /// [`save_with`] (CORE.md §6.2): 42 mesh points or 256 indices.
@@ -53,6 +53,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migrate_4_to_5,
     migrate_5_to_6,
     migrate_6_to_7,
+    migrate_7_to_8,
 ];
 
 /// Version 2 added `Value::Mesh`: additive, nothing to rewrite.
@@ -83,6 +84,12 @@ fn migrate_5_to_6(_: &mut SceneFile) -> Vec<String> {
 
 /// Version 7 added `time`: a missing field is read as the defaults by serde.
 fn migrate_6_to_7(_: &mut SceneFile) -> Vec<String> {
+    Vec::new()
+}
+
+/// Version 8 declares the `forge.expression` tag, whose graph is a string parameter:
+/// nothing to rewrite.
+fn migrate_7_to_8(_: &mut SceneFile) -> Vec<String> {
     Vec::new()
 }
 

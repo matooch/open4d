@@ -35,6 +35,7 @@ pub fn default_registry() -> Result<Registry, RegistryError> {
     registry.install(&Deformers)?;
     registry.install(&CloneToolset)?;
     registry.install(&FieldToolset)?;
+    registry.install(&forge_nodes::NodesToolset)?;
     Ok(registry)
 }
 
@@ -43,6 +44,7 @@ pub fn default_command_registry() -> CommandRegistry {
     let mut commands = CommandRegistry::new();
     register_editor_commands(&mut commands).expect("built-in command ids are unique");
     param_edit::register(&mut commands).expect("param.edit is unique");
+    forge_nodes::register_commands(&mut commands).expect("graph.* ids are unique");
     commands
 }
 

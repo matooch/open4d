@@ -162,3 +162,11 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `file_import_obj` | Import OBJ. Undoable editing command. Runs command `file.import_obj`. |
 | `file_export_obj` | Export OBJ. Not an undoable edit. Runs command `file.export_obj`. |
 | `param_edit` | Edit Parameter. Undoable editing command. Runs command `param.edit`. |
+| `graph_add_node` | Add Graph Node. Undoable editing command. Runs command `graph.add_node`. |
+| `graph_remove` | Remove Graph Node. Undoable editing command. Runs command `graph.remove`. |
+| `graph_connect` | Connect Graph Ports. Undoable editing command. Runs command `graph.connect`. |
+| `graph_disconnect` | Disconnect Graph Port. Undoable editing command. Runs command `graph.disconnect`. |
+| `graph_set_value` | Set Graph Value. Undoable editing command. Runs command `graph.set_value`. |
+| `graph_get` | Get Graph. Not an undoable edit. Runs command `graph.get`. |
+| `graph_node_types` | List Graph Node Types. Not an undoable edit. Runs command `graph.node_types`. |
+| `graph_evaluate` | Evaluate Graph. Not an undoable edit. Runs command `graph.evaluate`. |

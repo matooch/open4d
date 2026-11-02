@@ -2,7 +2,7 @@
 
 # Command reference
 
-103 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+111 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -109,6 +109,14 @@
 | [`file.import_obj`](#fileimport_obj) | Import OBJ | yes | `file_import_obj` |
 | [`file.export_obj`](#fileexport_obj) | Export OBJ | no | `file_export_obj` |
 | [`param.edit`](#paramedit) | Edit Parameter | yes | `param_edit` |
+| [`graph.add_node`](#graphadd_node) | Add Graph Node | yes | `graph_add_node` |
+| [`graph.remove`](#graphremove) | Remove Graph Node | yes | `graph_remove` |
+| [`graph.connect`](#graphconnect) | Connect Graph Ports | yes | `graph_connect` |
+| [`graph.disconnect`](#graphdisconnect) | Disconnect Graph Port | yes | `graph_disconnect` |
+| [`graph.set_value`](#graphset_value) | Set Graph Value | yes | `graph_set_value` |
+| [`graph.get`](#graphget) | Get Graph | no | `graph_get` |
+| [`graph.node_types`](#graphnode_types) | List Graph Node Types | no | `graph_node_types` |
+| [`graph.evaluate`](#graphevaluate) | Evaluate Graph | no | `graph_evaluate` |
 
 ## `object`
 
@@ -1245,4 +1253,97 @@ Export OBJ. Not an undoable edit.
 | `selected` | boolean | no | Export only the selected objects. Default: `false`. |
 
 Example: `forge cmd scene.forge file.export_obj --args '{"path":"model.obj","selected":false}'`
+
+
+## `graph`
+
+### `graph.add_node`
+
+Add Graph Node. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes | The expression tag that owns the graph. |
+| `type` | string | yes | Node type id, e.g. `math.add` (see `graph.node_types`). |
+| `values` | object or null | no | Constants of unconnected inputs by port id. |
+
+Example: `forge cmd scene.forge graph.add_node --args '{"tag":1,"type":"math.add","values":{"b":2.0}}'`
+
+### `graph.remove`
+
+Remove Graph Node. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes |  |
+| `node` | integer | yes | Graph node id. |
+
+Example: `forge cmd scene.forge graph.remove --args '{"node":1,"tag":1}'`
+
+### `graph.connect`
+
+Connect Graph Ports. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes |  |
+| `from_node` | integer | yes |  |
+| `from_port` | string | yes | Output port id. |
+| `to_node` | integer | yes |  |
+| `to_port` | string | yes | Input port id. |
+
+Example: `forge cmd scene.forge graph.connect --args '{"from_node":1,"from_port":"out","tag":1,"to_node":2,"to_port":"a"}'`
+
+### `graph.disconnect`
+
+Disconnect Graph Port. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes |  |
+| `to_node` | integer | yes |  |
+| `to_port` | string | yes |  |
+
+Example: `forge cmd scene.forge graph.disconnect --args '{"tag":1,"to_node":2,"to_port":"a"}'`
+
+### `graph.set_value`
+
+Set Graph Value. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes |  |
+| `node` | integer | yes |  |
+| `port` | string | yes | Input port id. |
+| `value` | any | yes | A number, bool, `[x, y, z]`, 16 numbers, string or node id, by the port type. |
+
+Example: `forge cmd scene.forge graph.set_value --args '{"node":1,"port":"b","tag":1,"value":2.5}'`
+
+### `graph.get`
+
+Get Graph. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes |  |
+
+Example: `forge cmd scene.forge graph.get --args '{"tag":1}'`
+
+### `graph.node_types`
+
+List Graph Node Types. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge graph.node_types --args '{}'`
+
+### `graph.evaluate`
+
+Evaluate Graph. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes |  |
+
+Example: `forge cmd scene.forge graph.evaluate --args '{"tag":1}'`
 

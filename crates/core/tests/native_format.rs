@@ -81,7 +81,7 @@ fn check_logical_scene(scene: &forge_core::Scene, v: u32) {
 #[test]
 fn the_migration_table_has_one_step_per_version() {
     assert_eq!(MIGRATIONS.len() as u32, VERSION - 1);
-    assert_eq!(VERSION, 7);
+    assert_eq!(VERSION, 8);
 }
 
 #[test]
@@ -106,7 +106,7 @@ fn every_old_version_has_a_fixture_that_loads_and_migrates() {
 }
 
 #[test]
-fn version_7_fixtures_are_current_and_byte_stable() {
+fn version_8_fixtures_are_current_and_byte_stable() {
     // The current fixtures pin the on-disk format: change them only with a version bump.
     let (text_scene, bin_scene) = (fixture_scene(false), fixture_scene(true));
     let opts = SaveOptions::default();
@@ -114,13 +114,13 @@ fn version_7_fixtures_are_current_and_byte_stable() {
     let bin = file::save_with(&bin_scene, &opts);
     if std::env::var_os("FORGE_WRITE_FIXTURES").is_some() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-        std::fs::write(dir.join("scene-v7.forge"), &text).unwrap();
-        std::fs::write(dir.join("scene-v7-chunked.forge"), &bin).unwrap();
+        std::fs::write(dir.join("scene-v8.forge"), &text).unwrap();
+        std::fs::write(dir.join("scene-v8-chunked.forge"), &bin).unwrap();
     }
-    assert_eq!(text, fixture("scene-v7.forge"), "text fixture drifted");
+    assert_eq!(text, fixture("scene-v8.forge"), "text fixture drifted");
     assert_eq!(
         bin,
-        fixture("scene-v7-chunked.forge"),
+        fixture("scene-v8-chunked.forge"),
         "chunk fixture drifted"
     );
     assert!(!contains(&text, b"%%FORGE-CHUNKS"));
@@ -142,9 +142,27 @@ fn version_6_fixtures_still_load_and_get_the_default_time_configuration() {
         assert!(report.warnings.is_empty(), "{name}: {:?}", report.warnings);
         assert_eq!(scene.time(), &forge_core::TimeConfig::default(), "{name}");
         let text = file::save(&scene);
-        assert!(text.contains("version: 7"), "{text}");
+        assert!(text.contains("version: 8"), "{text}");
         let (again, _) = file::load(registry(), &text).unwrap();
         assert_eq!(file::save(&again), text, "{name}");
+    }
+}
+
+#[test]
+fn version_7_fixtures_still_load_and_migrate_to_8() {
+    // Written by the build of format version 7 (before brief 108); never regenerate.
+    for name in ["scene-v7.forge", "scene-v7-chunked.forge"] {
+        let bytes = fixture(name);
+        assert!(contains(&bytes, b"version: 7,"), "{name}");
+        let (scene, report) = file::load_bytes(registry(), &bytes).unwrap();
+        assert!(report.warnings.is_empty(), "{name}: {:?}", report.warnings);
+        let text = file::save(&scene);
+        assert!(text.contains("version: 8"), "{text}");
+        assert!(!text.contains("version: 7"), "{text}");
+        let (again, _) = file::load(registry(), &text).unwrap();
+        assert_eq!(file::save(&again), text, "{name}");
+        // the migration step itself changes nothing but the version
+        assert_eq!(MIGRATIONS.len(), 7, "{name}");
     }
 }
 
@@ -229,7 +247,7 @@ fn small_values_stay_text_and_large_ones_become_chunks() {
     let marker = b"\n%%FORGE-CHUNKS 1\n";
     let at = big.windows(marker.len()).position(|w| w == marker).unwrap();
     let head = std::str::from_utf8(&big[..at]).unwrap();
-    assert!(head.contains("version: 7"), "{head}");
+    assert!(head.contains("version: 8"), "{head}");
     assert!(head.contains("\"mesh\": MeshChunk(0)"), "{head}");
     assert!(
         head.contains("\"selection.points\": IndexListChunk(1)"),
