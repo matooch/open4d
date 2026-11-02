@@ -52,6 +52,16 @@ Also export each as a case (`editable-circle`, `editable-rectangle`).
 | interp-f/star-uniform | a default Star, Uniform 4, extruded (unequal segments) | – |
 | interp-f/helix-adaptive | a default Helix, Adaptive, swept with a small Circle (radius 5); then `-sub50` (Subdivision 50), `-end360` and `-end1080` (End Angle), `-bias` (Radial Bias 50 %, Height Bias 50 %) | – |
 | interp-f/helix-handles | a default Helix made editable: record the tangent (handle) vectors of points 0, 1 and 100 in Notes | form only |
+| prim-f/cog-tooth | follow-up from brief 037: a default Cogwheel made editable; record every point and tangent of the first tooth in Notes (or export the editable spline's points), then `cog-ratio` with the tooth ratios changed (record which) | form + mesh |
+| prim-f/flower | Flower with inner 50, outer 150, 5 petals, extruded | – |
+| prim-f/cissoid-t | Cissoid with tension 1 and then 4, extruded | – |
+| prim-f/cycloid | Cycloid with end angle 720°, and then radius 50, r 25, extruded | – |
+| prim-f/arc-types | Arc in each of its other types (record the type labels), extruded | – |
+| prim-f/four-side | 4-Side as parallelogram and as trapezium | – |
+| prim-f/profile | Profile as L, T, U and Z | – |
+| prim-f/cycloid-types | Cycloid as hypocycloid; and the Cissoid types Lemniscate and Strophoid | – |
+| prim-f/reverse | a default Star with Reverse on, extruded | – |
+| prim-f/direction-auto | a clockwise closed spline (Star with Reverse) extruded with Direction Auto; and a Circle in the XZ plane, Direction Auto | – |
 
 ## Notes
 TODO
