@@ -105,7 +105,9 @@ pub fn target(app: &App) -> Option<NodeId> {
         return None;
     }
     let id = app.selection.active?;
-    is_polygon(app.doc.scene(), id).then_some(id)
+    // a locked layer's objects are not component targets (CORE.md §7.4)
+    (is_polygon(app.doc.scene(), id) && !forge_core::layers::locked(app.doc.scene(), id))
+        .then_some(id)
 }
 
 fn is_polygon(scene: &Scene, id: NodeId) -> bool {
@@ -124,7 +126,7 @@ pub fn targets(app: &App) -> Vec<NodeId> {
         .nodes
         .iter()
         .copied()
-        .filter(|id| is_polygon(scene, *id))
+        .filter(|id| is_polygon(scene, *id) && !forge_core::layers::locked(scene, *id))
         .collect();
     out.insert(active);
     out.into_iter().collect()

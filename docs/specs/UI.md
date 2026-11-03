@@ -1140,3 +1140,44 @@ command and menu, the document and undo history untouched, save/load/delete thro
 a broken file on disk loads the standard layout with a warning in the status bar, the last
 layout restore); `crates/command/tests/registry.rs` (headless refusal).
 
+
+## 22. Layer manager (`layer_manager`, `tree`, `object_manager`; brief 158)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G1 is unanswered, so **the
+column set and order, the toggle letters, the colour display and the menu placement are
+parity-pending**. What the toggles do is CORE.md section 7. All edits are registry commands
+(COMMANDS.md §6, `layer.*`); the panel only computes arguments, one gesture is one undo step.
+
+### 22.1 Panel
+
+`Panel::Layers`, title "Layers", default area right bottom, closed by default; the Window menu
+lists it as "Layers panel". Rows are the layers in table order. Columns: colour swatch (click
+opens a colour picker, the result runs `layer.set` `color`), name (double-click renames via
+`layer.rename`; Enter commits, Escape cancels), then nine toggle cells in this order: Solo `S`,
+View `V`, Render `R`, Manager `M`, Locked `L`, Animation `A`, Generators `G`, Deformers `D`,
+Expressions `E`. A cell is a small button that is filled when the flag is on; click runs
+`layer.set` for the row (for every selected row when the row is selected). Accessibility labels:
+`Solo: <layer>`, `View: <layer>`, `Render: <layer>`, `Manager: <layer>`, `Locked: <layer>`,
+`Animation: <layer>`, `Generators: <layer>`, `Deformers: <layer>`, `Expressions: <layer>`; the
+name cell is `Layer <name>`. Clicking a name selects the row (Ctrl toggles); panel state only.
+Buttons under the grid: "New layer" (`layer.create`), "Delete" (`layer.delete` of the selected
+rows), "Merge" (`layer.merge` of the selected rows into the first selected one, two or more),
+"Assign selection" (`layer.assign` of the selected objects to the selected row, exactly one
+row), "Remove from layer" (`layer.assign` with none). Disabled buttons when the precondition
+fails. With no layers the panel says "No layers".
+
+### 22.2 Object manager
+
+A row whose object is on a layer shows a small swatch in the layer colour before the name
+(accessibility label `Layer: <layer name>`); `TreeRow` carries `layer: Option<(LayerId, String,
+[f64; 3])>`. Rows of layers with `manager` off are omitted (CORE.md 7.4), also in search results.
+The row context menu gets a "Layer" sub menu (pure, `tree::layer_menu`): "No layer" and one entry
+per layer, each running `layer.assign` for the menu's selection; the layer the whole selection
+shares is checked.
+
+### 22.3 Tests
+
+`crates/ui/tests/layer_manager.rs`: pure (`tree::layer_menu`, row colours, manager filtering);
+egui_kittest: the Window menu opens the panel (closed by default), New/rename/toggle cells/
+delete/merge/assign with undo after each, toggling View hides the object in the viewport draw
+items and the object manager colour swatch, the context menu assignment, save/load.

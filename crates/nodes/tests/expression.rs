@@ -567,7 +567,7 @@ fn graphs_save_and_load_with_the_scene() {
     let path = dir.join("expr.forge").to_string_lossy().into_owned();
     app.save(&path).unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
-    assert!(text.contains("version: 8"), "{text}");
+    assert!(text.contains("version: 9"), "{text}");
     assert!(text.contains("forge.expression"), "{text}");
 
     let mut loaded = App::new_default();
@@ -607,7 +607,7 @@ fn a_version_7_file_loads_and_an_expression_added_afterwards_saves_as_version_8(
     let tag = add_tag(&mut app, cube);
     drive_x(&mut app, tag, 60.0, "transform.pos");
     let saved = forge_core::file::save(app.doc.scene());
-    assert!(saved.contains("version: 8"));
+    assert!(saved.contains("version: 9"));
     let (back, report) =
         forge_core::file::load(app.doc.scene().registry().clone(), &saved).unwrap();
     assert!(report.warnings.is_empty(), "{:?}", report.warnings);

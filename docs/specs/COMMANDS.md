@@ -104,6 +104,12 @@ touch history.
 | `object.create_cloner` | `nodes?` (selection), `name?` (default "Cloner") | `{node}` | yes |
 | `object.visibility` | `nodes?`, `editor?`, `render?` each `default`\|`on`\|`off` (at least one) | null | yes |
 | `object.enable` | `nodes?`, `enabled` | null | yes |
+| `layer.create` | `name?` (default "Layer N"), `color?` [r,g,b] 0..1, `assign?` (true: the new layer takes `nodes`/the selection) | `{layer}` | yes |
+| `layer.delete` | `layers` (ids) | `{deleted, released}` | yes |
+| `layer.rename` | `layer`, `name` | null | yes |
+| `layer.set` | `layers?` (ids; `layer` for one), then at least one of `name`, `color`, `solo`, `view`, `render`, `manager`, `locked`, `animation`, `generators`, `deformers`, `expressions` | `{changed}` | yes |
+| `layer.assign` | `layer` (id, null removes the objects from their layer), `nodes?` (selection) | `{assigned}` | yes |
+| `layer.merge` | `layers` (ids, at least two), `into` (id, one of them) | `{merged, members}` | yes |
 | `edit.undo` | - | `{done}` | no |
 | `edit.redo` | - | `{done}` | no |
 | `edit.history_jump` | `position` (steps applied, 0 ..= undo + redo steps) | `{position, undone, redone}` | no |
@@ -215,6 +221,13 @@ undo step "Create Cloner". With no nodes it creates an empty cloner. `view.clone
 (UI.md §16.3) switches the viewport's clone index and axes overlay; view state only.
 `object.visibility` / `object.enable` write the `object.*` params (TRANSFORM.md §2) of every
 named node in one undo step; tags and non-hierarchy nodes are skipped.
+
+`layer.*` (brief 158, CORE.md section 7, UI.md section 22): layers are document level, every
+command is one undo step. An unknown layer id is `InvalidArgs`. `layer.delete` releases the
+members (their `object.layer` becomes none). `layer.set` applies the given fields to every
+listed layer in one step (a name must be non-empty, a colour channel is clamped to 0..1).
+`layer.assign` skips tags and non-hierarchy nodes and returns how many nodes it set.
+`layer.merge` moves the members of every other listed layer to `into` and deletes the others.
 
 Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and ANIM.md §2):
 

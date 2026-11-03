@@ -932,6 +932,11 @@ impl Editor {
             }
             Panel::NodeEditor => crate::node_editor::node_editor_ui(ui, &mut self.state),
             Panel::Console => crate::console::console_ui(ui, &mut self.state),
+            Panel::Layers => {
+                for c in crate::layer_manager::layer_panel_ui(ui, &mut self.state) {
+                    self.run(c);
+                }
+            }
             Panel::History => {
                 if let Some(position) = crate::history_panel::history_panel_ui(ui, &self.state.doc)
                 {
@@ -1645,6 +1650,7 @@ impl Editor {
             if axis_mode {
                 // axis mode: the drag edits the axis of the active object (MANIPULATE.md §7.4)
                 if let Some(id) = self.state.selection.active
+                    && !forge_core::layers::locked(self.state.doc.scene(), id)
                     && let Ok(edit) = AxisEdit::capture(self.state.doc.scene(), id)
                 {
                     self.gesture_seq += 1;
@@ -1667,6 +1673,7 @@ impl Editor {
                     self.component_drag = Some((drag, cd, self.gesture_seq));
                 }
             } else if let Some(id) = self.state.selection.active
+                && !forge_core::layers::locked(self.state.doc.scene(), id)
                 && let Some(start) = self.state.evaluated().local_transform(id)
             {
                 self.gesture_seq += 1;

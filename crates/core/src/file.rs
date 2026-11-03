@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use crate::layers::{self, Layer, Layers};
 use crate::{
     Category, MeshData, Node, NodeId, Registry, Scene, SceneSettings, TimeConfig, Track, Value,
     parse_target,
@@ -17,8 +18,9 @@ pub const FORMAT: &str = "forge3d-scene";
 /// tracks, version 5 the scene settings, version 6 declares link lists and the hidden
 /// `object.*` params and adds the chunk section and file reference params, version 7 the
 /// time configuration (markers, preview range, playback mode), version 8 the expression
-/// tag and its graph parameter (brief 108). Older files still load, through [`MIGRATIONS`].
-pub const VERSION: u32 = 8;
+/// tag and its graph parameter (brief 108), version 9 the layer table and the hidden
+/// `object.layer` param (brief 158). Older files still load, through [`MIGRATIONS`].
+pub const VERSION: u32 = 9;
 
 /// A value whose binary payload is at least this many bytes is written as a chunk by
 /// [`save_with`] (CORE.md §6.2): 42 mesh points or 256 indices.
@@ -38,6 +40,8 @@ pub struct SceneFile {
     settings: SceneSettings,
     #[serde(default)]
     time: TimeConfig,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    layers: Vec<Layer>,
     roots: Vec<NodeRecord>,
 }
 
@@ -54,6 +58,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migrate_5_to_6,
     migrate_6_to_7,
     migrate_7_to_8,
+    migrate_8_to_9,
 ];
 
 /// Version 2 added `Value::Mesh`: additive, nothing to rewrite.
@@ -90,6 +95,12 @@ fn migrate_6_to_7(_: &mut SceneFile) -> Vec<String> {
 /// Version 8 declares the `forge.expression` tag, whose graph is a string parameter:
 /// nothing to rewrite.
 fn migrate_7_to_8(_: &mut SceneFile) -> Vec<String> {
+    Vec::new()
+}
+
+/// Version 9 added `layers` and the hidden `object.layer` link: a missing field is read as
+/// no layers by serde and a missing param takes its default on load.
+fn migrate_8_to_9(_: &mut SceneFile) -> Vec<String> {
     Vec::new()
 }
 
@@ -285,6 +296,7 @@ pub fn save_with(scene: &Scene, opts: &SaveOptions) -> Vec<u8> {
         version: VERSION,
         settings: scene.settings(),
         time: scene.time().clone(),
+        layers: scene.layers().as_slice().to_vec(),
         roots,
     };
     let text = ron::ser::to_string_pretty(
@@ -387,8 +399,11 @@ pub fn load_with(
             .warnings
             .push(format!("scene time: {e}; reset to the defaults")),
     }
+    loader.layers(file.layers);
     let next = loader.seen.last().map_or(1, |id| id.0 + 1);
     loader.scene.set_next_id(next);
+    let top = loader.scene.layers().iter().map(|l| l.id.0 + 1).max();
+    loader.scene.set_next_id(top.unwrap_or(1));
     Ok((loader.scene, loader.report))
 }
 
@@ -720,6 +735,47 @@ impl Loader<'_> {
         Value::String(path)
     }
 
+    /// Installs the layer table after the nodes: drops layers whose id repeats or is a node
+    /// id, and clears `object.layer` links to layers that do not exist (CORE.md §6.8).
+    fn layers(&mut self, list: Vec<Layer>) {
+        let mut ids = BTreeSet::new();
+        let mut kept = Vec::new();
+        for mut l in list {
+            if self.seen.contains(&l.id) || !ids.insert(l.id) {
+                let msg = format!("layer {} repeats an id; dropped", l.id);
+                self.report.warnings.push(msg);
+                continue;
+            }
+            l.name = l.name.trim().to_string();
+            if l.name.is_empty() {
+                l.name = format!("Layer {}", l.id);
+            }
+            l.color = l.color.map(|c| {
+                if c.is_finite() {
+                    c.clamp(0.0, 1.0)
+                } else {
+                    0.0
+                }
+            });
+            kept.push(l);
+        }
+        self.scene.init_layers(Layers::from_list(kept));
+        let nodes: Vec<NodeId> = self.seen.iter().copied().collect();
+        for id in nodes {
+            let dangling = matches!(
+                self.scene.param(id, layers::LAYER),
+                Some(Value::Link(Some(l))) if !self.scene.layers().contains(*l)
+            );
+            if dangling {
+                if let Some(n) = self.scene.node_mut(id) {
+                    n.params
+                        .insert(layers::LAYER.to_string(), Value::Link(None));
+                }
+                self.warn(id, "layer link to a missing layer cleared".into());
+            }
+        }
+    }
+
     fn warn(&mut self, id: NodeId, msg: String) {
         self.report.warnings.push(format!("node {id}: {msg}"));
     }
@@ -839,6 +895,7 @@ mod tests {
             version: 2,
             settings: SceneSettings::default(),
             time: TimeConfig::default(),
+            layers: Vec::new(),
             roots: Vec::new(),
         };
         let notes = migrate(&mut file, &steps, 4);

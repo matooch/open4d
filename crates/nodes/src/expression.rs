@@ -134,7 +134,8 @@ pub fn apply_expressions_in(
     let mut touched = Vec::new();
     for &tag in tags {
         let enabled = !matches!(out.param(tag, "enabled"), Some(Value::Bool(false)));
-        if !enabled {
+        // a layer with expressions off does not run the tags of its members (CORE.md §7.4)
+        if !enabled || !forge_core::layers::expressions_on(&out, tag) {
             continue;
         }
         match evaluate_tag(&out, registry, tag, seconds) {

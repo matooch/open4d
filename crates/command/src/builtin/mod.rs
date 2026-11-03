@@ -13,6 +13,7 @@ mod building;
 mod components;
 mod cutting;
 mod file;
+mod layer;
 mod mesh;
 mod object;
 mod param;
@@ -25,6 +26,7 @@ mod tools;
 /// Registers every built-in command, in a fixed order.
 pub fn register_editor_commands(r: &mut CommandRegistry) -> Result<(), CommandError> {
     object::register(r)?;
+    layer::register(r)?;
     mesh::register(r)?;
     tools::register(r)?;
     arrange::register(r)?;

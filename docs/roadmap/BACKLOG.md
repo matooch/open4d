@@ -155,7 +155,7 @@ implementers can avoid collisions.
 | 155 | [Preferences window and settings storage](../agents/tasks/155-preferences.md) | L | 175 | waiting: O29 | ui |
 | 156 | [Layout save/load and workspaces](../agents/tasks/156-layouts-workspaces.md) | L | 147 | done (parity-pending G1) | ui |
 | 157 | [HUD and viewport overlays](../agents/tasks/157-hud-overlays.md) | L | 143 | ready | viewport |
-| 158 | [Layer manager](../agents/tasks/158-layer-manager.md) | L | 149 | ready | ui, core |
+| 158 | [Layer manager](../agents/tasks/158-layer-manager.md) | L | 149 | done (parity-pending G1/G8; follow-up: render bridge honours the render flag) | ui, core |
 | 159 | [Command palette and undo history panel](../agents/tasks/159-command-palette-history.md) | L | 011 | done | ui |
 | 160 | [Console panel (log + Rhai REPL)](../agents/tasks/160-console.md) | L | 016 | done | ui |
 | 161 | [HiDPI, IME, themes, keyboard navigation](../agents/tasks/161-hidpi-ime-themes.md) | L | 147 | ready | ui |

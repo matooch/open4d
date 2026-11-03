@@ -505,3 +505,101 @@ parameter `graph` (JSON), so the file schema does not change and step 7 -> 8 has
 rewrite; a version 7 file loads unchanged and saves as version 8. Older builds reject a version 8
 file with `UnsupportedVersion` instead of loading a scene whose expressions they could not run.
 The fixtures `scene-v8*.forge` pin the current bytes; `scene-v7*.forge` stay as the old build wrote them.
+
+### 6.8 Version 9: layers (brief 158)
+
+Adds `layers: [(id: 12, name: "Layer 1", color: (r, g, b), solo: false, view: true, render: true,
+manager: true, locked: false, animation: true, generators: true, deformers: true, expressions:
+true)]` at the top level, after `time` (section 7). The field has a serde default and is not
+written while the list is empty, so a scene without layers saves exactly as a version 8 scene
+does apart from the version number, and step 8 -> 9 has nothing to rewrite (a version 1-8 file has
+no layers). Every hierarchy type also gets the hidden `object.layer` link param (section 7.1);
+a file written before it loads with the default (no layer). On load: a layer id that repeats or
+equals a node id drops that layer, a `object.layer` link that names no layer is cleared; both with
+a warning. The id counter starts above every node and layer id. Older builds reject a version 9
+file with `UnsupportedVersion`. The fixtures `scene-v9*.forge` pin the current bytes (they hold a
+layer and a member); `scene-v8*.forge` stay as the old build wrote them.
+
+## 7. Layers (`layers`; brief 158)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G1 (docs/parity/GUI-SESSIONS.md)
+is unanswered, so **the toggle set's meaning (what "solo" hides, whether a layer reaches the
+children of its members, what "generators off" leaves) is parity-pending**.
+
+### 7.1 Data
+
+A layer is document level data, not a tree node: `Layer { id, name, color, solo, view, render,
+manager, locked, animation, generators, deformers, expressions }`, kept in order of creation in
+`Scene::layers() -> &Layers`. `id` is a `NodeId` taken from the scene's id counter, so a layer id
+never equals a node id. Defaults of a new layer: `solo` off, `locked` off, every other toggle on;
+`color` is taken from an 8-colour palette by the layer count. A name is non-empty after trimming
+and need not be unique.
+
+Objects link to at most one layer through the hidden param `object.layer` (`Link`, default none,
+in the reserved `object.` group, hidden from the attribute manager like the other `object.*`
+params). A tag has no param of its own: it belongs to its host's layer. Membership is the node's
+**own** link; children do not inherit it (parity-pending). `Tx::set_param` accepts for this
+param only an existing layer id (or none); the link is not a node reference, so it is skipped by
+the dependency graph and by copy remapping and a copy of an object stays on the layer.
+
+### 7.2 Edits
+
+The table is replaced as a whole by one primitive edit `SetLayers`, so undo restores it exactly.
+`Tx` offers `add_layer(name) -> LayerId`, `update_layer(Layer)`, `remove_layer(id)` (clears the
+`object.layer` of every member in the same transaction) and `merge_layers(from, into)` (members
+of each `from` layer move to `into`, the `from` layers go). Assigning is `set_param`.
+
+### 7.3 Resolution (`forge_core::layers`, all pure)
+
+| function | value for a node whose own layer is `L` (none = no layer) |
+|---|---|
+| `shown(scene, id)` | `L.view` and (no layer is solo, or `L.solo`); a node without a layer is shown iff no layer is solo |
+| `render_shown` | `L.render` (none: true); solo does not affect rendering |
+| `locked` | `L.locked` |
+| `in_manager` | `L.manager` |
+| `animation_on`, `generators_on`, `deformers_on`, `expressions_on` | the toggle (none: true) |
+
+`visibility::editor_visible` is its old value and `layers::shown`; `render_visible` is its old
+value and `layers::render_shown` (TRANSFORM.md §2). Hiding by layer does not change the
+`object.*` params.
+
+### 7.4 How the toggles take effect
+
+- **view, solo**: through `editor_visible`, so the viewport, snapping and the scheduler's drawn
+  list skip the node (the OBJ export exports hidden objects as before, brief 098).
+- **render**: `render_visible` (the render bridge does not read it yet, brief 149).
+- **locked**: the viewport cannot pick the object (`pick_object`, `viewport_click`) and does not
+  start a gizmo, axis or component drag on it, and a locked polygon object is not a component
+  target. Object manager selection, attribute editing and commands still work (parity-pending:
+  the reference may also block those).
+- **animation off**: `forge_anim::overrides` skips the node (and its tags), so its tracks are not
+  evaluated and it keeps its stored values at every time.
+- **expressions off**: an expression tag whose host is on the layer does not run.
+- **deformers off**: `apply_deformer` leaves the points alone for a deformer on the layer (the
+  deformer's own `enabled` is untouched).
+- **generators off**: a `Category::Generator` node on the layer is pass-through: it produces no
+  geometry of its own and the objects it consumes as inputs (subdivision, boole, cloner
+  prototypes, modeling and spline generators) are no longer consumed, so they are drawn as
+  themselves; its instances are not drawn.
+- **manager off**: the object manager omits the row (its children are still listed, at the same
+  depth).
+
+### 7.5 Scheduling and dirtiness (briefs 180, 098)
+
+The layer table is part of the scene, so editing it raises the revision and the next pass is a
+diff pass. `depgraph::diff` additionally compares, when the two tables differ or a node's
+`object.layer` differs, the node's effect `layers::effect(scene, id)` (shown, render, animation,
+generators, deformers, expressions bits; a tag uses its host's) and seeds the frame and result
+vertices of every node whose effect changed, so dependants (parents, cloners reading the node,
+hosts of changed tags) are re-evaluated and nothing else is. A toggle that does not change any
+node's effect (a lock, a colour, a rename) seeds nothing. The animation stage reads the toggles
+directly: with animation off the evaluated scene holds the stored values, which the diff sees as
+param changes.
+
+### 7.6 Tests
+
+`crates/core/tests/layers.rs` (table edits and undo, resolution, link validation, delete and merge,
+file round trip, bad layer data, the dependency diff), `crates/core/tests/native_format.rs` (v8
+fixtures migrate to 9 without layers, v9 fixtures byte stable), `crates/app/tests/layers.rs` (the
+commands, one undo step each, each toggle's effect on evaluation, scheduler dirtiness against a
+fresh full evaluation, a seeded random edit sequence), `crates/ui/tests/layer_manager.rs` (UI.md §22).

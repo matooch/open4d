@@ -119,6 +119,8 @@ pub fn pick_object(scene: &Scene, cam: &Camera, x: f64, y: f64, w: f64, h: f64) 
     let ray = cam.ray(x, y, w, h);
     scene_draw_items_at(scene, &Default::default(), &EvalCtx::default())
         .into_iter()
+        // a locked layer's objects cannot be picked (CORE.md §7.4)
+        .filter(|item| !forge_core::layers::locked(scene, item.id()))
         .filter_map(|item| match item {
             DrawItem::Mesh { id, mesh, .. } => pick_poly(&mesh, &ray).map(|hit| (hit.t, id, None)),
             DrawItem::Instanced {

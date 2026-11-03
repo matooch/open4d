@@ -47,11 +47,12 @@ pub enum Panel {
     NodeEditor,
     History,
     Console,
+    Layers,
 }
 
 impl Panel {
     /// Every panel, in Window menu order.
-    pub const ALL: [Panel; 11] = [
+    pub const ALL: [Panel; 12] = [
         Panel::CommandBar,
         Panel::ToolPalette,
         Panel::Viewport,
@@ -63,6 +64,7 @@ impl Panel {
         Panel::NodeEditor,
         Panel::History,
         Panel::Console,
+        Panel::Layers,
     ];
 
     /// The panels `Dock::default()` opens; the others open from the Window menu.
@@ -89,6 +91,7 @@ impl Panel {
             Panel::NodeEditor => "Node Editor",
             Panel::History => "History",
             Panel::Console => "Console",
+            Panel::Layers => "Layers",
         }
     }
 
@@ -105,6 +108,7 @@ impl Panel {
             Panel::NodeEditor => Area::Center,
             Panel::History => Area::RightBottom,
             Panel::Console => Area::Bottom,
+            Panel::Layers => Area::RightBottom,
         }
     }
 }

@@ -6,6 +6,7 @@ pub mod depgraph;
 mod document;
 mod eval;
 pub mod file;
+pub mod layers;
 mod param;
 mod registry;
 mod scene;
@@ -19,6 +20,7 @@ pub use cache::EvalCache;
 pub use document::{Document, EditError, History, Tx};
 pub use eval::EvalCtx;
 pub use file::{LoadError, LoadReport};
+pub use layers::{Layer, LayerId, Layers};
 pub use param::{
     EnumOption, MeshData, ParamDesc, ParamError, ParamKind, RangeValue, UiHint, Unit, Value,
 };

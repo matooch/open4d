@@ -207,6 +207,10 @@ pub(crate) fn evaluate_geometry(
     let Some(node) = scene.node(id) else {
         return Ok(None);
     };
+    // a layer with generators off: pass-through, no geometry of its own (CORE.md §7.4)
+    if !forge_core::layers::generators_on(scene, id) {
+        return Ok(None);
+    }
     if node.type_id == subdivision::TYPE {
         let ty = subdivision::node_type();
         let p = Params {
@@ -311,6 +315,10 @@ pub fn is_consumed(scene: &Scene, id: NodeId) -> bool {
     else {
         return false;
     };
+    // the inputs of a bypassed generator are drawn as themselves
+    if !forge_core::layers::generators_on(scene, p.id) {
+        return false;
+    }
     match p.type_id.as_str() {
         subdivision::TYPE => input_of(scene, p.id) == Some(id),
         boole::TYPE => boole::inputs_of(scene, p.id).contains(&id),

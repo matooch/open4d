@@ -286,6 +286,7 @@ pub fn diff(old: &Scene, new: &Scene) -> SceneDiff {
             d.seeds.insert(Vertex::frame(id));
         }
     };
+    let layers_differ = old.layers() != new.layers();
     for id in all_nodes(new) {
         let n = new.node(id).expect("listed node");
         let Some(o) = old.node(id) else {
@@ -307,6 +308,12 @@ pub fn diff(old: &Scene, new: &Scene) -> SceneDiff {
         if o.children != n.children || o.tags != n.tags {
             d.structure_changed = true;
             d.seeds.insert(Vertex::result(id));
+        }
+        // what the layers decide about the node (CORE.md §7.5)
+        if (layers_differ || !std::ptr::eq(o, n))
+            && crate::layers::effect(old, id) != crate::layers::effect(new, id)
+        {
+            seed_all(&mut d, new, id);
         }
         if std::ptr::eq(o, n) {
             continue;

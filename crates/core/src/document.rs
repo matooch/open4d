@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use crate::layers::{self, Layer, LayerId, Layers};
 use crate::scene::{Slot, SlotOwner, Subtree};
 use crate::{
     Category, Key, NodeId, ParamError, ParamKind, Registry, Scene, SceneSettings, TimeConfig,
@@ -35,6 +36,10 @@ pub enum EditError {
     Settings(String),
     #[error("invalid time settings: {0}")]
     Time(String),
+    #[error("layer {0} does not exist")]
+    UnknownLayer(LayerId),
+    #[error("invalid layer: {0}")]
+    Layer(String),
 }
 
 /// One primitive, invertible change.
@@ -67,6 +72,7 @@ enum Edit {
     },
     SetSettings(SceneSettings),
     SetTime(TimeConfig),
+    SetLayers(Layers),
 }
 
 /// Applies `edit` (already validated) and returns its inverse.
@@ -112,6 +118,7 @@ fn apply(scene: &mut Scene, edit: Edit) -> Edit {
         }
         Edit::SetSettings(settings) => Edit::SetSettings(scene.replace_settings(settings)),
         Edit::SetTime(time) => Edit::SetTime(scene.replace_time(time)),
+        Edit::SetLayers(layers) => Edit::SetLayers(scene.replace_layers(layers)),
     }
 }
 
@@ -280,7 +287,16 @@ impl Tx<'_> {
             .find_param(param)
             .ok_or_else(|| EditError::UnknownParam(param.to_string()))?;
         let value = desc.validate(value)?;
-        if let (ParamKind::Link { accepts }, Value::Link(Some(target))) = (&desc.kind, &value) {
+        if param == layers::LAYER {
+            // the target is a layer, not a node (CORE.md §7.1)
+            if let Value::Link(Some(layer)) = &value
+                && !self.scene.layers().contains(*layer)
+            {
+                return Err(EditError::UnknownLayer(*layer));
+            }
+        } else if let (ParamKind::Link { accepts }, Value::Link(Some(target))) =
+            (&desc.kind, &value)
+        {
             let target = *target;
             if target == id {
                 return Err(EditError::InvalidLink(
@@ -421,6 +437,80 @@ impl Tx<'_> {
         Ok(())
     }
 
+    /// Adds a layer at the end of the table with the default toggles; an empty name takes
+    /// "Layer N", no colour the next palette colour (CORE.md §7.2).
+    pub fn add_layer(
+        &mut self,
+        name: Option<&str>,
+        color: Option<[f64; 3]>,
+    ) -> Result<LayerId, EditError> {
+        let table = self.scene.layers();
+        let name = match name.map(str::trim) {
+            Some("") => return Err(EditError::Layer("a layer name cannot be empty".into())),
+            Some(n) => n.to_string(),
+            None => table.next_name(),
+        };
+        let color = clamp_color(color.unwrap_or_else(|| table.next_color()));
+        let mut next = table.clone();
+        let id = self.scene.alloc_id();
+        next.push(Layer::new(id, &name, color));
+        self.push(Edit::SetLayers(next));
+        Ok(id)
+    }
+
+    /// Replaces the layer with the same id (name, colour and toggles).
+    pub fn update_layer(&mut self, mut layer: Layer) -> Result<(), EditError> {
+        layer.name = layer.name.trim().to_string();
+        if layer.name.is_empty() {
+            return Err(EditError::Layer("a layer name cannot be empty".into()));
+        }
+        layer.color = clamp_color(layer.color);
+        let mut next = self.scene.layers().clone();
+        if !next.update(layer.clone()) {
+            return Err(EditError::UnknownLayer(layer.id));
+        }
+        if &next != self.scene.layers() {
+            self.push(Edit::SetLayers(next));
+        }
+        Ok(())
+    }
+
+    /// Deletes a layer; its members lose the link in the same transaction.
+    pub fn remove_layer(&mut self, id: LayerId) -> Result<(), EditError> {
+        if !self.scene.layers().contains(id) {
+            return Err(EditError::UnknownLayer(id));
+        }
+        for member in layers::members(self.scene, id) {
+            self.set_param(member, layers::LAYER, Value::Link(None))?;
+        }
+        let mut next = self.scene.layers().clone();
+        next.remove(id);
+        self.push(Edit::SetLayers(next));
+        Ok(())
+    }
+
+    /// Moves the members of every layer in `from` (other than `into`) to `into`, then
+    /// deletes those layers. Returns the number of nodes that moved.
+    pub fn merge_layers(&mut self, from: &[LayerId], into: LayerId) -> Result<usize, EditError> {
+        if !self.scene.layers().contains(into) {
+            return Err(EditError::UnknownLayer(into));
+        }
+        if let Some(bad) = from.iter().find(|l| !self.scene.layers().contains(**l)) {
+            return Err(EditError::UnknownLayer(*bad));
+        }
+        let mut moved = 0;
+        for layer in from.iter().filter(|l| **l != into) {
+            for member in layers::members(self.scene, *layer) {
+                self.set_param(member, layers::LAYER, Value::Link(Some(into)))?;
+                moved += 1;
+            }
+            let mut next = self.scene.layers().clone();
+            next.remove(*layer);
+            self.push(Edit::SetLayers(next));
+        }
+        Ok(moved)
+    }
+
     pub fn rename(&mut self, id: NodeId, name: &str) -> Result<(), EditError> {
         self.require(id)?;
         self.push(Edit::Rename {
@@ -453,6 +543,16 @@ impl Tx<'_> {
         });
         Ok(())
     }
+}
+
+fn clamp_color(c: [f64; 3]) -> [f64; 3] {
+    c.map(|x| {
+        if x.is_finite() {
+            x.clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    })
 }
 
 /// A scene plus its undo history; the only way to mutate a scene.

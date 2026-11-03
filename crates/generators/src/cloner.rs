@@ -94,7 +94,9 @@ pub fn cloner_instances(
     let Some(node) = scene.node(id).filter(|n| n.type_id == TYPE) else {
         return Ok(None);
     };
-    if !crate::deformer_children(scene, id).is_empty() {
+    if !crate::deformer_children(scene, id).is_empty()
+        || !forge_core::layers::generators_on(scene, id)
+    {
         return Ok(None);
     }
     build_instances(scene, id, &node.params, ctx)

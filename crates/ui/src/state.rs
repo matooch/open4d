@@ -16,6 +16,7 @@ use crate::console::ConsoleState;
 use crate::crash_notice::CrashNotice;
 use crate::dock::Dock;
 use crate::keymap::KeyMapState;
+use crate::layer_manager::LayerPanel;
 use crate::node_editor::NodeEditorState;
 use crate::panes::{DEFAULT_SHADING, Views};
 use crate::screenshot::OffscreenGpu;
@@ -42,6 +43,8 @@ pub struct EditorState {
     pub script: ScriptPanelState,
     /// The Console panel: log filter and the REPL (docs/specs/UI.md §19).
     pub console: ConsoleState,
+    /// The Layers panel: selected rows and rename (docs/specs/UI.md §22).
+    pub layer_panel: LayerPanel,
     /// The Node Editor's tag, canvas and cache (docs/specs/UI.md §17).
     pub node_editor: NodeEditorState,
     /// The headless GPU device `viewport.screenshot` renders with (RPC.md §10.2).
@@ -102,6 +105,7 @@ impl EditorState {
             views: Views::new(&Self::default_camera()),
             script: ScriptPanelState::default(),
             console: ConsoleState::default(),
+            layer_panel: LayerPanel::default(),
             node_editor: NodeEditorState::default(),
             offscreen: OffscreenGpu::default(),
             tool: None,

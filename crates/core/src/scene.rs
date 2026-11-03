@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use glam::DMat4;
 
+use crate::layers::Layers;
 use crate::transform::Transform;
 use crate::{EditError, NodeType, Registry, TimeConfig, Track, Value};
 
@@ -123,6 +124,7 @@ pub struct Scene {
     revision: u64,
     settings: SceneSettings,
     time: TimeConfig,
+    layers: Layers,
 }
 
 impl Scene {
@@ -135,6 +137,7 @@ impl Scene {
             revision: 0,
             settings: SceneSettings::default(),
             time: TimeConfig::default(),
+            layers: Layers::default(),
         }
     }
 
@@ -146,6 +149,11 @@ impl Scene {
     /// Preview range, playback mode, display format and markers (ANIM.md §2.9).
     pub fn time(&self) -> &TimeConfig {
         &self.time
+    }
+
+    /// The layer table (docs/specs/CORE.md §7).
+    pub fn layers(&self) -> &Layers {
+        &self.layers
     }
 
     pub fn registry(&self) -> &Arc<Registry> {
@@ -342,6 +350,17 @@ impl Scene {
     pub(crate) fn replace_time(&mut self, time: TimeConfig) -> TimeConfig {
         self.revision += 1;
         std::mem::replace(&mut self.time, time)
+    }
+
+    /// Replaces the layer table (already validated), raises the revision.
+    pub(crate) fn replace_layers(&mut self, layers: Layers) -> Layers {
+        self.revision += 1;
+        std::mem::replace(&mut self.layers, layers)
+    }
+
+    /// Sets the layers of a freshly loaded scene without touching the revision.
+    pub(crate) fn init_layers(&mut self, layers: Layers) {
+        self.layers = layers;
     }
 
     /// Sets the time configuration of a freshly loaded scene without touching the revision.

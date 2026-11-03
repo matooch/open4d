@@ -2,7 +2,7 @@
 
 # Command reference
 
-132 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+138 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -45,6 +45,12 @@
 | [`select.loop`](#selectloop) | Loop Selection | yes | `select_loop` |
 | [`select.ring`](#selectring) | Ring Selection | yes | `select_ring` |
 | [`transform.set`](#transformset) | Set Transform | yes | `transform_set` |
+| [`layer.create`](#layercreate) | New Layer | yes | `layer_create` |
+| [`layer.delete`](#layerdelete) | Delete Layer | yes | `layer_delete` |
+| [`layer.rename`](#layerrename) | Rename Layer | yes | `layer_rename` |
+| [`layer.set`](#layerset) | Set Layer | yes | `layer_set` |
+| [`layer.assign`](#layerassign) | Assign to Layer | yes | `layer_assign` |
+| [`layer.merge`](#layermerge) | Merge Layers | yes | `layer_merge` |
 | [`mesh.make_editable`](#meshmake_editable) | Make Editable | yes | `mesh_make_editable` |
 | [`mesh.current_state_to_object`](#meshcurrent_state_to_object) | Current State to Object | yes | `mesh_current_state_to_object` |
 | [`mesh.extrude`](#meshextrude) | Extrude | yes | `mesh_extrude` |
@@ -708,6 +714,87 @@ Set Coordinates. One undo step.
 | `space` | string or null | no | `local` (default) or `world`. |
 
 Example: `forge cmd scene.forge transform.edit --args '{"gesture":1,"nodes":[1],"pos":[0.0,100.0,null],"space":"world"}'`
+
+
+## `layer`
+
+### `layer.create`
+
+New Layer. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `assign` | boolean | no | Put `nodes` (the selection when absent) on the new layer. Default: `false`. |
+| `color` | array of number (length 3) or null | no | Colour `[r, g, b]`, each 0..1; the next palette colour when absent. |
+| `name` | string or null | no | Name; "Layer N" when absent. |
+| `nodes` | array of integer or null | no |  |
+
+Example: `forge cmd scene.forge layer.create --args '{"name":"Props"}'`
+
+### `layer.delete`
+
+Delete Layer. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `layers` | array of integer | yes | Layer ids. |
+
+Example: `forge cmd scene.forge layer.delete --args '{"layers":[10]}'`
+
+### `layer.rename`
+
+Rename Layer. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `layer` | integer | yes |  |
+| `name` | string | yes |  |
+
+Example: `forge cmd scene.forge layer.rename --args '{"layer":10,"name":"Walls"}'`
+
+### `layer.set`
+
+Set Layer. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `animation` | boolean or null | no | Tracks of the members are evaluated. |
+| `color` | array of number (length 3) or null | no |  |
+| `deformers` | boolean or null | no | Deformer members deform. |
+| `expressions` | boolean or null | no | Expression tags of the members run. |
+| `generators` | boolean or null | no | Generator members produce geometry. |
+| `layer` | integer or null | no | One layer id. |
+| `layers` | array of integer or null | no | Several layer ids (instead of `layer`). |
+| `locked` | boolean or null | no | Not pickable or draggable in the viewport. |
+| `manager` | boolean or null | no | Listed in the object manager. |
+| `name` | string or null | no |  |
+| `render` | boolean or null | no | Render visibility. |
+| `solo` | boolean or null | no | Only soloed layers are shown while any is soloed. |
+| `view` | boolean or null | no | Viewport visibility. |
+
+Example: `forge cmd scene.forge layer.set --args '{"layer":10,"locked":true,"view":false}'`
+
+### `layer.assign`
+
+Assign to Layer. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `layer` | integer or null | no | The layer; null (or absent) removes the nodes from their layer. |
+| `nodes` | array of integer or null | no | Nodes; the current selection when absent. |
+
+Example: `forge cmd scene.forge layer.assign --args '{"layer":10,"nodes":[2,3]}'`
+
+### `layer.merge`
+
+Merge Layers. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `layers` | array of integer | yes | Layers to merge, at least two, including `into`. |
+| `into` | integer | yes | The layer that stays and receives the members. |
+
+Example: `forge cmd scene.forge layer.merge --args '{"into":10,"layers":[10,11]}'`
 
 
 ## `mesh`

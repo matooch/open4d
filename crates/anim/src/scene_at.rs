@@ -31,6 +31,10 @@ pub fn overrides(scene: &Scene, ids: &[NodeId], time: f64) -> Vec<(NodeId, Strin
         let Some(ty) = scene.node_type(id) else {
             continue;
         };
+        // a layer with animation off keeps the stored values (CORE.md §7.4)
+        if !forge_core::layers::animation_on(scene, id) {
+            continue;
+        }
         for (key, track) in &node.tracks {
             let Ok(target) = parse_target(key, |p| ty.find_param(p)) else {
                 continue;

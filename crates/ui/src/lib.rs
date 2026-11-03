@@ -20,6 +20,7 @@ pub mod dock;
 pub mod history_panel;
 pub mod keymap;
 pub mod keymap_editor;
+pub mod layer_manager;
 pub mod layout;
 pub mod manipulate;
 pub mod navigation;

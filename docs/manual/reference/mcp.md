@@ -98,6 +98,12 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `select_loop` | Loop Selection. Undoable editing command. Runs command `select.loop`. |
 | `select_ring` | Ring Selection. Undoable editing command. Runs command `select.ring`. |
 | `transform_set` | Set Transform. Undoable editing command. Runs command `transform.set`. |
+| `layer_create` | New Layer. Undoable editing command. Runs command `layer.create`. |
+| `layer_delete` | Delete Layer. Undoable editing command. Runs command `layer.delete`. |
+| `layer_rename` | Rename Layer. Undoable editing command. Runs command `layer.rename`. |
+| `layer_set` | Set Layer. Undoable editing command. Runs command `layer.set`. |
+| `layer_assign` | Assign to Layer. Undoable editing command. Runs command `layer.assign`. |
+| `layer_merge` | Merge Layers. Undoable editing command. Runs command `layer.merge`. |
 | `mesh_make_editable` | Make Editable. Undoable editing command. Runs command `mesh.make_editable`. |
 | `mesh_current_state_to_object` | Current State to Object. Undoable editing command. Runs command `mesh.current_state_to_object`. |
 | `mesh_extrude` | Extrude. Undoable editing command. Runs command `mesh.extrude`. |

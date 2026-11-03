@@ -252,7 +252,7 @@ fn doc_with_time() -> Document {
 fn markers_and_the_time_config_survive_a_save_and_load() {
     let doc = doc_with_time();
     let text = file::save(doc.scene());
-    assert!(text.contains("version: 8"), "{text}");
+    assert!(text.contains("version: 9"), "{text}");
     assert!(text.contains("preview: Some((4, 40))"), "{text}");
     let (loaded, report) = file::load(common::registry(), &text).unwrap();
     assert!(report.warnings.is_empty(), "{:?}", report.warnings);
