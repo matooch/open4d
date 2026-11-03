@@ -54,6 +54,16 @@ Unblocks: PLAN phase 6, plus deeper coverage of the generators we already have.
 | oil-tank-f/orient | Oil Tank | – | Oil Tank, Orientation −Z; then `-grid` with Slice on and Regular Grid on |
 | polygon-f/tri-seg3 | Polygon | – | Polygon primitive, Triangle on, Segments 3; then `-z` with Orientation +Z, and `-size` with Width 200, Height 50 |
 | figure-f/h90 | Figure | – | Figure, Height 90 (record only the bounding box in Notes; the mesh is not used for parity) |
+| landscape-f/sea-plateau | Landscape | – | follow-up from brief 036: Sea Level 50 %, then `-plateau` with Plateau Level 50 % |
+| landscape-f/spherical | Landscape | – | Spherical on |
+| landscape-f/orient-z | Landscape | – | Orientation +Z |
+| landscape-f/scale | Landscape | – | Scale 2, then `-scale-half` with Scale 0.5 |
+| landscape-f/size | Landscape | – | Size X and Z 1200, Size Y 200 |
+| landscape-f/furrows | Landscape | – | Rough Furrows 0 %, then 100 %; and Fine Furrows 0 %, then 100 % (four cases) |
+| landscape-f/no-borders | Landscape | – | Borders at Sea Level off |
+| landscape-f/seg4 | Landscape | – | Width and Depth Segments 4 |
+| landscape-f/seeds | Landscape | – | Seeds 1, 2 and 3 (three cases) |
+| landscape-f/seg1000 | Landscape | – | Width and Depth Segments 1000 (high-resolution slice; exporting the mesh is enough) |
 
 ## Notes
 TODO
