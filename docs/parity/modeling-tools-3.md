@@ -1,4 +1,4 @@
-# Modeling tools III: follow-ups from briefs 020–024 — observation (O58)
+# Modeling tools III: follow-ups from briefs 020–024 and 031 — observation (O58)
 
 Status: not observed · App version: TODO · OS: TODO · Observer: TODO · Date: TODO
 Method: exactly as [modeling-tools-2.md](modeling-tools-2.md) (O25): a default cube made
@@ -60,6 +60,12 @@ Unblocks: confirms 020/021; no brief waits on it.
 | knife-plane-mid | 1/1/1 | all polygons | Knife in Plane mode, plane through (0, 0, 0) with normal (0, 1, 0), if it can be set by script (else write "gui-only" and skip) |
 | slide-loop | 2/2/2 | the 4 middle edges around the cube at y = 0 (an edge loop) | Slide, offset 0.5 toward +y (if scriptable; record the settings and their range; else "gui-only") |
 | slide-edge | 2/2/2 | one middle edge at y = 0 on the front face | Slide, offset 0.5 (if scriptable) |
+| arr-f/array-3 | follow-up from brief 031: 1/1/1 cube made editable | – | Array command with 3 copies (record every dialog field label and default); export, and note whether the result has 3 or 4 cubes |
+| arr-f/array-mode | 1/1/1 | the top polygon | Array command, 2 copies, offset (0, 0, 300), each mode the dialog offers; note whether only the selection is copied |
+| arr-f/duplicate | default cube (not editable) | – | Duplicate, 3 copies, offset (200, 0, 0) per step if offered; record the copy names and positions (`scene_snapshot` in Notes) |
+| arr-f/arrange | three default cubes | – | Arrange (each layout it offers); record the resulting positions in Notes |
+| arr-f/randomize | three default cubes | – | Randomize with seed 1 and ranges P 100, R 30°, S 0.5; record the resulting transforms in Notes |
+| arr-f/transfer | two cubes, the second moved to (200, 100, 0) and rotated H 45° | – | Transfer from the second to the first; record what changed (position, rotation, scale) and in which space |
 
 GUI read (add to G3): the default of every setting in the Subdivide, Optimize, Weld, Melt,
 Dissolve, Disconnect, Mirror and Triangulate dialogs.
