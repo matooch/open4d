@@ -352,6 +352,15 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
     register_plain(r, "edit.redo", "Redo", false, |c| undo_redo(c, false))?;
     r.register_fn(
         spec(
+            "edit.history_jump",
+            "Jump in History",
+            false,
+            || json!({"position": 0}),
+        ),
+        |c, a: HistoryJumpArgs| history_jump(c, a.position),
+    )?;
+    r.register_fn(
+        spec(
             "view.shading",
             "Shading",
             false,
@@ -851,6 +860,41 @@ fn undo_redo(ctx: &mut dyn CommandContext, undo: bool) -> Result<Value, CommandE
     ctx.retain_selection();
     ctx.sync_timeline();
     Ok(json!({"done": done}))
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct HistoryJumpArgs {
+    /// Number of history steps that should be applied: 0 is the original state, the number
+    /// of undo steps the current one, and undo plus redo steps the newest.
+    position: usize,
+}
+
+/// `edit.history_jump` (docs/specs/UI.md §18.6): undo or redo until `position` steps are applied.
+fn history_jump(ctx: &mut dyn CommandContext, position: usize) -> Result<Value, CommandError> {
+    let applied = ctx.doc().history().undo_labels().len();
+    let total = applied + ctx.doc().history().redo_labels().len();
+    if position > total {
+        return Err(CommandError::InvalidArgs(format!(
+            "edit.history_jump: position {position} is beyond the history ({total} steps)"
+        )));
+    }
+    let (mut undone, mut redone) = (0, 0);
+    for _ in position..applied {
+        if ctx.doc_mut().undo() {
+            undone += 1;
+        }
+    }
+    for _ in applied..position {
+        if ctx.doc_mut().redo() {
+            redone += 1;
+        }
+    }
+    if undone + redone > 0 {
+        ctx.retain_selection();
+        ctx.sync_timeline();
+    }
+    Ok(json!({"position": position, "undone": undone, "redone": redone}))
 }
 
 fn node_ids(nodes: Option<Vec<u64>>) -> Option<Vec<NodeId>> {

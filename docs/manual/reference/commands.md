@@ -2,7 +2,7 @@
 
 # Command reference
 
-125 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+127 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -18,6 +18,7 @@
 | [`object.enable`](#objectenable) | Enable | yes | `object_enable` |
 | [`edit.undo`](#editundo) | Undo | no | `edit_undo` |
 | [`edit.redo`](#editredo) | Redo | no | `edit_redo` |
+| [`edit.history_jump`](#edithistory_jump) | Jump in History | no | `edit_history_jump` |
 | [`view.shading`](#viewshading) | Shading | no | `view_shading` |
 | [`view.layout`](#viewlayout) | Viewport Layout | no | `view_layout` |
 | [`view.maximize`](#viewmaximize) | Maximize Pane | no | `view_maximize` |
@@ -119,6 +120,7 @@
 | [`file.open_dialog`](#fileopen_dialog) | Open... | no | `file_open_dialog` |
 | [`file.save_dialog`](#filesave_dialog) | Save | no | `file_save_dialog` |
 | [`file.save_as_dialog`](#filesave_as_dialog) | Save As... | no | `file_save_as_dialog` |
+| [`ui.command_palette`](#uicommand_palette) | Command Palette... | no | `ui_command_palette` |
 | [`file.import_obj`](#fileimport_obj) | Import OBJ | yes | `file_import_obj` |
 | [`file.export_obj`](#fileexport_obj) | Export OBJ | no | `file_export_obj` |
 | [`param.edit`](#paramedit) | Edit Parameter | yes | `param_edit` |
@@ -515,6 +517,16 @@ Redo. Not an undoable edit.
 No arguments.
 
 Example: `forge cmd scene.forge edit.redo --args '{}'`
+
+### `edit.history_jump`
+
+Jump in History. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `position` | integer | yes | Number of history steps that should be applied: 0 is the original state, the number of undo steps the current one, and undo plus redo steps the newest. |
+
+Example: `forge cmd scene.forge edit.history_jump --args '{"position":0}'`
 
 ### `edit.soft_selection`
 
@@ -1472,6 +1484,17 @@ Export OBJ. Not an undoable edit.
 | `selected` | boolean | no | Export only the selected objects. Default: `false`. |
 
 Example: `forge cmd scene.forge file.export_obj --args '{"path":"model.obj","selected":false}'`
+
+
+## `ui`
+
+### `ui.command_palette`
+
+Command Palette.... Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge ui.command_palette --args '{}'`
 
 
 ## `graph`

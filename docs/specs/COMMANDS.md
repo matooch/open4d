@@ -106,6 +106,7 @@ touch history.
 | `object.enable` | `nodes?`, `enabled` | null | yes |
 | `edit.undo` | - | `{done}` | no |
 | `edit.redo` | - | `{done}` | no |
+| `edit.history_jump` | `position` (steps applied, 0 ..= undo + redo steps) | `{position, undone, redone}` | no |
 | `view.shading` | `mode` smooth, flat, wire, smooth_wire, flat_wire, quick, constant, hidden_line, bounding_box; `pane?` perspective, top, front, right (default: the active pane) | null | no |
 | `view.frame_all` | - | null | no |
 | `view.frame_selected` | - | null | no |
@@ -158,6 +159,7 @@ touch history.
 | `file.save` | `path?` (default: current file) | `{path}` | no |
 | `file.save_as` | `path` | `{path}` | no |
 | `file.open_dialog` `file.save_dialog` `file.save_as_dialog` | - | null | no |
+| `ui.command_palette` | - | null | no |
 | `file.autosave_now` | `wait?` (flush the background write) | `{path, queued}` | no |
 | `file.import_obj` | `path` | `{nodes}` | yes |
 | `file.export_obj` | `path`, `selected?` | `{objects}` | no |
@@ -217,6 +219,10 @@ Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and A
 - `object.delete`: skips nodes inside another selected node's subtree; clears the selection.
 - `edit.undo` / `edit.redo`: then `retain_existing` and clamp the timeline. `done` is false
   when there was nothing to undo.
+- `edit.history_jump` (brief 159, UI.md §18.6): undoes or redoes until exactly `position` steps
+  are applied, then retain_existing and clamp the timeline like `edit.undo`. `position` above the
+  number of undo plus redo steps is `InvalidArgs`. It is the history panel's click.
+- `ui.command_palette` (brief 159, UI.md §18): a window action like the `file.*_dialog` ones.
 - `mesh.*`: EDITABLE.md §1; skipped nodes (no mesh) are listed in `skipped` and in the
   status text. Empty selection is `Failed`.
 - `select.*`: EDITABLE.md §2.5 (model mode selects objects).

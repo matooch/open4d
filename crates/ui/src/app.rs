@@ -28,6 +28,7 @@ use crate::keymap_editor::KeyMapEditor;
 use crate::layout::{ButtonGroup, Layout, Sizes, command_bar, tool_palette};
 use crate::manipulate::{apply_axis_drag, apply_drag_anim};
 use crate::object_manager::ObjectManager;
+use crate::palette::Palette;
 use crate::panes::{PANE_GAP, display_settings};
 use crate::snapping::{SnapScene, collect_sources, collect_sources_multi, drag_step};
 use crate::state::EditorState;
@@ -108,6 +109,8 @@ pub struct Editor {
     objects: ObjectManager,
     /// The key map editor window (UI.md §14.5).
     keymap_editor: KeyMapEditor,
+    /// The command palette window (UI.md §18).
+    palette: Palette,
     /// Name field buffer in the attribute panel.
     name_edit: Option<(NodeId, String)>,
     /// The attribute manager tab shown (UI.md §12).
@@ -167,6 +170,15 @@ impl Editor {
         &mut self.keymap_editor
     }
 
+    /// The command palette's state.
+    pub fn palette(&self) -> &Palette {
+        &self.palette
+    }
+
+    pub fn palette_mut(&mut self) -> &mut Palette {
+        &mut self.palette
+    }
+
     /// The object manager's panel state.
     pub fn objects(&self) -> &ObjectManager {
         &self.objects
@@ -179,6 +191,7 @@ impl Editor {
             viewport: ViewportPanel::default(),
             objects: ObjectManager::default(),
             keymap_editor: KeyMapEditor::default(),
+            palette: Palette::default(),
             name_edit: None,
             attr_tab: String::new(),
             gesture_seq: 0,
@@ -228,6 +241,7 @@ impl Editor {
     fn run_id(&mut self, id: &str, args: Json) -> bool {
         // A command may leave a message of its own (e.g. skipped nodes) in the status.
         self.state.status.clear();
+        let noted = args.clone();
         let ok = match execute(&mut self.state, id, args) {
             Ok(_) => true,
             Err(e) => {
@@ -235,6 +249,9 @@ impl Editor {
                 false
             }
         };
+        if ok {
+            self.palette.note_run(id, &noted);
+        }
         self.serve_ui_requests();
         ok
     }
@@ -246,6 +263,7 @@ impl Editor {
                 UiRequest::Open => self.file_action(FileAction::Open),
                 UiRequest::Save => self.file_action(FileAction::Save),
                 UiRequest::SaveAs => self.file_action(FileAction::SaveAs),
+                UiRequest::CommandPalette => self.palette.open_palette(),
                 UiRequest::RenameActive => {
                     if let Some(id) = self.state.selection.active
                         && let Some(n) = self.state.doc.scene().node(id)
@@ -334,6 +352,11 @@ impl Editor {
         }
         egui::CentralPanel::no_frame().show(ui, |ui| self.area(ui, Area::Center, rs));
         self.keymap_editor.show(ui.ctx(), &mut self.state);
+        let ctx = ui.ctx().clone();
+        let registry = self.state.app.commands.clone();
+        if let Some((id, args)) = self.palette.show(&ctx, &registry, &self.state.keys.map) {
+            self.run_id(&id, args);
+        }
     }
 
     /// Advances the current frame from the frame clock while playing (ANIM.md §2.6).
@@ -358,7 +381,7 @@ impl Editor {
             }
             return;
         }
-        if ctx.egui_wants_keyboard_input() {
+        if ctx.egui_wants_keyboard_input() || self.palette.open {
             return;
         }
         let hot = self.viewport_hot;
@@ -686,6 +709,10 @@ impl Editor {
                     });
                 }
                 ui.separator();
+                if ui.button("Command palette\u{2026}").clicked() {
+                    self.run(cmd("ui.command_palette"));
+                    ui.close();
+                }
                 if ui.button("Key map\u{2026}").clicked() {
                     self.keymap_editor.open = true;
                     ui.close();
@@ -740,6 +767,12 @@ impl Editor {
                 crate::script_panel::script_panel_ui(ui, &mut self.state, self.dialogs.as_mut())
             }
             Panel::NodeEditor => crate::node_editor::node_editor_ui(ui, &mut self.state),
+            Panel::History => {
+                if let Some(position) = crate::history_panel::history_panel_ui(ui, &self.state.doc)
+                {
+                    self.run_id("edit.history_jump", json!({"position": position}));
+                }
+            }
         }
     }
 

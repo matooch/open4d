@@ -71,6 +71,7 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `object_enable` | Enable. Undoable editing command. Runs command `object.enable`. |
 | `edit_undo` | Undo. Not an undoable edit. Runs command `edit.undo`. |
 | `edit_redo` | Redo. Not an undoable edit. Runs command `edit.redo`. |
+| `edit_history_jump` | Jump in History. Not an undoable edit. Runs command `edit.history_jump`. |
 | `view_shading` | Shading. Not an undoable edit. Runs command `view.shading`. |
 | `view_layout` | Viewport Layout. Not an undoable edit. Runs command `view.layout`. |
 | `view_maximize` | Maximize Pane. Not an undoable edit. Runs command `view.maximize`. |
@@ -172,6 +173,7 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `file_open_dialog` | Open.... Not an undoable edit. Runs command `file.open_dialog`. |
 | `file_save_dialog` | Save. Not an undoable edit. Runs command `file.save_dialog`. |
 | `file_save_as_dialog` | Save As.... Not an undoable edit. Runs command `file.save_as_dialog`. |
+| `ui_command_palette` | Command Palette.... Not an undoable edit. Runs command `ui.command_palette`. |
 | `file_import_obj` | Import OBJ. Undoable editing command. Runs command `file.import_obj`. |
 | `file_export_obj` | Export OBJ. Not an undoable edit. Runs command `file.export_obj`. |
 | `param_edit` | Edit Parameter. Undoable editing command. Runs command `param.edit`. |

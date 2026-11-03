@@ -45,11 +45,12 @@ pub enum Panel {
     Coordinates,
     Script,
     NodeEditor,
+    History,
 }
 
 impl Panel {
     /// Every panel, in Window menu order.
-    pub const ALL: [Panel; 9] = [
+    pub const ALL: [Panel; 10] = [
         Panel::CommandBar,
         Panel::ToolPalette,
         Panel::Viewport,
@@ -59,6 +60,7 @@ impl Panel {
         Panel::Coordinates,
         Panel::Script,
         Panel::NodeEditor,
+        Panel::History,
     ];
 
     /// The panels `Dock::default()` opens; the others open from the Window menu.
@@ -83,6 +85,7 @@ impl Panel {
             Panel::Coordinates => "Coordinates",
             Panel::Script => "Script Manager",
             Panel::NodeEditor => "Node Editor",
+            Panel::History => "History",
         }
     }
 
@@ -97,6 +100,7 @@ impl Panel {
             Panel::Coordinates => Area::Bottom,
             Panel::Script => Area::Bottom,
             Panel::NodeEditor => Area::Center,
+            Panel::History => Area::RightBottom,
         }
     }
 }

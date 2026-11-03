@@ -515,6 +515,7 @@ Default bindings (all parity-pending, ours):
 | Mod+A / Mod+Shift+A / Mod+I | `select.all` / `select.none` / `select.invert` |
 | Alt+1 / Alt+2 / Alt+3 / Alt+4 | `select.mode` model / points / edges / polys |
 | Mod+Shift+E | `mesh.make_editable` |
+| Mod+Shift+P | `ui.command_palette` (brief 159, §18) |
 | 1 .. 5 | `view.shading` smooth, flat, wire, smooth_wire, flat_wire |
 | 6 .. 9 | `view.shading` quick, constant, hidden_line, bounding_box (brief 143) |
 | F4 | `view.layout` (toggle single / four; brief 143) |
@@ -834,3 +835,117 @@ but they are part of the tag's `graph` parameter, so moving a node is an edit of
   go); a value edit (`graph.set_value`); live values appear on ports; and the expression
   built in the editor drives the scene (a cube's position follows the graph after the edits, and
   after undo returns).
+
+## 18. Command palette and undo history (`palette`, `history_panel`; brief 159)
+
+Sources: own design from docs/roadmap/areas/L-ui.md (command-palette search is a common editor
+convention); no reference-app observation. The binding Mod+Shift+P is ours (parity-pending like
+every §14.2 default; it collides with no other default). Nothing is hard-coded: the palette reads
+the command registry (COMMANDS.md) and the key map (§14).
+
+### 18.1 Commands
+
+- `ui.command_palette` (no arguments, not undoable): asks the window to open the palette
+  (`UiRequest::CommandPalette`, like the file dialogs; headless contexts fail with `needs the
+  editor window`). Bound to Mod+Shift+P; also Window > "Command palette...".
+- `edit.history_jump {position}` (not undoable itself; moves along the document history): see §18.5.
+
+### 18.2 Fuzzy matcher (pure, `palette::fuzzy_score(query, text) -> Option<i32>`)
+
+Case-insensitive subsequence match: every character of `query` occurs in `text`, in order.
+`None` if not; an empty query gives `Some(0)`. The best alignment (dynamic programming over all
+alignments) maximises the sum of
+
+- +10 per matched character,
+- +20 when the matched character starts a word (text index 0, or the previous character is
+  one of ` ` `.` `_` `-` `/` `:` `=` `,`),
+- +15 when it directly follows the previous matched character (a run),
+- +15 when the first match is at index 0,
+- -1 per skipped character between two matches, and -1 per skipped leading character (at most 5),
+
+minus `len(text) / 4` so that a shorter text wins a tie. Consequences the tests pin: a prefix
+beats a later word start, a word start beats a mid-word hit, a contiguous run beats scattered
+letters, and `undo` finds `edit.undo` and "Undo".
+
+### 18.3 Entries (`palette::entries(registry, keys, shown)`)
+
+One entry per registry command, in registry order: id, label, whether it needs a form, and the
+first key-map binding of that command with no arguments (`shown` spells a chord for the platform,
+as in the key map editor). In addition one *preset* entry per key-map binding with non-empty
+arguments (`view.shading` `{"mode":"wire"}` bound to 3, ...): its label is the command label
+followed by the arguments summary (`Shading: mode=wire`), its chord that binding's, and it runs
+with those arguments without a form. So the palette lists every chord the key map has.
+
+A command *needs a form* when `{}` does not validate against its `args_schema()`
+(`forge_command::schema::validate`), i.e. it has required arguments. Other commands run
+directly with `{}` (their optional arguments stay at their defaults).
+
+### 18.4 Search and order (`palette::search(entries, query, recent) -> Vec<usize>`)
+
+The query is split on whitespace; every token must match at least one *field* of the entry (id,
+label, arguments summary, chord canonical text `Mod+Shift+P` and the shown spelling). An entry's
+score is the sum over tokens of the best field score. Order: score descending, then recently run
+first, then label, then id. With an empty query nothing is filtered: recent entries first (newest
+first), then the others by label (case-insensitive), then id.
+
+*Recent*: `Palette::recent`, keys of the commands run from anywhere in the window (menus, shortcuts,
+palette; not `ui.command_palette`), newest first, at most 20, no duplicates. The key of a run is the
+command id, or `id` + space + compact JSON arguments when the arguments are not empty; a run with
+arguments records both keys (so a command run through its form comes back to the top as the generic
+entry, and a preset recurs as itself). In memory only; it is not saved.
+
+### 18.5 The palette window
+
+A floating window anchored at the top centre of the editor (not part of the layout), opened by
+`ui.command_palette`; Escape closes it. A single-line search field has the focus on opening. Below
+it a scrolling list (at most 12 rows visible) of the matches: label, id in weak text, the chord
+right-aligned. Up/Down move the selected row (wrapping not), Enter or a click runs it, the first
+row is selected after every query change. Running closes the palette, then `Editor::run_id` runs the
+command, so a failure shows in the status bar, exactly as for a menu item.
+
+An entry that needs a form replaces the list by a form generated from `args_schema()`
+(`palette::form_fields(schema)`): a heading with the label and id, one row per property of the schema
+(required ones first, marked `*`, the description as hover text), with **Run** and **Back** buttons.
+Field kinds: `string` a text field; `integer` / `number` a text field parsed as such; `boolean` and
+enumerations (`enum`, `oneOf` of constants, `$ref` to such a definition, nullable `anyOf`) a drop
+down (optional ones have an empty entry that omits the key); everything else (arrays, objects,
+`null`able composites) a text field holding JSON. `palette::build_args(fields, values)` turns the
+texts into the argument object: empty optional fields are left out, an empty required one is
+`"<name> is required"`, a text that does not parse is `"<name>: ..."`; the object is then checked
+with `schema::validate` and a failure is shown in the form (error colour) without closing it.
+Enter in a text field also runs.
+
+### 18.6 History panel (`history_panel`)
+
+Window > "History panel" (panel `Panel::History`, title "History", default area right bottom, closed
+by default, `Dock::default()` unchanged). It lists the document's transactions (CORE.md §4)
+from `Document::history()`: first a row "0. Original state", then one row per undo step oldest
+first ("1. Create Cube"), then the redo steps in the order they were done (dimmed). A gesture whose
+edits were merged (CORE.md §4 merge keys, e.g. a drag) is one transaction and shows once. The row
+of the current state (as many steps applied as the undo stack is long) is marked: strong text and a
+"current" tag. Pure helper `history_rows(undo_labels, redo_labels) -> Vec<HistoryRow {position,
+label, kind: Past | Current | Future}>`.
+
+Clicking the row at `position` runs `edit.history_jump {position}`: `position` is the number of
+steps that should be applied, 0 ..= undo steps + redo steps. The command calls undo (or redo)
+repeatedly until the stack depth equals `position`, then does what `edit.undo` does afterwards
+(`retain_existing`, clamp the timeline), and returns `{position, undone, redone}`. A `position` out
+of range is `InvalidArgs` and changes nothing. Jumping to the current position does nothing. The
+jump is not a new history step; a later edit clears the redo steps as usual, which the panel then
+shows.
+
+### 18.7 Tests
+
+- Unit (`palette.rs`): `fuzzy_score` (subsequence, case, empty query, no match, the orderings of
+  §18.2), `search` (tokens, fields, chord text, recency order, empty query order), `entries`
+  (presets from bindings, `needs_form` from the schema), `form_fields` and `build_args` on schemas
+  of real commands (`object.create`, `view.shading`, optional and enum fields, errors), recent
+  bookkeeping; `history_rows`.
+- `crates/command/tests/registry.rs`: `edit.history_jump` jumps back and forth over a headless
+  document, and refuses a position out of range.
+- `crates/ui/tests/palette.rs` (egui_kittest, no GPU): Mod+Shift+P opens the palette; typing finds
+  a command, Enter runs it (a document edit with its undo step); a click runs another; a command
+  with required arguments opens a form, a wrong value shows an error, a right one runs it; Escape
+  closes; the recent order; the panels are closed by default and open from the Window menu. History
+  panel: rows and the current mark follow edits, undo and redo; clicking an older row undoes to
+  that state and a future row redoes; a merged gesture is one row.

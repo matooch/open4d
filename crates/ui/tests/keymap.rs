@@ -140,6 +140,7 @@ fn default_bindings_table() {
         ("Alt+3", "select.mode", r#"{"mode":"edges"}"#),
         ("Alt+4", "select.mode", r#"{"mode":"polys"}"#),
         ("Mod+Shift+E", "mesh.make_editable", "{}"),
+        ("Mod+Shift+P", "ui.command_palette", "{}"),
         ("1", "view.shading", r#"{"mode":"smooth"}"#),
         ("2", "view.shading", r#"{"mode":"flat"}"#),
         ("3", "view.shading", r#"{"mode":"wire"}"#),

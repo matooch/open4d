@@ -156,7 +156,7 @@ implementers can avoid collisions.
 | 156 | [Layout save/load and workspaces](../agents/tasks/156-layouts-workspaces.md) | L | 147 | ready | ui |
 | 157 | [HUD and viewport overlays](../agents/tasks/157-hud-overlays.md) | L | 143 | ready | viewport |
 | 158 | [Layer manager](../agents/tasks/158-layer-manager.md) | L | 149 | ready | ui, core |
-| 159 | [Command palette and undo history panel](../agents/tasks/159-command-palette-history.md) | L | 011 | ready | ui |
+| 159 | [Command palette and undo history panel](../agents/tasks/159-command-palette-history.md) | L | 011 | done | ui |
 | 160 | [Console panel (log + Rhai REPL)](../agents/tasks/160-console.md) | L | 016 | ready | ui |
 | 161 | [HiDPI, IME, themes, keyboard navigation](../agents/tasks/161-hidpi-ime-themes.md) | L | 147 | ready | ui |
 | 162 | [S3 acceptance test and UI docs](../agents/tasks/162-s3-ui-acceptance.md) | L | 147–153 | ready | tests, docs |

@@ -221,4 +221,6 @@ pub enum UiRequest {
     SaveAs,
     /// Starts the inline rename of the active object.
     RenameActive,
+    /// Opens the command palette (docs/specs/UI.md §18).
+    CommandPalette,
 }

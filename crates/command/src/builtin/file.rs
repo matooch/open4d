@@ -93,6 +93,11 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
         ("file.open_dialog", "Open...", UiRequest::Open),
         ("file.save_dialog", "Save", UiRequest::Save),
         ("file.save_as_dialog", "Save As...", UiRequest::SaveAs),
+        (
+            "ui.command_palette",
+            "Command Palette...",
+            UiRequest::CommandPalette,
+        ),
     ] {
         r.register(Box::new(DialogCommand { id, label, request }))?;
     }
@@ -185,7 +190,8 @@ fn export_obj(ctx: &mut dyn CommandContext, a: ExportArgs) -> Result<Value, Comm
 }
 
 /// `file.open_dialog`, `file.save_dialog`, `file.save_as_dialog`: the File menu items that
-/// ask for a file name, so a shortcut can run them (the window shows the dialog).
+/// ask for a file name, so a shortcut can run them (the window shows the dialog); and
+/// `ui.command_palette` (UI.md §18), which the window serves the same way.
 struct DialogCommand {
     id: &'static str,
     label: &'static str,

@@ -195,6 +195,8 @@ fn brief_command_ids_exist() {
         "file.open_dialog",
         "file.save_dialog",
         "file.save_as_dialog",
+        "ui.command_palette",
+        "edit.history_jump",
         "file.autosave_now",
         "timeline.stop",
         "timeline.settings",
@@ -442,6 +444,7 @@ fn window_commands_toggle_play_and_refuse_headless() {
         "file.save_as_dialog",
         "file.autosave_now",
         "object.begin_rename",
+        "ui.command_palette",
     ] {
         match r.run(&mut c, id, json!({})) {
             Err(CommandError::Failed(m)) => assert_eq!(m, "needs the editor window", "{id}"),
@@ -453,4 +456,54 @@ fn window_commands_toggle_play_and_refuse_headless() {
         ));
     }
     assert_eq!(steps(&c), 0);
+}
+
+/// docs/specs/COMMANDS.md §6 `edit.history_jump`, UI.md §18.6.
+#[test]
+fn history_jump_moves_along_the_history_and_checks_the_range() {
+    let r = registry();
+    let mut c = Headless::new();
+    let a = node_of(
+        &r.run(&mut c, "object.create", json!({"type": "test.box"}))
+            .unwrap(),
+    );
+    for name in ["one", "two", "three"] {
+        r.run(&mut c, "object.rename", json!({"node": a.0, "name": name}))
+            .unwrap();
+    }
+    let name = |c: &Headless| c.doc.scene().node(a).unwrap().name.clone();
+    assert_eq!(steps(&c), 4);
+    // back to the state after the first rename
+    let out = r
+        .run(&mut c, "edit.history_jump", json!({"position": 2}))
+        .unwrap();
+    assert_eq!(out, json!({"position": 2, "undone": 2, "redone": 0}));
+    assert_eq!(name(&c), "one");
+    assert_eq!(c.doc.history().redo_labels().len(), 2);
+    // forward again, past the middle
+    let out = r
+        .run(&mut c, "edit.history_jump", json!({"position": 4}))
+        .unwrap();
+    assert_eq!(out, json!({"position": 4, "undone": 0, "redone": 2}));
+    assert_eq!(name(&c), "three");
+    // the original state: the node is gone and the selection follows
+    r.run(&mut c, "edit.history_jump", json!({"position": 0}))
+        .unwrap();
+    assert!(!c.doc.scene().contains(a));
+    assert!(!c.selection.nodes.contains(&a));
+    // the current position is a no-op, a position beyond the history is refused
+    let out = r
+        .run(&mut c, "edit.history_jump", json!({"position": 0}))
+        .unwrap();
+    assert_eq!(out["undone"], 0);
+    assert_eq!(out["redone"], 0);
+    let err = r
+        .run(&mut c, "edit.history_jump", json!({"position": 5}))
+        .unwrap_err();
+    assert!(matches!(err, CommandError::InvalidArgs(_)), "{err}");
+    assert_eq!(c.doc.history().redo_labels().len(), 4);
+    assert!(matches!(
+        r.run(&mut c, "edit.history_jump", json!({"position": -1})),
+        Err(CommandError::InvalidArgs(_))
+    ));
 }

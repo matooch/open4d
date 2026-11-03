@@ -75,6 +75,11 @@ args = { mode = "polys" }
 chord = "Mod+Shift+E"
 command = "mesh.make_editable"
 
+# Command palette (brief 159)
+[[bind]]
+chord = "Mod+Shift+P"
+command = "ui.command_palette"
+
 # View: shading
 [[bind]]
 chord = "1"
