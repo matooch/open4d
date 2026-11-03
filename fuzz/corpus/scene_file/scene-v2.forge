@@ -1,0 +1,13 @@
+// Written by the build of format version 2 (adds Mesh values); never regenerate.
+(
+    format: "forge3d-scene",
+    version: 2,
+    roots: [
+        (id: 1, type_id: "forge.null", name: "Root", params: {}, tags: [], children: [
+            (id: 2, type_id: "test.box", name: "Box", params: {"size": Float(3.0), "segments": Int(4)}, tags: [
+                (id: 4, type_id: "test.sel", name: "Sel", params: {"set": String("a")}, tags: [], children: []),
+            ], children: []),
+            (id: 3, type_id: "test.poly", name: "Poly", params: {"mesh": Mesh((points: [(0.0, 0.0, 0.0), (1.5, 0.0, 0.0), (1.5, 0.1, 1e-9), (0.0, 2.0, 0.0)], polys: [[0, 1, 2, 3], [0, 1, 2]]))}, tags: [], children: []),
+        ]),
+    ],
+)

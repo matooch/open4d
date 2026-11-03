@@ -1,0 +1,23 @@
+[package]
+name = "forge-fuzz-harness"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Fuzz entry points for every untrusted-bytes reader, a mutation engine for stable mini-fuzz tests, and the random-command soak (docs/specs/PLATFORM.md section 9)."
+publish = false
+
+[dependencies]
+forge-app = { path = "../app" }
+forge-command = { path = "../command" }
+forge-core = { path = "../core" }
+forge-image = { path = "../image" }
+forge-io = { path = "../io" }
+forge-rpc = { path = "../rpc" }
+forge-script = { path = "../script" }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

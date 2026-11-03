@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "apps/studio", "apps/forge", "tools/*"]
+# The cargo-fuzz crate is its own workspace (brief 182): stable builds never see it.
+exclude = ["fuzz"]
 
 [workspace.package]
 version = "0.1.0"

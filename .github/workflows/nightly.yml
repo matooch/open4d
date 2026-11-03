@@ -1,0 +1,80 @@
+name: nightly
+
+# Fuzzing and soak (brief 182, docs/specs/PLATFORM.md section 9). Linux only.
+#   fuzz: one cargo-fuzz run per target on the nightly toolchain (fuzz/ is a separate cargo
+#         workspace, so the normal stable CI never builds it), seeded from fuzz/corpus.
+#   soak: ten minutes of random commands through the RPC dispatch on the pinned stable
+#         toolchain, checking undo/redo and save/load invariants.
+# Crash inputs and failing-soak logs are uploaded as artifacts. Run it by hand from the
+# Actions tab (workflow_dispatch); the durations can be changed there.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      fuzz_seconds:
+        description: "Seconds of fuzzing per target"
+        default: "120"
+      soak_seconds:
+        description: "Seconds of soak"
+        default: "600"
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: fuzz (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [scene_file, obj, image, exr, command_args, rpc_line, script]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - run: cargo install cargo-fuzz --locked
+      - name: Fuzz ${{ matrix.target }}
+        working-directory: fuzz
+        run: >
+          cargo +nightly fuzz run ${{ matrix.target }} --
+          -max_total_time=${{ inputs.fuzz_seconds || '120' }}
+          -max_len=65536 -rss_limit_mb=2048 -timeout=30
+      - name: Upload crash inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crash-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}/
+          if-no-files-found: ignore
+
+  soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Soak
+        shell: bash # pipefail: a failing test must fail the step despite `tee`
+        env:
+          FORGE_SOAK_SECS: ${{ inputs.soak_seconds || '600' }}
+          # A fresh seed every night; the seed is printed, so a failure reproduces.
+          FORGE_SOAK_SEED: ${{ github.run_number }}
+        run: >
+          cargo test --release -p forge-fuzz-harness --test soak -- --ignored --nocapture
+          2>&1 | tee soak.log
+      - name: Upload soak log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-log
+          path: soak.log

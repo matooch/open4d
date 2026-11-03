@@ -1,0 +1,72 @@
+(
+    format: "forge3d-scene",
+    version: 8,
+    settings: (
+        fps: 24,
+        start: 0,
+        end: 48,
+    ),
+    time: (
+        preview: Some((4, 40)),
+        mode: PingPong,
+        drop_frames: false,
+        display: Smpte,
+        markers: [
+            (
+                id: 1,
+                frame: 12,
+                name: "Hit",
+                color: (224, 160, 48),
+            ),
+            (
+                id: 2,
+                frame: 30,
+                name: "Land",
+                color: (56, 198, 232),
+            ),
+        ],
+    ),
+    roots: [
+        (
+            id: 1,
+            type_id: "test.poly",
+            name: "Poly",
+            params: {
+                "mesh": Mesh((
+                    points: [
+                        (0.0, 0.0, 0.0),
+                        (1.5, 0.0, 0.0),
+                        (1.5, 0.1, 0.000000001),
+                        (0.0, 2.0, 0.0),
+                    ],
+                    polys: [
+                        [
+                            0,
+                            1,
+                            2,
+                            3,
+                        ],
+                        [
+                            0,
+                            1,
+                            2,
+                        ],
+                    ],
+                )),
+                "object.editor_vis": Enum("default"),
+                "object.enabled": Bool(true),
+                "object.render_vis": Enum("default"),
+                "selection.points": IndexList([
+                    1,
+                    3,
+                ]),
+                "transform.pos": Vec3((0.0, 0.0, 0.0)),
+                "transform.rot": Vec3((0.0, 0.0, 0.0)),
+                "transform.scale": Vec3((1.0, 1.0, 1.0)),
+            },
+            tracks: {},
+            tags: [],
+            children: [],
+        ),
+    ],
+)

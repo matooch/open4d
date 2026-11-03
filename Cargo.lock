@@ -1519,6 +1519,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-fuzz-harness"
+version = "0.1.0"
+dependencies = [
+ "forge-app",
+ "forge-command",
+ "forge-core",
+ "forge-image",
+ "forge-io",
+ "forge-rpc",
+ "forge-script",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "forge-generators"
 version = "0.1.0"
 dependencies = [

@@ -302,3 +302,96 @@ Saved window layouts (UI.md §21) are files below the config directory of §1:
 without a home folder; `FORGE_SETTINGS` does not move it). `layouts_dir_with(&Dirs)` is the pure
 form. The folder is created on the first save.
 
+
+## 9. Fuzzing and soak (brief 182)
+
+Sources: the public cargo-fuzz / libFuzzer documentation (an input is a byte string, the target
+must not panic, abort or run out of memory) and GitHub Actions documentation. No reference-app
+observation is involved; no corpus file comes from the reference application.
+
+### 9.1 One entry point per reader (`forge-fuzz-harness`, `crates/fuzz-harness`)
+
+Every function takes `&[u8]`, returns `()` and **panics only on a bug**. They are the single
+definition of "what a fuzz target does"; both the nightly cargo-fuzz targets and the stable
+mini-fuzz tests call them.
+
+| Target (`fuzz/fuzz_targets/<name>.rs`) | Entry | What it feeds |
+|---|---|---|
+| `scene_file` | `fuzz_scene_file` | `forge_core::file::load_bytes` (default registry); on success the scene is saved again and the saved text must load (round-trip stability). A chunked file is also loaded with its chunk hashes recomputed (`reseal_chunks`), so mutated chunk payloads reach the mesh/index decoders instead of failing the FNV-1a check |
+| `obj` | `fuzz_obj` | `forge_io::obj::read` on the bytes as lossy UTF-8, both `flip_z` values; on success `obj::write` of the result must not panic |
+| `image` | `fuzz_image` | `forge_image::decode` with small `Limits` (4096 per side, 4 Mpixel) |
+| `exr` | `fuzz_exr` | `forge_image::decode_exr_layers` with the same limits |
+| `command_args` | `fuzz_command_args` | the first bytes pick a command id; the rest is JSON (or, when it is not JSON, a value built from the bytes) passed to `schema::validate` against that command's `args_schema` and to `CommandRegistry::run` on a fresh `App` |
+| `rpc_line` | `fuzz_rpc_line` | `forge_rpc::handle_request_line` (JSON parse, shape, token, method fields; a request that would reach the editor answers `-32603` at once because no editor is attached) and `dispatch` on a fresh `App` for the parsed method and params |
+| `script` | `fuzz_script` | `forge_script::run_script` on a fresh `App` with tight limits (20 000 operations, 50 commands, 1 s) |
+
+Commands that read or write files (`file.open`, `file.save`, `file.save_as`, `file.import_obj`,
+`file.export_obj`, `file.new`, `file.autosave_now`; `forge_fuzz_harness::FS_COMMANDS`) are never run
+with fuzzed arguments: a fuzzer must not write to the disk it runs on. Their parsers are covered
+by the `scene_file` and `obj` targets. `viewport.screenshot` needs a GPU host and is not part of
+the headless `dispatch`.
+
+### 9.2 Bounded allocation
+
+`forge_fuzz_harness::alloc` provides `CountingAlloc`, a `GlobalAlloc` wrapper that counts live
+bytes per thread. A target binary installs it with `#[global_allocator]`; after each input the
+target calls `alloc::assert_bounded(limit)`, which panics when the peak live bytes of that input
+exceeded `limit` (`DEFAULT_ALLOC_LIMIT` = 512 MiB). The limits in §9.1 (image size, script
+operations, 1 MiB strings) are what keep honest readers under it.
+
+### 9.3 Stable mini-fuzz (`cargo test`, part of the gate)
+
+`crates/fuzz-harness/tests/mini_fuzz.rs`: for each target, a test runs a few thousand inputs
+from a seeded `XorShift64` (no OS randomness, so a failure reproduces): the seed corpus files
+under `fuzz/corpus/<target>/` as they are, then byte flips, truncations, insertions, block
+duplications and splices of them, plus pure random bytes. Each input goes through the same
+entry point under `CountingAlloc`. The test fails with the target, the iteration and the input
+as hex (and writes it to `$TMPDIR/forge-fuzz-crash-<target>.bin`) when an entry panics.
+Further tests: `every_command_survives_hostile_arguments` (every non-file command id with 12 hostile values, 6 schema-valid and 4 corrupted generated argument objects, each on a fresh seeded `App`), the counting allocator itself, and a check that every command whose schema has a `path` is listed in `FS_COMMANDS`. `FORGE_MINI_FUZZ_ITERS` and `FORGE_MINI_FUZZ_SEED` raise the iteration count / shift the seed for longer local runs. Regressions for real findings are single-input tests next to them.
+
+### 9.4 Seed corpora
+
+`fuzz/corpus/<target>/` holds small files (each under 64 KiB, total under 1 MiB), all generated
+by this repository: the native scene fixtures of `crates/core/tests/fixtures`, our own OBJ
+golden meshes, images and EXRs written by our encoders (`cargo run -p forge-fuzz-harness
+--example gen_corpus`), command-argument samples (`CommandHandler::sample_args`), RPC request
+lines and the script examples. `fuzz/corpus` is committed (OBJ seeds come from our own writer and primitives, not from the golden folder, which holds reference-application output); libFuzzer's finds go to
+`fuzz/artifacts/` (ignored).
+
+### 9.5 The soak (`crates/fuzz-harness/tests/soak.rs`)
+
+`forge_fuzz_harness::soak::run(&SoakConfig)` drives an in-process `App` (the same object
+`forge-rpc-serve` wraps) through `dispatch`, exactly as the RPC methods `command.list` and
+`command.run` would:
+
+1. `command.list` gives every command id with its `args_schema`. Excluded: `FS_COMMANDS`.
+2. Each step picks a command from a seeded RNG and builds arguments that satisfy the schema
+   (`type`, `properties`, `required`, `enum`, `oneOf`/`anyOf`, `items`, `$ref`, `minimum`/
+   `maximum`). Integer fields that name nodes take an existing node id most of the time.
+   A small fraction of steps use a mutated value to exercise the error path. Errors from commands
+   are fine; **panics and invariant failures are not**.
+3. Invariants, checked at every checkpoint (every 200 steps):
+   - **Undo to the start**: undo until nothing is left; the saved bytes
+     (`file::save_with`, deterministic) equal the bytes of the scene at the start; redo
+     everything; the bytes equal those before the undo.
+   - **Round trip**: `save_with` then `load_bytes` then `save_with` gives the same bytes.
+   - A command whose `undoable` flag is false leaves the saved bytes unchanged (the history
+     commands `edit.undo`, `edit.redo`, `edit.history_jump` are exempt: they move along the
+     history). Redo repeats exactly the steps the checkpoint undid; steps undone earlier by a
+     random `edit.undo` stay on the redo stack.
+   - The scene stays small: past 80 nodes the step deletes all roots (`object.delete`),
+     because duplicating N nodes 60 times is legitimate but multiplies every later step.
+4. A step that panics is reported with the seed, step number, command id and arguments.
+
+Configuration: the smoke test `soak_smoke` is a fixed 1 500-step run in the normal test suite;
+the long run is the `#[ignore]` test `soak_long` (`FORGE_SOAK_SECS`, default 600;
+`FORGE_SOAK_SEED`). `FORGE_SOAK_TRACE=1` prints every step.
+
+### 9.6 Nightly workflow
+
+`.github/workflows/nightly.yml` (`schedule` + `workflow_dispatch`, Linux only): installs the
+nightly toolchain and `cargo-fuzz`, builds `fuzz/` (a separate cargo workspace, **not** a member
+of the main one, so the stable toolchain and CI never see it), runs each target for
+`-max_total_time=120` from its corpus, then runs the soak for 10 minutes
+(`FORGE_SOAK_SECS=600`) on the pinned stable toolchain. `fuzz/artifacts/` and a failing soak's
+report are uploaded as artifacts on failure.

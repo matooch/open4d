@@ -629,6 +629,24 @@ fn handle_line(line: &[u8], shared: &Shared, conn: u64, bucket: &mut Bucket) -> 
     (response, After::Continue)
 }
 
+/// Runs one request line through the full validation path (parse, shape, id, token, method
+/// fields) with a fresh rate-limit bucket and no editor behind it, so a valid call to a
+/// non-events method answers `-32603` instead of waiting. For the fuzz targets and tests
+/// (docs/specs/PLATFORM.md §9); the response is the JSON-RPC response object.
+pub fn handle_request_line(line: &[u8], token: Option<&str>) -> Value {
+    let (jobs, closed) = mpsc::channel();
+    // No receiver: a call that reaches the editor fails at once instead of waiting.
+    drop(closed);
+    let shared = Shared {
+        hub: Arc::new(Hub::default()),
+        token: token.map(str::to_string),
+        jobs,
+        wake: Arc::new(Mutex::new(None)),
+        stop: Arc::new(AtomicBool::new(false)),
+    };
+    handle_line(line, &shared, 0, &mut Bucket::new()).0
+}
+
 fn run_request(
     request: &Map<String, Value>,
     shared: &Shared,

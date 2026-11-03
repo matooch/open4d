@@ -179,7 +179,7 @@ implementers can avoid collisions.
 | 179 | [Autosave and recovery](../agents/tasks/179-autosave-recovery.md) | N | 175, 163 | done | app |
 | 180 | [Dependency-graph evaluation scheduler (parallel, dirty-only)](../agents/tasks/180-eval-scheduler.md) | N | 012 | done | core |
 | 181 | [Benchmarks and S10 performance thresholds](../agents/tasks/181-benchmarks-s10.md) | N | 180, 144 | ready | benches |
-| 182 | [Fuzzing and UI soak test](../agents/tasks/182-fuzz-soak.md) | N | 014, 163 | ready | fuzz |
+| 182 | [Fuzzing and UI soak test](../agents/tasks/182-fuzz-soak.md) | N | 014, 163 | done (nightly workflow pending first run) | fuzz |
 | 183 | [User manual and generated references (mdBook, GitHub Pages)](../agents/tasks/183-manual.md) | N | 019 | ready | docs |
 | 184 | [Rhai plugin packages](../agents/tasks/184-rhai-plugins.md) | N | 016 | ready | plugin |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |
