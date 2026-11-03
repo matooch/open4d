@@ -133,6 +133,8 @@ Output lines are capped at 10 000 (later lines are dropped silently).
 - **CLI** `forge run <script.rhai> [--scene in.forge] [--save out.forge]` (CLI.md §run).
 - **Editor**: the Script Manager panel (UI.md §10) runs on the editor's own context, so
   the run is one undo step in the editor's history.
+- **Editor REPL**: the Console panel (UI.md §19) runs one entry at a time in the same sandbox
+  (default limits, no state between entries); each entry is one undo step like a panel run.
 - RPC and MCP do not run scripts (A-automation: `script.run` only with
   `rpc.allow_scripts`, a later setting; not part of brief 016).
 

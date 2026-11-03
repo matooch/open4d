@@ -1,6 +1,6 @@
 # 160 · Console panel (log + Rhai REPL)
 
-Status: ready · Area: L · Depends on: 016 · Observations: – · Touches: ui
+Status: done · Area: L · Depends on: 016 · Observations: – · Touches: ui
 
 ## Goal
 A console showing the log and a Rhai REPL.
@@ -12,8 +12,8 @@ A console showing the log and a Rhai REPL.
 - tracing subscriber to an in-memory ring buffer.
 
 ## Done when
-- [ ] REPL evaluates a command.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] REPL evaluates a command.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -23,9 +23,9 @@ A console showing the log and a Rhai REPL.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: spec `docs/specs/UI.md` §19 (+ `SCRIPTING.md` §6). Tests added: 7 unit in `forge_ui::console` (level parsing, level filter, continuation lines, search, copy text, REPL history up/down/draft, caps), 10 egui_kittest in `crates/ui/tests/console.rs` (closed by default and opened from the Window menu, fed log lines, level drop-down, search, Copy, Run with two commands = one undo step, Enter and Shift+Enter, focus kept for the next entry, failing entry rolled back with the sandbox refusing `edit.undo`, Up/Down history, Clear). No parity cases (own design).
+- Rules: log = `forge_platform::logging::recent_lines()` (injectable via `ConsoleState::log_source`), level = second token of the tracing line, continuation lines inherit the previous level, search is a case-insensitive substring. REPL = `forge_script::run_script` with default limits on the editor context: one entry is one `Run Script` undo step, a failure is rolled back; each entry has a fresh scope.
+- Deviations: no new registry command (the REPL goes through `run_script`, which runs registry commands); variables do not persist between entries; the log tail is the 200-line in-memory ring of brief 178 and cannot be cleared; Up/Down recall only while the text is single-line; history entries are in memory only.
+- Files changed: crates/ui/src/{console.rs,state.rs,dock.rs,app.rs,lib.rs}, crates/ui/tests/console.rs, docs/specs/{UI,SCRIPTING}.md, BACKLOG, this brief.
+- Open questions: persist REPL history in the settings file? Variables across entries (a persistent Rhai scope) would need a change in forge-script.
+- Gate: see the commit message / final report.

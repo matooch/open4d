@@ -767,6 +767,7 @@ impl Editor {
                 crate::script_panel::script_panel_ui(ui, &mut self.state, self.dialogs.as_mut())
             }
             Panel::NodeEditor => crate::node_editor::node_editor_ui(ui, &mut self.state),
+            Panel::Console => crate::console::console_ui(ui, &mut self.state),
             Panel::History => {
                 if let Some(position) = crate::history_panel::history_panel_ui(ui, &self.state.doc)
                 {

@@ -949,3 +949,74 @@ shows.
   closes; the recent order; the panels are closed by default and open from the Window menu. History
   panel: rows and the current mark follow edits, undo and redo; clicking an older row undoes to
   that state and a future row redoes; a merged gesture is one row.
+
+## 19. Console (`console`; brief 160)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; the log line format is PLATFORM.md §8.2 (brief
+178), the REPL runs the sandbox of SCRIPTING.md. No reference-app observation.
+
+Window > "Console panel" (panel `Panel::Console`, title "Console", default area Bottom, closed by
+default; `Dock::default()` unchanged). Two halves side by side (`ui.columns(2)`): the **log** on the
+left, the **REPL** on the right.
+
+### 19.1 Log
+
+The lines come from `forge_platform::logging::recent_lines()`, the in-memory tail of the last 200
+log lines (PLATFORM.md §8.2: `<time> <LEVEL> <target>: <message>`), read again every frame (the
+panel requests a repaint once a second while it is open, so new lines show up). The source is a
+function held by `ConsoleState::log_source` so that tests can feed lines.
+
+- **Level filter**: a drop-down "Level" with Trace (all), Debug, Info, Warn, Error; a line shows
+  when its level is at least the chosen one. Default Trace.
+- **Search**: a text field "Search log"; a line shows when it contains the text, case-insensitive
+  (an empty text shows all).
+- **Copy**: the button "Copy" puts the shown lines, joined by newlines, on the clipboard
+  (`Context::copy_text`) and remembers the text in `ConsoleState::last_copy`.
+- Shown with the level colour (error: theme error colour, warn: amber, info: text, debug and trace:
+  weak text), monospace, sticking to the bottom while the scroll is at the end. A count "N of M lines"
+  is shown next to the toolbar.
+
+Pure functions (unit-tested):
+
+- `parse_level(line) -> Option<LogLevel>`: the level is the second whitespace-separated token of the
+  line when it is exactly `TRACE`, `DEBUG`, `INFO`, `WARN` or `ERROR`; other lines have none.
+- `filter_log(lines, min_level, search) -> Vec<LogLine {index, level, text}>`: a line without a
+  level (a continuation line of a multi-line message) takes the level of the line before it, or Info
+  at the start; then the two conditions above. `index` is the position in `lines`.
+- `log_text(&[LogLine])`: the lines joined by `\n`.
+
+### 19.2 REPL
+
+A multi-line monospace text field "REPL input" (hint "Rhai: Enter runs, Shift+Enter adds a line, Up /
+Down recall") and a **Run** button, **Clear** empties the transcript. Above them the transcript.
+
+- **Enter** (no Shift) runs the text; **Shift+Enter** inserts a newline at the cursor. An empty or
+  blank entry does nothing.
+- **History**: every run text is kept (at most 200, a repeat of the last entry is not added). **Up**
+  recalls the previous entry, **Down** the next, and past the newest the text that was being typed
+  comes back. They apply while the text has no newline (in a multi-line text the keys move the
+  cursor as usual); recalling replaces the field's text.
+- **Running** is `forge_script::run_script` on the editor's own context with the default limits
+  (SCRIPTING.md §5), i.e. the same sandbox and the same undo rule as the Script Manager (§10): the
+  commands go through the registry, **one entry is one undo step** (`Run Script`, so the History
+  panel shows one row per entry) and a failing entry is rolled back and changes nothing. A run
+  that changes nothing leaves no step. Every entry starts a fresh scope: variables do not survive
+  to the next entry (the document does; `scene()` reads it).
+- **Transcript** (`ConsoleState::repl`, at most 1000 lines): the entry echoed as `> first line`
+  (further lines `. line`), then its `print` lines, then `=> <value>` for a last expression that is
+  not `()`/null (JSON text, strings quoted), or for a failure the message in the error colour
+  (`line N: ...`, with the `print` lines before it). Entries with a successful run that made
+  commands add no extra summary line.
+
+### 19.3 Tests
+
+- Unit (`console.rs`): `parse_level` on real tracing lines and on junk; `filter_log` for each level,
+  search (case, empty), continuation lines, indices; `log_text`; the REPL history (up, down, restore
+  of the typed text, duplicates, cap).
+- `crates/ui/tests/console.rs` (egui_kittest, no GPU): the panel is closed by default and opens from
+  the Window menu; fed lines show, the Level drop-down hides lower levels, the search field filters,
+  Copy fills `last_copy` with exactly the shown lines; the REPL runs `create("test.box")` through
+  the Run button and through Enter (the node exists, the transcript has the echo and the result), a
+  multi-line entry typed with Shift+Enter, `print` output, a value result, one entry with two
+  commands is one undo step and undo removes both, a failing entry shows its error and changes
+  nothing, Up / Down recall earlier entries, and Clear empties the transcript.

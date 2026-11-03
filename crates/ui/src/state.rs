@@ -12,6 +12,7 @@ use forge_viewport::gizmo::{GizmoMode, Space as GizmoSpace};
 use forge_viewport::render::Shading;
 
 use crate::autosave::Autosave;
+use crate::console::ConsoleState;
 use crate::crash_notice::CrashNotice;
 use crate::dock::Dock;
 use crate::keymap::KeyMapState;
@@ -39,6 +40,8 @@ pub struct EditorState {
     pub views: Views,
     /// Script Manager source, console and recent list (docs/specs/UI.md §10).
     pub script: ScriptPanelState,
+    /// The Console panel: log filter and the REPL (docs/specs/UI.md §19).
+    pub console: ConsoleState,
     /// The Node Editor's tag, canvas and cache (docs/specs/UI.md §17).
     pub node_editor: NodeEditorState,
     /// The headless GPU device `viewport.screenshot` renders with (RPC.md §10.2).
@@ -98,6 +101,7 @@ impl EditorState {
             shading: DEFAULT_SHADING,
             views: Views::new(&Self::default_camera()),
             script: ScriptPanelState::default(),
+            console: ConsoleState::default(),
             node_editor: NodeEditorState::default(),
             offscreen: OffscreenGpu::default(),
             tool: None,

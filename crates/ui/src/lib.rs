@@ -12,6 +12,7 @@ pub mod clone_overlay;
 pub mod commands;
 pub mod component_edit;
 pub mod components;
+pub mod console;
 pub mod coordinates;
 pub mod crash_notice;
 pub mod cutting;
