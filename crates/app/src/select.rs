@@ -105,7 +105,54 @@ pub fn target(app: &App) -> Option<NodeId> {
         return None;
     }
     let id = app.selection.active?;
-    (app.doc.scene().node(id)?.type_id == POLYGON).then_some(id)
+    is_polygon(app.doc.scene(), id).then_some(id)
+}
+
+fn is_polygon(scene: &Scene, id: NodeId) -> bool {
+    scene.node(id).is_some_and(|n| n.type_id == POLYGON)
+}
+
+/// The component targets (EDITABLE.md §6.1): the selected polygon objects in ascending id
+/// order, when a component mode is on and the active node is a polygon object.
+pub fn targets(app: &App) -> Vec<NodeId> {
+    let Some(active) = target(app) else {
+        return Vec::new();
+    };
+    let scene = app.doc.scene();
+    let mut out: BTreeSet<NodeId> = app
+        .selection
+        .nodes
+        .iter()
+        .copied()
+        .filter(|id| is_polygon(scene, *id))
+        .collect();
+    out.insert(active);
+    out.into_iter().collect()
+}
+
+/// The objects a selection command works on: the explicit `nodes` (each must be a polygon
+/// object) or the component targets.
+pub fn resolve_targets(app: &App, nodes: Option<&[NodeId]>) -> Result<Vec<NodeId>, String> {
+    let Some(nodes) = nodes else {
+        let all = targets(app);
+        return if all.is_empty() {
+            Err("select a polygon object".into())
+        } else {
+            Ok(all)
+        };
+    };
+    let scene = app.doc.scene();
+    let mut out = BTreeSet::new();
+    for id in nodes {
+        if !is_polygon(scene, *id) {
+            return Err(format!("node {} is not a polygon object", id.0));
+        }
+        out.insert(*id);
+    }
+    if out.is_empty() {
+        return Err("nodes is empty".into());
+    }
+    Ok(out.into_iter().collect())
 }
 
 /// The stored (undeformed, object space) mesh of a polygon object.
@@ -146,14 +193,32 @@ pub fn write_selection(
     mode: EditMode,
     set: &IndexSet,
 ) -> Result<bool, EditError> {
+    write_selections(doc, mode, &[(id, set.clone())])
+}
+
+/// Stores each `(object, set)` as that object's `mode` set, all in one "Select" step.
+/// Objects whose stored set already equals the new one are left alone; returns false,
+/// writing nothing, if no object changes.
+pub fn write_selections(
+    doc: &mut Document,
+    mode: EditMode,
+    sets: &[(NodeId, IndexSet)],
+) -> Result<bool, EditError> {
     let Some(param) = mode.param() else {
         return Ok(false);
     };
-    if selection_of(doc.scene(), id, mode) == *set {
+    let changed: Vec<&(NodeId, IndexSet)> = sets
+        .iter()
+        .filter(|(id, set)| selection_of(doc.scene(), *id, mode) != *set)
+        .collect();
+    if changed.is_empty() {
         return Ok(false);
     }
     doc.transact("Select", |tx| {
-        tx.set_param(id, param, Value::IndexList(set.iter().collect()))
+        for (id, set) in changed {
+            tx.set_param(*id, param, Value::IndexList(set.iter().collect()))?;
+        }
+        Ok(())
     })?;
     Ok(true)
 }
@@ -209,17 +274,24 @@ fn select_objects(s: &mut App, cmd: SelectCmd) {
     }
 }
 
-/// Select All / Deselect All / Invert / Grow / Shrink on the current mode's set.
-pub fn run_select(s: &mut App, cmd: SelectCmd) -> Result<(), String> {
+/// Select All / Deselect All / Invert / Grow / Shrink on the current mode's set of every
+/// target (`nodes`: the objects to use instead, EDITABLE.md §6.3): one "Select" step.
+pub fn run_select(s: &mut App, cmd: SelectCmd, nodes: Option<&[NodeId]>) -> Result<(), String> {
     if s.mode == EditMode::Model {
+        if nodes.is_some() {
+            return Err("nodes needs a component mode".into());
+        }
         select_objects(s, cmd);
         return Ok(());
     }
-    let id = target(s).ok_or("select a polygon object")?;
-    let mesh = base_mesh(s.doc.scene(), id).ok_or("select a polygon object")?;
-    let current = selection_of(s.doc.scene(), id, s.mode);
-    let next = component_result(&mesh, s.mode, &current, cmd);
-    write_selection(&mut s.doc, id, s.mode, &next).map_err(|e| e.to_string())?;
+    let ids = resolve_targets(s, nodes)?;
+    let mut next = Vec::new();
+    for id in ids {
+        let mesh = base_mesh(s.doc.scene(), id).ok_or("select a polygon object")?;
+        let current = selection_of(s.doc.scene(), id, s.mode);
+        next.push((id, component_result(&mesh, s.mode, &current, cmd)));
+    }
+    write_selections(&mut s.doc, s.mode, &next).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -232,42 +304,54 @@ fn kind_of(mode: EditMode) -> Option<Kind> {
     }
 }
 
-/// Connected, Convert, Loop and Ring on the current mode's set (EDITABLE.md §2.8). Model
-/// mode does nothing.
-pub fn run_select_extra(s: &mut App, cmd: SelectExtra) -> Result<(), String> {
+/// Connected, Convert, Loop and Ring on the current mode's set of every target (EDITABLE.md
+/// §2.8, §6.3). Model mode does nothing. One "Select" step; an error in any object writes
+/// nothing.
+pub fn run_select_extra(
+    s: &mut App,
+    cmd: SelectExtra,
+    nodes: Option<&[NodeId]>,
+) -> Result<(), String> {
     let Some(from) = kind_of(s.mode) else {
-        return Ok(());
+        return if nodes.is_some() {
+            Err("nodes needs a component mode".into())
+        } else {
+            Ok(())
+        };
     };
-    let id = target(s).ok_or("select a polygon object")?;
-    let mesh = base_mesh(s.doc.scene(), id).ok_or("select a polygon object")?;
-    let current = selection_of(s.doc.scene(), id, s.mode);
-    let (write_mode, next) = match cmd {
-        SelectExtra::Connected => (s.mode, connected(&mesh, from, &current)),
-        SelectExtra::Convert { to, mode } => {
-            let to_mode = EditMode::from(to);
-            let to_kind = kind_of(to_mode).ok_or("convert needs points, edges or polys")?;
-            let rule = match mode {
-                ConvertMode::Strict => Mode::All,
-                ConvertMode::Tolerant => Mode::Any,
-            };
-            (to_mode, convert(&mesh, &current, from, to_kind, rule))
-        }
-        SelectExtra::Loop { across } | SelectExtra::Ring { across } => {
-            let across = match cmd {
-                SelectExtra::Ring { .. } => across ^ 1,
-                _ => across,
-            };
-            let ring = matches!(cmd, SelectExtra::Ring { .. });
-            let set = match from {
-                Kind::Edges if ring => edge_ring(&mesh, &current),
-                Kind::Edges => edge_loop(&mesh, &current),
-                Kind::Polys => poly_strip(&mesh, &current, across),
-                Kind::Points => return Err("loop and ring need edges or polygons".into()),
-            };
-            (s.mode, set)
-        }
-    };
-    write_selection(&mut s.doc, id, write_mode, &next).map_err(|e| e.to_string())?;
+    let ids = resolve_targets(s, nodes)?;
+    let mut write_mode = s.mode;
+    let mut next = Vec::new();
+    for id in ids {
+        let mesh = base_mesh(s.doc.scene(), id).ok_or("select a polygon object")?;
+        let current = selection_of(s.doc.scene(), id, s.mode);
+        let (mode, set) = match cmd {
+            SelectExtra::Connected => (s.mode, connected(&mesh, from, &current)),
+            SelectExtra::Convert { to, mode } => {
+                let to_mode = EditMode::from(to);
+                let to_kind = kind_of(to_mode).ok_or("convert needs points, edges or polys")?;
+                let rule = match mode {
+                    ConvertMode::Strict => Mode::All,
+                    ConvertMode::Tolerant => Mode::Any,
+                };
+                (to_mode, convert(&mesh, &current, from, to_kind, rule))
+            }
+            SelectExtra::Loop { across } | SelectExtra::Ring { across } => {
+                let ring = matches!(cmd, SelectExtra::Ring { .. });
+                let across = if ring { across ^ 1 } else { across };
+                let set = match from {
+                    Kind::Edges if ring => edge_ring(&mesh, &current),
+                    Kind::Edges => edge_loop(&mesh, &current),
+                    Kind::Polys => poly_strip(&mesh, &current, across),
+                    Kind::Points => return Err("loop and ring need edges or polygons".into()),
+                };
+                (s.mode, set)
+            }
+        };
+        write_mode = mode;
+        next.push((id, set));
+    }
+    write_selections(&mut s.doc, write_mode, &next).map_err(|e| e.to_string())?;
     if write_mode != s.mode {
         s.mode = write_mode;
     }

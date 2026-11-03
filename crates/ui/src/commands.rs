@@ -136,12 +136,12 @@ impl CommandContext for EditorState {
         self.app.set_status(text);
     }
 
-    fn select_components(&mut self, op: SelectOp) -> Result<(), String> {
-        self.app.select_components(op)
+    fn select_components(&mut self, op: SelectOp, nodes: Option<&[NodeId]>) -> Result<(), String> {
+        self.app.select_components(op, nodes)
     }
 
-    fn select_extra(&mut self, cmd: SelectExtra) -> Result<(), String> {
-        self.app.select_extra(cmd)
+    fn select_extra(&mut self, cmd: SelectExtra, nodes: Option<&[NodeId]>) -> Result<(), String> {
+        self.app.select_extra(cmd, nodes)
     }
 
     fn record_keys(&mut self) -> Result<usize, String> {

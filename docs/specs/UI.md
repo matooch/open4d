@@ -184,7 +184,9 @@ Component modes (EDITABLE.md §2): the header of the viewport holds four toggle 
 click and left drag (not on a gizmo handle) select components instead of objects, and the
 target is drawn with its points / edges / polygon outlines and selected components in the
 component selection colour (§8); the panel rebuilds its GPU meshes when the revision, the
-node selection, the mode or the target changes.
+node selection, the mode or the target changes. With several polygon objects selected every
+selected polygon object is a target and is drawn this way (EDITABLE.md §6); the Coordinates
+panel shows editable Pivot, Rotation and Size rows (§6.7).
 
 ### 6.2 Panes, 4-view layout, lights and anti-aliasing (brief 143)
 

@@ -34,6 +34,17 @@ pub fn collect_sources(
     exclude: &[NodeId],
     skip: Option<(NodeId, Vec<u32>)>,
 ) -> SnapScene {
+    let skips: Vec<(NodeId, Vec<u32>)> = skip.into_iter().collect();
+    collect_sources_multi(state, exclude, &skips)
+}
+
+/// [`collect_sources`] with the moving points of several objects (a multi-object component
+/// drag, EDITABLE.md §6.6).
+pub fn collect_sources_multi(
+    state: &EditorState,
+    exclude: &[NodeId],
+    skips: &[(NodeId, Vec<u32>)],
+) -> SnapScene {
     let scene = state.evaluated();
     let mut hidden: BTreeSet<NodeId> = BTreeSet::new();
     for id in exclude {
@@ -48,10 +59,11 @@ pub fn collect_sources(
         if hidden.contains(&id) {
             continue;
         }
-        let mut skip_points = match &skip {
-            Some((node, points)) if *node == id => points.clone(),
-            _ => Vec::new(),
-        };
+        let mut skip_points: Vec<u32> = skips
+            .iter()
+            .filter(|(node, _)| *node == id)
+            .flat_map(|(_, points)| points.iter().copied())
+            .collect();
         skip_points.sort_unstable();
         skip_points.dedup();
         out.nodes.push(id);

@@ -50,6 +50,21 @@ Setting enums are option ids (`"chamfer"`); the schema lists them.
   same step, so one undo restores mesh and selection. Result:
   `{ "node", "points", "polys", "selected": [index] }`.
 - Edit mode and the object selection are not changed.
+- Several objects (brief 034, EDITABLE.md §6.5; parity-pending): `nodes?: [id]` is accepted
+  next to `node` (both together are an error). Without either, the targets are the selected
+  polygon objects (the active node must be a polygon object, as before). The tool runs on
+  each object with *that object's* stored selection and topology; all meshes and selections
+  are written in the one transaction, so one undo step restores every object. An object
+  whose stored selection is empty and for which the tool fails is skipped and listed in
+  `skipped` (a tool like Subdivide that accepts an empty selection runs on it); a failure on an
+  object with a non-empty selection, or on every object, is `Failed` and nothing changes.
+  `polys`, `edges` and `points` name one object's indices, so they need exactly one object.
+  The result keeps the single-object keys for the first object processed and adds
+  `nodes: [{node, points, polys, selected}]` and `skipped: [node]`. `mesh.split` creates one
+  split object per source (`created` lists them, the first is also `created` of the top
+  level result) and selects them; `mesh.center_axis` moves each object's axis.
+- `mesh.loop_cut`, `mesh.knife`, `mesh.bridge`, `mesh.stitch`, `mesh.close_hole` and
+  `mesh.pen` work on one object and reject `nodes` (EDITABLE.md §6.5).
 
 ### 0.2 UI framework (`forge-ui`, `tools.rs`)
 ```rust

@@ -323,12 +323,12 @@ impl CommandContext for App {
         self.status = text;
     }
 
-    fn select_components(&mut self, op: SelectOp) -> Result<(), String> {
-        run_select(self, op.into())
+    fn select_components(&mut self, op: SelectOp, nodes: Option<&[NodeId]>) -> Result<(), String> {
+        run_select(self, op.into(), nodes)
     }
 
-    fn select_extra(&mut self, cmd: SelectExtra) -> Result<(), String> {
-        run_select_extra(self, cmd)
+    fn select_extra(&mut self, cmd: SelectExtra, nodes: Option<&[NodeId]>) -> Result<(), String> {
+        run_select_extra(self, cmd, nodes)
     }
 
     fn record_keys(&mut self) -> Result<usize, String> {

@@ -138,13 +138,13 @@ touch history.
 | `object.randomize` | `nodes?`, `seed?`, `position?`, `rotation_deg?`, `scale?`, `uniform_scale?` (MODELING.md §9.4) | `{randomized}` | yes |
 | `object.transfer` | `target`, `source?`, `position?`, `rotation?`, `scale?`, `space?` world\|local (MODELING.md §9.5) | `{node}` | yes |
 | `mesh.array_command` | `node?`, `polys?`, `settings?: {copies, offset, rotation_deg, scale, mode}` (MODELING.md §9.6) | `{node, points, polys, selected}` | yes |
-| `mesh.transform` | `node?`, `points?`, `move?`, `rotate? {axis, angle}`, `scale?`, `pivot?`, `soft?`, `symmetry?` (EDITABLE.md §5.5) | `{node, moved, soft, symmetry}` | yes |
+| `mesh.transform` | `node?`, `nodes?`, `space?` (EDITABLE.md §6.4), `points?`, `move?`, `rotate? {axis, angle}`, `scale?`, `pivot?`, `soft?`, `symmetry?` (EDITABLE.md §5.5) | `{node, moved, soft, symmetry}` | yes |
 | `edit.soft_selection` | `enabled?`, `radius?`, `falloff?`, `distance?`, `curve?` (EDITABLE.md §5.1) | the soft selection settings | no |
 | `edit.symmetry` | `enabled?`, `axis?`, `offset?`, `tolerance?` (EDITABLE.md §5.1) | the symmetry settings | no |
 | `select.mode` | `mode` model, points, edges, polys | null | no |
-| `select.all` `select.none` `select.invert` `select.grow` `select.shrink` `select.connected` | - | null | yes |
-| `select.convert` | `to` points, edges, polys; `mode?` strict, tolerant (EDITABLE.md §2.8) | null | yes |
-| `select.loop` `select.ring` | `across?` 0 or 1 (EDITABLE.md §2.8) | null | yes |
+| `select.all` `select.none` `select.invert` `select.grow` `select.shrink` `select.connected` | `nodes?` (polygon objects; the component targets when absent, EDITABLE.md §6.3) | null | yes |
+| `select.convert` | `nodes?`, `to` points, edges, polys; `mode?` strict, tolerant (EDITABLE.md §2.8) | null | yes |
+| `select.loop` `select.ring` | `nodes?`, `across?` 0 or 1 (EDITABLE.md §2.8) | null | yes |
 | `graph.add_node` | `tag`, `type`, `values?`, `pos?` (NODES.md §6) | `{node}` | yes |
 | `graph.remove` | `tag`, `node?`, `nodes?` | `{removed_links}` | yes |
 | `graph.connect` | `tag`, `from_node`, `from_port`, `to_node`, `to_port`, `release_node?`, `release_port?` (type and cycle checked) | `{replaced}` | yes |

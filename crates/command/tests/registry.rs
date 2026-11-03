@@ -93,7 +93,11 @@ impl CommandContext for Headless {
     fn set_status(&mut self, text: String) {
         self.status = text;
     }
-    fn select_components(&mut self, _op: SelectOp) -> Result<(), String> {
+    fn select_components(
+        &mut self,
+        _op: SelectOp,
+        _nodes: Option<&[NodeId]>,
+    ) -> Result<(), String> {
         Err("no components headless".into())
     }
     fn record_keys(&mut self) -> Result<usize, String> {

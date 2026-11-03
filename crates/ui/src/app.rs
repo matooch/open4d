@@ -18,7 +18,7 @@ use crate::animate::{AnimEdit, KeyState, key_frames, key_states};
 use crate::attributes::{Gesture, Widget, attribute_rows_multi};
 use crate::clone_overlay::{OverlayOptions, selected_cloner_marks};
 use crate::commands::{category_label, clone_toolset_menu, create_menu, execute};
-use crate::component_edit::{ComponentDrag, pivot_view, pivot_world};
+use crate::component_edit::{ComponentDrag, CoordEntry, component_coords, pivot_world};
 use crate::components::{
     ClickModifiers, EditMode, SelectCmd, target as component_target, viewport_click, viewport_rect,
 };
@@ -29,7 +29,7 @@ use crate::layout::{ButtonGroup, Layout, Sizes, command_bar, tool_palette};
 use crate::manipulate::{apply_axis_drag, apply_drag_anim};
 use crate::object_manager::ObjectManager;
 use crate::panes::{PANE_GAP, display_settings};
-use crate::snapping::{SnapScene, collect_sources, drag_step};
+use crate::snapping::{SnapScene, collect_sources, collect_sources_multi, drag_step};
 use crate::state::EditorState;
 use crate::theme::Theme;
 use crate::viewport_panel::{
@@ -1462,7 +1462,7 @@ impl Editor {
                 if let Some(cd) = ComponentDrag::begin(&self.state) {
                     self.gesture_seq += 1;
                     self.drag_sources = if snap.enabled {
-                        collect_sources(&self.state, &[], Some((cd.id, cd.moved_points())))
+                        collect_sources_multi(&self.state, &[], &cd.moved())
                     } else {
                         SnapScene::default()
                     };
@@ -1682,22 +1682,65 @@ impl Editor {
                     }
                     ui.end_row();
                 }
-                // component modes: the pivot of the selected components (EDITABLE.md §3.6)
+                // component modes: pivot, rotation and size of the selected components
+                // (EDITABLE.md §3.6, §6.7)
                 if component_target(&self.state).is_some() {
-                    ui.label("Pivot");
-                    match pivot_view(&self.state, self.coord_space == Space::World) {
-                        Some(p) => {
-                            for (k, axis) in ["X", "Y", "Z"].iter().enumerate() {
-                                ui.label(format!("{axis} {:.3}", p[k]));
-                            }
-                        }
-                        None => {
-                            ui.weak("no selection");
-                        }
-                    }
-                    ui.end_row();
+                    self.component_coords_ui(ui);
                 }
             });
+    }
+
+    /// The Pivot, Rotation and Size rows of the Coordinates panel in a component mode
+    /// (EDITABLE.md §6.7): typing a value transforms the selected components.
+    fn component_coords_ui(&mut self, ui: &mut Ui) {
+        let world = self.coord_space == Space::World;
+        let Some(c) = component_coords(&self.state, world) else {
+            ui.label("Pivot");
+            ui.weak("no selection");
+            ui.end_row();
+            return;
+        };
+        let rows = [
+            ("Pivot", ["X", "Y", "Z"], c.pivot),
+            ("Rotation", ["H", "P", "B"], DVec3::ZERO),
+            ("Size", ["X", "Y", "Z"], c.size),
+        ];
+        for (row, (label, axes, value)) in rows.into_iter().enumerate() {
+            let l = ui.label(label);
+            let mut shown = value;
+            let mut gesture = None;
+            for (k, axis) in axes.iter().enumerate() {
+                let r = ui
+                    .add(
+                        egui::DragValue::new(&mut shown[k])
+                            .speed(0.1)
+                            .prefix(format!("{axis} ")),
+                    )
+                    .labelled_by(l.id);
+                if r.changed() {
+                    gesture = Some(if r.dragged() {
+                        self.gesture_for(r.drag_started())
+                    } else {
+                        Gesture::Commit
+                    });
+                }
+            }
+            if let Some(g) = gesture
+                && let Some(drag) = ComponentDrag::begin(&self.state)
+            {
+                let entry = match row {
+                    0 => CoordEntry::Position(shown),
+                    // the rotation row always shows 0, so a typed value is the rotation
+                    1 => CoordEntry::Rotation(shown.map(f64::to_radians)),
+                    _ => CoordEntry::Size(shown),
+                };
+                self.state.status = match drag.apply_entry(&mut self.state.doc, entry, world, g) {
+                    Ok(()) => String::new(),
+                    Err(e) => e.to_string(),
+                };
+            }
+            ui.end_row();
+        }
     }
 
     fn tree_ui(&mut self, ui: &mut Ui) {
@@ -1716,8 +1759,12 @@ impl Editor {
             return;
         };
         let label = ts.tool().label();
+        let note = crate::tools::scope_note(&self.state);
         let rows = crate::attributes::tool_rows(ts.tool().settings(), ts.values());
         ui.heading(label);
+        if let Some(note) = note {
+            ui.weak(note);
+        }
         let (mut reset, mut apply, mut done) = (false, false, false);
         ui.horizontal(|ui| {
             reset = ui.button("Reset Values").clicked();

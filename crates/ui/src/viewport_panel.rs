@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 
 use forge_app::schedule;
 use forge_core::{EvalCtx, NodeId, Scene};
-use forge_generators::ClonerInstances;
+use forge_generators::{ClonerInstances, POLYGON};
 use forge_geometry::PolyMesh;
 use forge_geometry::selection::Selection;
 use forge_viewport::cache::{
@@ -414,7 +414,15 @@ impl<T: Clone> SlotCache<T> {
         }
         self.key = Some((frame.generation, selected.clone(), component, lod));
         self.rebuilt = 0;
-        let target = component.map(|(t, _)| t);
+        // every selected polygon object is a component target next to the primary one
+        // (EDITABLE.md §6.1)
+        let is_target = |id: &NodeId| {
+            component.is_some_and(|(t, _)| {
+                t == *id
+                    || (selected.contains(id)
+                        && frame.scene.node(*id).is_some_and(|n| n.type_id == POLYGON))
+            })
+        };
         let mut slots = std::mem::take(&mut self.slots);
         let mut next = BTreeMap::new();
         let mut items = Vec::new();
@@ -430,7 +438,7 @@ impl<T: Clone> SlotCache<T> {
                     && s.selected == is_selected
                     && s.smoothing == smoothing
                     && !s.target
-                    && Some(*id) != target
+                    && !is_target(id)
             });
             let slot = match kept {
                 Some(slot) => slot,
@@ -441,7 +449,7 @@ impl<T: Clone> SlotCache<T> {
                         out: out.clone(),
                         selected: is_selected,
                         smoothing,
-                        target: Some(*id) == target,
+                        target: is_target(id),
                         item,
                     }
                 }
@@ -523,7 +531,9 @@ pub fn upload_item(
             selected,
             smoothing,
         } => {
-            let target = component.filter(|(t, _)| *t == id);
+            let target = component.filter(|(t, _)| {
+                *t == id || (selected && scene.node(id).is_some_and(|n| n.type_id == POLYGON))
+            });
             let shown = target.map(|(_, mode)| {
                 (
                     mode,

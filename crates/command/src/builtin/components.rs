@@ -12,6 +12,7 @@ use glam::{DMat4, DQuat, DVec3};
 use serde_json::{Map, Value as Json, json};
 
 use super::cutting::{check_keys, node_schema, number, vec3, vec3_schema};
+use super::tools::polygon_targets;
 use crate::context::CommandContext;
 use crate::error::CommandError;
 use crate::registry::{CommandHandler, CommandRegistry};
@@ -192,11 +193,6 @@ fn selected_points(
         Some(_) => return Err(invalid(id, "points must be a list of indices".into())),
     };
     let set: IndexSet = list.into_iter().filter(|i| *i < n).collect();
-    if set.is_empty() {
-        return Err(CommandError::Failed(format!(
-            "{id}: no points to transform"
-        )));
-    }
     Ok(set.iter().collect())
 }
 
@@ -223,7 +219,11 @@ impl CommandHandler for Transform {
     fn args_schema(&self) -> Json {
         json!({"type": "object", "additionalProperties": false, "properties": {
             "node": node_schema(),
-            "points": {"description": "Point ids; the stored selection of the current mode (points, points of the edges or of the polygons) when absent.",
+            "nodes": {"description": "Polygon objects transformed together in one undo step; every selected polygon object when node and nodes are absent (EDITABLE.md section 6.4).",
+                      "type": ["array", "null"], "items": {"type": "integer", "minimum": 0}},
+            "space": {"description": "object: the arguments are in each object's object space (default for one object); world: in world space, one pivot for all objects (default for several).",
+                      "enum": ["object", "world", null]},
+            "points": {"description": "Point ids (one object only); the stored selection of the current mode (points, points of the edges or of the polygons) when absent.",
                        "type": ["array", "null"], "items": {"type": "integer", "minimum": 0}},
             "move": vec3_schema("Translation in object space."),
             "rotate": {"description": "Rotation about the pivot, angle in degrees.",
@@ -247,34 +247,74 @@ impl CommandHandler for Transform {
             id,
             obj,
             &[
-                "node", "points", "move", "rotate", "scale", "pivot", "soft", "symmetry",
+                "node", "nodes", "space", "points", "move", "rotate", "scale", "pivot", "soft",
+                "symmetry",
             ],
         )?;
-        let node = match obj.get("node") {
-            Some(Json::Number(n)) => NodeId(
-                n.as_u64()
-                    .ok_or_else(|| invalid(id, "bad node id".into()))?,
-            ),
-            None | Some(Json::Null) => ctx
-                .selection()
-                .active
-                .ok_or_else(|| CommandError::Failed(format!("{id}: select a polygon object")))?,
-            Some(_) => return Err(invalid(id, "bad node id".into())),
+        let nodes = polygon_targets(ctx, id, "Transform Components", obj)?;
+        let multi = nodes.len() > 1;
+        let world_space = match obj.get("space") {
+            None | Some(Json::Null) => multi,
+            Some(Json::String(s)) if s == "world" => true,
+            Some(Json::String(s)) if s == "object" => false,
+            Some(_) => return Err(invalid(id, "space must be object or world".into())),
         };
-        let scene = ctx.doc().scene();
-        let data: Arc<MeshData> = match scene.param(node, "mesh") {
-            Some(Value::Mesh(m)) if scene.node(node).is_some_and(|n| n.type_id == POLYGON) => {
-                m.clone()
-            }
-            _ => {
+        if multi && obj.get("points").is_some_and(|v| !v.is_null()) {
+            return Err(invalid(
+                id,
+                "points names the points of one object; give a single node".into(),
+            ));
+        }
+        let settings = effective(id, ctx.component_settings(), obj)?;
+
+        // every object's stored mesh and affected points
+        struct Part {
+            node: NodeId,
+            data: Arc<MeshData>,
+            mesh: PolyMesh,
+            points: Vec<u32>,
+            world: DMat4,
+        }
+        let mut parts: Vec<Part> = Vec::new();
+        for node in nodes {
+            let scene = ctx.doc().scene();
+            let data: Arc<MeshData> = match scene.param(node, "mesh") {
+                Some(Value::Mesh(m)) if scene.node(node).is_some_and(|n| n.type_id == POLYGON) => {
+                    m.clone()
+                }
+                _ => {
+                    return Err(CommandError::Failed(format!(
+                        "{id}: not a polygon object (use Make Editable first)"
+                    )));
+                }
+            };
+            let mesh = to_poly_mesh(&data);
+            let points = selected_points(ctx, id, node, &mesh, obj)?;
+            let world = ctx
+                .doc()
+                .scene()
+                .world_matrix(node)
+                .unwrap_or(DMat4::IDENTITY);
+            if points.is_empty() && !multi {
                 return Err(CommandError::Failed(format!(
-                    "{id}: not a polygon object (use Make Editable first)"
+                    "{id}: no points to transform"
                 )));
             }
-        };
-        let mesh = to_poly_mesh(&data);
-        let settings = effective(id, ctx.component_settings(), obj)?;
-        let points = selected_points(ctx, id, node, &mesh, obj)?;
+            if !points.is_empty() {
+                parts.push(Part {
+                    node,
+                    data,
+                    mesh,
+                    points,
+                    world,
+                });
+            }
+        }
+        if parts.is_empty() {
+            return Err(CommandError::Failed(format!(
+                "{id}: no points to transform"
+            )));
+        }
 
         let mv = vec3(id, obj, "move")?;
         let scale = obj.get("scale").filter(|v| !v.is_null());
@@ -298,35 +338,58 @@ impl CommandHandler for Transform {
         if mv.is_none() && scale.is_none() && rotate.is_none() {
             return Err(invalid(id, "give move, rotate or scale".into()));
         }
-        let pivot = match vec3(id, obj, "pivot")? {
-            Some(p) => p,
-            None => {
-                points
-                    .iter()
-                    .map(|i| mesh.points[*i as usize])
-                    .sum::<DVec3>()
-                    / points.len() as f64
+        let given_pivot = vec3(id, obj, "pivot")?;
+        // T(move) T(pivot) R S T(-pivot)
+        let matrix = |pivot: DVec3| {
+            let mut m =
+                DMat4::from_translation(mv.unwrap_or(DVec3::ZERO)) * DMat4::from_translation(pivot);
+            if let Some((axis, angle)) = rotate {
+                m *= DMat4::from_quat(DQuat::from_axis_angle(axis, angle));
             }
+            if let Some(s) = scale {
+                m *= DMat4::from_scale(s);
+            }
+            m * DMat4::from_translation(-pivot)
         };
-        let mut m =
-            DMat4::from_translation(mv.unwrap_or(DVec3::ZERO)) * DMat4::from_translation(pivot);
-        if let Some((axis, angle)) = rotate {
-            m *= DMat4::from_quat(DQuat::from_axis_angle(axis, angle));
-        }
-        if let Some(s) = scale {
-            m *= DMat4::from_scale(s);
-        }
-        m *= DMat4::from_translation(-pivot);
+        let mean_of = |ps: &mut dyn Iterator<Item = DVec3>| {
+            let (sum, n) = ps.fold((DVec3::ZERO, 0usize), |(s, n), p| (s + p, n + 1));
+            sum / n.max(1) as f64
+        };
+        // world space: one matrix about the common centroid (EDITABLE.md §6.4)
+        let world_matrix = world_space.then(|| {
+            let pivot = given_pivot.unwrap_or_else(|| {
+                mean_of(&mut parts.iter().flat_map(|p| {
+                    p.points
+                        .iter()
+                        .map(|i| p.world.transform_point3(p.mesh.points[*i as usize]))
+                }))
+            });
+            matrix(pivot)
+        });
 
-        let plan = ComponentPlan::new(&mesh, &points, &settings);
-        let moved_to = plan.apply(&mesh.points, m);
-        let mut out = (*data).clone();
-        let mut moved = 0;
-        for (slot, p) in out.points.iter_mut().zip(&moved_to) {
-            if p.to_array() != *slot {
-                moved += 1;
+        let mut written: Vec<(NodeId, Arc<MeshData>)> = Vec::new();
+        let mut per_node = Vec::new();
+        let mut total = 0;
+        for part in &parts {
+            let local = match world_matrix {
+                Some(m) => part.world.inverse() * m * part.world,
+                None => matrix(given_pivot.unwrap_or_else(|| {
+                    mean_of(&mut part.points.iter().map(|i| part.mesh.points[*i as usize]))
+                })),
+            };
+            let plan = ComponentPlan::new(&part.mesh, &part.points, &settings);
+            let moved_to = plan.apply(&part.mesh.points, local);
+            let mut out = (*part.data).clone();
+            let mut moved = 0;
+            for (slot, p) in out.points.iter_mut().zip(&moved_to) {
+                if p.to_array() != *slot {
+                    moved += 1;
+                }
+                *slot = p.to_array();
             }
-            *slot = p.to_array();
+            total += moved;
+            per_node.push(json!({"node": part.node.0, "moved": moved}));
+            written.push((part.node, Arc::new(out)));
         }
         let label = match (mv.is_some(), rotate.is_some(), scale.is_some()) {
             (true, false, false) => "Move",
@@ -334,12 +397,15 @@ impl CommandHandler for Transform {
             (false, false, true) => "Scale",
             _ => "Transform",
         };
-        let out = Arc::new(out);
-        ctx.doc_mut()
-            .transact(label, |tx| tx.set_param(node, "mesh", Value::Mesh(out)))?;
+        ctx.doc_mut().transact(label, |tx| {
+            for (node, mesh) in written {
+                tx.set_param(node, "mesh", Value::Mesh(mesh))?;
+            }
+            Ok(())
+        })?;
         Ok(
-            json!({"node": node.0, "moved": moved, "soft": settings.soft.to_json(),
-                  "symmetry": settings.symmetry.to_json()}),
+            json!({"node": parts[0].node.0, "moved": total, "nodes": per_node,
+                  "soft": settings.soft.to_json(), "symmetry": settings.symmetry.to_json()}),
         )
     }
 

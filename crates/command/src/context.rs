@@ -34,9 +34,12 @@ pub trait CommandContext {
     fn set_status(&mut self, text: String);
 
     /// Select All / None / Invert / Grow / Shrink on the current mode's set (EDITABLE.md §2.5).
-    fn select_components(&mut self, op: SelectOp) -> Result<(), String>;
+    ///
+    /// `nodes` names the polygon objects to work on; the component targets when `None`
+    /// (EDITABLE.md §6.3).
+    fn select_components(&mut self, op: SelectOp, nodes: Option<&[NodeId]>) -> Result<(), String>;
     /// Connected, Convert, Loop and Ring on the current mode's set (EDITABLE.md §2.8).
-    fn select_extra(&mut self, _cmd: SelectExtra) -> Result<(), String> {
+    fn select_extra(&mut self, _cmd: SelectExtra, _nodes: Option<&[NodeId]>) -> Result<(), String> {
         Err("no components headless".into())
     }
     /// Keys the selected objects' transform at the current frame; returns the key count.

@@ -570,7 +570,9 @@ Example: `forge cmd scene.forge select.mode --args '{"mode":"points"}'`
 
 Select All. One undo step.
 
-No arguments.
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.all --args '{}'`
 
@@ -578,7 +580,9 @@ Example: `forge cmd scene.forge select.all --args '{}'`
 
 Deselect All. One undo step.
 
-No arguments.
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.none --args '{}'`
 
@@ -586,7 +590,9 @@ Example: `forge cmd scene.forge select.none --args '{}'`
 
 Invert Selection. One undo step.
 
-No arguments.
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.invert --args '{}'`
 
@@ -594,7 +600,9 @@ Example: `forge cmd scene.forge select.invert --args '{}'`
 
 Grow Selection. One undo step.
 
-No arguments.
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.grow --args '{}'`
 
@@ -602,7 +610,9 @@ Example: `forge cmd scene.forge select.grow --args '{}'`
 
 Shrink Selection. One undo step.
 
-No arguments.
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.shrink --args '{}'`
 
@@ -610,7 +620,9 @@ Example: `forge cmd scene.forge select.shrink --args '{}'`
 
 Select Connected. One undo step.
 
-No arguments.
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.connected --args '{}'`
 
@@ -622,6 +634,7 @@ Convert Selection. One undo step.
 |---|---|---|---|
 | `to` | `"model"` \| `"points"` \| `"edges"` \| `"polys"` | yes | Element kind to convert to: points, edges or polys (not model). |
 | `mode` | string \| string | no | `strict` (default): all parts selected; `tolerant`: any part. Default: `"strict"`. |
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.convert --args '{"mode":"strict","to":"polys"}'`
 
@@ -632,6 +645,7 @@ Loop Selection. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `across` | integer | no | Polygons only: which edge pair of a quad the strip crosses (0 or 1, default 0). Default: `0`. |
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.loop --args '{"across":0}'`
 
@@ -642,6 +656,7 @@ Ring Selection. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `across` | integer | no | Polygons only: which edge pair of a quad the strip crosses (0 or 1, default 0). Default: `0`. |
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.ring --args '{"across":0}'`
 
@@ -691,6 +706,7 @@ Extrude. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -703,6 +719,7 @@ Extrude Inner. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -716,6 +733,7 @@ Bevel. One undo step.
 |---|---|---|---|
 | `edges` | array of integer \| array of integer (length 2) or null | no | Edges (edge mode): edge ids of the mesh, or point pairs [a, b]. |
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `points` | array of integer or null | no | Point indices (point mode). |
 | `polys` | array of integer or null | no | Polygon indices (polygon mode). When none of polys, edges, points is given the stored selection is used. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
@@ -729,6 +747,7 @@ Subdivide. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -741,6 +760,7 @@ Triangulate. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -753,6 +773,7 @@ Untriangulate. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -765,6 +786,7 @@ Reverse Normals. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -777,6 +799,7 @@ Optimize. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -790,6 +813,7 @@ Weld. One undo step.
 |---|---|---|---|
 | `edges` | array of integer \| array of integer (length 2) or null | no | Edges (edge mode): edge ids of the mesh, or point pairs [a, b]. |
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `points` | array of integer or null | no | Point indices (point mode). |
 | `polys` | array of integer or null | no | Polygon indices (polygon mode). When none of polys, edges, points is given the stored selection is used. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
@@ -803,6 +827,7 @@ Melt. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -816,6 +841,7 @@ Dissolve. One undo step.
 |---|---|---|---|
 | `edges` | array of integer \| array of integer (length 2) or null | no | Edges (edge mode): edge ids of the mesh, or point pairs [a, b]. |
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `points` | array of integer or null | no | Point indices (point mode). |
 | `polys` | array of integer or null | no | Polygon indices (polygon mode). When none of polys, edges, points is given the stored selection is used. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
@@ -829,6 +855,7 @@ Split. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -841,6 +868,7 @@ Disconnect. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -854,6 +882,7 @@ Connect Points/Edges. One undo step.
 |---|---|---|---|
 | `edges` | array of integer \| array of integer (length 2) or null | no | Edges (edge mode): edge ids of the mesh, or point pairs [a, b]. |
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `points` | array of integer or null | no | Point indices (point mode). |
 | `polys` | array of integer or null | no | Polygon indices (polygon mode). When none of polys, edges, points is given the stored selection is used. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
@@ -867,6 +896,7 @@ Mirror. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -879,6 +909,7 @@ Center Axis to. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -892,6 +923,7 @@ Slide. One undo step.
 |---|---|---|---|
 | `edges` | array of integer \| array of integer (length 2) or null | no | Edges (edge mode): edge ids of the mesh, or point pairs [a, b]. |
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `points` | array of integer or null | no | Point indices (point mode). |
 | `polys` | array of integer or null | no | Polygon indices (polygon mode). When none of polys, edges, points is given the stored selection is used. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
@@ -905,6 +937,7 @@ Array. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -1000,11 +1033,13 @@ Transform Components. One undo step.
 |---|---|---|---|
 | `move` | array of number (length 3) | no | Translation in object space. |
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects transformed together in one undo step; every selected polygon object when node and nodes are absent (EDITABLE.md section 6.4). |
 | `pivot` | array of number (length 3) | no | Pivot, object space; the mean of the selected points when absent. |
-| `points` | array of integer or null | no | Point ids; the stored selection of the current mode (points, points of the edges or of the polygons) when absent. |
+| `points` | array of integer or null | no | Point ids (one object only); the stored selection of the current mode (points, points of the edges or of the polygons) when absent. |
 | `rotate` | object | no | Rotation about the pivot, angle in degrees. |
 | `scale` | number \| array of number (length 3) | no | Scale about the pivot: one number or [x, y, z]. |
 | `soft` | boolean \| object | no | false: off, true: on with the editor settings, object: on with these values over the editor settings. Absent: the editor setting. |
+| `space` | `"object"` \| `"world"` \| `null` | no | object: the arguments are in each object's object space (default for one object); world: in world space, one pivot for all objects (default for several). |
 | `symmetry` | boolean \| object | no | As soft, for the symmetry plane. |
 
 Example: `forge cmd scene.forge mesh.transform --args '{"move":[0.0,10.0,0.0],"points":[0],"soft":{"falloff":"bell","radius":100.0},"symmetry":{"axis":"x"}}'`

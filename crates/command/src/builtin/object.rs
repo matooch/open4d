@@ -215,7 +215,16 @@ struct ModeArgs {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+struct SelectNodesArgs {
+    /// Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3).
+    nodes: Option<Vec<u64>>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct ConvertArgs {
+    /// Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3).
+    nodes: Option<Vec<u64>>,
     /// Element kind to convert to: points, edges or polys (not model).
     to: ModeArg,
     /// `strict` (default): all parts selected; `tolerant`: any part.
@@ -226,6 +235,8 @@ struct ConvertArgs {
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct AcrossArgs {
+    /// Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3).
+    nodes: Option<Vec<u64>>,
     /// Polygons only: which edge pair of a quad the strip crosses (0 or 1, default 0).
     #[serde(default)]
     across: u8,
@@ -500,24 +511,23 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
             Ok(Value::Null)
         },
     )?;
-    register_plain(r, "select.all", "Select All", true, |c| {
-        select(c, SelectOp::All)
-    })?;
-    register_plain(r, "select.none", "Deselect All", true, |c| {
-        select(c, SelectOp::None)
-    })?;
-    register_plain(r, "select.invert", "Invert Selection", true, |c| {
-        select(c, SelectOp::Invert)
-    })?;
-    register_plain(r, "select.grow", "Grow Selection", true, |c| {
-        select(c, SelectOp::Grow)
-    })?;
-    register_plain(r, "select.shrink", "Shrink Selection", true, |c| {
-        select(c, SelectOp::Shrink)
-    })?;
-    register_plain(r, "select.connected", "Select Connected", true, |c| {
-        select_extra(c, SelectExtra::Connected)
-    })?;
+    macro_rules! select_op {
+        ($id:literal, $label:literal, $op:expr) => {
+            r.register_fn(
+                spec($id, $label, true, || json!({})),
+                |c, a: SelectNodesArgs| select(c, $op, a.nodes),
+            )?;
+        };
+    }
+    select_op!("select.all", "Select All", SelectOp::All);
+    select_op!("select.none", "Deselect All", SelectOp::None);
+    select_op!("select.invert", "Invert Selection", SelectOp::Invert);
+    select_op!("select.grow", "Grow Selection", SelectOp::Grow);
+    select_op!("select.shrink", "Shrink Selection", SelectOp::Shrink);
+    r.register_fn(
+        spec("select.connected", "Select Connected", true, || json!({})),
+        |c, a: SelectNodesArgs| select_extra(c, SelectExtra::Connected, a.nodes),
+    )?;
     r.register_fn(
         spec(
             "select.convert",
@@ -537,6 +547,7 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
                     to: a.to,
                     mode: a.mode,
                 },
+                a.nodes,
             )
         },
     )?;
@@ -547,7 +558,7 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
             true,
             || json!({"across": 0}),
         ),
-        |c, a: AcrossArgs| select_extra(c, SelectExtra::Loop { across: a.across }),
+        |c, a: AcrossArgs| select_extra(c, SelectExtra::Loop { across: a.across }, a.nodes),
     )?;
     r.register_fn(
         spec(
@@ -556,7 +567,7 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
             true,
             || json!({"across": 0}),
         ),
-        |c, a: AcrossArgs| select_extra(c, SelectExtra::Ring { across: a.across }),
+        |c, a: AcrossArgs| select_extra(c, SelectExtra::Ring { across: a.across }, a.nodes),
     )?;
     r.register_fn(
         spec("transform.set", "Set Transform", true, || {
@@ -842,13 +853,29 @@ fn undo_redo(ctx: &mut dyn CommandContext, undo: bool) -> Result<Value, CommandE
     Ok(json!({"done": done}))
 }
 
-fn select(ctx: &mut dyn CommandContext, op: SelectOp) -> Result<Value, CommandError> {
-    ctx.select_components(op).map_err(CommandError::Failed)?;
+fn node_ids(nodes: Option<Vec<u64>>) -> Option<Vec<NodeId>> {
+    nodes.map(|n| n.into_iter().map(NodeId).collect())
+}
+
+fn select(
+    ctx: &mut dyn CommandContext,
+    op: SelectOp,
+    nodes: Option<Vec<u64>>,
+) -> Result<Value, CommandError> {
+    let nodes = node_ids(nodes);
+    ctx.select_components(op, nodes.as_deref())
+        .map_err(CommandError::Failed)?;
     Ok(Value::Null)
 }
 
-fn select_extra(ctx: &mut dyn CommandContext, cmd: SelectExtra) -> Result<Value, CommandError> {
-    ctx.select_extra(cmd).map_err(CommandError::Failed)?;
+fn select_extra(
+    ctx: &mut dyn CommandContext,
+    cmd: SelectExtra,
+    nodes: Option<Vec<u64>>,
+) -> Result<Value, CommandError> {
+    let nodes = node_ids(nodes);
+    ctx.select_extra(cmd, nodes.as_deref())
+        .map_err(CommandError::Failed)?;
     Ok(Value::Null)
 }
 
