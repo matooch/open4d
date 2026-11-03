@@ -1504,6 +1504,7 @@ dependencies = [
  "forge-fields",
  "forge-geometry",
  "forge-modifiers",
+ "forge-noise",
  "forge-parity-harness",
  "glam",
  "rayon",

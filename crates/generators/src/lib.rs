@@ -6,6 +6,7 @@ mod boole;
 mod cloner;
 mod cube;
 mod figure;
+mod landscape;
 mod lathe;
 mod modeling;
 mod oil_tank;
@@ -53,7 +54,7 @@ pub enum BuildError {
 /// The primitive node types.
 pub struct Primitives;
 
-fn types() -> [NodeType; 14] {
+fn types() -> [NodeType; 15] {
     [
         plane::node_type(),
         cube::node_type(),
@@ -69,6 +70,7 @@ fn types() -> [NodeType; 14] {
         oil_tank::node_type(),
         polygon_prim::node_type(),
         figure::node_type(),
+        landscape::node_type(),
     ]
 }
 
@@ -172,6 +174,7 @@ pub fn build(type_id: &str, values: &BTreeMap<String, Value>) -> Result<PolyMesh
         "forge.oil_tank" => oil_tank::build(&p),
         "forge.polygon_prim" => polygon_prim::build(&p),
         "forge.figure" => figure::build(&p),
+        "forge.landscape" => landscape::build(&p),
         _ => unreachable!("types() and build() list the same ids"),
     }
 }
