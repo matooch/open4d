@@ -133,6 +133,11 @@ touch history.
 | `mesh.close_hole` | `node?`, `edge` (id or point pair of a border edge) (MODELING.md §6.3) | `{node, points, polys, new_polys, new_points}` | yes |
 | `mesh.stitch` | `node?`, `points: [[a, b]]` or `edges: [[e, e]]`, `position?` middle\|first (MODELING.md §6.4) | `{node, points, polys, merged}` | yes |
 | `mesh.pen` | `node?`, `corners: [{point} \| {pos}]` (MODELING.md §6.5) | `{node, points, polys, new_polys, new_points}` | yes |
+| `object.duplicate` | `nodes?`, `copies?`, `offset?`, `rotation_deg?`, `scale?`, `mode?` step\|total (MODELING.md §9.2) | `{created, count}` | yes |
+| `object.arrange` | `nodes?`, `mode?` line\|grid\|circle, `spacing?`, `row_spacing?`, `columns?`, `radius?`, `plane?`, `start_angle_deg?` (MODELING.md §9.3) | `{arranged}` | yes |
+| `object.randomize` | `nodes?`, `seed?`, `position?`, `rotation_deg?`, `scale?`, `uniform_scale?` (MODELING.md §9.4) | `{randomized}` | yes |
+| `object.transfer` | `target`, `source?`, `position?`, `rotation?`, `scale?`, `space?` world\|local (MODELING.md §9.5) | `{node}` | yes |
+| `mesh.array_command` | `node?`, `polys?`, `settings?: {copies, offset, rotation_deg, scale, mode}` (MODELING.md §9.6) | `{node, points, polys, selected}` | yes |
 | `mesh.transform` | `node?`, `points?`, `move?`, `rotate? {axis, angle}`, `scale?`, `pivot?`, `soft?`, `symmetry?` (EDITABLE.md §5.5) | `{node, moved, soft, symmetry}` | yes |
 | `edit.soft_selection` | `enabled?`, `radius?`, `falloff?`, `distance?`, `curve?` (EDITABLE.md §5.1) | the soft selection settings | no |
 | `edit.symmetry` | `enabled?`, `axis?`, `offset?`, `tolerance?` (EDITABLE.md §5.1) | the symmetry settings | no |

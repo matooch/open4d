@@ -334,7 +334,9 @@ History (`edit.undo`, `edit.redo`, `object.delete`); Objects (`object.create` fo
 command goes to the status bar like any other.
 
 Not in the palette yet (no registry command exists): snapping, workplane, axis mode.
-Pointer-driven tools (cuts, bridge, pen) stay in the Mesh menu.
+Pointer-driven tools (cuts, bridge, pen) stay in the Mesh menu, as do the arrangement tools
+(Array, Duplicate, Arrange, Randomize, Transfer; MODELING.md §9.7), which have a settings panel and no
+viewport interaction.
 
 ## 12. Attribute manager (`attributes`, `widgets`; brief 150)
 

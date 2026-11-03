@@ -116,6 +116,11 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `mesh_mirror` | Mirror. Undoable editing command. Runs command `mesh.mirror`. |
 | `mesh_center_axis` | Center Axis to. Undoable editing command. Runs command `mesh.center_axis`. |
 | `mesh_slide` | Slide. Undoable editing command. Runs command `mesh.slide`. |
+| `mesh_array_command` | Array. Undoable editing command. Runs command `mesh.array_command`. |
+| `object_duplicate` | Duplicate. Undoable editing command. Runs command `object.duplicate`. |
+| `object_arrange` | Arrange. Undoable editing command. Runs command `object.arrange`. |
+| `object_randomize` | Randomize. Undoable editing command. Runs command `object.randomize`. |
+| `object_transfer` | Transfer. Undoable editing command. Runs command `object.transfer`. |
 | `mesh_loop_cut` | Loop Cut. Undoable editing command. Runs command `mesh.loop_cut`. |
 | `mesh_knife` | Knife. Undoable editing command. Runs command `mesh.knife`. |
 | `mesh_bridge` | Bridge. Undoable editing command. Runs command `mesh.bridge`. |

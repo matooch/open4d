@@ -367,6 +367,106 @@ pub fn building_descs() -> Vec<ToolDesc> {
     ]
 }
 
+fn step_params(copies: i64) -> Vec<ParamDesc> {
+    vec![
+        ParamDesc::int("copies", "Copies", copies).range(1, 1000),
+        ParamDesc::vec3("offset", "Offset", [200.0, 0.0, 0.0]).range(-BIG, BIG),
+        ParamDesc::vec3("rotation_deg", "Rotation", [0.0; 3]).range(-BIG, BIG),
+        ParamDesc::vec3("scale", "Scale", [1.0; 3]).range(0.001, 1000.0),
+        ParamDesc::enumeration(
+            "mode",
+            "Mode",
+            "step",
+            &[("step", "Per Copy"), ("total", "Total")],
+        ),
+    ]
+}
+
+/// The Array command (`mesh.array_command`; MODELING.md §9.6), a mesh tool.
+pub fn array_descs() -> Vec<ToolDesc> {
+    vec![command_desc(
+        "array",
+        "Array",
+        "mesh.array_command",
+        false,
+        step_params(3),
+    )]
+}
+
+/// The object commands of MODELING.md §9 (`object.duplicate` ...). Their settings are the
+/// command's numeric arguments, flat; `nodes`, `source` and the like are not settings.
+pub fn object_descs() -> Vec<ToolDesc> {
+    let plane = &[("xz", "XZ"), ("xy", "XY"), ("zy", "ZY")];
+    let on = |id: &str, label: &str| ParamDesc::bool(id, label, true);
+    let mut duplicate = step_params(1);
+    duplicate[1] = ParamDesc::vec3("offset", "Offset", [0.0; 3]).range(-BIG, BIG);
+    vec![
+        command_desc(
+            "duplicate",
+            "Duplicate",
+            "object.duplicate",
+            false,
+            duplicate,
+        ),
+        command_desc(
+            "arrange",
+            "Arrange",
+            "object.arrange",
+            false,
+            vec![
+                ParamDesc::enumeration(
+                    "mode",
+                    "Mode",
+                    "line",
+                    &[("line", "Line"), ("grid", "Grid"), ("circle", "Circle")],
+                ),
+                ParamDesc::vec3("spacing", "Spacing", [200.0, 0.0, 0.0]).range(-BIG, BIG),
+                ParamDesc::vec3("row_spacing", "Row Spacing", [0.0, 0.0, 200.0]).range(-BIG, BIG),
+                ParamDesc::int("columns", "Columns", 3).range(1, 1_000_000),
+                ParamDesc::float("radius", "Radius", 200.0).range(0.0, BIG),
+                ParamDesc::enumeration("plane", "Plane", "xz", plane),
+                ParamDesc::float("start_angle_deg", "Start Angle", 0.0).range(-BIG, BIG),
+            ],
+        ),
+        command_desc(
+            "randomize",
+            "Randomize",
+            "object.randomize",
+            false,
+            vec![
+                ParamDesc::int("seed", "Seed", 1).range(0, 1_000_000_000_000_i64),
+                ParamDesc::vec3("position", "Position", [50.0; 3]).range(0.0, BIG),
+                ParamDesc::vec3("rotation_deg", "Rotation", [0.0; 3]).range(0.0, BIG),
+                ParamDesc::vec3("scale", "Scale", [0.0; 3]).range(0.0, 0.999),
+                ParamDesc::bool("uniform_scale", "Uniform Scale", false),
+            ],
+        ),
+        command_desc(
+            "transfer",
+            "Transfer",
+            "object.transfer",
+            false,
+            vec![
+                ParamDesc::int("target", "Target (node id)", -1).range(-1, 1_000_000_000_000_i64),
+                on("position", "Position"),
+                on("rotation", "Rotation"),
+                on("scale", "Scale"),
+                ParamDesc::enumeration(
+                    "space",
+                    "Space",
+                    "world",
+                    &[("world", "World"), ("local", "Local")],
+                ),
+            ],
+        ),
+    ]
+}
+
+/// The object command descriptor with this id (`duplicate`, `arrange`, `randomize`, `transfer`).
+pub fn object_desc(id: &str) -> Option<ToolDesc> {
+    object_descs().into_iter().find(|t| t.id == id)
+}
+
 /// Every tool, in menu order.
 pub fn tool_descs() -> Vec<ToolDesc> {
     let mut all = vec![extrude_desc(), extrude_inner_desc(), bevel_desc()];
@@ -382,5 +482,7 @@ pub fn tool_desc(id: &str) -> Option<ToolDesc> {
         .chain(cutting_descs())
         .chain(interactive_cut_descs())
         .chain(building_descs())
+        .chain(array_descs())
+        .chain(object_descs())
         .find(|t| t.id == id)
 }

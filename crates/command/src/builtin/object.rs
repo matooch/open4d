@@ -699,7 +699,7 @@ fn reparent(ctx: &mut dyn CommandContext, a: ReparentArgs) -> Result<Value, Comm
 
 /// The hierarchy nodes of `ids`, without duplicates and without nodes below another listed
 /// node, in the order given.
-fn top_level(scene: &forge_core::Scene, ids: &[NodeId]) -> Vec<NodeId> {
+pub(super) fn top_level(scene: &forge_core::Scene, ids: &[NodeId]) -> Vec<NodeId> {
     let chosen: BTreeSet<NodeId> = ids.iter().copied().collect();
     let mut seen = BTreeSet::new();
     ids.iter()
@@ -723,7 +723,7 @@ fn top_level(scene: &forge_core::Scene, ids: &[NodeId]) -> Vec<NodeId> {
         .collect()
 }
 
-fn siblings(scene: &forge_core::Scene, parent: Option<NodeId>) -> Vec<NodeId> {
+pub(super) fn siblings(scene: &forge_core::Scene, parent: Option<NodeId>) -> Vec<NodeId> {
     match parent {
         Some(p) => scene
             .node(p)

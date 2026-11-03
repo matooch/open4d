@@ -2,7 +2,7 @@
 
 # Command reference
 
-112 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+117 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -63,6 +63,11 @@
 | [`mesh.mirror`](#meshmirror) | Mirror | yes | `mesh_mirror` |
 | [`mesh.center_axis`](#meshcenter_axis) | Center Axis to | yes | `mesh_center_axis` |
 | [`mesh.slide`](#meshslide) | Slide | yes | `mesh_slide` |
+| [`mesh.array_command`](#mesharray_command) | Array | yes | `mesh_array_command` |
+| [`object.duplicate`](#objectduplicate) | Duplicate | yes | `object_duplicate` |
+| [`object.arrange`](#objectarrange) | Arrange | yes | `object_arrange` |
+| [`object.randomize`](#objectrandomize) | Randomize | yes | `object_randomize` |
+| [`object.transfer`](#objecttransfer) | Transfer | yes | `object_transfer` |
 | [`mesh.loop_cut`](#meshloop_cut) | Loop Cut | yes | `mesh_loop_cut` |
 | [`mesh.knife`](#meshknife) | Knife | yes | `mesh_knife` |
 | [`mesh.bridge`](#meshbridge) | Bridge | yes | `mesh_bridge` |
@@ -227,6 +232,68 @@ Rename Active. Not an undoable edit.
 No arguments.
 
 Example: `forge cmd scene.forge object.begin_rename --args '{}'`
+
+### `object.duplicate`
+
+Duplicate. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `copies` | integer | no | Default: `1`. |
+| `mode` | `"step"` \| `"total"` | no | Default: `"step"`. |
+| `nodes` | array of integer or null | no | Nodes to work on; the current selection when absent. |
+| `offset` | array of number (length 3) | no | Default: `[0.0,0.0,0.0]`. |
+| `rotation_deg` | array of number (length 3) | no | Default: `[0.0,0.0,0.0]`. |
+| `scale` | array of number (length 3) | no | Default: `[1.0,1.0,1.0]`. |
+
+Example: `forge cmd scene.forge object.duplicate --args '{"copies":2,"nodes":[1],"offset":[200.0,0.0,0.0]}'`
+
+### `object.arrange`
+
+Arrange. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `columns` | integer | no | Default: `3`. |
+| `mode` | `"line"` \| `"grid"` \| `"circle"` | no | Default: `"line"`. |
+| `nodes` | array of integer or null | no | Nodes to work on; the current selection when absent. |
+| `plane` | `"xz"` \| `"xy"` \| `"zy"` | no | Default: `"xz"`. |
+| `radius` | number | no | Default: `200.0`. |
+| `row_spacing` | array of number (length 3) | no | Default: `[0.0,0.0,200.0]`. |
+| `spacing` | array of number (length 3) | no | Default: `[200.0,0.0,0.0]`. |
+| `start_angle_deg` | number | no | Default: `0.0`. |
+
+Example: `forge cmd scene.forge object.arrange --args '{"mode":"line","nodes":[1,2],"spacing":[200.0,0.0,0.0]}'`
+
+### `object.randomize`
+
+Randomize. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Nodes to work on; the current selection when absent. |
+| `position` | array of number (length 3) | no | Default: `[50.0,50.0,50.0]`. |
+| `rotation_deg` | array of number (length 3) | no | Default: `[0.0,0.0,0.0]`. |
+| `scale` | array of number (length 3) | no | Default: `[0.0,0.0,0.0]`. |
+| `seed` | integer | no | Default: `1`. |
+| `uniform_scale` | boolean | no | Default: `false`. |
+
+Example: `forge cmd scene.forge object.randomize --args '{"nodes":[1],"position":[50.0,50.0,50.0],"seed":7}'`
+
+### `object.transfer`
+
+Transfer. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `position` | boolean | no | Default: `true`. |
+| `rotation` | boolean | no | Default: `true`. |
+| `scale` | boolean | no | Default: `true`. |
+| `source` | integer or null | no | Node to copy from; the active node when absent. |
+| `space` | `"world"` \| `"local"` | no | Default: `"world"`. |
+| `target` | integer | no | Default: `-1`. |
+
+Example: `forge cmd scene.forge object.transfer --args '{"source":1,"space":"world","target":2}'`
 
 
 ## `view`
@@ -776,6 +843,18 @@ Slide. One undo step.
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
 Example: `forge cmd scene.forge mesh.slide --args '{"edges":[0],"settings":{"amount":0.5}}'`
+
+### `mesh.array_command`
+
+Array. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.array_command --args '{"settings":{"copies":2,"offset":[200.0,0.0,0.0]}}'`
 
 ### `mesh.loop_cut`
 

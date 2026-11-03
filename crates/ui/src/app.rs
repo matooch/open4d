@@ -527,6 +527,14 @@ impl Editor {
                         ui.close();
                     }
                 }
+                // Array command, Duplicate, Arrange, Randomize, Transfer (MODELING.md §9)
+                ui.separator();
+                for tool in crate::tools::arrange_tools() {
+                    if ui.button(tool.label()).clicked() {
+                        crate::tools::activate_tool(&mut self.state, tool.id());
+                        ui.close();
+                    }
+                }
             });
             ui.menu_button("Create", |ui| {
                 ui.menu_button("Clone toolset", |ui| {

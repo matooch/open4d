@@ -1,6 +1,7 @@
 //! forge-modeling: modeling tools as pure functions on polygon meshes. Spec:
 //! docs/specs/MODELING.md.
 
+mod arrange;
 mod bevel;
 mod build;
 mod cut;
@@ -14,6 +15,9 @@ mod soft;
 mod surface;
 mod util;
 
+pub use arrange::{
+    MAX_ARRAY_POINTS, Step, arrange_positions, array, copy_step, randomize_draw, step_of,
+};
 pub use bevel::bevel;
 pub use build::{
     BridgeEnd, BuildOutput, MAX_SEGMENTS, PenCorner, StitchTo, border_loop, bridge, close_hole,
@@ -23,7 +27,8 @@ pub use cut::{
     CutOutput, KnifeLine, MAX_CUTS, Plane, View, even_offsets, knife_line, knife_plane, loop_cut,
 };
 pub use desc::{
-    ToolDesc, building_descs, cutting_descs, interactive_cut_descs, tool_desc, tool_descs,
+    ToolDesc, array_descs, building_descs, cutting_descs, interactive_cut_descs, object_desc,
+    object_descs, tool_desc, tool_descs,
 };
 pub use extrude::{extrude, extrude_inner};
 pub use merge::{dissolve, melt};
@@ -118,6 +123,7 @@ pub fn tool_fn(id: &str) -> Option<ToolFn> {
         "mirror" => Some(mirror),
         "center_axis" => Some(center_axis_tool),
         "slide" => Some(slide),
+        "array" => Some(array),
         _ => None,
     }
 }

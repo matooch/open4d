@@ -11,7 +11,8 @@ use forge_generators::{
 use forge_geometry::PolyMesh;
 use forge_geometry::selection::{IndexSet, Selection};
 use forge_modeling::{
-    Settings, ToolDesc, building_descs, cutting_descs, interactive_cut_descs, tool_descs, tool_fn,
+    Settings, ToolDesc, array_descs, building_descs, cutting_descs, interactive_cut_descs,
+    object_descs, tool_descs, tool_fn,
 };
 use serde_json::{Value as Json, json};
 
@@ -89,6 +90,61 @@ pub fn building_tools() -> Vec<Box<dyn Tool>> {
         .collect()
 }
 
+/// An object command tool (Duplicate, Arrange, Randomize, Transfer; MODELING.md §9): its
+/// settings are the command's numeric arguments, applied to the selected objects. No preview.
+pub struct ObjectTool {
+    pub desc: ToolDesc,
+}
+
+impl Tool for ObjectTool {
+    fn id(&self) -> &'static str {
+        self.desc.id
+    }
+
+    fn label(&self) -> &'static str {
+        self.desc.label
+    }
+
+    fn command_id(&self) -> &'static str {
+        self.desc.command
+    }
+
+    fn settings(&self) -> Vec<ParamDesc> {
+        self.desc.params.clone()
+    }
+
+    fn drag_param(&self) -> &'static str {
+        ""
+    }
+
+    fn preview(&self, _: &PolyMesh, _: &Selection, _: &Settings) -> Result<PolyMesh, String> {
+        Err("object command: no preview".into())
+    }
+}
+
+/// True for the tools whose command takes the settings as top-level arguments.
+pub fn is_object_tool(id: &str) -> bool {
+    object_descs().iter().any(|d| d.id == id)
+}
+
+/// The arrangement tools of brief 031 (docs/specs/MODELING.md §9): the Array command, then
+/// Duplicate, Arrange, Randomize and Transfer. Listed apart from the other tool lists.
+pub fn arrange_tools() -> Vec<Box<dyn Tool>> {
+    let mut all: Vec<Box<dyn Tool>> = array_descs()
+        .into_iter()
+        .filter_map(|desc| {
+            let apply = tool_fn(desc.id)?;
+            Some(Box::new(ModelingTool { desc, apply }) as Box<dyn Tool>)
+        })
+        .collect();
+    all.extend(
+        object_descs()
+            .into_iter()
+            .map(|desc| Box::new(ObjectTool { desc }) as Box<dyn Tool>),
+    );
+    all
+}
+
 /// Every tool, in menu order.
 pub fn tools() -> Vec<Box<dyn Tool>> {
     tool_descs()
@@ -143,6 +199,7 @@ pub fn activate_tool(state: &mut EditorState, id: &str) -> bool {
         .into_iter()
         .chain(cutting_tools())
         .chain(building_tools())
+        .chain(arrange_tools())
         .find(|t| t.id() == id)
     else {
         return false;
@@ -223,7 +280,19 @@ pub fn apply_tool(state: &mut EditorState) -> Result<Json, String> {
     if crate::building::is_build_tool(ts.tool.id()) {
         return crate::building::apply_build(state);
     }
-    let (command, args) = (ts.tool.command_id(), ts.command_args());
+    let (command, mut args) = (ts.tool.command_id(), ts.command_args());
+    if is_object_tool(ts.tool.id()) {
+        let tool = ts.tool.id();
+        // the object commands take the settings as top-level arguments
+        args = Json::Object(ts.values().to_json());
+        if tool == "transfer" && ts.values().int("target") < 0 {
+            // no id typed: the first selected object other than the active one
+            let active = state.selection.active;
+            if let Some(other) = state.selection.nodes.iter().find(|n| Some(**n) != active) {
+                args["target"] = json!(other.0);
+            }
+        }
+    }
     execute(state, command, args)
 }
 

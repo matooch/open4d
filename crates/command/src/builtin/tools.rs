@@ -8,7 +8,7 @@ use forge_generators::{
 };
 use forge_geometry::selection::{IndexSet, Selection};
 use forge_geometry::{Edge, PolyMesh};
-use forge_modeling::{Settings, ToolDesc, cutting_descs, tool_descs, tool_fn};
+use forge_modeling::{Settings, ToolDesc, array_descs, cutting_descs, tool_descs, tool_fn};
 use serde_json::{Map, Value as Json, json};
 
 use crate::context::CommandContext;
@@ -23,7 +23,11 @@ struct ToolCommand {
 }
 
 pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
-    for desc in tool_descs().into_iter().chain(cutting_descs()) {
+    for desc in tool_descs()
+        .into_iter()
+        .chain(cutting_descs())
+        .chain(array_descs())
+    {
         let apply: forge_modeling::ToolFn = tool_fn(desc.id)
             .ok_or_else(|| CommandError::Failed(format!("tool {} has no function", desc.id)))?;
         r.register(Box::new(ToolCommand {
@@ -83,7 +87,7 @@ fn center_object(
     Ok(())
 }
 
-fn setting_schema(p: &forge_core::ParamDesc) -> Json {
+pub(super) fn setting_schema(p: &forge_core::ParamDesc) -> Json {
     match &p.default {
         Value::Bool(b) => json!({"type": "boolean", "default": b}),
         Value::Int(i) => json!({"type": "integer", "default": i}),
@@ -333,6 +337,8 @@ impl CommandHandler for ToolCommand {
     fn sample_args(&self) -> Json {
         if self.desc.id == "slide" {
             json!({"edges": [0], "settings": {"amount": 0.5}})
+        } else if self.desc.id == "array" {
+            json!({"settings": {"copies": 2, "offset": [200.0, 0.0, 0.0]}})
         } else if self.desc.params.iter().any(|p| p.id == "offset") {
             json!({"polys": [0], "settings": {"offset": 10.0}})
         } else {
