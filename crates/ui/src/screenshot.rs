@@ -1,7 +1,6 @@
 //! `viewport.screenshot`: the scene rendered offscreen with the viewport renderer and
 //! encoded as PNG (docs/specs/RPC.md §10.2).
 
-use forge_core::EvalCtx;
 use forge_viewport::camera::Camera;
 use forge_viewport::grid::grid_lines;
 use forge_viewport::panes::{PaneRect, arrange};
@@ -11,7 +10,9 @@ use forge_viewport::render::{
 
 use crate::panes::{PANE_GAP, display_settings, scene_lights};
 use crate::state::EditorState;
-use crate::viewport_panel::{GpuCache, GpuItem, UploadSettings, scene_draw_items_at, upload_items};
+use crate::viewport_panel::{
+    GpuCache, GpuItem, UploadSettings, scheduled_draw_items, upload_items,
+};
 
 /// A headless wgpu device made on first use. A failure to find an adapter is remembered,
 /// so a machine without a GPU does not retry on every call.
@@ -35,9 +36,11 @@ const GAP_COLOR: [u8; 4] = [18, 18, 20, 255];
 /// pane, or the four panes side by side with the editor's lighting and anti-aliasing; the
 /// grid is drawn, selected objects are tinted, the gizmo is left out (UI.md §6.2).
 pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Vec<u8>, String> {
-    let scene = state.app.evaluated();
+    // the same scheduler pass the live viewport draws from
+    let current = state.app.timeline.current;
+    let frame = state.app.scheduled_draw(current);
+    let scene = frame.scene.clone();
     let selected = state.app.selection.nodes.clone();
-    let ctx = EvalCtx::at_frame(state.app.timeline.current, f64::from(scene.settings().fps));
     let lights = scene_lights(&scene);
     let views = state.views.clone();
     let panes: Vec<(PaneRect, Camera, Settings)> = arrange(
@@ -60,7 +63,7 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
         &mut GpuCache::default(),
         &gpu.device,
         &scene,
-        scene_draw_items_at(&scene, &selected, &ctx),
+        scheduled_draw_items(&frame, &selected),
         None,
         &palette,
         UploadSettings::default(),

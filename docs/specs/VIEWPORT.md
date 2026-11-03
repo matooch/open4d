@@ -506,6 +506,21 @@ cloners returned as `DrawItem::Instanced` when `cloner_instances` gives instance
 itself is unchanged and expands, for bounds, tests and export). The panel keeps two `RevisionCache`s
 (meshes, instance sets) and refreshes them when the scene revision, selection or component state changes (§10.2).
 
+**Scheduled drawing (brief 098).** The editor viewport and `viewport.screenshot` draw from the
+scheduler (CORE.md section 5b, `App::scheduled_draw`): `schedule::Frame.outputs` holds per drawn
+node its world-space mesh, or `instances` for a cloner `cloner_instances` can show.
+`viewport_panel::draw_item_of` / `scheduled_draw_items` turn outputs into the same
+`DrawItem`s as `scene_draw_items_at` (tested equal, bit for bit, at many frames, with
+selection and instancing). The panel's `SlotCache` keeps one built (uploaded) item per drawn
+node and reuses it while the node's output `Arc` is the same one, its selection state and
+smoothing are unchanged and it is not (and was not) the component target; so a playback
+frame rebuilds, hashes (§10.2) and uploads only the animated nodes and their dependants, and a
+pass that reused every output (same `generation`, selection, component target, LOD flag) does
+nothing. `RevisionCache` entries of nodes without an item are dropped. A live tool preview
+puts a mesh into the drawn scene that the scheduler does not know, so while one is shown the
+panel falls back to `scene_draw_items_at` on the previewed scene. `scene_meshes_at` (bounds,
+tests) is unchanged.
+
 Brief 079 (UI.md §16.4) adds no draw path: the clone UI edits parameters, the revision hash
 changes with the clone data, and the overlay for clone indices and axes is drawn by the egui
 painter above the viewport image (UI.md §16.3), not by the renderer.

@@ -95,7 +95,7 @@ implementers can avoid collisions.
 | 095 | [Motion paths and onion skin](../agents/tasks/095-motion-paths-onion.md) | G | 010, 143 | ready | viewport |
 | 096 | [Rotation: Euler filter, quaternion interpolation option](../agents/tasks/096-rotation-euler-quat.md) | G | 089 | waiting: O27, O53 | anim |
 | 097 | [Keyframe indicators on every parameter; key context menu](../agents/tasks/097-keyframe-indicators.md) | G | 088, 150 | ready | ui |
-| 098 | [Animated evaluation performance (dependency-aware re-evaluation)](../agents/tasks/098-animated-eval-performance.md) | G | 180 | ready | core, anim |
+| 098 | [Animated evaluation performance (dependency-aware re-evaluation)](../agents/tasks/098-animated-eval-performance.md) | G | 180 | done | core, anim |
 | 099 | [S7 acceptance test and animation docs](../agents/tasks/099-s7-animation-acceptance.md) | G | 090–096 | ready | tests, docs |
 | 100 | [Joint object, bone display, joint tools (align, mirror, chain creation)](../agents/tasks/100-joints.md) | H | 011 | waiting: O34 | rig (new), plugin, viewport |
 | 101 | [Skin deformer + Weight tag + bind pose (LBS, DQS option)](../agents/tasks/101-skin-weights.md) | H | 100, 050 | waiting: O34 | rig, modifiers |

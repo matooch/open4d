@@ -115,7 +115,9 @@ impl SceneSettings {
 #[derive(Debug, Clone)]
 pub struct Scene {
     registry: Arc<Registry>,
-    nodes: BTreeMap<NodeId, Node>,
+    /// Nodes are shared between copies of the scene: a copy clones only the nodes it
+    /// then writes to (`Arc::make_mut`), so animated copies stay cheap (CORE.md section 5b).
+    nodes: BTreeMap<NodeId, Arc<Node>>,
     roots: Vec<NodeId>,
     next_id: u64,
     revision: u64,
@@ -151,7 +153,7 @@ impl Scene {
     }
 
     pub fn node(&self, id: NodeId) -> Option<&Node> {
-        self.nodes.get(&id)
+        self.nodes.get(&id).map(|n| &**n)
     }
 
     /// The registered type of a node; `None` for missing nodes and unknown types.
@@ -269,20 +271,30 @@ impl Scene {
         overrides: impl IntoIterator<Item = (NodeId, String, Value)>,
     ) -> (Scene, Vec<(NodeId, String, EditError)>) {
         let mut scene = self.clone();
+        let skipped = scene.apply_params(overrides);
+        (scene, skipped)
+    }
+
+    /// [`Scene::with_params`] on this scene in place (a scene copy shares its nodes, so
+    /// only the nodes written to are cloned). Returns the overrides that were skipped.
+    pub fn apply_params(
+        &mut self,
+        overrides: impl IntoIterator<Item = (NodeId, String, Value)>,
+    ) -> Vec<(NodeId, String, EditError)> {
         let mut skipped = Vec::new();
         for (id, param, value) in overrides {
-            match scene.check_override(id, &param, value) {
+            match self.check_override(id, &param, value) {
                 Ok(value) => {
-                    let n = scene.nodes.get_mut(&id).expect("checked node");
-                    if n.params.get(&param) != Some(&value) {
+                    if self.node(id).and_then(|n| n.params.get(&param)) != Some(&value) {
+                        let n = Arc::make_mut(self.nodes.get_mut(&id).expect("checked node"));
                         n.params.insert(param, value);
-                        scene.stamp_unique(id);
+                        self.stamp_unique(id);
                     }
                 }
                 Err(e) => skipped.push((id, param, e)),
             }
         }
-        (scene, skipped)
+        skipped
     }
 
     fn check_override(&self, id: NodeId, param: &str, value: Value) -> Result<Value, EditError> {
@@ -314,7 +326,7 @@ impl Scene {
         self.revision = prev.max(local) + 1;
         let rev = self.revision;
         if let Some(n) = self.nodes.get_mut(&id) {
-            n.rev = rev;
+            Arc::make_mut(n).rev = rev;
         }
     }
 
@@ -356,7 +368,7 @@ impl Scene {
         self.revision += 1;
         let rev = self.revision;
         if let Some(n) = self.nodes.get_mut(&id) {
-            n.rev = rev;
+            Arc::make_mut(n).rev = rev;
         }
     }
 
@@ -367,7 +379,7 @@ impl Scene {
         key: &str,
         track: Option<Track>,
     ) -> Option<Track> {
-        let n = self.nodes.get_mut(&id).expect("validated node");
+        let n = Arc::make_mut(self.nodes.get_mut(&id).expect("validated node"));
         let old = match track {
             Some(t) => n.tracks.insert(key.to_string(), t),
             None => n.tracks.remove(key),
@@ -377,7 +389,7 @@ impl Scene {
     }
 
     pub(crate) fn node_mut(&mut self, id: NodeId) -> Option<&mut Node> {
-        self.nodes.get_mut(&id)
+        self.nodes.get_mut(&id).map(Arc::make_mut)
     }
 
     /// The ordered list a slot indexes into.
@@ -393,9 +405,11 @@ impl Scene {
         match slot_owner {
             SlotOwner::Children(None) => &mut self.roots,
             SlotOwner::Children(Some(p)) => {
-                &mut self.nodes.get_mut(&p).expect("slot parent").children
+                &mut Arc::make_mut(self.nodes.get_mut(&p).expect("slot parent")).children
             }
-            SlotOwner::Tags(h) => &mut self.nodes.get_mut(&h).expect("slot host").tags,
+            SlotOwner::Tags(h) => {
+                &mut Arc::make_mut(self.nodes.get_mut(&h).expect("slot host")).tags
+            }
         }
     }
 
@@ -430,7 +444,7 @@ impl Scene {
     fn attach(&mut self, id: NodeId, slot: Slot) {
         let (owner, index) = SlotOwner::of(slot);
         self.slot_list_mut(owner).insert(index, id);
-        let n = self.nodes.get_mut(&id).expect("attached node exists");
+        let n = Arc::make_mut(self.nodes.get_mut(&id).expect("attached node exists"));
         match slot {
             Slot::Child { parent, .. } => (n.parent, n.host) = (parent, None),
             Slot::Tag { host, .. } => (n.parent, n.host) = (None, Some(host)),
@@ -444,7 +458,7 @@ impl Scene {
         let root = subtree.nodes[0].id;
         let ids: Vec<NodeId> = subtree.nodes.iter().map(|n| n.id).collect();
         for n in subtree.nodes {
-            let prev = self.nodes.insert(n.id, n);
+            let prev = self.nodes.insert(n.id, Arc::new(n));
             assert!(prev.is_none(), "insert_subtree: id already in use");
         }
         for id in ids {
@@ -460,6 +474,7 @@ impl Scene {
         let mut stack = vec![id];
         while let Some(cur) = stack.pop() {
             let n = self.nodes.remove(&cur).expect("subtree node exists");
+            let n = Arc::try_unwrap(n).unwrap_or_else(|a| (*a).clone());
             stack.extend(n.children.iter().chain(&n.tags).rev());
             nodes.push(n);
         }
@@ -480,7 +495,7 @@ impl Scene {
         if node.parent.is_none() && node.host.is_none() {
             self.roots.push(node.id);
         }
-        self.nodes.insert(node.id, node);
+        self.nodes.insert(node.id, Arc::new(node));
     }
 }
 

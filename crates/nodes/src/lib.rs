@@ -15,8 +15,9 @@ mod script;
 
 pub use commands::register_commands;
 pub use expression::{
-    Diagnostic, GRAPH_PARAM, NodesToolset, TAG, apply_expressions, apply_expressions_with,
-    evaluate_tag, load_graph, tag_reads_time, tag_type,
+    Diagnostic, ExpressionRun, GRAPH_PARAM, NodesToolset, TAG, apply_expressions,
+    apply_expressions_in, apply_expressions_with, evaluate_tag, expression_tags, load_graph,
+    tag_reads_time, tag_type,
 };
 pub use graph::{Evaluation, Graph, GraphError, GraphNode, GraphNodeId, Link, PortRef};
 pub use nodes::{BuiltinNodes, noise_kind};

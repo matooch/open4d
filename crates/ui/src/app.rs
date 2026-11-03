@@ -1018,9 +1018,13 @@ impl Editor {
             self.viewport_interaction(ui, &response, rect, ppp, size);
         }
         let gizmo = self.current_gizmo();
-        let shown = self.state.evaluated();
-        // a live tool preview replaces the target's mesh in the drawn scene only
-        let shown = crate::tools::with_preview(&self.state, &shown).unwrap_or(shown);
+        // the scheduler's pass: only what changed since the last frame is evaluated and
+        // rebuilt (CORE.md section 5b); a live tool preview replaces the target's mesh in
+        // the drawn scene only, which the scheduler does not know, so it draws from scratch
+        let current = self.state.timeline.current;
+        let scheduled = self.state.app.scheduled_draw(current);
+        let previewed = crate::tools::with_preview(&self.state, &scheduled.scene);
+        let shown = previewed.clone().unwrap_or_else(|| scheduled.scene.clone());
         let lights = crate::panes::scene_lights(&shown);
         let tex = self.viewport.render(
             rs,
@@ -1037,6 +1041,7 @@ impl Editor {
                     self.state.timeline.current,
                     f64::from(shown.settings().fps),
                 ),
+                frame: previewed.is_none().then_some(&*scheduled),
             },
         );
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));

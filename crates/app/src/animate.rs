@@ -6,6 +6,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use forge_anim::{scene_at, value_at};
+
+use crate::schedule;
 use forge_core::transform::{POS, ROT, SCALE};
 use forge_core::{
     Document, EditError, Key, NodeId, ParamKind, Scene, Track, Tx, Value, parse_target,
@@ -65,6 +67,9 @@ pub struct Evaluated {
 struct Cached {
     key: (u64, usize, i64, u32),
     scene: Arc<Scene>,
+    /// Nodes with tracks, expression tags and whether one is enabled: valid for the
+    /// revision and node count of `key`.
+    inputs: (Vec<NodeId>, Vec<NodeId>, bool),
 }
 
 impl Evaluated {
@@ -80,12 +85,17 @@ impl Evaluated {
         }
         let time = frame_time(frame, fps);
         // Order (docs/specs/NODES.md section 5): tracks, then expression tags; generators
-        // read the result.
-        let animated = scene_at(scene, time);
-        let evaluated = Arc::new(forge_nodes::apply_expressions(&animated, time).0);
+        // read the result. Only the nodes written to are copied (section 5b).
+        let inputs = match cache.take() {
+            Some(c) if c.key.0 == key.0 && c.key.1 == key.1 => c.inputs,
+            _ => schedule::animation_inputs(scene),
+        };
+        let animated = schedule::animate(scene, &inputs.0, &inputs.1, inputs.2, time);
+        let evaluated = Arc::new(animated.scene);
         *cache = Some(Cached {
             key,
             scene: evaluated.clone(),
+            inputs,
         });
         evaluated
     }

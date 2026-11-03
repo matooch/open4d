@@ -162,3 +162,32 @@ fn levels_order_dependencies_first() {
     assert!(g.level(Vertex::result(f.a)) > g.level(Vertex::result(f.b)));
     assert!(g.level(Vertex::result(f.b)) > g.level(Vertex::result(f.c)));
 }
+
+#[test]
+fn a_scene_copy_shares_its_nodes_and_copies_only_the_ones_it_writes() {
+    let f = fixture();
+    let base = f.doc.scene();
+    let mut copy = base.clone();
+    for id in [f.a, f.b, f.c, f.tag, f.other] {
+        assert!(std::ptr::eq(base.node(id).unwrap(), copy.node(id).unwrap()));
+    }
+    let key = base
+        .node(f.other)
+        .unwrap()
+        .params
+        .keys()
+        .find(|k| matches!(base.param(f.other, k), Some(Value::Float(_))))
+        .expect("a float param")
+        .clone();
+    let skipped = copy.apply_params([(f.other, key.clone(), Value::Float(123.0))]);
+    assert!(skipped.is_empty());
+    assert_eq!(copy.param(f.other, &key), Some(&Value::Float(123.0)));
+    assert_ne!(base.param(f.other, &key), Some(&Value::Float(123.0)));
+    for id in [f.a, f.b, f.c, f.tag] {
+        assert!(std::ptr::eq(base.node(id).unwrap(), copy.node(id).unwrap()));
+    }
+    assert!(!std::ptr::eq(
+        base.node(f.other).unwrap(),
+        copy.node(f.other).unwrap()
+    ));
+}

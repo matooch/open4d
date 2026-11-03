@@ -7,7 +7,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use forge_app::animate::Evaluated;
-use forge_app::schedule::{Frame, NodeOutput, Scheduler, Threads, drawn_nodes, node_output};
+use forge_app::schedule::{
+    Frame, NodeOutput, Path as Found, Scheduler, Threads, drawn_nodes, node_output,
+};
 use forge_app::{App, default_registry};
 use forge_clone_engine::SplitMix64;
 use forge_core::{Document, EvalCtx, Key, NodeId, Scene, Value};
@@ -190,9 +192,9 @@ fn known(reg: &forge_core::Registry, ty: &str, t: &Table) -> Table {
 }
 
 fn check_scene(name: &str, scene: &Scene, frames: &[i64]) {
-    let mut serial = Scheduler::new(Threads::Serial);
-    let mut par = Scheduler::new(Threads::Fixed(4));
-    let mut auto = Scheduler::new(Threads::Auto);
+    let mut serial = Scheduler::new(Threads::Serial).with_validation(true);
+    let mut par = Scheduler::new(Threads::Fixed(4)).with_validation(true);
+    let mut auto = Scheduler::new(Threads::Auto).with_validation(true);
     for &fr in frames {
         let want = reference(scene, fr);
         let s = serial.evaluate(scene, fr);
@@ -385,8 +387,8 @@ fn all_ids(scene: &Scene) -> Vec<NodeId> {
 fn random_scenes_and_edits_match_the_full_serial_evaluation() {
     for seed in 0..12u64 {
         let mut doc = random_scene(seed);
-        let mut inc_serial = Scheduler::new(Threads::Serial);
-        let mut inc_par = Scheduler::new(Threads::Fixed(3));
+        let mut inc_serial = Scheduler::new(Threads::Serial).with_validation(true);
+        let mut inc_par = Scheduler::new(Threads::Fixed(3)).with_validation(true);
         let mut rng = SplitMix64::new(seed ^ 0xabcdef);
         for step in 0..10 {
             // a frame change or an edit, evaluated incrementally and from scratch
@@ -473,7 +475,7 @@ fn sorted(mut v: Vec<NodeId>) -> Vec<NodeId> {
 #[test]
 fn editing_one_node_evaluates_exactly_its_dependants() {
     let mut g = groups();
-    let mut s = Scheduler::new(Threads::Fixed(2));
+    let mut s = Scheduler::new(Threads::Fixed(2)).with_validation(true);
     let first = s.evaluate(g.app.doc.scene(), 0);
     assert_eq!(
         first.stats.evaluated.len(),
@@ -542,7 +544,7 @@ fn editing_one_node_evaluates_exactly_its_dependants() {
 #[test]
 fn removing_a_linked_node_dirties_its_former_dependants() {
     let mut g = groups();
-    let mut s = Scheduler::new(Threads::Serial);
+    let mut s = Scheduler::new(Threads::Serial).with_validation(true);
     s.evaluate(g.app.doc.scene(), 0);
     let fl = g.field;
     g.app.doc.transact("rm", |tx| tx.delete(fl)).unwrap();
@@ -564,7 +566,7 @@ fn a_sibling_deformer_dirties_the_objects_it_deforms() {
             Ok((null, cube, bend, other))
         })
         .unwrap();
-    let mut s = Scheduler::new(Threads::Serial);
+    let mut s = Scheduler::new(Threads::Serial).with_validation(true);
     s.evaluate(app.doc.scene(), 0);
     app.doc
         .transact("e", |tx| tx.set_param(bend, "strength", Value::Float(0.5)))
@@ -581,7 +583,7 @@ fn a_sibling_deformer_dirties_the_objects_it_deforms() {
 #[test]
 fn a_static_scene_does_no_work_on_a_frame_change() {
     let mut g = groups();
-    let mut s = Scheduler::new(Threads::Fixed(2));
+    let mut s = Scheduler::new(Threads::Fixed(2)).with_validation(true);
     s.evaluate(g.app.doc.scene(), 0);
     for fr in [1, 2, 50] {
         let f = s.evaluate(g.app.doc.scene(), fr);
@@ -603,9 +605,10 @@ fn only_the_animated_chain_is_re_evaluated_on_a_frame_change() {
             tx.set_key(moving, "transform.pos.x", Key::new(1.0, 90.0))
         })
         .unwrap();
-    let mut s = Scheduler::new(Threads::Fixed(2));
+    let mut s = Scheduler::new(Threads::Fixed(2)).with_validation(true);
     s.evaluate(g.app.doc.scene(), 0);
     let f = s.evaluate(g.app.doc.scene(), 10);
+    assert_eq!(f.stats.path, Found::ChangeSet);
     assert_eq!(f.stats.evaluated, sorted(vec![moving, g.nulls[0]]));
     assert_eq!(frame_bits(&f), reference(g.app.doc.scene(), 10));
     assert_eq!(
@@ -643,7 +646,7 @@ fn effector_scene(speed: f64) -> (Document, NodeId, NodeId, NodeId) {
 #[test]
 fn a_noise_effector_makes_its_cloner_time_dependent() {
     let (doc, cloner, other, effector) = effector_scene(1.0);
-    let mut s = Scheduler::new(Threads::Fixed(2));
+    let mut s = Scheduler::new(Threads::Fixed(2)).with_validation(true);
     s.evaluate(doc.scene(), 0);
     let f = s.evaluate(doc.scene(), 12);
     assert_eq!(f.stats.evaluated, sorted(vec![cloner, effector]));
@@ -651,7 +654,7 @@ fn a_noise_effector_makes_its_cloner_time_dependent() {
     assert!(!s.time_dependent().contains(&other));
     assert_eq!(frame_bits(&f), reference(doc.scene(), 12));
     let (still, ..) = effector_scene(0.0);
-    let mut s = Scheduler::new(Threads::Serial);
+    let mut s = Scheduler::new(Threads::Serial).with_validation(true);
     s.evaluate(still.scene(), 0);
     assert!(s.evaluate(still.scene(), 9).stats.evaluated.is_empty());
     assert!(s.time_dependent().is_empty());
@@ -705,10 +708,11 @@ fn expressions_run_in_order_and_drive_dirtiness() {
     );
     expr_link(&mut app, tag, (t, "seconds"), (v, "x"));
     expr_link(&mut app, tag, (v, "out"), (w, "value"));
-    let mut s = Scheduler::new(Threads::Fixed(2));
+    let mut s = Scheduler::new(Threads::Fixed(2)).with_validation(true);
     s.evaluate(app.doc.scene(), 0);
     let f = s.evaluate(app.doc.scene(), 15);
     assert!(f.stats.expressions_ran);
+    assert_eq!(f.stats.path, Found::ChangeSet);
     assert_eq!(f.stats.evaluated, vec![cubes[0]], "only the host moves");
     assert_eq!(frame_bits(&f), reference(app.doc.scene(), 15));
     assert!(s.time_dependent().contains(&cubes[0]) && s.time_dependent().contains(&tag));
@@ -734,7 +738,7 @@ fn link_cycles_are_reported_and_broken_the_same_way_every_time() {
                 Ok((a, b, plain))
             })
             .unwrap();
-        let mut s = Scheduler::new(Threads::Fixed(2));
+        let mut s = Scheduler::new(Threads::Fixed(2)).with_validation(true);
         let f = s.evaluate(app.doc.scene(), 0);
         (
             a,
@@ -757,7 +761,7 @@ fn link_cycles_are_reported_and_broken_the_same_way_every_time() {
 #[test]
 fn changing_fps_or_loading_another_document_starts_over() {
     let mut g = groups();
-    let mut s = Scheduler::new(Threads::Serial);
+    let mut s = Scheduler::new(Threads::Serial).with_validation(true);
     s.evaluate(g.app.doc.scene(), 0);
     g.app
         .run(
@@ -777,4 +781,47 @@ fn the_app_exposes_the_scheduler() {
     let mut g = groups();
     let f = g.app.scheduled(0);
     assert_eq!(frame_bits(&f), reference(g.app.doc.scene(), 0));
+}
+
+#[test]
+fn a_frame_change_copies_only_the_nodes_the_tracks_and_tags_write() {
+    let mut g = groups();
+    let moving = g.cubes[0][1];
+    g.app
+        .doc
+        .transact("k", |tx| {
+            tx.set_key(moving, "transform.pos.x", Key::new(0.0, 0.0))?;
+            tx.set_key(moving, "transform.pos.x", Key::new(1.0, 90.0))
+        })
+        .unwrap();
+    let base = g.app.doc.scene().clone();
+    let mut s = Scheduler::new(Threads::Serial).with_validation(true);
+    let first = s.evaluate(&base, 0);
+    assert_eq!(
+        first.stats.path,
+        Found::Diff,
+        "the first pass has no history"
+    );
+    for frame in [7, 3, 60, 0] {
+        let f = s.evaluate(&base, frame);
+        assert_eq!(f.stats.path, Found::ChangeSet);
+        let mut copied = Vec::new();
+        for id in forge_core::depgraph::all_nodes(&base) {
+            let (a, b) = (base.node(id).unwrap(), f.scene.node(id).unwrap());
+            if !std::ptr::eq(a, b) {
+                copied.push(id);
+            }
+        }
+        // (a value equal to the stored one is not even written)
+        assert!(copied.is_empty() || copied == vec![moving], "frame {frame}");
+        assert_eq!(frame_bits(&f), reference(&base, frame));
+    }
+    // an edit goes back to the diff, and the result is still right
+    g.app
+        .doc
+        .transact("e", |tx| tx.set_param(g.loose, "radius", Value::Float(5.0)))
+        .unwrap();
+    let f = s.evaluate(g.app.doc.scene(), 12);
+    assert_eq!(f.stats.path, Found::Diff);
+    assert_eq!(frame_bits(&f), reference(g.app.doc.scene(), 12));
 }

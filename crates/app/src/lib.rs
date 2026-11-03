@@ -82,6 +82,8 @@ pub struct App {
     pub eval: Evaluated,
     /// Dirty-only, parallel evaluation of the drawn nodes (docs/specs/CORE.md section 5b).
     pub scheduler: schedule::Scheduler,
+    /// The same for the viewport: showable cloners come out as instances.
+    pub draw_scheduler: schedule::Scheduler,
     /// Last message for the status bar (errors from failed edits).
     pub status: String,
     /// The file the scene was last saved to or loaded from.
@@ -114,6 +116,7 @@ impl App {
             autokey: false,
             eval: Evaluated::default(),
             scheduler: schedule::Scheduler::default(),
+            draw_scheduler: schedule::Scheduler::default().with_instancing(true),
             status: String::new(),
             file_path: None,
         }
@@ -142,6 +145,11 @@ impl App {
     /// call (docs/specs/CORE.md section 5b). The timeline does not move.
     pub fn scheduled(&mut self, frame: i64) -> Arc<schedule::Frame> {
         self.scheduler.evaluate(self.doc.scene(), frame)
+    }
+
+    /// [`App::scheduled`] for drawing (the viewport and screenshots): cloners are instances.
+    pub fn scheduled_draw(&mut self, frame: i64) -> Arc<schedule::Frame> {
+        self.draw_scheduler.evaluate(self.doc.scene(), frame)
     }
 
     /// Keeps the current frame inside the project range (after undo, load, range edits).
@@ -227,6 +235,7 @@ impl App {
         self.doc = doc;
         self.eval.clear();
         self.scheduler.clear();
+        self.draw_scheduler.clear();
         self.timeline = Timeline::default();
         self.sync_timeline();
         self.selection.clear();

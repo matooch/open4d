@@ -244,8 +244,35 @@ change.
 
 **Expressions** stay one ordered stage (section 5a): the stage reruns as a whole whenever
 the document changes or the frame changes and an enabled tag exists, in document order,
-each tag seeing the earlier writes. Its writes are discovered by the diff, so independence
-of tags is never assumed.
+each tag seeing the earlier writes. Independence of tags is never assumed.
+
+**Change set (brief 098).** When only the time moved (same document revision, node count,
+fps and seed as the last pass) the tracks and expression stage does not copy the scene and
+does not diff it. It reports what it wrote, `touched: Vec<(NodeId, param)>`: every
+parameter a track override or an enabled tag's `ParamWrite` addressed (a write that leaves
+the value as it was still counts). Starting from the stored document, only these pairs can
+differ between two evaluated scenes of the same document, so the dirty seeds are found by
+comparing, bit-exactly (`depgraph::identical`), the old and new value of the pairs touched
+in the previous pass or in this one: a changed `transform.*` / `object.*` param of a
+non-tag seeds `Frame(n)`, any other seeds `Result(n)`, the same rule as the diff. A
+changed `Link` / `LinkList` value (edges may differ) falls back to the full diff. The
+time-reader set is updated only for the nodes that changed (the readers are node-local),
+the dependency graph is kept, the node lists (all nodes, nodes with tracks, expression tags)
+are kept per document revision, and the drawn list is recomputed only when a dirty node or
+one of its children can have changed its drawn state. The full diff stays the path for a
+changed document (first pass, edit, undo, fps) and is the validator: `Scheduler::
+with_validation(true)` runs it on every change-set pass and panics if the seeds differ
+(all scheduler tests run with it on). `Stats::path` says which path a pass took
+(`None`, `ChangeSet`, `Diff`).
+
+**Sharing.** `Scene` stores nodes as `Arc<Node>`; cloning a scene clones one pointer per
+node, and the mutating primitives (`Scene::apply_params`, the document edits) copy a node
+on write (`Arc::make_mut`). `forge_app::schedule::animate` builds the evaluated scene as
+`scene.clone()` plus the track overrides plus the tags' writes, so a frame copies only the
+animated nodes and the nodes tags write to; every other node is the same allocation as in
+the document (tested with pointer equality). `animate` equals
+`apply_expressions(scene_at(scene, t), t)` (the tests compare the schedulers against the old
+`Evaluated` path bit for bit, and `Evaluated` itself now goes through `animate`).
 
 **Parallelism.** The units of work are the drawn nodes (enabled, editor-visible,
 not consumed by a parent generator) that are dirty or have no result yet. Each is a pure
@@ -265,27 +292,39 @@ edge that points at a vertex on the current path; each removal is reported as a
 harmless for reachability). The scheduler returns the breaks in its stats; evaluation
 itself does not follow links recursively beyond what the evaluators already guard.
 
+**Outputs for drawing.** `Scheduler::with_instancing(true)` (the app's `draw_scheduler`,
+`App::scheduled_draw`) stores a cloner that `cloner_instances` can show as
+`NodeOutput::instances` instead of an expanded mesh (VIEWPORT.md section 10.8); every other
+output is unchanged. `Frame` carries `drawn` (the drawn nodes in scene order) and
+`generation`, which changes exactly when some output was recomputed or the drawn list
+changed; a pass that reused everything keeps the previous generation. OBJ export keeps
+`export_scene` on the evaluated scene of `Evaluated` (it exports hidden objects and
+evaluates with the default context, so it is not the drawn set; only its animation stage is
+shared).
+
 **Benchmark** (`crates/app/benches/schedule.rs`, criterion): see the table below.
 
-Measured on 4 cores, debug-info-less release bench profile (criterion, median of 10 samples,
-frame advanced by one per iteration):
+Measured on 4 cores, release bench profile (criterion, median of 10 samples, frame advanced
+by one per iteration). "180" is the pass of brief 180 (scene copy plus bit-exact diff);
+"098" the change-set pass:
 
-| Scene | Path | Time | vs full serial |
+| Scene | Path | Time | vs old full serial |
 |---|---|---|---|
-| 1 animated cube + 1000 static cubes | old path: animate, evaluate every drawn node | 28.9 ms | 1.0x |
-| | scheduler, full evaluation, serial | 40.0 ms | 0.7x |
-| | scheduler, full evaluation, 4 threads | 14.2 ms | 2.0x |
-| | scheduler, dirty only, serial | 6.2 ms | 4.6x |
-| | scheduler, dirty only, 4 threads | 6.6 ms | 4.4x |
-| One cloner, 10 000 clones of a cube (full evaluation) | serial (1-thread pool) | 7.7 ms | 1.0x |
-| | 4 threads (parallel expansion) | 5.4 ms | 1.4x |
+| 1 animated cube + 1000 static cubes | old path: animate, evaluate every drawn node | 29.0 ms | 1.0x |
+| | scheduler, full evaluation, serial | 36.4 ms (180: 40.0) | 0.8x |
+| | scheduler, full evaluation, 4 threads | 11.9 ms (180: 14.2) | 2.4x |
+| | scheduler, dirty only, serial | **192 us** (180: 6.2 ms) | **151x** |
+| | scheduler, dirty only, 4 threads | **101 us** (180: 6.6 ms) | **287x** |
+| One cloner, 10 000 clones of a cube (full evaluation) | serial (1-thread pool) | 8.5 ms | 1.0x |
+| | 4 threads (parallel expansion) | 5.6 ms | 1.5x |
 
-The remaining 6 ms of the dirty-only pass is the per-pass scene copy, the bit-exact diff and
-the scheduler bookkeeping over 1001 nodes, which grow with the node count, not with the
-dirty set; trimming them (incremental animation instead of a scene copy) belongs to the
-playback brief 098. A single node cannot be spread over nodes, so the 10k cloner gains only
-from the parallel expansion (effectors stay serial: the Random effector's draws are
-index-keyed hashes but the effector trait takes a sequential closure).
+The target of brief 098 (playback at least 10x the full-evaluation rate) is met by more
+than 15x. What is left of the 190 us is cloning the node map (1001 pointers), the output
+map, one dirty-set walk and the bookkeeping; it still grows with the node count but at
+microseconds per thousand nodes, not milliseconds. A single node cannot be spread over
+nodes, so the 10k cloner gains only from the parallel expansion (effectors stay serial: the
+Random effector's draws are index-keyed hashes but the effector trait takes a sequential
+closure). The old path's variance between runs is about 10 %.
 
 ## 6. Native scene file (`file`)
 
