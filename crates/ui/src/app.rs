@@ -38,6 +38,7 @@ use crate::theme::Theme;
 use crate::viewport_panel::{
     NavAction, NavInput, NavMode, SceneView, ViewportPanel, apply_nav, nav_action,
 };
+use crate::workspaces::{LayoutStore, Workspace};
 
 mod files;
 mod recovery;
@@ -122,6 +123,14 @@ pub struct Editor {
     gesture: Option<u64>,
     /// The pointer was over the viewport last frame (Space plays only then).
     viewport_hot: bool,
+    /// The workspace the arrangement started from, shown in the Workspace menu (UI.md §21).
+    workspace: String,
+    /// Where saved layouts live; empty by default so tests never touch the user's folder.
+    layout_store: LayoutStore,
+    /// Bumped on every `set_layout`: egui forgets the remembered panel sizes (UI.md §21.2).
+    layout_gen: u32,
+    /// The name field of the "Save layout as" window while it is open.
+    save_layout_name: Option<String>,
     coord_space: Space,
     coord_third: Third,
     /// Manual apply mode, the typed values waiting for Apply, and what they belong to (UI.md §20).
@@ -158,6 +167,8 @@ impl eframe::App for Editor {
     /// Clean exit: the session's autosaves and marker go (docs/specs/PLATFORM.md §7.6).
     fn on_exit(&mut self) {
         self.state.autosave.finish();
+        // remembered for the next start; an unwritable folder is not worth a message now
+        let _ = self.layout_store.save_last(&self.layout());
     }
 }
 
@@ -203,6 +214,10 @@ impl Editor {
             gesture_seq: 0,
             gesture: None,
             viewport_hot: false,
+            workspace: "Standard".into(),
+            layout_store: LayoutStore::default(),
+            layout_gen: 0,
+            save_layout_name: None,
             coord_space: Space::Local,
             coord_third: Third::Scale,
             coord_manual: false,
@@ -232,6 +247,7 @@ impl Editor {
             version: crate::layout::LAYOUT_VERSION,
             dock: self.state.dock.clone(),
             sizes: self.sizes,
+            workspace: self.workspace.clone(),
         }
     }
 
@@ -239,6 +255,64 @@ impl Editor {
     pub fn set_layout(&mut self, layout: Layout) {
         self.state.dock = layout.dock;
         self.sizes = layout.sizes;
+        self.workspace = layout.workspace;
+        self.layout_gen += 1;
+    }
+
+    /// Replaces where saved layouts are kept (tests use a temporary folder).
+    pub fn set_layout_store(&mut self, store: LayoutStore) {
+        self.layout_store = store;
+    }
+
+    /// The saved layout names.
+    pub fn saved_layouts(&self) -> Vec<String> {
+        self.layout_store.list()
+    }
+
+    /// The workspace name shown in the Workspace menu.
+    pub fn workspace(&self) -> &str {
+        &self.workspace
+    }
+
+    /// Restores the arrangement remembered at the last exit, if any; a broken file gives the
+    /// standard layout and a warning in the status bar (UI.md §21.3).
+    pub fn restore_last_layout(&mut self) {
+        match self.layout_store.load_last() {
+            Ok(Some(l)) => {
+                self.set_layout(l.layout);
+                if let Some(w) = l.warning {
+                    self.state.status = w;
+                }
+            }
+            Ok(None) => {}
+            Err(e) => self.state.status = e,
+        }
+    }
+
+    /// Does one layout request of a command (UI.md §21.4); the error is for the status bar.
+    fn layout_request(&mut self, request: UiRequest) -> Result<(), String> {
+        match request {
+            UiRequest::Workspace(name) => {
+                let w = Workspace::from_name(&name).ok_or_else(|| {
+                    let all: Vec<&str> = Workspace::ALL.iter().map(|w| w.name()).collect();
+                    format!("no workspace named \"{name}\" (use {})", all.join(", "))
+                })?;
+                self.set_layout(w.layout());
+            }
+            UiRequest::LayoutSave(name) => {
+                self.layout_store.save(&name, &self.layout())?;
+            }
+            UiRequest::LayoutLoad(name) => {
+                let loaded = self.layout_store.load(&name)?;
+                self.set_layout(loaded.layout);
+                if let Some(w) = loaded.warning {
+                    return Err(w);
+                }
+            }
+            UiRequest::LayoutDelete(name) => self.layout_store.delete(&name)?,
+            _ => {}
+        }
+        Ok(())
     }
 
     /// Runs a command; an error goes to the status bar. True if it succeeded.
@@ -273,6 +347,14 @@ impl Editor {
                 UiRequest::Save => self.file_action(FileAction::Save),
                 UiRequest::SaveAs => self.file_action(FileAction::SaveAs),
                 UiRequest::CommandPalette => self.palette.open_palette(),
+                r @ (UiRequest::Workspace(_)
+                | UiRequest::LayoutSave(_)
+                | UiRequest::LayoutLoad(_)
+                | UiRequest::LayoutDelete(_)) => {
+                    if let Err(e) = self.layout_request(r) {
+                        self.state.status = e;
+                    }
+                }
                 UiRequest::RenameActive => {
                     if let Some(id) = self.state.selection.active
                         && let Some(n) = self.state.doc.scene().node(id)
@@ -302,6 +384,8 @@ impl Editor {
             }
             self.rpc = Some(inbox);
         }
+        // requests left by commands run outside `run_id` (a script, a test) (UI.md §21.4)
+        self.serve_ui_requests();
         // Closing the window with unsaved changes asks first (UI.md §15).
         if ui.ctx().input(|i| i.viewport().close_requested()) && !self.confirm_discard() {
             ui.ctx()
@@ -319,19 +403,20 @@ impl Editor {
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
         let sizes = self.sizes;
+        let salt = self.layout_gen;
         if !self.state.dock.tabs(Area::Top).is_empty() {
             egui::Panel::top("area_top")
                 .resizable(false)
                 .show(ui, |ui| self.area(ui, Area::Top, rs));
         }
         if !self.state.dock.tabs(Area::Bottom).is_empty() {
-            egui::Panel::bottom("area_bottom")
+            egui::Panel::bottom(("area_bottom", salt))
                 .resizable(true)
                 .default_size(sizes.bottom_height)
                 .show(ui, |ui| self.area(ui, Area::Bottom, rs));
         }
         if !self.state.dock.tabs(Area::Left).is_empty() {
-            egui::Panel::left("area_left")
+            egui::Panel::left(("area_left", salt))
                 .resizable(true)
                 .default_size(sizes.left_width)
                 .show(ui, |ui| self.area(ui, Area::Left, rs));
@@ -341,13 +426,13 @@ impl Editor {
             !self.state.dock.tabs(Area::RightBottom).is_empty(),
         );
         if top || bottom {
-            egui::Panel::right("area_right")
+            egui::Panel::right(("area_right", salt))
                 .resizable(true)
                 .default_size(sizes.right_width)
                 .show(ui, |ui| {
                     if top && bottom {
                         let h = ui.available_height();
-                        egui::Panel::top("area_right_top")
+                        egui::Panel::top(("area_right_top", salt))
                             .resizable(true)
                             .default_size(h * sizes.right_top_fraction)
                             .show(ui, |ui| self.area(ui, Area::RightTop, rs));
@@ -361,6 +446,7 @@ impl Editor {
         }
         egui::CentralPanel::no_frame().show(ui, |ui| self.area(ui, Area::Center, rs));
         self.keymap_editor.show(ui.ctx(), &mut self.state);
+        self.save_layout_window(ui.ctx());
         let ctx = ui.ctx().clone();
         let registry = self.state.app.commands.clone();
         if let Some((id, args)) = self.palette.show(&ctx, &registry, &self.state.keys.map) {
@@ -731,7 +817,76 @@ impl Editor {
                     ui.close();
                 }
             });
+            self.workspace_menu(ui);
         });
+    }
+
+    /// The workspace switcher (UI.md §21.5): every entry runs a registry command.
+    fn workspace_menu(&mut self, ui: &mut Ui) {
+        ui.menu_button("Workspace", |ui| {
+            for w in Workspace::ALL {
+                let on = self.workspace.eq_ignore_ascii_case(w.name());
+                if ui.selectable_label(on, w.name()).clicked() {
+                    self.run(("ui.workspace", json!({"name": w.name()})));
+                    ui.close();
+                }
+            }
+            let saved = self.layout_store.list();
+            if !saved.is_empty() {
+                ui.separator();
+                for name in &saved {
+                    let on = self.workspace == *name;
+                    if ui.selectable_label(on, name).clicked() {
+                        self.run(("ui.layout_load", json!({"name": name})));
+                        ui.close();
+                    }
+                }
+            }
+            ui.separator();
+            if ui.button("Save layout as\u{2026}").clicked() {
+                self.save_layout_name = Some(String::new());
+                ui.close();
+            }
+            if !saved.is_empty() {
+                ui.menu_button("Delete layout", |ui| {
+                    for name in &saved {
+                        if ui.button(name).clicked() {
+                            self.run(("ui.layout_delete", json!({"name": name})));
+                            ui.close();
+                        }
+                    }
+                });
+            }
+            if ui.button("Reset layout").clicked() {
+                self.run(("ui.workspace", json!({"name": "Standard"})));
+                ui.close();
+            }
+        });
+    }
+
+    /// The small "Save layout as" window.
+    fn save_layout_window(&mut self, ctx: &egui::Context) {
+        let Some(mut name) = self.save_layout_name.take() else {
+            return;
+        };
+        let (mut save, mut cancel) = (false, false);
+        egui::Window::new("Save layout as")
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                let label = ui.label("Name");
+                let r = ui.text_edit_singleline(&mut name).labelled_by(label.id);
+                let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                ui.horizontal(|ui| {
+                    save = ui.button("Save").clicked() || enter;
+                    cancel = ui.button("Cancel").clicked();
+                });
+            });
+        if save {
+            self.run(("ui.layout_save", json!({"name": name})));
+        } else if !cancel {
+            self.save_layout_name = Some(name);
+        }
     }
 
     fn status_bar(&mut self, ui: &mut Ui) {

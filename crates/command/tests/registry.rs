@@ -507,3 +507,29 @@ fn history_jump_moves_along_the_history_and_checks_the_range() {
         Err(CommandError::InvalidArgs(_))
     ));
 }
+
+#[test]
+fn layout_and_workspace_commands_need_the_window() {
+    let r = registry();
+    let mut c = Headless::new();
+    for id in [
+        "ui.workspace",
+        "ui.layout_save",
+        "ui.layout_load",
+        "ui.layout_delete",
+    ] {
+        assert!(r.get(id).is_some(), "missing {id}");
+        assert!(!r.get(id).unwrap().undoable(), "{id} is view state");
+        match r.run(&mut c, id, json!({"name": "Modeling"})) {
+            Err(CommandError::Failed(m)) => assert_eq!(m, "needs the editor window", "{id}"),
+            other => panic!("{id}: {other:?}"),
+        }
+        for bad in [json!({}), json!({"name": "a", "x": 1}), json!({"name": 3})] {
+            assert!(
+                matches!(r.run(&mut c, id, bad), Err(CommandError::InvalidArgs(_))),
+                "{id}"
+            );
+        }
+    }
+    assert_eq!(steps(&c), 0);
+}

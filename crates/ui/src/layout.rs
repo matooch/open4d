@@ -42,6 +42,16 @@ pub struct Layout {
     pub version: u32,
     pub dock: Dock,
     pub sizes: Sizes,
+    /// The workspace the arrangement started from (UI.md §21.1); empty for none.
+    #[serde(default)]
+    pub workspace: String,
+}
+
+/// A layout read leniently: the layout to use and why it is not the one in the file.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Loaded {
+    pub layout: Layout,
+    pub warning: Option<String>,
 }
 
 impl Layout {
@@ -53,6 +63,42 @@ impl Layout {
             version: LAYOUT_VERSION,
             dock: Dock::default(),
             sizes: Sizes::default(),
+            workspace: "Standard".into(),
+        }
+    }
+
+    /// Reads a layout file's text; anything unusable (not JSON, bad fields, a repeated
+    /// panel, another version) gives the standard layout and a warning (UI.md §21.1).
+    pub fn load_text(text: &str) -> Loaded {
+        let fallback = |why: String| Loaded {
+            layout: Layout::standard(),
+            warning: Some(format!(
+                "Layout file not usable ({why}): using the standard layout"
+            )),
+        };
+        // read the version first so an old or new file is named as such
+        match serde_json::from_str::<Value>(text) {
+            Ok(v) => match v.get("version").and_then(Value::as_u64) {
+                Some(n) if n < u64::from(LAYOUT_VERSION) => {
+                    return fallback(format!(
+                        "older version {n}, this build writes {LAYOUT_VERSION}"
+                    ));
+                }
+                Some(n) if n > u64::from(LAYOUT_VERSION) => {
+                    return fallback(format!(
+                        "newer version {n}, this build reads {LAYOUT_VERSION}"
+                    ));
+                }
+                _ => {}
+            },
+            Err(e) => return fallback(e.to_string()),
+        }
+        match Layout::from_json(text) {
+            Ok(layout) => Loaded {
+                layout,
+                warning: None,
+            },
+            Err(e) => fallback(e),
         }
     }
 

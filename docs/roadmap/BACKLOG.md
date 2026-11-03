@@ -153,7 +153,7 @@ implementers can avoid collisions.
 | 153 | [Viewport navigation parity (keys, mouse, frame commands, views)](../agents/tasks/153-viewport-navigation.md) | L | 152 | done (parity-pending G2) | viewport, ui |
 | 154 | [Content browser (own presets) and recent files](../agents/tasks/154-content-browser.md) | L | 163 | ready | ui |
 | 155 | [Preferences window and settings storage](../agents/tasks/155-preferences.md) | L | 175 | waiting: O29 | ui |
-| 156 | [Layout save/load and workspaces](../agents/tasks/156-layouts-workspaces.md) | L | 147 | ready | ui |
+| 156 | [Layout save/load and workspaces](../agents/tasks/156-layouts-workspaces.md) | L | 147 | done (parity-pending G1) | ui |
 | 157 | [HUD and viewport overlays](../agents/tasks/157-hud-overlays.md) | L | 143 | ready | viewport |
 | 158 | [Layer manager](../agents/tasks/158-layer-manager.md) | L | 149 | ready | ui, core |
 | 159 | [Command palette and undo history panel](../agents/tasks/159-command-palette-history.md) | L | 011 | done | ui |

@@ -1062,3 +1062,81 @@ axis and angle), Size `scale`; a draft with several rows is one `mesh.transform`
 size, one step, autokey, errors, no change on error); `crates/ui/tests/coordinates_manager.rs`
 (pure mixed detection, each mode through egui_kittest: world move of two objects is one
 undo step, scale/size switch, manual draft and Apply, component rows via `mesh.transform`).
+
+## 21. Workspaces and saved layouts (`workspaces`, `layout`, `app`; brief 156)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; the per-OS directories are PLATFORM.md §8.
+GUI session G1 (docs/parity/GUI-SESSIONS.md) is unanswered, so **the workspace names' contents,
+the panel placement and the menu bar switcher are parity-pending**. View state only: nothing
+here touches the document, the selection or the undo history.
+
+### 21.1 Layout data and versions
+`Layout { version, dock, sizes, workspace }` (§11). `workspace` is the name of the workspace the
+arrangement started from (`#[serde(default)]`, empty for none). `LAYOUT_VERSION` stays `1`: a
+field added with a serde default keeps the version; the version is raised only for an
+incompatible change. `Layout::load_text(text) -> Loaded { layout, warning }` never fails: a
+file that is not JSON, has a missing or wrong field type, lists a panel twice, has an active tab
+out of range, or has a version other than `LAYOUT_VERSION` ("older" below it, "newer" above)
+gives `Layout::standard()` and a one-line warning that names the reason. `from_json` is the
+strict parser (an error for each of those cases) and stays as it was.
+
+### 21.2 Workspaces (`workspaces::Workspace`)
+Six built-in arrangements, each `Workspace::layout() -> Layout` with `workspace` set to its
+name. Names (also the `ui.workspace` argument, matched case-insensitively): `Standard`,
+`Modeling`, `Animate`, `UV`, `Rigging`, `Node`. Every panel (Panel::ALL) is open in no more
+than one area; the Viewport is open in all of them (the UV workspace has no UV editor panel yet,
+brief 129 adds it), and panels not listed are closed (reopen from the Window menu).
+
+| Workspace | Top | Left | Centre | Right top | Right bottom | Bottom | Sizes (left, right, fraction, bottom) |
+|---|---|---|---|---|---|---|---|
+| Standard | Command bar | Tools | Viewport | Objects | Attributes | Timeline, Coordinates | 150, 340, 0.45, 120 |
+| Modeling | Command bar | Tools | Viewport | Objects | Attributes, Coordinates | History, Console | 150, 360, 0.35, 150 |
+| Animate | Command bar | Tools | Viewport | Objects | Attributes, Coordinates | Timeline, History | 150, 340, 0.40, 240 |
+| UV | Command bar | Tools | Viewport | - | Attributes, Coordinates, Objects | History | 150, 400, 0.45, 120 |
+| Rigging | Command bar | Tools | Viewport | Objects | Attributes | Timeline, Coordinates, Script | 150, 380, 0.60, 160 |
+| Node | Command bar | - | Node Editor, Viewport | Objects | Attributes | Console, History, Script | 150, 340, 0.45, 200 |
+
+`Standard` equals `Layout::standard()`. Each tab list starts with the shown tab. Switching
+applies the dock and the sizes (egui forgets its remembered panel sizes: a new size generation
+re-seeds them).
+
+### 21.3 Layout files (`workspaces::LayoutStore`)
+User layouts live in `<config>/layouts/<name>.json` (PLATFORM.md §8), the layout as
+`Layout::to_json`. A name is 1 to 48 characters of letters, digits, space, `-` and `_`, starting
+with a letter or digit, without leading or trailing space, and is not a workspace name
+(case-insensitive); otherwise the request fails with the reason. Saving replaces a file of the
+same name (written to a temporary file and renamed). `list()` is the names, sorted, of valid
+`*.json` files (hidden `_`-files and other extensions are ignored). `load(name)` returns a
+`Loaded`: a missing file is an error ("no layout named X"), a broken or old file the standard
+layout and a warning. `delete(name)` removes the file (missing: error). Without a config
+directory (no home folder) save fails with "no layout folder", `list` is empty.
+`_last.json` in the same folder remembers the arrangement at exit; the studio restores it at
+start (`Editor::restore_last_layout`), a broken file falls back to the standard layout and
+puts the warning into the status bar. Tests use a store over a temporary folder
+(`Editor::set_layout_store`); the default store of `Editor::new` is empty so tests never touch
+the user's folder.
+
+### 21.4 Commands (COMMANDS.md §6; window actions like `ui.command_palette`)
+`ui.workspace {name}`, `ui.layout_save {name}`, `ui.layout_load {name}`,
+`ui.layout_delete {name}`. Not undoable, no document change. They ask the window
+(`UiRequest::Workspace`, `LayoutSave`, `LayoutLoad`, `LayoutDelete`); headless contexts and the
+RPC server refuse with `needs the editor window`. Errors from the window (bad name, no such
+layout, no folder, I/O) and warnings (a broken file replaced by the standard layout) go to the
+status bar. `ui.layout_save` stores the current arrangement; `ui.layout_load` applies a saved
+one and takes its `workspace` as the shown name.
+
+### 21.5 Menu bar
+A "Workspace" menu in the menu bar (right of Window) lists the six workspaces (the current one
+checked), then the saved layouts, then "Save layout as..." (a name field and a Save button in a
+small window), "Delete layout" (a submenu of saved layouts) and "Reset layout" (the standard
+workspace). Each entry runs the command above, so it is also in the command palette. The
+Window menu's "Reset layout" is unchanged.
+
+### 21.6 Tests
+Pure in `workspaces.rs` (names, every workspace valid and containing the Viewport, store round
+trip in a temporary folder, bad names, listing, delete, broken/old/newer/duplicated files fall
+back with a warning); `crates/ui/tests/workspaces.rs` (egui_kittest: each workspace switch via
+command and menu, the document and undo history untouched, save/load/delete through commands,
+a broken file on disk loads the standard layout with a warning in the status bar, the last
+layout restore); `crates/command/tests/registry.rs` (headless refusal).
+

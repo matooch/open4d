@@ -38,6 +38,7 @@ pub mod tools;
 pub mod tree;
 pub mod viewport_panel;
 pub mod widgets;
+pub mod workspaces;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -191,6 +192,8 @@ pub fn run_with_rpc(registry: Arc<Registry>, rpc: Option<forge_rpc::Inbox>) -> e
                     );
                     state.crash_notice = crash_notice::CrashNotice::start_default();
                     let mut editor = app::Editor::new(state);
+                    editor.set_layout_store(workspaces::LayoutStore::platform());
+                    editor.restore_last_layout();
                     if let Some(inbox) = rpc {
                         editor.attach_rpc(inbox);
                     }

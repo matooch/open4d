@@ -160,6 +160,10 @@ touch history.
 | `file.save_as` | `path` | `{path}` | no |
 | `file.open_dialog` `file.save_dialog` `file.save_as_dialog` | - | null | no |
 | `ui.command_palette` | - | null | no |
+| `ui.workspace` | `name` (Standard, Modeling, Animate, UV, Rigging, Node) | null | no |
+| `ui.layout_save` | `name` | null | no |
+| `ui.layout_load` | `name` | null | no |
+| `ui.layout_delete` | `name` | null | no |
 | `file.autosave_now` | `wait?` (flush the background write) | `{path, queued}` | no |
 | `file.import_obj` | `path` | `{nodes}` | yes |
 | `file.export_obj` | `path`, `selected?` | `{objects}` | no |
@@ -224,6 +228,9 @@ Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and A
   are applied, then retain_existing and clamp the timeline like `edit.undo`. `position` above the
   number of undo plus redo steps is `InvalidArgs`. It is the history panel's click.
 - `ui.command_palette` (brief 159, UI.md §18): a window action like the `file.*_dialog` ones.
+- `ui.workspace`, `ui.layout_save`, `ui.layout_load`, `ui.layout_delete` (brief 156, UI.md §21):
+  window actions too (headless: `needs the editor window`, unknown keys `InvalidArgs`); view state,
+  not undoable, the document is untouched. Errors of the window go to the status bar.
 - `mesh.*`: EDITABLE.md §1; skipped nodes (no mesh) are listed in `skipped` and in the
   status text. Empty selection is `Failed`.
 - `select.*`: EDITABLE.md §2.5 (model mode selects objects).

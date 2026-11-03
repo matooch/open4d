@@ -133,6 +133,22 @@ impl Default for Dock {
 }
 
 impl Dock {
+    /// A dock with exactly the listed tabs per area (the first tab of each is shown); areas
+    /// not listed are empty. A panel listed twice keeps its first place.
+    pub fn arranged(areas: &[(Area, &[Panel])]) -> Dock {
+        let mut d = Dock {
+            areas: Default::default(),
+        };
+        for (area, tabs) in areas {
+            for p in *tabs {
+                if d.area_of(*p).is_none() {
+                    d.areas[*area as usize].tabs.push(*p);
+                }
+            }
+        }
+        d
+    }
+
     /// True if no panel appears twice and every active index is in range (a loaded dock
     /// must satisfy this; the editing methods keep it).
     pub fn is_valid(&self) -> bool {

@@ -2,7 +2,7 @@
 
 # Command reference
 
-128 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+132 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -121,6 +121,10 @@
 | [`file.save_dialog`](#filesave_dialog) | Save | no | `file_save_dialog` |
 | [`file.save_as_dialog`](#filesave_as_dialog) | Save As... | no | `file_save_as_dialog` |
 | [`ui.command_palette`](#uicommand_palette) | Command Palette... | no | `ui_command_palette` |
+| [`ui.workspace`](#uiworkspace) | Workspace | no | `ui_workspace` |
+| [`ui.layout_save`](#uilayout_save) | Save Layout | no | `ui_layout_save` |
+| [`ui.layout_load`](#uilayout_load) | Load Layout | no | `ui_layout_load` |
+| [`ui.layout_delete`](#uilayout_delete) | Delete Layout | no | `ui_layout_delete` |
 | [`file.import_obj`](#fileimport_obj) | Import OBJ | yes | `file_import_obj` |
 | [`file.export_obj`](#fileexport_obj) | Export OBJ | no | `file_export_obj` |
 | [`param.edit`](#paramedit) | Edit Parameter | yes | `param_edit` |
@@ -1513,6 +1517,46 @@ Command Palette.... Not an undoable edit.
 No arguments.
 
 Example: `forge cmd scene.forge ui.command_palette --args '{}'`
+
+### `ui.workspace`
+
+Workspace. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | A workspace name (`ui.workspace`) or the name of a saved layout. |
+
+Example: `forge cmd scene.forge ui.workspace --args '{"name":"Modeling"}'`
+
+### `ui.layout_save`
+
+Save Layout. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | A workspace name (`ui.workspace`) or the name of a saved layout. |
+
+Example: `forge cmd scene.forge ui.layout_save --args '{"name":"My layout"}'`
+
+### `ui.layout_load`
+
+Load Layout. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | A workspace name (`ui.workspace`) or the name of a saved layout. |
+
+Example: `forge cmd scene.forge ui.layout_load --args '{"name":"My layout"}'`
+
+### `ui.layout_delete`
+
+Delete Layout. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | A workspace name (`ui.workspace`) or the name of a saved layout. |
+
+Example: `forge cmd scene.forge ui.layout_delete --args '{"name":"My layout"}'`
 
 
 ## `graph`

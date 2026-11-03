@@ -164,6 +164,16 @@ pub fn dirs() -> Option<Dirs> {
     ))
 }
 
+/// The folder of saved window layouts, `<config>/layouts` (docs/specs/PLATFORM.md §8).
+pub fn layouts_dir_with(dirs: &Dirs) -> PathBuf {
+    dirs.config.join("layouts")
+}
+
+/// The layouts folder of this process (`None` without a home folder).
+pub fn layouts_dir() -> Option<PathBuf> {
+    dirs().map(|d| layouts_dir_with(&d))
+}
+
 /// The settings file of this process, migrating a pre-175 file on first use (silently).
 pub fn settings_path() -> Option<PathBuf> {
     let base = BaseFolders::from_system();

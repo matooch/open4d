@@ -103,6 +103,58 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
     }
     r.register_fn(
         spec(
+            "ui.workspace",
+            "Workspace",
+            false,
+            || json!({"name": "Modeling"}),
+        ),
+        |c, a: LayoutNameArgs| {
+            c.request_ui(UiRequest::Workspace(a.name))
+                .map(|()| Value::Null)
+                .map_err(CommandError::Failed)
+        },
+    )?;
+    r.register_fn(
+        spec(
+            "ui.layout_save",
+            "Save Layout",
+            false,
+            || json!({"name": "My layout"}),
+        ),
+        |c, a: LayoutNameArgs| {
+            c.request_ui(UiRequest::LayoutSave(a.name))
+                .map(|()| Value::Null)
+                .map_err(CommandError::Failed)
+        },
+    )?;
+    r.register_fn(
+        spec(
+            "ui.layout_load",
+            "Load Layout",
+            false,
+            || json!({"name": "My layout"}),
+        ),
+        |c, a: LayoutNameArgs| {
+            c.request_ui(UiRequest::LayoutLoad(a.name))
+                .map(|()| Value::Null)
+                .map_err(CommandError::Failed)
+        },
+    )?;
+    r.register_fn(
+        spec(
+            "ui.layout_delete",
+            "Delete Layout",
+            false,
+            || json!({"name": "My layout"}),
+        ),
+        |c, a: LayoutNameArgs| {
+            c.request_ui(UiRequest::LayoutDelete(a.name))
+                .map(|()| Value::Null)
+                .map_err(CommandError::Failed)
+        },
+    )?;
+    r.register_fn(
+        spec(
             "file.import_obj",
             "Import OBJ",
             true,
@@ -189,6 +241,13 @@ fn export_obj(ctx: &mut dyn CommandContext, a: ExportArgs) -> Result<Value, Comm
     Ok(json!({"objects": objects.len()}))
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct LayoutNameArgs {
+    /// A workspace name (`ui.workspace`) or the name of a saved layout.
+    name: String,
+}
+
 /// `file.open_dialog`, `file.save_dialog`, `file.save_as_dialog`: the File menu items that
 /// ask for a file name, so a shortcut can run them (the window shows the dialog); and
 /// `ui.command_palette` (UI.md §18), which the window serves the same way.
@@ -218,7 +277,8 @@ impl CommandHandler for DialogCommand {
                 self.id
             )));
         }
-        ctx.request_ui(self.request).map_err(CommandError::Failed)?;
+        ctx.request_ui(self.request.clone())
+            .map_err(CommandError::Failed)?;
         Ok(Value::Null)
     }
 

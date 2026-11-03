@@ -293,3 +293,12 @@ everywhere in the text. Writing a report never fails the panic: errors are ignor
 `<dir>/.seen`. The editor shows a window "Forge3D crashed last time" (UI.md §15.2) with the
 report names, **Open folder** and **Dismiss**; both mark the listed reports as seen (they are
 not deleted). If the autosave recovery window (§7.7) has entries, the notice says so.
+
+## 8. Layout files (brief 156)
+
+Saved window layouts (UI.md §21) are files below the config directory of §1:
+`<config>/layouts/<name>.json`, and `<config>/layouts/_last.json` for the arrangement at exit.
+`forge_platform::layouts_dir() -> Option<PathBuf>` is `dirs().config.join("layouts")` (`None`
+without a home folder; `FORGE_SETTINGS` does not move it). `layouts_dir_with(&Dirs)` is the pure
+form. The folder is created on the first save.
+

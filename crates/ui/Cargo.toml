@@ -36,6 +36,7 @@ wgpu = "30"
 [dev-dependencies]
 egui_kittest = "0.37"
 forge-modifiers = { path = "../modifiers" }
+tempfile = "3"
 
 [lints]
 workspace = true

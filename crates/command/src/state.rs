@@ -211,7 +211,7 @@ pub struct CameraSet {
 
 /// Something only the editor window can do (file dialogs, inline rename). A command asks
 /// for it through [`crate::CommandContext::request_ui`]; headless contexts refuse.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UiRequest {
     /// File > Open with a file dialog.
     Open,
@@ -223,4 +223,12 @@ pub enum UiRequest {
     RenameActive,
     /// Opens the command palette (docs/specs/UI.md §18).
     CommandPalette,
+    /// Switches to a built-in workspace (docs/specs/UI.md §21).
+    Workspace(String),
+    /// Saves the current arrangement as a named layout.
+    LayoutSave(String),
+    /// Applies a saved layout.
+    LayoutLoad(String),
+    /// Deletes a saved layout.
+    LayoutDelete(String),
 }

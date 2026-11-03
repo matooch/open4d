@@ -174,6 +174,10 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `file_save_dialog` | Save. Not an undoable edit. Runs command `file.save_dialog`. |
 | `file_save_as_dialog` | Save As.... Not an undoable edit. Runs command `file.save_as_dialog`. |
 | `ui_command_palette` | Command Palette.... Not an undoable edit. Runs command `ui.command_palette`. |
+| `ui_workspace` | Workspace. Not an undoable edit. Runs command `ui.workspace`. |
+| `ui_layout_save` | Save Layout. Not an undoable edit. Runs command `ui.layout_save`. |
+| `ui_layout_load` | Load Layout. Not an undoable edit. Runs command `ui.layout_load`. |
+| `ui_layout_delete` | Delete Layout. Not an undoable edit. Runs command `ui.layout_delete`. |
 | `file_import_obj` | Import OBJ. Undoable editing command. Runs command `file.import_obj`. |
 | `file_export_obj` | Export OBJ. Not an undoable edit. Runs command `file.export_obj`. |
 | `param_edit` | Edit Parameter. Undoable editing command. Runs command `param.edit`. |
