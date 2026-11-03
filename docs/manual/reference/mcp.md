@@ -130,6 +130,14 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `mesh_transform` | Transform Components. Undoable editing command. Runs command `mesh.transform`. |
 | `edit_soft_selection` | Soft Selection. Not an undoable edit. Runs command `edit.soft_selection`. |
 | `edit_symmetry` | Symmetry. Not an undoable edit. Runs command `edit.symmetry`. |
+| `object_set_axis` | Set Axis. Undoable editing command. Runs command `object.set_axis`. |
+| `object_center_axis` | Center Axis. Undoable editing command. Runs command `object.center_axis`. |
+| `object_align_axis` | Align Axis. Undoable editing command. Runs command `object.align_axis`. |
+| `edit_axis_mode` | Axis Mode. Not an undoable edit. Runs command `edit.axis_mode`. |
+| `snap_set` | Snap Settings. Not an undoable edit. Runs command `snap.set`. |
+| `snap_toggle` | Snapping. Not an undoable edit. Runs command `snap.toggle`. |
+| `snap_reset` | Reset Snapping. Not an undoable edit. Runs command `snap.reset`. |
+| `snap_query` | Snap Query. Not an undoable edit. Runs command `snap.query`. |
 | `param_set` | Set Parameter. Undoable editing command. Runs command `param.set`. |
 | `key_record` | Record. Undoable editing command. Runs command `key.record`. |
 | `key_delete_at_frame` | Delete Keys. Undoable editing command. Runs command `key.delete_at_frame`. |

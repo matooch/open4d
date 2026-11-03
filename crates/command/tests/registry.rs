@@ -20,6 +20,7 @@ struct Headless {
     status: String,
     path: Option<String>,
     component_settings: forge_modeling::ComponentSettings,
+    transform_settings: forge_modeling::snap::TransformSettings,
 }
 
 impl Headless {
@@ -41,6 +42,7 @@ impl Headless {
             status: String::new(),
             path: None,
             component_settings: Default::default(),
+            transform_settings: Default::default(),
         }
     }
 }
@@ -69,6 +71,12 @@ impl CommandContext for Headless {
     }
     fn component_settings_mut(&mut self) -> &mut forge_modeling::ComponentSettings {
         &mut self.component_settings
+    }
+    fn transform_settings(&self) -> &forge_modeling::snap::TransformSettings {
+        &self.transform_settings
+    }
+    fn transform_settings_mut(&mut self) -> &mut forge_modeling::snap::TransformSettings {
+        &mut self.transform_settings
     }
     fn timeline(&self) -> &Timeline {
         &self.timeline

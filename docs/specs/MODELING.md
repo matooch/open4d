@@ -714,6 +714,9 @@ loop tools at the hovered edge. The tools reuse `ToolState`; hover and drag live
   `mesh.knife` (line mode, `eye` or `direction` from the camera). A drag shorter than 3 pixels
   does nothing. **Knife Plane**: the same drag, with an unbounded segment (plane mode: the plane
   through the eye and the dragged line). **Knife Loop**: hover and click as the loop cut with one cut (settings `lock_offset`, `offset`).
+- **Snapping** (brief 032, MANIPULATE.md §6.7): with `snap.enabled` the Knife drag end points move to the
+  pixel of the snap hit, and the loop offset snaps to 0.5 within the snap radius of the edge midpoint
+  (`edge_midpoint` target on).
 - **Slide**: the standard tool drag (§0.2) sets `amount` (one viewport height = 2.0); the release
   applies.
 - Nothing is written during hover or drag; the target is the active polygon object; all three
@@ -807,7 +810,9 @@ active polygon object.
   (preview while the second is hovered). Apply runs the command with the two picked edges, or with
   exactly two selected border edges. Bridge setting: `segments`; Stitch setting: `position`.
 - **Polygon Pen**: each click adds a corner, snapped to an existing point within the point pick radius
-  (else a point on the plane through the camera target facing the viewer); a click on the first
+  (else a point on the plane through the camera target facing the viewer); with snapping on
+  (MANIPULATE.md §6.7) the snap hit decides first: a vertex of the target is the `Point` corner, any
+  other target a `New` corner at the hit; a click on the first
   corner with three or more corners, or Apply, runs `mesh.pen`. Reset Values / Done discard the
   corners. The preview shows the polygon once there are three corners.
 Nothing is written during hover.

@@ -346,6 +346,30 @@ impl Drag {
         })
     }
 
+    /// Translate drags only: the delta that puts the gizmo origin on `target` as far as the
+    /// handle allows (axis handle: along the axis; plane handle: within the plane; centre
+    /// handle: all of it; docs/specs/MANIPULATE.md §6.7). Other drags keep their last delta.
+    pub fn translate_to(&mut self, target: DVec3) -> DragDelta {
+        let g = self.gizmo;
+        if g.mode == GizmoMode::Translate {
+            let d = target - g.origin;
+            let next = match self.start {
+                Start::Line { axis, .. } => Some(g.axis(axis) * d.dot(g.axis(axis))),
+                Start::Plane {
+                    normal,
+                    axes: Some(_),
+                    ..
+                } => Some(d - normal * d.dot(normal)),
+                Start::Plane { axes: None, .. } => Some(d),
+                _ => None,
+            };
+            if let Some(v) = next {
+                self.last = DragDelta::Translate(v);
+            }
+        }
+        self.last
+    }
+
     /// `snap`: units for translate, radians for rotate, factor steps for scale.
     #[allow(clippy::too_many_arguments)] // camera, cursor, viewport and snap are independent
     pub fn update(

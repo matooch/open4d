@@ -108,6 +108,14 @@ impl CommandContext for EditorState {
         self.app.component_settings_mut()
     }
 
+    fn transform_settings(&self) -> &forge_modeling::snap::TransformSettings {
+        self.app.transform_settings()
+    }
+
+    fn transform_settings_mut(&mut self) -> &mut forge_modeling::snap::TransformSettings {
+        self.app.transform_settings_mut()
+    }
+
     fn timeline(&self) -> &Timeline {
         self.app.timeline()
     }

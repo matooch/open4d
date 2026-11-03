@@ -8,6 +8,7 @@ use crate::error::CommandError;
 use crate::registry::{CommandRegistry, CommandSpec, NoArgs};
 
 mod arrange;
+mod axis;
 mod building;
 mod components;
 mod cutting;
@@ -15,6 +16,7 @@ mod file;
 mod mesh;
 mod object;
 mod param;
+mod snap;
 pub use param::{stored as display_to_stored, value_from_json as param_value_from_json};
 mod timeline;
 pub use timeline::timeline_state;
@@ -29,6 +31,8 @@ pub fn register_editor_commands(r: &mut CommandRegistry) -> Result<(), CommandEr
     cutting::register(r)?;
     building::register(r)?;
     components::register(r)?;
+    axis::register(r)?;
+    snap::register(r)?;
     param::register(r)?;
     timeline::register(r)?;
     file::register(r)?;

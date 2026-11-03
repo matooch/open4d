@@ -2,6 +2,7 @@
 
 use forge_core::transform::{self, Transform, hpb_from_rotation, rotation_part};
 use forge_core::{Document, EditError, EvalCtx, NodeId, Scene, Tx, Value};
+use forge_generators::axis::AxisEdit;
 use forge_viewport::camera::Camera;
 use forge_viewport::gizmo::DragDelta;
 use forge_viewport::picking::{pick_instances, pick_poly};
@@ -59,8 +60,23 @@ pub fn apply_drag_anim(
         .map_or(doc.scene(), |a| a.eval)
         .parent_world_matrix(id)
         .ok_or(EditError::UnknownNode(id))?;
-    let rp = rotation_part(&parent);
-    let (label, next) = match delta {
+    let (label, next) = dragged_transform(start, &parent, delta);
+    let edit = |tx: &mut Tx| write_transform(tx, id, &next, anim);
+    match gesture {
+        Gesture::Commit => doc.transact(label, edit),
+        Gesture::Drag(n) => doc.transact_merged(label, &format!("gizmo:{id}:{n}"), edit),
+    }
+}
+
+/// The transform a gizmo `delta` makes of `start` under a parent with world matrix `parent`
+/// (the rules of [`apply_drag`]) and the undo label.
+pub fn dragged_transform(
+    start: &Transform,
+    parent: &glam::DMat4,
+    delta: DragDelta,
+) -> (&'static str, Transform) {
+    let rp = rotation_part(parent);
+    match delta {
         DragDelta::Translate(w) => (
             "Move",
             Transform {
@@ -85,11 +101,28 @@ pub fn apply_drag_anim(
                 ..*start
             },
         ),
-    };
-    let edit = |tx: &mut Tx| write_transform(tx, id, &next, anim);
+    }
+}
+
+/// Sets the axis of the captured object to the start axis changed by `delta`; the points and
+/// children keep their world place (MANIPULATE.md §7.4). One undo step per drag.
+pub fn apply_axis_drag(
+    doc: &mut Document,
+    edit: &AxisEdit,
+    delta: DragDelta,
+    gesture: Gesture,
+) -> Result<(), EditError> {
+    let id = edit.node;
+    let parent = doc
+        .scene()
+        .parent_world_matrix(id)
+        .ok_or(EditError::UnknownNode(id))?;
+    let (label, next) = dragged_transform(&edit.start, &parent, delta);
+    let label = format!("{label} axis");
+    let run = |tx: &mut Tx| edit.apply(tx, &next);
     match gesture {
-        Gesture::Commit => doc.transact(label, edit),
-        Gesture::Drag(n) => doc.transact_merged(label, &format!("gizmo:{id}:{n}"), edit),
+        Gesture::Commit => doc.transact(&label, run),
+        Gesture::Drag(n) => doc.transact_merged(&label, &format!("axis:{id}:{n}"), run),
     }
 }
 

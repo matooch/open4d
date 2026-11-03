@@ -8,6 +8,7 @@ description = "Viewport: camera navigation, picking, snapping, grid, gizmos and 
 [dependencies]
 bytemuck = { version = "1", features = ["derive"] }
 forge-geometry = { path = "../geometry" }
+forge-modeling = { path = "../modeling" }
 glam = "0.34"
 pollster = "1"
 wgpu = "30"

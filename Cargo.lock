@@ -1713,6 +1713,7 @@ dependencies = [
  "bytemuck",
  "criterion",
  "forge-geometry",
+ "forge-modeling",
  "glam",
  "png",
  "pollster 1.0.1",

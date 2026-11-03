@@ -151,6 +151,11 @@ impl ComponentDrag {
         })
     }
 
+    /// The selected points the drag moves (they are not snap targets, MANIPULATE.md §6.7).
+    pub fn moved_points(&self) -> Vec<u32> {
+        self.points.iter().collect()
+    }
+
     /// Sets the mesh to the start mesh changed by `delta` (one undo step per drag).
     pub fn apply(
         &self,

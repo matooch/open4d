@@ -164,6 +164,8 @@ fn default_bindings_table() {
         ("E", "view.gizmo_mode", r#"{"mode":"rotate"}"#),
         ("R", "view.gizmo_mode", r#"{"mode":"scale"}"#),
         ("Q", "view.gizmo_space", "{}"),
+        ("Shift+S", "snap.toggle", "{}"),
+        ("L", "edit.axis_mode", "{}"),
         ("K", "key.record", "{}"),
         ("Shift+K", "key.autokey", "{}"),
         ("Space", "timeline.toggle_play", "{}"),

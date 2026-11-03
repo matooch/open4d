@@ -2,7 +2,7 @@
 
 # Command reference
 
-117 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+125 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -77,6 +77,14 @@
 | [`mesh.transform`](#meshtransform) | Transform Components | yes | `mesh_transform` |
 | [`edit.soft_selection`](#editsoft_selection) | Soft Selection | no | `edit_soft_selection` |
 | [`edit.symmetry`](#editsymmetry) | Symmetry | no | `edit_symmetry` |
+| [`object.set_axis`](#objectset_axis) | Set Axis | yes | `object_set_axis` |
+| [`object.center_axis`](#objectcenter_axis) | Center Axis | yes | `object_center_axis` |
+| [`object.align_axis`](#objectalign_axis) | Align Axis | yes | `object_align_axis` |
+| [`edit.axis_mode`](#editaxis_mode) | Axis Mode | no | `edit_axis_mode` |
+| [`snap.set`](#snapset) | Snap Settings | no | `snap_set` |
+| [`snap.toggle`](#snaptoggle) | Snapping | no | `snap_toggle` |
+| [`snap.reset`](#snapreset) | Reset Snapping | no | `snap_reset` |
+| [`snap.query`](#snapquery) | Snap Query | no | `snap_query` |
 | [`param.set`](#paramset) | Set Parameter | yes | `param_set` |
 | [`key.record`](#keyrecord) | Record | yes | `key_record` |
 | [`key.delete_at_frame`](#keydelete_at_frame) | Delete Keys | yes | `key_delete_at_frame` |
@@ -295,6 +303,42 @@ Transfer. One undo step.
 
 Example: `forge cmd scene.forge object.transfer --args '{"source":1,"space":"world","target":2}'`
 
+### `object.set_axis`
+
+Set Axis. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | The object; the active node when absent. |
+| `pos` | array of number (length 3) or null | no | New axis position `[x, y, z]`. |
+| `rot` | array of number (length 3) or null | no | New axis rotation `[h, p, b]` in degrees. |
+| `scale` | array of number (length 3) or null | no | New axis scale `[x, y, z]` (always the object's own scale). |
+| `space` | string \| string \| null | no | Whether `pos` and `rot` are local (default) or world values. |
+
+Example: `forge cmd scene.forge object.set_axis --args '{"pos":[0.0,50.0,0.0],"space":"world"}'`
+
+### `object.center_axis`
+
+Center Axis. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Objects; the current selection when absent. |
+| `to` | string \| string \| string \| string \| null | no | What to centre on (default `bounding_box`). |
+
+Example: `forge cmd scene.forge object.center_axis --args '{"to":"bounding_box"}'`
+
+### `object.align_axis`
+
+Align Axis. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `to` | string \| string \| string | yes |  |
+| `nodes` | array of integer or null | no | Objects; the current selection when absent. |
+
+Example: `forge cmd scene.forge object.align_axis --args '{"to":"world"}'`
+
 
 ## `view`
 
@@ -498,6 +542,16 @@ Symmetry. Not an undoable edit.
 | `tolerance` | number | no |  |
 
 Example: `forge cmd scene.forge edit.symmetry --args '{"axis":"x","enabled":true}'`
+
+### `edit.axis_mode`
+
+Axis Mode. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean or null | no | Switch axis mode on or off; toggles when absent. |
+
+Example: `forge cmd scene.forge edit.axis_mode --args '{"enabled":true}'`
 
 
 ## `select`
@@ -954,6 +1008,56 @@ Transform Components. One undo step.
 | `symmetry` | boolean \| object | no | As soft, for the symmetry plane. |
 
 Example: `forge cmd scene.forge mesh.transform --args '{"move":[0.0,10.0,0.0],"points":[0],"soft":{"falloff":"bell","radius":100.0},"symmetry":{"axis":"x"}}'`
+
+
+## `snap`
+
+### `snap.set`
+
+Snap Settings. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean | no |  |
+| `grid_spacing` | number | no |  |
+| `mode` | `"3d"` \| `"2d"` | no |  |
+| `quantize` | object | no |  |
+| `radius` | number | no |  |
+| `targets` | object | no |  |
+| `visible_only` | boolean | no |  |
+| `workplane` | object | no |  |
+
+Example: `forge cmd scene.forge snap.set --args '{"enabled":true,"radius":12,"targets":{"grid_point":true,"vertex":true}}'`
+
+### `snap.toggle`
+
+Snapping. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean | no |  |
+
+Example: `forge cmd scene.forge snap.toggle --args '{}'`
+
+### `snap.reset`
+
+Reset Snapping. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge snap.reset --args '{}'`
+
+### `snap.query`
+
+Snap Query. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `point` | array of number (length 3) | yes | World point to snap. |
+| `nodes` | array of integer or null | no | Only snap to these nodes; the whole scene when absent. |
+| `radius` | number | no | World units (default 10). |
+
+Example: `forge cmd scene.forge snap.query --args '{"point":[0.0,0.0,0.0],"radius":25}'`
 
 
 ## `param`

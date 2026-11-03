@@ -11,6 +11,7 @@ mod merge;
 mod points;
 mod settings;
 mod slide;
+pub mod snap;
 mod soft;
 mod surface;
 mod util;

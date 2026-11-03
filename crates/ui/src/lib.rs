@@ -27,6 +27,7 @@ pub mod object_manager;
 pub mod panes;
 pub mod screenshot;
 pub mod script_panel;
+pub mod snapping;
 pub mod state;
 pub mod theme;
 pub mod timeline;

@@ -194,6 +194,15 @@ args = { mode = "scale" }
 chord = "Q"
 command = "view.gizmo_space"
 
+# Snapping and axis mode (brief 032)
+[[bind]]
+chord = "Shift+S"
+command = "snap.toggle"
+
+[[bind]]
+chord = "L"
+command = "edit.axis_mode"
+
 # Animation
 [[bind]]
 chord = "K"

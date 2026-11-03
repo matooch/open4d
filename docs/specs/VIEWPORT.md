@@ -85,6 +85,12 @@ yaw 0, pitch 0, perspective fov_y 45°.
   two are parallel (`1 − (d̂₁·d̂₂)² < 1e-12`).
 - `snap_to_point(mesh, cam, x, y, w, h, radius_px) -> Option<DVec3>`: world position
   of `pick_point(…, visible_only = true)`.
+- Snapping 2.0 (brief 032, MANIPULATE.md §6): `snap_cursor(sources, cam, x, y, w, h, settings)
+  -> Option<SnapHit>` resolves the cursor against vertex, edge, edge midpoint, polygon centre,
+  polygon surface, grid point, grid line, workplane and object-axis targets with the priority
+  point > edge > polygon > grid > workplane; `Drag::translate_to(target)` turns a hit into a
+  translate delta constrained by the handle. The settings and the world-space solver live in
+  `forge_modeling::snap`.
 
 ## 4. Grid (`grid`)
 

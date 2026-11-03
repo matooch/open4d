@@ -74,6 +74,8 @@ pub struct App {
     pub mode: EditMode,
     /// Soft selection and symmetry of component transforms (EDITABLE.md §5). Not saved.
     pub component_settings: forge_modeling::ComponentSettings,
+    /// Snapping and axis mode (MANIPULATE.md §6, §7.4). Not saved.
+    pub transform_settings: forge_modeling::snap::TransformSettings,
     /// Current frame and playback; fps and range are scene settings.
     pub timeline: Timeline,
     /// Autokey: edits of animatable parameters write keys (docs/specs/ANIM.md §2.4).
@@ -112,6 +114,7 @@ impl App {
             selection: NodeSelection::default(),
             mode: EditMode::default(),
             component_settings: Default::default(),
+            transform_settings: Default::default(),
             timeline: Timeline::default(),
             autokey: false,
             eval: Evaluated::default(),
@@ -286,6 +289,14 @@ impl CommandContext for App {
 
     fn component_settings_mut(&mut self) -> &mut forge_modeling::ComponentSettings {
         &mut self.component_settings
+    }
+
+    fn transform_settings(&self) -> &forge_modeling::snap::TransformSettings {
+        &self.transform_settings
+    }
+
+    fn transform_settings_mut(&mut self) -> &mut forge_modeling::snap::TransformSettings {
+        &mut self.transform_settings
     }
 
     fn timeline(&self) -> &Timeline {

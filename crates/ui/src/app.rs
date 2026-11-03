@@ -7,6 +7,7 @@ use egui::{RichText, Sense, Ui};
 use forge_command::UiRequest;
 use forge_core::transform::{Transform, rotation_part};
 use forge_core::{NodeId, Value};
+use forge_generators::axis::AxisEdit;
 use forge_viewport::gizmo::{Drag, Gizmo, GizmoMode, Space as GizmoSpace};
 use forge_viewport::panes::{Layout as PaneLayout, Pane, arrange};
 use forge_viewport::render::Shading;
@@ -25,9 +26,10 @@ use crate::coordinates::{Row, Space, Third, coord_view, set_coord_anim};
 use crate::dock::{Area, Panel};
 use crate::keymap_editor::KeyMapEditor;
 use crate::layout::{ButtonGroup, Layout, Sizes, command_bar, tool_palette};
-use crate::manipulate::apply_drag_anim;
+use crate::manipulate::{apply_axis_drag, apply_drag_anim};
 use crate::object_manager::ObjectManager;
 use crate::panes::{PANE_GAP, display_settings};
+use crate::snapping::{SnapScene, collect_sources, drag_step};
 use crate::state::EditorState;
 use crate::theme::Theme;
 use crate::viewport_panel::{
@@ -121,6 +123,12 @@ pub struct Editor {
     gizmo_drag: Option<(Drag, NodeId, Transform, u64)>,
     /// The gizmo drag on components in progress: drag state, component drag, gesture.
     component_drag: Option<(Drag, ComponentDrag, u64)>,
+    /// The axis-mode gizmo drag in progress: drag state, the captured axis, gesture.
+    axis_drag: Option<(Drag, AxisEdit, u64)>,
+    /// What the snapping of the drag in progress can land on, collected when it began.
+    drag_sources: SnapScene,
+    /// Where the viewport was drawn last (egui points); tests aim pointers with it.
+    view_rect: egui::Rect,
     /// The rectangle select in progress, `[x0, y0, x1, y1]` in render pixels.
     rect_drag: Option<[f64; 4]>,
     /// The interactive drag of the active modeling tool (docs/specs/MODELING.md §0.2).
@@ -145,6 +153,11 @@ impl eframe::App for Editor {
 }
 
 impl Editor {
+    /// The rectangle of the last drawn viewport pane (egui points).
+    pub fn view_rect(&self) -> egui::Rect {
+        self.view_rect
+    }
+
     /// The key map editor window's state.
     pub fn keymap_editor(&self) -> &KeyMapEditor {
         &self.keymap_editor
@@ -175,6 +188,9 @@ impl Editor {
             coord_third: Third::Scale,
             gizmo_drag: None,
             component_drag: None,
+            axis_drag: None,
+            drag_sources: SnapScene::default(),
+            view_rect: egui::Rect::NOTHING,
             rect_drag: None,
             tool_drag: None,
             dialogs: Box::new(NativeDialogs),
@@ -461,6 +477,8 @@ impl Editor {
                     self.run(cmd("mesh.current_state_to_object"));
                     ui.close();
                 }
+                ui.separator();
+                self.snapping_menu(ui);
             });
             ui.menu_button("Select", |ui| {
                 if ui.button("Grow Selection").clicked() {
@@ -821,6 +839,55 @@ impl Editor {
         }
     }
 
+    /// Edit menu: snapping and axis mode (docs/specs/MANIPULATE.md §6, §7.4). Each entry runs
+    /// its registry command.
+    fn snapping_menu(&mut self, ui: &mut Ui) {
+        let t = self.state.app.transform_settings.clone();
+        let mut runs: Vec<Cmd> = Vec::new();
+        let mut item = |ui: &mut Ui, this: &Self, on: bool, label: &str, command: Cmd| {
+            let mut button = egui::Button::new(label).selected(on);
+            if let Some(sc) = this.chord_text(ui.ctx(), &command) {
+                button = button.shortcut_text(sc);
+            }
+            if ui.add(button).clicked() {
+                runs.push(command);
+                ui.close();
+            }
+        };
+        item(ui, self, t.axis_mode, "Axis mode", cmd("edit.axis_mode"));
+        ui.separator();
+        item(ui, self, t.snap.enabled, "Snapping", cmd("snap.toggle"));
+        ui.menu_button("Snap targets", |ui| {
+            for kind in forge_modeling::snap::SnapKind::ALL {
+                let on = t.snap.targets.get(kind);
+                if ui
+                    .add(egui::Button::new(kind.label()).selected(on))
+                    .clicked()
+                {
+                    runs.push(("snap.set", json!({"targets": {kind.id(): !on}})));
+                    ui.close();
+                }
+            }
+        });
+        let two_d = t.snap.mode == forge_modeling::snap::SnapMode::D2;
+        let mode = if two_d { "3d" } else { "2d" };
+        if ui
+            .add(egui::Button::new("2D snapping").selected(two_d))
+            .clicked()
+        {
+            runs.push(("snap.set", json!({"mode": mode})));
+            ui.close();
+        }
+        let q = t.snap.quantize.enabled;
+        if ui.add(egui::Button::new("Quantize").selected(q)).clicked() {
+            runs.push(("snap.set", json!({"quantize": {"enabled": !q}})));
+            ui.close();
+        }
+        for command in runs {
+            self.run(command);
+        }
+    }
+
     /// View menu: layout, maximise, lighting, shadows, anti-aliasing (docs/specs/UI.md §6.2).
     /// Each entry runs its registry command.
     fn view_options_menu(&mut self, ui: &mut Ui) {
@@ -1006,15 +1073,9 @@ impl Editor {
                 self.state.view_aspect = view_size[0] / view_size[1];
             }
         }
-        let Some(rs) = rs else {
-            // not selectable: a selectable label would take the pointer from the navigation
-            ui.put(
-                rect,
-                egui::Label::new("Viewport unavailable").selectable(false),
-            );
-            return;
-        };
-
+        if pane == self.state.views.active {
+            self.view_rect = rect;
+        }
         let ppp = ui.ctx().pixels_per_point();
         let size = [
             (rect.width() * ppp).round() as u32,
@@ -1025,6 +1086,14 @@ impl Editor {
         } else {
             self.viewport_interaction(ui, &response, rect, ppp, size);
         }
+        let Some(rs) = rs else {
+            // not selectable: a selectable label would take the pointer from the navigation
+            ui.put(
+                rect,
+                egui::Label::new("Viewport unavailable").selectable(false),
+            );
+            return;
+        };
         let gizmo = self.current_gizmo();
         // the scheduler's pass: only what changed since the last frame is evaluated and
         // rebuilt (CORE.md section 5b); a live tool preview replaces the target's mesh in
@@ -1069,6 +1138,9 @@ impl Editor {
             );
         }
         self.paint_clone_overlay(ui, &shown, pane, rect);
+        if pane == self.state.views.active {
+            self.paint_snap_marker(ui, rect, ppp, size);
+        }
         let label = SHADINGS
             .iter()
             .find(|(s, _)| *s == self.state.pane_shading(pane))
@@ -1076,9 +1148,16 @@ impl Editor {
         ui.painter().text(
             rect.left_top() + egui::vec2(8.0, 6.0),
             egui::Align2::LEFT_TOP,
-            match self.state.mode {
-                EditMode::Model => format!("{} · {label}", pane.label()),
-                mode => format!("{} · {label} · {} mode", pane.label(), mode.label()),
+            {
+                let axis = if self.state.app.transform_settings.axis_mode {
+                    " · Axis mode"
+                } else {
+                    ""
+                };
+                match self.state.mode {
+                    EditMode::Model => format!("{} · {label}{axis}", pane.label()),
+                    mode => format!("{} · {label} · {} mode{axis}", pane.label(), mode.label()),
+                }
             },
             egui::FontId::proportional(12.0),
             Theme::default().weak_text,
@@ -1116,6 +1195,28 @@ impl Editor {
                 Theme::default().component_selection,
             );
         }
+    }
+
+    /// The snap target under the pointer: a ring at its projection and its kind (MANIPULATE.md §6.7).
+    fn paint_snap_marker(&self, ui: &Ui, rect: egui::Rect, ppp: f32, size: [u32; 2]) {
+        let Some(hit) = self.state.snap_hit else {
+            return;
+        };
+        let (w, h) = (size[0].max(1) as f64, size[1].max(1) as f64);
+        let Some(p) = crate::snapping::pixel_of(&self.state.camera, hit.position, w, h) else {
+            return;
+        };
+        let at = rect.min + egui::vec2((p.0 / ppp as f64) as f32, (p.1 / ppp as f64) as f32);
+        let colour = Theme::default().component_selection;
+        ui.painter()
+            .circle_stroke(at, 6.0, egui::Stroke::new(2.0, colour));
+        ui.painter().text(
+            at + egui::vec2(10.0, -10.0),
+            egui::Align2::LEFT_BOTTOM,
+            hit.kind.label(),
+            egui::FontId::proportional(11.0),
+            colour,
+        );
     }
 
     /// Clone indices and axes of the selected cloners (UI.md §16.3), painted over the image.
@@ -1239,7 +1340,9 @@ impl Editor {
         let id = self.state.selection.active?;
         let m = self.state.evaluated().world_matrix(id)?;
         // component modes: the gizmo sits on the selected components (EDITABLE.md §3.6)
-        let origin = if component_target(&self.state).is_some() {
+        let origin = if component_target(&self.state).is_some()
+            && !self.state.app.transform_settings.axis_mode
+        {
             pivot_world(&self.state)?
         } else {
             m.w_axis.truncate()
@@ -1333,34 +1436,89 @@ impl Editor {
             }
         }
         let cam = self.state.camera;
-        let snap_step = |mode: GizmoMode| {
-            modifiers.command.then_some(match mode {
-                GizmoMode::Translate => 10.0,
-                GizmoMode::Rotate => 15f64.to_radians(),
-                GizmoMode::Scale => 0.1,
-            })
-        };
+        let snap = self.state.app.transform_settings.snap.clone();
+        let axis_mode = self.state.app.transform_settings.axis_mode;
+        let mode = self.state.gizmo_mode;
         if response.drag_started_by(egui::PointerButton::Primary)
             && let Some(g) = self.current_gizmo()
             && let Some(handle) = g.hit_test(&cam, x, y, w, h)
             && let Some(drag) = Drag::begin(&g, handle, &cam, x, y, w, h)
         {
-            if component_target(&self.state).is_some() {
+            if axis_mode {
+                // axis mode: the drag edits the axis of the active object (MANIPULATE.md §7.4)
+                if let Some(id) = self.state.selection.active
+                    && let Ok(edit) = AxisEdit::capture(self.state.doc.scene(), id)
+                {
+                    self.gesture_seq += 1;
+                    self.drag_sources = if snap.enabled {
+                        collect_sources(&self.state, &[], None)
+                    } else {
+                        SnapScene::default()
+                    };
+                    self.axis_drag = Some((drag, edit, self.gesture_seq));
+                }
+            } else if component_target(&self.state).is_some() {
                 // a gizmo drag in a component mode edits the components (EDITABLE.md §3.5)
                 if let Some(cd) = ComponentDrag::begin(&self.state) {
                     self.gesture_seq += 1;
+                    self.drag_sources = if snap.enabled {
+                        collect_sources(&self.state, &[], Some((cd.id, cd.moved_points())))
+                    } else {
+                        SnapScene::default()
+                    };
                     self.component_drag = Some((drag, cd, self.gesture_seq));
                 }
             } else if let Some(id) = self.state.selection.active
                 && let Some(start) = self.state.evaluated().local_transform(id)
             {
                 self.gesture_seq += 1;
+                self.drag_sources = if snap.enabled {
+                    collect_sources(&self.state, &[id], None)
+                } else {
+                    SnapScene::default()
+                };
                 self.gizmo_drag = Some((drag, id, start, self.gesture_seq));
             }
         }
+        let ctrl = modifiers.command;
+        if let Some((drag, edit, n)) = &mut self.axis_drag {
+            if response.dragged_by(egui::PointerButton::Primary) {
+                let (delta, hit) = drag_step(
+                    &snap,
+                    &self.drag_sources.sources,
+                    drag,
+                    &cam,
+                    (x, y),
+                    (w, h),
+                    mode,
+                    ctrl,
+                );
+                self.state.snap_hit = hit;
+                self.state.status =
+                    match apply_axis_drag(&mut self.state.doc, edit, delta, Gesture::Drag(*n)) {
+                        Ok(()) => String::new(),
+                        Err(e) => e.to_string(),
+                    };
+            }
+            if response.drag_stopped() {
+                self.axis_drag = None;
+                self.state.snap_hit = None;
+            }
+            return;
+        }
         if let Some((drag, cd, n)) = &mut self.component_drag {
             if response.dragged_by(egui::PointerButton::Primary) {
-                let delta = drag.update(&cam, x, y, w, h, snap_step(self.state.gizmo_mode));
+                let (delta, hit) = drag_step(
+                    &snap,
+                    &self.drag_sources.sources,
+                    drag,
+                    &cam,
+                    (x, y),
+                    (w, h),
+                    mode,
+                    ctrl,
+                );
+                self.state.snap_hit = hit;
                 self.state.status = match cd.apply(&mut self.state.doc, delta, Gesture::Drag(*n)) {
                     Ok(()) => String::new(),
                     Err(e) => e.to_string(),
@@ -1368,12 +1526,23 @@ impl Editor {
             }
             if response.drag_stopped() {
                 self.component_drag = None;
+                self.state.snap_hit = None;
             }
             return;
         }
         if let Some((drag, id, start, n)) = &mut self.gizmo_drag {
             if response.dragged_by(egui::PointerButton::Primary) {
-                let delta = drag.update(&cam, x, y, w, h, snap_step(self.state.gizmo_mode));
+                let (delta, hit) = drag_step(
+                    &snap,
+                    &self.drag_sources.sources,
+                    drag,
+                    &cam,
+                    (x, y),
+                    (w, h),
+                    mode,
+                    ctrl,
+                );
+                self.state.snap_hit = hit;
                 let (id, start, n) = (*id, *start, *n);
                 let (ctx, eval) = (self.state.anim_ctx(), self.state.evaluated());
                 let anim = AnimEdit { ctx, eval: &eval };
@@ -1391,6 +1560,7 @@ impl Editor {
             }
             if response.drag_stopped() {
                 self.gizmo_drag = None;
+                self.state.snap_hit = None;
             }
             return;
         }

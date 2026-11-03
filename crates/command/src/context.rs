@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use forge_core::{Document, NodeId, Scene};
 use forge_modeling::ComponentSettings;
+use forge_modeling::snap::TransformSettings;
 use serde_json::Value;
 
 use crate::state::{
@@ -22,6 +23,9 @@ pub trait CommandContext {
     /// Soft selection and symmetry for component transforms (EDITABLE.md §5).
     fn component_settings(&self) -> &ComponentSettings;
     fn component_settings_mut(&mut self) -> &mut ComponentSettings;
+    /// Snapping and axis mode (MANIPULATE.md §6, §7.4).
+    fn transform_settings(&self) -> &TransformSettings;
+    fn transform_settings_mut(&mut self) -> &mut TransformSettings;
     fn timeline(&self) -> &Timeline;
     fn timeline_mut(&mut self) -> &mut Timeline;
     fn autokey(&self) -> bool;

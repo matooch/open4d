@@ -312,8 +312,8 @@ and the pivot `c` taken at the start. On every frame
 `doc.transact_merged(label, "gizmo:<id>:<n>", ...)`, the pattern of `apply_drag`
 (MANIPULATE.md §3): the whole drag is one undo step ("Move", "Rotate", "Scale"), and undo
 restores the mesh at drag start. Only the `mesh` param is written; the stored selection
-sets are unchanged. Snapping is the gizmo's own (`Drag::update` with the Ctrl/Cmd step,
-`snap.rs`): 10 units, 15 degrees, 0.1.
+sets are unchanged. Snapping is the gizmo's own (`Drag::update` with the quantize step, `snap.rs`; defaults 10 units,
+15 degrees, 0.1) plus target snapping (MANIPULATE.md §6.7, brief 032).
 
 A component mode with a target but an empty affected set draws no gizmo, and a press on
 the spot where it would be does nothing special (it is a click or a rectangle select). In

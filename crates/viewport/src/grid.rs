@@ -39,8 +39,13 @@ fn ceil_pow10(v: f64) -> f64 {
     10f64.powi(e)
 }
 
+/// The spacing of the visible grid (what `grid_lines` uses).
+pub fn grid_spacing(cam: &Camera, viewport_h: f64) -> f64 {
+    ceil_pow10(MIN_PX * cam.world_per_pixel(viewport_h))
+}
+
 pub fn grid_lines(cam: &Camera, viewport_h: f64) -> Grid {
-    let spacing = ceil_pow10(MIN_PX * cam.world_per_pixel(viewport_h));
+    let spacing = grid_spacing(cam, viewport_h);
     let major = 10.0 * spacing;
     let cx = (cam.target_world().x / major).round() * major;
     let cz = (cam.target_world().z / major).round() * major;

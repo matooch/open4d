@@ -1,6 +1,7 @@
 //! forge-generators: parametric primitives. Spec: docs/specs/PRIMITIVES.md
 //! (vertex and face orders come from docs/parity/{plane,cube,sphere}.md).
 
+pub mod axis;
 mod boole;
 mod cloner;
 mod cube;

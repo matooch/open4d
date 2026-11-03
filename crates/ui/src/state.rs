@@ -56,6 +56,9 @@ pub struct EditorState {
     pub autosave: Autosave,
     /// The "crashed last time" notice (docs/specs/UI.md §15.2).
     pub crash_notice: CrashNotice,
+    /// The snap target under the pointer during a drag or tool hover, for the marker
+    /// (MANIPULATE.md §6.7). Not saved.
+    pub snap_hit: Option<forge_modeling::snap::SnapHit>,
 }
 
 impl Deref for EditorState {
@@ -104,6 +107,7 @@ impl EditorState {
             ui_requests: Vec::new(),
             autosave: Autosave::default(),
             crash_notice: CrashNotice::default(),
+            snap_hit: None,
         }
     }
 }

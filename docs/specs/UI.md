@@ -333,7 +333,7 @@ History (`edit.undo`, `edit.redo`, `object.delete`); Objects (`object.create` fo
 `select.mode` and `view.shading` buttons show as selected for the current value. A failed
 command goes to the status bar like any other.
 
-Not in the palette yet (no registry command exists): snapping, workplane, axis mode.
+Snapping and axis mode exist as commands (`snap.*`, `edit.axis_mode`, MANIPULATE.md §6–7) and as Edit menu entries; they are not palette buttons yet.
 Pointer-driven tools (cuts, bridge, pen) stay in the Mesh menu, as do the arrangement tools
 (Array, Duplicate, Arrange, Randomize, Transfer; MODELING.md §9.7), which have a settings panel and no
 viewport interaction.
@@ -519,6 +519,8 @@ Default bindings (all parity-pending, ours):
 | Mod+M | `view.maximize` (toggle the active pane; brief 143) |
 | W / E / R | `view.gizmo_mode` move / rotate / scale |
 | Q | `view.gizmo_space` (toggle) |
+| Shift+S | `snap.toggle` (brief 032; X is the Pan hold key) |
+| L | `edit.axis_mode` (toggle; brief 032) |
 | H / S | `view.frame_all` / `view.frame_selected` (brief 153) |
 | Mod+1 .. Mod+7 | `view.set_view` perspective, front, right, top, back, left, bottom (brief 153) |
 | K / Shift+K | `key.record` / `key.autokey` |

@@ -185,6 +185,14 @@ touch history.
 | `marker.list` | - | `{markers:[{id,frame,name,color}]}` | no |
 | `marker.jump` | `forward` | `{frame,found}` | no |
 | `transform.set` | `node`, `pos?`, `rot?` (degrees), `scale?` | null | yes |
+| `object.set_axis` | `node?`, `pos?`, `rot?` (degrees), `scale?`, `space?` (`local`, `world`) (MANIPULATE.md §7.2) | `{nodes}` | yes |
+| `object.center_axis` | `nodes?`, `to?` (`bounding_box`, `points`, `selection`, `children`) | `{nodes, centers}` | yes |
+| `object.align_axis` | `nodes?`, `to` (`world`, `parent`, `normal`) | `{nodes}` | yes |
+| `edit.axis_mode` | `enabled?` (toggles when absent) | `{enabled}` | no |
+| `snap.set` | `enabled?`, `mode?`, `radius?`, `visible_only?`, `grid_spacing?`, `targets?`, `workplane?`, `quantize?` (MANIPULATE.md §6.1) | the snap settings | no |
+| `snap.toggle` | `enabled?` | `{enabled}` | no |
+| `snap.reset` | - | the snap settings | no |
+| `snap.query` | `point`, `radius?`, `nodes?` (MANIPULATE.md §6.4) | `{hit}` | no |
 | `param.set` | `node`, `param`, `value` | null | yes |
 | `param.edit` | `param`, `value`, `nodes?`, `component?`, `gesture?` | `{changed}` | yes |
 
@@ -261,6 +269,9 @@ Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and A
 - `transform.set`: sets only the given components of the object's pos/rot/scale in one step
   ("Set Transform"); it does not write animation keys (autokey is a gizmo/attribute
   panel feature; replaying a gizmo drag as a command comes with brief 012+).
+- `object.set_axis`, `object.center_axis`, `object.align_axis` (brief 032): edit the axis (the
+  transform) without moving the content, one transaction each (MANIPULATE.md §7). `snap.*` and
+  `edit.axis_mode` change the editor's transform settings only (MANIPULATE.md §6, §7.4).
 - `param.set`: converts `value` by the parameter kind: bool, integer, float (a `Unit::Angle`
   float is degrees, `Unit::Percent` is percent), `[x,y,z]` vec3 (angle vec3 in degrees)
   and color, string/enum id, link (node id or null), index list (array of integers). Mesh
