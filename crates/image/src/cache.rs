@@ -111,10 +111,20 @@ pub struct TextureCache {
     limits: Limits,
 }
 
+/// The cache key for `path`. A missing file resolves through its canonical parent folder, so
+/// a deleted file keeps the key it had while it existed (macOS temp dirs are symlinks:
+/// `/var/…` → `/private/var/…`).
 fn resolve(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path)
-        .or_else(|_| std::path::absolute(path))
-        .unwrap_or_else(|_| path.to_path_buf())
+    if let Ok(p) = std::fs::canonicalize(path) {
+        return p;
+    }
+    let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    match (abs.parent(), abs.file_name()) {
+        (Some(dir), Some(name)) => std::fs::canonicalize(dir)
+            .map(|d| d.join(name))
+            .unwrap_or(abs),
+        _ => abs,
+    }
 }
 
 impl TextureCache {

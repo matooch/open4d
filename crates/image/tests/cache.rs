@@ -253,3 +253,23 @@ fn threads_share_one_entry() {
     assert_eq!(s.entries, 1);
     assert!(s.misses >= 1 && s.misses <= 8);
 }
+
+/// macOS temp dirs are symlinks (`/var` → `/private/var`); a deleted file reached through a
+/// symlinked folder must still drop its entry. This reproduces that on every Unix host.
+#[cfg(unix)]
+#[test]
+fn deleted_file_through_a_symlinked_folder_drops_entries() {
+    let dir = tempfile::tempdir().unwrap();
+    let real = dir.path().join("real");
+    std::fs::create_dir(&real).unwrap();
+    let link = dir.path().join("link");
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    let p = write_png(&link, "a.png", 4, 4);
+    let cache = TextureCache::new(1 << 20);
+    cache.get(&p, &no_mips()).unwrap();
+    assert_eq!(cache.stats().entries, 1);
+    std::fs::remove_file(&p).unwrap();
+    assert!(matches!(cache.get(&p, &no_mips()), Err(ImageError::Io(_))));
+    assert_eq!(cache.stats().entries, 0);
+    assert_eq!(cache.stats().bytes, 0);
+}
