@@ -18,7 +18,8 @@ pub use registry::{
     CommandHandler, CommandPlugin, CommandRegistry, CommandSpec, NoArgs, valid_command_id,
 };
 pub use state::{
-    CameraSet, ConvertMode, GizmoModeArg, GizmoSpaceArg, LayoutArg, LightingArg, ModeArg,
-    NodeSelection, PaneArg, ProjectionArg, SelectExtra, SelectOp, ShadingMode, UiRequest, ViewArg,
+    CameraSet, ConvertMode, GizmoModeArg, GizmoSpaceArg, HudItemArg, LayoutArg, LightingArg,
+    ModeArg, NodeSelection, PaneArg, ProjectionArg, SelectExtra, SelectOp, ShadingMode, UiRequest,
+    ViewArg,
 };
 pub use timeline::{Playback, Timeline};

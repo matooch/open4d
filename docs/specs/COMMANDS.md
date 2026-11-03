@@ -123,6 +123,7 @@ touch history.
 | `view.shadows` | `enabled` | null | no |
 | `view.antialias` | `enabled` | null | no |
 | `view.clone_display` | `indices?`, `axes?` (at least one) | null | no |
+| `view.hud` | `item` fps, counts, tool, frame, camera, safe_frames; `pane?` perspective, top, front, right (default: the active pane); `all_panes?` (true: every pane, `pane` ignored); `enabled?` (absent toggles) | null | no |
 | `view.set_camera` | `target?` [x,y,z] world, `distance?`, `yaw?`, `pitch?` (degrees), `projection?` perspective, orthographic, `fov?` (degrees), `height?` (orthographic) | null | no |
 | `view.get_camera` | - | `{target, eye, distance, yaw, pitch, projection, fov?, height?}` | no |
 | `view.gizmo_mode` | `mode` move, rotate, scale | null | no |
@@ -218,7 +219,9 @@ the nodes into it in the order given (nested ones dropped as above), then select
 tag, like `object.create`) under the first top-level node's parent at its position, moves the
 nodes (nested ones dropped, as `object.group`) into it in the order given and selects it, in one
 undo step "Create Cloner". With no nodes it creates an empty cloner. `view.clone_display`
-(UI.md §16.3) switches the viewport's clone index and axes overlay; view state only.
+(UI.md §16.3) switches the viewport's clone index and axes overlay; view state only. `view.hud`
+(UI.md §23) switches one heads-up item of one pane (or of all four); view state only, saved with
+layouts, headless contexts ignore it.
 `object.visibility` / `object.enable` write the `object.*` params (TRANSFORM.md §2) of every
 named node in one undo step; tags and non-hierarchy nodes are skipped.
 

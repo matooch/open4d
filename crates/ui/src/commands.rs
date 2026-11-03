@@ -230,6 +230,25 @@ impl CommandContext for EditorState {
         self.views.antialias = on;
     }
 
+    fn set_hud(
+        &mut self,
+        item: forge_command::HudItemArg,
+        pane: Option<PaneArg>,
+        all_panes: bool,
+        enabled: Option<bool>,
+    ) {
+        let item = crate::hud::HudItem::from(item);
+        let panes = if all_panes {
+            forge_viewport::panes::Pane::ALL.to_vec()
+        } else {
+            vec![pane.map_or(self.views.active, pane_of)]
+        };
+        for p in panes {
+            let on = enabled.unwrap_or(!self.hud.flags(p).get(item));
+            self.hud.set(p, item, on);
+        }
+    }
+
     fn set_clone_display(&mut self, indices: Option<bool>, axes: Option<bool>) {
         if let Some(on) = indices {
             self.views.clone_indices = on;

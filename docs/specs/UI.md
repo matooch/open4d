@@ -1181,3 +1181,91 @@ shares is checked.
 egui_kittest: the Window menu opens the panel (closed by default), New/rename/toggle cells/
 delete/merge/assign with undo after each, toggling View hides the object in the viewport draw
 items and the object manager colour swatch, the context menu assignment, save/load.
+
+## 23. Viewport HUD and overlays (`hud`, `app`, `layout`; brief 157)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G8 (docs/parity/GUI-SESSIONS.md)
+is unanswered, so **which items exist, their wording, their places, the safe frame percentages and
+the defaults (everything off) are parity-pending**. View state only: nothing here touches the
+document, the selection or the undo history.
+
+### 23.1 Items and settings
+
+Six items per pane, each a flag in `HudFlags` (all `false` by default so a fresh viewport looks as
+before): `fps` (frame time of the editor), `counts` (objects, points, polygons of the scene and of
+the selection), `tool` (active tool and snap state), `frame` (current frame/time), `camera` (name
+and projection), `safe_frames`. `HudSettings { perspective, top, front, right }` holds one
+`HudFlags` per pane (brief 143 panes), `HudSettings::flags(pane)`, `set(pane, item, on)`.
+They live in `EditorState.hud`. Command `view.hud {item, pane?, all_panes?, enabled?}`
+(COMMANDS.md §6). The View menu has a "HUD" sub menu with one sub menu per pane, each with a
+check box per item (labels "Frame rate", "Counts", "Tool and snap", "Frame", "Camera", "Safe
+frames"), running `view.hud`.
+
+### 23.2 Persistence
+
+`Layout` (§11, §21) gets `hud: Option<HudSettings>` with `#[serde(default)]`; `LAYOUT_VERSION`
+stays 1. `Editor::layout()` writes `Some(current settings)` when any item is on (otherwise
+`None`, so a session without a HUD still equals `Layout::standard()`) and `set_layout` applies a
+`Some` (saved layouts and the layout remembered at exit carry the HUD); built-in workspaces and
+layouts without a block have `None`, so switching workspace keeps the user's HUD. A settings block with an unknown field is read
+leniently by serde (unknown fields are ignored, missing ones are `false`).
+
+### 23.3 Draw list (pure, `hud::draw_list`)
+
+`draw_list(&HudContext, &HudFlags, size: [f32; 2]) -> Vec<HudPrim>` in pane-local points
+(origin top left, `size` = the pane). `HudPrim` is `Text { pos, anchor, text, tone }` or
+`Rect { min, max, tone }` (a 1 point outline); `tone` is `Normal`, `Weak` or `Guide`. Placement
+(left column starts at y = 26, below the pane label, line height 14, x = 8):
+
+- left column, top to bottom: camera, tool and snap, then the three count lines;
+- top right (x = width - 8, y = 6, right aligned): frame rate;
+- bottom right (x = width - 8, y = height - 6, right aligned bottom): frame;
+- safe frames: outlines only, no text.
+
+Texts (`format_count` groups thousands with a comma):
+
+| item | text |
+|---|---|
+| fps | `"{fps:.1} fps  {ms:.1} ms"`, or `"-- fps"` before the first measurement |
+| counts | `"Objects  {n}  (selected {k})"`, `"Points  {n}  (selected {k})"`, `"Polygons  {n}  (selected {k})"` |
+| tool | `"Tool  {name}"`, `"Snap  off"` or `"Snap  on  {3D\|2D}"`; with axis mode `"  Axis mode"` is appended to the tool line |
+| frame | `"Frame  {format_time(frame, fps, display)}  /  {format_time(end, ...)}"` using the scene's time display (ANIM.md §2.9) |
+| camera | `"Camera  {pane} ({Perspective, fov 45°\|Orthographic})"` |
+
+Counts: the drawn objects of the scheduled frame (CORE.md §5b); points and polygons are those of
+their evaluated meshes, a cloner drawn by instancing counts prototype geometry times visible
+clones; "selected" sums the drawn objects that are selected. `HudContext` carries the numbers; it
+is built by `hud::context(state, pane, frame, timing)` from the editor state.
+
+### 23.4 Safe frames (pure, `hud::safe_frames`)
+
+`safe_frames(size: [f32; 2], render: Option<[u32; 2]>) -> SafeFrames { frame, action, title }`,
+each `[min_x, min_y, max_x, max_y]` in pane-local points. The frame is the render aspect fitted
+inside the pane (centred, as large as fits, a 0 pixel size counts as absent); with no render size
+(the scene has no render settings yet, so today always) it is the whole pane. Action safe is the
+frame scaled to 90 % about its centre, title safe to 80 % (own values, parity-pending). The draw
+list holds the three outlines (`Weak` frame when the render size is present, `Guide` action and
+title), the frame outline is omitted when it equals the pane.
+
+### 23.5 Frame rate
+
+`hud::FrameTimer` keeps an exponential moving average of the frame time (`push(dt)`, factor 0.1,
+the first sample taken as is, non-finite or non-positive samples ignored); `fps() = 1 / avg`,
+`ms() = avg * 1000`. The editor pushes egui's `unstable_dt` once per frame, not per pane.
+
+### 23.6 Painting
+
+The editor paints the draw list over the viewport image of each visible pane after the existing
+pane label (`Editor::paint_hud`), and also over the "Viewport unavailable" placeholder so
+headless tests see it. The primitives of the last frame are kept in `EditorState.hud_last`
+(`Vec<(Pane, Vec<HudPrim>)>`) for tests.
+
+### 23.7 Tests
+
+`crates/ui/tests/hud.rs`: pure (counts format, safe frame geometry for each aspect, draw list text
+for each item, placement, ordering, settings round trip and leniency, `FrameTimer`, layout
+persistence with `None`/`Some`, workspace switch keeps the HUD), a rasterised **baseline image**
+of the draw list (`tests/baselines/hud_*.png`, own images; `FORGE_UPDATE_BASELINES=1` rewrites
+them; text is drawn as 6 x 10 point boxes per glyph so the image does not depend on fonts), the
+command (toggle, panes, all panes, errors), and egui_kittest (View > HUD menu check boxes, items
+appear in `hud_last` only for enabled panes, four-view layout, layout save/load round trip).

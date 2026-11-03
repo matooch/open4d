@@ -8,8 +8,8 @@ use forge_modeling::snap::TransformSettings;
 use serde_json::Value;
 
 use crate::state::{
-    CameraSet, GizmoModeArg, GizmoSpaceArg, LayoutArg, LightingArg, ModeArg, NodeSelection,
-    PaneArg, SelectExtra, SelectOp, ShadingMode, UiRequest, ViewArg,
+    CameraSet, GizmoModeArg, GizmoSpaceArg, HudItemArg, LayoutArg, LightingArg, ModeArg,
+    NodeSelection, PaneArg, SelectExtra, SelectOp, ShadingMode, UiRequest, ViewArg,
 };
 use crate::timeline::Timeline;
 
@@ -83,6 +83,16 @@ pub trait CommandContext {
     fn set_lighting(&mut self, _lighting: LightingArg) {}
     fn set_shadows(&mut self, _on: bool) {}
     fn set_antialias(&mut self, _on: bool) {}
+    /// Shows or hides a HUD item in a pane (`None`: the active pane), in all panes, or
+    /// toggles it (`enabled` `None`).
+    fn set_hud(
+        &mut self,
+        _item: HudItemArg,
+        _pane: Option<PaneArg>,
+        _all_panes: bool,
+        _enabled: Option<bool>,
+    ) {
+    }
     /// Switches the clone index and axes overlay (`None` keeps a setting).
     fn set_clone_display(&mut self, _indices: Option<bool>, _axes: Option<bool>) {}
     /// Applies validated camera fields.

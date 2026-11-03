@@ -2,7 +2,7 @@
 
 # Command reference
 
-138 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+139 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -25,6 +25,7 @@
 | [`view.lighting`](#viewlighting) | Viewport Lighting | no | `view_lighting` |
 | [`view.shadows`](#viewshadows) | Viewport Shadows | no | `view_shadows` |
 | [`view.antialias`](#viewantialias) | Viewport Anti-aliasing | no | `view_antialias` |
+| [`view.hud`](#viewhud) | Viewport HUD | no | `view_hud` |
 | [`view.gizmo_mode`](#viewgizmo_mode) | Gizmo Mode | no | `view_gizmo_mode` |
 | [`view.gizmo_space`](#viewgizmo_space) | Gizmo Space | no | `view_gizmo_space` |
 | [`object.begin_rename`](#objectbegin_rename) | Rename Active | no | `object_begin_rename` |
@@ -426,6 +427,19 @@ Viewport Anti-aliasing. Not an undoable edit.
 | `enabled` | boolean | yes |  |
 
 Example: `forge cmd scene.forge view.antialias --args '{"enabled":true}'`
+
+### `view.hud`
+
+Viewport HUD. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `item` | `"fps"` \| `"counts"` \| `"tool"` \| `"frame"` \| `"camera"` \| `"safe_frames"` | yes | A heads-up display item of a viewport pane (docs/specs/UI.md §23). |
+| `all_panes` | boolean | no | Apply to all four panes (`pane` is ignored). Default: `false`. |
+| `enabled` | boolean or null | no | Absent toggles. |
+| `pane` | `"perspective"` \| `"top"` \| `"front"` \| `"right"` \| null | no | Viewport pane; absent = the active pane. |
+
+Example: `forge cmd scene.forge view.hud --args '{"enabled":true,"item":"counts","pane":"perspective"}'`
 
 ### `view.gizmo_mode`
 

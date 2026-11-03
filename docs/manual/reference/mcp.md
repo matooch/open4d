@@ -78,6 +78,7 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `view_lighting` | Viewport Lighting. Not an undoable edit. Runs command `view.lighting`. |
 | `view_shadows` | Viewport Shadows. Not an undoable edit. Runs command `view.shadows`. |
 | `view_antialias` | Viewport Anti-aliasing. Not an undoable edit. Runs command `view.antialias`. |
+| `view_hud` | Viewport HUD. Not an undoable edit. Runs command `view.hud`. |
 | `view_gizmo_mode` | Gizmo Mode. Not an undoable edit. Runs command `view.gizmo_mode`. |
 | `view_gizmo_space` | Gizmo Space. Not an undoable edit. Runs command `view.gizmo_space`. |
 | `object_begin_rename` | Rename Active. Not an undoable edit. Runs command `object.begin_rename`. |

@@ -45,6 +45,9 @@ pub struct Layout {
     /// The workspace the arrangement started from (UI.md §21.1); empty for none.
     #[serde(default)]
     pub workspace: String,
+    /// The viewport HUD settings (UI.md §23.2); `None` leaves the current ones alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hud: Option<crate::hud::HudSettings>,
 }
 
 /// A layout read leniently: the layout to use and why it is not the one in the file.
@@ -64,6 +67,7 @@ impl Layout {
             dock: Dock::default(),
             sizes: Sizes::default(),
             workspace: "Standard".into(),
+            hud: None,
         }
     }
 

@@ -13,8 +13,8 @@ use crate::context::CommandContext;
 use crate::error::CommandError;
 use crate::registry::CommandRegistry;
 use crate::state::{
-    CameraSet, ConvertMode, GizmoModeArg, GizmoSpaceArg, LayoutArg, LightingArg, ModeArg, PaneArg,
-    SelectExtra, SelectOp, ShadingMode, UiRequest, ViewArg,
+    CameraSet, ConvertMode, GizmoModeArg, GizmoSpaceArg, HudItemArg, LayoutArg, LightingArg,
+    ModeArg, PaneArg, SelectExtra, SelectOp, ShadingMode, UiRequest, ViewArg,
 };
 
 #[derive(Deserialize, JsonSchema)]
@@ -110,6 +110,19 @@ struct ViewArgs {
     view: ViewArg,
     /// Viewport pane; absent = the active pane.
     pane: Option<PaneArg>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct HudArgs {
+    item: HudItemArg,
+    /// Viewport pane; absent = the active pane.
+    pane: Option<PaneArg>,
+    /// Apply to all four panes (`pane` is ignored).
+    #[serde(default)]
+    all_panes: bool,
+    /// Absent toggles.
+    enabled: Option<bool>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -428,6 +441,18 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
         ),
         |c, a: EnabledArgs| {
             c.set_antialias(a.enabled);
+            Ok(Value::Null)
+        },
+    )?;
+    r.register_fn(
+        spec(
+            "view.hud",
+            "Viewport HUD",
+            false,
+            || json!({"item": "counts", "pane": "perspective", "enabled": true}),
+        ),
+        |c, a: HudArgs| {
+            c.set_hud(a.item, a.pane, a.all_panes, a.enabled);
             Ok(Value::Null)
         },
     )?;

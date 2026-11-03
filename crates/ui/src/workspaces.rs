@@ -120,6 +120,7 @@ impl Workspace {
             dock: Dock::arranged(&areas),
             sizes,
             workspace: self.name().into(),
+            hud: None,
         }
     }
 }

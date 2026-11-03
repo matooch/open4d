@@ -248,6 +248,7 @@ impl Editor {
             dock: self.state.dock.clone(),
             sizes: self.sizes,
             workspace: self.workspace.clone(),
+            hud: (self.state.hud != crate::hud::HudSettings::default()).then_some(self.state.hud),
         }
     }
 
@@ -256,6 +257,9 @@ impl Editor {
         self.state.dock = layout.dock;
         self.sizes = layout.sizes;
         self.workspace = layout.workspace;
+        if let Some(hud) = layout.hud {
+            self.state.hud = hud;
+        }
         self.layout_gen += 1;
     }
 
@@ -734,6 +738,7 @@ impl Editor {
                 }
                 ui.separator();
                 self.view_options_menu(ui);
+                self.hud_menu(ui);
                 ui.separator();
                 ui.radio_value(
                     &mut self.state.gizmo_space,
@@ -1093,6 +1098,29 @@ impl Editor {
 
     /// View menu: layout, maximise, lighting, shadows, anti-aliasing (docs/specs/UI.md §6.2).
     /// Each entry runs its registry command.
+    /// View > HUD: one sub menu per pane with a check box per item (UI.md §23.1).
+    fn hud_menu(&mut self, ui: &mut Ui) {
+        let mut runs: Vec<Cmd> = Vec::new();
+        ui.menu_button("HUD", |ui| {
+            for pane in Pane::ALL {
+                ui.menu_button(pane.label(), |ui| {
+                    for item in crate::hud::HudItem::ALL {
+                        let on = self.state.hud.flags(pane).get(item);
+                        if ui.selectable_label(on, item.label()).clicked() {
+                            runs.push((
+                                "view.hud",
+                                json!({"item": item.id(), "pane": pane.id(), "enabled": !on}),
+                            ));
+                        }
+                    }
+                });
+            }
+        });
+        for c in runs {
+            self.run(c);
+        }
+    }
+
     fn view_options_menu(&mut self, ui: &mut Ui) {
         let v = self.state.views.clone();
         let four = v.layout == PaneLayout::Four;
@@ -1207,6 +1235,10 @@ impl Editor {
             PANE_GAP,
         );
         self.viewport_hot = false;
+        // the frame time of the editor, once per frame (UI.md §23.5)
+        let dt = f64::from(ui.input(|i| i.unstable_dt));
+        self.state.hud_timer.push(dt);
+        self.state.hud_last.clear();
         let four = rects.len() > 1;
         let active = self.state.views.active;
         for r in rects {
@@ -1295,6 +1327,8 @@ impl Editor {
                 rect,
                 egui::Label::new("Viewport unavailable").selectable(false),
             );
+            let frame = self.state.app.scheduled_draw(self.state.timeline.current);
+            self.paint_hud(ui, pane, rect, &frame);
             return;
         };
         let gizmo = self.current_gizmo();
@@ -1365,6 +1399,7 @@ impl Editor {
             egui::FontId::proportional(12.0),
             Theme::default().weak_text,
         );
+        self.paint_hud(ui, pane, rect, &scheduled);
         // cutting tools: the knife line being dragged and the heads-up line (MODELING.md §5.5)
         if let Some(hud) =
             crate::cutting::hud(&self.state).or_else(|| crate::building::hud(&self.state))
@@ -1398,6 +1433,63 @@ impl Editor {
                 Theme::default().component_selection,
             );
         }
+    }
+
+    /// The HUD items of `pane` over its image (UI.md §23.6).
+    fn paint_hud(
+        &mut self,
+        ui: &Ui,
+        pane: Pane,
+        rect: egui::Rect,
+        frame: &forge_app::schedule::Frame,
+    ) {
+        use crate::hud::{Anchor, HudPrim, Tone};
+        let flags = *self.state.hud.flags(pane);
+        if !flags.any() {
+            return;
+        }
+        let ctx = crate::hud::context(&self.state, pane, frame, &self.state.hud_timer);
+        let list = crate::hud::draw_list(&ctx, &flags, [rect.width(), rect.height()]);
+        let theme = Theme::default();
+        let painter = ui.painter().with_clip_rect(rect);
+        let tone = |t: Tone| match t {
+            Tone::Normal => theme.text,
+            Tone::Weak => theme.weak_text,
+            Tone::Guide => theme.accent,
+        };
+        let at = |p: [f32; 2]| rect.min + egui::vec2(p[0], p[1]);
+        for prim in &list {
+            match prim {
+                HudPrim::Text {
+                    pos,
+                    anchor,
+                    text,
+                    tone: t,
+                } => {
+                    let align = match anchor {
+                        Anchor::LeftTop => egui::Align2::LEFT_TOP,
+                        Anchor::RightTop => egui::Align2::RIGHT_TOP,
+                        Anchor::RightBottom => egui::Align2::RIGHT_BOTTOM,
+                    };
+                    painter.text(
+                        at(*pos),
+                        align,
+                        text,
+                        egui::FontId::monospace(11.0),
+                        tone(*t),
+                    );
+                }
+                HudPrim::Rect { min, max, tone: t } => {
+                    painter.rect_stroke(
+                        egui::Rect::from_min_max(at(*min), at(*max)),
+                        0.0,
+                        egui::Stroke::new(1.0, tone(*t)),
+                        egui::StrokeKind::Inside,
+                    );
+                }
+            }
+        }
+        self.state.hud_last.push((pane, list));
     }
 
     /// The snap target under the pointer: a ring at its projection and its kind (MANIPULATE.md §6.7).

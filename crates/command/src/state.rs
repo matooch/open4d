@@ -136,6 +136,18 @@ pub enum PaneArg {
     Right,
 }
 
+/// A heads-up display item of a viewport pane (docs/specs/UI.md §23).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum HudItemArg {
+    Fps,
+    Counts,
+    Tool,
+    Frame,
+    Camera,
+    SafeFrames,
+}
+
 /// `view.layout`: one viewport or the 2x2 four-view grid.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]

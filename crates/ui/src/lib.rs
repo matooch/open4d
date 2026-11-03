@@ -18,6 +18,7 @@ pub mod crash_notice;
 pub mod cutting;
 pub mod dock;
 pub mod history_panel;
+pub mod hud;
 pub mod keymap;
 pub mod keymap_editor;
 pub mod layer_manager;
