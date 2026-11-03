@@ -1,0 +1,16 @@
+[package]
+name = "forge-image"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Image IO, texture cache with mips, colour management (docs/specs/IMAGE.md)."
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tiff", "hdr"] }
+exr = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true
