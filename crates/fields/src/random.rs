@@ -1,6 +1,6 @@
 //! Random field (docs/specs/FIELDS.md F6): noise, random and sorted values.
 
-use forge_core::{EvalCtx, NodeType, ParamDesc, Unit, Value};
+use forge_core::{EvalCtx, NodeId, NodeType, ParamDesc, Scene, Unit, Value};
 use forge_noise::{Noise, NoiseKind, hash_cell};
 use glam::{DMat4, DVec3};
 
@@ -280,4 +280,19 @@ pub(crate) fn field(p: &Params, remap: Remap, world: DMat4) -> Result<RandomFiel
         color: p.color("color"),
         world_to_local: world.inverse(),
     })
+}
+
+/// True if the Random field node `id` changes with time: a noise mode with a non-zero
+/// animation speed (CORE.md section 5b).
+pub fn reads_time(scene: &Scene, id: NodeId) -> bool {
+    let Some(node) = scene.node(id).filter(|n| n.type_id == RANDOM) else {
+        return false;
+    };
+    let ty = random_type();
+    let p = Params {
+        ty: &ty,
+        values: &node.params,
+    };
+    !matches!(p.option("random_mode").as_str(), "random" | "sorted")
+        && p.float("animation_speed") != 0.0
 }

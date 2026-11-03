@@ -24,7 +24,8 @@ mod subdivision;
 
 pub use boole::{boole, inputs_of as boole_inputs_of};
 pub use cloner::{
-    ClonerInstances, clone_data, cloner_instances, prototypes_of as cloner_prototypes,
+    ClonerInstances, PARALLEL_POINTS, clone_data, cloner_instances, expand as expand_clones,
+    prototypes_of as cloner_prototypes,
 };
 pub use modeling::{array, connect, inputs_of as modeling_inputs_of, symmetry};
 pub use polygon::{
@@ -279,6 +280,21 @@ fn produces_geometry(type_id: &str) -> bool {
         || type_id == modeling::INSTANCE
         || modeling::input_count(type_id).is_some()
         || spline_gens::spline_input_count(type_id).is_some()
+}
+
+/// Nodes whose result `id` depends on beyond its children, tags and links: the deformers
+/// of a geometry-less parent that also deform `id` (MODIFIERS.md section 0). Used for the
+/// dependency graph (CORE.md section 5b).
+pub fn eval_dependencies(scene: &Scene, id: NodeId) -> Vec<NodeId> {
+    let Some(parent) = sibling_deformer_parent(scene, id).and_then(|p| scene.node(p)) else {
+        return Vec::new();
+    };
+    parent
+        .children
+        .iter()
+        .copied()
+        .filter(|c| forge_modifiers::is_deformer(scene, *c))
+        .collect()
 }
 
 /// True if the node is an input a parent generator consumes (not drawn itself):

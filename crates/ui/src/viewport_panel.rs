@@ -239,21 +239,7 @@ pub fn scene_meshes(
 /// The nodes drawn as objects, in scene order: generator inputs consumed by their parent and
 /// hidden or disabled objects are left out (SUBDIVISION.md §4, UI.md §13.1).
 fn drawn_nodes(scene: &Scene) -> Vec<NodeId> {
-    let mut out = Vec::new();
-    for root in scene.roots() {
-        for id in std::iter::once(*root).chain(scene.descendants(*root)) {
-            // a generator's input child is drawn through the generator (SUBDIVISION.md §4)
-            if forge_generators::is_consumed(scene, id) {
-                continue;
-            }
-            // hidden or disabled objects are not drawn (UI.md §13.1)
-            if !forge_core::visibility::editor_visible(scene, id) {
-                continue;
-            }
-            out.push(id);
-        }
-    }
-    out
+    forge_app::schedule::drawn_nodes(scene)
 }
 
 /// [`scene_meshes`] evaluated with `ctx` (time, fps, seed). Cloners are expanded to geometry

@@ -2,6 +2,7 @@
 //! cache, native scene file and the node-type registry. Spec: docs/specs/CORE.md.
 
 mod cache;
+pub mod depgraph;
 mod document;
 mod eval;
 pub mod file;

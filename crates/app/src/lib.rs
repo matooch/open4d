@@ -7,6 +7,7 @@ pub mod animate;
 pub mod diagnostics;
 pub mod param_edit;
 pub mod query;
+pub mod schedule;
 pub mod select;
 
 use std::sync::Arc;
@@ -79,6 +80,8 @@ pub struct App {
     pub autokey: bool,
     /// The scene at the current frame, cached.
     pub eval: Evaluated,
+    /// Dirty-only, parallel evaluation of the drawn nodes (docs/specs/CORE.md section 5b).
+    pub scheduler: schedule::Scheduler,
     /// Last message for the status bar (errors from failed edits).
     pub status: String,
     /// The file the scene was last saved to or loaded from.
@@ -110,6 +113,7 @@ impl App {
             timeline: Timeline::default(),
             autokey: false,
             eval: Evaluated::default(),
+            scheduler: schedule::Scheduler::default(),
             status: String::new(),
             file_path: None,
         }
@@ -132,6 +136,12 @@ impl App {
     /// The scene at the current frame.
     pub fn evaluated(&self) -> Arc<Scene> {
         self.eval.get(self.doc.scene(), self.timeline.current)
+    }
+
+    /// The drawn nodes' outputs at `frame`, recomputing only what changed since the last
+    /// call (docs/specs/CORE.md section 5b). The timeline does not move.
+    pub fn scheduled(&mut self, frame: i64) -> Arc<schedule::Frame> {
+        self.scheduler.evaluate(self.doc.scene(), frame)
     }
 
     /// Keeps the current frame inside the project range (after undo, load, range edits).
@@ -216,6 +226,7 @@ impl App {
         }
         self.doc = doc;
         self.eval.clear();
+        self.scheduler.clear();
         self.timeline = Timeline::default();
         self.sync_timeline();
         self.selection.clear();

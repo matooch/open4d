@@ -20,7 +20,9 @@ pub use data::{CloneData, CloneItem};
 pub use effector::{Effector, EffectorCtx, apply_effectors, effector_from_node};
 pub use node::{CLONER, CloneToolset, cloner_type, settings_from_params};
 pub use plain::{ColorMode, PLAIN, Plain, Space, TransformMode, plain_type};
-pub use random::{NOISE_FEATURE, RANDOM, Random, RandomMode, random_type, uniform};
+pub use random::{
+    NOISE_FEATURE, RANDOM, Random, RandomMode, effector_reads_time, random_type, uniform,
+};
 pub use rng::SplitMix64;
 pub use settings::*;
 

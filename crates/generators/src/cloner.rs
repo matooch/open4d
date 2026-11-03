@@ -113,24 +113,56 @@ pub(crate) fn evaluate_cloner(
     else {
         return Ok(None);
     };
-    let mut out = PolyMesh::default();
+    let total: usize = (0..clones.len())
+        .filter(|i| clones.visible[*i])
+        .map(|i| protos[clones.child[i] as usize].points.len())
+        .sum();
+    Ok(Some(expand(&protos, &clones, total >= PARALLEL_POINTS)))
+}
+
+/// Output points from which the expansion runs on the rayon pool.
+pub const PARALLEL_POINTS: usize = 4096;
+
+/// The visible clones as one mesh, in clone order. `parallel` only changes who computes
+/// each clone's block; the arithmetic per point is the same, so the result is bit-identical
+/// (CORE.md section 5b).
+pub fn expand(protos: &[PolyMesh], clones: &CloneData, parallel: bool) -> PolyMesh {
+    use rayon::prelude::*;
+    let mut visible = Vec::new();
+    let mut base = 0u32;
     for i in 0..clones.len() {
-        if !clones.visible[i] {
-            continue;
+        if clones.visible[i] {
+            visible.push((i, base));
+            base += protos[clones.child[i] as usize].points.len() as u32;
         }
-        let proto = &protos[clones.child[i] as usize];
-        let base = out.points.len() as u32;
-        let m = clones.matrices[i];
-        out.points
-            .extend(proto.points.iter().map(|p| m.transform_point3(*p)));
-        out.polys.extend(
-            proto
-                .polys
-                .iter()
-                .map(|f| f.iter().map(|&v| v + base).collect::<Vec<u32>>()),
-        );
     }
-    Ok(Some(out))
+    let block = |&(i, base): &(usize, u32)| {
+        let proto = &protos[clones.child[i] as usize];
+        let m = clones.matrices[i];
+        let points: Vec<_> = proto
+            .points
+            .iter()
+            .map(|p| m.transform_point3(*p))
+            .collect();
+        let polys: Vec<Vec<u32>> = proto
+            .polys
+            .iter()
+            .map(|f| f.iter().map(|&v| v + base).collect())
+            .collect();
+        (points, polys)
+    };
+    let blocks: Vec<(Vec<_>, Vec<Vec<u32>>)> = if parallel {
+        visible.par_iter().map(block).collect()
+    } else {
+        visible.iter().map(block).collect()
+    };
+    let mut out = PolyMesh::default();
+    out.points.reserve(base as usize);
+    for (points, polys) in blocks {
+        out.points.extend(points);
+        out.polys.extend(polys);
+    }
+    out
 }
 
 /// The clone data of the cloner `id` (for consumers such as the viewport and effectors).

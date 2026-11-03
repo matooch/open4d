@@ -53,6 +53,15 @@ pub fn load_graph(scene: &Scene, tag: NodeId) -> Result<Graph, String> {
     }
 }
 
+/// True if the expression tag's graph can read the time: it has a `time.now` or a script
+/// node (CORE.md section 5b). A tag whose graph cannot be read counts as not reading it.
+pub fn tag_reads_time(scene: &Scene, tag: NodeId) -> bool {
+    load_graph(scene, tag).is_ok_and(|g| {
+        g.nodes()
+            .any(|n| n.type_id == "time.now" || n.type_id == "script.rhai")
+    })
+}
+
 /// Tags of a scene in document order: an object, its tags in order, then its children.
 fn expression_tags(scene: &Scene) -> Vec<NodeId> {
     let mut out = Vec::new();

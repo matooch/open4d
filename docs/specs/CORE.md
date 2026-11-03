@@ -201,6 +201,92 @@ for; (4) dynamics (later). An expression therefore overrides an animated value o
 parameter and every generator sees the expression's output. Priorities between expression tags
 and constraints/IK are brief 111. Details: NODES.md section 5.
 
+### 5b. Dependency graph and evaluation scheduler (brief 180)
+
+Source: own design (no reference-app observation). Code: `forge_core::depgraph` (graph,
+diff), `forge_app::schedule` (scheduler), `forge_generators::eval_dependencies`,
+`forge_fields::reads_time`, `forge_clone_engine::effector_reads_time`,
+`forge_nodes::tag_reads_time`.
+
+**Vertices.** Every node `n` has two vertices. `Frame(n)` is what flows *down* the
+hierarchy: the `transform.*` params and the `object.*` visibility/enable params, composed
+with the ancestors. `Result(n)` is the evaluated output of `n` (its world-space mesh).
+Two vertices keep the parent/child relation acyclic: a child's result needs its parent's
+frame, a parent's result needs its children's results.
+
+**Edges** (`a -> b` means "`a` depends on `b`"):
+
+| Edge | Rule |
+|---|---|
+| own frame | `Result(n) -> Frame(n)` (not for tags) |
+| ancestor | `Frame(n) -> Frame(parent(n))` |
+| child | `Result(n) -> Result(c)` for each child (generator inputs, deformer children, cloner prototypes, boolean A/B) |
+| tag | `Result(n) -> Result(t)` for each tag |
+| link | `Result(n) -> Result(t)` for each `Link` / `LinkList` param target that exists (effectors, field lists, instance reference, deformer `fields`) |
+| extra | `Result(g) -> Result(d)` for the deformers of a geometry-less parent that also deform `g` (`forge_generators::eval_dependencies`, MODIFIERS.md section 0) |
+
+**Dirty rule.** The scheduler compares the evaluated scene of this pass (tracks, then
+expressions) with the previous one, bit-exactly (`f64` by bit pattern, so `-0.0 != 0.0`).
+A changed node seeds `Frame(n)` if a `transform.*` or `object.*` param (or its parent)
+changed, otherwise `Result(n)`; a changed type, child list or tag list seeds `Result(n)`.
+Added and removed nodes seed their vertices. The dirty set is the set of vertices that
+reach a seed over the edges, taken in the new graph and in the previous graph (so a
+removed link or node still dirties its former dependants). A changed fps or seed dirties
+everything. A pass whose scene revision, node count and time are unchanged does nothing.
+
+**Time.** A frame change dirties (a) whatever the diff finds changed (animated tracks,
+expression writes) and (b) every implicit time reader: a Random field in a noise mode
+with `animation_speed != 0`, a Random effector in a noise/turbulence mode with
+`animation_speed != 0`, and the nodes depending on them. The time-dependent set reported
+by the scheduler is these readers plus nodes with tracks plus all their dependants. A scene
+with no tracks, no readers and no enabled expression tag does no work at all on a frame
+change.
+
+**Expressions** stay one ordered stage (section 5a): the stage reruns as a whole whenever
+the document changes or the frame changes and an enabled tag exists, in document order,
+each tag seeing the earlier writes. Its writes are discovered by the diff, so independence
+of tags is never assumed.
+
+**Parallelism.** The units of work are the drawn nodes (enabled, editor-visible,
+not consumed by a parent generator) that are dirty or have no result yet. Each is a pure
+function of the immutable evaluated scene and the `EvalCtx`, so they run in parallel
+(rayon `par_iter`, indexed collect) and the results are stored in node id order. No
+evaluator keeps mutable shared state, and every random draw is a hash of
+(seed, clone/point index), so output does not depend on thread scheduling: serial
+(`Threads::Serial`) and parallel results are bit-identical (tests compare point bit
+patterns). Cloner expansion also runs in parallel over clones (offsets by prefix sum,
+per-clone arithmetic unchanged) once there are at least 4096 output points.
+
+**Cycles.** Links can form cycles. A depth-first walk from the vertices in ascending
+`(node id, Frame < Result)` order, following dependencies in ascending order, removes every
+edge that points at a vertex on the current path; each removal is reported as a
+`CycleBreak { from, to, kind, path }`. The remaining graph is acyclic and gives
+`levels()` (0 = no dependencies). Dirty propagation uses the unbroken graph (cycles are
+harmless for reachability). The scheduler returns the breaks in its stats; evaluation
+itself does not follow links recursively beyond what the evaluators already guard.
+
+**Benchmark** (`crates/app/benches/schedule.rs`, criterion): see the table below.
+
+Measured on 4 cores, debug-info-less release bench profile (criterion, median of 10 samples,
+frame advanced by one per iteration):
+
+| Scene | Path | Time | vs full serial |
+|---|---|---|---|
+| 1 animated cube + 1000 static cubes | old path: animate, evaluate every drawn node | 28.9 ms | 1.0x |
+| | scheduler, full evaluation, serial | 40.0 ms | 0.7x |
+| | scheduler, full evaluation, 4 threads | 14.2 ms | 2.0x |
+| | scheduler, dirty only, serial | 6.2 ms | 4.6x |
+| | scheduler, dirty only, 4 threads | 6.6 ms | 4.4x |
+| One cloner, 10 000 clones of a cube (full evaluation) | serial (1-thread pool) | 7.7 ms | 1.0x |
+| | 4 threads (parallel expansion) | 5.4 ms | 1.4x |
+
+The remaining 6 ms of the dirty-only pass is the per-pass scene copy, the bit-exact diff and
+the scheduler bookkeeping over 1001 nodes, which grow with the node count, not with the
+dirty set; trimming them (incremental animation instead of a scene copy) belongs to the
+playback brief 098. A single node cannot be spread over nodes, so the 10k cloner gains only
+from the parallel expansion (effectors stay serial: the Random effector's draws are
+index-keyed hashes but the effector trait takes a sequential closure).
+
 ## 6. Native scene file (`file`)
 
 RON text, deterministic (same scene → byte-identical output):

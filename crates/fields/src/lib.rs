@@ -25,7 +25,9 @@ pub use node::{
     BOX, FieldToolset, LAYER_STRENGTH, LINEAR, SPHERICAL, box_type, linear_type, spherical_type,
 };
 pub use radial::{RADIAL, Radial, radial_type};
-pub use random::{NOISE_TYPES, RANDOM, RandomField, RandomMode, RandomSpace, random_type};
+pub use random::{
+    NOISE_TYPES, RANDOM, RandomField, RandomMode, RandomSpace, random_type, reads_time,
+};
 pub use remap::{Contour, Remap};
 pub use shape::{Direction, Shape};
 pub use torus::{TORUS, Torus, torus_type};
