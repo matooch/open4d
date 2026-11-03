@@ -1,39 +1,18 @@
 //! Gizmo drags → transform params, and object picking (docs/specs/MANIPULATE.md §3, §5).
 
-use forge_core::transform::{self, Transform, hpb_from_rotation, rotation_part};
-use forge_core::{Document, EditError, EvalCtx, NodeId, Scene, Tx, Value};
+use forge_core::transform::{Transform, hpb_from_rotation, rotation_part};
+use forge_core::{Document, EditError, EvalCtx, NodeId, Scene, Tx};
 use forge_generators::axis::AxisEdit;
 use forge_viewport::camera::Camera;
 use forge_viewport::gizmo::DragDelta;
 use forge_viewport::picking::{pick_instances, pick_poly};
 use glam::DMat3;
 
-use crate::animate::{AnimEdit, unchanged, write_param};
+use crate::animate::AnimEdit;
 use crate::attributes::Gesture;
 use crate::viewport_panel::{DrawItem, instance_input, scene_draw_items_at};
 
-/// Writes the three transform params. With `anim` the params that already hold the
-/// shown value are skipped and animated ones get keys (docs/specs/ANIM.md §2.4); without
-/// it all three are set.
-pub(crate) fn write_transform(
-    tx: &mut Tx,
-    id: NodeId,
-    t: &Transform,
-    anim: Option<&AnimEdit>,
-) -> Result<(), EditError> {
-    for (param, v) in [
-        (transform::POS, t.pos),
-        (transform::ROT, t.rot),
-        (transform::SCALE, t.scale),
-    ] {
-        let value = Value::Vec3(v.to_array());
-        if unchanged(anim, id, param, &value) {
-            continue;
-        }
-        write_param(tx, id, param, value, anim.map(|a| &a.ctx))?;
-    }
-    Ok(())
-}
+pub(crate) use forge_app::coords::write_transform;
 
 /// Sets the node's transform to `start` changed by `delta` (one undo step per drag).
 pub fn apply_drag(

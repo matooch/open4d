@@ -68,6 +68,8 @@ switch `Local | World` (Local ≙ the observed "Object (Rel)") and a third-row s
   `rot = hpb_from_rotation(R_P⁻¹ · R(value))`; world scale → `scale = value / parent
   scale` (per axis, parent scale = column lengths of `P`). `Size` → `scale = value /
   bbox size` per axis (axes with zero bbox size keep their scale).
+- Brief 151 adds multi-object editing, a Manual/Apply mode and the `transform.edit` command
+  (UI.md §20); `set_coord` keeps this behaviour for one object.
 - "Object (Abs)" and "Size+" are not implemented (behaviour not observed in detail).
 - Default dock: the Coordinates panel joins the Bottom area after Timeline.
 

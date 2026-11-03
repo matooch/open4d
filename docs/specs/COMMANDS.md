@@ -139,7 +139,7 @@ touch history.
 | `object.randomize` | `nodes?`, `seed?`, `position?`, `rotation_deg?`, `scale?`, `uniform_scale?` (MODELING.md §9.4) | `{randomized}` | yes |
 | `object.transfer` | `target`, `source?`, `position?`, `rotation?`, `scale?`, `space?` world\|local (MODELING.md §9.5) | `{node}` | yes |
 | `mesh.array_command` | `node?`, `polys?`, `settings?: {copies, offset, rotation_deg, scale, mode}` (MODELING.md §9.6) | `{node, points, polys, selected}` | yes |
-| `mesh.transform` | `node?`, `nodes?`, `space?` (EDITABLE.md §6.4), `points?`, `move?`, `rotate? {axis, angle}`, `scale?`, `pivot?`, `soft?`, `symmetry?` (EDITABLE.md §5.5) | `{node, moved, soft, symmetry}` | yes |
+| `mesh.transform` | `node?`, `nodes?`, `space?` (EDITABLE.md §6.4), `points?`, `move?`, `rotate? {axis, angle}`, `scale?`, `pivot?`, `soft?`, `symmetry?` (EDITABLE.md §5.5), `gesture?` | `{node, moved, soft, symmetry}` | yes |
 | `edit.soft_selection` | `enabled?`, `radius?`, `falloff?`, `distance?`, `curve?` (EDITABLE.md §5.1) | the soft selection settings | no |
 | `edit.symmetry` | `enabled?`, `axis?`, `offset?`, `tolerance?` (EDITABLE.md §5.1) | the symmetry settings | no |
 | `select.mode` | `mode` model, points, edges, polys | null | no |
@@ -187,6 +187,7 @@ touch history.
 | `marker.list` | - | `{markers:[{id,frame,name,color}]}` | no |
 | `marker.jump` | `forward` | `{frame,found}` | no |
 | `transform.set` | `node`, `pos?`, `rot?` (degrees), `scale?` | null | yes |
+| `transform.edit` | `nodes?`, `space?` (`local`, `world`), `pos?`, `rot?` (degrees), `scale?`, `size?` (each `[x|null, y|null, z|null]`), `gesture?` | `{changed}` | yes |
 | `object.set_axis` | `node?`, `pos?`, `rot?` (degrees), `scale?`, `space?` (`local`, `world`) (MANIPULATE.md §7.2) | `{nodes}` | yes |
 | `object.center_axis` | `nodes?`, `to?` (`bounding_box`, `points`, `selection`, `children`) | `{nodes, centers}` | yes |
 | `object.align_axis` | `nodes?`, `to` (`world`, `parent`, `normal`) | `{nodes}` | yes |
@@ -275,6 +276,17 @@ Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and A
 - `transform.set`: sets only the given components of the object's pos/rot/scale in one step
   ("Set Transform"); it does not write animation keys (autokey is a gizmo/attribute
   panel feature; replaying a gizmo drag as a command comes with brief 012+).
+- `transform.edit` (registered by forge-app, UI.md §20; brief 151): the Coordinates manager's
+  edit. For every node in `nodes` (default the selection; nodes without a transform are
+  skipped) it sets the given rows in `space` (default `local`): `pos`, `rot`, and `scale`
+  or `size` (not both). A `null` axis keeps that axis as it is shown in `space`. World rows:
+  position `P⁻¹ · v`, rotation `R_P⁻¹ · R(v)`, scale `v / parent scale`; `size` divides by the
+  mesh bounding box (an axis with zero size keeps its scale), MANIPULATE.md §4. One undo step
+  "Set Coordinates" for all nodes and rows; the values are the evaluated ones, written through
+  the animation rules (ANIM.md §2.4). `gesture` merges edits with the same number and nodes.
+  No node with a transform is `Failed`; nothing is written on an error.
+- `mesh.transform` also takes `gesture` (integer): steps with the same number and nodes merge
+  into one undo step (the Coordinates manager's dragged fields, UI.md §20.3).
 - `object.set_axis`, `object.center_axis`, `object.align_axis` (brief 032): edit the axis (the
   transform) without moving the content, one transaction each (MANIPULATE.md §7). `snap.*` and
   `edit.axis_mode` change the editor's transform settings only (MANIPULATE.md §6, §7.4).

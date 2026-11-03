@@ -233,6 +233,8 @@ impl CommandHandler for Transform {
             "scale": {"description": "Scale about the pivot: one number or [x, y, z].",
                       "anyOf": [{"type": "number"}, vec3_schema("Scale factors.")]},
             "pivot": vec3_schema("Pivot, object space; the mean of the selected points when absent."),
+            "gesture": {"description": "Steps with the same gesture number and objects merge into one undo step (a dragged Coordinates field).",
+                        "type": ["integer", "null"], "minimum": 0},
             "soft": {"description": "false: off, true: on with the editor settings, object: on with these values over the editor settings. Absent: the editor setting.",
                      "anyOf": [{"type": "boolean"}, soft_schema()]},
             "symmetry": {"description": "As soft, for the symmetry plane.",
@@ -248,7 +250,7 @@ impl CommandHandler for Transform {
             obj,
             &[
                 "node", "nodes", "space", "points", "move", "rotate", "scale", "pivot", "soft",
-                "symmetry",
+                "symmetry", "gesture",
             ],
         )?;
         let nodes = polygon_targets(ctx, id, "Transform Components", obj)?;
@@ -397,12 +399,27 @@ impl CommandHandler for Transform {
             (false, false, true) => "Scale",
             _ => "Transform",
         };
-        ctx.doc_mut().transact(label, |tx| {
+        let gesture = match obj.get("gesture") {
+            None | Some(Json::Null) => None,
+            Some(v) => Some(
+                v.as_u64()
+                    .ok_or_else(|| invalid(id, "gesture must be a non-negative integer".into()))?,
+            ),
+        };
+        let key = gesture.map(|g| {
+            let ids: Vec<String> = written.iter().map(|(n, _)| n.0.to_string()).collect();
+            format!("meshxf:{}:{g}", ids.join(","))
+        });
+        let write = |tx: &mut forge_core::Tx| {
             for (node, mesh) in written {
                 tx.set_param(node, "mesh", Value::Mesh(mesh))?;
             }
             Ok(())
-        })?;
+        };
+        match key {
+            Some(k) => ctx.doc_mut().transact_merged(label, &k, write)?,
+            None => ctx.doc_mut().transact(label, write)?,
+        };
         Ok(
             json!({"node": parts[0].node.0, "moved": total, "nodes": per_node,
                   "soft": settings.soft.to_json(), "symmetry": settings.symmetry.to_json()}),

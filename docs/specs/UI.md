@@ -1020,3 +1020,45 @@ Down recall") and a **Run** button, **Clear** empties the transcript. Above them
   multi-line entry typed with Shift+Enter, `print` output, a value result, one entry with two
   commands is one undo step and undo removes both, a failing entry shows its error and changes
   nothing, Up / Down recall earlier entries, and Clear empties the transcript.
+
+## 20. Coordinates manager (`coordinates`, `forge_app::coords`, `app`; brief 151)
+
+Sources: own design from docs/roadmap/areas/L-ui.md and MANIPULATE.md §4; GUI session G1
+(docs/parity/GUI-SESSIONS.md) is unanswered, so **the layout, the mode names and the Apply
+behaviour are parity-pending**. Component rows are EDITABLE.md §6.7 (brief 034).
+
+### 20.1 Modes
+- **Space** `Local | World` (`Space`): the object's own parameters, or the world matrix.
+- **Third row** `Scale | Size` (`Third`): scale factors, or mesh bounding box times scale
+  (a node without a mesh shows "no mesh" for Size).
+- **Apply**: `Immediate` (default; every field change is applied at once, a drag of a field is
+  one undo step) or `Manual` (check box "Manual"): field changes only fill a draft, shown in
+  the fields in place of the object's values; the **Apply** button writes the draft in one
+  command and one undo step, **Reset** drops the draft. In Immediate mode Apply and Reset are
+  disabled. The draft is dropped when the selection, the space or the third row changes.
+- Rotation is shown as H / P / B in degrees (MANIPULATE.md §1).
+
+### 20.2 Several objects (brief 150 multi-edit rules)
+The panel shows the active object. An axis is `mixed` when its value in the chosen space
+differs (more than 1e-9 relative) between the selected objects: the field then reads "mixed".
+Typing into a field sets that axis on every selected object and keeps each object's other
+axes. Rows are the same for all objects; nodes without a transform (tags) are ignored.
+`coord_view_multi(scene, ids, space, third) -> Option<(CoordView, Mixed)>` is pure.
+
+### 20.3 Commands
+Object edits run `transform.edit` (COMMANDS.md §6): one command, one undo step, for every
+selected object and every row of an Apply. It is the animation-aware sibling of
+`transform.set` (as `param.edit` is of `param.set`): autokey and ANIM.md §2.4 apply, a value
+equal to the shown one is not written. Plain edits of one parameter, if a row ever needs
+them, use `param.edit`. In a component mode (a polygon object with an affected point set) the
+panel shows **Pivot, Rotation, Size** of the components instead of the object rows (the
+Scale|Size switch is hidden; Local|World and Manual/Apply stay) and runs `mesh.transform`
+(`gesture`, EDITABLE.md §6.7): Pivot becomes `move`, Rotation `rotate` (HPB turned into an
+axis and angle), Size `scale`; a draft with several rows is one `mesh.transform`, applied as
+`T(move) T(pivot) R S T(-pivot)`, so the result has the typed size and the typed pivot.
+
+### 20.4 Tests
+`crates/app/tests/transform_edit.rs` (command: local/world, axes with null, multi-object,
+size, one step, autokey, errors, no change on error); `crates/ui/tests/coordinates_manager.rs`
+(pure mixed detection, each mode through egui_kittest: world move of two objects is one
+undo step, scale/size switch, manual draft and Apply, component rows via `mesh.transform`).

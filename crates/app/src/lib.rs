@@ -4,6 +4,7 @@
 //! and no GPU. The editor and every automation front end build on it.
 
 pub mod animate;
+pub mod coords;
 pub mod diagnostics;
 pub mod param_edit;
 pub mod query;
@@ -45,6 +46,7 @@ pub fn default_command_registry() -> CommandRegistry {
     let mut commands = CommandRegistry::new();
     register_editor_commands(&mut commands).expect("built-in command ids are unique");
     param_edit::register(&mut commands).expect("param.edit is unique");
+    coords::register(&mut commands).expect("transform.edit is unique");
     forge_nodes::register_commands(&mut commands).expect("graph.* ids are unique");
     commands
 }

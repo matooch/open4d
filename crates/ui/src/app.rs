@@ -18,11 +18,13 @@ use crate::animate::{AnimEdit, KeyState, key_frames, key_states};
 use crate::attributes::{Gesture, Widget, attribute_rows_multi};
 use crate::clone_overlay::{OverlayOptions, selected_cloner_marks};
 use crate::commands::{category_label, clone_toolset_menu, create_menu, execute};
-use crate::component_edit::{ComponentDrag, CoordEntry, component_coords, pivot_world};
+use crate::component_edit::{
+    ComponentDrag, component_coords, component_transform_args, pivot_world,
+};
 use crate::components::{
     ClickModifiers, EditMode, SelectCmd, target as component_target, viewport_click, viewport_rect,
 };
-use crate::coordinates::{Row, Space, Third, coord_view, set_coord_anim};
+use crate::coordinates::{CoordDraft, Mixed, Space, Third, coord_view_multi};
 use crate::dock::{Area, Panel};
 use crate::keymap_editor::KeyMapEditor;
 use crate::layout::{ButtonGroup, Layout, Sizes, command_bar, tool_palette};
@@ -122,6 +124,10 @@ pub struct Editor {
     viewport_hot: bool,
     coord_space: Space,
     coord_third: Third,
+    /// Manual apply mode, the typed values waiting for Apply, and what they belong to (UI.md §20).
+    coord_manual: bool,
+    coord_draft: CoordDraft,
+    coord_draft_key: String,
     /// The gizmo drag in progress: drag state, node, its transform at the start, gesture.
     gizmo_drag: Option<(Drag, NodeId, Transform, u64)>,
     /// The gizmo drag on components in progress: drag state, component drag, gesture.
@@ -199,6 +205,9 @@ impl Editor {
             viewport_hot: false,
             coord_space: Space::Local,
             coord_third: Third::Scale,
+            coord_manual: false,
+            coord_draft: CoordDraft::default(),
+            coord_draft_key: String::new(),
             gizmo_drag: None,
             component_drag: None,
             axis_drag: None,
@@ -1617,163 +1626,164 @@ impl Editor {
     }
 
     fn coordinates_ui(&mut self, ui: &mut Ui) {
-        let Some(id) = self.state.selection.active else {
+        let Some(active) = self.state.selection.active else {
             ui.weak("Nothing selected");
             return;
         };
+        // component rows replace the object rows while components are selected (UI.md §20.3)
+        let comp = if component_target(&self.state).is_some() {
+            component_coords(&self.state, self.coord_space == Space::World)
+        } else {
+            None
+        };
+        let mut ids = vec![active];
+        ids.extend(
+            self.state
+                .selection
+                .nodes
+                .iter()
+                .copied()
+                .filter(|n| *n != active),
+        );
+        // a draft belongs to one selection, space and row set
+        let key = format!(
+            "{ids:?}|{:?}|{:?}|{}",
+            self.coord_space,
+            self.coord_third,
+            comp.is_some()
+        );
+        if key != self.coord_draft_key {
+            self.coord_draft_key = key;
+            self.coord_draft.clear();
+        }
         ui.horizontal(|ui| {
             ui.radio_value(&mut self.coord_space, Space::Local, "Local");
             ui.radio_value(&mut self.coord_space, Space::World, "World");
+            if comp.is_none() {
+                ui.separator();
+                ui.radio_value(&mut self.coord_third, Third::Scale, "Scale");
+                ui.radio_value(&mut self.coord_third, Third::Size, "Size");
+            }
             ui.separator();
-            ui.radio_value(&mut self.coord_third, Third::Scale, "Scale");
-            ui.radio_value(&mut self.coord_third, Third::Size, "Size");
+            ui.checkbox(&mut self.coord_manual, "Manual");
+            let pending = self.coord_manual && !self.coord_draft.is_empty();
+            if ui
+                .add_enabled(pending, egui::Button::new("Apply"))
+                .clicked()
+            {
+                self.coord_apply(comp.is_some());
+            }
+            if ui
+                .add_enabled(pending, egui::Button::new("Reset"))
+                .clicked()
+            {
+                self.coord_draft.clear();
+            }
         });
         let eval_scene = self.state.evaluated();
-        let Some(view) = coord_view(&eval_scene, id, self.coord_space, self.coord_third) else {
-            return;
+        let (labels, values, mixed, degrees): (_, [Option<DVec3>; 3], Mixed, _) = match comp {
+            Some(c) => (
+                ["Pivot", "Rotation", "Size"],
+                [Some(c.pivot), Some(DVec3::ZERO), Some(c.size)],
+                [[false; 3]; 3],
+                [false, true, false],
+            ),
+            None => {
+                let Some((view, mixed)) =
+                    coord_view_multi(&eval_scene, &ids, self.coord_space, self.coord_third)
+                else {
+                    return;
+                };
+                (
+                    [
+                        "Position",
+                        "Rotation",
+                        match self.coord_third {
+                            Third::Scale => "Scale",
+                            Third::Size => "Size",
+                        },
+                    ],
+                    [Some(view.pos), Some(view.rot), view.third],
+                    mixed,
+                    [false, true, false],
+                )
+            }
         };
-        let third_label = match self.coord_third {
-            Third::Scale => "Scale",
-            Third::Size => "Size",
-        };
-        let rows = [
-            (
-                Row::Position,
-                "Position",
-                ["X", "Y", "Z"],
-                Some(view.pos),
-                false,
-            ),
-            (
-                Row::Rotation,
-                "Rotation",
-                ["H", "P", "B"],
-                Some(view.rot),
-                true,
-            ),
-            (
-                Row::Third(self.coord_third),
-                third_label,
-                ["X", "Y", "Z"],
-                view.third,
-                false,
-            ),
-        ];
-        egui::Grid::new(("coords", id))
+        let axes = [["X", "Y", "Z"], ["H", "P", "B"], ["X", "Y", "Z"]];
+        let mut edit: Option<(usize, usize, f64, Gesture)> = None;
+        egui::Grid::new(("coords", active))
             .num_columns(4)
             .show(ui, |ui| {
-                for (row, label, axes, value, degrees) in rows {
-                    let l = ui.label(label);
-                    let Some(value) = value else {
+                for row in 0..3 {
+                    let l = ui.label(labels[row]);
+                    let Some(value) = values[row] else {
                         ui.weak("no mesh");
                         ui.end_row();
                         continue;
                     };
-                    let mut shown = if degrees {
-                        value.map(f64::to_degrees)
-                    } else {
-                        value
-                    };
-                    let mut gesture = None;
-                    for (k, axis) in axes.iter().enumerate() {
-                        let r = ui
-                            .add(
-                                egui::DragValue::new(&mut shown[k])
-                                    .speed(0.1)
-                                    .prefix(format!("{axis} ")),
-                            )
-                            .labelled_by(l.id);
+                    for k in 0..3 {
+                        let draft = self.coord_draft.value(row, k);
+                        let base = if degrees[row] {
+                            value[k].to_degrees()
+                        } else {
+                            value[k]
+                        };
+                        let mut shown = draft.unwrap_or(base);
+                        let is_mixed = mixed[row][k] && draft.is_none();
+                        let mut field = egui::DragValue::new(&mut shown)
+                            .speed(0.1)
+                            .prefix(format!("{} ", axes[row][k]));
+                        if is_mixed {
+                            field = field.custom_formatter(|_, _| "mixed".into());
+                        }
+                        let r = ui.add(field).labelled_by(l.id);
                         if r.changed() {
-                            gesture = Some(if r.dragged() {
+                            let g = if r.dragged() {
                                 self.gesture_for(r.drag_started())
                             } else {
                                 Gesture::Commit
-                            });
+                            };
+                            edit = Some((row, k, shown, g));
                         }
-                    }
-                    if let Some(g) = gesture {
-                        let value = if degrees {
-                            shown.map(f64::to_radians)
-                        } else {
-                            shown
-                        };
-                        let anim = AnimEdit {
-                            ctx: self.state.anim_ctx(),
-                            eval: &eval_scene,
-                        };
-                        self.state.status = match set_coord_anim(
-                            &mut self.state.doc,
-                            id,
-                            self.coord_space,
-                            row,
-                            value,
-                            g,
-                            Some(&anim),
-                        ) {
-                            Ok(()) => String::new(),
-                            Err(e) => e.to_string(),
-                        };
                     }
                     ui.end_row();
                 }
-                // component modes: pivot, rotation and size of the selected components
-                // (EDITABLE.md §3.6, §6.7)
-                if component_target(&self.state).is_some() {
-                    self.component_coords_ui(ui);
-                }
             });
+        if let Some((row, k, v, g)) = edit {
+            if self.coord_manual {
+                self.coord_draft.set(row, k, v);
+            } else {
+                let mut one = CoordDraft::default();
+                one.set(row, k, v);
+                let gesture = match g {
+                    Gesture::Commit => None,
+                    Gesture::Drag(n) => Some(n),
+                };
+                self.coord_run(&one, comp.is_some(), gesture);
+            }
+        }
     }
 
-    /// The Pivot, Rotation and Size rows of the Coordinates panel in a component mode
-    /// (EDITABLE.md §6.7): typing a value transforms the selected components.
-    fn component_coords_ui(&mut self, ui: &mut Ui) {
+    /// Writes the Manual-mode draft in one step and drops it.
+    fn coord_apply(&mut self, component: bool) {
+        let draft = std::mem::take(&mut self.coord_draft);
+        self.coord_run(&draft, component, None);
+    }
+
+    /// Runs the registry command for a draft: `mesh.transform` for components, else
+    /// `transform.edit` (UI.md §20.3).
+    fn coord_run(&mut self, draft: &CoordDraft, component: bool, gesture: Option<u64>) {
         let world = self.coord_space == Space::World;
-        let Some(c) = component_coords(&self.state, world) else {
-            ui.label("Pivot");
-            ui.weak("no selection");
-            ui.end_row();
-            return;
+        let cmd = if component {
+            component_transform_args(&self.state, draft, world, gesture)
+                .map(|a| ("mesh.transform", a))
+        } else {
+            draft
+                .transform_args(self.coord_space, self.coord_third, gesture)
+                .map(|a| ("transform.edit", a))
         };
-        let rows = [
-            ("Pivot", ["X", "Y", "Z"], c.pivot),
-            ("Rotation", ["H", "P", "B"], DVec3::ZERO),
-            ("Size", ["X", "Y", "Z"], c.size),
-        ];
-        for (row, (label, axes, value)) in rows.into_iter().enumerate() {
-            let l = ui.label(label);
-            let mut shown = value;
-            let mut gesture = None;
-            for (k, axis) in axes.iter().enumerate() {
-                let r = ui
-                    .add(
-                        egui::DragValue::new(&mut shown[k])
-                            .speed(0.1)
-                            .prefix(format!("{axis} ")),
-                    )
-                    .labelled_by(l.id);
-                if r.changed() {
-                    gesture = Some(if r.dragged() {
-                        self.gesture_for(r.drag_started())
-                    } else {
-                        Gesture::Commit
-                    });
-                }
-            }
-            if let Some(g) = gesture
-                && let Some(drag) = ComponentDrag::begin(&self.state)
-            {
-                let entry = match row {
-                    0 => CoordEntry::Position(shown),
-                    // the rotation row always shows 0, so a typed value is the rotation
-                    1 => CoordEntry::Rotation(shown.map(f64::to_radians)),
-                    _ => CoordEntry::Size(shown),
-                };
-                self.state.status = match drag.apply_entry(&mut self.state.doc, entry, world, g) {
-                    Ok(()) => String::new(),
-                    Err(e) => e.to_string(),
-                };
-            }
-            ui.end_row();
+        if let Some((id, args)) = cmd {
+            self.state.status = execute(&mut self.state, id, args).err().unwrap_or_default();
         }
     }
 

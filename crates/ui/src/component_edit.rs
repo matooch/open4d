@@ -417,3 +417,79 @@ impl ComponentDrag {
         })
     }
 }
+
+/// The `mesh.transform` arguments for a Coordinates-panel draft in a component mode
+/// (UI.md §20.3): row 0 is the pivot, row 1 the rotation (degrees), row 2 the size; `None`
+/// axes keep the shown value. `None` without a selection or when nothing would change.
+pub fn component_transform_args(
+    s: &EditorState,
+    draft: &crate::coordinates::CoordDraft,
+    world: bool,
+    gesture: Option<u64>,
+) -> Option<serde_json::Value> {
+    use serde_json::json;
+    let parts = edit_parts(s).len();
+    let c = component_coords(s, world)?;
+    let object = !world && parts == 1;
+    let mut args = serde_json::Map::new();
+    args.insert(
+        "space".into(),
+        if object { "object" } else { "world" }.into(),
+    );
+    let axes = |row: usize| {
+        DVec3::from_array(std::array::from_fn(|k| {
+            draft.value(row, k).unwrap_or(f64::NAN)
+        }))
+    };
+    let pivot = axes(0);
+    if pivot.to_array().iter().any(|x| !x.is_nan()) {
+        let to = DVec3::from_array(std::array::from_fn(|k| {
+            if pivot[k].is_nan() {
+                c.pivot[k]
+            } else {
+                pivot[k]
+            }
+        }));
+        args.insert("move".into(), json!((to - c.pivot).to_array()));
+    }
+    let rot = axes(1);
+    if rot.to_array().iter().any(|x| !x.is_nan()) {
+        let hpb = DVec3::from_array(std::array::from_fn(|k| {
+            if rot[k].is_nan() {
+                0.0
+            } else {
+                rot[k].to_radians()
+            }
+        }));
+        let m = forge_core::transform::Transform {
+            rot: hpb,
+            ..forge_core::transform::Transform::IDENTITY
+        }
+        .rotation();
+        let (axis, angle) = glam::DQuat::from_mat3(&m).to_axis_angle();
+        if angle.abs() > 1e-12 {
+            args.insert(
+                "rotate".into(),
+                json!({"axis": axis.to_array(), "angle": angle.to_degrees()}),
+            );
+        }
+    }
+    let size = axes(2);
+    if size.to_array().iter().any(|x| !x.is_nan()) {
+        let f = DVec3::from_array(std::array::from_fn(|k| {
+            if size[k].is_nan() || c.size[k].abs() <= 1e-12 {
+                1.0
+            } else {
+                size[k] / c.size[k]
+            }
+        }));
+        args.insert("scale".into(), json!(f.to_array()));
+    }
+    if args.len() == 1 {
+        return None;
+    }
+    if let Some(g) = gesture {
+        args.insert("gesture".into(), g.into());
+    }
+    Some(args.into())
+}

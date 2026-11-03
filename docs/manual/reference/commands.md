@@ -2,7 +2,7 @@
 
 # Command reference
 
-127 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+128 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -124,6 +124,7 @@
 | [`file.import_obj`](#fileimport_obj) | Import OBJ | yes | `file_import_obj` |
 | [`file.export_obj`](#fileexport_obj) | Export OBJ | no | `file_export_obj` |
 | [`param.edit`](#paramedit) | Edit Parameter | yes | `param_edit` |
+| [`transform.edit`](#transformedit) | Set Coordinates | yes | `transform_edit` |
 | [`graph.add_node`](#graphadd_node) | Add Graph Node | yes | `graph_add_node` |
 | [`graph.remove`](#graphremove) | Remove Graph Node | yes | `graph_remove` |
 | [`graph.connect`](#graphconnect) | Connect Graph Ports | yes | `graph_connect` |
@@ -688,6 +689,22 @@ Set Transform. One undo step.
 
 Example: `forge cmd scene.forge transform.set --args '{"node":1,"pos":[0.0,100.0,0.0],"rot":[90.0,0.0,0.0],"scale":[1.0,1.0,1.0]}'`
 
+### `transform.edit`
+
+Set Coordinates. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `gesture` | integer or null | no | Edits with the same gesture number and nodes merge into one undo step. |
+| `nodes` | array of integer or null | no | Objects to edit; absent means the current selection. |
+| `pos` | array of number or null (length 3) or null | no | Position `[x, y, z]`; a `null` axis keeps the shown value. |
+| `rot` | array of number or null (length 3) or null | no | Rotation `[h, p, b]` in degrees; `null` keeps an axis. |
+| `scale` | array of number or null (length 3) or null | no | Scale factors; `null` keeps an axis. Not together with `size`. |
+| `size` | array of number or null (length 3) or null | no | Size (mesh bounding box times scale); `null` keeps an axis. |
+| `space` | string or null | no | `local` (default) or `world`. |
+
+Example: `forge cmd scene.forge transform.edit --args '{"gesture":1,"nodes":[1],"pos":[0.0,100.0,null],"space":"world"}'`
+
 
 ## `mesh`
 
@@ -1043,6 +1060,7 @@ Transform Components. One undo step.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
+| `gesture` | integer or null | no | Steps with the same gesture number and objects merge into one undo step (a dragged Coordinates field). |
 | `move` | array of number (length 3) | no | Translation in object space. |
 | `node` | integer or null | no | Polygon object; the active node when absent. |
 | `nodes` | array of integer or null | no | Polygon objects transformed together in one undo step; every selected polygon object when node and nodes are absent (EDITABLE.md section 6.4). |
