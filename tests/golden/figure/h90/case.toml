@@ -1,0 +1,12 @@
+feature = "figure"
+observation = "docs/parity/generators-3.md"
+description = "Figure with Height 90, other parameters at their R25 defaults (bounding box only, the mesh is not used for parity)"
+mesh = "mesh.obj"
+
+[params]
+height = 90.0
+segments = 14
+
+[import]
+scale = 1.0
+flip_z = false
