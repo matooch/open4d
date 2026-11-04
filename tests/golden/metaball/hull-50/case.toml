@@ -15,7 +15,7 @@ type = "sphere"
 pos = [-60.0, 0.0, 0.0]
 radius = 100.0
 segments = 16
-type = "standard"
+sphere_type = "standard"
 render_perfect = true
 
 [params.input2]
@@ -23,7 +23,7 @@ type = "sphere"
 pos = [60.0, 0.0, 0.0]
 radius = 100.0
 segments = 16
-type = "standard"
+sphere_type = "standard"
 render_perfect = true
 
 [import]

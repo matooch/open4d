@@ -27,6 +27,8 @@ Unblocks: PLAN phase 6, plus deeper coverage of the generators we already have.
 
 ## Cases
 
+In `case.toml`, `type` in a `[params.input…]` table names the child object (`"sphere"`). A child's own Type setting goes under `<object>_type` (`sphere_type = "standard"`): TOML rejects a repeated key.
+
 | Case (folder) | Generator | Children | Changed from default |
 |---|---|---|---|
 | metaball/two-spheres | Metaball | two default spheres at x −60 and x 60 | – |
