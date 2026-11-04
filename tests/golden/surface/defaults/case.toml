@@ -1,0 +1,38 @@
+feature = "surface"
+observation = "docs/parity/deformers-4.md"
+description = "Default plane at y 250 with a Bend strength 90 child, linked into Surface, initialized"
+mesh = "mesh.obj"
+
+[params]
+type = "Projection"
+memory = "0 B"
+strength_percent = 100.0
+proportional = false
+surface = "Plane"
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+
+[params.surface_plane]
+type = "plane"
+position = [0.0, 250.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+width = 400.0
+height = 400.0
+width_segments = 10
+height_segments = 10
+orientation = "+Y"
+
+[params.surface_bend]
+type = "bend"
+strength_deg = 90.0
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false
