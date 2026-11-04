@@ -1,0 +1,49 @@
+feature = "spline-wrap"
+observation = "docs/parity/deformers-3.md"
+description = "Same setup as spline-wrap/defaults with the Spline link set to a default Arc spline (made through its menu command, at the origin)"
+mesh = "mesh.obj"
+
+[params]
+axis = "+X"
+strength_percent = 100.0
+offset_percent = 0.0
+from_percent = 0.0
+to_percent = 100.0
+mode = "Fit Spline"
+end_mode = "Extend"
+scale_from_rail = false
+size_strength_percent = 100.0
+spline_size_strength_percent = 100.0
+rotation_from_rail = true
+up_vector = [0.0, 0.0, 0.0]
+banking_deg = 0.0
+rotation_strength_percent = 100.0
+spline_rotation_strength_percent = 100.0
+fix_bounding_box = false
+bounding_box_center = [0.0, 0.0, 0.0]
+bounding_box_size = [200.0, 200.0, 200.0]
+
+[params.spline]
+type = "spline"
+spline_type = "Arc"
+radius = 200.0
+inner_radius = 100.0
+start_angle_deg = 0.0
+end_angle_deg = 90.0
+plane = "XY"
+reverse = false
+intermediate_points = "Uniform"
+number = 8
+angle_deg = 5.0
+maximum_length = 5.0
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false

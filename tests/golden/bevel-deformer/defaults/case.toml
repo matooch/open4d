@@ -1,0 +1,36 @@
+feature = "bevel-deformer"
+observation = "docs/parity/deformers-3.md"
+description = "Bevel deformer child of a cube with segments 1/1/1 (200 x 400 x 200), default settings"
+mesh = "mesh.obj"
+
+[params]
+component_mode = "Edges"
+selection = ""
+use_angle = true
+angle_threshold_deg = 40.0
+bevel_mode = "Chamfer"
+offset_mode = "Fixed Distance"
+offset = 1.0
+subdivision = 0
+depth_percent = 100.0
+limit = true
+shape = "Round"
+tension_percent = 100.0
+mitering = "Default"
+ending = "Default"
+partial_rounding = "None"
+corner_n_gons = false
+rounding_n_gons = false
+phong_break_rounding = false
+phong_break_miters = false
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 1
+segments_y = 1
+segments_z = 1
+
+[import]
+scale = 1.0
+flip_z = false
