@@ -1,0 +1,21 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Two default cubes made editable, the second at x = 200, joined with Connect Objects so one object holds both (edges touching at x = 100: 16 points, 12 polygons); then Optimize run over everything with tolerance 0.01, points, polygons and unused points on (12 points, 11 polygons)"
+mesh = "mesh.obj"
+
+[params]
+tool = "optimize"
+segments = [1, 1, 1]
+
+[params.settings]
+tolerance = 0.01
+optimize_points = true
+optimize_polygons = true
+delete_unused_points = true
+
+[params.setup]
+moved_to_x = 200.0
+
+[import]
+scale = 1.0
+flip_z = false

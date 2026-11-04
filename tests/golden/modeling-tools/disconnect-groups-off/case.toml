@@ -1,0 +1,16 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Cube made editable with 2 x 1 x 1 segments (12 points, 10 polygons); the two top polygons ([6, 7]) selected and Disconnect run with Preserve Groups off"
+mesh = "mesh.obj"
+
+[params]
+tool = "disconnect"
+segments = [2, 1, 1]
+select_polys = [6, 7]
+
+[params.settings]
+preserve_groups = false
+
+[import]
+scale = 1.0
+flip_z = false

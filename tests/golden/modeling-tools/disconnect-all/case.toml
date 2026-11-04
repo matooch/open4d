@@ -1,0 +1,16 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Default cube made editable (8 points, 6 polygons); all 6 polygons selected and Disconnect run with Preserve Groups off (every polygon unshared)"
+mesh = "mesh.obj"
+
+[params]
+tool = "disconnect"
+segments = [1, 1, 1]
+select_polys = [0, 1, 2, 3, 4, 5]
+
+[params.settings]
+preserve_groups = false
+
+[import]
+scale = 1.0
+flip_z = false
