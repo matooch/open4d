@@ -4,7 +4,6 @@ description = "Camera object at (0, 0, -800) linked; default 32x32 grid; grid po
 mesh = "mesh.obj"
 
 [params]
-camera = "Camera"
 strength_percent = 100.0
 grid_x = 32
 grid_y = 32

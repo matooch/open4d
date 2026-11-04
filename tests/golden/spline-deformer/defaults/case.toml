@@ -4,8 +4,6 @@ description = "Default Arc spline as Original Spline, the same Arc rotated H 90 
 mesh = "mesh.obj"
 
 [params]
-original_spline = "Arc"
-modifying_spline = "Arc.1"
 b_spline_approximation = 10
 radius = 30.0
 use_length = false

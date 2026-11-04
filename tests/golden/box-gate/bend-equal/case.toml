@@ -1,0 +1,31 @@
+feature = "box-gate"
+observation = "docs/parity/deformers-4.md"
+description = "Bend strength 90, mode Within Box, size (200, 250, 200) exactly the cube extent; input cube 200x200x200 segments 4/4/4"
+mesh = "mesh.obj"
+
+[params]
+size = [200.0, 250.0, 200.0]
+p536871510 = ""
+alignment = "Y+"
+mode = "Within Box"
+p536871511 = ""
+strength_deg = 90.0
+p536871512 = ""
+angle_deg = 0.0
+p536871513 = ""
+p536871514 = ""
+p536871515 = ""
+keep_length = false
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+
+[params.input]
+type = "cube"
+size = [200.0, 200.0, 200.0]
+segments_x = 4
+segments_y = 4
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false
