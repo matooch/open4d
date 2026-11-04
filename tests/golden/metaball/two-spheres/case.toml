@@ -1,0 +1,31 @@
+feature = "metaball"
+observation = "docs/parity/generators-3.md"
+description = "Metaball at its R25 defaults with two default spheres as children at x -60 and x 60"
+mesh = "mesh.obj"
+
+[params]
+hull_value = 100.0
+editor_subdiv = 40.0
+render_subdiv = 5.0
+exponential_falloff = false
+accurate_normals = false
+
+[params.input]
+type = "sphere"
+pos = [-60.0, 0.0, 0.0]
+radius = 100.0
+segments = 16
+type = "standard"
+render_perfect = true
+
+[params.input2]
+type = "sphere"
+pos = [60.0, 0.0, 0.0]
+radius = 100.0
+segments = 16
+type = "standard"
+render_perfect = true
+
+[import]
+scale = 1.0
+flip_z = false

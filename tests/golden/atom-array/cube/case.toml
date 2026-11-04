@@ -1,0 +1,26 @@
+feature = "atom-array"
+observation = "docs/parity/generators-3.md"
+description = "Atom Array at its R25 defaults with one default cube as child"
+mesh = "mesh.obj"
+
+[params]
+cylinder_radius = 2.0
+sphere_radius = 5.0
+subdivisions = 8
+single_elements = false
+
+[params.input]
+type = "cube"
+pos = [0.0, 0.0, 0.0]
+size = [200.0, 200.0, 200.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = false
+fillet = false
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[import]
+scale = 1.0
+flip_z = false

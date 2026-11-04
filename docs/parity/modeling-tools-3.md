@@ -74,4 +74,6 @@ GUI-only: the drag scale (how many units the Extrude offset changes per screen p
 default camera). Add it to [GUI-SESSIONS.md](GUI-SESSIONS.md) G3 when someone sits at the app.
 
 ## Notes
-TODO
+- `bevel-proportional-rect` crashed the app in the run of 2026-11-03/04 (leftover
+  CURRENT_CASE said so at the start of the next run). Skipped for good, per the queue
+  rules.
