@@ -1,0 +1,41 @@
+feature = "boole"
+observation = "docs/parity/generators-3.md"
+description = "Two default cubes, the second at (50, 50, 50), under a Boole with R25 defaults for everything else, Boolean Type A union B"
+mesh = "mesh.obj"
+
+[params]
+mode = "union"
+single_object = false
+hide_new_edges = true
+phong_breaks = false
+select_intersections = false
+optimize_points = 0.01
+high_quality = true
+
+[params.input]
+type = "cube"
+pos = [0.0, 0.0, 0.0]
+size = [200.0, 200.0, 200.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = false
+fillet = false
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[params.input2]
+type = "cube"
+pos = [50.0, 50.0, 50.0]
+size = [200.0, 200.0, 200.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = false
+fillet = false
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[import]
+scale = 1.0
+flip_z = false
