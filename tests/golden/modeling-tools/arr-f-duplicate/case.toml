@@ -1,0 +1,20 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "A default cube (not editable) at the origin; the Duplicate command run with 3 copies, linear layout, per-step move (200, 0, 0), scale (1, 1, 1), rotation (0, 0, 0). Copy names and world positions in samples.json"
+mesh = "mesh.obj"
+
+[params]
+tool = "duplicate"
+segments = []
+
+[params.settings]
+copies = 3
+layout = "linear"
+per_step = true
+move = [200.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+rotation = [0.0, 0.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false

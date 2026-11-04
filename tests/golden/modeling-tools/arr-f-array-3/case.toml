@@ -1,0 +1,19 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Cube made editable with 1 x 1 x 1 segments and all 6 polygons selected; the Array command run with 3 columns along x and offset (300, 0, 0), scale (1, 1, 1), rotation (0, 0, 0), other fields at the dialog defaults"
+mesh = "mesh.obj"
+
+[params]
+tool = "array_command"
+segments = [1, 1, 1]
+select_polys = [0, 1, 2, 3, 4, 5]
+
+[params.settings]
+count = [3, 1, 1]
+offset = [300.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+rotation = [0.0, 0.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false
