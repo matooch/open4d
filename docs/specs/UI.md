@@ -1353,3 +1353,54 @@ trip, `Theme::of(Dark) == Theme::default()`, visuals (focus stroke, light base),
 clamp, settings round trip and leniency, commands (refused headless, argument validation),
 window (switching theme changes `Theme::current` and the saved file, scale sets the zoom
 factor), layout at pixels-per-point 1, 1.5 and 2, IME in the palette search, Tab focus order.
+
+## 25. Icon set and icon atlas (`icons`; brief 148)
+
+Sources: own design from docs/roadmap/areas/L-ui.md. GUI session G1 (docs/parity/GUI-SESSIONS.md) is
+unanswered, so **which glyph stands for which command is parity-pending** (only layout was ever to
+come from G1; icons are never traced or imitated). Every glyph is a simple geometric drawing made
+for this project; no file comes from any other application.
+
+### 25.1 Files
+`crates/ui/icons/<glyph>.svg`, one per glyph, compiled into the binary (`include_str!`). All
+share one form: `viewBox 0 0 24 24`, white (`#fff`) strokes of width 1.5 on a transparent
+background, no text, no raster images, no external references. White means the atlas is a
+tint mask: the UI multiplies it by the wanted colour (so themes need no second atlas). The
+glyph name is the file stem (lowercase letters, digits, `_`).
+
+### 25.2 Mapping (`icon_name`)
+`icon_name(id) -> Option<&'static str>` maps a node-type id (`forge.cube`) or a command id
+(`mesh.bevel`) to a glyph name. Several ids may share a glyph (`marker.add` and
+`marker.rename` use `marker`/`rename`; the two gizmo commands share `gizmo`). The table is
+`ICON_MAP`, sorted by id, with no duplicate ids.
+- Every node type of `forge_app::default_registry()` (62 at the time of writing) has its own
+  glyph. Every command of `forge_app::default_command_registry()` (141) maps to a glyph.
+- Fallback: an id not in the table (a plugin type, a later command) gets `IconRef::Letter(c)`,
+  where `c` is the first alphanumeric character of its label, upper-cased (`'?'` if none).
+  The UI draws the letter with the normal font inside a rounded square. `icon_ref(id, label)`
+  returns `IconRef::Glyph(name)` or the letter.
+- Every glyph file is used by at least one id, and every mapped name has a file (tested), so
+  the set cannot rot.
+
+### 25.3 Atlas (`IconAtlas`)
+`IconAtlas::build(pixels_per_point)` renders every glyph with `resvg` (no text or system-font
+features, so it needs no fonts or GPU and runs headless). Scale `s` is clamped to `0.5..=4.0`.
+- Cell size `cell = ceil(24 * s) + 2 * PAD` pixels (`PAD = 1`, transparent, so bilinear
+  sampling never bleeds into a neighbour); the glyph is drawn into the inner `ceil(24 * s)`
+  square, scaled by `ceil(24 * s) / 24`.
+- Layout: glyphs in name order, row-major, 16 per row; the image is `16 * cell` wide and
+  `rows * cell` high. `rect(name)` is the inner pixel rectangle `[x0, y0, x1, y1]`;
+  `uv(name)` the same in 0..1 texture coordinates.
+- Pixels are premultiplied RGBA8 (`pixels`), directly usable as
+  `egui::ColorImage::from_rgba_premultiplied` (`to_color_image`). `IconAtlas::texture(ctx)`
+  uploads it with linear filtering.
+- Deterministic: the same scale gives byte-identical pixels.
+- A glyph that fails to parse is a build error caught by the tests, never a runtime panic:
+  `build` skips it (and logs a warning), so it then falls back to its letter.
+
+### 25.4 Tests (`crates/ui/tests/icons.rs`)
+Every node type and command resolves to a glyph that exists; the map is sorted and unique;
+no unused file; every file has the shared form of §25.1 and; the atlas has
+the documented size, every glyph's rectangle contains inked pixels and the padding is empty;
+scale 2 doubles the cell; two builds are identical; the letter fallback; unknown ids; the
+atlas converts to a `ColorImage` of the same size.

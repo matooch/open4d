@@ -19,6 +19,7 @@ pub mod cutting;
 pub mod dock;
 pub mod history_panel;
 pub mod hud;
+pub mod icons;
 pub mod keymap;
 pub mod keymap_editor;
 pub mod layer_manager;
