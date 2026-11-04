@@ -1,0 +1,29 @@
+feature = "symmetry"
+observation = "docs/parity/generators-3.md"
+description = "Symmetry over a default cube at x 100, one case per Mirror Plane option (XZ), R25 defaults"
+mesh = "mesh.obj"
+
+[params]
+mirror_plane = "xz"
+weld_points = true
+weld_tolerance = 0.01
+symmetrical = true
+clamp_points_on_axis = false
+delete_polygons_on_axis = false
+auto_flip = false
+
+[params.input]
+type = "cube"
+pos = [100.0, 0.0, 0.0]
+size = [200.0, 200.0, 200.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = false
+fillet = false
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[import]
+scale = 1.0
+flip_z = false
