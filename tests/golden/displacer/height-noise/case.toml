@@ -1,0 +1,40 @@
+feature = "displacer"
+observation = "docs/parity/deformers-3.md"
+description = "Displacer child of the cube: a Noise shader with its default settings in the Shader link, Height set to 20. The noise shader is seeded by its own default (665)"
+mesh = "mesh.obj"
+
+[params]
+emulation = false
+strength_percent = 100.0
+height = 20.0
+type = "Intensity (Centered)"
+direction = "Vertex normal"
+process_normal_tag = false
+channel = "Custom Shader"
+shader = "Noise"
+offsetu = 0.0
+offsetv = 0.0
+lengthu_percent = 100.0
+lengthv_percent = 100.0
+tile = true
+use = "Gray"
+invert = false
+object = true
+camera = false
+backface_cull = false
+
+[params.shader]
+type = "noise"
+noise = 2013
+seed = 665
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false

@@ -1,0 +1,22 @@
+feature = "polygon-reduction"
+observation = "docs/parity/deformers-3.md"
+description = "Polygon Reduction child of a default sphere, Reduction Strength set to 50 percent"
+mesh = "mesh.obj"
+
+[params]
+reduction_strength_percent = 50.0
+mesh_quality_factor = 1000
+co_planar_optimization = true
+bounday_curve_preservation = true
+polygon_quality_preservation = false
+
+[params.input]
+type = "sphere"
+radius = 100.0
+segments = 16
+sphere_type = "Standard"
+render_perfect = true
+
+[import]
+scale = 1.0
+flip_z = false
