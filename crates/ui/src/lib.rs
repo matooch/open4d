@@ -150,6 +150,12 @@ pub fn run(registry: Arc<Registry>) -> eframe::Result {
 
 /// Like [`run`], serving the RPC server's requests between frames (docs/specs/RPC.md).
 pub fn run_with_rpc(registry: Arc<Registry>, rpc: Option<forge_rpc::Inbox>) -> eframe::Result {
+    run_with_app(forge_app::App::new(registry), rpc)
+}
+
+/// Like [`run_with_rpc`] over a prepared application (plugins installed by the host).
+pub fn run_with_app(app: forge_app::App, rpc: Option<forge_rpc::Inbox>) -> eframe::Result {
+    let mut app = Some(app);
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         viewport: egui::ViewportBuilder::default()
@@ -169,7 +175,7 @@ pub fn run_with_rpc(registry: Arc<Registry>, rpc: Option<forge_rpc::Inbox>) -> e
                     a.name, a.backend, a.driver, a.driver_info
                 ));
             }
-            let mut state = state::EditorState::new(registry);
+            let mut state = state::EditorState::with_app(app.take().expect("built once"));
             state
                 .script
                 .use_settings_file(forge_platform::settings_path());

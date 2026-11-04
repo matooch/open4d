@@ -1,6 +1,6 @@
 # 186 · Plugin host integration: evaluation hook and plugin folders
 
-Status: ready · Area: N · Depends on: 184 · Observations: – · Touches: core, generators, plugin, app, cli, ui
+Status: done · Area: N · Depends on: 184 · Observations: – · Touches: core, generators, plugin, app, cli, ui
 
 ## Goal
 Plugin node types from brief 184 produce geometry in the live scene (viewport, scheduler, export, `forge` CLI), and hosts load plugins from a known folder without extra code.
@@ -17,10 +17,10 @@ Plugin node types from brief 184 produce geometry in the live scene (viewport, s
 - A `plugin.list` command (read-only, no undo step) reports loaded plugins, their node types and commands, and the skipped ones with the reason.
 
 ## Done when
-- [ ] A test scene with the example `ring-kit` node evaluates through `forge_generators::evaluate` and the scheduler, and exports to OBJ, with the same mesh as `RhaiPlugin::evaluate`.
-- [ ] Folder order, the env var, `--plugins`, `--no-plugins` and clash skipping are tested (temp dirs; never the real data dir).
-- [ ] `plugin.list` works over CLI and RPC; the generated command reference is regenerated.
-- [ ] PLUGINS.md §6 is closed; the gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] A test scene with the example `ring-kit` node evaluates through `forge_generators::evaluate` and the scheduler, and exports to OBJ, with the same mesh as `RhaiPlugin::evaluate`.
+- [x] Folder order, the env var, `--plugins`, `--no-plugins` and clash skipping are tested (temp dirs; never the real data dir).
+- [x] `plugin.list` works over CLI and RPC; the generated command reference is regenerated.
+- [x] PLUGINS.md §6 is closed; the gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -30,8 +30,8 @@ Plugin node types from brief 184 produce geometry in the live scene (viewport, s
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions.
-- The last lines of the gate output.
+- Result: tests added: `crates/plugin/tests/host.rs` (8: ring-kit through `evaluate`, scheduler, `eval_mesh` and OBJ export; failing/invalid/looping build functions are node errors; folder order, `FORGE_PLUGIN_PATH`, `--plugins`, `--no-plugins`/`FORGE_NO_PLUGINS`, clash skipping, broken plugins; `plugin.list`), `apps/forge/tests/cli.rs` (2: CLI flags and env end to end with an isolated HOME, `plugin.list` over RPC dispatch). No parity cases involved (STATUS.md unchanged).
+- Deviations: the evaluator trait returns `forge_core::MeshData` (core does not see `PolyMesh`); added `BuildError::Failed(String)` and `RegistryError::{UnknownType, DuplicateEvaluator}`. The host entry point is `forge_plugin::load_host` (forge-app cannot depend on forge-plugin: plugin -> script -> app), so `App::new_default()` stays plugin-free; CLI, `forge-rpc-serve`, `forge-mcp --headless` and the studio editor use `load_host`, the editor through new `forge_ui::run_with_app` / `EditorState::with_app`. `plugin.list` is registered by `load_host` (also when disabled); the generated docs use a plugin-disabled host. Existing spawn-based tests set `FORGE_NO_PLUGINS=1`.
+- Files changed: see the commit; spec in `docs/specs/PLUGINS.md` sections 6, 8, 9; regenerated `docs/manual/reference/{cli,commands,mcp}.md`.
+- Open questions: none.
+- The last lines of the gate output: `GATE: 1688 tests passed, 0 failed` ... `GATE: all passed`.

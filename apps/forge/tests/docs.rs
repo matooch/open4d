@@ -44,7 +44,7 @@ fn generation_is_deterministic_and_complete() {
     let pages = docs::generate();
     let commands = &pages.iter().find(|(n, _)| *n == "commands.md").unwrap().1;
     // Every registry command has a section, an MCP tool name and an argument table.
-    let app = forge_app::App::new_default();
+    let app = docs::docs_app();
     for c in app.commands.iter() {
         assert!(
             commands.contains(&format!("### `{}`", c.id())),
@@ -70,7 +70,11 @@ fn forge_docs_writes_and_checks() {
     let d = std::env::temp_dir().join(format!("forge-docs-test-{}", std::process::id()));
     std::fs::remove_dir_all(&d).ok();
     let out = d.to_str().unwrap();
-    let forge = || Command::cargo_bin("forge").unwrap();
+    let forge = || {
+        let mut cmd = Command::cargo_bin("forge").unwrap();
+        cmd.env("FORGE_NO_PLUGINS", "1");
+        cmd
+    };
     // Nothing there yet: the check fails and names the fix.
     let failed = forge()
         .args(["docs", "--check", "--out", out])

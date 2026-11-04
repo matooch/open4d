@@ -2,7 +2,7 @@
 
 # Command reference
 
-141 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+142 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -147,6 +147,7 @@
 | [`graph.get`](#graphget) | Get Graph | no | `graph_get` |
 | [`graph.node_types`](#graphnode_types) | List Graph Node Types | no | `graph_node_types` |
 | [`graph.evaluate`](#graphevaluate) | Evaluate Graph | no | `graph_evaluate` |
+| [`plugin.list`](#pluginlist) | List Plugins | no | `plugin_list` |
 
 ## `object`
 
@@ -1790,4 +1791,15 @@ Evaluate Graph. Not an undoable edit.
 | `tag` | integer | yes |  |
 
 Example: `forge cmd scene.forge graph.evaluate --args '{"tag":1}'`
+
+
+## `plugin`
+
+### `plugin.list`
+
+List Plugins. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge plugin.list --args '{}'`
 

@@ -20,6 +20,7 @@ forge-command = { path = "../../crates/command" }
 forge-core = { path = "../../crates/core" }
 forge-generators = { path = "../../crates/generators" }
 forge-mcp = { path = "../../crates/mcp" }
+forge-plugin = { path = "../../crates/plugin" }
 forge-rpc = { path = "../../crates/rpc" }
 forge-script = { path = "../../crates/script" }
 serde_json = "1"

@@ -8,6 +8,7 @@ description = "The Forge3D editor application."
 [dependencies]
 forge-app = { path = "../../crates/app" }
 forge-cli = { path = "../forge" }
+forge-plugin = { path = "../../crates/plugin" }
 forge-rpc = { path = "../../crates/rpc" }
 forge-ui = { path = "../../crates/ui" }
 tracing = "0.1"

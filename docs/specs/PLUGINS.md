@@ -100,15 +100,70 @@ function, with the line), `Build` (a build function failed or returned a bad mes
 
 ## 6. Not in this version
 
-- The editor/CLI do not install `plugins/` folders automatically yet; hosts call
-  `install_all`. Scene evaluation (`forge_generators::evaluate`) does not call
-  `RhaiPlugin::evaluate` yet, so plugin node types are created and edited like any node but
-  their mesh is produced by hosts that call it (follow-up: evaluation hook).
 - No native (dynamic library) plugins; no `import` between scripts; no permissions beyond
   `commands`.
+
+(Closed by brief 186: scene evaluation of plugin node types (section 8) and the plugin
+folders (section 9).)
 
 ## 7. Example
 
 `examples/plugins/ring-kit/` registers node type `ring_kit.ring` (params `radius`, `tube`,
 `segments`, `sides`) and command `ring_kit.add_ring` (creates a ring node and renames it).
 Tests: `crates/plugin/tests/plugin.rs`.
+
+## 8. Evaluation hook (brief 186)
+
+`forge-core` holds the hook so that no crate depends on `forge-plugin`:
+
+- trait `forge_core::NodeEvaluator` (`Debug + Send + Sync`):
+  `evaluate(&self, scene, id, ctx) -> Result<Option<MeshData>, String>`;
+- `Registry::set_evaluator(type_id, evaluator)` (the type must be registered; a second
+  evaluator for a type is an error), `Registry::evaluator(type_id)`.
+
+`RhaiPlugin::register` sets an evaluator for each of its node types in the same atomic
+`install` as the types. `forge_generators::evaluate` consults the registry for a type that
+no built-in evaluator handles (deformer children still apply afterwards, and a plugin node
+passes deformers on like any geometry node), so the viewport, the scheduler, `forge eval`,
+`forge export`, the RPC `eval.mesh` method and MCP all show the plugin mesh, equal to
+`RhaiPlugin::evaluate`. The build function sandbox and limits are those of section 3.1,
+unchanged.
+
+A failing evaluation (a script error, a bad mesh, a limit hit, even a panic inside the
+evaluator) is the node's build error (`BuildError::Failed(message)`), reported like any
+other node error; it never aborts the host.
+
+## 9. Plugin folders and the host entry point (brief 186)
+
+Folders are loaded in this order; a later folder skips any plugin whose name, node type id
+or command id is already taken (reported as skipped, with the reason):
+
+1. `<forge-platform data dir>/plugins/` (`forge_platform::dirs().data`);
+2. every folder in `FORGE_PLUGIN_PATH` (split with the OS path-list separator; empty
+   entries ignored);
+3. every `--plugins <dir>` of the `forge` CLI (repeatable, global option).
+
+`--no-plugins` and `FORGE_NO_PLUGINS` set to anything but empty or `0` disable all
+loading; the built-in set is then exactly the plugin-free one, plus `plugin.list`.
+
+`forge_plugin::HostOptions` carries these inputs (`extra_dirs`, `disabled`, `data_dir`,
+`env_path`); `HostOptions::from_env(extra_dirs, no_plugins)` reads the process environment
+and the platform data dir, so tests build the struct with temp dirs and never touch the
+real data dir. `forge_plugin::load_host(&options)` returns a `Host` (shared `Registry`,
+bound `CommandRegistry`, `LoadReport`); `Host::new_app()` makes an `App`. The CLI, the
+RPC server binary, the MCP server binary and the editor all go through it, so headless
+and windowed load the same set. `App::new_default()` and `default_registry()` stay
+plugin-free (deterministic tests, generated docs).
+
+### plugin.list
+
+Command `plugin.list` (read-only, not undoable, no arguments) returns
+
+```
+{ "disabled": bool, "folders": [path...],
+  "plugins": [ { "name", "version", "id", "dir", "node_types": [id...], "commands": [id...] } ],
+  "skipped": [ { "dir", "reason" } ] }
+```
+
+It is registered by `load_host` in every host (also when loading is disabled), so it is in
+the generated command, RPC and MCP references.

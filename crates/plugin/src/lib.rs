@@ -4,6 +4,7 @@
 //! (geometry from a Rhai function, run in a pure sandbox) and commands (Rhai functions in
 //! the command registry). Every script runs under the `forge-script` sandbox limits.
 
+mod host;
 mod manifest;
 
 use std::collections::BTreeSet;
@@ -13,12 +14,15 @@ use std::sync::{Arc, OnceLock, Weak};
 use forge_command::{
     CommandContext, CommandError, CommandHandler, CommandPlugin, CommandRegistry, valid_command_id,
 };
-use forge_core::{MeshData, NodeId, Plugin, Registry, RegistryError, Scene};
+use forge_core::{
+    EvalCtx, MeshData, NodeEvaluator, NodeId, Plugin, Registry, RegistryError, Scene,
+};
 use forge_geometry::PolyMesh;
 use forge_script::{ScriptOptions, eval_function, run_function, script_functions};
 use glam::DVec3;
 use serde_json::{Map, Value as Json, json};
 
+pub use host::{Host, HostOptions, LoadReport, PluginInfo, SkippedInfo, load_host};
 pub use manifest::{CommandDef, Manifest, NodeTypeDef, PERMISSIONS};
 
 /// File name of the manifest inside a plugin folder.
@@ -41,7 +45,7 @@ pub enum PluginError {
 }
 
 /// One loaded, validated plugin package.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RhaiPlugin {
     id: String,
     dir: PathBuf,
@@ -268,14 +272,38 @@ fn mesh_from_json(v: &Json) -> Result<PolyMesh, String> {
     })
 }
 
+/// The registry hook of one plugin: evaluates its node types (PLUGINS.md section 8).
+#[derive(Debug)]
+struct PluginEvaluator(RhaiPlugin);
+
+impl NodeEvaluator for PluginEvaluator {
+    fn evaluate(
+        &self,
+        scene: &Scene,
+        id: NodeId,
+        _ctx: &EvalCtx,
+    ) -> Result<Option<MeshData>, String> {
+        match self.0.evaluate(scene, id) {
+            None => Ok(None),
+            Some(Err(e)) => Err(e.to_string()),
+            Some(Ok(mesh)) => Ok(Some(MeshData {
+                points: mesh.points.iter().map(|p| p.to_array()).collect(),
+                polys: mesh.polys,
+            })),
+        }
+    }
+}
+
 impl Plugin for RhaiPlugin {
     fn id(&self) -> &str {
         &self.id
     }
 
     fn register(&self, registry: &mut Registry) -> Result<(), RegistryError> {
+        let evaluator = Arc::new(PluginEvaluator(self.clone()));
         for t in &self.manifest.node_types {
             registry.register(t.node_type.clone())?;
+            registry.set_evaluator(&t.node_type.id, evaluator.clone())?;
         }
         Ok(())
     }
@@ -393,6 +421,17 @@ pub fn install_all(
     registry: &mut Registry,
     commands: &mut CommandRegistry,
 ) -> Installed {
+    install_from(root, registry, commands, &mut BTreeSet::new())
+}
+
+/// [`install_all`] with plugin names already taken by earlier folders (they are skipped).
+/// The names of the plugins installed here are added to `names`.
+pub fn install_from(
+    root: &Path,
+    registry: &mut Registry,
+    commands: &mut CommandRegistry,
+    names: &mut BTreeSet<String>,
+) -> Installed {
     let (found, failed) = discover(root);
     let mut out = Installed {
         failures: failed
@@ -401,7 +440,6 @@ pub fn install_all(
             .collect(),
         ..Installed::default()
     };
-    let mut names = BTreeSet::new();
     for plugin in found {
         let dir = plugin.dir.clone();
         if !names.insert(plugin.manifest.name.clone()) {

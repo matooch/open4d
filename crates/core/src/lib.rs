@@ -24,7 +24,7 @@ pub use layers::{Layer, LayerId, Layers};
 pub use param::{
     EnumOption, MeshData, ParamDesc, ParamError, ParamKind, RangeValue, UiHint, Unit, Value,
 };
-pub use registry::{Category, NodeType, Plugin, Registry, RegistryError};
+pub use registry::{Category, NodeEvaluator, NodeType, Plugin, Registry, RegistryError};
 pub use scene::{Node, NodeId, Scene, SceneSettings};
 pub use time::{Marker, PlayMode, TimeConfig, TimeDisplay};
 pub use track::{Interp, Key, Target, Track, TrackError, parse_target};

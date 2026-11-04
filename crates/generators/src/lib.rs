@@ -49,6 +49,9 @@ pub enum BuildError {
     /// An observed option whose geometry is not derived yet.
     #[error("not supported yet: {0}")]
     Unsupported(&'static str),
+    /// A plugin evaluator failed (docs/specs/PLUGINS.md section 8).
+    #[error("{0}")]
+    Failed(String),
 }
 
 /// The primitive node types.
@@ -234,10 +237,37 @@ pub(crate) fn evaluate_geometry(
     if modeling::input_count(&node.type_id).is_some() || node.type_id == modeling::INSTANCE {
         return modeling::evaluate_modeling(scene, id, &node.type_id, &node.params, ctx);
     }
+    if let Some(ev) = scene.registry().evaluator(&node.type_id) {
+        return plugin_mesh(ev.as_ref(), scene, id, ctx);
+    }
     match build(&node.type_id, &node.params) {
         Ok(mesh) => Ok(Some(mesh)),
         Err(BuildError::UnknownType(_)) => Ok(None),
         Err(e) => Err(e),
+    }
+}
+
+/// Runs a plugin evaluator; a panic inside it is a node error too.
+fn plugin_mesh(
+    ev: &dyn forge_core::NodeEvaluator,
+    scene: &Scene,
+    id: NodeId,
+    ctx: &EvalCtx,
+) -> Result<Option<PolyMesh>, BuildError> {
+    let out =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ev.evaluate(scene, id, ctx)))
+            .unwrap_or_else(|_| Err("the plugin evaluator panicked".to_string()));
+    match out {
+        Ok(Some(m)) => Ok(Some(PolyMesh {
+            points: m
+                .points
+                .iter()
+                .map(|p| glam::DVec3::from_array(*p))
+                .collect(),
+            polys: m.polys,
+        })),
+        Ok(None) => Ok(None),
+        Err(e) => Err(BuildError::Failed(e)),
     }
 }
 
@@ -258,7 +288,7 @@ fn deformer_children(scene: &Scene, id: NodeId) -> Vec<NodeId> {
     };
     let mut out = deformers(node);
     if let Some(parent) = node.parent.and_then(|p| scene.node(p))
-        && !produces_geometry(&parent.type_id)
+        && !produces_geometry(scene, &parent.type_id)
     {
         out.extend(deformers(parent));
     }
@@ -269,7 +299,7 @@ fn deformer_children(scene: &Scene, id: NodeId) -> Vec<NodeId> {
 /// deformer children), if any.
 pub(crate) fn sibling_deformer_parent(scene: &Scene, id: NodeId) -> Option<NodeId> {
     let parent = scene.node(scene.node(id)?.parent?)?;
-    (!produces_geometry(&parent.type_id)
+    (!produces_geometry(scene, &parent.type_id)
         && parent
             .children
             .iter()
@@ -279,8 +309,9 @@ pub(crate) fn sibling_deformer_parent(scene: &Scene, id: NodeId) -> Option<NodeI
 
 /// True for the node types that build a mesh of their own, so a parent that only
 /// groups objects (a Null) passes its deformers on to them (MODIFIERS.md §0).
-fn produces_geometry(type_id: &str) -> bool {
+fn produces_geometry(scene: &Scene, type_id: &str) -> bool {
     types().iter().any(|t| t.id == type_id)
+        || scene.registry().evaluator(type_id).is_some()
         || type_id == subdivision::TYPE
         || type_id == boole::TYPE
         || type_id == cloner::TYPE

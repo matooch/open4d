@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use crate::{ParamDesc, ParamKind, transform};
+use crate::{EvalCtx, MeshData, NodeId, ParamDesc, ParamKind, Scene, transform};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Category {
@@ -83,6 +83,10 @@ pub enum RegistryError {
     InvalidDefault { type_id: String, param: String },
     #[error("{type_id}: enum {param:?} needs at least one option and unique option ids")]
     InvalidEnum { type_id: String, param: String },
+    #[error("node type {0:?} is not registered")]
+    UnknownType(String),
+    #[error("node type {0:?} already has an evaluator")]
+    DuplicateEvaluator(String),
     #[error("{type_id}: parameter id {param:?} uses the reserved `transform.` prefix")]
     ReservedParam { type_id: String, param: String },
 }
@@ -93,9 +97,22 @@ pub trait Plugin {
     fn register(&self, registry: &mut Registry) -> Result<(), RegistryError>;
 }
 
+/// Produces the geometry of nodes of a type that no built-in evaluator handles (plugin node
+/// types, docs/specs/PLUGINS.md section 8). `Ok(None)` means "no geometry"; an `Err` is the
+/// node's build error and never aborts the host.
+pub trait NodeEvaluator: std::fmt::Debug + Send + Sync {
+    fn evaluate(
+        &self,
+        scene: &Scene,
+        id: NodeId,
+        ctx: &EvalCtx,
+    ) -> Result<Option<MeshData>, String>;
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Registry {
     types: BTreeMap<String, Arc<NodeType>>,
+    evaluators: BTreeMap<String, Arc<dyn NodeEvaluator>>,
 }
 
 fn valid_type_id(id: &str) -> bool {
@@ -186,6 +203,27 @@ impl Registry {
         plugin.register(&mut staged)?;
         *self = staged;
         Ok(())
+    }
+
+    /// Sets the geometry evaluator of a registered type; one per type.
+    pub fn set_evaluator(
+        &mut self,
+        type_id: &str,
+        evaluator: Arc<dyn NodeEvaluator>,
+    ) -> Result<(), RegistryError> {
+        if !self.types.contains_key(type_id) {
+            return Err(RegistryError::UnknownType(type_id.to_string()));
+        }
+        if self.evaluators.contains_key(type_id) {
+            return Err(RegistryError::DuplicateEvaluator(type_id.to_string()));
+        }
+        self.evaluators.insert(type_id.to_string(), evaluator);
+        Ok(())
+    }
+
+    /// The geometry evaluator of a type, if a plugin set one.
+    pub fn evaluator(&self, type_id: &str) -> Option<&Arc<dyn NodeEvaluator>> {
+        self.evaluators.get(type_id)
     }
 
     pub fn get(&self, id: &str) -> Option<&Arc<NodeType>> {

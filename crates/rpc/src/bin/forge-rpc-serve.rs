@@ -5,7 +5,6 @@ use std::io::Write;
 use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
 
-use forge_app::App;
 use forge_rpc::{RpcSettings, Server, ServerConfig};
 
 const USAGE: &str = "usage: forge-rpc-serve [--port N] [--insecure-local] [scene-file]\n\
@@ -50,7 +49,8 @@ fn main() -> ExitCode {
         env!("CARGO_PKG_VERSION"),
         token.iter().cloned().collect(),
     );
-    let mut app = App::new_default();
+    let mut app =
+        forge_plugin::load_host(&forge_plugin::HostOptions::from_env(Vec::new(), false)).new_app();
     if let Some(p) = &scene
         && let Err(e) = app.open(p)
     {

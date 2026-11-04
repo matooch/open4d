@@ -28,7 +28,10 @@ fn script() -> PathBuf {
 }
 
 fn forge() -> Command {
-    Command::cargo_bin("forge").unwrap()
+    let mut cmd = Command::cargo_bin("forge").unwrap();
+    // never pick up plugins from the machine running the tests
+    cmd.env("FORGE_NO_PLUGINS", "1");
+    cmd
 }
 
 /// Runs `forge --json args`, returns (exit code, stdout JSON).

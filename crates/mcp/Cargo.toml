@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 forge-app = { path = "../app" }
+forge-plugin = { path = "../plugin" }
 forge-rpc = { path = "../rpc" }
 serde_json = "1"
 tracing = "0.1"

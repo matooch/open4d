@@ -200,3 +200,4 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `graph_get` | Get Graph. Not an undoable edit. Runs command `graph.get`. |
 | `graph_node_types` | List Graph Node Types. Not an undoable edit. Runs command `graph.node_types`. |
 | `graph_evaluate` | Evaluate Graph. Not an undoable edit. Runs command `graph.evaluate`. |
+| `plugin_list` | List Plugins. Not an undoable edit. Runs command `plugin.list`. |

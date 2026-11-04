@@ -20,6 +20,8 @@ Headless Forge3D: scenes, commands and export.
 | Argument | Required | Default | Description |
 |---|---|---|---|
 | `--json` | no |  | Machine output: one JSON object on stdout, messages on stderr |
+| `--plugins` | no |  | Load the plugins in this folder too (repeatable; docs/specs/PLUGINS.md section 9) |
+| `--no-plugins` | no |  | Load no plugins at all (also: FORGE_NO_PLUGINS=1) |
 
 ## Subcommands
 

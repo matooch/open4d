@@ -106,8 +106,13 @@ impl EditorState {
     }
 
     pub fn new(registry: Arc<Registry>) -> EditorState {
+        EditorState::with_app(App::new(registry))
+    }
+
+    /// An editor over an application built elsewhere (plugins installed, own commands).
+    pub fn with_app(app: App) -> EditorState {
         EditorState {
-            app: App::new(registry),
+            app,
             expanded: BTreeSet::new(),
             dock: Dock::default(),
             camera: Self::default_camera(),
