@@ -1,0 +1,14 @@
+feature = "caps-bevel"
+observation = "docs/parity/caps-bevel.md"
+description = "Platonic with Type Dodecahedron and Segments 2, made editable"
+mesh = "mesh.obj"
+
+[params]
+type = "polygon"
+radius = 100.0
+segments = 2
+type = "Dodeca"
+
+[import]
+scale = 1.0
+flip_z = false

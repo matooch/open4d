@@ -1,0 +1,26 @@
+feature = "caps-bevel"
+observation = "docs/parity/caps-bevel.md"
+description = "Default Cylinder with Orientation +X and Slice on (From 0 to 270 degrees), made editable"
+mesh = "mesh.obj"
+
+[params]
+type = "polygon"
+radius = 50.0
+height = 200.0
+height_segments = 4
+rotation_segments = 16
+orientation = "+X"
+caps = true
+cap_segments = 1
+fillet = false
+fillet_segments = 3
+fillet_radius = 3.0
+slice = true
+from_deg = 0.0
+to_deg = 270.0
+regular_grid = false
+width = 10.0
+
+[import]
+scale = 1.0
+flip_z = false

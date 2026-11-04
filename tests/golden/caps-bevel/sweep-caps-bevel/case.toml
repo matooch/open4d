@@ -1,0 +1,86 @@
+feature = "caps-bevel"
+observation = "docs/parity/caps-bevel.md"
+description = "Sweep of a default Circle spline as profile with an open Arc path (Start Angle 0, End Angle 270 degrees), Start and End Cap on, both caps beveled: Bevel Shape Round, Size 5, Segments 3 (default)"
+mesh = "mesh.obj"
+
+[params]
+type = "sweep"
+isoparm_subdivision = 10
+end_scale = 100.0
+end_rotation = 0.0
+start_growth = 0.0
+end_growth = 100.0
+parallel_movement = false
+constant_cross_section = true
+banking = true
+keep_segments = false
+use_rail_direction = true
+two_rail = true
+use_rail_scale = true
+flip_normals = false
+stick_uvs = false
+caps_type = "N-gon"
+start_cap = true
+end_cap = true
+caps_grid_size = 10.0
+caps_density = 0.2
+quad_dominant = false
+separate_bevel_controls = false
+bevel_shape = "Round"
+bevel_size = 5.0
+bevel_extended_shape = false
+bevel_height = 0.0
+bevel_shape_depth = 1.0
+bevel_segments = 3.0
+end_bevel_shape = "Round"
+end_bevel_size = 0.0
+end_bevel_extended_shape = false
+end_bevel_height = 0.0
+end_bevel_shape_depth = 1.0
+end_bevel_segments = 3.0
+bevel_outside = false
+break_phong_rounding = true
+avoid_self_intersections = true
+polygon_selection_shell = false
+polygon_selection_start_cap = false
+polygon_selection_end_cap = false
+polygon_selection_start_bevel = false
+polygon_selection_end_bevel = false
+edge_selection_start_shell = false
+edge_selection_end_shell = false
+edge_selection_start_cap = false
+edge_selection_end_cap = false
+edge_selection_start_step = false
+edge_selection_end_step = false
+
+[params.input]
+type = "circle"
+ellipse = false
+ring = false
+radius = 200.0
+radius_y = 200.0
+inner_radius = 100.0
+plane = "XY"
+reverse = false
+intermediate = "Uniform"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+[params.input2]
+type = "arc"
+arc_type = "Arc"
+radius = 200.0
+inner_radius = 100.0
+start_angle = 0.0
+end_angle = 270.0
+plane = "XY"
+reverse = false
+intermediate = "Uniform"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+[import]
+scale = 1.0
+flip_z = false
