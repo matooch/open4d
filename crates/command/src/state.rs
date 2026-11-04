@@ -223,7 +223,7 @@ pub struct CameraSet {
 
 /// Something only the editor window can do (file dialogs, inline rename). A command asks
 /// for it through [`crate::CommandContext::request_ui`]; headless contexts refuse.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UiRequest {
     /// File > Open with a file dialog.
     Open,
@@ -243,4 +243,8 @@ pub enum UiRequest {
     LayoutLoad(String),
     /// Deletes a saved layout.
     LayoutDelete(String),
+    /// Switches the theme by name (docs/specs/UI.md §24.3).
+    Theme(String),
+    /// Sets the UI scale factor.
+    Scale(f64),
 }

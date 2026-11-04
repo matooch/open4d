@@ -180,7 +180,7 @@ impl EditorState {
 
 /// Draws the panel.
 pub fn script_panel_ui(ui: &mut Ui, state: &mut EditorState, dialogs: &mut dyn Dialogs) {
-    let theme = Theme::default();
+    let theme = Theme::current(ui.ctx());
     let mut run = false;
     ui.horizontal(|ui| {
         run = ui.button("Run").clicked();

@@ -53,7 +53,7 @@ pub fn row_text(row: &HistoryRow) -> String {
 
 /// Draws the list; the position of the row clicked, if any.
 pub fn history_panel_ui(ui: &mut Ui, doc: &Document) -> Option<usize> {
-    let theme = Theme::default();
+    let theme = Theme::current(ui.ctx());
     let history = doc.history();
     let rows = history_rows(&history.undo_labels(), &history.redo_labels());
     let mut jump = None;

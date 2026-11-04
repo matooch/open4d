@@ -2,7 +2,7 @@
 
 # Command reference
 
-139 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+141 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -132,6 +132,8 @@
 | [`ui.layout_save`](#uilayout_save) | Save Layout | no | `ui_layout_save` |
 | [`ui.layout_load`](#uilayout_load) | Load Layout | no | `ui_layout_load` |
 | [`ui.layout_delete`](#uilayout_delete) | Delete Layout | no | `ui_layout_delete` |
+| [`ui.theme`](#uitheme) | Theme | no | `ui_theme` |
+| [`ui.scale`](#uiscale) | UI Scale | no | `ui_scale` |
 | [`file.import_obj`](#fileimport_obj) | Import OBJ | yes | `file_import_obj` |
 | [`file.export_obj`](#fileexport_obj) | Export OBJ | no | `file_export_obj` |
 | [`param.edit`](#paramedit) | Edit Parameter | yes | `param_edit` |
@@ -1658,6 +1660,26 @@ Delete Layout. Not an undoable edit.
 | `name` | string | yes | A workspace name (`ui.workspace`) or the name of a saved layout. |
 
 Example: `forge cmd scene.forge ui.layout_delete --args '{"name":"My layout"}'`
+
+### `ui.theme`
+
+Theme. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | A workspace name (`ui.workspace`) or the name of a saved layout. |
+
+Example: `forge cmd scene.forge ui.theme --args '{"name":"dark"}'`
+
+### `ui.scale`
+
+UI Scale. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `factor` | number | yes | UI scale factor, 0.5 to 3 (1 = the OS scale). |
+
+Example: `forge cmd scene.forge ui.scale --args '{"factor":1.0}'`
 
 
 ## `graph`

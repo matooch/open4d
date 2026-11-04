@@ -21,6 +21,7 @@ use crate::keymap::KeyMapState;
 use crate::layer_manager::LayerPanel;
 use crate::node_editor::NodeEditorState;
 use crate::panes::{DEFAULT_SHADING, Views};
+use crate::prefs::UiPrefs;
 use crate::screenshot::OffscreenGpu;
 use crate::script_panel::ScriptPanelState;
 use crate::tools::ToolState;
@@ -55,6 +56,8 @@ pub struct EditorState {
     pub tool: Option<ToolState>,
     /// Key chords to commands, defaults and overrides (docs/specs/UI.md §14).
     pub keys: KeyMapState,
+    /// Theme and UI scale (UI.md §24).
+    pub prefs: UiPrefs,
     /// The viewport gizmo's mode and axes (`view.gizmo_mode`, `view.gizmo_space`).
     pub gizmo_mode: GizmoMode,
     pub gizmo_space: GizmoSpace,
@@ -118,6 +121,7 @@ impl EditorState {
             offscreen: OffscreenGpu::default(),
             tool: None,
             keys: KeyMapState::default(),
+            prefs: UiPrefs::default(),
             gizmo_mode: GizmoMode::Translate,
             gizmo_space: GizmoSpace::Object,
             ui_requests: Vec::new(),

@@ -1,6 +1,6 @@
 # 161 · HiDPI, IME, themes, keyboard navigation
 
-Status: ready · Area: L · Depends on: 147 · Observations: – · Touches: ui
+Status: done · Area: L · Depends on: 147 · Observations: – · Touches: ui
 
 ## Goal
 Correct scaling, text input methods, a dark theme close to the reference feel and a light theme, keyboard focus navigation.
@@ -12,8 +12,8 @@ Correct scaling, text input methods, a dark theme close to the reference feel an
 - Theme tokens in one module.
 
 ## Done when
-- [ ] Tests at scale 1, 1.5, 2.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Tests at scale 1, 1.5, 2.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -23,9 +23,9 @@ Correct scaling, text input methods, a dark theme close to the reference feel an
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: 13 tests added (`crates/ui/tests/accessibility.rs`); no parity data (own design), nothing in `UNSUPPORTED` / `KNOWN_MISMATCH`.
+- Rules (spec UI.md §24): theme tokens for dark / light / high contrast in `theme` with a `focus` token and WCAG contrast tests; `UiPrefs` (theme, scale 0.5-3) in the `ui` key of the settings file; commands `ui.theme` and `ui.scale` (window requests, refused headless) and View > Theme / UI scale menus; scale is egui's zoom factor on top of the OS scale; focus ring = 2 pt `focus` stroke on the active widget style; IME underline uses `focus`; a system CJK font (if found) is added as last fallback; Tab / Shift+Tab are unbound in the key map. All parity-pending (no reference observation).
+- Deviations: the component-selection colour passed to the GPU viewport still uses the dark token (that function has no egui context). Dark error colour contrast is only asserted >= 3 (existing palette not changed). egui shows the IME preedit inside the text field while composing (test asserts that, not "text only after commit").
+- Files changed: crates/ui/src/{theme,prefs,app,state,lib,console,history_panel,keymap_editor,node_editor,palette,script_panel,timeline,viewport_panel}.rs, crates/command/src/{state.rs,builtin/file.rs}, crates/ui/tests/accessibility.rs, docs/specs/UI.md, docs/manual/reference/{commands,mcp}.md, docs/parity/STATUS.md, docs/roadmap/BACKLOG.md.
+- Open questions: real IME and HiDPI behaviour on a desktop is not exercised headless; a bundled CJK font was not added (licence / size).
+- Gate: `GATE: all passed`.

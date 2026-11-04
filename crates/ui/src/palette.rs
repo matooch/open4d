@@ -552,7 +552,7 @@ impl Palette {
         registry: &CommandRegistry,
         run: &mut Option<(String, Value)>,
     ) {
-        let theme = Theme::default();
+        let theme = Theme::current(ui.ctx());
         // Take the navigation keys first so the text field never sees them.
         let (down, up, enter) = ui.input_mut(|i| {
             (
@@ -649,7 +649,7 @@ impl Palette {
     }
 
     fn form_ui(&mut self, ui: &mut egui::Ui, run: &mut Option<(String, Value)>) {
-        let theme = Theme::default();
+        let theme = Theme::current(ui.ctx());
         let Some(form) = self.form.as_mut() else {
             return;
         };

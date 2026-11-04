@@ -279,7 +279,7 @@ fn level_color(level: LogLevel, theme: &Theme) -> Option<Color32> {
 }
 
 fn log_ui(ui: &mut Ui, console: &mut ConsoleState) {
-    let theme = Theme::default();
+    let theme = Theme::current(ui.ctx());
     let lines = (console.log_source)();
     let shown = filter_log(&lines, console.level, &console.search);
     ui.horizontal(|ui| {
@@ -323,7 +323,7 @@ fn log_ui(ui: &mut Ui, console: &mut ConsoleState) {
 }
 
 fn repl_ui(ui: &mut Ui, state: &mut EditorState) {
-    let theme = Theme::default();
+    let theme = Theme::current(ui.ctx());
     let id = ui.make_persistent_id("console_repl_input");
     let focused = ui.memory(|m| m.has_focus(id));
     let mut run = false;

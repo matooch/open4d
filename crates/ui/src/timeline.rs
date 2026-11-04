@@ -159,7 +159,7 @@ fn color32(c: [u8; 3]) -> Color32 {
 /// the markers. `keys` are key frames of the selected objects.
 pub fn strip(ui: &mut Ui, scene: &Scene, current: i64, keys: &[f64], out: &mut Vec<Cmd>) {
     let (settings, time) = (scene.settings(), scene.time());
-    let theme = Theme::default();
+    let theme = Theme::current(ui.ctx());
     let width = ui.available_width().max(60.0);
     let (rect, response) = ui.allocate_exact_size(vec2(width, 30.0), Sense::click_and_drag());
     response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Slider, true, "Frame strip"));

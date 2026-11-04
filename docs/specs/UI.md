@@ -262,6 +262,9 @@ Behaviour, data and rules: docs/specs/ANIM.md §2. Panel summary (own design,
 
 ## 8. Theme (`theme`)
 
+Three themes (own palettes, §24.1): dark (default), light, high contrast. The text below is
+the dark one.
+
 Our own dark palette (sRGB): window `#1E2024`, panel `#25282D`, faint
 `#2E3238`, text `#D6D9DE`, weak text `#9AA0A8`, accent `#E08A2E` (selection), accent
 text `#1A1A1A`, error `#E5534B`, component selection `#38C6E8` (selected points, edges
@@ -1269,3 +1272,84 @@ of the draw list (`tests/baselines/hud_*.png`, own images; `FORGE_UPDATE_BASELIN
 them; text is drawn as 6 x 10 point boxes per glyph so the image does not depend on fonts), the
 command (toggle, panes, all panes, errors), and egui_kittest (View > HUD menu check boxes, items
 appear in `hud_last` only for enabled panes, four-view layout, layout save/load round trip).
+
+## 24. HiDPI, IME, themes, keyboard navigation (`theme`, `prefs`, `app`; brief 161)
+
+Sources: own design from docs/roadmap/areas/L-ui.md ("HiDPI, IME, keyboard-only navigation,
+high-contrast theme"); egui's public input model (`Event::Ime`, `Memory::focused`). No reference
+observation; the palettes are our own.
+
+### 24.1 Theme tokens (one module, `theme`)
+`ThemeKind { Dark, Light, HighContrast }`, names `dark`, `light`, `high-contrast`
+(`name()`, `from_name()`, `ThemeKind::ALL`). `Theme::of(kind)` returns the token set; the UI
+takes its colours from it. Tokens: `window`, `panel`, `faint`, `text`, `weak_text`, `accent`,
+`accent_text`, `error`, `component_selection` and `focus` (keyboard focus ring and IME
+composition underline). `Theme::default()` is `of(Dark)`, unchanged (§8).
+
+| token | dark | light | high contrast |
+|---|---|---|---|
+| window | `#1E2024` | `#F4F5F7` | `#000000` |
+| panel | `#25282D` | `#ECEEF1` | `#000000` |
+| faint | `#2E3238` | `#DDE0E5` | `#1A1A1A` |
+| text | `#D6D9DE` | `#1B1E22` | `#FFFFFF` |
+| weak text | `#9AA0A8` | `#4A515A` | `#D8D8D8` |
+| accent | `#E08A2E` | `#A64B00` | `#FFD400` |
+| accent text | `#1A1A1A` | `#FFFFFF` | `#000000` |
+| error | `#E5534B` | `#B3261E` | `#FF7B72` |
+| component selection | `#38C6E8` | `#006C99` | `#00E5FF` |
+| focus | `#5AA9FF` | `#0B57D0` | `#5CE1FF` |
+
+Contrast (WCAG ratio, tested for every theme): text on panel and window >= 7 (high contrast
+>= 15), weak text on panel >= 4.5, accent text on accent >= 4.5, focus on panel >= 3, error on
+panel >= 3 (dark) or >= 4.5 (light, high contrast).
+`Theme::visuals()` builds from egui's dark visuals (light visuals for Light) and sets the focus
+style: the active/focused widget outline is a 2 point stroke in `focus`, and the IME
+composition underlines use `focus`. `Theme::apply(ctx)` installs visuals and fonts and stores
+the theme in the context; `Theme::current(&Context)` reads it back (dark before the first
+apply). `Theme::apply_visuals` does the same without reinstalling fonts (used when switching).
+
+### 24.2 Preferences (`prefs::UiPrefs`)
+`UiPrefs { theme: ThemeKind, scale: f32 }`, default dark and 1.0. `scale` is the UI scale
+factor, clamped to `0.5..=3.0` (`MIN_SCALE`, `MAX_SCALE`), multiplied with the OS scale
+(`pixels_per_point = native * scale`, egui `set_zoom_factor`). Persistence: the `ui` key of the
+settings file (`{"ui": {"theme": "light", "scale": 1.5}}`), other keys kept, written on every
+change; `use_settings_file(path)` loads; an unknown theme name or a non-finite or out-of-range
+scale falls back per field to the default (lenient, like the key map). `EditorState.prefs`
+holds it.
+
+### 24.3 Commands (not undoable, window actions like `ui.workspace`)
+`ui.theme {name}` (`dark`, `light`, `high-contrast`) and `ui.scale {factor}`; a factor outside
+`0.5..=3.0` or non-finite is `InvalidArgs`. They ask the window (`UiRequest::Theme`,
+`UiRequest::Scale`); headless contexts and RPC refuse with `needs the editor window`. An unknown
+theme name goes to the status bar listing the valid ones. The window applies the preferences at
+the start of each frame when they differ from what is applied (`Editor::apply_prefs`). View
+menu: a "Theme" submenu (one checked item per theme) and a "UI scale" submenu (50 %, 75 %,
+100 %, 125 %, 150 %, 200 %, 300 %); both run the commands, so they are in the command palette.
+
+### 24.4 HiDPI
+All layout is in points; nothing assumes `pixels_per_point == 1`. The viewport image is sized in
+physical pixels (`rect * pixels_per_point`, as before). Tested at pixels-per-point 1, 1.5 and 2
+and at UI scale 1.5: the editor lays out, the central viewport has a positive area inside the
+screen, and the screen size in points is `physical / (native * scale)`.
+
+### 24.5 IME
+Text fields are egui `TextEdit`s, which take `Event::Ime` (preedit, commit). Requirement: the
+command palette search accepts composed text. Tested by feeding `Ime::Preedit` then
+`Ime::Commit`: egui shows the preedit in the field while composing, the commit replaces it with exactly the
+committed text, and non-ASCII (CJK) text is kept intact.
+The default fonts have no CJK glyphs, so `install_fonts` adds the first system CJK font found
+(`theme::system_cjk_font`, a list of usual Linux, macOS and Windows paths; read at start-up,
+never bundled) as the last fallback of both families; without one, egui draws tofu boxes.
+
+### 24.6 Keyboard navigation
+Tab and Shift+Tab move keyboard focus through the widgets (egui's focus order); the default key
+map binds neither (tested), so the shortcuts layer never swallows them. The focused widget is
+drawn with the focus ring (§24.1). Test: with the editor shown, Tab moves focus from none to a
+widget and then to a different one, Shift+Tab goes back.
+
+### 24.7 Tests
+`crates/ui/tests/accessibility.rs`: token tables and contrast for the three themes, names round
+trip, `Theme::of(Dark) == Theme::default()`, visuals (focus stroke, light base), `UiPrefs`
+clamp, settings round trip and leniency, commands (refused headless, argument validation),
+window (switching theme changes `Theme::current` and the saved file, scale sets the zoom
+factor), layout at pixels-per-point 1, 1.5 and 2, IME in the palette search, Tab focus order.

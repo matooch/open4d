@@ -154,6 +154,27 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
         },
     )?;
     r.register_fn(
+        spec("ui.theme", "Theme", false, || json!({"name": "dark"})),
+        |c, a: LayoutNameArgs| {
+            c.request_ui(UiRequest::Theme(a.name))
+                .map(|()| Value::Null)
+                .map_err(CommandError::Failed)
+        },
+    )?;
+    r.register_fn(
+        spec("ui.scale", "UI Scale", false, || json!({"factor": 1.0})),
+        |c, a: ScaleArgs| {
+            if !(a.factor.is_finite() && (0.5..=3.0).contains(&a.factor)) {
+                return Err(CommandError::InvalidArgs(
+                    "factor must be between 0.5 and 3".into(),
+                ));
+            }
+            c.request_ui(UiRequest::Scale(a.factor))
+                .map(|()| Value::Null)
+                .map_err(CommandError::Failed)
+        },
+    )?;
+    r.register_fn(
         spec(
             "file.import_obj",
             "Import OBJ",
@@ -246,6 +267,13 @@ fn export_obj(ctx: &mut dyn CommandContext, a: ExportArgs) -> Result<Value, Comm
 struct LayoutNameArgs {
     /// A workspace name (`ui.workspace`) or the name of a saved layout.
     name: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ScaleArgs {
+    /// UI scale factor, 0.5 to 3 (1 = the OS scale).
+    factor: f64,
 }
 
 /// `file.open_dialog`, `file.save_dialog`, `file.save_as_dialog`: the File menu items that

@@ -30,6 +30,7 @@ pub mod node_editor;
 pub mod object_manager;
 pub mod palette;
 pub mod panes;
+pub mod prefs;
 pub mod screenshot;
 pub mod script_panel;
 pub mod snapping;
@@ -173,6 +174,9 @@ pub fn run_with_rpc(registry: Arc<Registry>, rpc: Option<forge_rpc::Inbox>) -> e
                 .use_settings_file(forge_platform::settings_path());
             state
                 .keys
+                .use_settings_file(forge_platform::settings_path());
+            state
+                .prefs
                 .use_settings_file(forge_platform::settings_path());
             if let Some(inbox) = &rpc {
                 let ctx = cc.egui_ctx.clone();

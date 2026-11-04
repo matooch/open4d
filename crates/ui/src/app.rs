@@ -34,7 +34,7 @@ use crate::palette::Palette;
 use crate::panes::{PANE_GAP, display_settings};
 use crate::snapping::{SnapScene, collect_sources, collect_sources_multi, drag_step};
 use crate::state::EditorState;
-use crate::theme::Theme;
+use crate::theme::{Theme, ThemeKind};
 use crate::viewport_panel::{
     NavAction, NavInput, NavMode, SceneView, ViewportPanel, apply_nav, nav_action,
 };
@@ -155,6 +155,7 @@ pub struct Editor {
     /// save or load, and the last window title sent.
     dialogs: Box<dyn Dialogs>,
     sent_title: String,
+    applied_prefs: Option<(ThemeKind, f32)>,
     /// Requests from the RPC server, run between frames (docs/specs/RPC.md §5).
     rpc: Option<forge_rpc::Inbox>,
 }
@@ -232,6 +233,7 @@ impl Editor {
             tool_drag: None,
             dialogs: Box::new(NativeDialogs),
             sent_title: String::new(),
+            applied_prefs: None,
             rpc: None,
         }
     }
@@ -293,6 +295,36 @@ impl Editor {
         }
     }
 
+    /// View > Theme and View > UI scale (UI.md §24.3); both run commands.
+    fn appearance_menu(&mut self, ui: &mut Ui) {
+        ui.menu_button("Theme", |ui| {
+            for kind in ThemeKind::ALL {
+                if ui
+                    .radio(self.state.prefs.theme == kind, kind.name())
+                    .clicked()
+                {
+                    self.run(("ui.theme", json!({"name": kind.name()})));
+                    ui.close();
+                }
+            }
+        });
+        ui.menu_button("UI scale", |ui| {
+            for percent in [50, 75, 100, 125, 150, 200, 300] {
+                let factor = percent as f32 / 100.0;
+                if ui
+                    .radio(
+                        (self.state.prefs.scale - factor).abs() < 1e-3,
+                        format!("{percent} %"),
+                    )
+                    .clicked()
+                {
+                    self.run(("ui.scale", json!({"factor": factor})));
+                    ui.close();
+                }
+            }
+        });
+    }
+
     /// Does one layout request of a command (UI.md §21.4); the error is for the status bar.
     fn layout_request(&mut self, request: UiRequest) -> Result<(), String> {
         match request {
@@ -314,9 +346,37 @@ impl Editor {
                 }
             }
             UiRequest::LayoutDelete(name) => self.layout_store.delete(&name)?,
+            UiRequest::Theme(name) => {
+                let kind = ThemeKind::from_name(&name).ok_or_else(|| {
+                    let all: Vec<&str> = ThemeKind::ALL.iter().map(|k| k.name()).collect();
+                    format!("no theme named \"{name}\" (use {})", all.join(", "))
+                })?;
+                self.state.prefs.theme = kind;
+                self.state.prefs.save()?;
+            }
+            UiRequest::Scale(factor) => {
+                if !crate::prefs::scale_in_range(factor) {
+                    return Err("UI scale must be between 0.5 and 3".into());
+                }
+                self.state.prefs.scale = factor as f32;
+                self.state.prefs.save()?;
+            }
             _ => {}
         }
         Ok(())
+    }
+
+    /// Applies the theme and scale of the preferences when they changed (UI.md §24.3).
+    fn apply_prefs(&mut self, ctx: &egui::Context) {
+        let wanted = (self.state.prefs.theme, self.state.prefs.scale);
+        if self.applied_prefs == Some(wanted) {
+            return;
+        }
+        Theme::of(wanted.0).apply_visuals(ctx);
+        if (ctx.zoom_factor() - wanted.1).abs() > f32::EPSILON {
+            ctx.set_zoom_factor(wanted.1);
+        }
+        self.applied_prefs = Some(wanted);
     }
 
     /// Runs a command; an error goes to the status bar. True if it succeeded.
@@ -354,7 +414,9 @@ impl Editor {
                 r @ (UiRequest::Workspace(_)
                 | UiRequest::LayoutSave(_)
                 | UiRequest::LayoutLoad(_)
-                | UiRequest::LayoutDelete(_)) => {
+                | UiRequest::LayoutDelete(_)
+                | UiRequest::Theme(_)
+                | UiRequest::Scale(_)) => {
                     if let Err(e) = self.layout_request(r) {
                         self.state.status = e;
                     }
@@ -390,6 +452,7 @@ impl Editor {
         }
         // requests left by commands run outside `run_id` (a script, a test) (UI.md §21.4)
         self.serve_ui_requests();
+        self.apply_prefs(ui.ctx());
         // Closing the window with unsaved changes asks first (UI.md §15).
         if ui.ctx().input(|i| i.viewport().close_requested()) && !self.confirm_discard() {
             ui.ctx()
@@ -739,6 +802,7 @@ impl Editor {
                 ui.separator();
                 self.view_options_menu(ui);
                 self.hud_menu(ui);
+                self.appearance_menu(ui);
                 ui.separator();
                 ui.radio_value(
                     &mut self.state.gizmo_space,
@@ -899,7 +963,7 @@ impl Editor {
             if self.state.status.is_empty() {
                 ui.weak("Ready");
             } else {
-                ui.colored_label(Theme::default().error, &self.state.status);
+                ui.colored_label(Theme::current(ui.ctx()).error, &self.state.status);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.weak(format!("{} nodes", self.state.doc.scene().len()));
@@ -1250,7 +1314,7 @@ impl Editor {
                 ui.painter().rect_stroke(
                     rect,
                     0.0,
-                    egui::Stroke::new(1.5, Theme::default().component_selection),
+                    egui::Stroke::new(1.5, Theme::current(ui.ctx()).component_selection),
                     egui::StrokeKind::Inside,
                 );
             }
@@ -1366,7 +1430,7 @@ impl Editor {
             let to_points = |x: f64, y: f64| {
                 rect.min + egui::vec2((x / ppp as f64) as f32, (y / ppp as f64) as f32)
             };
-            let colour = Theme::default().component_selection;
+            let colour = Theme::current(ui.ctx()).component_selection;
             ui.painter().rect_stroke(
                 egui::Rect::from_two_pos(to_points(x0, y0), to_points(x1, y1)),
                 0.0,
@@ -1397,7 +1461,7 @@ impl Editor {
                 }
             },
             egui::FontId::proportional(12.0),
-            Theme::default().weak_text,
+            Theme::current(ui.ctx()).weak_text,
         );
         self.paint_hud(ui, pane, rect, &scheduled);
         // cutting tools: the knife line being dragged and the heads-up line (MODELING.md §5.5)
@@ -1409,7 +1473,7 @@ impl Editor {
                 egui::Align2::LEFT_BOTTOM,
                 hud,
                 egui::FontId::proportional(12.0),
-                Theme::default().component_selection,
+                Theme::current(ui.ctx()).component_selection,
             );
         }
         if let Some(([x0, y0, x1, y1], _)) =
@@ -1420,7 +1484,7 @@ impl Editor {
             };
             ui.painter().line_segment(
                 [to_points(x0, y0), to_points(x1, y1)],
-                egui::Stroke::new(1.5, Theme::default().component_selection),
+                egui::Stroke::new(1.5, Theme::current(ui.ctx()).component_selection),
             );
         }
         // Polygon Pen: the corners placed so far (MODELING.md §6.7)
@@ -1430,7 +1494,7 @@ impl Editor {
             ui.painter().circle_filled(
                 rect.min + egui::vec2((x / ppp as f64) as f32, (y / ppp as f64) as f32),
                 4.0,
-                Theme::default().component_selection,
+                Theme::current(ui.ctx()).component_selection,
             );
         }
     }
@@ -1450,7 +1514,7 @@ impl Editor {
         }
         let ctx = crate::hud::context(&self.state, pane, frame, &self.state.hud_timer);
         let list = crate::hud::draw_list(&ctx, &flags, [rect.width(), rect.height()]);
-        let theme = Theme::default();
+        let theme = Theme::current(ui.ctx());
         let painter = ui.painter().with_clip_rect(rect);
         let tone = |t: Tone| match t {
             Tone::Normal => theme.text,
@@ -1502,7 +1566,7 @@ impl Editor {
             return;
         };
         let at = rect.min + egui::vec2((p.0 / ppp as f64) as f32, (p.1 / ppp as f64) as f32);
-        let colour = Theme::default().component_selection;
+        let colour = Theme::current(ui.ctx()).component_selection;
         ui.painter()
             .circle_stroke(at, 6.0, egui::Stroke::new(2.0, colour));
         ui.painter().text(
@@ -1557,7 +1621,7 @@ impl Editor {
                     egui::Align2::LEFT_BOTTOM,
                     mark.index.to_string(),
                     egui::FontId::proportional(11.0),
-                    Theme::default().weak_text,
+                    Theme::current(ui.ctx()).weak_text,
                 );
             }
         }
@@ -2220,7 +2284,7 @@ impl Editor {
             return;
         };
         let marks = key_states(&shown, id, self.state.timeline.current);
-        let theme = Theme::default();
+        let theme = Theme::current(ui.ctx());
         let mut rename = None;
         ui.horizontal(|ui| {
             let type_label = ui.label(RichText::new(&view.type_label).color(theme.weak_text));
@@ -2413,7 +2477,7 @@ fn key_marker(ui: &mut Ui, state: Option<KeyState>, name: &str) {
     let (rect, response) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), Sense::hover());
     let Some(state) = state else { return };
     let (text, fill) = match state {
-        KeyState::Keyed => ("keyed", Theme::default().accent),
+        KeyState::Keyed => ("keyed", Theme::current(ui.ctx()).accent),
         KeyState::Animated => ("animated", egui::Color32::TRANSPARENT),
     };
     response.widget_info(|| {
@@ -2430,6 +2494,6 @@ fn key_marker(ui: &mut Ui, state: Option<KeyState>, name: &str) {
     ui.painter().add(egui::Shape::convex_polygon(
         points,
         fill,
-        egui::Stroke::new(1.5, Theme::default().accent),
+        egui::Stroke::new(1.5, Theme::current(ui.ctx()).accent),
     ));
 }
