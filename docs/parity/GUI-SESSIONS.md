@@ -29,6 +29,10 @@ You can also do a sitting **with an observer session's help**:
    menu's submenus.
 5. **Command bar and tool palette:** the order of the button groups (describe the icons
    in words only).
+6. **Content browser and recent files** (brief 154, parity-pending):
+   - where the content browser opens by default and its tabs or top-level folders;
+   - how many files File > Open Recent keeps, and whether opening one moves it to the top;
+   - whether a saved preset of a selection keeps links to objects outside the selection.
 
 ## G2 · Shortcuts and navigation
 1. For each of these, the key it uses (write "none" if none):
