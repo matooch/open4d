@@ -1,0 +1,59 @@
+feature = "bend"
+observation = "docs/parity/deformers-4.md"
+description = "O24 bend-spherical (Bend strength 90, spherical field size 200 in the field list) with the cube moved to (0, 100, 0); field stays at the origin (0, 0, 0)"
+mesh = "mesh.obj"
+
+[params]
+size = [250.0, 250.0, 250.0]
+p536871510 = ""
+alignment = "Y+"
+mode = "Limited"
+p536871511 = ""
+strength_deg = 90.0
+p536871512 = ""
+angle_deg = 0.0
+p536871513 = ""
+p536871514 = ""
+p536871515 = ""
+keep_length = false
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+
+[params.field]
+type = "spherical field"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+size = 200.0
+clip_to_shape = false
+enable_remapping = true
+strength_percent = 100.0
+invert = false
+inner_offset_percent = 50.0
+min_percent = 0.0
+clamp_min = true
+max_percent = 100.0
+clamp_max = true
+multiplier_percent = 100.0
+contour_mode = "None"
+color_mode = "Color"
+color = [0.29075513999408337, 0.16680576551388682, 0.10745580629098424]
+length = "Use Value"
+scale_percent = 100.0
+invert_direction = true
+strength = "No Remap"
+scale_percent_1005032 = 100.0
+invert_rotations = false
+layer_strength_percent = 100.0
+layer_blend_mode = "Normal"
+field_layers = 1
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false
