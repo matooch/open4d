@@ -184,9 +184,9 @@ fn apply_group(mesh: &PolyMesh, group: &[u32], p: &Run, out: &mut PolyMesh) {
     };
     let moved: BTreeSet<u32> = match p.kind {
         Kind::Extrude => every(),
-        Kind::Inset => boundary,
+        Kind::Inset => boundary.clone(),
         Kind::Bevel if p.lift != 0.0 => every(),
-        Kind::Bevel => boundary,
+        Kind::Bevel => boundary.clone(),
     };
     let target = match p.kind {
         Kind::Extrude => extrude_targets(mesh, group, &moved, p.offset),
@@ -205,11 +205,16 @@ fn apply_group(mesh: &PolyMesh, group: &[u32], p: &Run, out: &mut PolyMesh) {
                 .collect()
         }
     };
-    // new points, ascending original index
+    // boundary points get new points (ascending original index); interior points have no
+    // wall to keep them, so they move in place (O58 extrude-bent-group)
     let mut new_of: HashMap<u32, u32> = HashMap::new();
     for old in &moved {
-        new_of.insert(*old, out.points.len() as u32);
-        out.points.push(target[old]);
+        if boundary.contains(old) {
+            new_of.insert(*old, out.points.len() as u32);
+            out.points.push(target[old]);
+        } else {
+            out.points[*old as usize] = target[old];
+        }
     }
     let map = |v: u32| new_of.get(&v).copied().unwrap_or(v);
     // caps replace the polygons in place
@@ -252,27 +257,35 @@ fn apply_group(mesh: &PolyMesh, group: &[u32], p: &Run, out: &mut PolyMesh) {
     }
 }
 
-/// Extrude: every group point moves along the mean of the unit normals of the group's
-/// polygons that use it.
+/// Extrude: every group point moves along the mean `m` of the unit normals of the group's
+/// polygons that use it, scaled to `m / |m|²` so the point lands `offset` from each of
+/// those planes (a mitre; O58 extrude-bent-group). On a flat region this is the normal.
 fn extrude_targets(
     mesh: &PolyMesh,
     group: &[u32],
     moved: &BTreeSet<u32>,
     offset: f64,
 ) -> HashMap<u32, DVec3> {
-    let mut sum: HashMap<u32, DVec3> = moved.iter().map(|v| (*v, DVec3::ZERO)).collect();
+    let mut sum: HashMap<u32, (DVec3, f64)> =
+        moved.iter().map(|v| (*v, (DVec3::ZERO, 0.0))).collect();
     for i in group {
         let poly = &mesh.polys[*i as usize];
         let n = poly_normal(&mesh.points, poly);
         for v in poly {
-            if let Some(s) = sum.get_mut(v) {
+            if let Some((s, k)) = sum.get_mut(v) {
                 *s += n;
+                *k += 1.0;
             }
         }
     }
     sum.into_iter()
-        .map(|(v, s)| {
-            let dir = if s.length() < 1e-12 { s } else { s.normalize() };
+        .map(|(v, (s, k))| {
+            let m = if k > 0.0 { s / k } else { s };
+            let dir = if m.length() < 1e-6 {
+                DVec3::ZERO
+            } else {
+                m / m.length_squared()
+            };
             (v, mesh.points[v as usize] + dir * offset)
         })
         .collect()

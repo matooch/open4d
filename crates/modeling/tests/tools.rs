@@ -177,16 +177,17 @@ fn preserve_groups_splits_at_the_maximum_angle() {
 }
 
 #[test]
-fn a_group_around_a_bend_moves_along_the_mean_normal() {
+fn a_group_around_a_bend_moves_to_the_offset_planes() {
     let m = cube();
     let s = settings("extrude", json!({"offset": 1.0, "maximum_angle_deg": 91.0}));
     let (out, _) = extrude(&m, &set(&[0, 4]), &s).unwrap();
-    // the shared point 1 (-1, 1, 1) is used by both polygons: normals +y and +z
-    let new1 = out.points.iter().skip(8).find(|p| {
-        (**p - DVec3::new(-1.0, 1.0, 1.0)).length() > 1e-9
-            && (**p - DVec3::new(-1.0, 1.0, 1.0) - DVec3::new(0.0, 1.0, 1.0).normalize()).length()
-                < 1e-9
-    });
+    // the shared point 1 (-1, 1, 1) is used by both polygons: normals +y and +z; it lands
+    // 1 from both planes (a mitre, O58 extrude-bent-group), not 1 along the mean normal
+    let new1 = out
+        .points
+        .iter()
+        .skip(8)
+        .find(|p| (**p - DVec3::new(-1.0, 2.0, 2.0)).length() < 1e-9);
     assert!(new1.is_some());
 }
 

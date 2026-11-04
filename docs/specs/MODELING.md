@@ -129,24 +129,27 @@ addressable. `realtime_update` only affects the UI preview.
 ### 1.2 Groups (case: `extrude-two`, `extrude-two-separate`)
 - Preserve Groups **off**: every selected polygon is its own group.
 - Preserve Groups **on**: selected polygons that share an edge and whose unit normals differ by
-  at most `maximum_angle_deg` are one group (union-find over shared edges). **parity-pending**
-  for the angle test: every golden group is flat (angle 0), so only "edge-connected selected
-  polygons form a group" is proven (`extrude-two` vs `-separate`). The angle test is the
-  public manual's description of Maximum Angle.
+  at most `maximum_angle_deg` are one group (union-find over shared edges). A 90° bend
+  with Maximum Angle 91° is one group (`extrude-bent-group`, O58); `extrude-max-angle` (O58)
+  covers the split side. The exact threshold comparison (≤ vs <) is unobserved.
 - Groups are processed in ascending order of their smallest polygon index; within a group the
   polygons are in ascending index order.
 
 ### 1.3 New points (cases: all)
-- For each group, one new point per point of the group, in **ascending original point index**
-  (`extrude-two`: copies of 1,3,5,7,9,11 are points 12..17; `extrude-two-separate`: group 6 gives
-  12..15, group 7 gives 16..19, so a point shared by two groups is copied twice and the file
-  keeps both).
-- The original points stay where they are and keep their index. The new points are appended
-  after all existing points, group after group.
-- Position: `p + offset · d`, `d` the unit normal of the group's polygons at `p` (the
-  normalised sum of the unit polygon normals of the group's polygons that use `p`; for a flat
-  group this is the polygon normal). Cases `extrude-top` (+50: y 150) and `extrude-top-negative`
-  (−50: y 50, same faces). **parity-pending** for non-flat groups.
+- For each group, one new point per **boundary** point of the group (a point on a boundary
+  edge, §1.4), in **ascending original point index** (`extrude-two`: copies of 1,3,5,7,9,11 are
+  points 12..17; `extrude-two-separate`: group 6 gives 12..15, group 7 gives 16..19, so a point
+  shared by two groups is copied twice and the file keeps both).
+- An **interior** point of a group (all its edges shared by two polygons of the group) gets no
+  new point: it moves in place and keeps its index (`extrude-bent-group`: point 11, the middle
+  of the bend, moves to (150, 150, 0); 26 + 8 = 34 points, not 35).
+- The original boundary points stay where they are and keep their index. The new points are
+  appended after all existing points, group after group.
+- Position: `p + offset · m / |m|²`, `m` the mean of the unit polygon normals of the group's
+  polygons that use `p`. The point lands `offset` from each of those polygons' planes (a
+  mitre); for a flat group `m` is the polygon normal. Cases `extrude-top` (+50: y 150),
+  `extrude-top-negative` (−50: y 50, same faces) and, for a 90° bend, `extrude-bent-group` /
+  `extrude-bent-ngon` (O58: (100, 100, z) → (150, 150, z), not (135.4, 135.4, z)).
 
 ### 1.4 Faces (all extrude cases)
 - Polygons keep their index. Each selected polygon is **replaced in place** by its cap: the same

@@ -140,7 +140,7 @@ fn extrude_and_inset_match_the_reference() {
     let want: std::collections::BTreeSet<String> =
         UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 20, "{matched:?}");
+    assert_eq!(matched.len(), 25, "{matched:?}");
 }
 
 /// Tools of the mesh commands (spec §4).
