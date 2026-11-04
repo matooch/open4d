@@ -16,8 +16,8 @@ twist = 0.0
 points = 8
 plane = "xy"
 reverse = false
-intermediate = "adaptive"
-intermediate_number = 8
+intermediate = "uniform"
+intermediate_number = 4
 intermediate_angle = 5.0
 intermediate_max_length = 5.0
 
