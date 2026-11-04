@@ -38,5 +38,9 @@ criterion = { version = "0.8", default-features = false, features = ["cargo_benc
 name = "schedule"
 harness = false
 
+[[bench]]
+name = "s10"
+harness = false
+
 [lints]
 workspace = true
