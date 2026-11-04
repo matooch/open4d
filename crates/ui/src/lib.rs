@@ -13,6 +13,7 @@ pub mod commands;
 pub mod component_edit;
 pub mod components;
 pub mod console;
+pub mod content_browser;
 pub mod coordinates;
 pub mod crash_notice;
 pub mod cutting;
@@ -185,6 +186,10 @@ pub fn run_with_app(app: forge_app::App, rpc: Option<forge_rpc::Inbox>) -> efram
             state
                 .prefs
                 .use_settings_file(forge_platform::settings_path());
+            state.app.browser.use_files(
+                forge_platform::settings_path(),
+                forge_platform::presets_dir(),
+            );
             if let Some(inbox) = &rpc {
                 let ctx = cc.egui_ctx.clone();
                 inbox.set_wake(move || ctx.request_repaint());

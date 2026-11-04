@@ -1404,3 +1404,74 @@ no unused file; every file has the shared form of §25.1 and; the atlas has
 the documented size, every glyph's rectangle contains inked pixels and the padding is empty;
 scale 2 doubles the cell; two builds are identical; the letter fallback; unknown ids; the
 atlas converts to a `ColorImage` of the same size.
+
+## 26. Content browser and recent files (`browser`, `content_browser`; brief 154)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; no reference-app observation exists, so
+**the panel layout, the tab names, the folder structure of the library and the number of recent
+files are parity-pending**. The presets are written for this project (simple primitive
+assemblies saved with the native format, CORE.md section 6); no preset, thumbnail or folder
+layout comes from any other application. Every action is a registry command (COMMANDS.md §6,
+`browser.*`), so it works headless; the panel only computes arguments.
+
+### 26.1 Library (`forge_command::browser`)
+A preset is a native scene file (`.forge`). Its root nodes are what loading adds to the open
+document. Kinds: `objects` only. A materials kind waits for material nodes (area J); no
+material node type is registered today, so there is nothing to browse or load for it.
+- Built-in presets are our own files in `crates/command/presets/objects/`, compiled in
+  (`include_str!`). Ids: `builtin:<slug>`. Today: `pedestal`, `table`, `snowman`.
+- User presets are files `<library>/objects/<slug>.forge`. `<library>` is `<data dir>/presets`
+  (PLATFORM.md section 2) in the editor and none in a headless run unless the host sets it
+  (`Browser::use_files`); tests use a temporary folder. Ids: `user:<slug>`.
+- `list` returns the built-in presets, then the user presets, each group sorted by name
+  (case-insensitive, then id). The name is the title-cased slug (`-` becomes a space). A user
+  file that is not a `.forge` file is ignored; an unreadable folder lists as empty.
+- A slug is the name lower-cased with every run of characters other than ASCII letters and
+  digits replaced by one `-`, trimmed of `-`; an empty slug is refused.
+
+### 26.2 Loading
+`browser.load` reads the preset (user files through `file::load_with` with the document's
+registry, so older format versions migrate) and copies every root with its subtree, tags,
+parameters and tracks under the given parent (none: the top level), after the existing
+children, in one undo step "Load Preset". Parameters that link to nodes inside the preset
+are remapped to the copies; links to nodes outside it and the layer link `object.layer` are
+dropped. Names are kept. The new roots become the selection. A preset with no roots, an
+unknown id or a node type the registry lacks is an error and the document is unchanged.
+Load warnings go to the status bar.
+
+### 26.3 Saving and deleting user presets
+`browser.save_preset` copies the given nodes (default: the selection; nodes inside another
+listed node are skipped) into a new scene and writes it to `<library>/objects/<slug>.forge`.
+Existing files are only replaced with `overwrite: true`. Not undoable (it touches no
+document). Without a library folder it fails. `browser.delete_preset` removes a user preset
+file; built-in ids are refused.
+
+### 26.4 Recent files
+`Browser.recent` holds absolute paths, newest first, at most `MAX_RECENT_FILES` (10,
+parity-pending), no duplicates. `file.open`, `file.save` and `file.save_as` record the path
+after they succeed (`browser.recent` itself never records). With a settings file the list is
+loaded from and stored under the key `recent.files` (other keys are kept; a missing or
+malformed key is an empty list). `browser.recent` returns `{files: [{index, path, name,
+exists}]}`. `browser.open_recent {index}` runs `file.open` on that entry; a file that no longer
+exists is removed from the list and the command fails. `browser.clear_recent` empties it.
+
+### 26.5 Panel and menu
+`Panel::ContentBrowser`, title "Content Browser", default area right bottom, closed by default;
+the Window menu lists "Content Browser panel". Two tabs (panel state only): "Presets" and
+"Recent". Presets: a search box (case-insensitive substring of the name), one row per preset
+(a button showing the name, accessibility label `Load <name>`, tooltip with the source) running `browser.load`, and a "Save
+selection as preset" row (name box + button, `browser.save_preset`) shown only when a library
+folder exists. Recent: one button per file (shows the file name, accessibility label `Recent <file name>`, tooltip = path; a missing file is struck through) running
+`browser.open_recent`, and a "Clear recent" button; "No recent files" when empty. The File menu
+gets an "Open Recent" sub menu with the same entries (disabled when empty). Opening a recent file
+with unsaved changes asks like File > Open does.
+
+### 26.6 Tests
+`crates/command` unit tests: slugs, names, sorting, search. `crates/app/tests/browser.rs`: every
+built-in preset loads into an empty document and into a nested parent (parameters, tags and
+tracks preserved, link remap, one undo step, undo and redo), save/list/load round trip in a temp
+library, overwrite and delete rules, recent list order, limit, de-duplication, persistence in a
+temp settings file next to foreign keys, `open_recent` (missing file removed), commands refuse
+bad arguments. `crates/ui/tests/content_browser.rs` (egui_kittest): panel opens from the Window
+menu, closed by default, clicking a preset loads it with one undo step, recent entries open a
+file, Open Recent submenu, search filter.

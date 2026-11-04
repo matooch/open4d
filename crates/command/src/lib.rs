@@ -1,6 +1,7 @@
 //! Command registry: every user action as a named, typed, undoable command
 //! (docs/specs/COMMANDS.md).
 
+pub mod browser;
 mod builtin;
 mod context;
 mod error;

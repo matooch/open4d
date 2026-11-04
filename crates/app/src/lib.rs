@@ -94,6 +94,8 @@ pub struct App {
     pub file_path: Option<String>,
     /// Scene revision at the last save or load (the dirty marker).
     pub saved_revision: u64,
+    /// The preset library and the recent files (docs/specs/UI.md §26). Survives File > New.
+    pub browser: forge_command::browser::Browser,
 }
 
 impl App {
@@ -124,6 +126,7 @@ impl App {
             draw_scheduler: schedule::Scheduler::default().with_instancing(true),
             status: String::new(),
             file_path: None,
+            browser: Default::default(),
         }
     }
 
@@ -235,7 +238,9 @@ impl App {
     /// Replaces the document. `full` also resets everything but the command set.
     pub fn reset(&mut self, doc: Document, path: Option<String>, full: bool) {
         if full {
+            let browser = std::mem::take(&mut self.browser);
             *self = App::with_commands(doc.scene().registry().clone(), self.commands.clone());
+            self.browser = browser;
         }
         self.doc = doc;
         self.eval.clear();
@@ -366,5 +371,13 @@ impl CommandContext for App {
     fn mark_saved(&mut self, path: String) {
         self.file_path = Some(path);
         self.saved_revision = self.doc.scene().revision();
+    }
+
+    fn browser(&self) -> Option<&forge_command::browser::Browser> {
+        Some(&self.browser)
+    }
+
+    fn browser_mut(&mut self) -> Option<&mut forge_command::browser::Browser> {
+        Some(&mut self.browser)
     }
 }

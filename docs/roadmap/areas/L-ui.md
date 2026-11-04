@@ -33,7 +33,7 @@
   GPU/backend choice, input devices, default layout, file paths.
 - [ ] **Layouts:** save/load; Standard, Model, Animate, UV Edit, Rigging, Script
   workspaces.
-- [ ] **Content browser:** our own presets library (objects, materials) and recent files.
+- [x] **Content browser:** our own presets library (objects done; materials wait for material nodes) and recent files.
 - [ ] **Layer manager**, **Console panel** (log and Rhai REPL), and **HUD overlays**.
 - [ ] **HiDPI, IME, keyboard-only navigation, high-contrast theme** (basic accessibility).
 

@@ -1,6 +1,6 @@
 # 154 · Content browser (own presets) and recent files
 
-Status: ready · Area: L · Depends on: 163 · Observations: – · Touches: ui
+Status: done · Area: L · Depends on: 163 · Observations: – · Touches: ui
 
 ## Goal
 Browse our own preset library and recent files.
@@ -12,7 +12,7 @@ Browse our own preset library and recent files.
 - Presets are native files we author; never the reference presets.
 
 ## Done when
-- [ ] Load a preset from the browser.
+- [x] Load a preset from the browser.
 - [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
@@ -23,9 +23,26 @@ Browse our own preset library and recent files.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: no parity data (own design, no observation). Tests added: 4 unit tests in
+  `crates/command/src/browser.rs`, 14 in `crates/app/tests/browser.rs` (1 ignored generator for
+  the preset files), 9 egui_kittest in `crates/ui/tests/content_browser.rs`.
+- Rules (docs/specs/UI.md §26, COMMANDS.md §6): presets are native `.forge` scenes (3 built-in
+  ones written for this project, plus user files in `<data>/presets/objects`); `browser.load`
+  grafts the roots under a parent in one undo step, remapping links inside the preset and
+  dropping others and the layer link; recent files live in the settings key `recent.files`,
+  max 10, recorded by `file.open/save/save_as`. All of it is parity-pending (panel layout,
+  tab names, folder structure, recent count).
+- Deviations: the materials kind is not implemented, because no material node type exists
+  yet (area J); the folder layout and `kind` argument leave room for it. `FS_COMMANDS` of the
+  fuzz harness gained the four `browser.*` commands that touch files, and the generated
+  `command_args` corpus was regenerated (its file index prefix shifts when ids are added).
+- Files changed: `crates/command/src/{browser.rs,builtin/browser.rs,builtin/file.rs,
+  builtin/mod.rs,context.rs,lib.rs}`, `crates/command/presets/objects/*.forge`,
+  `crates/app/{src/lib.rs,tests/browser.rs}`, `crates/platform/src/lib.rs`,
+  `crates/ui/src/{content_browser.rs,dock.rs,app.rs,app/files.rs,state.rs,commands.rs,
+  icon_table.rs,lib.rs}`, `crates/ui/tests/content_browser.rs`,
+  `crates/fuzz-harness/src/targets.rs`, fuzz corpus, specs (UI §26, COMMANDS, PLATFORM),
+  generated `docs/manual/reference`, BACKLOG, L-ui checklist.
+- Open questions: the reference layout of a content browser (tabs, folders, thumbnails) and
+  how many recent files it keeps (a GUI observation session would settle both).
+- Gate: `GATE: 1715 tests passed, 0 failed` ... `GATE: all passed`.

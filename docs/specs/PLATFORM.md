@@ -302,6 +302,10 @@ Saved window layouts (UI.md §21) are files below the config directory of §1:
 without a home folder; `FORGE_SETTINGS` does not move it). `layouts_dir_with(&Dirs)` is the pure
 form. The folder is created on the first save.
 
+User presets (UI.md §26) live in `<data>/presets/objects/`: `forge_platform::presets_dir()` is
+`dirs().data.join("presets")` (`presets_dir_with(&Dirs)` the pure form). The recent file list
+is the `recent.files` key of the settings file (§2). Both are created on first write.
+
 
 ## 9. Fuzzing and soak (brief 182)
 
@@ -326,7 +330,8 @@ mini-fuzz tests call them.
 | `script` | `fuzz_script` | `forge_script::run_script` on a fresh `App` with tight limits (20 000 operations, 50 commands, 1 s) |
 
 Commands that read or write files (`file.open`, `file.save`, `file.save_as`, `file.import_obj`,
-`file.export_obj`, `file.new`, `file.autosave_now`; `forge_fuzz_harness::FS_COMMANDS`) are never run
+`file.export_obj`, `file.new`, `file.autosave_now`, `browser.save_preset`, `browser.delete_preset`,
+`browser.open_recent`, `browser.clear_recent`; `forge_fuzz_harness::FS_COMMANDS`) are never run
 with fuzzed arguments: a fuzzer must not write to the disk it runs on. Their parsers are covered
 by the `scene_file` and `obj` targets. `viewport.screenshot` needs a GPU host and is not part of
 the headless `dispatch`.

@@ -193,6 +193,13 @@ pub(crate) const GLYPHS: &[(&str, &str)] = &[
 ];
 
 pub(crate) const ICON_MAP: &[(&str, &str)] = &[
+    ("browser.clear_recent", "delete"),
+    ("browser.delete_preset", "delete"),
+    ("browser.list", "list"),
+    ("browser.load", "import"),
+    ("browser.open_recent", "file_open"),
+    ("browser.recent", "history"),
+    ("browser.save_preset", "file_save"),
     ("edit.axis_mode", "axis"),
     ("edit.history_jump", "history"),
     ("edit.redo", "redo"),

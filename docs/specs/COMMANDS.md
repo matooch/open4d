@@ -110,6 +110,13 @@ touch history.
 | `layer.set` | `layers?` (ids; `layer` for one), then at least one of `name`, `color`, `solo`, `view`, `render`, `manager`, `locked`, `animation`, `generators`, `deformers`, `expressions` | `{changed}` | yes |
 | `layer.assign` | `layer` (id, null removes the objects from their layer), `nodes?` (selection) | `{assigned}` | yes |
 | `layer.merge` | `layers` (ids, at least two), `into` (id, one of them) | `{merged, members}` | yes |
+| `browser.list` | `kind?` (`objects`), `query?` (substring of the name) | `{presets: [{id, name, kind, source}]}` | no |
+| `browser.load` | `id`, `parent?` (node id; absent = top level) | `{preset, nodes}` | yes |
+| `browser.save_preset` | `name`, `nodes?` (selection), `overwrite?` (false) | `{id, path}` | no |
+| `browser.delete_preset` | `id` (a `user:` id) | `{deleted}` | no |
+| `browser.recent` | none | `{files: [{index, path, name, exists}]}` | no |
+| `browser.open_recent` | `index` (0 = newest) | as `file.open` | no |
+| `browser.clear_recent` | none | `{cleared}` | no |
 | `edit.undo` | - | `{done}` | no |
 | `edit.redo` | - | `{done}` | no |
 | `edit.history_jump` | `position` (steps applied, 0 ..= undo + redo steps) | `{position, undone, redone}` | no |
@@ -231,6 +238,11 @@ members (their `object.layer` becomes none). `layer.set` applies the given field
 listed layer in one step (a name must be non-empty, a colour channel is clamped to 0..1).
 `layer.assign` skips tags and non-hierarchy nodes and returns how many nodes it set.
 `layer.merge` moves the members of every other listed layer to `into` and deletes the others.
+
+`browser.*` (brief 154, UI.md section 26): the preset library and the recent file list. `browser.load`
+is one undo step; the others touch files or application state only. An unknown preset id,
+index or kind is `InvalidArgs`; failed reads are `Failed`. `file.open`, `file.save` and
+`file.save_as` record the path in the recent list on success.
 
 Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and ANIM.md §2):
 

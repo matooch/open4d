@@ -24,6 +24,7 @@ use crate::component_edit::{
 use crate::components::{
     ClickModifiers, EditMode, SelectCmd, target as component_target, viewport_click, viewport_rect,
 };
+use crate::content_browser::{BrowserAction, menu_entries};
 use crate::coordinates::{CoordDraft, Mixed, Space, Third, coord_view_multi};
 use crate::dock::{Area, Panel};
 use crate::keymap_editor::KeyMapEditor;
@@ -624,6 +625,19 @@ impl Editor {
                         ui.close();
                         self.file_action(action);
                     }
+                    if matches!(action, FileAction::Open) {
+                        let entries = menu_entries(&self.state.app.browser);
+                        ui.add_enabled_ui(!entries.is_empty(), |ui| {
+                            ui.menu_button("Open Recent", |ui| {
+                                for (i, name) in &entries {
+                                    if ui.button(name).clicked() {
+                                        ui.close();
+                                        self.open_recent(*i);
+                                    }
+                                }
+                            });
+                        });
+                    }
                 }
             });
             ui.menu_button("Edit", |ui| {
@@ -1004,6 +1018,16 @@ impl Editor {
             Panel::Layers => {
                 for c in crate::layer_manager::layer_panel_ui(ui, &mut self.state) {
                     self.run(c);
+                }
+            }
+            Panel::ContentBrowser => {
+                for a in crate::content_browser::content_browser_ui(ui, &mut self.state) {
+                    match a {
+                        BrowserAction::Run(c) => {
+                            self.run(c);
+                        }
+                        BrowserAction::OpenRecent(i) => self.open_recent(i),
+                    }
                 }
             }
             Panel::History => {

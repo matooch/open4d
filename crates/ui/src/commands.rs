@@ -193,6 +193,14 @@ impl CommandContext for EditorState {
         self.app.mark_saved(path);
     }
 
+    fn browser(&self) -> Option<&forge_command::browser::Browser> {
+        Some(&self.app.browser)
+    }
+
+    fn browser_mut(&mut self) -> Option<&mut forge_command::browser::Browser> {
+        Some(&mut self.app.browser)
+    }
+
     fn set_shading(&mut self, shading: ShadingMode, pane: Option<PaneArg>) {
         let shading = shading_of(shading);
         self.with_pane(pane.map(pane_of), |s| s.shading = shading);

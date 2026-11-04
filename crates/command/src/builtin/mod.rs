@@ -9,6 +9,7 @@ use crate::registry::{CommandRegistry, CommandSpec, NoArgs};
 
 mod arrange;
 mod axis;
+mod browser;
 mod building;
 mod components;
 mod cutting;
@@ -38,6 +39,7 @@ pub fn register_editor_commands(r: &mut CommandRegistry) -> Result<(), CommandEr
     param::register(r)?;
     timeline::register(r)?;
     file::register(r)?;
+    browser::register(r)?;
     Ok(())
 }
 

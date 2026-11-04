@@ -22,6 +22,10 @@ pub const FS_COMMANDS: &[&str] = &[
     "file.import_obj",
     "file.export_obj",
     "file.autosave_now",
+    "browser.save_preset",
+    "browser.delete_preset",
+    "browser.open_recent",
+    "browser.clear_recent",
 ];
 
 /// Decode limits the image targets use: bounded memory for honest readers.

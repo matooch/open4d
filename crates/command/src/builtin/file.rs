@@ -15,8 +15,8 @@ use crate::state::UiRequest;
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-struct PathArgs {
-    path: String,
+pub(super) struct PathArgs {
+    pub(super) path: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -200,7 +200,7 @@ fn scene_dir(path: &str) -> Option<std::path::PathBuf> {
     abs.parent().map(std::path::Path::to_path_buf)
 }
 
-fn open(ctx: &mut dyn CommandContext, a: PathArgs) -> Result<Value, CommandError> {
+pub(super) fn open(ctx: &mut dyn CommandContext, a: PathArgs) -> Result<Value, CommandError> {
     let registry = ctx.doc().scene().registry().clone();
     let opts = file::LoadOptions {
         base_dir: scene_dir(&a.path),
@@ -210,6 +210,9 @@ fn open(ctx: &mut dyn CommandContext, a: PathArgs) -> Result<Value, CommandError
         .map_err(|e| e.to_string())
         .and_then(|bytes| file::load_with(registry, &bytes, &opts).map_err(|e| e.to_string()));
     let (scene, report) = loaded.map_err(|e| CommandError::Failed(format!("Open failed: {e}")))?;
+    if let Some(b) = ctx.browser_mut() {
+        b.record_recent(&a.path);
+    }
     ctx.reset_document(Document::from_scene(scene), Some(a.path), false);
     ctx.set_status(report.warnings.join("; "));
     Ok(json!({"warnings": report.warnings}))
@@ -222,6 +225,9 @@ fn save_to(ctx: &mut dyn CommandContext, path: String) -> Result<Value, CommandE
     };
     let bytes = file::save_with(ctx.doc().scene(), &opts);
     std::fs::write(&path, bytes).map_err(|e| CommandError::Failed(format!("Save failed: {e}")))?;
+    if let Some(b) = ctx.browser_mut() {
+        b.record_recent(&path);
+    }
     ctx.mark_saved(path.clone());
     ctx.set_status(String::new());
     Ok(json!({"path": path}))

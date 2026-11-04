@@ -14,6 +14,7 @@ use forge_viewport::render::Shading;
 
 use crate::autosave::Autosave;
 use crate::console::ConsoleState;
+use crate::content_browser::BrowserPanel;
 use crate::crash_notice::CrashNotice;
 use crate::dock::Dock;
 use crate::hud::{FrameTimer, HudPrim, HudSettings};
@@ -48,6 +49,8 @@ pub struct EditorState {
     pub console: ConsoleState,
     /// The Layers panel: selected rows and rename (docs/specs/UI.md §22).
     pub layer_panel: LayerPanel,
+    /// The Content Browser panel: tab, search and the name box (docs/specs/UI.md §26).
+    pub browser_panel: BrowserPanel,
     /// The Node Editor's tag, canvas and cache (docs/specs/UI.md §17).
     pub node_editor: NodeEditorState,
     /// The headless GPU device `viewport.screenshot` renders with (RPC.md §10.2).
@@ -122,6 +125,7 @@ impl EditorState {
             script: ScriptPanelState::default(),
             console: ConsoleState::default(),
             layer_panel: LayerPanel::default(),
+            browser_panel: BrowserPanel::default(),
             node_editor: NodeEditorState::default(),
             offscreen: OffscreenGpu::default(),
             tool: None,

@@ -158,6 +158,13 @@ impl Editor {
         }
     }
 
+    /// File > Open Recent / the Content Browser's recent tab: entry `index` of the recent list.
+    pub fn open_recent(&mut self, index: usize) {
+        if self.confirm_discard() {
+            self.run(("browser.open_recent", json!({"index": index})));
+        }
+    }
+
     /// Loads `path` and replaces the document; on any error the document stays.
     pub fn open_path(&mut self, path: &Path) {
         self.run(("file.open", json!({"path": path_arg(path)})));

@@ -7,6 +7,7 @@ use forge_modeling::ComponentSettings;
 use forge_modeling::snap::TransformSettings;
 use serde_json::Value;
 
+use crate::browser::Browser;
 use crate::state::{
     CameraSet, GizmoModeArg, GizmoSpaceArg, HudItemArg, LayoutArg, LightingArg, ModeArg,
     NodeSelection, PaneArg, SelectExtra, SelectOp, ShadingMode, UiRequest, ViewArg,
@@ -61,6 +62,14 @@ pub trait CommandContext {
     fn file_path(&self) -> Option<String>;
     /// Records that the scene was saved to `path` (clears the dirty state).
     fn mark_saved(&mut self, path: String);
+
+    /// The preset library and recent files (UI.md §26); `None` in contexts without them.
+    fn browser(&self) -> Option<&Browser> {
+        None
+    }
+    fn browser_mut(&mut self) -> Option<&mut Browser> {
+        None
+    }
 
     /// The scene at the current frame (animation applied). Contexts without an animation
     /// evaluator return the stored scene.

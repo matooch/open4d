@@ -2,7 +2,7 @@
 
 # Command reference
 
-142 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+149 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -136,6 +136,13 @@
 | [`ui.scale`](#uiscale) | UI Scale | no | `ui_scale` |
 | [`file.import_obj`](#fileimport_obj) | Import OBJ | yes | `file_import_obj` |
 | [`file.export_obj`](#fileexport_obj) | Export OBJ | no | `file_export_obj` |
+| [`browser.list`](#browserlist) | List Presets | no | `browser_list` |
+| [`browser.load`](#browserload) | Load Preset | yes | `browser_load` |
+| [`browser.save_preset`](#browsersave_preset) | Save Preset | no | `browser_save_preset` |
+| [`browser.delete_preset`](#browserdelete_preset) | Delete Preset | no | `browser_delete_preset` |
+| [`browser.recent`](#browserrecent) | Recent Files | no | `browser_recent` |
+| [`browser.open_recent`](#browseropen_recent) | Open Recent | no | `browser_open_recent` |
+| [`browser.clear_recent`](#browserclear_recent) | Clear Recent Files | no | `browser_clear_recent` |
 | [`param.edit`](#paramedit) | Edit Parameter | yes | `param_edit` |
 | [`transform.edit`](#transformedit) | Set Coordinates | yes | `transform_edit` |
 | [`graph.add_node`](#graphadd_node) | Add Graph Node | yes | `graph_add_node` |
@@ -1681,6 +1688,79 @@ UI Scale. Not an undoable edit.
 | `factor` | number | yes | UI scale factor, 0.5 to 3 (1 = the OS scale). |
 
 Example: `forge cmd scene.forge ui.scale --args '{"factor":1.0}'`
+
+
+## `browser`
+
+### `browser.list`
+
+List Presets. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `kind` | `"objects"` \| null | no | Preset kind; only `objects` exists. |
+| `query` | string or null | no | Keep the presets whose name contains this text (case-insensitive). |
+
+Example: `forge cmd scene.forge browser.list --args '{"query":"table"}'`
+
+### `browser.load`
+
+Load Preset. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | `builtin:<name>` or `user:<name>`. |
+| `parent` | integer or null | no | Parent node of the loaded objects; the top level when absent. |
+
+Example: `forge cmd scene.forge browser.load --args '{"id":"builtin:table"}'`
+
+### `browser.save_preset`
+
+Save Preset. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | Preset name; the file name is derived from it. |
+| `nodes` | array of integer or null | no | Nodes to save; the selection when absent. |
+| `overwrite` | boolean | no | Replace an existing preset of the same name. Default: `false`. |
+
+Example: `forge cmd scene.forge browser.save_preset --args '{"name":"My preset","overwrite":false}'`
+
+### `browser.delete_preset`
+
+Delete Preset. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | A `user:<name>` preset id. |
+
+Example: `forge cmd scene.forge browser.delete_preset --args '{"id":"user:my-preset"}'`
+
+### `browser.recent`
+
+Recent Files. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge browser.recent --args '{}'`
+
+### `browser.open_recent`
+
+Open Recent. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `index` | integer | yes | Position in the recent list, 0 = newest. |
+
+Example: `forge cmd scene.forge browser.open_recent --args '{"index":0}'`
+
+### `browser.clear_recent`
+
+Clear Recent Files. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge browser.clear_recent --args '{}'`
 
 
 ## `graph`

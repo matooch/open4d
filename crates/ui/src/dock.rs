@@ -48,11 +48,12 @@ pub enum Panel {
     History,
     Console,
     Layers,
+    ContentBrowser,
 }
 
 impl Panel {
     /// Every panel, in Window menu order.
-    pub const ALL: [Panel; 12] = [
+    pub const ALL: [Panel; 13] = [
         Panel::CommandBar,
         Panel::ToolPalette,
         Panel::Viewport,
@@ -65,6 +66,7 @@ impl Panel {
         Panel::History,
         Panel::Console,
         Panel::Layers,
+        Panel::ContentBrowser,
     ];
 
     /// The panels `Dock::default()` opens; the others open from the Window menu.
@@ -92,6 +94,7 @@ impl Panel {
             Panel::History => "History",
             Panel::Console => "Console",
             Panel::Layers => "Layers",
+            Panel::ContentBrowser => "Content Browser",
         }
     }
 
@@ -109,6 +112,7 @@ impl Panel {
             Panel::History => Area::RightBottom,
             Panel::Console => Area::Bottom,
             Panel::Layers => Area::RightBottom,
+            Panel::ContentBrowser => Area::RightBottom,
         }
     }
 }
