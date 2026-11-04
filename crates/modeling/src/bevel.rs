@@ -56,7 +56,12 @@ impl Options {
             solid: s.choice("bevel_mode") == "solid",
             proportional: s.choice("offset_mode") == "proportional",
             offset: s.float("offset"),
-            levels: s.int("subdivision").max(0) as usize,
+            // Subdivision has no effect in solid mode (O58 bevel-solid-sub1 = bevel-solid)
+            levels: if s.choice("bevel_mode") == "solid" {
+                0
+            } else {
+                s.int("subdivision").max(0) as usize
+            },
             extrusion: s.float("extrusion"),
         })
     }
@@ -83,10 +88,102 @@ pub fn bevel(
         }
         bevel_polys(mesh, &sel.polys, o.offset, o.extrusion)
     } else if !sel.points.is_empty() {
-        unsupported("point mode (no reference data)")
+        if o.solid {
+            return unsupported("Bevel Mode Solid in point mode (no reference data)");
+        }
+        if o.levels > 0 || o.proportional {
+            return unsupported("Subdivision or Proportional in point mode (no reference data)");
+        }
+        bevel_points(mesh, &sel.points, o.offset)
     } else {
         Err(ToolError::EmptySelection)
     }
+}
+
+/// Point mode (O58 `bevel-point`): every selected point is cut off at `offset` along each of
+/// its edges; the point is replaced by a polygon of the cut points. Returns the new polygons
+/// as the selection.
+fn bevel_points(
+    mesh: &PolyMesh,
+    points: &IndexSet,
+    offset: f64,
+) -> Result<(PolyMesh, Selection), ToolError> {
+    let chosen: Vec<u32> = points.iter().collect();
+    let mut out = mesh.clone();
+    let mut ring_of: HashMap<u32, Vec<(u32, u32)>> = HashMap::new();
+    let mut cut: HashMap<(u32, u32), u32> = HashMap::new();
+    // per point: the polygons around it in ascending index, their (previous, next) neighbours
+    for &v in &chosen {
+        if v as usize >= mesh.points.len() {
+            return Err(ToolError::BadPoint(v));
+        }
+        let mut ring = Vec::new();
+        for poly in &mesh.polys {
+            if let Some(k) = poly.iter().position(|p| *p == v) {
+                let m = poly.len();
+                ring.push((poly[(k + m - 1) % m], poly[(k + 1) % m]));
+            }
+        }
+        let nexts: BTreeSet<u32> = ring.iter().map(|r| r.1).collect();
+        let prevs: BTreeSet<u32> = ring.iter().map(|r| r.0).collect();
+        if ring.len() < 3 || nexts != prevs || nexts.len() != ring.len() {
+            return unsupported("a beveled point that is not interior to a closed surface");
+        }
+        if ring
+            .iter()
+            .any(|(a, b)| chosen.contains(a) || chosen.contains(b))
+        {
+            return unsupported("two adjacent beveled points (no reference data)");
+        }
+        // cut points in ring order: on the edge to each polygon's next point (the first takes
+        // the slot of `v`, the others are appended)
+        for (k, (_, next)) in ring.iter().enumerate() {
+            let at = mesh.points[v as usize];
+            let to = mesh.points[*next as usize];
+            let dir = (to - at).normalize_or_zero();
+            let p = at + dir * offset;
+            let id = if k == 0 {
+                out.points[v as usize] = p;
+                v
+            } else {
+                out.points.push(p);
+                (out.points.len() - 1) as u32
+            };
+            cut.insert((v, *next), id);
+        }
+        ring_of.insert(v, ring);
+    }
+    for poly in &mut out.polys {
+        let m = poly.len();
+        let old = poly.clone();
+        let mut next_poly = Vec::new();
+        for k in 0..m {
+            let v = old[k];
+            if ring_of.contains_key(&v) {
+                next_poly.push(cut[&(v, old[(k + m - 1) % m])]);
+                next_poly.push(cut[&(v, old[(k + 1) % m])]);
+            } else {
+                next_poly.push(v);
+            }
+        }
+        *poly = next_poly;
+    }
+    let mut selected = IndexSet::new();
+    for &v in &chosen {
+        // the cap lists the cut points against the ring order
+        let ring = &ring_of[&v];
+        let mut cap = vec![cut[&(v, ring[0].1)]];
+        cap.extend(ring.iter().skip(1).rev().map(|r| cut[&(v, r.1)]));
+        selected.insert(out.polys.len() as u32);
+        out.polys.push(cap);
+    }
+    Ok((
+        out,
+        Selection {
+            polys: selected,
+            ..Selection::default()
+        },
+    ))
 }
 
 /// A directed edge `u -> w`: the polygon and the corner of `u`.
@@ -496,6 +593,18 @@ fn classify(
     }
 }
 
+/// Level `level` of `last` of the circle arc at a beveled vertex `at`: the rational quadratic
+/// with control point `at`, ends `pa`, `pb` and the weight from the angle between them seen
+/// from `at` (O58 `bevel-wedge`, `bevel-uniform-wedge`). For a square corner this is the
+/// strips' own profile.
+fn vertex_arc(at: DVec3, pa: DVec3, pb: DVec3, level: usize, last: usize) -> DVec3 {
+    let (ua, ub) = ((pa - at).normalize_or_zero(), (pb - at).normalize_or_zero());
+    let w = ((1.0 - ua.dot(ub)) / 2.0).max(0.0).sqrt();
+    let t = level as f64 / last as f64;
+    let (c0, c1, c2) = ((1.0 - t) * (1.0 - t), 2.0 * w * t * (1.0 - t), t * t);
+    (pa * c0 + at * c1 + pb * c2) / (c0 + c1 + c2)
+}
+
 /// The position of native level `level` at vertex `v`.
 fn native_point(
     mesh: &PolyMesh,
@@ -507,17 +616,43 @@ fn native_point(
     let line = |s: &Strip, j: usize| (s.profile[j], s.dir);
     if info.strips.len() == 1 {
         let s = &strips[info.strips[0]];
-        let (q, t) = line(s, level);
         let cap = &mesh.polys[info.cap as usize];
         let nrm = poly_normal(&mesh.points, cap);
-        let denom = t.dot(nrm);
-        if denom.abs() < 1e-9 {
-            return unsupported("a beveled edge is parallel to the polygon at its end");
+        // the level line of strip `s` meets the plane of the cap polygon
+        let hit = |j: usize| -> Result<DVec3, ToolError> {
+            let (q, t) = line(s, j);
+            let denom = t.dot(nrm);
+            if denom.abs() < 1e-9 {
+                return unsupported("a beveled edge is parallel to the polygon at its end");
+            }
+            Ok(q + t * ((mesh.points[v as usize] - q).dot(nrm) / denom))
+        };
+        let last = s.profile.len() - 1;
+        if level == 0 || level == last {
+            return hit(level);
         }
-        let s_par = (mesh.points[v as usize] - q).dot(nrm) / denom;
-        return Ok(q + t * s_par);
+        return Ok(vertex_arc(
+            mesh.points[v as usize],
+            hit(0)?,
+            hit(last)?,
+            level,
+            last,
+        ));
     }
     let last = strips[info.strips[0]].profile.len() - 1;
+    if level != 0 && level != last {
+        let ends = (
+            native_point(mesh, strips, info, v, 0)?,
+            native_point(mesh, strips, info, v, last)?,
+        );
+        return Ok(vertex_arc(
+            mesh.points[v as usize],
+            ends.0,
+            ends.1,
+            level,
+            last,
+        ));
+    }
     let mut lines = Vec::new();
     for si in &info.strips {
         let s = &strips[*si];

@@ -218,10 +218,6 @@ fn unsupported_options_and_bad_selections_fail() {
         (one.clone(), json!({"partial_rounding": "full"})),
         (one.clone(), json!({"corner_ngons": true})),
         (one.clone(), json!({"rounding_ngons": true})),
-        (
-            one.clone(),
-            json!({"bevel_mode": "solid", "subdivision": 1}),
-        ),
         (edges(&m, &TOP), json!({"bevel_mode": "solid"})),
         (polys(&[4]), json!({"subdivision": 1})),
         (polys(&[4]), json!({"bevel_mode": "solid"})),
@@ -231,7 +227,7 @@ fn unsupported_options_and_bad_selections_fail() {
                 points: [1u32].into_iter().collect(),
                 ..Selection::default()
             },
-            json!({}),
+            json!({"subdivision": 1}),
         ),
     ] {
         let r = bevel(&m, &sel, &settings(v.clone()));
@@ -318,4 +314,42 @@ fn a_non_right_angle_edge_keeps_its_profile_on_the_faces() {
     assert!(closed(&out));
     out.validate().unwrap();
     assert_eq!(out.polys.len(), m.polys.len() + 3);
+}
+
+#[test]
+fn solid_ignores_subdivision() {
+    // O58 bevel-solid-sub1: Subdivision 1 in solid mode gives the Subdivision 0 mesh
+    let m = block(200.0, 200.0, 200.0);
+    let one = edges(&m, &[(1, 3)]);
+    let a = bevel(
+        &m,
+        &one,
+        &settings(json!({"bevel_mode": "solid", "offset": 20.0})),
+    )
+    .unwrap();
+    let b = bevel(
+        &m,
+        &one,
+        &settings(json!({"bevel_mode": "solid", "offset": 20.0, "subdivision": 1})),
+    )
+    .unwrap();
+    assert_eq!(a.0, b.0);
+}
+
+#[test]
+fn point_mode_cuts_the_corner_off() {
+    // O58 bevel-point: a cube corner becomes a triangle of cut points `offset` along each edge
+    let m = block(200.0, 200.0, 200.0);
+    let sel = Selection {
+        points: [3u32].into_iter().collect(),
+        ..Selection::default()
+    };
+    let (out, picked) = bevel(&m, &sel, &settings(json!({"offset": 20.0}))).unwrap();
+    assert_eq!(out.points.len(), m.points.len() + 2);
+    assert_eq!(out.polys.len(), m.polys.len() + 1);
+    assert_eq!(picked.polys.iter().collect::<Vec<_>>(), vec![6]);
+    let corner = m.points[3];
+    for id in &out.polys[6] {
+        assert!(((out.points[*id as usize] - corner).length() - 20.0).abs() < 1e-9);
+    }
 }

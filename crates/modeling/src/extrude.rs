@@ -221,10 +221,11 @@ fn apply_group(mesh: &PolyMesh, group: &[u32], p: &Run, out: &mut PolyMesh) {
     for i in group {
         out.polys[*i as usize] = mesh.polys[*i as usize].iter().map(|v| map(*v)).collect();
     }
-    // columns of intermediate points: one per edge start point, then stragglers
+    // columns of intermediate points: walking the sides, each side's start then end point,
+    // each point once (O58 inset-patch-sub)
     let n = p.rows - 1;
     let mut columns: HashMap<u32, Vec<u32>> = HashMap::new();
-    for point in sides.iter().map(|s| s.a).chain(sides.iter().map(|s| s.b)) {
+    for point in sides.iter().flat_map(|s| [s.a, s.b]) {
         if columns.contains_key(&point) {
             continue;
         }

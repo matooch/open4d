@@ -77,3 +77,10 @@ default camera). Add it to [GUI-SESSIONS.md](GUI-SESSIONS.md) G3 when someone si
 - `bevel-proportional-rect` crashed the app in the run of 2026-11-03/04 (leftover
   CURRENT_CASE said so at the start of the next run). Skipped for good, per the queue
   rules.
+- Follow-up suggestions from the implementer (cases 6-16 all matched; these settle the
+  remaining **parity-pending** guesses in MODELING.md §3.6):
+  - `bevel-point-two`: 1/1/1, two non-adjacent points (e.g. 0 and 3), Bevel point mode,
+    offset 20. Settles the slot order of the cut points when several points are selected.
+  - `bevel-solid-sub2`: 1/1/1, one top edge, Shape Solid, Subdivision 2 (does Subdivision stay
+    without effect for N >= 2?).
+  - `bevel-point-valence4`: default Pyramid, the apex, point mode, offset 20 (a ring of four).

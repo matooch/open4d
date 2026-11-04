@@ -20,6 +20,19 @@ const UNSUPPORTED: &[&str] = &[];
 /// Cases that build but differ (none).
 const KNOWN_MISMATCH: &[&str] = &[];
 
+/// The default Pyramid made editable.
+fn pyramid() -> PolyMesh {
+    let mut reg = Registry::with_builtins();
+    reg.install(&Primitives).unwrap();
+    let mut doc = Document::new(Arc::new(reg));
+    let id = doc
+        .transact("pyramid", |tx| tx.create("forge.pyramid", None, None))
+        .unwrap();
+    evaluate(doc.scene(), id, &EvalCtx::default())
+        .unwrap()
+        .expect("pyramid geometry")
+}
+
 fn cube(segments: [i64; 3]) -> PolyMesh {
     let mut reg = Registry::with_builtins();
     reg.install(&Primitives).unwrap();
@@ -61,6 +74,7 @@ fn json_of(v: &toml::Value) -> serde_json::Value {
 fn extrude_and_inset_match_the_reference() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
     let mut matched = Vec::new();
+    let mut failed = Vec::new();
     let mut unsupported = std::collections::BTreeSet::new();
     for case in discover_cases(&root).unwrap() {
         // `rechecks/extrude-bevel-subdiv` (O15) is an Extrude case
@@ -82,8 +96,16 @@ fn extrude_and_inset_match_the_reference() {
             .iter()
             .map(|v| v.as_integer().unwrap())
             .collect();
-        let base = cube([seg[0], seg[1], seg[2]]);
+        // an empty `segments` plus `[params.primitive]` names a non-cube base (default Pyramid)
+        let base = match m.params.get("primitive").and_then(|p| p.get("type")) {
+            Some(t) if t.as_str() == Some("pyramid") => pyramid(),
+            Some(t) => panic!("{key}: unknown base primitive {t:?}"),
+            None => cube([seg[0], seg[1], seg[2]]),
+        };
         let mut sel = Selection::default();
+        if let Some(points) = m.params.get("select_points") {
+            sel.points = index_set(points);
+        }
         if let Some(polys) = m.params.get("select_polys") {
             sel.polys = polys
                 .as_array()
@@ -132,15 +154,21 @@ fn extrude_and_inset_match_the_reference() {
             assert!(!(raw.passed() && welded.passed()), "{key} matches now");
             continue;
         }
-        assert!(raw.passed(), "{key} raw: {:?}", raw.failures);
-        assert!(welded.passed(), "{key} welded: {:?}", welded.failures);
+        if !(raw.passed() && welded.passed()) {
+            failed.push(format!(
+                "{key} raw: {:?} welded: {:?}",
+                raw.failures, welded.failures
+            ));
+            continue;
+        }
         matched.push(key);
     }
     println!("matched exactly: {}", matched.join(", "));
+    assert!(failed.is_empty(), "mismatches:\n{}", failed.join("\n"));
     let want: std::collections::BTreeSet<String> =
         UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 25, "{matched:?}");
+    assert_eq!(matched.len(), 36, "{matched:?}");
 }
 
 /// Tools of the mesh commands (spec §4).

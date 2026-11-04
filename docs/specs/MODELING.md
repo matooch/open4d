@@ -170,13 +170,15 @@ addressable. `realtime_update` only affects the UI preview.
 Each side is cut into `N + 1` rows. Between `a'` and `a` there are `N` intermediate points
 `c_1(a) … c_N(a)` at `a' + (a − a')·k/(N+1)`, `k = 1..N`, **top (cap side) first**
 (`133.33`, then `116.67`).
-- Column points are numbered after the group's new points. Columns are created in the order of
-  the boundary edges, one column per edge start point `a` (each point once): `extrude-subdiv`
-  columns of points 1, 7, 5, 3 (the polygon's corner order, not ascending order), two points
-  each: 12,13 / 14,15 / 16,17 / 18,19. **parity-pending** for groups with several
-  boundary loops (a start-point-only order is the simplest rule that fits; ascending order of
-  the new points does not fit `extrude-subdiv`). A point that is only ever an edge end gets its
-  column after all start-point columns.
+- Column points are numbered after the group's new points. Columns are created walking the
+  boundary edges in order (§1.4), for each edge its start point `a` then its end point `b`,
+  each point once. `extrude-subdiv`: edges 1→7, 7→5, 5→3, 3→1 give columns of 1, 7, 5, 3 (the
+  polygon's corner order, not ascending order), two points each: 12,13 / 14,15 / 16,17 /
+  18,19. `inset-patch-sub` (O58, 3x1x3 patch, 12 boundary points, N = 2) proves the "then
+  end point" part: edge 1→23 gives columns 1 and 23 before the next edge's 3, so the column
+  order is 1, 23, 3, 5, 9, 7, 21, 11, 19, 17, 15, 13 (a start-points-first rule gives 1, 3,
+  5, 9, 7, ... and does not fit). **parity-pending** only for groups with several boundary
+  loops of different sizes (not observed).
 - Rails: `L = [a', c_1(a)…c_N(a), a]`, `R = [b', c_1(b)…c_N(b), b]`. Row `j` (0 = cap side,
   `0..=N`) is `[L_j, L_{j+1}, R_{j+1}, R_j]`, except **inner rows** (`1 ≤ j ≤ N−1`) which are
   the same cycle started at `R_{j+1}`: `[R_{j+1}, R_j, L_j, L_{j+1}]` (`extrude-subdiv` face 7 =
@@ -268,7 +270,7 @@ The mode is the selection that is given: edges, else polygons, else points (when
 non-empty, in that order). Edge ids are indices into `PolyMesh::edges()` (GEOMETRY.md §1); the
 command also accepts point pairs `[a, b]`. The result selects the new polygons: the cap
 polygons in polygon mode, every strip polygon in edge mode.
-**Point mode is `Unsupported`**: no golden case.
+Point mode: §3.6.
 
 ### 3.3 Polygon mode (cases: `bevel-poly`, `bevel-poly-extrusion0`)
 An inset (§2.2, same groups, mitre and numbering) plus a lift. Each new point is the inset
@@ -282,7 +284,8 @@ edge as `[a', a, b, b']`, exactly as Extrude (§1.4).
 - Preserve Groups (on) and Maximum Angle (89) are the hidden values of the reference tool;
   they are fixed here. Interior points of a group (none in the data) move by the lift only
   (**parity-pending**).
-- `subdivision > 0`, `bevel_mode` solid, `offset_mode` other than fixed: `Unsupported`.
+- `subdivision > 0`, `bevel_mode` solid, `offset_mode` other than fixed: `Unsupported`
+  (no golden case).
 
 ### 3.4 Edge mode, chamfer (cases: `bevel-edge`, `bevel-edge-sub`, `bevel-edges-top`,
 `bevel-mitering-uniform`, `bevel-proportional`)
@@ -310,10 +313,27 @@ Level `j` (`t = j/(N+1)`) is the rational quadratic (a circle arc)
 `t = 1/3, 2/3` (they lie on the radius-20 circle but not at equal angles; equal angles would
 give 97.32), and the 45-degree point (94.142136) of `bevel-edges-top` is `t = 1/2`.
 The level line of the strip is `Q_j + s · (b − a)/|b − a|`.
-**Tension 1 and Depth 1 only**; other values are `Unsupported` (no data). **parity-pending**
-for angles other than 90 degrees (all data are cube edges).
+(This is the profile of the cross-section through `a`; only the end points `j = 0` and
+`j = N + 1` of a vertex are taken from it, §End points.)
+**Tension 1 and Depth 1 only**; other values are `Unsupported` (no data). Angles other than 90 degrees: see the end-point rule
+below (`bevel-wedge`, a 63.4 degree edge, proves the weight rule).
 
 **End points.**
+- **Inner levels `1 … N` of a vertex** are not the strip's cross-section points moved along
+  the edge. They are the rational quadratic of the *cap-plane* cross-section at that vertex:
+  control point `K` = the original vertex `v`, end points `E_0`, `E_{N+1}` (the level 0 and
+  level `N+1` points of the vertex as defined below), weight `w = cos(ψ/2)` with
+  `cos ψ = −û_0 · û_{N+1}`, `û` the unit vectors from `v` to the end points, and
+  `t = j/(N+1)`. For a cap square to the edge this is the strip profile above (all cube cases).
+  `bevel-wedge` (pyramid base edge, end faces slanted): the end points are
+  (80, −100, 100) and (91.0557, −82.1115, 91.0557), so `|v E_{N+1}| = 21.91 ≠ 20`,
+  `cos ψ = −1/√6`, `w = 0.543944` (not 0.525731 of the dihedral angle), giving the golden
+  (87.604931, −97.507094, 98.753547) and (92.227034, −90.028375, 95.014188). The same rule
+  gives the two-edge corner: `bevel-uniform-wedge`, corner (100, −100, 100) with `C_0` =
+  (80, −100, 80) and `C_3` = (91.0557, −82.1115, 91.0557): `cos ψ = −1/√3`, `C_1` =
+  (86.994176, −97.384258, 86.994176), `C_2` = (91.844028, −89.537033, 91.844028). The end
+  points `E_0`, `E_{N+1}` themselves are unchanged (hit of the level line with the cap plane,
+  closest approach of two level lines).
 - A vertex with one selected edge: the cap polygon is the polygon `(n1 -> v)` where `n1` is
   the next point after `v` in the polygon that holds `x -> v` (`x` the other end of the edge).
   Level point `j` is the intersection of the level line with the plane of the cap polygon
@@ -360,10 +380,13 @@ edge in edge order, then, edge by edge, rows `1 … N` (`bevel-mitering-uniform`
 the row 0 of the four edges, 10, 11 are rows 1, 2 of the first edge).
 **parity-pending**: rows `j ≥ 1` for `N ≥ 3` and the row order for more than three rows.
 
-### 3.5 Edge mode, solid (case: `bevel-solid`)
+### 3.5 Edge mode, solid (cases: `bevel-solid`, `bevel-solid-sub1`)
 `bevel_mode` solid keeps the old points and adds the same four end points as the chamfer, in
-the same order (8..11), no point is removed. Only one selected edge per vertex, `subdivision`
-0 and one selected edge per polygon are supported (`Unsupported` otherwise).
+the same order (8..11), no point is removed. Only one selected edge per vertex and one
+selected edge per polygon are supported (`Unsupported` otherwise).
+- **Subdivision has no effect in solid mode**: `bevel-solid-sub1` (Subdivision 1) equals
+  `bevel-solid` face for face and point for point. It is read as 0 (**parity-pending** for
+  larger values, one case).
 - The polygons `fA` and `fB` are cut by the line through their two new points. Let the cut
   edges be the polygon's edges next to the beveled edge, `X` on the earlier one, `Y` on the
   later one in the polygon's walk (indices `i < j`): the part that holds the polygon's first
@@ -373,7 +396,24 @@ the same order (8..11), no point is removed. Only one selected edge per vertex, 
   appended. Appended parts are in ascending order of the original polygon.
 - The cap polygons get `[incoming end point, v, outgoing end point]` (`2 10 3 11 5 4`).
 
-### 3.6 Settings without an effect or without data
+### 3.6 Point mode (case: `bevel-point`)
+Selected points are cut off, each independently (adjacent selected points, points that are not
+interior to a closed surface, `subdivision > 0`, proportional offset and solid mode are
+`Unsupported`).
+- For a point `v`, let the *ring* be its polygons in ascending index, each giving the pair
+  (previous point, next point) of `v` in it. The cut points sit `offset` from `v` along the
+  edge to each ring entry's **next** point, in ring order (`bevel-point`, point 3 of the cube:
+  ring = polygons 0, 1, 4 with next points 2, 5, 1 → (100, 80, −100), (100, 100, −80),
+  (80, 100, −100)).
+- The first cut point takes the slot of `v` (index 3), the others are appended (slots 8, 9);
+  no swap-remove (a swap-remove would need the creation order 5, 1, 2, which no rule here
+  explains). **parity-pending** for several selected points (the data have one).
+- Each polygon through `v` gets the cut point on its previous edge then the one on its next
+  edge in place of `v` (polygon 0 `0 1 3 2` → `0 1 [80,100,−100] [100,80,−100] 2`). The new
+  polygon is appended: first cut point, then the others in reverse ring order
+  (`4 10 9` = (100,80,−100), (80,100,−100), (100,100,−80)). Selection: the new polygon.
+
+### 3.7 Settings without an effect or without data
 - `limit`: no effect seen (all offsets are inside the geometry); ignored. **parity-pending**.
   (The note of `bevel-proportional` that offset 30 gave a degenerate mesh is consistent with
   Limit not clamping, but it does not prove it.)
@@ -386,7 +426,7 @@ the same order (8..11), no point is removed. Only one selected edge per vertex, 
 - **Unsupported** (no golden case): `shape` user/profile (out of scope, v1.1), `offset_mode`
   radial, `tension ≠ 1`, `depth ≠ 1`, `mitering` radial/patch, `ending` ≠ default,
   `partial_rounding` ≠ none, `corner_ngons`, `rounding_ngons`, `bevel_mode` solid together
-  with `subdivision > 0` or in polygon mode, point mode, open or non-manifold edges, vertices
+  in polygon or point mode, point mode with `subdivision > 0` or a proportional offset, open or non-manifold edges, vertices
   that are not valence 3, three selected edges at a vertex.
 
 ## 4. Mesh commands (`mesh.subdivide` ... `mesh.center_axis`)
