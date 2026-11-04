@@ -1,0 +1,57 @@
+feature = "collision"
+observation = "docs/parity/deformers-4.md"
+description = "Sphere radius 100 at (150, 0, 0) in the first Objects list, other parameters at defaults"
+mesh = "mesh.obj"
+
+[params]
+falloff = "None"
+distance = 100.0
+strength_percent = 100.0
+restore_shape_percent = 100.0
+solver = "Intersect"
+stretch_relax = ""
+falloff_1018 = ""
+restore = ""
+collision = ""
+invert = false
+falloff_1004 = ""
+invert_1006 = false
+enable = false
+compress = false
+memory = "0 B"
+p536871440 = ""
+auto_time = true
+p536871441 = ""
+scale_percent = 100.0
+p536871443 = ""
+cache = 20
+maximum_undo_limit_mb = ""
+size = 1.0
+steps = 1
+stretch = 8
+relax = 4
+stiffness_percent = 75.0
+struct_percent = 100.0
+flex_percent = 100.0
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+
+[params.collider]
+type = "sphere"
+position = [150.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+radius = 100.0
+segments = 16
+render_perfect = true
+list = "first Objects list"
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false
