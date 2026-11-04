@@ -4,7 +4,7 @@ description = "Platonic with Type Dodecahedron and Segments 2, made editable"
 mesh = "mesh.obj"
 
 [params]
-type = "polygon"
+primitive = "polygon"
 radius = 100.0
 segments = 2
 type = "Dodeca"

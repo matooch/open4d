@@ -36,7 +36,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O19 | Deformers III | [deformers-3.md](deformers-3.md) | `tests/golden/<deformer>/` meshes | done |
 | O45 | Deformers IV | [deformers-4.md](deformers-4.md) | `tests/golden/<deformer>/` meshes | done |
 | O46 | Spline tools and editable splines | [spline-tools.md](spline-tools.md) | `tests/golden/spline-tools/` meshes | done |
-| O56 | Caps and bevel tab | [caps-bevel.md](caps-bevel.md) | `tests/golden/caps-bevel/` meshes | todo |
+| O56 | Caps and bevel tab | [caps-bevel.md](caps-bevel.md) | `tests/golden/caps-bevel/` meshes | done |
 | O48 | Text spline | [text.md](text.md) | `tests/golden/text/` meshes | todo |
 | O49 | Fields IV: modifier layers, vertex maps | [fields-4.md](fields-4.md) | `tests/golden/fields/` samples + meshes | todo |
 | O42 | Shaders on a UV grid | [shaders.md](shaders.md) | `tests/golden/shaders/` samples | todo |
