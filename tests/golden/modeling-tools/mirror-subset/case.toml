@@ -1,0 +1,19 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Default cube made editable (8 points, 6 polygons); the top polygon ([4]) selected and the Mirror command run with the defaults (Duplicate off, Weld on) across the plane x = 0; the mirrored copy maps onto the original quad"
+mesh = "mesh.obj"
+
+[params]
+tool = "mirror"
+segments = [1, 1, 1]
+select_polys = [4]
+
+[params.settings]
+plane_point = [0.0, 0.0, 0.0]
+plane_normal = [1.0, 0.0, 0.0]
+duplicate = false
+weld = true
+
+[import]
+scale = 1.0
+flip_z = false
