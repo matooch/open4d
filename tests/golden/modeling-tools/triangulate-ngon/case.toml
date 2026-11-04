@@ -1,0 +1,14 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "A Disc primitive with Disc Segments 1 and Rotation Segments 6 made editable (7 points, 6 base polygons, 0 n-gon); all polygons selected and the Triangulate command run (7 points, 6 base polygons, 0 n-gon afterwards)"
+mesh = "mesh.obj"
+
+[params]
+tool = "triangulate"
+segments = []
+disc_segments = 1
+rotation_segments = 6
+
+[import]
+scale = 1.0
+flip_z = false

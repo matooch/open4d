@@ -1,0 +1,17 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Default cube made editable (8 points, 6 polygons); all polygons triangulated (8 points, 12 polygons); then all selected and the Untriangulate command run with N-gons on (the max-angle field could not be read in a confirmable unit: the tool settings store 1, which is 57.29578 degrees if radians)"
+mesh = "mesh.obj"
+
+[params]
+tool = "untriangulate"
+segments = [1, 1, 1]
+select_polys = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+triangulate_first = true
+
+[params.settings]
+n_gons = true
+
+[import]
+scale = 1.0
+flip_z = false
