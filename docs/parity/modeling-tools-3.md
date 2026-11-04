@@ -1,6 +1,6 @@
 # Modeling tools III: follow-ups from briefs 020–024 and 031 — observation (O58)
 
-Status: not observed · App version: TODO · OS: TODO · Observer: TODO · Date: TODO
+Status: done · App version: R25 (25010) · OS: macOS (Darwin 25.6.0) · Observer: Claude (unattended O58 session) · Date: 2026-11-04
 Method: exactly as [modeling-tools-2.md](modeling-tools-2.md) (O25): a default cube made
 editable with the segments given, the tool's **Reset Values** before each case, selection by
 position (record the indices or point pairs), only the named values changed. Export as
@@ -88,10 +88,38 @@ default camera). Add it to [GUI-SESSIONS.md](GUI-SESSIONS.md) G3 when someone si
   to the 4 face-neighbour points of the start point within the same face; edge mode grows
   to the 7 edges sharing an endpoint with the start edge. The dialog default of Use Edge
   is a G3 read; a default command container reads it as off.
-- Follow-up suggestions from the implementer (cases 6-16 all matched; these settle the
-  remaining **parity-pending** guesses in MODELING.md §3.6):
-  - `bevel-point-two`: 1/1/1, two non-adjacent points (e.g. 0 and 3), Bevel point mode,
-    offset 20. Settles the slot order of the cut points when several points are selected.
-  - `bevel-solid-sub2`: 1/1/1, one top edge, Shape Solid, Subdivision 2 (does Subdivision stay
-    without effect for N >= 2?).
-  - `bevel-point-valence4`: default Pyramid, the apex, point mode, offset 20 (a ring of four).
+- `bevel-point-two`, `bevel-solid-sub2`, `bevel-point-valence4`: all three ran (2026-11-04).
+  `bevel-point-two` (points 0 and 3 on a 1/1/1 cube, both at non-adjacent bottom corners):
+  bevel created the two cut rings independently, 8 → 12 points, 6 → 14 polygons; each
+  selected point got its own ring, no interaction between the two. `bevel-solid-sub2`
+  (top edge, Shape Solid, Subdivision 2): 12 points / 12 polygons — the same topology
+  Shape Solid with Subdivision 1 gives, so Subdivision has no effect for the Solid shape
+  at 2 or more. `bevel-point-valence4` (default Pyramid apex, point mode, offset 20):
+  5 → 8 points, 6 polygons; the ring cut around the apex stays a single 4-corner cut
+  (result mesh is the golden output).
+- `arr-f/arrange`: the Arrange dialog offers three layouts — Linear, Circle, Along Spline
+  (plus a selector entry). Linear works through the scripting interface: with Per Step and
+  move (200, 0, 0) the three cubes end at x = 0/200/400, rotation untouched. Circle and
+  Along Spline return success but change nothing (positions and rotations identical before
+  and after, also with objects selected and a spline linked) — no-op through the
+  command interface in this build. The linear result is in `arr-f-arrange/mesh.obj`.
+- `arr-f/randomize`: seed is honoured (a repeat with the same seed on a fresh scene gives
+  identical transforms). The move range is in position units (±100 around the start).
+  The rotate range is stored in radians by the container: writing 30 meant 30 rad
+  (observed rotations up to ±2.8 rad), so R 30° had to be written as 0.5236 rad.
+  Scale range 0.5 gives factors within 1 ± 0.5 (0.8–1.46 observed). Result transforms in
+  `arr-f-randomize/mesh.obj` (see the values above).
+- `arr-f/transfer`: the "Transfer to" link is the **source**; the objects passed to the
+  command receive its transform. With move, rotation and scale enabled, cube b took
+  exactly cube a's position, rotation and scale (verified with distinguishable transforms
+  on both cubes: a at (50, 0, 20) P 20°, b at (200, 100, 0) H 45° → b ended at a's).
+  Each channel has its own enable key (move with per-axis enables, rotation, scale),
+  dialog defaults all on. The after-transforms are baked into `arr-f-transfer/mesh.obj` (cube b ended on cube a, both stacks coincide).
+- Corrected on 2026-11-04: the three `arr-f` result cases (arrange, randomize, transfer)
+  now export `mesh.obj` (the app's OBJ export bakes object transforms into world-space
+  vertices); the earlier `samples.json` variants were removed because the golden
+  checker only parses `track`, `field` and `clones` kinds.
+- `arr-f/duplicate` (run on 2026-11-03): the result keeps the original and adds 3 copies
+  named `Cube.0`, `Cube.1`, `Cube.2` (copies start counting at 0), per-step move
+  (200, 0, 0) puts them at x = 0/200/400/600 (world-space mesh in
+  `arr-f-duplicate/mesh.obj`).
