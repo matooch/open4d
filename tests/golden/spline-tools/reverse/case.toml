@@ -1,0 +1,28 @@
+feature = "spline-tools"
+observation = "docs/parity/spline-tools.md"
+description = "Default Rectangle made editable, then Reverse Sequence"
+mesh = "mesh.obj"
+
+[params]
+extrude_offset = 20.0
+caps = false
+command = "reverse"
+
+[params.input]
+width = 400.0
+height = 400.0
+rounding = false
+rounding_radius = 50.0
+plane = "xy"
+reverse = false
+intermediate = "adaptive"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+position = [0.0, 0.0, 0.0]
+
+
+
+[import]
+scale = 1.0
+flip_z = false
