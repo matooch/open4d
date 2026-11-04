@@ -103,6 +103,35 @@ pub fn run_script(
     source: &str,
     opts: &ScriptOptions,
 ) -> Result<ScriptReport, ScriptFailure> {
+    run_entry(ctx, commands, source, Entry::Script, opts)
+}
+
+/// Like [`run_script`], but runs only the function definitions of `source` and calls
+/// `function(arg)` (`arg` converted from JSON). Top-level statements of `source` do not
+/// run. Used by plugin commands (docs/specs/PLUGINS.md).
+pub fn run_function(
+    ctx: &mut dyn CommandContext,
+    commands: &Arc<CommandRegistry>,
+    source: &str,
+    function: &str,
+    arg: &Json,
+    opts: &ScriptOptions,
+) -> Result<ScriptReport, ScriptFailure> {
+    run_entry(ctx, commands, source, Entry::Call { function, arg }, opts)
+}
+
+enum Entry<'a> {
+    Script,
+    Call { function: &'a str, arg: &'a Json },
+}
+
+fn run_entry(
+    ctx: &mut dyn CommandContext,
+    commands: &Arc<CommandRegistry>,
+    source: &str,
+    entry: Entry<'_>,
+    opts: &ScriptOptions,
+) -> Result<ScriptReport, ScriptFailure> {
     let output: Rc<RefCell<Vec<String>>> = Rc::default();
     let operations: Rc<Cell<u64>> = Rc::default();
     let host = Rc::new(Host::new(commands.clone(), opts.max_commands));
@@ -118,7 +147,15 @@ pub fn run_script(
     let depth = ctx.doc().undo_depth();
     let guard = host.lend(ctx);
     let mut scope = Scope::new();
-    let result = engine.eval_ast_with_scope::<Dynamic>(&mut scope, &ast);
+    let result = match entry {
+        Entry::Script => engine.eval_ast_with_scope::<Dynamic>(&mut scope, &ast),
+        Entry::Call { function, arg } => engine.call_fn::<Dynamic>(
+            &mut scope,
+            &ast.clone_functions_only(),
+            function,
+            (convert::from_json(arg),),
+        ),
+    };
     drop(guard);
 
     match result {
@@ -141,6 +178,58 @@ pub fn run_script(
             Err(failure)
         }
     }
+}
+
+/// Calls `function(arg)` from the function definitions of `source` in a sandbox that has
+/// no scene and no commands: only the maths types and seeded random numbers. The result is
+/// deterministic for equal inputs. Used by plugin generators (docs/specs/PLUGINS.md).
+pub fn eval_function(
+    source: &str,
+    function: &str,
+    arg: &Json,
+    opts: &ScriptOptions,
+) -> Result<ScriptReport, ScriptFailure> {
+    let output: Rc<RefCell<Vec<String>>> = Rc::default();
+    let operations: Rc<Cell<u64>> = Rc::default();
+    let mut engine = Engine::new();
+    configure(&mut engine, opts, &output, &operations);
+    maths::register(&mut engine);
+    let ast = engine
+        .compile(source)
+        .map_err(|e| convert::syntax_failure(&e))?;
+    let mut scope = Scope::new();
+    let result = engine.call_fn::<Dynamic>(
+        &mut scope,
+        &ast.clone_functions_only(),
+        function,
+        (convert::from_json(arg),),
+    );
+    match result {
+        Ok(value) => Ok(ScriptReport {
+            output: output.take(),
+            value: convert::to_json(&value).unwrap_or(Json::Null),
+            commands: 0,
+            operations: operations.get(),
+        }),
+        Err(e) => {
+            let mut failure = convert::failure(&e, opts);
+            failure.output = output.take();
+            Err(failure)
+        }
+    }
+}
+
+/// The functions `source` defines as `(name, parameter count)`; a syntax error fails.
+pub fn script_functions(source: &str) -> Result<Vec<(String, usize)>, ScriptFailure> {
+    let mut engine = Engine::new();
+    engine.set_max_expr_depths(64, 32);
+    let ast = engine
+        .compile(source)
+        .map_err(|e| convert::syntax_failure(&e))?;
+    Ok(ast
+        .iter_functions()
+        .map(|f| (f.name.to_string(), f.params.len()))
+        .collect())
 }
 
 fn configure(

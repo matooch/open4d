@@ -165,3 +165,11 @@ Output lines are capped at 10 000 (later lines are dropped silently).
 CLI tests (`apps/forge/tests/cli.rs`): `forge run` with and without `--scene`/`--save`,
 `--json` output, script errors and exit codes. UI test: the Script Manager panel runs a
 script and shows its output.
+
+## Plugin entry points
+
+`run_function(ctx, commands, source, function, arg, opts)` runs only the function
+definitions of `source` and calls `function(arg)` with the same undo, rollback and limits as
+`run_script`. `eval_function(source, function, arg, opts)` does the same with no context and
+no command bindings (maths and random numbers only). `script_functions(source)` lists the
+defined functions with their arity. Plugin packages use them (PLUGINS.md).

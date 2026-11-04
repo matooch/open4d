@@ -1696,6 +1696,19 @@ dependencies = [
 [[package]]
 name = "forge-plugin"
 version = "0.1.0"
+dependencies = [
+ "forge-app",
+ "forge-command",
+ "forge-core",
+ "forge-geometry",
+ "forge-script",
+ "glam",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml",
+]
 
 [[package]]
 name = "forge-render-api"
