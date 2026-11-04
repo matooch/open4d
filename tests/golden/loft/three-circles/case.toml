@@ -1,0 +1,64 @@
+feature = "loft"
+observation = "docs/parity/generators-3.md"
+description = "Loft with three default Circles at y 0, 200 and 400 (Plane XZ), the middle one with Radius 100, R25 defaults"
+mesh = "mesh.obj"
+
+[params]
+mesh_subdivision_u = 16
+mesh_subdivision_v = 4
+isoparm_subdivision_u = 10
+organic_form = false
+subdivision_per_segment = true
+loop = false
+linear_interpolation = false
+adapt_uv = true
+flip_normals = false
+
+[params.input]
+type = "circle_spline"
+pos = [0.0, 0.0, 0.0]
+ellipse = false
+ring = false
+radius = 200.0
+radius_y = 200.0
+inner_radius = 100.0
+plane = "xz"
+reverse = false
+intermediate = "uniform"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+[params.input2]
+type = "circle_spline"
+pos = [0.0, 200.0, 0.0]
+ellipse = false
+ring = false
+radius = 100.0
+radius_y = 200.0
+inner_radius = 100.0
+plane = "xz"
+reverse = false
+intermediate = "uniform"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+[params.input3]
+type = "circle_spline"
+pos = [0.0, 400.0, 0.0]
+ellipse = false
+ring = false
+radius = 200.0
+radius_y = 200.0
+inner_radius = 100.0
+plane = "xz"
+reverse = false
+intermediate = "uniform"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+[import]
+scale = 1.0
+flip_z = false
