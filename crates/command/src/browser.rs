@@ -449,11 +449,10 @@ mod tests {
         }
         b.record_recent("/scenes/5.forge");
         assert_eq!(b.recent.len(), MAX_RECENT_FILES);
-        assert_eq!(b.recent[0], "/scenes/5.forge");
-        assert_eq!(
-            b.recent.iter().filter(|p| p.ends_with("/5.forge")).count(),
-            1
-        );
+        // stored absolute: on Windows "/scenes/5.forge" gains the current drive
+        let five = absolute("/scenes/5.forge");
+        assert_eq!(b.recent[0], five);
+        assert_eq!(b.recent.iter().filter(|p| **p == five).count(), 1);
         assert!(b.remove_recent(0));
         assert!(!b.remove_recent(99));
         assert_eq!(b.clear_recent(), MAX_RECENT_FILES - 1);
