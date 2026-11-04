@@ -251,7 +251,7 @@ No Field list on Explosion FX.
   point 0 and one neighbour); no visible smoothing spread in the export. Same solver-cache caveat.
 - collision/sphere: the cube is undeformed in the export (all 162 cube coordinates identical to the
   plain cube grid); only the sphere helper geometry is added (114 more vertices).
-- shear/falloff/shear-spherical exported geometry identical to the plain cube grid: with the default
+- falloff/shear-spherical exported geometry identical to the plain cube grid: with the default
   spherical field (size 200 at the origin) the shear shift, which is proportional to y, is negligible
   inside the field's reach. The field weighting itself is not independently confirmed by this mesh.
 - In falloff/bend-offset the field stays at the origin (0, 0, 0) while the cube moves to (0, 100, 0)
@@ -262,12 +262,11 @@ No Field list on Explosion FX.
 
 ## Notes
 
-Folders: for the classical deformers (twist, taper, bulge, bend, shear, spherify, squash-stretch,
-wrap, ffd) the row's folder is nested under the feature folder that job O9 introduced
-(`bend/box-gate/…`, `bend/falloff/…`, `squash-stretch/squash-f/…`, `wrap/wrap-f/…`, `ffd/…`); the
-ten new-deformer features get their own top-level folder named after the row's first component
-(`spline-deformer`, `spline-rail`, `mesh-deformer`, `surface`, `camera-deformer`, `collision`,
-`jiggle`, `delta-mush`, `correction`, `explosion-fx`).
+Folders: every family in this job keeps its folder named after the row's first component,
+top-level under `tests/golden/` (`spline-deformer`, `spline-rail`, `mesh-deformer`, `surface`,
+`camera-deformer`, `collision`, `jiggle`, `delta-mush`, `correction`, `explosion-fx`, `box-gate`,
+`falloff`, `squash-f`, `wrap-f`). The `ffd/ffd-grid-5` case is nested under the `ffd` folder that
+job O9 created, next to that job's cases.
 
 Per-case result overview (vertex/face counts and bounds from each case's `mesh.obj`):
 
@@ -285,32 +284,32 @@ Per-case result overview (vertex/face counts and bounds from each case's `mesh.o
 | correction/defaults | 162/160 | (-100, -200, -100) | (359.154943, 259.154943, 100) |
 | ffd/ffd-grid-5 | 162/160 | (-100, -200, -100) | (100, 200, 100) |
 | explosion-fx/frame-10 | 672/618 | (-177.731545, -237.659725, -148.18575) | (118.167887, 197.497872, 129.770756) |
-| twist/box-gate/twist-narrow-x | 98/96 | (-111.800177, -100, -111.800177) | (111.800177, 100, 111.800177) |
-| taper/box-gate/taper-narrow-x | 98/96 | (-100, -100, -100) | (100, 100, 100) |
-| bulge/box-gate/bulge-narrow-z | 98/96 | (-150, -100, -100) | (150, 100, 100) |
-| bend/box-gate/bend-rotated | 98/96 | (-100, -108.810876, -141.553768) | (190.26559, 141.553768, 108.810876) |
-| bend/box-gate/bend-angle | 98/96 | (-100, -100, -100) | (240.584979, 260.416693, 248.406702) |
-| bend/box-gate/bend-equal | 98/96 | (-95.578207, -100.102682, -100) | (234.257625, 229.73315, 100) |
-| bend/falloff/bend-offset | 324/320 | (-100, -200, -100) | (191.000027, 300, 100) |
-| bend/falloff/bend-strength-200 | 162/160 | (-100, -200, -100) | (359.154943, 259.154943, 100) |
-| shear/falloff/shear-spherical | 162/160 | (-100, -200, -100) | (100, 200, 100) |
-| spherify/falloff/spherify-linear | 162/160 | (-100, -200, -159.164079) | (200, 200, 159.164079) |
-| bend/falloff/field-child | 162/160 | (-100, -200, -100) | (359.154943, 259.154943, 100) |
-| squash-stretch/squash-f/top-bottom | 162/160 | (-200, -124.9975, -200) | (200, 174.9975, 200) |
-| squash-stretch/squash-f/center | 162/160 | (-200, -149.9975, -200) | (200, 149.9975, 200) |
-| squash-stretch/squash-f/aspect | 162/160 | (-150, -149.9975, -200) | (150, 149.9975, 200) |
-| squash-stretch/squash-f/smooth | 162/160 | (-200, -149.9975, -200) | (200, 149.9975, 200) |
-| squash-stretch/squash-f/curvature | 162/160 | (-200, -149.9975, -200) | (200, 149.9975, 200) |
-| squash-stretch/squash-f/curvature-cubic | 162/160 | (-200, -149.9975, -200) | (200, 149.9975, 200) |
-| squash-stretch/squash-f/curvature-quartic | 162/160 | (-200, -149.9975, -200) | (200, 149.9975, 200) |
-| squash-stretch/squash-f/custom | 162/160 | (-200, -149.9975, -200) | (200, 149.9975, 200) |
-| wrap/wrap-f/movement | 162/160 | (-212.132034, -175, -100) | (212.132034, 275, 129.289322) |
-| wrap/wrap-f/scale-z | 162/160 | (-176.776695, -200, -50) | (176.776695, 200, 93.933983) |
-| wrap/wrap-f/tension | 162/160 | (-184.605834, -200, -100) | (184.605834, 200, 114.644661) |
-| wrap/wrap-f/latitude | 162/160 | (-212.132034, -300, -100) | (212.132034, 0, 200) |
-| wrap/wrap-f/longitude | 162/160 | (-212.132034, -200, 270.710678) | (212.132034, 200, 500) |
-| wrap/wrap-f/size | 162/160 | (-200, -200, -100) | (200, 200, 100) (wrapped: point radii 0–223.61) |
-| wrap/wrap-f/spherical-h200 | 162/160 | (-212.132034, -300, -100) | (212.132034, 300, 200) |
+| box-gate/twist-narrow-x | 98/96 | (-111.800177, -100, -111.800177) | (111.800177, 100, 111.800177) |
+| box-gate/taper-narrow-x | 98/96 | (-100, -100, -100) | (100, 100, 100) |
+| box-gate/bulge-narrow-z | 98/96 | (-150, -100, -100) | (150, 100, 100) |
+| box-gate/bend-rotated | 98/96 | (-100, -108.810876, -141.553768) | (190.26559, 141.553768, 108.810876) |
+| box-gate/bend-angle | 98/96 | (-100, -100, -100) | (240.584979, 260.416693, 248.406702) |
+| box-gate/bend-equal | 98/96 | (-95.578207, -100.102682, -100) | (234.257625, 229.73315, 100) |
+| falloff/bend-offset | 324/320 | (-100, -200, -100) | (191.000027, 300, 100) |
+| falloff/bend-strength-200 | 162/160 | (-100, -200, -100) | (359.154943, 259.154943, 100) |
+| falloff/shear-spherical | 162/160 | (-100, -200, -100) | (100, 200, 100) |
+| falloff/spherify-linear | 162/160 | (-100, -200, -159.164079) | (200, 200, 159.164079) |
+| falloff/field-child | 162/160 | (-100, -200, -100) | (359.154943, 259.154943, 100) |
+| squash-f/top-bottom | 162/160 | (-200, -124.9975, -200) | (200, 174.9975, 200) |
+| squash-f/center | 162/160 | (-200, -149.9975, -200) | (200, 149.9975, 200) |
+| squash-f/aspect | 162/160 | (-150, -149.9975, -200) | (150, 149.9975, 200) |
+| squash-f/smooth | 162/160 | (-200, -149.9975, -200) | (200, 149.9975, 200) |
+| squash-f/curvature | 162/160 | (-200, -149.9975, -200) | (200, 149.9975, 200) |
+| squash-f/curvature-cubic | 162/160 | (-200, -149.9975, -200) | (200, 149.9975, 200) |
+| squash-f/curvature-quartic | 162/160 | (-200, -149.9975, -200) | (200, 149.9975, 200) |
+| squash-f/custom | 162/160 | (-200, -149.9975, -200) | (200, 149.9975, 200) |
+| wrap-f/movement | 162/160 | (-212.132034, -175, -100) | (212.132034, 275, 129.289322) |
+| wrap-f/scale-z | 162/160 | (-176.776695, -200, -50) | (176.776695, 200, 93.933983) |
+| wrap-f/tension | 162/160 | (-184.605834, -200, -100) | (184.605834, 200, 114.644661) |
+| wrap-f/latitude | 162/160 | (-212.132034, -300, -100) | (212.132034, 0, 200) |
+| wrap-f/longitude | 162/160 | (-212.132034, -200, 270.710678) | (212.132034, 200, 500) |
+| wrap-f/size | 162/160 | (-200, -200, -100) | (200, 200, 100) (wrapped: point radii 0–223.61) |
+| wrap-f/spherical-h200 | 162/160 | (-212.132034, -300, -100) | (212.132034, 300, 200) |
 
 The three derived cases the queue flagged (squash-f/curvature-cubic, squash-f/curvature-quartic,
 wrap-f/spherical-h200) were observed as additional cases, as the rows request.
