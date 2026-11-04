@@ -1,0 +1,30 @@
+feature = "ffd"
+observation = "docs/parity/deformers-4.md"
+description = "FFD grid points 5/5/5, centre grid point (index 62) moved by (0, 100, 0)"
+mesh = "mesh.obj"
+
+[params]
+grid_size = [300.0, 300.0, 300.0]
+grid_points_x = 5
+grid_points_y = 5
+grid_points_z = 5
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+grid_points_x = 5
+grid_points_y = 5
+grid_points_z = 5
+point_index_moved = 62
+point_moved_by = [0.0, 100.0, 0.0]
+point_count = 125
+point62_before = [0.0, 0.0, 0.0]
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false
