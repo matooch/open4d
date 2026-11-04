@@ -1,0 +1,33 @@
+feature = "spline-tools"
+observation = "docs/parity/spline-tools.md"
+description = "Default Circle made editable, Intermediate Points None, Type Akima"
+mesh = "mesh.obj"
+
+[params]
+extrude_offset = 20.0
+caps = false
+command = "make_editable"
+
+[params.settings]
+intermediate_points = "none"
+type = "akima"
+
+[params.input]
+ellipse = false
+ring = false
+radius = 200.0
+radius_y = 200.0
+inner_radius = 100.0
+plane = "xy"
+reverse = false
+intermediate = "uniform"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+position = [0.0, 0.0, 0.0]
+
+
+
+[import]
+scale = 1.0
+flip_z = false
