@@ -77,6 +77,17 @@ default camera). Add it to [GUI-SESSIONS.md](GUI-SESSIONS.md) G3 when someone si
 - `bevel-proportional-rect` crashed the app in the run of 2026-11-03/04 (leftover
   CURRENT_CASE said so at the start of the next run). Skipped for good, per the queue
   rules.
+- `knife-plane-mid`: gui-only. The knife command (line mode API) accepts a container but
+  cuts nothing, and the Knife tool's plane mode cannot be driven through the command
+  interface (returns False on a 1/1/1 cube with all polygons selected, plane preset XZ
+  through the origin in world space). Needs a human at the viewport (G3).
+- `slide-loop`, `slide-edge`: gui-only. Both Slide tools return False through the command
+  interface with Percent 0.5 and Weld on (edges selected). Interactive drag only.
+- `sel/grow-*` ran through the selection-grow modeling command with the command defaults
+  (Use Edge off): poly mode grows to the 3×3 patch around the start quad; point mode grows
+  to the 4 face-neighbour points of the start point within the same face; edge mode grows
+  to the 7 edges sharing an endpoint with the start edge. The dialog default of Use Edge
+  is a G3 read; a default command container reads it as off.
 - Follow-up suggestions from the implementer (cases 6-16 all matched; these settle the
   remaining **parity-pending** guesses in MODELING.md §3.6):
   - `bevel-point-two`: 1/1/1, two non-adjacent points (e.g. 0 and 3), Bevel point mode,

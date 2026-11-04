@@ -1,0 +1,16 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Cube made editable with 4 x 4 x 4 segments; the middle front polygon (index [9], corners [(-50.0, 0.0, -100.0), (-50.0, 50.0, -100.0), (0.0, 50.0, -100.0), (0.0, 0.0, -100.0)], front face z = -100) selected and Grow Selection run with the command defaults (Use Edge off); final selection written to selection.json"
+mesh = "mesh.obj"
+
+[params]
+tool = "grow"
+segments = [4, 4, 4]
+select_polys = [9]
+
+[params.settings]
+use_edge = false
+
+[import]
+scale = 1.0
+flip_z = false
