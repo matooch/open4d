@@ -48,6 +48,26 @@ Default Intermediate Points is **Adaptive** (Angle 5°), like most spline primit
 | two-lines | `A` + newline + `B` | vertical spacing default; a plain newline in the text is stored and produces a second line | ok |
 | intermediate | `S` | Intermediate Points Uniform, number 4 | ok |
 
+## Follow-up cases (planner, after brief 039)
+
+Brief 039 matched every font-independent rule above. Glyph shapes need a font both sides can
+use: in GUI session G1 or G4, pick **DejaVu Sans** (freely licensed; installable from the
+DejaVu project) in the font picker, confirm it reshapes the text, then export these like the
+cases above. If the picker cannot reshape the text either, say so in the Notes and skip the
+`dv-` rows.
+
+| Case | Text | Changes | Mesh |
+|---|---|---|---|
+| dv-a | A | Font DejaVu Sans | extruded as above |
+| dv-o | O | Font DejaVu Sans | extruded as above |
+| dv-word | Forge | Font DejaVu Sans | extruded as above |
+| dv-two-lines | A (newline) A | Font DejaVu Sans | extruded as above |
+| align-right | AB | Align Right | extruded as above |
+| vspacing | A (newline) A | Vertical Spacing 50 | extruded as above |
+| kerning | AV | – (default kerning) | extruded as above |
+| height-negative | A | Height −200 | extruded as above |
+| separate-letters | AB | Separate Letters on (record the object tree) | extruded as above |
+
 ## Notes
 
 - **Fonts are not scriptable on this build (R25.010, macOS).** The font parameter reads
