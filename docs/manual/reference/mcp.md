@@ -113,6 +113,11 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `spline_delete_points` | Delete Spline Points. Undoable editing command. Runs command `spline.delete_points`. |
 | `spline_set_closed` | Close Spline. Undoable editing command. Runs command `spline.set_closed`. |
 | `spline_set_type` | Set Spline Type. Undoable editing command. Runs command `spline.set_type`. |
+| `spline_chamfer` | Chamfer Spline. Undoable editing command. Runs command `spline.chamfer`. |
+| `spline_outline` | Create Spline Outline. Undoable editing command. Runs command `spline.outline`. |
+| `spline_boolean` | Spline Boolean. Undoable editing command. Runs command `spline.boolean`. |
+| `spline_reverse` | Reverse Spline. Undoable editing command. Runs command `spline.reverse`. |
+| `spline_subdivide` | Subdivide Spline. Undoable editing command. Runs command `spline.subdivide`. |
 | `mesh_extrude` | Extrude. Undoable editing command. Runs command `mesh.extrude`. |
 | `mesh_extrude_inner` | Extrude Inner. Undoable editing command. Runs command `mesh.extrude_inner`. |
 | `mesh_bevel` | Bevel. Undoable editing command. Runs command `mesh.bevel`. |

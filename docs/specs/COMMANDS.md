@@ -144,6 +144,11 @@ touch history.
 | `spline.delete_points` | `node`, `indices` | `{deleted}` | yes |
 | `spline.set_closed` | `node`, `segment?`, `closed` | null | yes |
 | `spline.set_type` | `nodes?`, `type` linear, cubic, akima, bspline, bezier | `{changed}` | yes |
+| `spline.chamfer` | `node`, `radius?`, `flat?`, `indices?` (SPLINES.md §8.1) | `{points}` | yes |
+| `spline.outline` | `node`, `distance?` (§8.2) | `{segments}` | yes |
+| `spline.boolean` | `op` union, and, or, subtract, intersect; `a`, `b`, `keep_inputs?` (§8.3) | `{node}` | yes |
+| `spline.reverse` | `node` (§8.4) | `{points}` | yes |
+| `spline.subdivide` | `node`, `subdivisions?` (§8.5) | `{points}` | yes |
 | `mesh.current_state_to_object` | `nodes?` | `{made, skipped}` | yes |
 | `mesh.extrude` `mesh.extrude_inner` `mesh.bevel` | `node?`, `polys?`, `settings?`; bevel also `edges?`, `points?` (MODELING.md §0.1, §3) | `{node, points, polys, selected}` | yes |
 | `mesh.subdivide` `mesh.triangulate` `mesh.untriangulate` `mesh.reverse_normals` `mesh.optimize` `mesh.weld` `mesh.melt` `mesh.dissolve` `mesh.split` `mesh.disconnect` `mesh.connect_points` `mesh.mirror` `mesh.center_axis` | `node?`, `polys?`, `settings?`; weld, dissolve and connect_points also `edges?`, `points?` (MODELING.md §0.1, §4) | `{node, points, polys, selected}`; split adds `created`, center_axis adds `center` | yes |

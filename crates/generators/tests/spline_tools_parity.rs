@@ -1,6 +1,8 @@
-//! Editable splines (docs/specs/SPLINES.md, brief 028) against tests/golden/spline-tools (O46):
-//! the extrude (Offset 20, caps off) of a spline made editable, with the interpolation type
-//! and Intermediate Points of `[params.settings]` applied afterwards.
+//! Editable splines and spline tools (docs/specs/SPLINES.md, briefs 028 and 029) against
+//! tests/golden/spline-tools (O46): the extrude (Offset 20, caps off) of a spline made
+//! editable, with the interpolation type and Intermediate Points of `[params.settings]`
+//! applied afterwards (section 4), or of the result of the tool named by `command`
+//! (section 8: chamfer, outline, reverse, subdivide, the spline booleans).
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -11,6 +13,7 @@ mod common;
 use common::{apply, resolved_params};
 use forge_core::{Document, EvalCtx, Registry, Value};
 use forge_generators::editable_spline::{self, SplineData, SplineType, tangent_readback};
+use forge_generators::spline_tools::{self, BoolOp};
 use forge_generators::splines::{CIRCLE, RECTANGLE};
 use forge_generators::{BuildError, Primitives, evaluate, make_editable};
 use forge_parity_harness::{GoldenCase, Mesh, compare_meshes, discover_cases, export_weld};
@@ -22,41 +25,39 @@ fn registry() -> Arc<Registry> {
     Arc::new(reg)
 }
 
-/// Cases of this brief (editable objects and interpolation types).
+/// Cases that match the export exactly (editable objects, interpolation types, tools).
 const MATCHING: &[&str] = &[
+    "and",
+    "chamfer",
     "editable-circle",
     "editable-rectangle",
     "interp-akima",
     "interp-bezier",
     "interp-bspline",
     "interp-linear",
+    "intersect",
+    "or",
+    "reverse",
+    "subdivide",
+    "subtract",
+    "union",
 ];
 
-/// Built but not matching.
-const KNOWN_MISMATCH: &[&str] = &[];
+/// Built but not matching. `outline`, `outline-neg`: same structure (two loops, 36 samples
+/// each, order, direction, faces), positions within `OUTLINE_BOUND` (SPLINES.md section 8.2).
+const KNOWN_MISMATCH: &[&str] = &["outline", "outline-neg"];
+
+/// The worst position error a known-mismatch outline may have (measured 3.7e-3).
+const OUTLINE_BOUND: f64 = 0.005;
 
 /// Observed options whose rules are not derived.
 const UNSUPPORTED: &[&str] = &[];
 
-/// Cases of the folder that belong to other briefs: spline tools and booleans (029), the
-/// Intermediate Points / primitive follow-ups of briefs 037 and 038 (`interp-f-*`,
-/// `prim-f-*`, checked by their own tests when those briefs pick them up).
+/// Cases of the folder that belong to other briefs: the Intermediate Points / primitive
+/// follow-ups of briefs 037 and 038 (`interp-f-*`, `prim-f-*`, checked by their own tests
+/// when those briefs pick them up).
 fn owned_elsewhere(name: &str) -> bool {
-    name.starts_with("interp-f-")
-        || name.starts_with("prim-f-")
-        || [
-            "and",
-            "chamfer",
-            "intersect",
-            "or",
-            "outline",
-            "outline-neg",
-            "reverse",
-            "subdivide",
-            "subtract",
-            "union",
-        ]
-        .contains(&name)
+    name.starts_with("interp-f-") || name.starts_with("prim-f-")
 }
 
 fn extrude_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
@@ -120,6 +121,176 @@ fn extrude_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
     })
 }
 
+/// Extrude Direction Auto (brief 044 owns the real rule), the guess of `spline_sampling.rs`
+/// extended to several loops: negative Z when the loops' signed areas add up to a clockwise
+/// total (`outline`, `or`, `intersect`; a total of zero follows the first loop).
+fn auto_sign(doc: &Document, id: forge_core::NodeId) -> f64 {
+    let (data, ty, sampling) = editable_spline::settings_of(doc.scene(), id).unwrap();
+    let areas: Vec<f64> = data
+        .curve(ty, sampling)
+        .loops()
+        .iter()
+        .map(|ring| {
+            (0..ring.len())
+                .map(|i| {
+                    let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+                    a.x * b.y - b.x * a.y
+                })
+                .sum()
+        })
+        .collect();
+    let total: f64 = areas.iter().sum();
+    let scale: f64 = areas.iter().map(|a| a.abs()).sum();
+    let area = if total.abs() < 1e-9 * scale {
+        areas[0]
+    } else {
+        total
+    };
+    if area < 0.0 { -1.0 } else { 1.0 }
+}
+
+fn float(t: &toml::map::Map<String, toml::Value>, key: &str) -> f64 {
+    t[key]
+        .as_float()
+        .or_else(|| t[key].as_integer().map(|i| i as f64))
+        .unwrap()
+}
+
+/// The extrude of the result of the case's `command` applied to its editable input(s).
+fn tool_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
+    let reg = registry();
+    let m = case.manifest().unwrap();
+    let params = resolved_params(case, &m);
+    let command = params["command"].as_str().unwrap().to_string();
+    let settings = params.get("settings").and_then(|v| v.as_table()).cloned();
+    let offset = params["extrude_offset"].as_float().unwrap();
+    let mut doc = Document::new(reg.clone());
+    // the inputs, made editable, top level
+    let mut editable = Vec::new();
+    for key in ["input", "input2"] {
+        let Some(table) = params.get(key).and_then(|v| v.as_table()) else {
+            continue;
+        };
+        let mut table = table.clone();
+        if let Some(p) = table.remove("position") {
+            table.insert("pos".into(), p);
+        }
+        let ty = if table.contains_key("width") {
+            RECTANGLE
+        } else {
+            CIRCLE
+        };
+        let id = doc
+            .transact("input", |tx| {
+                let id = tx.create(ty, None, None)?;
+                apply(tx, &reg, id, ty, &table);
+                make_editable(tx, id).map_err(|e| match e {
+                    forge_generators::EditableError::Edit(e) => e,
+                    other => panic!("{other}"),
+                })
+            })
+            .unwrap();
+        editable.push(id);
+    }
+    let node = editable[0];
+    let failed = |e: spline_tools::ToolError| BuildError::Failed(e.to_string());
+    let result = if let Some(op) = command.strip_prefix("spline_").and_then(BoolOp::from_id) {
+        doc.transact("boolean", |tx| {
+            Ok(spline_tools::boolean_in_tx(
+                tx,
+                editable[0],
+                editable[1],
+                op,
+                false,
+            ))
+        })
+        .unwrap()
+        .map_err(failed)?
+    } else {
+        let (data, ty, _) = editable_spline::settings_of(doc.scene(), node).unwrap();
+        let s = settings.unwrap_or_default();
+        let (data, new_type) = match command.as_str() {
+            "chamfer" => {
+                let c = spline_tools::chamfer(
+                    &data,
+                    float(&s, "radius"),
+                    s["flat"].as_bool().unwrap(),
+                    None,
+                )
+                .map_err(failed)?;
+                (c.data, c.curved.then_some(SplineType::Bezier))
+            }
+            "create_outline" => (
+                spline_tools::outline(&data, float(&s, "distance")).map_err(failed)?,
+                None,
+            ),
+            "reverse" => (spline_tools::reverse(&data), None),
+            "subdivide" => (
+                spline_tools::subdivide(
+                    &data,
+                    ty,
+                    s["subdivisions"].as_integer().unwrap() as usize,
+                )
+                .map_err(failed)?,
+                None,
+            ),
+            other => panic!("{}: unknown command {other}", case.name),
+        };
+        doc.transact("tool", |tx| {
+            for (k, v) in data.to_values() {
+                tx.set_param(node, &k, v)?;
+            }
+            if let Some(t) = new_type {
+                tx.set_param(node, "type", Value::Enum(t.id().into()))?;
+            }
+            Ok(())
+        })
+        .unwrap();
+        node
+    };
+    let ex = doc
+        .transact("extrude", |tx| {
+            let ex = tx.create("forge.extrude", None, None)?;
+            for cap in ["cap_start", "cap_end"] {
+                tx.set_param(ex, cap, Value::Enum("none".into()))?;
+            }
+            tx.move_node(result, Some(ex), None)?;
+            Ok(ex)
+        })
+        .unwrap();
+    let sign = auto_sign(&doc, result);
+    doc.transact("direction", |tx| {
+        tx.set_param(ex, "movement", Value::Vec3([0.0, 0.0, sign * offset]))
+    })
+    .unwrap();
+    let mesh = evaluate(doc.scene(), ex, &EvalCtx::default())?.expect("geometry");
+    Ok(Mesh {
+        positions: mesh.points.iter().map(|p| p.to_array()).collect(),
+        faces: mesh.polys.clone(),
+    })
+}
+
+/// A case's mesh: a tool result if it has a `command`, else the extrude of the editable
+/// spline with its settings.
+fn mesh_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
+    let m = case.manifest().unwrap();
+    let tool = m
+        .params
+        .get("command")
+        .and_then(|c| c.as_str())
+        .is_some_and(|c| {
+            ["chamfer", "create_outline", "reverse", "subdivide"].contains(&c)
+                || c.strip_prefix("spline_")
+                    .and_then(BoolOp::from_id)
+                    .is_some()
+        });
+    if tool {
+        tool_of(case)
+    } else {
+        extrude_of(case)
+    }
+}
+
 #[test]
 fn editable_and_interpolation_cases_against_the_export() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
@@ -131,7 +302,7 @@ fn editable_and_interpolation_cases_against_the_export() {
         }
         let tol = case.manifest().unwrap().tolerance;
         let expected = case.expected_mesh().unwrap().unwrap();
-        let ours = match extrude_of(&case) {
+        let ours = match mesh_of(&case) {
             Err(BuildError::Unsupported(_)) => {
                 unsupported.insert(case.name.clone());
                 continue;
@@ -141,6 +312,14 @@ fn editable_and_interpolation_cases_against_the_export() {
         let r = compare_meshes(&export_weld(&expected), &export_weld(&ours), &tol);
         if KNOWN_MISMATCH.contains(&case.name.as_str()) {
             assert!(!r.passed(), "{}: matches now, remove it", case.name);
+            // the structure is right: same faces, positions within the measured bound
+            assert!(
+                r.topology_match,
+                "{}: faces differ: {:?}",
+                case.name, r.failures
+            );
+            let worst = r.max_position_error.expect("vertex counts match");
+            assert!(worst < OUTLINE_BOUND, "{}: error {worst}", case.name);
             mismatched.insert(case.name.clone());
             continue;
         }
@@ -168,7 +347,9 @@ fn every_case_of_the_folder_is_claimed() {
             continue;
         }
         assert!(
-            MATCHING.contains(&case.name.as_str()) || owned_elsewhere(&case.name),
+            MATCHING.contains(&case.name.as_str())
+                || KNOWN_MISMATCH.contains(&case.name.as_str())
+                || owned_elsewhere(&case.name),
             "{}: new spline-tools case; claim it or list its brief",
             case.name
         );

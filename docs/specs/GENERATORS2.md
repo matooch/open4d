@@ -110,7 +110,12 @@ for the rest). The helix biases and `reverse` → `Unsupported`. The circle's `e
   `(inner, 0)`), reported by the reference as a second segment of the same spline. A
   [`Curve`] keeps it in `extra`; the Extrude puts every loop's points into each row (outer
   first) and winds the faces of the further loops the other way (`[a, a', b', b]`, the
-  outer loop `[a, b, b', a']`, `circle-ring` faces 36–71). Caps of a spline with several
+  outer loop `[a, b, b', a']`, `circle-ring` faces 36–71). The winding follows the loops'
+  geometry rather than their index (brief 029, `spline-tools/outline`, `outline-neg`, `or`,
+  `intersect`): a loop that runs counter-clockwise about the movement winds `[a, b, b', a']`,
+  a clockwise one `[a, a', b', b]`, and a loop inside an odd number of other loops the
+  opposite of that; `circle-ring` is the special case of a counter-clockwise hole. Open or
+  degenerate loops keep the index rule. Caps of a spline with several
   loops, and Lathe/Loft/Sweep of one → `Unsupported`.
 - **Rectangle** `width`, `height` 400: lines through `(w/2, h/2), (−w/2, h/2),
   (−w/2, −h/2), (w/2, −h/2)`, closed (`extrude/rectangle`, `lathe/defaults`).

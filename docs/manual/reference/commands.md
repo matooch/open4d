@@ -2,7 +2,7 @@
 
 # Command reference
 
-160 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+165 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -60,6 +60,11 @@
 | [`spline.delete_points`](#splinedelete_points) | Delete Spline Points | yes | `spline_delete_points` |
 | [`spline.set_closed`](#splineset_closed) | Close Spline | yes | `spline_set_closed` |
 | [`spline.set_type`](#splineset_type) | Set Spline Type | yes | `spline_set_type` |
+| [`spline.chamfer`](#splinechamfer) | Chamfer Spline | yes | `spline_chamfer` |
+| [`spline.outline`](#splineoutline) | Create Spline Outline | yes | `spline_outline` |
+| [`spline.boolean`](#splineboolean) | Spline Boolean | yes | `spline_boolean` |
+| [`spline.reverse`](#splinereverse) | Reverse Spline | yes | `spline_reverse` |
+| [`spline.subdivide`](#splinesubdivide) | Subdivide Spline | yes | `spline_subdivide` |
 | [`mesh.extrude`](#meshextrude) | Extrude | yes | `mesh_extrude` |
 | [`mesh.extrude_inner`](#meshextrude_inner) | Extrude Inner | yes | `mesh_extrude_inner` |
 | [`mesh.bevel`](#meshbevel) | Bevel | yes | `mesh_bevel` |
@@ -1276,6 +1281,64 @@ Set Spline Type. One undo step.
 | `nodes` | array of integer or null | no | Editable splines; the current selection when absent. |
 
 Example: `forge cmd scene.forge spline.set_type --args '{"nodes":[1],"type":"akima"}'`
+
+### `spline.chamfer`
+
+Chamfer Spline. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline. |
+| `flat` | boolean or null | no | A straight cut instead of an arc (default false). |
+| `indices` | array of integer or null | no | Points to chamfer; all points when absent. |
+| `radius` | number or null | no | Distance from each corner along both edges (default 10; at most half an edge). |
+
+Example: `forge cmd scene.forge spline.chamfer --args '{"flat":false,"node":1,"radius":40}'`
+
+### `spline.outline`
+
+Create Spline Outline. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline (every segment closed). |
+| `distance` | number or null | no | Offset to the right of the direction of travel (outward for a counter-clockwise spline); default 10, never 0. |
+
+Example: `forge cmd scene.forge spline.outline --args '{"distance":20,"node":1}'`
+
+### `spline.boolean`
+
+Spline Boolean. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `op` | `"union"` \| `"and"` \| `"or"` \| `"subtract"` \| `"intersect"` | yes | The operation. |
+| `a` | integer | yes | The first editable spline (closed, one segment); the result takes its place and transform. |
+| `b` | integer | yes | The second editable spline. |
+| `keep_inputs` | boolean or null | no | Keep the two inputs (default false: they are replaced by the result). |
+
+Example: `forge cmd scene.forge spline.boolean --args '{"a":1,"b":2,"op":"union"}'`
+
+### `spline.reverse`
+
+Reverse Spline. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline. |
+
+Example: `forge cmd scene.forge spline.reverse --args '{"node":1}'`
+
+### `spline.subdivide`
+
+Subdivide Spline. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline. |
+| `subdivisions` | integer or null | no | Parts every span is cut into (default 1 = unchanged, so 2 adds one point per span). |
+
+Example: `forge cmd scene.forge spline.subdivide --args '{"node":1,"subdivisions":2}'`
 
 
 ## `snap`

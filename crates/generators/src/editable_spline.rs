@@ -444,6 +444,29 @@ pub fn data_of(
     SplineData::from_values(&node.params)
 }
 
+/// A `forge.spline` node's data with its interpolation type and Intermediate Points (for
+/// the spline tools, SPLINES.md section 8).
+pub fn settings_of(
+    scene: &forge_core::Scene,
+    id: forge_core::NodeId,
+) -> Result<(SplineData, SplineType, Sampling), BuildError> {
+    let node = scene
+        .node(id)
+        .filter(|n| n.type_id == TYPE)
+        .ok_or_else(|| BuildError::UnknownType(format!("node {id}")))?;
+    let ty = node_type();
+    let p = Params {
+        ty: &ty,
+        values: &node.params,
+    };
+    let kind = SplineType::from_id(&p.enumeration("type")).unwrap_or(SplineType::Bezier);
+    Ok((
+        SplineData::from_values(&node.params)?,
+        kind,
+        Sampling::from_params(&p),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

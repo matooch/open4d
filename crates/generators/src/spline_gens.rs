@@ -209,6 +209,85 @@ fn no_fillets(p: &Params) -> Result<(), BuildError> {
     Ok(())
 }
 
+/// Twice the area vector of the closed loop `lp` (Newell): its counter-clockwise normal.
+fn loop_normal(lp: &[DVec3]) -> DVec3 {
+    (0..lp.len())
+        .map(|i| lp[i].cross(lp[(i + 1) % lp.len()]))
+        .sum()
+}
+
+/// Whether loop `inner` lies inside loop `outer` (both projected on the plane spanned by
+/// `u` and `v`): every point of `inner` that is not on `outer`'s boundary is inside it, and
+/// there is one. Loops that touch or share a stretch of boundary are not nested.
+fn nested_in(inner: &[DVec3], outer: &[DVec3], u: DVec3, v: DVec3) -> bool {
+    let proj = |q: DVec3| (q.dot(u), q.dot(v));
+    let poly: Vec<(f64, f64)> = outer.iter().map(|q| proj(*q)).collect();
+    let on_boundary = |p: (f64, f64)| {
+        (0..poly.len()).any(|i| {
+            let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+            let (ab, ap) = ((b.0 - a.0, b.1 - a.1), (p.0 - a.0, p.1 - a.1));
+            let len2 = ab.0 * ab.0 + ab.1 * ab.1;
+            let t = if len2 > 0.0 {
+                ((ap.0 * ab.0 + ap.1 * ab.1) / len2).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let d = (ap.0 - t * ab.0, ap.1 - t * ab.1);
+            d.0 * d.0 + d.1 * d.1 < 1e-12
+        })
+    };
+    let inside = |p: (f64, f64)| {
+        let mut inside = false;
+        for i in 0..poly.len() {
+            let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+            if (a.1 > p.1) != (b.1 > p.1) && p.0 < a.0 + (p.1 - a.1) / (b.1 - a.1) * (b.0 - a.0) {
+                inside = !inside;
+            }
+        }
+        inside
+    };
+    let mut any = false;
+    for q in inner {
+        let p = proj(*q);
+        if on_boundary(p) {
+            continue;
+        }
+        if !inside(p) {
+            return false;
+        }
+        any = true;
+    }
+    any
+}
+
+/// Per loop, whether its side faces wind the "normal" way (`[a, b, b', a']`). A loop faces
+/// outward of the material: a loop running counter-clockwise about the movement winds
+/// the normal way, a clockwise one the other way, and a loop inside an odd number of other
+/// loops (a hole) the opposite of that (`splines-2/circle-ring`; `spline-tools/outline`,
+/// `outline-neg`, `or`, `intersect`). Without a usable movement or for open splines only
+/// the first loop is outer.
+fn outer_loops(loops: &[Vec<DVec3>], movement: DVec3, closed: bool) -> Vec<bool> {
+    let by_index = || (0..loops.len()).map(|l| l == 0).collect();
+    if !closed || movement.length_squared() < 1e-18 {
+        return by_index();
+    }
+    let axis = movement.normalize();
+    let u = axis.any_orthonormal_vector();
+    let v = axis.cross(u);
+    let ccw: Vec<f64> = loops.iter().map(|lp| loop_normal(lp).dot(axis)).collect();
+    if ccw.iter().any(|d| d.abs() < 1e-9) {
+        return by_index();
+    }
+    (0..loops.len())
+        .map(|l| {
+            let nested = (0..loops.len())
+                .filter(|k| *k != l && nested_in(&loops[l], &loops[*k], u, v))
+                .count();
+            (ccw[l] > 0.0) != (nested % 2 == 1)
+        })
+        .collect()
+}
+
 /// Extrude (§7).
 pub fn extrude(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMesh, BuildError> {
     let ty = extrude_type();
@@ -228,6 +307,7 @@ pub fn extrude(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMe
         Value::Vec3(v) => DVec3::from_array(v),
         _ => unreachable!(),
     };
+    let outer = outer_loops(&loops, mv, curve.closed);
     let mut points = Vec::with_capacity(n * (sub + 1));
     for j in 0..=sub {
         let off = mv * (j as f64 / sub as f64);
@@ -240,10 +320,10 @@ pub fn extrude(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMe
         for (l, lp) in loops.iter().enumerate() {
             let m = lp.len();
             let spans = if curve.closed { m } else { m - 1 };
+            let outer = outer[l];
             for i in 0..spans {
                 let (a, b) = (start + i, start + (i + 1) % m);
-                // the further loops are holes: their faces wind the other way (`circle-ring`)
-                polys.push(if l == 0 {
+                polys.push(if outer {
                     vec![r(j, a), r(j, b), r(j + 1, b), r(j + 1, a)]
                 } else {
                     vec![r(j, a), r(j + 1, a), r(j + 1, b), r(j, b)]

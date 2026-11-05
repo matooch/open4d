@@ -22,6 +22,7 @@ mod sphere;
 mod spline_gens;
 mod spline_prims;
 pub mod spline_sampling;
+pub mod spline_tools;
 pub mod splines;
 mod subdivision;
 
