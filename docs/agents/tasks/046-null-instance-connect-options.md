@@ -1,6 +1,6 @@
 # 046 · Null display, Instance render modes, Connect weld options
 
-Status: blocked: O20 has no null/instance/connect cases · Area: C · Depends on: – · Observations: O20 · Touches: generators, viewport
+Status: waiting (O20 follow-up cases, G8): O20 has no null/instance/connect cases · Area: C · Depends on: – · Observations: O20 · Touches: generators, viewport
 
 ## Goal
 The smaller R25 object options (Null display shapes, Instance modes, Connect weld tolerance) exist and match where observed.

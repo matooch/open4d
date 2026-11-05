@@ -120,7 +120,7 @@ Every case below was exported and has `case.toml` + `mesh.obj` under
 
 Brief 043 matched every case above except the strict point and face numbering of the four
 `boole/r25-*` cases (BOOLE.md §5a, parity-pending), and Loop on non-quad input. These cases
-separate the hypotheses it could not; run them like the cases above, R25 defaults. The `sweep/` and `lathe/` rows come from brief 042 (helix route, banking frame, 2-Rail profile, Lathe scaling); the `atom-array/` and `spline-mask/` rows from brief 041 (oblique edges, modes, axis, caps).
+separate the hypotheses it could not; run them like the cases above, R25 defaults. The `sweep/` and `lathe/` rows come from brief 042 (helix route, banking frame, 2-Rail profile, Lathe scaling); the `atom-array/` and `spline-mask/` rows from brief 041 (oblique edges, modes, axis, caps); the `instance/` and `connect/` rows for brief 046. Null display shapes are viewport-only: record them in GUI session G8 (shape, radius, aspect, orientation) instead of exporting a mesh.
 
 | Case (folder) | Generator | Children | Changed from default |
 |---|---|---|---|
@@ -149,6 +149,13 @@ separate the hypotheses it could not; run them like the cases above, R25 default
 | spline-mask/axis-zy | Spline Mask | the same circles rotated into the ZY plane | Axis ZY |
 | spline-mask/cap | Spline Mask | the two circles of `spline-mask/union` | Create Cap on |
 | spline-mask/rect-circle | Spline Mask | a default Rectangle and a default Circle at x 100 | Mode Union |
+| instance/render-instance | Instance | a default cube as reference | Instance Mode Render Instance |
+| instance/multi-instance | Instance | a default cube as reference | Instance Mode Multi-Instance |
+| connect/tolerance-in | Connect | two default cubes, the second at x 200.5 (gap 0.5) | Weld on, Tolerance 1 |
+| connect/tolerance-out | Connect | the same | Weld on, Tolerance 0.25 |
+| connect/phong-off | Connect | a default sphere and a default cube at x 300 | Weld on; Phong mode Off (one case per Phong mode; export normals or record the Phong break readback) |
+| connect/phong-average | Connect | the same | Phong mode Average |
+| connect/phong-hard | Connect | the same | Phong mode Hard |
 
 ## Notes
 

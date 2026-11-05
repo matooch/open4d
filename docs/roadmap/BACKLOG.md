@@ -43,7 +43,7 @@ implementers can avoid collisions.
 | 043 | [Boole R25 modes and numbering, Subdivision types, Symmetry planes](../agents/tasks/043-boole-subdivision-symmetry-r25.md) | C | – | done (Boole R25 strict numbering parity-pending) | generators, geometry |
 | 044 | [Shared Caps/Bevel tabs and Extrude R25 options](../agents/tasks/044-caps-bevel-tab.md) | C | 042 | waiting: 042 | generators |
 | 045 | [Extrude R25 vertex order](../agents/tasks/045-extrude-r25-order.md) | C | 044 | ready | generators |
-| 046 | [Null display, Instance render modes, Connect weld options](../agents/tasks/046-null-instance-connect-options.md) | C | – | ready | generators, viewport |
+| 046 | [Null display, Instance render modes, Connect weld options](../agents/tasks/046-null-instance-connect-options.md) | C | – | waiting: O20 (follow-up cases), G8 | generators, viewport |
 | 047 | [Camera, Light, Environment, Floor and Sky as scene objects](../agents/tasks/047-scene-objects-camera-light.md) | C | – | waiting: O29 | generators, core, viewport |
 | 048 | [Generators as clone and volume inputs (consumed-input rules)](../agents/tasks/048-generators-in-clone-volume-contexts.md) | C | 065, 081 | ready | generators |
 | 049 | [Create menu organisation](../agents/tasks/049-create-menu-organisation.md) | C | 148 | ready | ui, core |
