@@ -34,7 +34,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O58 | Modeling tools III (020/021 follow-ups) | [modeling-tools-3.md](modeling-tools-3.md) | `tests/golden/modeling-tools/` meshes | todo (10 follow-up cases) |
 | O20 | Generators III | [generators-3.md](generators-3.md) | `tests/golden/<generator>/` meshes | todo (32 follow-up cases) |
 | O19 | Deformers III | [deformers-3.md](deformers-3.md) | `tests/golden/<deformer>/` meshes | todo (16 follow-up cases) |
-| O45 | Deformers IV | [deformers-4.md](deformers-4.md) | `tests/golden/<deformer>/` meshes | todo (16 follow-up cases, interactive export) |
+| O45 | Deformers IV | [deformers-4.md](deformers-4.md) | `tests/golden/<deformer>/` meshes | todo (35 follow-up cases; solver deformers need interactive export) |
 | O46 | Spline tools and editable splines | [spline-tools.md](spline-tools.md) | `tests/golden/spline-tools/` meshes | todo (15 follow-up cases) |
 | O56 | Caps and bevel tab | [caps-bevel.md](caps-bevel.md) | `tests/golden/caps-bevel/` meshes | done |
 | O48 | Text spline | [text.md](text.md) | `tests/golden/text/` meshes | todo (9 follow-up cases) |

@@ -260,7 +260,7 @@ No Field list on Explosion FX.
 - correction/defaults: which corrected point to move is not specified by the row; corrected point 0
   moved by (50, 0, 0).
 
-## Follow-up cases (planner, after brief 056) — interactive export needed
+## Follow-up cases (planner, after briefs 056 and 052) — interactive export needed for solver deformers
 
 Brief 056 matched Correction and Delta Mush exactly; the Mesh, Surface, Camera, Collision and
 Jiggle cases above exported **undeformed** geometry because, as Findings says, the scripted path
@@ -288,6 +288,25 @@ case still exports undeformed, say so in its row and move on.
 | delta-mush/iterations | Delta Mush | Iterations 0 and 1 (two cases), bent pose initialised before the bend |
 | correction/uv | Correction | Mapping UV |
 | correction/normals | Correction | Mapping Normals |
+| melt/no-random-s0 | Melt | Radial and Vertical Randomness 0 %, Strength 0 % (scripted export is fine: Melt has no cache) |
+| melt/no-random-s10 | Melt | the same, Strength 10 % |
+| melt/no-random-s50 | Melt | the same, Strength 50 % |
+| melt/no-random-s100 | Melt | the same, Strength 100 % |
+| melt/size-100 | Melt | Strength 50 %, Melted Size 100 % |
+| melt/size-200 | Melt | Strength 50 %, Melted Size 200 % |
+| melt/radius-50 | Melt | Strength 50 %, Radius 50 |
+| melt/radius-200 | Melt | Strength 50 %, Radius 200 |
+| melt/noise-scale-50 | Melt | Strength 50 %, Noise Scale 50 % |
+| formula/d-const | Formula | d(u,v,x,y,z,t) = 0.1 |
+| formula/d-u | Formula | d = u |
+| formula/d-v | Formula | d = v |
+| formula/effect-manual | Formula | Effect Manual, X = x*2 |
+| formula/effect-spherical | Formula | Effect Spherical (one case per other effect: Cylindrical, X Radial, Z Radial) |
+| formula/size-nonuniform | Formula | Size (100, 300, 50) |
+| ffd/point-x | FFD | the lattice point at +x middle moved by (50, 0, 0) |
+| ffd/point-z | FFD | the lattice point at +z middle moved by (0, 0, 50) |
+| ffd/grid-2 | FFD | 2 × 2 × 2 grid points, one corner moved by (50, 50, 50) |
+| ffd/grid-small | FFD | Grid Size (150, 150, 150), the middle top point moved by (0, 50, 0) |
 
 ## Notes
 
