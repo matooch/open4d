@@ -187,5 +187,5 @@ implementers can avoid collisions.
 | 188 | [Adopt the R25 Loft ring and quad order (D18)](../agents/tasks/188-r25-loft-adoption.md) | C | 042 | done | generators, io |
 | 189 | [Native format v10 for list-valued parameters](../agents/tasks/189-format-v10.md) | M | 028, 163 | done | core, io |
 | 190 | [Viewport splines: drawing, points, handles and dragging](../agents/tasks/190-viewport-splines.md) | E | 028, 143 | ready | viewport, ui, command |
-| 191 | [R25 Helix Bézier construction (sampling parity)](../agents/tasks/191-helix-sampling.md) | B | 028, 042 | ready | generators |
+| 191 | [R25 Helix Bézier construction (sampling parity)](../agents/tasks/191-helix-sampling.md) | B | 028, 042 | done | generators |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |

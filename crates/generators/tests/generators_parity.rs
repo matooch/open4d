@@ -30,12 +30,11 @@ const KNOWN_MISMATCH: &[&str] = &[
     "loft/defaults", // superseded by R25 (D18): loft/three-circles
     "loft/three",    // superseded by R25 (D18): loft/three-circles
     "loft/caps-off", // superseded by R25 (D18): loft/three-circles
-    // brief 042, the R25 uniform helix route is off by up to 3.5e-4 (`splines-2/helix-uniform`,
-    // GENERATORS2.md §6.1) and the sweep frames amplify it. Banking off (`sweep/banking`) and
-    // the 2-Rail mapping (`sweep/rail`: the rail helix is off by 2e-2) match along the
-    // reference's own ring centres (`tests/sweep_loft_r25.rs`). `sweep/scale-end` also has
-    // the Banking-on frame mismatch of `sweep/helix` (GENERATORS2.md §10a).
-    "sweep/banking",
+    // brief 191 fixed the R25 uniform helix route (`splines-2/helix-uniform`, GENERATORS2.md
+    // §6.1), which un-pinned `sweep/banking`. The 2-Rail mapping (`sweep/rail`) matched along
+    // the reference's own ring centres (`tests/sweep_loft_r25.rs`) but its rail helix (end
+    // radius 400) is not checked by `helix-uniform`. `sweep/scale-end` also has the
+    // Banking-on frame mismatch of `sweep/helix` (GENERATORS2.md §10a).
     "sweep/rail",
     "sweep/scale-end",
 ];
@@ -111,7 +110,7 @@ fn generators_match_the_reference() {
                 !r.passed(),
                 "{key} matches now: remove it from KNOWN_MISMATCH"
             );
-            println!("{key}: known mismatch");
+            println!("{key}: known mismatch {:?}", r.max_position_error);
             continue;
         }
         if CAP_GEOMETRIC.contains(&key.as_str()) {
@@ -132,7 +131,7 @@ fn generators_match_the_reference() {
     let want: std::collections::BTreeSet<String> =
         UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 13 + 11 + 9 + 2, "{matched:?}");
+    assert_eq!(matched.len(), 13 + 11 + 10 + 2, "{matched:?}");
 }
 
 /// Exact positions and faces up to a trailing run of triangles in both meshes (the

@@ -42,11 +42,13 @@ const MATCHING: &[&str] = &[
     "star-twist",
 ];
 
-/// Built but not matching. `helix-uniform`: the 901 points of the first ring are within
-/// 3.5e-4 of the export (tolerance 1e-4, GENERATORS2.md §6.1); the second ring is displaced
-/// along a direction the extrude does not model (the spline is not planar), so only the
-/// first ring is compared.
-const KNOWN_MISMATCH: &[&str] = &["helix-uniform"];
+/// Built but not matching (none at the moment).
+const KNOWN_MISMATCH: &[&str] = &[];
+
+/// Matching on the first ring only: the second ring of `helix-uniform` is displaced along a
+/// direction the extrude does not model (the spline is not planar). The 901 points of the
+/// first ring are within 1e-6 of the export (GENERATORS2.md §6.1).
+const FIRST_RING_ONLY: &[&str] = &["helix-uniform"];
 
 /// Not built: the Cogwheel's tooth outline is not derived (GENERATORS2.md §6.3) and the
 /// Formula needs the expression library of brief 052.
@@ -112,8 +114,12 @@ fn extrude_of(case: &forge_parity_harness::GoldenCase) -> Result<Mesh, BuildErro
 #[test]
 fn splines_2_cases_against_the_export() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
-    let (mut matched, mut mismatched, mut unsupported) =
-        (BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
+    let (mut matched, mut mismatched, mut unsupported, mut first_ring) = (
+        BTreeSet::new(),
+        BTreeSet::new(),
+        BTreeSet::new(),
+        BTreeSet::new(),
+    );
     for case in discover_cases(&root).unwrap() {
         if case.feature != "splines-2" {
             continue;
@@ -140,7 +146,16 @@ fn splines_2_cases_against_the_export() {
             case.name
         );
         if KNOWN_MISMATCH.contains(&case.name.as_str()) {
-            // the first ring only
+            let r = compare_meshes(&export_weld(&expected), &export_weld(&ours), &tol);
+            assert!(
+                !r.passed(),
+                "{}: matches now, remove it from KNOWN_MISMATCH",
+                case.name
+            );
+            mismatched.insert(case.name.clone());
+            continue;
+        }
+        if FIRST_RING_ONLY.contains(&case.name.as_str()) {
             let n = expected.positions.len() / 2;
             let ring = |m: &Mesh| Mesh {
                 positions: m.positions[..n].to_vec(),
@@ -148,13 +163,13 @@ fn splines_2_cases_against_the_export() {
             };
             let r = compare_meshes(&ring(&expected), &ring(&ours), &tol);
             assert!(
-                !r.passed(),
-                "{}: matches now, remove it from KNOWN_MISMATCH",
-                case.name
+                r.passed(),
+                "{}: {:?} ({:?})",
+                case.name,
+                r.failures,
+                r.max_position_error
             );
-            let worst = r.max_position_error.unwrap();
-            assert!(worst < 1e-3, "{}: error {worst}", case.name);
-            mismatched.insert(case.name.clone());
+            first_ring.insert(case.name.clone());
             continue;
         }
         let r = compare_meshes(&export_weld(&expected), &export_weld(&ours), &tol);
@@ -170,6 +185,7 @@ fn splines_2_cases_against_the_export() {
     let names = |l: &[&str]| l.iter().map(|s| s.to_string()).collect::<BTreeSet<_>>();
     assert_eq!(matched, names(MATCHING));
     assert_eq!(mismatched, names(KNOWN_MISMATCH));
+    assert_eq!(first_ring, names(FIRST_RING_ONLY));
     assert_eq!(unsupported, names(UNSUPPORTED));
 }
 

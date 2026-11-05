@@ -431,26 +431,6 @@ impl HelixShape {
         DVec3::new(r * a.cos(), r * a.sin(), -self.height * s)
     }
 
-    /// Speed `|f'(s)|`.
-    fn speed(&self, s: f64) -> f64 {
-        let da = self.end_angle - self.start_angle;
-        let r = self.start_radius + (self.end_radius - self.start_radius) * s;
-        let dr = self.end_radius - self.start_radius;
-        (dr * dr + r * r * da * da + self.height * self.height).sqrt()
-    }
-
-    /// Length of the piece `[s0, s1]` (Simpson, exact for a constant radius).
-    fn length(&self, s0: f64, s1: f64) -> f64 {
-        const N: usize = 16;
-        let h = (s1 - s0) / N as f64;
-        let mut sum = self.speed(s0) + self.speed(s1);
-        for k in 1..N {
-            let w = if k % 2 == 1 { 4.0 } else { 2.0 };
-            sum += w * self.speed(s0 + h * k as f64);
-        }
-        sum * h / 3.0
-    }
-
     /// R20 form (`sweep/helix`, Adaptive): lines through `subdivision` points per turn, the
     /// points next to both ends skipped.
     fn adaptive_polyline(&self, subdivision: f64, sampling: Sampling) -> Curve {
@@ -474,20 +454,20 @@ impl HelixShape {
         )
     }
 
-    /// R25 form (`splines-2/helix-uniform`): `n + 1` points at `s = i/n` with tangent handles
-    /// along `f(s + 1/n) - f(s - 1/n)`, each a third of its piece's length long.
+    /// R25 form (`splines-2/helix-uniform`): `n + 1` points at `s = i/n`. The handles at a
+    /// point lie along `f(s + 1/n) - f(s - 1/n)` and are a third of the chord of the piece
+    /// they belong to long (GENERATORS2.md §6.1).
     fn bezier(&self, n: usize, sampling: Sampling) -> Curve {
         let d = 1.0 / n as f64;
-        let handle = |s: f64, piece: f64| {
-            let dir = (self.at(s + d) - self.at(s - d)).normalize_or_zero();
-            dir * (piece / 3.0)
+        let handle = |s: f64, chord: f64| {
+            (self.at(s + d) - self.at(s - d)).normalize_or_zero() * (chord / 3.0)
         };
         let segments = (0..n)
             .map(|i| {
                 let (s0, s1) = (i as f64 * d, (i + 1) as f64 * d);
-                let len = self.length(s0, s1);
                 let (p0, p1) = (self.at(s0), self.at(s1));
-                [p0, p0 + handle(s0, len), p1 - handle(s1, len), p1]
+                let chord = (p1 - p0).length();
+                [p0, p0 + handle(s0, chord), p1 - handle(s1, chord), p1]
             })
             .collect();
         Curve::new(segments, false, false, sampling)

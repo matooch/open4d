@@ -26,8 +26,6 @@ const KNOWN_MISMATCH: &[&str] = &[
     "spline-wrap/arc",
     // which spline points pair up (20.2)
     "spline-deformer/defaults",
-    // the rail rule matches to 2e-4; the Helix's Uniform samples are a known mismatch (20.3)
-    "spline-rail/defaults",
 ];
 
 /// Observed options we do not build.
@@ -308,8 +306,8 @@ fn spline_deformers_match_the_reference() {
         exact.push(key);
     }
     println!("exact: {exact:?}; pinned: {pinned:?}");
-    assert_eq!(exact.len(), 0, "{exact:?}");
-    assert_eq!(pinned.len(), 4, "{pinned:?}");
+    assert_eq!(exact, ["spline-rail/defaults"]);
+    assert_eq!(pinned.len(), 3, "{pinned:?}");
 }
 
 /// What the golden data supports for the pinned cases, asserted on the golden and on ours.
@@ -416,21 +414,6 @@ fn check_invariants(key: &str, orig: &Mesh, ours: &Mesh, gold: &Mesh) {
                 .collect();
             ours_by.sort_by(|a, b| a.0.total_cmp(&b.0));
             assert!(ours_by.windows(2).all(|w| w[0].1 >= w[1].1), "{ours_by:?}");
-        }
-        "spline-rail/defaults" => {
-            // the rule matches the golden within 2.5e-4 on all 162 points (the sampled Helix
-            // itself is a known mismatch of the sampler, `splines-2/helix-uniform`), and
-            // exactly on the t = 0 rows
-            let mut worst = 0.0f64;
-            for i in 0..ours.positions.len() {
-                worst = worst.max((v(ours, i) - v(gold, i)).length());
-            }
-            assert!(worst < 2.5e-4, "{key}: worst error {worst}");
-            // ends: z = -100 (t = 0) rows are exact
-            for x in [-100, 100] {
-                let i = column(x, -100);
-                assert!((v(ours, i) - v(gold, i)).length() < 1e-4);
-            }
         }
         other => panic!("no invariants for {other}"),
     }

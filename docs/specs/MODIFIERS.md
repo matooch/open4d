@@ -1214,10 +1214,9 @@ leaves points outside `|x| ≤ size_x/2, |y| ≤ size_y/2, |z| ≤ size_z/2` unc
 
 Test: `crates/modifiers/tests/spline_parity.rs`; features `spline-wrap` (2), `spline-deformer` (1), `spline-rail` (1);
 the cube is built, each linked spline from its `[params.*]` table (the splines are not in the OBJ).
-Result: **0/4 exact under the 1e-4 tolerance, all four pinned in `KNOWN_MISMATCH`** (the exact comparison must still fail):
+Result: **1/4 exact under the 1e-4 tolerance** (`spline-rail/defaults`, since brief 191), **three pinned in `KNOWN_MISMATCH`** (the exact comparison must still fail):
 
-- `spline-rail/defaults`: rule derived (20.3); worst error 1.9e-4, rows `t = 0` exact. Cause: the sampled Helix itself is a known
-  mismatch of the sampler (`splines-2/helix-uniform`, GENERATORS2 §6.2); the middle rows sit at a relative `1e-7` offset along the helix.
+- `spline-rail/defaults`: rule derived (20.3), **exact** since brief 191 fixed the sampled Helix (handles of GENERATORS2 §6.1, open-spline offsets of §6.2); it was 1.9e-4 off before.
 - `spline-wrap/arc`: rule derived (20.1), compared under the recorded degenerate box (`fix_bounding_box`, centre `(0, 0, ½)`,
   size `(200, 200, 1)`). Rows behind the start match to 6e-5; rows beyond the end are 2.2e-3 off because the golden extends 99 spline
   lengths and the sampler's end point differs from the reference by 6e-7 (golden `L = 314.27710692`, ours `314.27710754`; end chord

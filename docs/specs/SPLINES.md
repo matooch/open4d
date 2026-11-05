@@ -36,7 +36,8 @@ Handles are the **geometric Bezier offsets**: a segment from point `i` to point 
 `[P_i, P_i + right_i, P_j + left_j, P_j]`. The reference app's public tangent read returns
 **3/4 of these offsets** (`editable-circle`: radius 200 reads 83, while the circle's handle
 is `83/150 · 200 = 110.667`, GENERATORS2.md §6.1; the default Helix reads 6.278974 where
-its piece is 25.13 long and its handle a third of it, 8.37). The constant is
+its piece is 25.13 long and its handle a third of its 3-D chord, 8.3986, split into tangential
+8.371965 and vertical 0.667976). The constant is
 `TANGENT_READBACK = 0.75` in code, used only to compare against the observation form's
 Notes (`editable_spline::tangent_readback`); the stored value is never scaled.
 
@@ -152,11 +153,10 @@ available through `spline.edit_points` (CLI, RPC, MCP, scripts).
 - Tangent handles of other primitives (Cogwheel `prim-f-cog-tooth`, Notes) were not
   compared: the form gives them, no test consumes them (follow-up below).
 - The `0.75` tangent read-back factor is shown by two cases (circle, helix). The helix
-  read-back (`interp-f/helix-handles`, form only) agrees only to a relative 1e-3: our helix
-  handle is a third of the piece length, the app's is 0.07 % shorter (6.278974 against
-  6.283081 at point 0), the same helix deviation as `helix-uniform` (GENERATORS2.md §6.1).
-  That test (`editable_helix_points_and_tangents_match_the_notes`) is a unit check with its
-  own relative tolerance, not a mesh parity case.
+  read-back (`interp-f/helix-handles`, form only) agrees to the form's six digits since brief
+  191: the handle is a third of the 3-D chord along the central difference (GENERATORS2.md
+  §6.1). That test (`editable_helix_points_and_tangents_match_the_notes`) is a unit check
+  (2e-6), not a mesh parity case.
 - Make Editable of a reversed spline is `Unsupported` (reversal itself is the tool of section 8.4).
 
 ## 8. Spline tools and booleans (brief 029; `crates/generators/src/spline_tools.rs`)
