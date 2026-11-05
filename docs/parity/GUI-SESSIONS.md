@@ -86,6 +86,10 @@ You can also do a sitting **with an observer session's help**:
 8. Extrude drag: how far the offset changes per screen pixel at the default camera
    (drag 100 px and read the offset).
 
+9. **Spline point and handle dragging** (brief 190, parity-pending): on an editable Bezier
+   spline in Points mode, drag one tangent handle. Does the opposite handle follow (mirrored),
+   and which key breaks the link? Does dragging a point move its handles with it?
+
 ## G4 · Attribute manager widgets and field lists
 1. Number fields: drag to scrub? With which modifier for fine/coarse steps? What arrow
    clicks do.
