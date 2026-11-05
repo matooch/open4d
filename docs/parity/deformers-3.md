@@ -186,6 +186,32 @@ declarations; the ±999999999 assignment check was not run on Wind (time ran sho
 | spline-wrap/arc | Spline Wrap | the link set to a default Arc spline | 162 vertices, 160 faces; bbox (−31109.951, −31424.238, −200)–(877.734, 874.024, 200). Arc (200 radius, 0°–90°) recorded under `[params.spline]` |
 | wind/frame-10 | Wind | – | document at frame 10, 30 fps (`frame` and `fps` in the toml). 162 vertices, 160 faces; bbox (−100, −200, −172.439)–(100, 200, 161.438): the amplitude pushes x-slices in z; y stays exact |
 
+## Follow-up cases (planner, after brief 053)
+
+Brief 053 matched the strength-0 cases exactly and the strength-50 and wind cases only
+statistically (the random stream and wind noise are unknown). These pin each law with tiny
+inputs. Use a plane made editable as the child; frame 0 unless stated; **write `frame` and
+`fps` into every case.toml** (`wind/frame-10` lacked them).
+
+| Case | Deformer | Child | Changed from default |
+|---|---|---|---|
+| explosion/one-poly-25 | Explosion | a 1 × 1-segment plane | strength 25 % |
+| explosion/one-poly-100 | Explosion | the same | strength 100 % |
+| explosion/two-poly-50 | Explosion | a 2 × 1-segment plane | strength 50 % |
+| explosion/rand-0 | Explosion | a 2 × 1-segment plane | strength 50 %, Randomness 0 % |
+| explosion/end-size-100 | Explosion | the same | strength 50 %, End Size 100 % |
+| explosion/speed-0 | Explosion | the same | strength 50 %, Speed 0 |
+| explosion/angle-speed-200 | Explosion | the same | strength 50 %, Angle Speed 200 |
+| shatter/one-poly-25 | Shatter | a 1 × 1-segment plane | strength 25 % |
+| shatter/two-poly-50 | Shatter | a 2 × 1-segment plane | strength 50 % |
+| shatter/rand-0 | Shatter | the same | strength 50 %, Randomness 0 % |
+| wind/frame-0 | Wind | default cube 4 × 8 × 4 segments (as wind/frame-10) | frame 0 |
+| wind/frame-20 | Wind | the same | frame 20 |
+| wind/flag-off | Wind | the same | frame 10, Flag off |
+| wind/size-50 | Wind | the same | frame 10, Size 50 |
+| wind/size-200 | Wind | the same | frame 10, Size 200 |
+| wind/row-x | Wind | a 10 × 1-segment plane along x | frame 10 |
+
 ## Notes
 
 - All 15 cases of the form were run; none were skipped. 15 `mesh.obj` + `case.toml` pairs.
