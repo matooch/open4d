@@ -30,6 +30,18 @@ pub(crate) fn symmetry_type() -> NodeType {
         .param(ParamDesc::bool("weld_points", "Weld points", true))
         .param(distance("tolerance", "Tolerance", 0.01))
         .param(ParamDesc::bool("symmetrical", "Symmetrical", true))
+        // Modeling aids (observed off, not derived; true is `Unsupported`).
+        .param(ParamDesc::bool(
+            "clamp_points_on_axis",
+            "Clamp points on axis",
+            false,
+        ))
+        .param(ParamDesc::bool(
+            "delete_polygons_on_axis",
+            "Delete polygons on axis",
+            false,
+        ))
+        .param(ParamDesc::bool("auto_flip", "Automatically flip", false))
 }
 
 pub(crate) fn array_type() -> NodeType {
@@ -168,6 +180,9 @@ pub(crate) fn evaluate_modeling(
 pub fn symmetry(mesh: &PolyMesh, values: &BTreeMap<String, Value>) -> Result<PolyMesh, BuildError> {
     let ty = symmetry_type();
     let p = Params { ty: &ty, values };
+    if p.bool("clamp_points_on_axis") || p.bool("delete_polygons_on_axis") || p.bool("auto_flip") {
+        return Err(BuildError::Unsupported("symmetry modeling options"));
+    }
     let axis = match p.enumeration("mirror_plane").as_str() {
         "xy" => 2,
         "xz" => 1,

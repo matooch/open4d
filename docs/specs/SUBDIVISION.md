@@ -89,6 +89,16 @@ first-seen direction `(a, b)`.
 - Confirmed on an all-quad cube at level 2; the n-gon child rule (mod 4) and the inner
   edges' direction (which orders level ≥ 3) are unverified (**parity-pending**).
 
+### 3.2 R25 types (`subdivision/r25-type-*`, O20)
+
+The R25 Type list is `catmull_clark`, `catmull_clark_ngons` (default), `osd_catmull_clark`,
+`osd_loop`, `osd_bilinear` (no adaptive); `r12_compatibility` (off) and `level_view` /
+`level_render` 2 are stored. On a default cube at level 2 the first, second, third and fifth
+types equal §2 / §3 exactly (`r25-type-catmull_clark`, `-catmull_clark_ngons`,
+`-osd_catmull_clark`, `-osd_bilinear`: 98 points, 96 quads). `osd_loop` (98 points, 192
+triangles) is `Unsupported` as in R20: **parity-pending, `pending brief 043: Subdivision
+type OpenSubdiv Loop`** (`r25-type-osd_loop`, `scheme-osd_loop`).
+
 ## 4. Evaluation and display
 
 `forge_generators::evaluate(scene, id) -> Result<Option<PolyMesh>, BuildError>`: the
@@ -101,4 +111,6 @@ picking use `evaluate` and skip nodes consumed by a parent subdivision generator
 `crates/generators/tests/subdivision_parity.rs`: for each `tests/golden/subdivision/`
 case, the input is our own primitive when the case's `input` is `cube` or `plane`
 (both have exact parity), else the case's `input.obj`; subdivide with the case's
-`level` and `scheme`, compare with the harness (strict topology, 1e-4).
+`level` (R25 cases: `level_view`) and `scheme`, compare with the harness (strict topology,
+1e-4). The input is `input = "cube"` (older cases) or an `[params.input]` cube table (R25
+cases: `size`, segments, `fillet_subdivision` = our `fillet_segments`).

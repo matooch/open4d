@@ -107,7 +107,9 @@ pub(crate) fn loft_type() -> NodeType {
                 "linear_interpolation",
                 "Linear interpolation",
                 false,
-            )),
+            ))
+            // UV-only: the mesh is the same either way (loft observation, Adapt UV row).
+            .param(ParamDesc::bool("adapt_uv", "Adapt UV", true)),
         "triangles",
     )
 }
@@ -126,7 +128,33 @@ pub(crate) fn sweep_type() -> NodeType {
                 "constant_cross_section",
                 "Constant cross section",
                 true,
-            )),
+            ))
+            .param(
+                ParamDesc::float("start_growth", "Start growth", 0.0)
+                    .range(0.0, 100.0)
+                    .unit(Unit::Percent),
+            )
+            .param(
+                ParamDesc::float("end_growth", "End growth", 100.0)
+                    .range(0.0, 100.0)
+                    .unit(Unit::Percent),
+            )
+            .param(ParamDesc::bool(
+                "parallel_movement",
+                "Parallel movement",
+                false,
+            ))
+            .param(ParamDesc::bool("keep_segments", "Keep segments", false))
+            // Rail options: only meaningful with a third spline child (Unsupported).
+            .param(ParamDesc::bool(
+                "use_rail_direction",
+                "Use rail direction",
+                true,
+            ))
+            .param(ParamDesc::bool("two_rail", "2-Rail", true))
+            .param(ParamDesc::bool("use_rail_scale", "Use rail scale", true))
+            // UV-only.
+            .param(ParamDesc::bool("stick_uvs", "Stick UVs", false)),
         "triangles",
     )
 }
@@ -295,6 +323,15 @@ pub(crate) fn evaluate_spline_gen(
     let Some(first) = curves.first() else {
         return Ok(None);
     };
+    if type_id == SWEEP
+        && scene.node(id).is_some_and(|n| {
+            let splines = |c: &&NodeId| scene.node(**c).is_some_and(|n| is_spline(&n.type_id));
+            n.children.iter().filter(splines).count() > 2
+        })
+    {
+        // A third spline is the rail (profile, path, rail); its rules are not derived.
+        return Err(BuildError::Unsupported("sweep with a rail spline"));
+    }
     if type_id != EXTRUDE && curves.iter().any(|c| !c.extra.is_empty()) {
         return Err(BuildError::Unsupported("a spline with several loops"));
     }
@@ -421,7 +458,13 @@ pub fn sweep(
     let ty = sweep_type();
     let p = Params { ty: &ty, values };
     no_fillets(&p)?;
-    if !p.bool("banking") || !p.bool("constant_cross_section") {
+    if !p.bool("banking")
+        || !p.bool("constant_cross_section")
+        || p.float("start_growth") != 0.0
+        || p.float("end_growth") != 100.0
+        || p.bool("parallel_movement")
+        || p.bool("keep_segments")
+    {
         return Err(BuildError::Unsupported(
             "sweep options other than the defaults",
         ));

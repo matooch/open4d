@@ -15,7 +15,11 @@ use forge_parity_harness::{Mesh, compare_meshes, discover_cases, parse_obj};
 use glam::DVec3;
 
 /// Observed schemes whose geometry is not derived yet.
-const UNSUPPORTED: &[&str] = &["subdivision/scheme-osd_loop"];
+const UNSUPPORTED: &[&str] = &[
+    "subdivision/scheme-osd_loop",
+    // pending brief 043: Subdivision type OpenSubdiv Loop (R25 export: 98 points, 192 triangles)
+    "subdivision/r25-type-osd_loop",
+];
 
 /// The reference cylinder's caps are separate surfaces (docs/specs/SUBDIVISION.md §2,
 /// `ngon-1`), but the export welds them: mark the rim — edges whose two faces meet at
@@ -59,8 +63,33 @@ fn subdivision_matches_the_reference() {
     {
         let key = format!("{}/{}", case.feature, case.name);
         let m = case.manifest().unwrap();
-        let input_kind = m.params["input"].as_str().unwrap().to_string();
+        // `input = "cube"` (older cases) or an `[params.input]` table (O20 cases).
+        let input_table = m.params["input"].as_table();
+        let input_kind = match input_table {
+            Some(t) => t["type"].as_str().unwrap().to_string(),
+            None => m.params["input"].as_str().unwrap().to_string(),
+        };
         let input = match input_kind.as_str() {
+            "cube" if input_table.is_some() => {
+                let t = input_table.unwrap();
+                let own: Table = t
+                    .iter()
+                    .filter(|(k, _)| *k != "type" && *k != "pos")
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
+                let mut mesh =
+                    build("forge.cube", &typed_params(&reg, "forge.cube", &own)).unwrap();
+                let pos: Vec<f64> = t["pos"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.as_float().or(v.as_integer().map(|i| i as f64)).unwrap())
+                    .collect();
+                for p in &mut mesh.points {
+                    *p += DVec3::new(pos[0], pos[1], pos[2]);
+                }
+                mesh
+            }
             "cube" | "plane" => {
                 let ty = format!("forge.{input_kind}");
                 let table = with_defaults(&case, &m, &input_kind, &Table::new());
@@ -76,7 +105,12 @@ fn subdivision_matches_the_reference() {
         } else {
             BTreeSet::new()
         };
-        let level = m.params["level"].as_integer().unwrap() as usize;
+        let level = m
+            .params
+            .get("level")
+            .or(m.params.get("level_view"))
+            .and_then(|v| v.as_integer())
+            .unwrap() as usize;
         let scheme = m
             .params
             .get("scheme")
@@ -108,5 +142,5 @@ fn subdivision_matches_the_reference() {
     println!("matched exactly: {}", matched.join(", "));
     let want: BTreeSet<String> = UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 10, "{matched:?}");
+    assert_eq!(matched.len(), 14, "{matched:?}");
 }

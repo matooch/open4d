@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 mod common;
 
-use common::resolved_params;
+use common::{normalize, resolved_params};
 use forge_core::{Document, NodeId, ParamKind, Registry, Value};
 use forge_generators::{BuildError, Primitives, evaluate};
 use forge_io::obj::{ReadOptions, WriteOptions, read, write};
@@ -29,11 +29,29 @@ const GENERATORS: &[&str] = &[
 ];
 
 /// Cases whose options are observed but not built (none today; asserted exactly).
-const UNSUPPORTED: &[&str] = &[];
+const UNSUPPORTED: &[&str] = &[
+    // pending brief 042: Lathe movement/scaling
+    "lathe/movement",
+    // pending brief 042: Loft linear interpolation
+    "loft/linear",
+    // pending brief 042: Sweep rail spline (2-Rail, rail direction and scale)
+    "sweep/rail",
+    // pending brief 042: Sweep with Banking off
+    "sweep/banking",
+];
 
 /// Built but differing from the reference, pinned like in `generators_parity.rs`
 /// (GENERATORS2.md §9–10). Through the writer they still differ.
-const KNOWN_MISMATCH: &[&str] = &["loft/mesh-subdivision", "sweep/helix"];
+const KNOWN_MISMATCH: &[&str] = &[
+    "loft/mesh-subdivision",
+    "sweep/helix",
+    // pending brief 042: Lathe partial angle (open lathe caps / seam faces)
+    "lathe/partial",
+    // pending brief 042: Sweep end scale/rotation in R25
+    "sweep/scale-end",
+    // pending brief 042: Loft R25 ring (U points) and N-gon caps
+    "loft/three-circles",
+];
 
 /// Exact except for trailing cut / cap triangles whose cocircular Delaunay ties the
 /// reference decides by noise (GEOMETRY.md §6.1 R1), plus a geometric comparison: of the
@@ -79,7 +97,10 @@ type Table = toml::map::Map<String, toml::Value>;
 /// Sets a node's params from a case table (same rules as `generators_parity.rs`).
 fn apply(tx: &mut forge_core::Tx, reg: &Registry, id: NodeId, type_id: &str, table: &Table) {
     let ty = reg.get(type_id).unwrap();
-    for (k, v) in table {
+    for (k, v) in &normalize(ty, table) {
+        if common::is_display_only(k) {
+            continue;
+        }
         // `type` names an input's node type, unless the node has a `type` param itself
         if (k == "type" && ty.find_param("type").is_none()) || v.is_table() {
             continue;
@@ -100,6 +121,7 @@ fn apply(tx: &mut forge_core::Tx, reg: &Registry, id: NodeId, type_id: &str, tab
             (ParamKind::Float { .. }, toml::Value::Float(f)) => Value::Float(angle(desc, *f)),
             (ParamKind::Vec3 { .. }, v @ toml::Value::Array(_)) => vec3(v),
             (ParamKind::Enum { .. }, toml::Value::String(s)) => Value::Enum(s.clone()),
+            (ParamKind::String, toml::Value::String(s)) => Value::String(s.clone()),
             other => panic!("{type_id}.{k}: unexpected value {other:?}"),
         };
         tx.set_param(id, k, value).unwrap();
@@ -246,7 +268,7 @@ fn golden_scenes_through_the_writer_match_the_reference() {
         set(KNOWN_MISMATCH),
         "known-mismatch set changed"
     );
-    assert_eq!(matched.len(), 75 + 31, "{matched:?}");
+    assert_eq!(matched.len(), 75 + 31 + 3, "{matched:?}");
 }
 
 #[test]

@@ -354,6 +354,28 @@ their transforms; the profile is read in its XY coordinates).
   0.4° tilted and twists less than parallel transport (48° against 56° over the default
   helix); not derived.
 
+### 10a. O20 additions (R25 cases of `generators-3.md`)
+
+Case spellings the parity tests translate: `fillet_subdivision` is our `fillet_segments`;
+a 3-array `size` on a cube is `size_x/y/z`; Symmetry's `weld_tolerance` is `tolerance`;
+`isoparm_subdivision*` are viewport-only display settings and are ignored.
+- **Symmetry** (§1): `r25-plane-xy/-zy/-xz` match exactly (same rules as R20). New params
+  `clamp_points_on_axis`, `delete_polygons_on_axis`, `auto_flip` (all off; modeling aids, a
+  true value is `Unsupported`).
+- **Loft:** new param `adapt_uv` (true; UV only, no effect on the mesh).
+- **Sweep:** new params `start_growth` 0 %, `end_growth` 100 %, `parallel_movement` off,
+  `keep_segments` off (non-default → `Unsupported`), `use_rail_direction`, `two_rail`,
+  `use_rail_scale` (R25 defaults on; only meaningful with a rail) and `stick_uvs` (UV only).
+  A **third spline child** (the rail) is `Unsupported("sweep with a rail spline")`.
+- **Parity-pending (brief 042):** `lathe/movement` (movement/scaling: `Unsupported`);
+  `lathe/partial` (builds, 132 faces against 130: the open lathe's cut faces differ);
+  `loft/linear` (`Unsupported`); `loft/three-circles` (R25 rings have `U` = 16 points, not
+  `U − 1`, and the default Caps Type is N-gon, so the caps are two 16-gons: 144 points, 130
+  faces; the same appears in `rechecks/loft-defaults`); `sweep/rail`, `sweep/banking`
+  (Banking off: `Unsupported`) and `sweep/scale-end` (rings 0 to 590 of 901 equal, later
+  rings drift by up to 2.3, and the R25 caps are N-gons). All are pinned in `UNSUPPORTED` /
+  `KNOWN_MISMATCH` as `pending brief 042: ...`.
+
 ## 11. Parity tests
 
 `crates/generators/tests/generators_parity.rs`: each case rebuilds its inputs from

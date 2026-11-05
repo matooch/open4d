@@ -8,17 +8,25 @@ use std::path::Path;
 mod common;
 
 use common::{Table, resolved_params, typed_params};
-use forge_core::{Registry, Value};
+use forge_core::Registry;
 use forge_generators::{BuildError, Primitives, build};
 use forge_parity_harness::{Mesh, compare_meshes, discover_cases};
 
 /// Observed options not derived (none in these features).
-const UNSUPPORTED: &[&str] = &[];
+const UNSUPPORTED: &[&str] = &["oil-tank/orient-z-grid"];
 
 /// Built but differing (PRIMITIVES3.md P4): the exported Bucky is irregular (radii 97.6 to
 /// 98.5, coordinate noise 0.05 to 0.2 against a 1e-4 tolerance) and its listing order is
 /// not derived.
-const KNOWN_MISMATCH: &[&str] = &["platonic/type-bucky"];
+///
+/// The Bucky cases at Radius 10 and 1000 show the same irregularity scaled with the radius
+/// (sizes 19.268 / 192.675 / 1926.748): a fixed shape, not noise, but still not derived.
+const KNOWN_MISMATCH: &[&str] = &[
+    "platonic/type-bucky",
+    "platonic/bucky-r10",
+    "platonic/bucky-r1000",
+    "platonic/bucky-seg2",
+];
 
 const STRICT: &[&str] = &["platonic", "oil-tank", "polygon-prim"];
 
@@ -129,10 +137,10 @@ fn primitives3_match_the_reference() {
     println!("matched: {}", matched.join(", "));
     let want: BTreeSet<String> = UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(per_feature.get("platonic"), Some(&7), "{per_feature:?}");
-    assert_eq!(per_feature.get("oil-tank"), Some(&3), "{per_feature:?}");
-    assert_eq!(per_feature.get("polygon-prim"), Some(&3), "{per_feature:?}");
-    assert_eq!(matched.len(), 7 + 3 + 3 + 1, "{matched:?}");
+    assert_eq!(per_feature.get("platonic"), Some(&12), "{per_feature:?}");
+    assert_eq!(per_feature.get("oil-tank"), Some(&6), "{per_feature:?}");
+    assert_eq!(per_feature.get("polygon-prim"), Some(&6), "{per_feature:?}");
+    assert_eq!(matched.len(), 12 + 6 + 6 + 2, "{matched:?}");
 }
 
 /// P4: our Bucky has the exported counts (60 points, 12 triangles and 52 quads) with every
@@ -157,10 +165,12 @@ fn bucky_has_the_exported_counts() {
     }
 }
 
+/// P2: dodeca and bucky cut flat at Segments 2 have the exported counts
+/// (`platonic/dodeca-seg2` 74 points, 48 + 48 faces; `bucky-seg2` 234 points, 48 + 208).
 #[test]
-fn unobserved_segments_are_unsupported() {
+fn dodeca_and_bucky_segments_have_the_exported_counts() {
     let reg = registry();
-    for kind in ["dodeca", "bucky"] {
+    for (kind, points, tris, quads) in [("dodeca", 74, 48, 48), ("bucky", 234, 48, 208)] {
         let p = typed_params(
             &reg,
             "forge.platonic",
@@ -171,10 +181,18 @@ fn unobserved_segments_are_unsupported() {
             .into_iter()
             .collect(),
         );
-        assert!(matches!(
-            build("forge.platonic", &p),
-            Err(BuildError::Unsupported(_))
-        ));
+        let m = build("forge.platonic", &p).unwrap();
+        m.validate().unwrap();
+        assert_eq!(m.points.len(), points, "{kind}");
+        assert_eq!(
+            m.polys.iter().filter(|f| f.len() == 3).count(),
+            tris,
+            "{kind}"
+        );
+        assert_eq!(
+            m.polys.iter().filter(|f| f.len() == 4).count(),
+            quads,
+            "{kind}"
+        );
     }
-    let _: BTreeMap<String, Value> = BTreeMap::new();
 }

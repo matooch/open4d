@@ -113,11 +113,24 @@ the same region split into quads (two per L-shaped face in `mode-a_minus_b`).
 - Open or self-intersecting inputs give whatever the winding-number classification
   gives (no observation yet).
 
+## 5a. R25 cases (`boole/r25-*`, O20) — parity-pending, brief 043
+
+The R25 export of the four modes keeps the cut faces of B as a **second object** with its
+own copies of the points (`r25-a_minus_b`: object `Cube` with 13 points and 6 faces, object
+`Cube_1` with 7 points and 3 faces, 20 points / 9 faces in the merged mesh; ours welds to
+14 points). The case form is `[params.input]` / `[params.input2]` cube tables plus `mode`,
+`hide_new_edges` (R25 default on), `high_quality`, `optimize_points` (0.01). Our modes
+reproduce the geometry (R20 `hide-edges` etc. still match) but not the R25 point sets and
+numbering: `r25-union`, `r25-a_minus_b`, `r25-intersect`, `r25-a_without_b` are pinned in
+`KNOWN_MISMATCH` as `pending brief 043: Boole R25 modes and numbering`. The cases declare
+the strict comparison, so the test compares them strictly (never geometrically).
+
 ## 6. Parity tests
 
 `crates/generators/tests/boole_parity.rs`: for each `tests/golden/boole/` case, A =
 our default cube, B = our default cube translated by the case's `b_pos`, options from
-`[params]`; compared with `compare_geometric` (the cases set
-`[tolerance] compare = "geometric"`). `boole/quality-off` is pinned as unsupported.
+`[params]` (or the cube tables of `[params.input]`, `[params.input2]` for the R25 cases,
+§5a); compared with `compare_geometric` (the R20 cases set
+`[tolerance] compare = "geometric"`; the R25 cases are strict). `boole/quality-off` is pinned as unsupported.
 Unit tests (`crates/geometry/tests/boolean.rs`): all modes on overlapping, disjoint,
 touching and nested boxes (volumes, closedness, point sets) and a box with a hole.

@@ -144,3 +144,35 @@ fn missing_golden_root_is_an_error_but_empty_root_has_no_cases() {
     assert!(discover_cases(&dir.path().join("absent")).is_err());
     assert!(discover_cases(dir.path()).unwrap().is_empty());
 }
+
+#[test]
+fn lfs_pointer_case_is_reported_as_not_fetched_not_invalid() {
+    use forge_parity_harness::is_lfs_pointer;
+    assert!(is_lfs_pointer(
+        "version https://git-lfs.github.com/spec/v1\noid sha256:ab\nsize 12\n"
+    ));
+    assert!(!is_lfs_pointer("v 0 0 0\n"));
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+    write(repo, "docs/parity/cube.md", "obs\n");
+    write(
+        repo,
+        "tests/golden/cube/big/case.toml",
+        &format!("{OK}mesh = \"mesh.obj\"\n"),
+    );
+    write(
+        repo,
+        "tests/golden/cube/big/mesh.obj",
+        "version https://git-lfs.github.com/spec/v1\noid sha256:ab\nsize 12\n",
+    );
+    let cases = discover_cases(&repo.join("tests/golden")).unwrap();
+    let note = cases[0].data_not_fetched().expect("pointer detected");
+    assert!(
+        note.contains("data not fetched") && note.contains("cube/big"),
+        "{note}"
+    );
+    assert!(validate_case(repo, &cases[0]).is_empty());
+    // A real mesh is not a pointer.
+    write(repo, "tests/golden/cube/big/mesh.obj", "v 0 0 0\n");
+    assert!(cases[0].data_not_fetched().is_none());
+}

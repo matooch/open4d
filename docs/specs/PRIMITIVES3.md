@@ -45,14 +45,20 @@ from the origin, except that **Tetra is not centred** and **Bucky is irregular**
   `[0,1,3,2], [2,3,5,4], [4,5,7,6], [6,7,1,0], [1,7,5,3], [6,0,2,4]`.
 - *dodeca* see P3. *bucky* see P4.
 
+**P2a. Hexa with segments is the cube grid** (`platonic/hexa-seg3`: 56 points, 54 quads in
+the Cube primitive's order, PRIMITIVES.md §2): the Hexahedron is the Cube primitive with edge
+`2·radius/√3` and `segments` per axis (the same listing as P1 at `segments = 1`).
+
 **P2. Segments are flat.** `segments = n > 1` cuts every face of the base solid into the
 flat grid of PRIMITIVES.md §3.1 / PRIMITIVES2.md §9 (edge points in first-appearance order,
 interior points per face, triangle rows / quad grid) and does **not** project onto the
 sphere: `platonic/segments` (icosa, n = 3) has edge points at distance 86.85 from the
 origin, face points likewise, and its vertex and face lists equal `flat_subdivision` with
-the identity map (92 points, 180 triangles). Hexa, tetra and octa use the same routine
-(**parity-pending**: observed for the icosa only). Dodeca and bucky with `segments > 1`
-return `BuildError::Unsupported("platonic dodecahedron/bucky segments")` (not observed).
+the identity map (92 points, 180 triangles). Tetra and octa use the same routine (`platonic/tetra-seg3`, `octa-seg3`, exact); hexa is
+P2a. **Dodeca and bucky** with `segments = n` cut their exported triangles and quads
+(pentagons already split as P3) with the same routine (`platonic/dodeca-seg2`, exact: 20 base
+points + 42 edge midpoints + 12 quad centres = 74 points, 48 triangles + 48 quads; bucky
+Segments 2 has the counts 234 points, 48 + 208 faces: 60 + 122 + 52).
 
 **P3. Dodecahedron** (`platonic/type-dodeca`, 20 points, 12 triangles then 12 quads).
 Points `0..12` are the vertices `(0, ±1/φ, ±φ)`, `(±φ, 0, ±1/φ)`, `(±1/φ, ±φ, 0)` in the
@@ -76,10 +82,12 @@ the 12 pentagons become a triangle and a quad as in P3, the 20 hexagons two quad
 (12 + 12 + 40 = 64 faces, 52 quads). Listing order is our own: points in layers of
 descending Z, counter-clockwise inside each layer. **Known mismatch**: the observed positions
 are not derivable (noise of 0.05–0.2 cm, tolerance 1e-4) and neither is its face order.
-Settling data: Bucky at Radius 1000 and 10 (is the irregularity proportional to the radius?),
-and Bucky with Segments 2.
+Settling data (O20): the sizes at Radius 10 / 100 / 1000 are 19.268 / 192.675 / 1926.748, so the
+irregularity is **proportional to the radius** (a fixed shape, not noise), but it is still not
+derived. `platonic/bucky-r10`, `bucky-r1000` and `bucky-seg2` are pinned in `KNOWN_MISMATCH`
+with `type-bucky` (the Segments 2 counts match, see P2).
 
-**Unsupported:** none except the `segments > 1` of P2.
+**Unsupported:** none.
 
 ## 2. Oil Tank (`forge.oil_tank`)
 
@@ -110,15 +118,19 @@ PRIMITIVES2.md §2, triangles at both poles); `oil-tank/segments` (cap 6, height
 12: same formula with other counts, so `Θ` does not depend on the cap segments).
 `Θ = 22.5°` was fitted on the default cap, whose four ring radii `25.6131, 50.9796, 75.8550,
 100` and heights `1.5815, 6.3106, 14.1419, 25` equal the formula to the 4-decimal export.
-**Parity-pending:** whether `Θ` depends on `cap_height / radius` (every case has `25/100`);
-other orientations are the PRIMITIVES2.md §1 maps; a zero `cap_height` gives flat ends
+**`Θ` depends on the cap:** `Θ = 90° · cap_height / radius` (`oil-tank/cap`: cap 50, radius
+100, `Θ = 45°`, ring 1 at `r = 27.5899 = 100 sin 11.25° / sin 45°`; `oil-tank/cap-r50`: cap 50,
+radius 50, `Θ = 90°`, ring 1 at `19.1342 = 50 sin 22.5°`; the default 25/100 gives the fitted
+22.5°). A cap of 0 or a radius of 0 keeps `Θ = 22.5°`. **Parity-pending:** the rule for
+`cap_height / radius > 1` (no case; not clamped); other orientations are the PRIMITIVES2.md §1 maps; a zero `cap_height` gives flat ends
 (`y` offset 0); a `cap_height` above `height/2` is clamped to `height/2`.
 
 **Slice** (`oil-tank/slice`, To 270°): the lathe slice of PRIMITIVES2.md §2 (rotation
 segments + 1 columns from `from` to `to`), the two cut faces triangulated by the reference
 Delaunay rule of GEOMETRY.md §6.1 (13-gon, 11 triangles each: 189 points, 214 faces).
 **Unsupported:** `regular_grid` on (`BuildError::Unsupported("slice regular grid")`, as the
-other round primitives; no case).
+other round primitives): `oil-tank/orient-z-grid` (553 points, 904 faces) is pinned in
+`UNSUPPORTED` (the regular-grid cut face is not derived).
 
 ## 3. Polygon (`forge.polygon_prim`)
 
@@ -262,6 +274,31 @@ values are **parity-pending**: never observed). The seed is the integer reduced 
   radius `R + y`. The height field and the seam are as above.
 - *Orientation* is the shared map of PRIMITIVES2.md §1 (only `plus_y` observed, **parity-pending**).
 - Segments below 4 are rejected by the range; sizes of 0 give a degenerate flat mesh.
+
+### L5. O20 landscape cases (20 cases; `landscape/segments-1000` needs LFS)
+- **Topology is exact for every case** (segments 4, scale, size, seeds, furrows, sea level,
+  borders, orientation +Z: the horizontal axes x and y are exact, the height is z).
+- **Spherical** (`landscape/spherical`, 4902 points, 5000 faces: 4800 quads + 200 triangles):
+  `width_segments` meridians by `depth_segments / 2 − 1` parallels from south to north, two
+  poles first (south, north), then the parallels in meridian order: point `(k, j)` is
+  `2 + 100 k + j`. Direction `(cos φ cos λ, sin φ, cos φ sin λ)`, `λ = 2π j / width_segments`,
+  `φ = −90° + 180° (k + 1) / (depth_segments / 2)`; radius `min(size_x, size_z)/2 + height`
+  (the equator ring is at y = 0, the poles are at ±(radius + their height), 362.96 and 338.05
+  in the case). No border mask. Quads `[(k,j), (k+1,j), (k+1,j+1), (k,j+1)]` (j wraps), then
+  per meridian `j` a south triangle `[S, (0,j), (0,j+1)]` and a north triangle
+  `[(m,j+1), (m,j), N]` (m the last parallel), alternating. The face lists equal the
+  export's. Heights stay our own noise (level C).
+- **Statistical heights:** divided by `size_y` (and read on the orientation's height axis,
+  or as the radius above the sphere). 16 of 20 cases are within the L4 tolerances.
+  Pinned as `STAT_MISMATCH`: `no-borders` (without the shared border mask the two noises are
+  uncorrelated: corr −0.25, mean 0.564 / 0.641), `spherical` (same, corr 0.01), and
+  `sea-level-50` (corr 0.20) with `sea-level-50-plateau-50`. Facts for a later derivation:
+  in the export, `sea-level-50-plateau-50` equals **0.005 × `sea-level-50`** (to the export's 6-digit rounding) at every one of
+  the 10201 points, and `sea-level-50` is not a function of the default height at the same
+  vertex (so Sea Level changes the field, not only a clamp). **Parity-pending**: sea level and
+  plateau law.
+- `landscape/segments-1000` (1,002,001 points) is stored with Git LFS; where only the pointer
+  is checked out it is skipped with a note (INFRA.md §4).
 
 ### L4. Tests
 - `landscape_matches_the_reference_topology` (parity file): for all 4 cases the face lists are

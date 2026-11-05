@@ -104,10 +104,15 @@ fn furrows_change_the_detail_and_multifractal_changes_the_mesh() {
 }
 
 #[test]
-fn spherical_and_orientation_keep_the_topology() {
+fn spherical_has_poles_and_orientation_keeps_the_topology() {
     let flat = small(&[]);
     let sph = small(&[("spherical", Value::Bool(true))]);
-    assert_eq!(flat.polys, sph.polys);
+    // 20 x 20 segments: 20 meridians, 9 parallels, two poles; quads between the parallels
+    // and a triangle per meridian at each pole (the layout of `landscape/spherical`).
+    let (nw, rings) = (20, 9);
+    assert_eq!(sph.points.len(), 2 + nw * rings);
+    assert_eq!(sph.polys.len(), nw * (rings - 1) + 2 * nw);
+    assert_eq!(sph.polys.iter().filter(|f| f.len() == 3).count(), 2 * nw);
     let r = 300.0;
     assert!(sph.points.iter().all(|q| q.length() >= r - 1e-9));
     let up = small(&[("orientation", Value::Enum("pos_z".into()))]);

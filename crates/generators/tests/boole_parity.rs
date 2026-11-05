@@ -5,20 +5,58 @@ use std::path::Path;
 
 mod common;
 
-use common::resolved_params;
-use forge_core::Value;
-use forge_generators::{BuildError, boole, build};
-use forge_parity_harness::{Compare, Mesh, compare_geometric, discover_cases};
+use common::{Table, resolved_params, typed_params};
+use forge_core::{Registry, Value};
+use forge_generators::{BuildError, Primitives, boole, build};
+use forge_parity_harness::{Compare, Mesh, compare_geometric, compare_meshes, discover_cases};
 use glam::DVec3;
+
+/// A cube input table (`[params.input]` form: type, pos and the cube's own params).
+fn cube_input(reg: &Registry, t: &Table) -> forge_geometry::PolyMesh {
+    assert_eq!(t["type"].as_str(), Some("cube"));
+    let own: Table = t
+        .iter()
+        .filter(|(k, _)| *k != "type" && *k != "pos")
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    let mut m = build("forge.cube", &typed_params(reg, "forge.cube", &own)).unwrap();
+    let pos = t["pos"].as_array().unwrap();
+    let c = |k: usize| {
+        pos[k]
+            .as_float()
+            .or(pos[k].as_integer().map(|i| i as f64))
+            .unwrap()
+    };
+    for p in &mut m.points {
+        *p += DVec3::new(c(0), c(1), c(2));
+    }
+    m
+}
 
 /// Observed options whose geometry is not derived yet.
 const UNSUPPORTED: &[&str] = &["boole/quality-off"];
+
+/// Built, but the strict comparison (R25 point set and numbering) differs.
+const KNOWN_MISMATCH: &[&str] = &[
+    // pending brief 043: Boole R25 modes and numbering (the R25 export keeps the cut faces
+    // as a second object with its own 7 points: 13 + 7 = 20 points for a_minus_b, not our 14)
+    "boole/r25-a_minus_b",
+    "boole/r25-a_without_b",
+    "boole/r25-intersect",
+    "boole/r25-union",
+];
 
 #[test]
 fn boole_matches_the_reference_geometrically() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
     let mut unsupported = BTreeSet::new();
     let mut matched = Vec::new();
+    let mut mismatch = BTreeSet::new();
+    let reg = {
+        let mut r = Registry::with_builtins();
+        r.install(&Primitives).unwrap();
+        r
+    };
     for case in discover_cases(&root)
         .unwrap()
         .into_iter()
@@ -26,16 +64,28 @@ fn boole_matches_the_reference_geometrically() {
     {
         let key = format!("{}/{}", case.feature, case.name);
         let m = case.manifest().unwrap();
-        assert_eq!(m.tolerance.compare, Compare::Geometric, "{key}");
-
-        let a = build("forge.cube", &BTreeMap::new()).unwrap();
-        let mut b = a.clone();
-        let pos = m.params["b_pos"].as_array().unwrap();
-        let c = |k: usize| pos[k].as_float().unwrap();
-        let offset = DVec3::new(c(0), c(1), c(2));
-        for p in &mut b.points {
-            *p += offset;
+        let r25 = m.params.contains_key("input2");
+        if !r25 {
+            assert_eq!(m.tolerance.compare, Compare::Geometric, "{key}");
         }
+
+        let (a, b) = if r25 {
+            let t = |k: &str| m.params[k].as_table().unwrap().clone();
+            (
+                cube_input(&reg, &t("input")),
+                cube_input(&reg, &t("input2")),
+            )
+        } else {
+            let a = build("forge.cube", &BTreeMap::new()).unwrap();
+            let mut b = a.clone();
+            let pos = m.params["b_pos"].as_array().unwrap();
+            let c = |k: usize| pos[k].as_float().unwrap();
+            let offset = DVec3::new(c(0), c(1), c(2));
+            for p in &mut b.points {
+                *p += offset;
+            }
+            (a, b)
+        };
         let mut values = BTreeMap::new();
         for (k, v) in &resolved_params(&case, &m) {
             let v = match v {
@@ -58,19 +108,28 @@ fn boole_matches_the_reference_geometrically() {
                     faces: ours.polys,
                 };
                 let expected = case.expected_mesh().unwrap().unwrap();
-                let r = compare_geometric(&expected, &ours, &m.tolerance);
-                assert!(r.passed(), "{key}: {:?}", r.failures);
-                println!(
-                    "{key}: points {:?}, planes {:?}, closed {:?}, faces {:?}",
-                    r.points, r.planes, r.closed, r.face_counts
-                );
-                matched.push(key);
+                if m.tolerance.compare == Compare::Geometric {
+                    let r = compare_geometric(&expected, &ours, &m.tolerance);
+                    assert!(r.passed(), "{key}: {:?}", r.failures);
+                    println!(
+                        "{key}: points {:?}, planes {:?}, closed {:?}, faces {:?}",
+                        r.points, r.planes, r.closed, r.face_counts
+                    );
+                    matched.push(key);
+                } else if compare_meshes(&expected, &ours, &m.tolerance).passed() {
+                    matched.push(key);
+                } else {
+                    println!("{key}: known mismatch (strict)");
+                    mismatch.insert(key);
+                }
             }
         }
     }
     println!("matched geometrically: {}", matched.join(", "));
     let want: BTreeSet<String> = UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
+    let want: BTreeSet<String> = KNOWN_MISMATCH.iter().map(|s| s.to_string()).collect();
+    assert_eq!(mismatch, want, "known-mismatch set changed");
     assert_eq!(matched.len(), 5, "{matched:?}");
 }
 

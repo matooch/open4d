@@ -145,6 +145,9 @@ fn check(root: &str) -> ExitCode {
     };
     let mut bad = false;
     for case in &cases {
+        if let Some(note) = case.data_not_fetched() {
+            outln!("note: {note}");
+        }
         for p in validate_case(root, case) {
             outln!("{}/{}: {p}", case.feature, case.name);
             bad = true;

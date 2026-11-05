@@ -17,12 +17,32 @@ const FEATURES: &[&str] = &[
 ];
 
 /// Observed cases not derived yet.
-const UNSUPPORTED: &[&str] = &[];
+const UNSUPPORTED: &[&str] = &[
+    // pending brief 042: Lathe movement/scaling
+    "lathe/movement",
+    // pending brief 042: Loft linear interpolation
+    "loft/linear",
+    // pending brief 042: Sweep rail spline (2-Rail, rail direction and scale)
+    "sweep/rail",
+    // pending brief 042: Sweep with Banking off
+    "sweep/banking",
+];
 
 /// Cases we build but that differ, pinned so a fix shows up (GENERATORS2.md §9–10: a
 /// 6-point loft section snaps two samples to segment starts; the sweep frame along a
 /// non-planar path twists less than parallel transport). Not understood yet.
-const KNOWN_MISMATCH: &[&str] = &["loft/mesh-subdivision", "sweep/helix"];
+const KNOWN_MISMATCH: &[&str] = &[
+    "loft/mesh-subdivision",
+    "sweep/helix",
+    // pending brief 042: Lathe partial angle (the open lathe's end cap / seam faces)
+    "lathe/partial",
+    // pending brief 042: Sweep end scale/rotation in R25 (rings 0..590 of 901 match, later
+    // rings drift up to 2.3; end caps are N-gons in R25, ours triangles)
+    "sweep/scale-end",
+    // pending brief 042: Loft R25 ring and caps (the R25 export has U = 16 points per ring,
+    // ours U - 1, and N-gon end caps, ours triangles; same in rechecks/loft-defaults)
+    "loft/three-circles",
+];
 
 /// Cases whose caps contain an exactly cocircular quad that the reference splits the other
 /// way (GEOMETRY.md §6.1 R1; `loft/three` end cap, 2 of 54 cap triangles): exact except the
@@ -116,7 +136,7 @@ fn generators_match_the_reference() {
     let want: std::collections::BTreeSet<String> =
         UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 13 + 11 + 7, "{matched:?}");
+    assert_eq!(matched.len(), 13 + 11 + 7 + 3, "{matched:?}");
 }
 
 /// Exact positions and faces up to a trailing run of triangles in both meshes (the
