@@ -23,6 +23,22 @@ export the whole scene and note which object is which group).
 | sphere-moved | sphere at position (10, 20, 30), rotation H 45° | Make Editable | `Sphere` (Polygon, 114 points, 128 polygons; tags Phong, UVW, two data tags), position (10, 20, 30), rotation H 45° unchanged. | position and rotation stay **on the object**. Name kept; the exported bbox is centred at (10, 20, 30). |
 | spline | Circle spline | Make Editable | `Circle` (type Spline, 4 points, closed; two unnamed data tags: segment data and point data). No children. | name kept; becomes an editable spline with 4 points. Tree only, no export. |
 
+## Follow-up cases (planner, after brief 030)
+
+Brief 030 matched all 8 meshes and trees above except the `array` tree. Record these the same way
+(mesh plus the tree after: names, types, tags in order, children, transforms).
+
+| Case | Scene before | Command | Tree after (names / types / tags / children) | Notes |
+|---|---|---|---|---|
+| array-tree | as `array` | Make Editable | | record every child's name, type, transform and tags |
+| extrude-cap-off | Extrude of a Rectangle, end cap off | Make Editable | | |
+| extrude-triangles | Extrude of a Rectangle, Cap Type Triangles | Make Editable | | |
+| lathe-caps | Lathe of an Arc, caps on | Make Editable | | |
+| extrude-csto | as `extrude` | Current State to Object | | caps as children of the copy? |
+| cloner | Cloner (Grid, 3 × 1 × 1) of a default cube | Make Editable | | |
+| two-objects | a default cube and a default sphere, both selected | Make Editable | | which ends up selected |
+| two-objects-csto | the same | Current State to Object | | order of the copies |
+
 ## Behaviour notes
 - **Undo:** each command (Make Editable, Current State to Object) is **one undo step**: a single Undo restored the exact tree before the command in all 9 cases (checked with the scripting interface's undo, not the menu).
 - **Selection after:** the object the command was run on stays the only selected object, in every case. For Make Editable it is the converted object (now polygon, Null or spline); for Current State to Object it is the **original**, not the new copy. The caps of the extrude are not selected.
