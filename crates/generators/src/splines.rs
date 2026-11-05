@@ -513,3 +513,28 @@ pub(crate) fn placed_curve(scene: &Scene, id: NodeId) -> Result<Option<Curve>, B
     let m = scene.local_transform(id).expect("node exists").matrix();
     Ok(Some(curve.transformed(&m)))
 }
+
+/// A spline node as a polyline helper mesh for the spline-driven deformers (MODIFIERS.md
+/// §20.0): its sampled points in its own space, one 2-point edge per chord (plus the closing
+/// edge of a closed spline). `None` if `id` is no spline or has no curve.
+pub fn polyline_mesh(scene: &Scene, id: NodeId) -> Option<forge_geometry::PolyMesh> {
+    let node = scene.node(id)?;
+    if !is_spline(&node.type_id) {
+        return None;
+    }
+    let curve = if node.type_id == crate::spline_mask::TYPE {
+        crate::spline_mask::curve_of(scene, id).ok()??
+    } else {
+        build_curve(&node.type_id, &node.params).ok()?
+    };
+    let points = curve.points();
+    let n = points.len();
+    if n < 2 {
+        return None;
+    }
+    let spans = if curve.closed && n > 2 { n } else { n - 1 };
+    let polys = (0..spans)
+        .map(|k| vec![k as u32, ((k + 1) % n) as u32])
+        .collect();
+    Some(forge_geometry::PolyMesh { points, polys })
+}

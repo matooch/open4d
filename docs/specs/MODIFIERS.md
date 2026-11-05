@@ -6,7 +6,8 @@
 Bend, Twist, Taper, Bulge, Shear, Spherify, Squash & Stretch and Wrap are specified below
 (§0–7, §9); falloff is §10; Explosion, Shatter and Wind are §11–12 (brief 053, source
 docs/parity/deformers-3.md O19); Mesh (cage), Surface, Camera, Collision, Jiggle, Delta Mush
-and Correction are §14–15 (brief 056, source docs/parity/deformers-4.md O45). Sources:
+and Correction are §14–15 (brief 056, source docs/parity/deformers-4.md O45); Spline Wrap, Spline and
+Spline Rail are §20–21 (brief 055, sources O19 and O45). Sources:
 docs/parity/{bend,twist,deformer-common,taper,bulge,shear,spherify,deformers-2,followups-1}.md and their golden
 cases. Everything else is still a checklist item.
 
@@ -1065,3 +1066,172 @@ Test: `crates/modifiers/tests/ffd_formula_melt_parity.rs`; features `ffd` (3), `
   (Spherical, Cylindrical, X Radial, Z Radial, Manual), a non-uniform `size`, and `X(x,y,z,t) = x*2`;
   FFD with a point moved on the x and z axes (confirms the axis orientation), 2 points per axis,
   `grid_size` 150 (more cube points outside), and a lattice with the cube fully inside.
+
+## 20. Spline Wrap, Spline and Spline Rail (`forge.spline_wrap`, `forge.spline_deformer`, `forge.spline_rail`) (brief 055)
+
+Sources: O19 [deformers-3.md](../parity/deformers-3.md) (Spline Wrap parameter table, cases
+`spline-wrap/defaults`, `spline-wrap/arc`) and O45 [deformers-4.md](../parity/deformers-4.md) (Spline and Spline
+Rail tables, cases `spline-deformer/defaults`, `spline-rail/defaults`). Golden folders
+`tests/golden/{spline-wrap,spline-deformer,spline-rail}` (4 cases). `tests/golden/{wrap,wrap-f}` belong to the
+plain Wrap deformer (§7.2), not to this section. All three keep the cube's topology and carry `fields` (§10) and
+`enabled` (§0). They run in `apply_deformer_resolved`: the resolver hands them every linked spline.
+
+### 20.0 Linked splines and the polyline model
+
+The resolver returns a linked **spline** node as a polyline helper mesh: `points` are the spline's own sampled
+points (its Intermediate Points setting, SPLINES.md; Uniform 8 for the default Arc and Helix), `polys` the
+2-point edges `[k, k+1]`, plus `[n−1, 0]` when the spline is closed (closed iff `polys.len() == points.len()`).
+The deformer takes the points to its own local space with `inverse(deformer_world) · spline_world`
+(the cases keep deformer, cube and splines at the origin).
+
+Every rule below works on that polyline `V_0 … V_{n−1}` and not on the Bezier curve. Proof: the chord
+direction at the start and end of the sampled default Arc, `(−0.0183835, 0.999831)` and `(−0.999830, 0.0184499)`, and of the
+sampled default Helix, `(−0.0069667, 0.996813, −0.0794711)`, are exactly the directions in which `spline-wrap/arc` and
+`spline-wrap/defaults` extend (`rows z = −100 … 100`, see 20.1), and the length 314.2771 of the sampled Arc
+(true arc 314.1593) is the rate at which they extend (`s = 314.277 · z`). Let `ℓ_k` be the cumulative chord
+length, `L = ℓ_{n−1}`, `c_k` the unit chord from `V_k` to `V_{k+1}`.
+
+`C(s)` is the point at arc length `s`: linear inside `[0, L]`; for an open spline and **Extend**, outside it continues along `c_0`
+(`s < 0`) and `c_{n−2}` (`s > L`); a closed spline wraps `s` modulo `L`.
+
+**Frame.** Tangent at a vertex: `c_0` at the start, `c_{n−2}` at the end, else `normalize(c_{k−1} + c_k)`.
+Initial normal `N_0 = normalize(Z × T_0 projected ⟂ T_0)` (any perpendicular if `T_0 ∥ Z`); `N_k` is parallel
+transported with the shortest rotation `T_{k−1} → T_k`; `B_k = T_k × N_k` so that `N × B = T`.
+The frame at arc length `s` inside a chord uses that chord as `T`, `N` interpolated between its vertices and
+re-orthogonalised, `B = T × N`; outside `[0, L]` it is the frame of the end chord (constant).
+Same rule as the Sweep frame (GENERATORS2 §10) except for the initial normal, which for Sweep is the bend
+direction. `spline-wrap/arc` fixes `N_0 = Z × T_0 = (−cos α, −sin α, 0)` with `α = 0.018384` (the planar case cannot tell the bend rule apart, the
+helix says neither reproduces its start, see 20.1).
+
+### 20.1 Spline Wrap (`forge.spline_wrap`)
+
+| Key | Label | Type | Default | Range / options |
+|---|---|---|---|---|
+| `spline` | Spline | link | none | spline |
+| `rail` | Rail | link | none | spline (accepted, **not applied**, parity-pending) |
+| `axis` | Axis | enum | `pos_x` | `pos_x`, `neg_x`, `pos_y`, `neg_y`, `pos_z`, `neg_z` |
+| `strength` | Strength | percent | 100 | ≥ 0 |
+| `offset` | Offset | percent | 0 | any |
+| `from` | From | percent | 0 | any |
+| `to` | To | percent | 100 | any |
+| `mode` | Mode | enum | `fit_spline` | `fit_spline`, `keep_length` |
+| `end_mode` | End Mode | enum | `extend` | `clamp`, `extend` |
+| `scale_from_rail` | Scale from Rail | bool | off | not applied, parity-pending |
+| `size_strength`, `spline_size_strength` | Size Strength, Spline Size Strength | percent | 100 | not applied, parity-pending |
+| `rotation_from_rail` | Rotation from Rail | bool | on | – |
+| `up_vector` | Up Vector | vec3 | (0, 0, 0) | not applied, parity-pending |
+| `banking` | Banking | angle | 0 | not applied, parity-pending |
+| `rotation_strength`, `spline_rotation_strength` | Rotation Strength, Spline Rotation Strength | percent | 100 | not applied, parity-pending |
+| `fix_bounding_box` | Fix Bounding Box | bool | off | – |
+| `bounding_box_center`, `bounding_box_size` | Bounding Box Center, Size | vec3 | (0,0,0), (200,200,200) | – |
+
+**What the data shows (both cases, all 162 points, derived).** With the defaults (Axis +X, Fit Spline, Extend,
+Rotation from Rail on, spline at the origin) every output point is
+`out = C(s) + x · N(s) + y · B(s)` with `s = L · z` (`spline-wrap/arc`: `z = −100 … 100` in steps of 50
+gives `s/z = 314.277` on every row, the rows are collinear with `C(0) = (200, 0, 0)` = the Arc's start; `N` is
+`(−0.999831, −0.018383, 0)` for `z ≤ 0` and `(−0.018450, −0.999830, 0)` for `z > 0`, `B = (0, 0, 1)` on every row).
+So, for Axis **+X**, the object's **z** coordinate runs along the spline, **x** is the offset along the
+normal and **y** the offset along the binormal (a cyclic shift `(x, y, z) → (N, B, T)`; the same shift in
+`spline-wrap/defaults`). Other axes follow the same cyclic rule `(along, N, B)` = `(z, x, y)` for X, `(x, y, z)` for Y,
+`(y, z, x)` for Z, a negative axis reading `−along`; **parity-pending** (only +X was observed).
+
+**The parameter `t = s/L`.** `t = from + offset + u · (to − from)` with `u = (a − min) / size`, `a` the along
+coordinate and `[min, min + size]` the box: the fixed box when `fix_bounding_box` (`center − size/2`, `size` of the
+along axis), else the object's extent along that axis. The recorded cases show `t = z` exactly (s = L·z), i.e.
+`min = 0`, `size = 1`: the reference had **no bounding box** when the scripted export evaluated the deformer (the same class of
+caveat as the solver caches in O45 Findings: the scripted evaluation lacks the parent's cache). A real box would give
+`t = (z + 100) / 200` and the cube spread over the spline; `spline-wrap/*` therefore cannot pin the box rule.
+Rule used: the object's own extent (parity-pending, from the manual's description only). The test reproduces the recorded
+situation by giving the deformer the fixed box `center (0, 0, ½)`, `size (200, 200, 1)`.
+
+`keep_length` (own design, parity-pending): `s = (from + offset) · L + (a − min)`, the object keeps its length.
+`end_mode = clamp` clamps `s` to `[0, L]` (closed splines wrap in both modes). `rotation_from_rail` off keeps the frame
+of the first vertex everywhere. `strength`: `p' = p + (strength/100) · (out − p)`.
+
+**Known mismatch (helix frame).** `spline-wrap/defaults` fixes the start and end frames of the 2-turn helix:
+`N_0 = (−0.999950, −0.007527, −0.006573)`, `B_0 = (−0.00715, 0.07942, 0.99682)` and
+`N_end = (−0.57403, 0.06944, 0.81590)`, `B_end = (0.8188, 0.03941, 0.57272)`. The chords of the extension
+(20.0) match; the frame roll does not. Three hypotheses were measured: (1) `N_0 = Z × T_0` then parallel transport
+over the polyline's averaged tangents: start roll off by −0.0066 rad (0.38°); (2) the bend direction `c_1 − c_0`
+(Sweep's rule, GENERATORS2 §10): off by −0.0138 rad; (3) transport over the raw chords from the observed start:
+the end frame is still 0.029 rad (1.7°) away from the observed end (both transports agree to 1e-4, so sampling is not
+the cause). The roll has to come from a rule not visible in the planar Arc; the case is `KNOWN_MISMATCH` and the
+extension direction `T`, the offsets' unit length and `B ⟂ N ⟂ T` are asserted instead (21).
+
+### 20.2 Spline (`forge.spline_deformer`)
+
+| Key | Label | Type | Default | Range |
+|---|---|---|---|---|
+| `original_spline` | Original Spline | link | none | spline |
+| `modifying_spline` | Modifying Spline | link | none | spline |
+| `b_spline_approximation` | B-Spline Approximation | int | 10 | 1 … 100 (accepted, not applied) |
+| `radius` | Radius | distance | 30 | ≥ 0 |
+| `use_length` | Use Length | bool | off | not applied, parity-pending |
+| `full_polygons` | Full Polygons | bool | off | not applied, parity-pending |
+
+**Derived from `spline-deformer/defaults` (162 points, Arc 0°–90° radius 200 as original, the same Arc turned 90° about Y as modifier):**
+exactly 4 points move, and they are exactly the points whose distance to the original spline is below `radius`
+(30): `(0, 200, 0)` (distance 0), `(50, 200, 0)` (6.16), `(100, 150, 0)` (19.72), `(100, 200, 0)` (23.61); the
+nearest other points are at 41 and 50. Each of them moves by `d · (0, −1, −1)` with `d` = 200, 155.526, 55.929, 38.534
+(the end point lands on the modifier's start `(0, 0, −200)`), so `d/200 = 1, 0.7776, 0.2796, 0.1927`, falling with the distance.
+These are the only facts.
+
+Own design, **parity-pending** (mismatch: the shared direction `(0, −1, −1)` and the weights are not reproduced):
+`p' = p + w · (M(f) − O(f))`, with `O(f)`, `M(f)` the original and the modifying polylines at the same arc-length fraction `f`
+(both in the deformer's space) and `f` the position of `p`'s nearest point on the original; `w = 1 − dist/radius`
+(linear through the first three points of the weights above within 0.004, the fourth is 0.05 off); points
+at or beyond `radius` do not move. Three hypotheses for the direction were tried and failed: same-fraction pairing
+(the end point would not move), reversed-fraction pairing (the end point matches, the others get an x part), and a rigid
+frame transfer (x changes). Open: what pairs the spline points.
+
+### 20.3 Spline Rail (`forge.spline_rail`)
+
+| Key | Label | Type | Default | Options |
+|---|---|---|---|---|
+| `z_spline_left`, `z_spline_right` | Z Spline Left / Right | link | none | spline |
+| `x_spline_top`, `x_spline_bottom` | X Spline Top / Bottom | link | none | accepted, not applied |
+| `reference` | Reference | link | none | accepted, not applied |
+| `mode` | Mode | enum | `unlimited` | `limited`, `within_box`, `unlimited` |
+| `size` | Size | vec3 | (200, 200, 200) | ≥ 0 |
+| `scale_before_start`, `scale_after_end` | Scale Before Start / After End | percent | 100 | – |
+
+**Derived from `spline-rail/defaults` (two Helix splines at x = −150 and x = +150, mode Unlimited, all 162 points):**
+with `u = x / size_x + ½`, `t = z / size_z + ½` and `L(t)`, `R(t)` the left and right spline at the arc-length fraction `t`,
+
+```
+p' = L(t) + u · (R(t) − L(t)) + (0, y, 0)
+```
+
+(rows `z = −100, −50, 0, 50, 100` give `t = 0 … 1` and the helix angles 0°, 180°, 360°, 540°, 720°; `x = ±100`
+land on the two splines, `x = 0` halfway; `y` is carried in the world Y direction, e.g. `Y = y − 0.2514` at `t = 1`, the Helix's end `y`).
+Unlimited continues beyond the ends as in 20.0 (`t` outside `[0, 1]`, each spline along its own end chord). The fraction runs over the vertex index (`t = k/(n−1)` is vertex `k`): the arc-length fraction of the polyline is off by 0.06 at
+`t = ¼` (the Uniform sampler ends 1e-4 short), the index fraction by under 2e-4. Outside `[0, 1]` each spline continues along its end chord by `t` (resp. `t − 1`) times its length.
+**Own design, parity-pending:** `limited` clamps `t` to `[0, 1]` and carries the rest of `z` rigidly along the mean end chord; `within_box`
+leaves points outside `|x| ≤ size_x/2, |y| ≤ size_y/2, |z| ≤ size_z/2` unchanged (all of them inside here); `scale_before_start` /
+`scale_after_end` scale the width `R − L` around its middle for `t < 0` / `t > 1`; with one Z spline only, `p' = S(t) + (x, y, 0)`; the X splines and `reference` are not applied.
+
+## 21. Parity of §20
+
+Test: `crates/modifiers/tests/spline_parity.rs`; features `spline-wrap` (2), `spline-deformer` (1), `spline-rail` (1);
+the cube is built, each linked spline from its `[params.*]` table (the splines are not in the OBJ).
+Result: **0/4 exact under the 1e-4 tolerance, all four pinned in `KNOWN_MISMATCH`** (the exact comparison must still fail):
+
+- `spline-rail/defaults`: rule derived (20.3); worst error 1.9e-4, rows `t = 0` exact. Cause: the sampled Helix itself is a known
+  mismatch of the sampler (`splines-2/helix-uniform`, GENERATORS2 §6.2); the middle rows sit at a relative `1e-7` offset along the helix.
+- `spline-wrap/arc`: rule derived (20.1), compared under the recorded degenerate box (`fix_bounding_box`, centre `(0, 0, ½)`,
+  size `(200, 200, 1)`). Rows behind the start match to 6e-5; rows beyond the end are 2.2e-3 off because the golden extends 99 spline
+  lengths and the sampler's end point differs from the reference by 6e-7 (golden `L = 314.27710692`, ours `314.27710754`; end chord
+  tilt 0.01844994 against 0.01844986). With the object's own box the case does not match (asserted): the recorded export had no box.
+- `spline-wrap/defaults`: helix frame roll (20.1, three hypotheses). Asserted instead: unit orthogonal offsets, the start extension along
+  the first sampled chord (golden and ours), start/end normals within 0.05/0.1 rad.
+- `spline-deformer/defaults`: moved set derived (exactly the points within `radius`; golden and ours equal); direction and weights
+  not (20.2). Asserted: golden moves by `d(0, −1, −1)` with `d` falling with the distance, ours the same points with falling weights.
+- `UNSUPPORTED`: none (unobserved options are accepted parameters that are not applied, listed in the tables).
+
+Follow-up cases (planner, **interactive export** so the deformer has its box and caches):
+`spline-wrap/box` (the same Arc and Helix, exported interactively: gives `t = (z+100)/200` and the real frame inside the spline),
+`spline-wrap/axis-y`, `axis-z`, `axis-neg-x` (axis mapping), `spline-wrap/keep-length`, `clamp`, `strength-50`, `offset-25`,
+`from-25-to-75`, `rotation-off`, `banking-45`, `up-vector` and a Rail link (each on the Arc with a 3-segment cube along z);
+`spline-wrap/closed` (a Circle); `spline-deformer/modifier-moved` (modifying Arc translated by (0, 50, 0), a straight original line and a
+straight modifying line so pairing is unambiguous, radius 100), `spline-deformer/radius-60`, `use-length`; `spline-rail/limited`, `within-box`,
+`scale-before-50`, `x-splines`, one-spline, and Z splines of different lengths; a plane with 10 × 10 segments for all of them.

@@ -230,7 +230,10 @@ fn resolve_helper(scene: &Scene, helper: NodeId, ctx: &EvalCtx) -> Option<PolyMe
         return None;
     }
     HELPER_DEPTH.with(|d| d.set(depth + 1));
-    let mesh = evaluate(scene, helper, ctx).ok().flatten();
+    let mesh = match splines::polyline_mesh(scene, helper) {
+        Some(line) => Some(line),
+        None => evaluate(scene, helper, ctx).ok().flatten(),
+    };
     HELPER_DEPTH.with(|d| d.set(depth));
     mesh
 }

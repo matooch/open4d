@@ -18,6 +18,7 @@ pub mod jiggle;
 pub mod melt;
 pub mod shear;
 pub mod spherify;
+pub mod spline;
 pub mod squash;
 pub mod surface;
 pub mod taper;
@@ -86,6 +87,12 @@ pub const MELT: &str = "forge.melt";
 
 /// Type id of the Mesh (cage) deformer (MODIFIERS.md §14.1).
 pub const MESH_DEFORMER: &str = "forge.mesh_deformer";
+/// Type id of the Spline Wrap deformer (MODIFIERS.md §20.1).
+pub const SPLINE_WRAP: &str = "forge.spline_wrap";
+/// Type id of the Spline deformer (MODIFIERS.md §20.2).
+pub const SPLINE_DEFORMER: &str = "forge.spline_deformer";
+/// Type id of the Spline Rail deformer (MODIFIERS.md §20.3).
+pub const SPLINE_RAIL: &str = "forge.spline_rail";
 /// Type id of the Surface deformer (MODIFIERS.md §14.2).
 pub const SURFACE_DEFORMER: &str = "forge.surface_deformer";
 /// Type id of the Camera deformer (MODIFIERS.md §14.3).
@@ -356,6 +363,148 @@ impl Deformers {
             .param(enabled_param())
     }
 
+    /// Spline Wrap: lays the object along a linked spline (MODIFIERS.md §20.1).
+    pub fn spline_wrap_type() -> NodeType {
+        NodeType::new(SPLINE_WRAP, "Spline Wrap", Category::Deformer)
+            .param(ParamDesc::link("spline", "Spline", SPLINE_OBJECTS))
+            .param(ParamDesc::link("rail", "Rail", SPLINE_OBJECTS))
+            .param(ParamDesc::enumeration(
+                "axis",
+                "Axis",
+                "pos_x",
+                &[
+                    ("pos_x", "+X"),
+                    ("neg_x", "-X"),
+                    ("pos_y", "+Y"),
+                    ("neg_y", "-Y"),
+                    ("pos_z", "+Z"),
+                    ("neg_z", "-Z"),
+                ],
+            ))
+            .param(percent("strength", "Strength", 100.0).range(0.0, f64::MAX))
+            .param(percent("offset", "Offset", 0.0))
+            .param(percent("from", "From", 0.0))
+            .param(percent("to", "To", 100.0))
+            .param(ParamDesc::enumeration(
+                "mode",
+                "Mode",
+                "fit_spline",
+                &[("fit_spline", "Fit Spline"), ("keep_length", "Keep Length")],
+            ))
+            .param(ParamDesc::enumeration(
+                "end_mode",
+                "End Mode",
+                "extend",
+                &[("clamp", "Clamp"), ("extend", "Extend")],
+            ))
+            .param(ParamDesc::bool("scale_from_rail", "Scale from Rail", false))
+            .param(percent("size_strength", "Size Strength", 100.0))
+            .param(percent(
+                "spline_size_strength",
+                "Spline Size Strength",
+                100.0,
+            ))
+            .param(ParamDesc::bool(
+                "rotation_from_rail",
+                "Rotation from Rail",
+                true,
+            ))
+            .param(ParamDesc::vec3("up_vector", "Up Vector", [0.0, 0.0, 0.0]))
+            .param(ParamDesc::float("banking", "Banking", 0.0).unit(Unit::Angle))
+            .param(percent("rotation_strength", "Rotation Strength", 100.0))
+            .param(percent(
+                "spline_rotation_strength",
+                "Spline Rotation Strength",
+                100.0,
+            ))
+            .param(ParamDesc::bool(
+                "fix_bounding_box",
+                "Fix Bounding Box",
+                false,
+            ))
+            .param(ParamDesc::vec3(
+                "bounding_box_center",
+                "Bounding Box Center",
+                [0.0, 0.0, 0.0],
+            ))
+            .param(ParamDesc::vec3(
+                "bounding_box_size",
+                "Bounding Box Size",
+                [200.0, 200.0, 200.0],
+            ))
+            .param(fields_param())
+            .param(enabled_param())
+    }
+
+    /// Spline: follows the change from an original to a modifying spline (MODIFIERS.md §20.2).
+    pub fn spline_deformer_type() -> NodeType {
+        NodeType::new(SPLINE_DEFORMER, "Spline", Category::Deformer)
+            .param(ParamDesc::link(
+                "original_spline",
+                "Original Spline",
+                SPLINE_OBJECTS,
+            ))
+            .param(ParamDesc::link(
+                "modifying_spline",
+                "Modifying Spline",
+                SPLINE_OBJECTS,
+            ))
+            .param(
+                ParamDesc::int("b_spline_approximation", "B-Spline Approximation", 10)
+                    .range(1, 100),
+            )
+            .param(
+                ParamDesc::float("radius", "Radius", 30.0)
+                    .range(0.0, f64::MAX)
+                    .unit(Unit::Distance),
+            )
+            .param(ParamDesc::bool("use_length", "Use Length", false))
+            .param(ParamDesc::bool("full_polygons", "Full Polygons", false))
+            .param(fields_param())
+            .param(enabled_param())
+    }
+
+    /// Spline Rail: spreads the object between two Z splines (MODIFIERS.md §20.3).
+    pub fn spline_rail_type() -> NodeType {
+        NodeType::new(SPLINE_RAIL, "Spline Rail", Category::Deformer)
+            .param(ParamDesc::link(
+                "z_spline_left",
+                "Z Spline Left",
+                SPLINE_OBJECTS,
+            ))
+            .param(ParamDesc::link(
+                "z_spline_right",
+                "Z Spline Right",
+                SPLINE_OBJECTS,
+            ))
+            .param(ParamDesc::link(
+                "x_spline_top",
+                "X Spline Top",
+                SPLINE_OBJECTS,
+            ))
+            .param(ParamDesc::link(
+                "x_spline_bottom",
+                "X Spline Bottom",
+                SPLINE_OBJECTS,
+            ))
+            .param(ParamDesc::link("reference", "Reference", HELPER_OBJECTS))
+            .param(ParamDesc::enumeration(
+                "mode",
+                "Mode",
+                "unlimited",
+                &[
+                    ("limited", "Limited"),
+                    ("within_box", "Within Box"),
+                    ("unlimited", "Unlimited"),
+                ],
+            ))
+            .param(box_param())
+            .param(percent("scale_before_start", "Scale Before Start", 100.0))
+            .param(percent("scale_after_end", "Scale After End", 100.0))
+            .param(fields_param())
+            .param(enabled_param())
+    }
+
     /// Mesh (cage): mean value coordinates of the linked cages (MODIFIERS.md §14.1).
     pub fn mesh_deformer_type() -> NodeType {
         NodeType::new(MESH_DEFORMER, "Mesh", Category::Deformer)
@@ -451,6 +600,9 @@ impl Deformers {
 /// Objects a helper link may point to (cages, surfaces, cameras, colliders).
 const HELPER_OBJECTS: &[Category] = &[Category::Object, Category::Generator];
 
+/// Objects a spline link may point to (splines are generators).
+const SPLINE_OBJECTS: &[Category] = &[Category::Generator];
+
 fn percent(id: &str, label: &str, default: f64) -> ParamDesc {
     ParamDesc::float(id, label, default).unit(Unit::Percent)
 }
@@ -512,6 +664,9 @@ impl Plugin for Deformers {
         r.register(Deformers::ffd_type())?;
         r.register(Deformers::formula_type())?;
         r.register(Deformers::melt_type())?;
+        r.register(Deformers::spline_wrap_type())?;
+        r.register(Deformers::spline_deformer_type())?;
+        r.register(Deformers::spline_rail_type())?;
         r.register(Deformers::mesh_deformer_type())?;
         r.register(Deformers::surface_deformer_type())?;
         r.register(Deformers::camera_deformer_type())?;
@@ -755,6 +910,12 @@ pub fn apply_deformer_resolved(
 ) {
     if scene
         .node(deformer)
+        .is_some_and(|n| is_spline_type(&n.type_id))
+    {
+        return apply_spline(scene, deformer, target, mesh, ctx, resolve);
+    }
+    if scene
+        .node(deformer)
         .is_some_and(|n| is_helper_type(&n.type_id))
     {
         return apply_helper(scene, deformer, target, mesh, ctx, resolve);
@@ -797,6 +958,130 @@ pub fn apply_deformer_resolved(
     for q in mesh.points.iter_mut() {
         *q = to_target.transform_point3(*q);
     }
+}
+
+fn is_spline_type(id: &str) -> bool {
+    matches!(id, SPLINE_WRAP | SPLINE_DEFORMER | SPLINE_RAIL)
+}
+
+/// The polyline of the spline linked by `deformer`'s `key`, in `dw_inv`'s space (the
+/// deformer's local space).
+fn linked_polyline(
+    scene: &Scene,
+    deformer: NodeId,
+    key: &str,
+    dw_inv: DMat4,
+    resolve: Resolver,
+) -> Option<spline::Polyline> {
+    let id = helper::link(scene, deformer, key)?;
+    let mesh = resolve(id)?;
+    let to_deformer = dw_inv * scene.world_matrix(id)?;
+    spline::Polyline::from_mesh(&mesh, |p| to_deformer.transform_point3(p))
+}
+
+/// Runs Spline Wrap, Spline or Spline Rail on `mesh` (points in `target` space), working in
+/// the deformer's local space (MODIFIERS.md §20).
+fn apply_spline(
+    scene: &Scene,
+    deformer: NodeId,
+    target: NodeId,
+    mesh: &mut PolyMesh,
+    ctx: &EvalCtx,
+    resolve: Resolver,
+) {
+    let (Some(node), Some(ty)) = (scene.node(deformer), scene.node_type(deformer)) else {
+        return;
+    };
+    if !is_enabled(ty, node) || !forge_core::layers::deformers_on(scene, deformer) {
+        return;
+    }
+    let params = &node.params;
+    let (Some(tw), Some(dw)) = (scene.world_matrix(target), scene.world_matrix(deformer)) else {
+        return;
+    };
+    let (Some(dw_inv), Some(tw_inv)) = (helper::inverse(dw), helper::inverse(tw)) else {
+        return;
+    };
+    let to_deformer = dw_inv * tw;
+    let Some(back) = helper::inverse(to_deformer) else {
+        return;
+    };
+    let before = mesh.points.clone();
+    let mut pts: Vec<DVec3> = before
+        .iter()
+        .map(|p| to_deformer.transform_point3(*p))
+        .collect();
+    let line = |key: &str| linked_polyline(scene, deformer, key, dw_inv, resolve);
+    match node.type_id.as_str() {
+        SPLINE_WRAP => {
+            let Some(path) = line("spline") else {
+                return;
+            };
+            let axis = match read_enum(ty, params, "axis").as_str() {
+                "neg_x" => (0, true),
+                "pos_y" => (1, false),
+                "neg_y" => (1, true),
+                "pos_z" => (2, false),
+                "neg_z" => (2, true),
+                _ => (0, false),
+            };
+            let pct = |id: &str| read_float(ty, params, id) / 100.0;
+            let fixed_box = read_bool(ty, params, "fix_bounding_box").then(|| {
+                (
+                    read_vec3(ty, params, "bounding_box_center"),
+                    read_vec3(ty, params, "bounding_box_size"),
+                )
+            });
+            let p = spline::WrapParams {
+                axis: spline::WrapAxis {
+                    index: axis.0,
+                    negative: axis.1,
+                },
+                strength: pct("strength"),
+                offset: pct("offset"),
+                from: pct("from"),
+                to: pct("to"),
+                keep_length: read_enum(ty, params, "mode") == "keep_length",
+                extend: read_enum(ty, params, "end_mode") != "clamp",
+                rotate: read_bool(ty, params, "rotation_from_rail"),
+                fixed_box,
+            };
+            spline::spline_wrap(&mut pts, &path, &p);
+        }
+        SPLINE_DEFORMER => {
+            let (Some(original), Some(modifying)) =
+                (line("original_spline"), line("modifying_spline"))
+            else {
+                return;
+            };
+            let p = spline::SplineDeformParams {
+                radius: read_float(ty, params, "radius"),
+            };
+            spline::spline_deform(&mut pts, &original, &modifying, &p);
+        }
+        _ => {
+            let (left, right) = (line("z_spline_left"), line("z_spline_right"));
+            let mode = match read_enum(ty, params, "mode").as_str() {
+                "limited" => spline::RailMode::Limited,
+                "within_box" => spline::RailMode::WithinBox,
+                _ => spline::RailMode::Unlimited,
+            };
+            let p = spline::RailParams {
+                mode,
+                size: read_vec3(ty, params, "size"),
+                scale_before: read_float(ty, params, "scale_before_start") / 100.0,
+                scale_after: read_float(ty, params, "scale_after_end") / 100.0,
+            };
+            spline::spline_rail(&mut pts, left.as_ref(), right.as_ref(), &p);
+        }
+    }
+    let weights = falloff(scene, deformer, tw, &before, ctx).ok().flatten();
+    for (i, (q, p0)) in pts.iter().zip(&before).enumerate() {
+        let new = back.transform_point3(*q);
+        let w = weights.as_ref().map_or(1.0, |w| w[i]);
+        mesh.points[i] = *p0 + (new - *p0) * w;
+    }
+    let _ = tw_inv;
 }
 
 fn is_helper_type(id: &str) -> bool {
