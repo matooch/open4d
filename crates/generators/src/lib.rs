@@ -209,11 +209,30 @@ pub fn build(type_id: &str, values: &BTreeMap<String, Value>) -> Result<PolyMesh
 pub fn evaluate(scene: &Scene, id: NodeId, ctx: &EvalCtx) -> Result<Option<PolyMesh>, BuildError> {
     let mut mesh = evaluate_geometry(scene, id, ctx)?;
     if let Some(mesh) = mesh.as_mut() {
+        let resolve = |helper: NodeId| resolve_helper(scene, helper, ctx);
         for d in deformer_children(scene, id) {
-            forge_modifiers::apply_deformer_mesh(scene, d, id, mesh, ctx);
+            forge_modifiers::apply_deformer_resolved(scene, d, id, mesh, ctx, &resolve);
         }
     }
     Ok(mesh)
+}
+
+thread_local! {
+    /// Nesting depth of helper evaluations (a deformer whose helper is deformed by itself).
+    static HELPER_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// The mesh of a helper object a deformer links (cage, surface, collider), deformers
+/// included; `None` past a nesting depth of 4 (a helper that depends on its own deformer).
+fn resolve_helper(scene: &Scene, helper: NodeId, ctx: &EvalCtx) -> Option<PolyMesh> {
+    let depth = HELPER_DEPTH.with(|d| d.get());
+    if depth >= 4 {
+        return None;
+    }
+    HELPER_DEPTH.with(|d| d.set(depth + 1));
+    let mesh = evaluate(scene, helper, ctx).ok().flatten();
+    HELPER_DEPTH.with(|d| d.set(depth));
+    mesh
 }
 
 /// [`evaluate`] without the deformers: used where only the presence of geometry

@@ -5,7 +5,8 @@
 
 Bend, Twist, Taper, Bulge, Shear, Spherify, Squash & Stretch and Wrap are specified below
 (§0–7, §9); falloff is §10; Explosion, Shatter and Wind are §11–12 (brief 053, source
-docs/parity/deformers-3.md O19). Sources:
+docs/parity/deformers-3.md O19); Mesh (cage), Surface, Camera, Collision, Jiggle, Delta Mush
+and Correction are §14–15 (brief 056, source docs/parity/deformers-4.md O45). Sources:
 docs/parity/{bend,twist,deformer-common,taper,bulge,shear,spherify,deformers-2,followups-1}.md and their golden
 cases. Everything else is still a checklist item.
 
@@ -718,3 +719,214 @@ Test: `crates/modifiers/tests/destructive_parity.rs`, features `explosion` (2), 
 (2), `wind` (1). Exact (`export_weld`, `compare_meshes`): `explosion/defaults`,
 `shatter/defaults`. `KNOWN_MISMATCH` (statistical checks pass instead): `explosion/strength-50`,
 `shatter/strength-50` (random stream), `wind/frame-10` (noise function).
+
+## 14. Cage, Surface, Camera, Collision, Jiggle, Delta Mush, Correction deformers (brief 056)
+
+Source: O45 [deformers-4.md](../parity/deformers-4.md); golden `tests/golden/{mesh-deformer,
+surface,camera-deformer,collision,jiggle,delta-mush,correction}` (8 cases, observation level
+A for `correction/defaults` and `delta-mush/defaults`, otherwise see below).
+
+**What the data shows.** The observer's scripted export did not run the helper-driven
+deformers (O45 Findings): `mesh-deformer/cage`, `surface/defaults`, `camera-deformer/grid`,
+`collision/sphere`, `jiggle/frame-10`, `jiggle/frame-20` all export the **undeformed** (or
+rigidly moved) cube, so the reference maths of those six cannot be read from them. The
+algorithms below are therefore **ours** (planner design decisions of brief 056 plus
+public literature), everything about them is **parity-pending**, and the cases are pinned
+in `KNOWN_MISMATCH` with invariants (§15), except `camera-deformer/grid`, which matches
+only because the recorded camera pose (rotated 45°) keeps the cube outside our grid (it does not
+exercise the grid; §15). The two substantive exact cases are the ones whose
+reference result is fully determined without a solver: `correction/defaults` (Bend, then
+the stored offset of point 0) and `delta-mush/defaults` (initialised on the deformed pose,
+so the output is the input).
+
+Common: all seven carry `fields` (§10) and `enabled` (§0). They run in the points-and-mesh
+path `apply_deformer_resolved` (`apply_deformer_mesh` is the same without linked meshes).
+The generator layer hands the deformer a **resolver** `NodeId -> Option<PolyMesh>` that
+evaluates a linked helper object (with its own deformers, cycle-guarded); the deformer takes
+the mesh to world space with the helper's world matrix. Every deformer works in world space:
+`P = world(target) · p`, result `world(target)⁻¹ · P'`. A linked object that is missing, has
+no mesh, or a stored `bind` of the wrong length, leaves the points alone. Falloff:
+`p' = p + w·(deform(p) − p)` as in §10. Percent params store the number the app shows.
+Strength: `p' = p + s·(deform(p) − p)`, `s = strength/100`.
+
+*Data params* (hidden, non-animatable `Vec3List`, written by the Initialize / Update actions of
+the reference, here by the caller): `bind` (Mesh, Surface, Delta Mush), `offsets` (Camera),
+`reference` and `offsets` (Correction). An empty list means "not initialised"; the bind
+state is then the current state, i.e. the identity deformation.
+
+### 14.1 Mesh (`forge.mesh_deformer`), cage with mean value coordinates
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `cages` | Cages | link list (objects) | empty |
+| `strength` | Strength | percent | 100 |
+| `bind` | (Initialize data) | Vec3List | empty |
+
+Reference table (O45): Auto Init, Memory, Accuracy, External are **not implemented**
+(Accuracy has no analogue: the weights are exact). `bind` = the cage's world points at
+Initialize. For each point `p` (world) and each cage, the weights `w_i(p)` of the **bind**
+cage (triangulated with `triangulate_poly`) are the mean value coordinates of Ju, Schaefer,
+Warren 2005 (per triangle `θ_m = 2 asin(l_m/2)` of the unit-sphere edge lengths,
+`c_m`, `s_m`, `w_m = (θ_m − c_{m+1}θ_{m+2} − c_{m+2}θ_{m+1}) / (d_m sin θ_{m+1} s_{m+2})`),
+**normalised to sum 1** (which also fixes an inside-out cage). A point on a cage vertex takes that
+vertex, a point in a triangle's plane takes the 2-D barycentric weights. Then
+`p' = Σ w_i · c_i` with `c_i` the **current** cage points. With several cages they apply in order.
+Proof properties (unit tests): the identity when the cage is unmoved; a cage translation
+translates every point; a uniform cage scale scales it (linear precision of MVC).
+Case `mesh-deformer/cage`: cage 300×500×300 (1/1/1), cage point 0 moved by (−100, 0, 0) after
+Initialize. The reference export is the undeformed cube, ours moves the points near cage point 0.
+
+### 14.2 Surface (`forge.surface_deformer`), projection
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `surface` | Surface | link (object) | none |
+| `strength` | Strength | percent | 100 |
+| `proportional` | Proportional | bool | off |
+| `bind` | (Initialize data) | Vec3List | empty |
+
+Type `Projection` only; `Mapping (U,V)` / `(V,U)` are **not implemented** (no UVs in the
+mesh; `type` is not a param). `bind` = the surface's world points at Initialize. Each point is
+bound to the nearest point `q` of the bind surface's triangles: triangle `t`, barycentric
+`b`, and the offset `p − q` in the triangle frame `(e1, n×e1, n)` with `e1 = normalize(B − A)`,
+`n` the triangle normal. The result is `Σ b_i · C_i + frame_now · offset`, with `C_i` the current
+surface points. `proportional` scales the offset by `sqrt(area_now / area_bind)` of the triangle.
+Case `surface/defaults`: plane 400×400 (10×10) at y 250 with a Bend 90° child, Initialize on the flat
+plane. The golden plane is exported bent (matched by our Plane + Bend); the cube is exported
+undeformed.
+
+### 14.3 Camera (`forge.camera_deformer`), screen-space grid
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `camera` | Camera | link (object) | none |
+| `strength` | Strength | percent | 100 |
+| `grid_x`, `grid_y` | Grid X, Y | int | 32 (1…256) |
+| `offsets` | (grid point offsets) | Vec3List | empty (all zero) |
+
+The camera is any linked object: its world matrix is the camera frame, looking along +z
+(there is no camera object type yet, so no field of view is needed). A point in camera space
+`c` with `c_z > 0` has screen coordinates `u = c_x/c_z`, `v = c_y/c_z`. The grid covers
+`u, v ∈ [−0.75, 0.75]` with `(grid_x+1)·(grid_y+1)` points, row-major (`index = j·(grid_x+1)+i`,
+`i` along u from −0.75). The grid point offsets are screen units **at distance 1000**; a point at depth `c_z`
+moves in camera space by `bilinear(offsets)(u, v) · c_z/1000` along x and y (z unchanged). Outside the grid
+nothing moves. **Fitted from `camera-deformer/grid`**: `grid_points = 1089 = 33²`, and the
+before position of the edited point `[−46.875, −46.875, 1000]` is a multiple of `1500/32 = 46.875`:
+a square grid of half-extent `0.75 · 1000` at distance 1000 (index 15 on both axes — the form calls it
+point (1, 1) / index 34, which does not fit 33 points per row: **open question**, the test uses the
+grid point nearest to the recorded position). `safe_frame`, `draw_grid` are display only. The
+reference export is the undeformed cube; ours equals it, **vacuously**: with the recorded camera
+(at (0, 0, −800), rotated H 45° / P −19.45°) the cube lies outside the grid. The test therefore also
+runs the same grid point with the camera unrotated and asserts a move in (1, 50] cm.
+
+### 14.4 Collision (`forge.collision`), push out of collider volumes
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `colliders` | Objects | link list (objects) | empty |
+| `offset` | Offset | distance | 0 |
+| `strength` | Strength | percent | 100 |
+
+Reference Solver options (Inside, Inside (Stretch), Outside, Outside (Volume), Intersect), Falloff,
+Stretch/Relax and the cache group are **not implemented**; the single behaviour is the planner's
+"push points out of collider volumes". A collider is a closed mesh (orientation fixed by the sign
+of its signed volume). A world point is *inside* when a ray along the fixed direction
+`(1, 0.0123, 0.0071)` crosses an odd number of triangles. Let `q` be the closest surface point, `n`
+the outward normal (the triangle normal; `(p − q)/|p − q|` when `p` is outside and `|p − q| > 1e-9`).
+If `p` is inside, or outside closer than `offset`: `p' = q + n·offset`. Several colliders apply in order.
+Case `collision/sphere`: a sphere r 100 at (150, 0, 0) cuts the cube's +x side (x > 50 inside it);
+the reference export keeps the cube undeformed (O45: no solver cache). Invariant on ours: no point
+is strictly inside the sphere, untouched points are unchanged.
+
+### 14.5 Jiggle (`forge.jiggle`), spring simulation with a deterministic per-frame cache
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `strength` | Strength | percent | 100 |
+| `stiffness` | Stiffness | percent | 40 |
+| `structural` | Structural | percent | 100 |
+| `drag` | Drag | percent | 10 |
+| `motion_scale` | Motion Scale | percent | 100 |
+| `springs` | Springs | int | 4 |
+| `iterations` | Iterations | int | 4 (1…1000) |
+| `gravity` | Gravity | float | 0 |
+| `local` | Local | bool | off |
+| `cache` | Cache | int | 20 (1…1000) |
+
+`On Stopped`, the vertex-map links, Restrict, Forces and the cache buttons are **not implemented**.
+Level C: the reference exports of `jiggle/frame-10` and `frame-20` are the rigidly moved cube (the
+solver cache was not built), so the model is ours. **The simulation is a pure function of
+(scene, frame)**, so it is reproducible without hidden state; the "cache" is the window of frames it
+replays: with `f = round(time·fps)` and `s = max(0, f − cache)` the state at frame `s` is at rest
+(`x = T`, `v = 0`) and frames `s+1 … f` are stepped, the target world matrix of an earlier frame
+`k` being read from `forge_anim::scene_at(scene, k/fps)` (the same document, tracks evaluated at `k`).
+Per frame: target `T_i = P0_i + m·(W_k r_i − P0_i)`, `m = motion_scale/100`, `r_i` the input point (target space),
+`W_k` the target's world matrix, `P0_i = W_s r_i`. `iterations` substeps of `h = 1/(fps·iterations)`:
+`a = ω²(T − x) + g·(0, −1, 0)`, `ω² = 2000·stiffness/100`, `v += a·h`, `v *= (1 − drag/100)^(1/iterations)`,
+`x += v·h`; after each substep `springs` Jacobi passes on the displacement `d = x − T`:
+`d_i += 0.5·(structural/100)·(mean_{j ∈ N(i)} d_j − d_i)`, `N(i)` the edge neighbours.
+Output `T + strength/100·(x − T)` taken back by `W_f⁻¹`. `local` simulates in the target's space
+with a constant target `r` (the object's motion is ignored; only gravity moves the points).
+Invariants (unit tests and `jiggle/*`): frame 0 and a static object give the input; with a constant
+velocity the points lag behind the rigid motion; the result is identical on every call; strength 0 is rigid.
+
+### 14.6 Delta Mush (`forge.delta_mush`)
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `strength` | Strength | percent | 100 |
+| `iterations` | Iterations | int | 10 (≥ 0) |
+| `pin_border_points` | Pin Border Points | bool | off |
+| `bind` | (Initialize data) | Vec3List | empty |
+
+`Smooth View`, `Tangent Mode` (only Edge is implemented), `Smooth Type`, `Mode`/`Tags` are **not
+implemented**. `S(x)`: `iterations` Jacobi steps `x_i ← ½x_i + ½·mean_{j∈N(i)} x_j` (border points
+fixed when `pin_border_points`; a border point is on an edge that has one polygon). Per point the
+frame `F(x) = (t, b, n)`: `n` the normalised sum of the Newell normals of its polygons on the smoothed mesh, `t` the unit
+projection of the edge to the lowest-index neighbour on the plane ⟂ `n`, `b = n × t`. At Initialize
+(the bind pose) `δ_i = F_i(S(bind))ᵀ (bind_i − S(bind)_i)` is stored in the frame; now
+`p'_i = S(p)_i + F_i(S(p)) δ_i`. At the bind pose `p' = p` exactly (the frame cancels), which is
+`delta-mush/defaults`: the cube was edited (point 0 moved by (80, 80, 80)) *then* Delta Mush was
+added and initialised, so the golden is the edited cube: matched. A pose change smooths out
+differences and keeps the detail.
+
+### 14.7 Correction (`forge.correction`)
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `mapping` | Mapping | enum `uv`, `nearest`, `normals` | `nearest` |
+| `strength` | Strength | percent | 100 |
+| `reference` | (state at Update) | Vec3List | empty |
+| `offsets` | (corrected point offsets) | Vec3List | empty |
+
+`Lock`, `Scale` are **not implemented**. At Update the deformed points of the deformers above are
+stored as `reference` (target space) and the corrections edited through the point list are
+`offsets` (one per reference point, zero by default). Evaluation (after the deformers above it, tree
+order, §0): `p'_i = p_i + s·offsets[k(i)]`, with `k(i)` the reference point matched by the mapping:
+`nearest` and `normals` the nearest reference point to `p_i` (lowest index on a tie),
+`uv` the same index (`k(i) = i`, the topology is unchanged). `normals` as a distinct rule is
+parity-pending. Case `correction/defaults`: under Bend 90° the corrected point 0 (at (−100, −200, −100),
+below the Bend box, so unmoved by it) edited by (+50, 0, 0) gives point 0 at (−50, −200, −100) and every other
+point as the plain Bend: all 162 points matched.
+
+## 15. Parity of §14
+
+Test: `crates/modifiers/tests/helper_parity.rs`, features `mesh-deformer`, `surface`,
+`camera-deformer`, `collision`, `jiggle` (2), `delta-mush`, `correction` (8 cases; 3 exact, 5 pinned). Cases are compared
+the way the reference exports a scene: helper objects first (they leak into the OBJ, O45 Findings), then the
+cube (`export_weld`).
+
+- Exact: `correction/defaults`, `delta-mush/defaults`, and (vacuously, see §14.3) `camera-deformer/grid`.
+- `KNOWN_MISMATCH` (the reference scripted export did not deform, so ours — which does — differs; the exact
+  comparison must still fail and the invariants below hold on ours and on the golden): `mesh-deformer/cage`,
+  `surface/defaults`, `collision/sphere`, `jiggle/frame-10`, `jiggle/frame-20`.
+  - helper part: the leaked cage, the bent plane and the collider sphere equal the golden (ours, exactly);
+  - the golden cube equals the undeformed cube (resp. the rigidly moved cube for Jiggle);
+  - ours: topology preserved, points finite, plus the per-deformer invariant of §14.
+- `UNSUPPORTED`: none (unobserved options are not parameters).
+- Follow-up case suggestions, to be recorded interactively with the solver caches built: Mesh with the cage
+  point moved by (0, 100, 0) and by uniform scale, and with Accuracy 1; Surface with the plane tilted 30° and with
+  Proportional on; Camera grid point (16, 16) moved and two points moved, camera rotated; Collision with Solver
+  Outside and Inside on a cube collider and Distance 0 / 50, Strength 50 %; Jiggle on a plane keyed over 0–5 frames with
+  Stiffness 100 %, Drag 0 and 100 %, Gravity −980, one export per frame 1…8 (the lag curve); Delta Mush with Iterations 0 and 1
+  and a bent pose (Bend 90 above, Initialize before the bend); Correction with Mapping UV and Normals, Strength 50 %.

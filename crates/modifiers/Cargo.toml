@@ -8,6 +8,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+forge-anim = { path = "../anim" }
 forge-core = { path = "../core" }
 forge-fields = { path = "../fields" }
 forge-geometry = { path = "../geometry" }

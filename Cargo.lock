@@ -1643,6 +1643,7 @@ dependencies = [
 name = "forge-modifiers"
 version = "0.1.0"
 dependencies = [
+ "forge-anim",
  "forge-core",
  "forge-fields",
  "forge-generators",

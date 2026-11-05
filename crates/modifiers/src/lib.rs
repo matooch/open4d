@@ -4,11 +4,19 @@
 
 pub mod bend;
 pub mod bulge;
+pub mod cage;
+pub mod camera;
+pub mod collision;
 pub mod common;
+pub mod correction;
+pub mod delta_mush;
 pub mod explosion;
+pub mod helper;
+pub mod jiggle;
 pub mod shear;
 pub mod spherify;
 pub mod squash;
+pub mod surface;
 pub mod taper;
 pub mod twist;
 pub mod wind;
@@ -29,6 +37,7 @@ use crate::common::{
     TaperParams, TwistParams, WrapParams, read_bool, read_enum, read_float, read_vec3,
 };
 use crate::explosion::{BlastParams, Kind, blast};
+pub use crate::helper::Resolver;
 use crate::shear::shear;
 use crate::spherify::spherify;
 use crate::squash::squash_stretch;
@@ -60,6 +69,21 @@ pub const EXPLOSION: &str = "forge.explosion";
 pub const SHATTER: &str = "forge.shatter";
 /// Type id of the Wind deformer (MODIFIERS.md §12).
 pub const WIND: &str = "forge.wind";
+
+/// Type id of the Mesh (cage) deformer (MODIFIERS.md §14.1).
+pub const MESH_DEFORMER: &str = "forge.mesh_deformer";
+/// Type id of the Surface deformer (MODIFIERS.md §14.2).
+pub const SURFACE_DEFORMER: &str = "forge.surface_deformer";
+/// Type id of the Camera deformer (MODIFIERS.md §14.3).
+pub const CAMERA_DEFORMER: &str = "forge.camera_deformer";
+/// Type id of the Collision deformer (MODIFIERS.md §14.4).
+pub const COLLISION: &str = "forge.collision";
+/// Type id of the Jiggle deformer (MODIFIERS.md §14.5).
+pub const JIGGLE: &str = "forge.jiggle";
+/// Type id of the Delta Mush deformer (MODIFIERS.md §14.6).
+pub const DELTA_MUSH: &str = "forge.delta_mush";
+/// Type id of the Correction deformer (MODIFIERS.md §14.7).
+pub const CORRECTION: &str = "forge.correction";
 
 /// The deformer node types.
 pub struct Deformers;
@@ -262,6 +286,104 @@ impl Deformers {
             .param(fields_param())
             .param(enabled_param())
     }
+
+    /// Mesh (cage): mean value coordinates of the linked cages (MODIFIERS.md §14.1).
+    pub fn mesh_deformer_type() -> NodeType {
+        NodeType::new(MESH_DEFORMER, "Mesh", Category::Deformer)
+            .param(ParamDesc::link_list("cages", "Cages", HELPER_OBJECTS))
+            .param(percent("strength", "Strength", 100.0))
+            .param(ParamDesc::vec3_list("bind", "Bind"))
+            .param(fields_param())
+            .param(enabled_param())
+    }
+
+    /// Surface: follows a linked surface, projection type (MODIFIERS.md §14.2).
+    pub fn surface_deformer_type() -> NodeType {
+        NodeType::new(SURFACE_DEFORMER, "Surface", Category::Deformer)
+            .param(ParamDesc::link("surface", "Surface", HELPER_OBJECTS))
+            .param(percent("strength", "Strength", 100.0))
+            .param(ParamDesc::bool("proportional", "Proportional", false))
+            .param(ParamDesc::vec3_list("bind", "Bind"))
+            .param(fields_param())
+            .param(enabled_param())
+    }
+
+    /// Camera: a grid in screen space seen from a linked camera (MODIFIERS.md §14.3).
+    pub fn camera_deformer_type() -> NodeType {
+        NodeType::new(CAMERA_DEFORMER, "Camera", Category::Deformer)
+            .param(ParamDesc::link("camera", "Camera", HELPER_OBJECTS))
+            .param(percent("strength", "Strength", 100.0))
+            .param(ParamDesc::int("grid_x", "Grid X", 32).range(1, 256))
+            .param(ParamDesc::int("grid_y", "Grid Y", 32).range(1, 256))
+            .param(ParamDesc::vec3_list("offsets", "Grid offsets"))
+            .param(fields_param())
+            .param(enabled_param())
+    }
+
+    /// Collision: pushes points out of the linked colliders (MODIFIERS.md §14.4).
+    pub fn collision_type() -> NodeType {
+        NodeType::new(COLLISION, "Collision", Category::Deformer)
+            .param(ParamDesc::link_list("colliders", "Objects", HELPER_OBJECTS))
+            .param(ParamDesc::float("offset", "Offset", 0.0).range(0.0, f64::MAX))
+            .param(percent("strength", "Strength", 100.0))
+            .param(fields_param())
+            .param(enabled_param())
+    }
+
+    /// Jiggle: spring simulation over the frames (MODIFIERS.md §14.5).
+    pub fn jiggle_type() -> NodeType {
+        NodeType::new(JIGGLE, "Jiggle", Category::Deformer)
+            .param(percent("strength", "Strength", 100.0).range(0.0, f64::MAX))
+            .param(percent("stiffness", "Stiffness", 40.0).range(0.0, 100.0))
+            .param(percent("structural", "Structural", 100.0).range(0.0, 100.0))
+            .param(percent("drag", "Drag", 10.0).range(0.0, 100.0))
+            .param(percent("motion_scale", "Motion Scale", 100.0).range(0.0, f64::MAX))
+            .param(ParamDesc::int("springs", "Springs", 4).range(0, 100))
+            .param(ParamDesc::int("iterations", "Iterations", 4).range(1, 1000))
+            .param(ParamDesc::float("gravity", "Gravity", 0.0))
+            .param(ParamDesc::bool("local", "Local", false))
+            .param(ParamDesc::int("cache", "Cache", 20).range(1, 1000))
+            .param(fields_param())
+            .param(enabled_param())
+    }
+
+    /// Delta Mush: smoothing plus stored deltas (MODIFIERS.md §14.6).
+    pub fn delta_mush_type() -> NodeType {
+        NodeType::new(DELTA_MUSH, "Delta Mush", Category::Deformer)
+            .param(percent("strength", "Strength", 100.0))
+            .param(ParamDesc::int("iterations", "Iterations", 10).range(0, 1000))
+            .param(ParamDesc::bool(
+                "pin_border_points",
+                "Pin Border Points",
+                false,
+            ))
+            .param(ParamDesc::vec3_list("bind", "Bind"))
+            .param(fields_param())
+            .param(enabled_param())
+    }
+
+    /// Correction: stored point offsets after the deformers above it (MODIFIERS.md §14.7).
+    pub fn correction_type() -> NodeType {
+        NodeType::new(CORRECTION, "Correction", Category::Deformer)
+            .param(ParamDesc::enumeration(
+                "mapping",
+                "Mapping",
+                "nearest",
+                &[("uv", "UV"), ("nearest", "Nearest"), ("normals", "Normals")],
+            ))
+            .param(percent("strength", "Strength", 100.0))
+            .param(ParamDesc::vec3_list("reference", "Reference"))
+            .param(ParamDesc::vec3_list("offsets", "Offsets"))
+            .param(fields_param())
+            .param(enabled_param())
+    }
+}
+
+/// Objects a helper link may point to (cages, surfaces, cameras, colliders).
+const HELPER_OBJECTS: &[Category] = &[Category::Object, Category::Generator];
+
+fn percent(id: &str, label: &str, default: f64) -> ParamDesc {
+    ParamDesc::float(id, label, default).unit(Unit::Percent)
 }
 
 fn box_param() -> ParamDesc {
@@ -318,6 +440,13 @@ impl Plugin for Deformers {
         r.register(Deformers::explosion_type())?;
         r.register(Deformers::shatter_type())?;
         r.register(Deformers::wind_type())?;
+        r.register(Deformers::mesh_deformer_type())?;
+        r.register(Deformers::surface_deformer_type())?;
+        r.register(Deformers::camera_deformer_type())?;
+        r.register(Deformers::collision_type())?;
+        r.register(Deformers::jiggle_type())?;
+        r.register(Deformers::delta_mush_type())?;
+        r.register(Deformers::correction_type())?;
         Ok(())
     }
 }
@@ -494,7 +623,9 @@ pub fn apply_deformer(
 }
 
 /// [`apply_deformer`] for a whole mesh: Explosion and Shatter split the mesh into its
-/// polygons (MODIFIERS.md §11), every other deformer moves the points only.
+/// polygons (MODIFIERS.md §11), every other deformer moves the points only. The
+/// helper-driven deformers (§14) see no linked objects here: see
+/// [`apply_deformer_resolved`].
 pub fn apply_deformer_mesh(
     scene: &Scene,
     deformer: NodeId,
@@ -502,6 +633,26 @@ pub fn apply_deformer_mesh(
     mesh: &mut PolyMesh,
     ctx: &EvalCtx,
 ) {
+    apply_deformer_resolved(scene, deformer, target, mesh, ctx, &|_| None)
+}
+
+/// [`apply_deformer_mesh`] with a `resolve` function that evaluates a linked helper object
+/// (cage, surface, collider) to its local-space mesh; the helper-driven deformers of
+/// MODIFIERS.md §14 need it.
+pub fn apply_deformer_resolved(
+    scene: &Scene,
+    deformer: NodeId,
+    target: NodeId,
+    mesh: &mut PolyMesh,
+    ctx: &EvalCtx,
+    resolve: Resolver,
+) {
+    if scene
+        .node(deformer)
+        .is_some_and(|n| is_helper_type(&n.type_id))
+    {
+        return apply_helper(scene, deformer, target, mesh, ctx, resolve);
+    }
     let kind = match scene.node(deformer).map(|n| n.type_id.as_str()) {
         Some(EXPLOSION) => Kind::Explosion,
         Some(SHATTER) => Kind::Shatter,
@@ -539,6 +690,197 @@ pub fn apply_deformer_mesh(
     blast(mesh, kind, &p, ctx.seed);
     for q in mesh.points.iter_mut() {
         *q = to_target.transform_point3(*q);
+    }
+}
+
+fn is_helper_type(id: &str) -> bool {
+    matches!(
+        id,
+        MESH_DEFORMER
+            | SURFACE_DEFORMER
+            | CAMERA_DEFORMER
+            | COLLISION
+            | JIGGLE
+            | DELTA_MUSH
+            | CORRECTION
+    )
+}
+
+/// The world points and triangles of the helper object linked by `node`.
+fn helper_mesh(
+    scene: &Scene,
+    node: NodeId,
+    resolve: Resolver,
+) -> Option<(Vec<DVec3>, Vec<[u32; 3]>)> {
+    let mesh = resolve(node)?;
+    let world = helper::world_points(scene, node, &mesh)?;
+    Some((world, helper::triangles(&mesh)))
+}
+
+/// Runs one of the deformers of MODIFIERS.md §14 on `mesh` (points in `target` space).
+fn apply_helper(
+    scene: &Scene,
+    deformer: NodeId,
+    target: NodeId,
+    mesh: &mut PolyMesh,
+    ctx: &EvalCtx,
+    resolve: Resolver,
+) {
+    let (Some(node), Some(ty)) = (scene.node(deformer), scene.node_type(deformer)) else {
+        return;
+    };
+    if !is_enabled(ty, node) || !forge_core::layers::deformers_on(scene, deformer) {
+        return;
+    }
+    let params = &node.params;
+    let Some(tw) = scene.world_matrix(target) else {
+        return;
+    };
+    let Some(tw_inv) = helper::inverse(tw) else {
+        return;
+    };
+    let strength = read_float(ty, params, "strength") / 100.0;
+    let before = mesh.points.clone();
+    // Deformers working in the target's own space; the others in world space.
+    let local = matches!(node.type_id.as_str(), DELTA_MUSH | CORRECTION);
+    let mut pts: Vec<DVec3> = if local {
+        before.clone()
+    } else {
+        before.iter().map(|p| tw.transform_point3(*p)).collect()
+    };
+    match node.type_id.as_str() {
+        MESH_DEFORMER => {
+            for cage in helper::link_list(scene, deformer, "cages") {
+                let Some((current, tris)) = helper_mesh(scene, cage, resolve) else {
+                    continue;
+                };
+                let stored = helper::vec3_list(scene, deformer, "bind");
+                let bind = if stored.is_empty() {
+                    current.clone()
+                } else {
+                    stored
+                };
+                cage::cage_deform(&mut pts, &bind, &current, &tris, strength);
+            }
+        }
+        SURFACE_DEFORMER => {
+            if let Some((current, tris)) = helper::link(scene, deformer, "surface")
+                .and_then(|s| helper_mesh(scene, s, resolve))
+            {
+                let stored = helper::vec3_list(scene, deformer, "bind");
+                let bind = if stored.is_empty() {
+                    current.clone()
+                } else {
+                    stored
+                };
+                let proportional = read_bool(ty, params, "proportional");
+                surface::surface_deform(&mut pts, &bind, &current, &tris, strength, proportional);
+            }
+        }
+        CAMERA_DEFORMER => {
+            if let Some(cam) =
+                helper::link(scene, deformer, "camera").and_then(|c| scene.world_matrix(c))
+            {
+                let grid = |id: &str| match scene.param(deformer, id) {
+                    Some(Value::Int(i)) => (*i).max(1) as usize,
+                    _ => 32,
+                };
+                let offsets = helper::vec3_list(scene, deformer, "offsets");
+                camera::camera_deform(
+                    &mut pts,
+                    cam,
+                    &offsets,
+                    (grid("grid_x"), grid("grid_y")),
+                    strength,
+                );
+            }
+        }
+        COLLISION => {
+            let offset = read_float(ty, params, "offset");
+            for c in helper::link_list(scene, deformer, "colliders") {
+                if let Some((cp, tris)) = helper_mesh(scene, c, resolve) {
+                    collision::collide(&mut pts, &cp, &tris, offset, strength);
+                }
+            }
+        }
+        JIGGLE => {
+            let int = |id: &str| match scene.param(deformer, id) {
+                Some(Value::Int(i)) => (*i).max(0) as usize,
+                _ => 0,
+            };
+            let p = jiggle::JiggleParams {
+                strength: read_float(ty, params, "strength"),
+                stiffness: read_float(ty, params, "stiffness"),
+                structural: read_float(ty, params, "structural"),
+                drag: read_float(ty, params, "drag"),
+                motion_scale: read_float(ty, params, "motion_scale"),
+                springs: int("springs"),
+                iterations: int("iterations").max(1),
+                gravity: read_float(ty, params, "gravity"),
+                local: read_bool(ty, params, "local"),
+                fps: ctx.fps,
+            };
+            let frame = (ctx.time * ctx.fps).round() as i64;
+            let start = (frame - int("cache") as i64).max(0);
+            let worlds: Vec<DMat4> = (start..=frame)
+                .map(|k| {
+                    if k == frame {
+                        tw
+                    } else {
+                        forge_anim::scene_at(scene, k as f64 / ctx.fps)
+                            .world_matrix(target)
+                            .unwrap_or(tw)
+                    }
+                })
+                .collect();
+            // `pts` are world points of this frame; the simulation wants target space.
+            let nb = helper::neighbours(mesh);
+            let out = jiggle::jiggle(&before, &nb, &worlds, &p);
+            pts = out.iter().map(|q| tw.transform_point3(*q)).collect();
+        }
+        DELTA_MUSH => {
+            let stored = helper::vec3_list(scene, deformer, "bind");
+            let bind = if stored.is_empty() {
+                before.clone()
+            } else {
+                stored
+            };
+            let int = match scene.param(deformer, "iterations") {
+                Some(Value::Int(i)) => (*i).max(0) as usize,
+                _ => 10,
+            };
+            let p = delta_mush::DeltaMushParams {
+                strength,
+                iterations: int,
+                pin_border: read_bool(ty, params, "pin_border_points"),
+            };
+            let mut m = PolyMesh {
+                points: pts.clone(),
+                polys: mesh.polys.clone(),
+            };
+            delta_mush::delta_mush(&mut m, &bind, &p);
+            pts = m.points;
+        }
+        CORRECTION => {
+            let mapping = match read_enum(ty, params, "mapping").as_str() {
+                "uv" => correction::Mapping::Uv,
+                _ => correction::Mapping::Nearest,
+            };
+            let reference = helper::vec3_list(scene, deformer, "reference");
+            let offsets = helper::vec3_list(scene, deformer, "offsets");
+            correction::correct(&mut pts, &reference, &offsets, mapping, strength);
+        }
+        _ => return,
+    }
+    let weights = falloff(scene, deformer, tw, &before, ctx).ok().flatten();
+    for (i, (q, p0)) in pts.iter().zip(&before).enumerate() {
+        let new = if local {
+            *q
+        } else {
+            tw_inv.transform_point3(*q)
+        };
+        let w = weights.as_ref().map_or(1.0, |w| w[i]);
+        mesh.points[i] = *p0 + (new - *p0) * w;
     }
 }
 
