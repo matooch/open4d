@@ -32,7 +32,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O17 | Spline primitives II | [splines-2.md](splines-2.md) | `tests/golden/splines-2/` meshes | done |
 | O18 | Primitives III | [primitives-3.md](primitives-3.md) | `tests/golden/<object>/` meshes | done |
 | O58 | Modeling tools III (020/021 follow-ups) | [modeling-tools-3.md](modeling-tools-3.md) | `tests/golden/modeling-tools/` meshes | done |
-| O20 | Generators III | [generators-3.md](generators-3.md) | `tests/golden/<generator>/` meshes | done |
+| O20 | Generators III | [generators-3.md](generators-3.md) | `tests/golden/<generator>/` meshes | todo (7 follow-up cases) |
 | O19 | Deformers III | [deformers-3.md](deformers-3.md) | `tests/golden/<deformer>/` meshes | done |
 | O45 | Deformers IV | [deformers-4.md](deformers-4.md) | `tests/golden/<deformer>/` meshes | done |
 | O46 | Spline tools and editable splines | [spline-tools.md](spline-tools.md) | `tests/golden/spline-tools/` meshes | done |

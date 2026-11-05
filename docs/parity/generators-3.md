@@ -116,6 +116,22 @@ Every case below was exported and has `case.toml` + `mesh.obj` under
 | landscape/seed-3 | Landscape | – | Seed 3 |
 | landscape/segments-1000 | Landscape | – | Width and Depth Segments 1000 (high-resolution slice) |
 
+## Follow-up cases (planner, after brief 043)
+
+Brief 043 matched every case above except the strict point and face numbering of the four
+`boole/r25-*` cases (BOOLE.md §5a, parity-pending), and Loop on non-quad input. These cases
+separate the hypotheses it could not; run them like the cases above, R25 defaults.
+
+| Case (folder) | Generator | Children | Changed from default |
+|---|---|---|---|
+| boole/r25-union-shift-x | Boole | two default cubes, the second at (50, 0, 0) | Boolean Type A union B |
+| boole/r25-a_minus_b-shift-x | Boole | the same | Boolean Type A subtract B |
+| boole/r25-union-inside | Boole | a default cube and a second cube of size 100 at (0, 0, 0) | Boolean Type A union B |
+| boole/r25-a_minus_b-inside | Boole | the same | Boolean Type A subtract B |
+| boole/r25-union-uneven | Boole | two default cubes, the second at (30, 50, 70) | Boolean Type A union B |
+| boole/r25-a_minus_b-uneven | Boole | the same | Boolean Type A subtract B |
+| subdivision/r25-loop-pyramid | Subdivision Surface | a default Pyramid | Type OpenSubdiv Loop |
+
 ## Notes
 
 **R25 differences from the R20 observation docs found while running these cases:**
