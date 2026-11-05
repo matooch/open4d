@@ -28,7 +28,15 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
             true,
             || json!({"nodes": [1]}),
         ),
-        |c, a: NodesArgs| convert(c, a.nodes, "Make Editable", forge_generators::make_editable),
+        |c, a: NodesArgs| {
+            convert(
+                c,
+                a.nodes,
+                "Make Editable",
+                forge_generators::make_editable,
+                true,
+            )
+        },
     )?;
     r.register_fn(
         spec(
@@ -43,6 +51,7 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
                 a.nodes,
                 "Current State to Object",
                 forge_generators::current_state_to_object,
+                false,
             )
         },
     )?;
@@ -50,12 +59,15 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
 }
 
 /// Runs `convert` on every chosen node as one undo step. Nodes without a mesh are
-/// skipped with a status message; the selection becomes the new objects.
+/// skipped with a status message. With `select_new` the selection becomes the new objects
+/// (Make Editable); without it the originals stay selected (Current State to Object,
+/// EDITABLE.md §1.4).
 fn convert(
     ctx: &mut dyn CommandContext,
     nodes: Option<Vec<u64>>,
     label: &str,
     convert: Convert,
+    select_new: bool,
 ) -> Result<Value, CommandError> {
     let ids = target_nodes(ctx, nodes);
     if ids.is_empty() {
@@ -97,7 +109,7 @@ fn convert(
             .collect::<Vec<_>>()
             .join("; "),
     );
-    if let Some((first, rest)) = made.split_first() {
+    if let Some((first, rest)) = made.split_first().filter(|_| select_new) {
         let sel = ctx.selection_mut();
         sel.click(*first);
         for id in rest {

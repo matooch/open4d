@@ -35,6 +35,11 @@ pub enum Widget {
     LinkList {
         accepts: Vec<Category>,
     },
+    /// A list with a row of data per entry (a field list).
+    LinkRows {
+        accepts: Vec<Category>,
+        blends: Vec<EnumOption>,
+    },
     /// Raw value of a node whose type is not registered.
     ReadOnly,
 }
@@ -129,6 +134,10 @@ pub(crate) fn widget(kind: &ParamKind, unit: Unit) -> Widget {
         },
         ParamKind::LinkList { accepts } => Widget::LinkList {
             accepts: accepts.clone(),
+        },
+        ParamKind::LinkRows { accepts, blends } => Widget::LinkRows {
+            accepts: accepts.clone(),
+            blends: blends.clone(),
         },
         ParamKind::Mesh | ParamKind::IndexList | ParamKind::Vec3List => Widget::ReadOnly,
     }

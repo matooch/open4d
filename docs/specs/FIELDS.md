@@ -1,4 +1,4 @@
-# Fields: framework, Linear / Spherical / Box, Remapping (brief 057)
+# Fields: framework, Linear / Spherical / Box, Remapping (brief 057), field lists (059)
 
 Wording: "field", "field list", "remapping". Sources: parity observations
 O7 [fields.md](../parity/fields.md), O11 §1 [followups-1.md](../parity/followups-1.md),
@@ -7,8 +7,8 @@ O24 [deformer-falloff.md](../parity/deformer-falloff.md); design
 [D-deformers-fields.md](../roadmap/areas/D-deformers-fields.md); evaluation context
 [MODIFIERS.md §8](MODIFIERS.md). Golden data: `tests/golden/fields/` (`samples.json`, kind
 `field`, level B, 729 points on the grid `{-300, -225, ..., 300}^3`, x fastest, tolerance 1e-5).
-Cylinder, Cone, Torus, Capsule, Radial and Random are section F6 (brief 058). Out of scope here: blend modes other
-than Normal, groups, Formula and Shader fields (059); modifier layers (060); wiring fields into
+Cylinder, Cone, Torus, Capsule, Radial and Random are section F6 (brief 058); blend modes, rows, Group,
+Formula and Shader fields are section F7 (brief 059). Out of scope here: modifier layers (060); wiring fields into
 effectors (072); deformer falloff is wired by 061 (MODIFIERS.md §10); the colour and direction channels (not observed).
 
 ## F1. API (`forge-fields`)
@@ -31,16 +31,19 @@ pub struct FieldSample { pub value: f64, pub color: [f64; 3], pub direction: DVe
   (`spherical-scaled`) and a moved one follows (`spherical-moved`).
 - `FieldList { layers }` holds layers **top to bottom** (the order the observer reads them; a
   layer added later goes on top, O13). A layer is `{ field, strength, blend }`; `strength` is
-  the layer strength (fraction), `blend` is `BlendMode::Normal` (the other modes are 059).
+  the layer strength (fraction), `blend` one of the nine `BlendMode`s (F7).
   `FieldList::sample(p, ctx)` evaluates bottom to top starting at 0:
-  `acc = acc + (value - acc) * strength` (Normal). One layer at 50 %
-  therefore halves its value (`layer-opacity-50`); the two-layer rule is **parity-pending** until
-  059 matches `blend-normal` and `blend-normal-50`.
+  `acc = acc + (blend(acc, value) - acc) * strength`, which for Normal is
+  `acc + (value - acc) * strength`. One layer at 50 % therefore halves its value
+  (`layer-opacity-50`), and a top layer at 50 % over a full one shows the one below through
+  (`blend-normal-50`). The blend functions and the rows' storage are F7.
 - **An empty list means full effect**: `FieldList::sample` returns value 1 (O24 `bend-empty-list`).
   `is_empty()` lets a deformer skip the evaluation.
 - `field_from_node(scene, id) -> Result<Box<dyn Field>, FieldError>` builds the field of a
-  `Category::Field` node from its parameters and world matrix. `FieldList::from_nodes(scene,
-  ids_top_to_bottom)` builds a list whose layer strengths are the nodes' `layer_strength` (100 % default); `with_strength` sets one.
+  `Category::Field` node from its parameters and world matrix. `FieldList::from_param(scene, owner,
+  param)` builds the list of a `LinkRows` parameter (a deformer's or effector's `fields`),
+  `from_rows` that of a row slice, `from_nodes(scene, ids_top_to_bottom)` one of Normal rows at
+  100 %; `with_strength` sets a strength after the fact (F7).
   `FieldError::Unsupported` names an observed option without derived rules.
 - Types are registered by the `FieldToolset` plugin (installed by `forge_app::default_registry`),
   so `object.create`, `param.set`, undo, save/load and the CLI, RPC, MCP and script front ends work
@@ -59,7 +62,6 @@ Type ids `forge.field.linear`, `forge.field.spherical`, `forge.field.box` (F6 ad
 | `radius` (Spherical) | Size | float, distance | 100 | 0 .. 1e20 |
 | `size` (Box) | Size | vec3, distance | (100, 100, 100) | 0 .. 1e20 |
 | `clip_to_shape` | Clip to Shape | bool | off | |
-| `layer_strength` | Layer Strength | float, percent | 100 % | the node's row in a field list (F1; deformer falloff, brief 061) |
 | `color` | Color | colour | white | the constant colour channel (brief 068, MOGRAPH.md E6, E8) |
 | `enable_remapping` | Enable Remapping | bool | on | |
 | `strength` | Strength | float, percent | 100 % | -1e20 .. 1e20 |
@@ -123,11 +125,11 @@ With `i = inner_offset`:
 
 ## F5. Parity (`crates/fields/tests/fields_parity.rs`)
 
-Every `linear-*`, `spherical-*` and `box-*` case of `tests/golden/fields` (27 cases: 26 field cases and `layer-opacity-50`, a Spherical field in a list at layer strength 50 %) builds a
+Every `linear-*`, `spherical-*` and `box-*` case of `tests/golden/fields` (27 cases: 26 field cases and `layer-opacity-50`, a Spherical field in a list row at strength 50 %) builds a
 scene through the registry (type, `position`, `rotation_deg`, `scale`, parameters from
 `case.toml`, percent divided by 100), samples the 729 points through a one-layer `FieldList`
-and compares with `compare_samples` at the file's tolerance. Cases of other types (blend-*, ...) are 059 and later and are not run; the test asserts exactly how many are
-skipped. Brief 058 extends the same test (36 exact cases) and adds the statistical Random test (F6).
+and compares with `compare_samples` at the file's tolerance. Brief 058 extends the same test (36 exact cases) and adds the statistical Random test (F6); brief 059
+adds the list cases (52 exact cases, F7, with `shader-noise` pinned as Unsupported).
 
 ### Parity-pending rules (no observation tells them apart) and what would settle them
 
@@ -154,7 +156,7 @@ Sources: O13 [fields-2.md](../parity/fields-2.md) (parameters, defaults, `cylind
 `random-random-mode`), O23 [fields-3.md](../parity/fields-3.md) (`radial-half`, `radial-transition`,
 `radial-iterations`, `random-global`). Type ids `forge.field.cylinder`, `.cone`, `.torus`, `.capsule`,
 `.radial`, `.random`; category `Field`. All carry the Remapping parameters of F2, `color` and
-`layer_strength`; `clip_to_shape` exists on every type except Random. Inner Offset / Mirror Graph
+`clip_to_shape` exists on every type except Random. Inner Offset / Mirror Graph
 defaults: Cylinder, Cone, Torus, Capsule 50 % / on; Radial 0 % / on; Random 0 % / **off** (O13). Each
 shape is one source file in `crates/fields/src/` and plugs into `Shape` (the ramp `t` of F3) or, for
 Random, is its own `Field`.
@@ -259,9 +261,114 @@ unknown, and a 9x9x9 grid at spacing 75 cannot pin them.
 | Random Space None, Sorted mode, Animation Speed | | Space None; Sorted on a cloner; Animation Speed 100 % at times 0 and 1 s |
 | Noise types without a literature definition (16) | | one line sample for each type |
 
-## F-UI. Disabled field rows (brief 079)
+## F-UI. Disabled field rows (brief 079, changed by 059)
 
 A field node whose object state `object.enabled` is false (TRANSFORM.md §2, UI.md §16.1) is
-left out by `FieldList::from_nodes`: the layer does not exist, so the remaining layers (or the
-empty list, value 1) decide. The enable box in a field list writes `object.enabled` of the
-field node. Own design, parity-pending G4.
+left out by `FieldList::from_rows`: the layer does not exist, so the remaining layers (or the
+empty list, value 1) decide. Since brief 059 the enable box in a field list is the row's own
+`enabled` (F7); a row that is off is left out the same way. Own design, parity-pending G4.
+
+## F7. Field lists: rows, blend modes, Group, Formula, Shader (brief 059)
+
+Sources: O13 [fields-2.md](../parity/fields-2.md) (`two-layers-add`, `two-layers-max`, `layer-opacity-50`;
+a layer added later goes on top), O23 [fields-3.md](../parity/fields-3.md) (`blend-*`, `three-layers`,
+`group-field`, `formula-defaults`, `formula-custom`, `shader-noise`), O24 [deformer-falloff.md](../parity/deformer-falloff.md)
+(`bend-field-strength-50`). Golden data: `tests/golden/fields/`. Parity test:
+`crates/fields/tests/fields_parity.rs` (`exact_field_types_match_the_reference`, 52 exact cases),
+plus `crates/fields/tests/lists.rs`.
+
+### Rows (storage)
+A field list is a parameter of kind `LinkRows` (`Value::LinkRows(Vec<LinkRow>)`, CORE.md section 6.10) on
+the node that owns it: the `fields` parameter of every deformer and effector, and the `fields` parameter
+of a Group field. A row is `{ target, blend, strength, enabled }`: the field node, a blend option id,
+the layer strength as a fraction (100 % = 1, any finite number) and the enable box. Rows are ordered **top
+to bottom**, a node appears at most once per list, the targets must be `Category::Field` nodes, the
+blend id one of the nine below (`ParamDesc::link_rows(id, label, accepts, blends)`; the default of a new
+row is the first blend, Normal, at 100 %, on). Because the row belongs to the list, a field used by two
+lists has two strengths and two blend modes. All edits go through `param.set` / `param.edit` of the owner's
+`fields` parameter (one undo step per edit; JSON rows are `{target, blend, strength (percent), enabled}`
+and a bare node id is a default row); the Attributes manager draws each row as
+`[enable] name [blend] [strength %] ^ v x` (UI.md §16.1). Setting a plain `LinkList` on such a
+parameter turns it into default rows.
+
+`FieldList::from_rows` leaves out a row that is switched off, a node that no longer exists or is not a
+field, and a field node whose own object state `object.enabled` is off (F-UI). The remaining rows keep
+their order, blend mode and strength. The per-row enable box replaces the use of `object.enabled` as
+the list's enable box (brief 061/079 used the node's state); both still remove the layer.
+
+### Blend modes
+Evaluated bottom to top from `acc = 0`. With `base` the accumulated value and `top` the layer's own
+value, `acc' = base + (blend(base, top) - base) * strength`. The blend functions, all matching on the
+729 samples of O23 to 1e-15 (two overlapping Spherical fields A at -75 and B at +75, Size 200, B on top):
+
+| mode | `blend(base, top)` | proving case |
+|---|---|---|
+| Normal | `top` | `blend-normal`, `three-layers` (C replaces everything below), `blend-normal-50` (strength 50 %: `base + (top - base) / 2`) |
+| Max | `max(base, top)` | `blend-max`, `two-layers-max` |
+| Min | `min(base, top)` | `blend-min` |
+| Add | `clamp(base + top, 0, 1)` | `blend-add` (29 ones), `two-layers-add` |
+| Subtract | `clamp(base - top, 0, 1)` | `blend-subtract` (base is the lower layer; `top - base` fails on 102 samples) |
+| Multiply | `base * top` | `blend-multiply` |
+| Overlay | `2 base top` if `base < 0.5`, else `1 - 2 (1 - base)(1 - top)` | `blend-overlay` (the swapped test on `top` fails on 34 samples) |
+| Screen | `base + top - base top` | `blend-screen` |
+| Clip | `min(base, top)` | `blend-clip` (equal to Min on this data; `base * top` fails on 28 samples) |
+
+The colour channel is blended with the same function per component and the direction channel always
+with Normal (**parity-pending**: no case samples them). Strength with a mode other than Normal
+(`base + (blend - base) * strength`), Add and Subtract on values outside 0..1, a list whose bottom layer is
+not Normal (the start value is 0) and **Clip as a distinct mode** are parity-pending (see the table at
+the end).
+
+### Group field (`forge.field.group`)
+A field whose value is a field list: the node's own `fields` rows are built with `FieldList::from_rows`
+(nested groups are allowed; a depth over 16 or a cycle gives `FieldError::Unsupported`), sampled at the
+world position and then passed through the group's own Remapping tab as the ramp position `t`
+(F4). The Remapping defaults are those of `group-field`: Enable Remapping **off**, Mirror Graph off,
+Inner Offset 0 %, Strength 100 %, Min 0 %, Max 100 %, both clamps on, Multiplier 100 %, Contour None. With
+remapping off the group's value is the list's value: `group-field` (B over A, both Normal) equals B alone
+and matches to 1e-5. The node's position, rotation and scale do not move its layers (they have their own).
+A group without layers has value 0 (**parity-pending**; an empty list on a deformer is full effect).
+The group's `color` is stored only (the list's colour channel is used). A group reads time if one of
+its enabled layers does (`reads_time`).
+
+### Formula field (`forge.field.formula`)
+Parameters: `formula` (string, default the text of `formula-defaults`), `time_delta` (percent, 100 %; the
+O23 key `t_d_time_delta_time_percent`), `frequency` (float, 1; `f_frequency`), `color` and the
+Remapping tab with **both clamps off**, Inner Offset 0 %, Mirror Graph off (`formula-defaults`).
+The text is compiled with `forge-expr` in **degrees mode** (EXPR.md E5) with the variables
+`px py pz id count subfields d t f`:
+
+- `px py pz`: the sample position in the field's own space (`formula-custom`: `px/100`; `x` alone is not a
+  variable, EXPR.md rejects it and the observation gave zeros);
+- `id`, `count`: the index of the sample in the batch and the batch size (`formula-defaults`: sample
+  number `i` of 729 gives `0.5 + sin(i / 729 * 360 deg) * 0.5` at all 729 points to 1e-5, so `subfields`,
+  `d` are 0 and `f` is 1). A single `sample` is `id = 0`, `count = 1`;
+- `t`: `ctx.time * time_delta`; `f`: `frequency`; `subfields`, `d`: 0 (**parity-pending**, no case).
+
+The result is limited to `0..1` as the ramp position (`formula-custom`: `px/100` gives 0 for `px <= 0`
+and 1 for `px >= 100` although both clamps are off, so the limit is not the Remapping clamp), a non-finite
+result is 0, then the Remapping tab of F4 is applied. A text that does not parse gives
+`FieldError::Formula(message)`. A formula reads time when it names `t` and `time_delta` is not 0.
+
+### Shader field (`forge.field.shader`)
+The node type exists (parameter `shader`, a text, plus the Remapping tab) so lists, files and undo handle it,
+but building it returns `FieldError::Unsupported("shader field (needs brief 125)")` until the shader
+library exists. `shader-noise` is pinned as Unsupported in the parity test (the Noise shader of O23 is a
+brief 125 case). Its shader parameters (`noise_*`, channel, material tag, UV offsets and lengths) are not
+parameters yet.
+
+### Parity-pending rules of F7 and the data that settles them
+| rule | alternatives | data that settles it |
+|---|---|---|
+| Clip vs Min | `min` vs a clip against a threshold or the lower layer's support | Clip with the top layer at 50 % and with values the lower layer does not reach; a lower layer with a negative strength |
+| Blend with strength other than 100 % for modes other than Normal | `base + (blend - base) s` vs `blend(base, top s)` | `blend-add` and `blend-multiply` with the top strength 50 % |
+| Add / Subtract limits | clamp to 0..1 vs unclamped until the end | Add of three layers (0.7 each), top Subtract of 0.2 |
+| Bottom layer blend | start value 0 vs transparent | the bottom layer set to Add or Multiply |
+| Colour and direction blending | per-component blend vs Normal only | two Spherical layers with different colours, Plain effector Fields Color mode, blend Add |
+| Group remapping on | list value as `t` vs remapping only the shape | Group with Enable Remapping on, Invert on, Inner Offset 50 % over B over A |
+| Group transform and own Strength | whether group position moves layers | Group at (100, 0, 0) holding A and B |
+| Empty group | 0 vs 1 | a Group field without layers in a deformer's list |
+| Formula `d`, `subfields`, space of `px` | field space vs world; `d` distance | a Formula `px/100` on a field moved to (100, 0, 0) and rotated; `d` and `subfields` on their own as formulas |
+| Formula result limit | clamp 0..1 before vs after Remapping | formula `2*px/100` with Invert on |
+| Formula `t` and `f` | seconds scale, units of `t` | formula `t` sampled at 0 s and 1 s with the time delta 100 % and 50 % |
+| Shader field | everything | brief 125 and a shader-noise case on a finer grid |

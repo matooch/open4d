@@ -233,6 +233,7 @@ fn gpu_benches(c: &mut Criterion) {
                         color: [0.7; 3],
                     }],
                     grid: None,
+                    lines: &[],
                     gizmo: None,
                     settings: Settings::default(),
                 };
@@ -270,6 +271,7 @@ fn gpu_benches(c: &mut Criterion) {
                 }],
                 instanced: &[],
                 grid: None,
+                lines: &[],
                 gizmo: None,
                 settings: Settings::default(),
             };

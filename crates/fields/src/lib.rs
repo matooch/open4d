@@ -5,30 +5,39 @@
 //! take a [`FieldList`]. Field objects are scene nodes of category `Field`, registered by
 //! [`FieldToolset`].
 
+mod blend;
 mod capsule;
 mod cone;
 mod cylinder;
+mod formula;
+mod group;
 mod node;
 mod radial;
 mod random;
 mod remap;
+mod shader;
 mod shape;
 mod torus;
 
-use forge_core::{EvalCtx, NodeId, Scene, Value};
+use forge_core::{Category, EvalCtx, LinkRow, NodeId, Scene, Value};
 use glam::{DMat4, DVec3};
 
+pub use blend::{BLEND_OPTIONS, BlendMode};
 pub use capsule::{CAPSULE, Capsule, capsule_type};
 pub use cone::{CONE, Cone, cone_type};
 pub use cylinder::{CYLINDER, Cylinder, cylinder_type};
+pub use formula::{FORMULA, FormulaField, formula_type};
+pub use group::{GROUP, GroupField, group_type};
 pub use node::{
-    BOX, FieldToolset, LAYER_STRENGTH, LINEAR, SPHERICAL, box_type, linear_type, spherical_type,
+    BOX, FIELD_LIST, FieldToolset, LINEAR, SPHERICAL, box_type, field_list_param, linear_type,
+    spherical_type,
 };
 pub use radial::{RADIAL, Radial, radial_type};
 pub use random::{
     NOISE_TYPES, RANDOM, RandomField, RandomMode, RandomSpace, random_type, reads_time,
 };
 pub use remap::{Contour, Remap};
+pub use shader::{SHADER, shader_type};
 pub use shape::{Direction, Shape};
 pub use torus::{TORUS, Torus, torus_type};
 
@@ -39,6 +48,9 @@ pub enum FieldError {
     Unsupported(&'static str),
     #[error("node {0} is not a field")]
     NotAField(u64),
+    /// The Formula field's text does not parse.
+    #[error("formula: {0}")]
+    Formula(String),
 }
 
 /// The channels of one sample.
@@ -53,11 +65,11 @@ pub struct FieldSample {
 }
 
 impl FieldSample {
-    /// Normal blend of `s` over `self` by `strength`: `self += (s - self) * strength`.
-    fn blend_normal(&mut self, s: &FieldSample, strength: f64) {
-        self.value += (s.value - self.value) * strength;
-        self.color =
-            std::array::from_fn(|i| self.color[i] + (s.color[i] - self.color[i]) * strength);
+    /// `s` blended over `self` with `mode` at `strength`, channel by channel (the colour with
+    /// the same function as the value, the direction always Normal: **parity-pending**).
+    fn blend(&mut self, s: &FieldSample, mode: BlendMode, strength: f64) {
+        self.value = mode.mix(self.value, s.value, strength);
+        self.color = std::array::from_fn(|i| mode.mix(self.color[i], s.color[i], strength));
         self.direction += (s.direction - self.direction) * strength;
     }
 
@@ -138,16 +150,31 @@ impl Field for ShapeField {
 
 /// Builds the field of a `Category::Field` node from its parameters and world matrix.
 pub fn field_from_node(scene: &Scene, id: NodeId) -> Result<Box<dyn Field>, FieldError> {
-    let node = scene.node(id).ok_or(FieldError::NotAField(id.0))?;
-    let world = scene.world_matrix(id).ok_or(FieldError::NotAField(id.0))?;
-    node::build_field(&node.type_id, &node.params, world).ok_or(FieldError::NotAField(id.0))?
+    field_from_node_at(scene, id, 0)
 }
 
-/// How a layer combines with the layers below it. Only Normal exists so far (059).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum BlendMode {
-    #[default]
-    Normal,
+/// Group nesting deeper than this (or a group that contains itself) is refused.
+const MAX_GROUP_DEPTH: usize = 16;
+
+fn field_from_node_at(
+    scene: &Scene,
+    id: NodeId,
+    depth: usize,
+) -> Result<Box<dyn Field>, FieldError> {
+    let node = scene.node(id).ok_or(FieldError::NotAField(id.0))?;
+    if node.type_id == GROUP {
+        if depth >= MAX_GROUP_DEPTH {
+            return Err(FieldError::Unsupported("group nested too deeply"));
+        }
+        let rows = match node.params.get(FIELD_LIST) {
+            Some(Value::LinkRows(rows)) => rows.clone(),
+            _ => Vec::new(),
+        };
+        let list = FieldList::from_rows_at(scene, &rows, depth + 1)?;
+        return group::field(&node.params, list).map(|f| Box::new(f) as Box<dyn Field>);
+    }
+    let world = scene.world_matrix(id).ok_or(FieldError::NotAField(id.0))?;
+    node::build_field(&node.type_id, &node.params, world).ok_or(FieldError::NotAField(id.0))?
 }
 
 /// One row of a field list.
@@ -168,7 +195,8 @@ impl Layer {
     }
 }
 
-/// An ordered list of field layers, **top to bottom**. An empty list means full effect.
+/// An ordered list of field layers, **top to bottom**, evaluated bottom to top with each layer's
+/// blend mode and strength (F7). An empty list means full effect.
 #[derive(Default)]
 pub struct FieldList {
     pub layers: Vec<Layer>,
@@ -179,23 +207,60 @@ impl FieldList {
         FieldList::default()
     }
 
-    /// A list of the given field nodes, top to bottom (disabled ones left out); each layer's strength is the
-    /// node's `layer_strength` (100 % by default).
+    /// A list of the given field nodes, top to bottom, every row Normal at 100 % (disabled
+    /// nodes left out, F-UI).
     pub fn from_nodes(
         scene: &Scene,
         ids_top_to_bottom: &[NodeId],
     ) -> Result<FieldList, FieldError> {
-        let layers = ids_top_to_bottom
+        let rows: Vec<LinkRow> = ids_top_to_bottom
             .iter()
-            // A field switched off in the list (`object.enabled`) is not a layer (spec F-UI).
-            .filter(|id| forge_core::visibility::own(scene, **id).2)
             .map(|id| {
-                field_from_node(scene, *id).map(|field| {
-                    let mut layer = Layer::new(field);
-                    if let Some(Value::Float(s)) = scene.param(*id, LAYER_STRENGTH) {
-                        layer.strength = *s;
-                    }
-                    layer
+                match scene.node_type(*id) {
+                    Some(t) if t.category == Category::Field => {}
+                    _ => return Err(FieldError::NotAField(id.0)),
+                }
+                Ok(LinkRow::new(*id, BlendMode::Normal.id()))
+            })
+            .collect::<Result<_, _>>()?;
+        FieldList::from_rows(scene, &rows)
+    }
+
+    /// The list stored in the `LinkRows` parameter `param` of `owner` (a deformer's or an
+    /// effector's `fields`); an unset or other kind of value is an empty list.
+    pub fn from_param(scene: &Scene, owner: NodeId, param: &str) -> Result<FieldList, FieldError> {
+        match scene.param(owner, param) {
+            Some(Value::LinkRows(rows)) => FieldList::from_rows(scene, rows),
+            _ => Ok(FieldList::new()),
+        }
+    }
+
+    /// A list from rows, top to bottom (F7). A row that is switched off, whose node is gone or is
+    /// not a field, or whose node is disabled (`object.enabled`, F-UI) is left out; the others
+    /// keep their blend mode and strength.
+    pub fn from_rows(scene: &Scene, rows: &[LinkRow]) -> Result<FieldList, FieldError> {
+        FieldList::from_rows_at(scene, rows, 0)
+    }
+
+    fn from_rows_at(
+        scene: &Scene,
+        rows: &[LinkRow],
+        depth: usize,
+    ) -> Result<FieldList, FieldError> {
+        let layers = rows
+            .iter()
+            .filter(|r| r.enabled)
+            .filter(|r| {
+                scene
+                    .node_type(r.target)
+                    .is_some_and(|t| t.category == Category::Field)
+            })
+            .filter(|r| forge_core::visibility::own(scene, r.target).2)
+            .map(|r| {
+                field_from_node_at(scene, r.target, depth).map(|field| Layer {
+                    field,
+                    strength: r.strength,
+                    blend: BlendMode::from_id(&r.blend).unwrap_or_default(),
                 })
             })
             .collect::<Result<_, _>>()?;
@@ -223,8 +288,7 @@ impl FieldList {
         let mut acc = FieldSample::from_value(0.0);
         for layer in self.layers.iter().rev() {
             let s = layer.field.sample(p_world, ctx);
-            let BlendMode::Normal = layer.blend;
-            acc.blend_normal(&s, layer.strength);
+            acc.blend(&s, layer.blend, layer.strength);
         }
         acc
     }
@@ -237,9 +301,8 @@ impl FieldList {
         }
         let mut acc = vec![FieldSample::from_value(0.0); points.len()];
         for layer in self.layers.iter().rev() {
-            let BlendMode::Normal = layer.blend;
             for (a, s) in acc.iter_mut().zip(layer.field.sample_many(points, ctx)) {
-                a.blend_normal(&s, layer.strength);
+                a.blend(&s, layer.blend, layer.strength);
             }
         }
         acc

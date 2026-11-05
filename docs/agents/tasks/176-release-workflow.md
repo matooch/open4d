@@ -29,4 +29,4 @@ A tag builds installable packages for all three OS.
 - Deviations: own scripts instead of cargo-dist (scripts run locally). Windows MSI NOT built: zip only, MSI documented as follow-up in docs/RELEASING.md. Icons are rasterised by a Pillow script that mirrors the SVG geometry (no SVG renderer available); outputs committed. No brief 005 report exists; libxkbcommon, libxkbcommon-x11 and libxcb-xkb bundled by judgement. The Windows exe has no embedded icon (needs a build script).
 - Files changed: .github/workflows/release.yml, scripts/release/* (lib.sh, version.sh, changelog.sh, checksums.sh, package-linux.sh, package-macos.sh, package-windows.ps1, sign-hooks.sh/.ps1, gen-icons.py), packaging/icons/*, docs/RELEASING.md, .gitignore (dist/), this brief, roadmap/BACKLOG.md.
 - Open questions: only a tagged/dispatched run verifies the macOS (lipo, hdiutil), Windows (pwsh zip), softprops upload and ubuntu-22.04 build steps; whether `--locked` and the apt package list suffice on the runners.
-- Gate: see below.
+

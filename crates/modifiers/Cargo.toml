@@ -8,9 +8,12 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+forge-anim = { path = "../anim" }
 forge-core = { path = "../core" }
+forge-expr = { path = "../expr" }
 forge-fields = { path = "../fields" }
 forge-geometry = { path = "../geometry" }
+forge-noise = { path = "../noise" }
 glam = "0.34"
 
 [dev-dependencies]

@@ -407,7 +407,12 @@ impl Plugin for CloneToolset {
     fn register(&self, r: &mut Registry) -> Result<(), RegistryError> {
         r.register(cloner_type())?;
         r.register(crate::plain::plain_type())?;
-        r.register(crate::random::random_type())
+        r.register(crate::random::random_type())?;
+        r.register(crate::step::step_type())?;
+        r.register(crate::formula::formula_type())?;
+        r.register(crate::time::time_type())?;
+        r.register(crate::target::target_type())?;
+        r.register(crate::delay::delay_type())
     }
 }
 

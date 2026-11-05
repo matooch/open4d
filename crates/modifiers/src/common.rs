@@ -304,6 +304,20 @@ pub(crate) fn read_float(ty: &NodeType, params: &BTreeMap<String, Value>, id: &s
     }
 }
 
+pub(crate) fn read_int(ty: &NodeType, params: &BTreeMap<String, Value>, id: &str) -> i64 {
+    match read(ty, params, id) {
+        Value::Int(i) => i,
+        other => unreachable!("{id} is not an int: {other:?}"),
+    }
+}
+
+pub(crate) fn read_string(ty: &NodeType, params: &BTreeMap<String, Value>, id: &str) -> String {
+    match read(ty, params, id) {
+        Value::String(s) => s,
+        other => unreachable!("{id} is not a string: {other:?}"),
+    }
+}
+
 pub(crate) fn read_bool(ty: &NodeType, params: &BTreeMap<String, Value>, id: &str) -> bool {
     matches!(read(ty, params, id), Value::Bool(true))
 }

@@ -648,7 +648,11 @@ fn change_set(
         let linkish = |v: Option<&forge_core::Value>| {
             matches!(
                 v,
-                Some(forge_core::Value::Link(_) | forge_core::Value::LinkList(_))
+                Some(
+                    forge_core::Value::Link(_)
+                        | forge_core::Value::LinkList(_)
+                        | forge_core::Value::LinkRows(_)
+                )
             )
         };
         if linkish(a) || linkish(b) {

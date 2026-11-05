@@ -94,12 +94,13 @@ fn falloff_deformer_table(
 
 /// The `[params.field]` table of an O24 case as a field node under the scene root;
 /// returns its id. `size` is the Spherical radius, `*_percent` fractions, `layer_*` the
-/// list row (the node's `layer_strength`).
+/// list row (returned as the row's strength; the row itself is stored on the deformer).
 fn build_field(
     tx: &mut forge_core::Tx,
     reg: &Registry,
     table: &toml::map::Map<String, toml::Value>,
-) -> NodeId {
+) -> (NodeId, f64) {
+    let mut strength = 1.0;
     let name = table["type"].as_str().unwrap();
     let ty_id = format!("forge.field.{name}");
     let ty = reg.get(&ty_id).unwrap();
@@ -112,6 +113,10 @@ fn build_field(
     for (k, v) in table {
         let (key, scale) = match k.as_str() {
             "type" | "layer_blend_mode" => continue,
+            "layer_strength_percent" => {
+                strength = num(v) / 100.0;
+                continue;
+            }
             // The colour and direction channel keys are not parameters (FIELDS.md F2).
             "color_mode"
             | "length_mode"
@@ -151,7 +156,7 @@ fn build_field(
         };
         tx.set_param(id, &key, value).unwrap();
     }
-    id
+    (id, strength)
 }
 
 /// Sets a node's params from a case table: `pos` / `rot` are the transform (`rot` is
@@ -241,8 +246,12 @@ fn build_case(
             let layers = params["field_layers"].as_integer().unwrap_or(0);
             assert_eq!(layers, params.get("field").map_or(0, |_| 1), "one field");
             if let Some(field) = params.get("field").and_then(|v| v.as_table()) {
-                let f = build_field(tx, reg, field);
-                tx.set_param(deformer, "fields", Value::LinkList(vec![f]))?;
+                let (f, strength) = build_field(tx, reg, field);
+                let row = forge_core::LinkRow {
+                    strength,
+                    ..forge_core::LinkRow::new(f, "normal")
+                };
+                tx.set_param(deformer, "fields", Value::LinkRows(vec![row]))?;
             }
             return Ok(object);
         }

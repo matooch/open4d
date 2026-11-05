@@ -260,6 +260,74 @@ No Field list on Explosion FX.
 - correction/defaults: which corrected point to move is not specified by the row; corrected point 0
   moved by (50, 0, 0).
 
+## Follow-up cases (planner, after briefs 056, 052 and 055) — interactive export needed for solver deformers and Spline Wrap
+
+Brief 056 matched Correction and Delta Mush exactly; the Mesh, Surface, Camera, Collision and
+Jiggle cases above exported **undeformed** geometry because, as Findings says, the scripted path
+builds no solver cache. Re-record those, and record the new rows, **interactively**: open the
+scene in the app, press Initialize (Mesh, Delta Mush, Correction), play the timeline from frame 0
+to the case frame (Jiggle, Collision), confirm in the viewport that the cube deforms, then use
+File > Export with the usual export settings. Write `frame` and `fps` into every case.toml. If a
+case still exports undeformed, say so in its row and move on.
+
+| Case (folder) | Deformer | Setup / changes |
+|---|---|---|
+| mesh-deformer/cage-redo | Mesh | as `mesh-deformer/cage`, exported interactively |
+| mesh-deformer/cage-up | Mesh | the cage's top-front point moved by (0, 100, 0) |
+| mesh-deformer/cage-scale | Mesh | the whole cage scaled 150 % after Initialize |
+| surface/defaults-redo | Surface | as `surface/defaults`, exported interactively |
+| surface/tilted | Surface | the surface plane rotated P 30° after Initialize |
+| camera-deformer/grid-redo | Camera | as `camera-deformer/grid`; record the edited grid point's index as the app shows it |
+| camera-deformer/aimed | Camera | camera aimed at the cube from (0, 0, −1000); two grid points moved |
+| collision/sphere-redo | Collision | as `collision/sphere`, played to the case frame |
+| collision/cube-outside | Collision | a cube collider, Solver Outside, Strength 50 % |
+| jiggle/plane-frames | Jiggle | a 4 × 4 plane moving +x 300 over frames 0–10; export frames 1–8 |
+| jiggle/stiffness-100 | Jiggle | the same, Stiffness 100 %, frame 5 |
+| jiggle/drag | Jiggle | the same, Drag 0 % and 100 % (two cases), frame 5 |
+| jiggle/gravity | Jiggle | the same, Gravity (0, −981, 0), frame 5 |
+| delta-mush/iterations | Delta Mush | Iterations 0 and 1 (two cases), bent pose initialised before the bend |
+| correction/uv | Correction | Mapping UV |
+| correction/normals | Correction | Mapping Normals |
+| melt/no-random-s0 | Melt | Radial and Vertical Randomness 0 %, Strength 0 % (scripted export is fine: Melt has no cache) |
+| melt/no-random-s10 | Melt | the same, Strength 10 % |
+| melt/no-random-s50 | Melt | the same, Strength 50 % |
+| melt/no-random-s100 | Melt | the same, Strength 100 % |
+| melt/size-100 | Melt | Strength 50 %, Melted Size 100 % |
+| melt/size-200 | Melt | Strength 50 %, Melted Size 200 % |
+| melt/radius-50 | Melt | Strength 50 %, Radius 50 |
+| melt/radius-200 | Melt | Strength 50 %, Radius 200 |
+| melt/noise-scale-50 | Melt | Strength 50 %, Noise Scale 50 % |
+| formula/d-const | Formula | d(u,v,x,y,z,t) = 0.1 |
+| formula/d-u | Formula | d = u |
+| formula/d-v | Formula | d = v |
+| formula/effect-manual | Formula | Effect Manual, X = x*2 |
+| formula/effect-spherical | Formula | Effect Spherical (one case per other effect: Cylindrical, X Radial, Z Radial) |
+| formula/size-nonuniform | Formula | Size (100, 300, 50) |
+| ffd/point-x | FFD | the lattice point at +x middle moved by (50, 0, 0) |
+| ffd/point-z | FFD | the lattice point at +z middle moved by (0, 0, 50) |
+| ffd/grid-2 | FFD | 2 × 2 × 2 grid points, one corner moved by (50, 50, 50) |
+| ffd/grid-small | FFD | Grid Size (150, 150, 150), the middle top point moved by (0, 50, 0) |
+| spline-wrap/box | Spline Wrap | as `spline-wrap/defaults` and `spline-wrap/arc`, exported interactively so the deformer has a real bounding box (two cases) |
+| spline-wrap/axis-y | Spline Wrap | as `spline-wrap/arc`, Axis +Y (one case each for +Z and −X) |
+| spline-wrap/keep-length | Spline Wrap | as `spline-wrap/arc`, Keep Length on |
+| spline-wrap/clamp | Spline Wrap | as `spline-wrap/arc`, Clamp on |
+| spline-wrap/strength-50 | Spline Wrap | as `spline-wrap/arc`, Strength 50 % |
+| spline-wrap/offset-25 | Spline Wrap | as `spline-wrap/arc`, Offset 25 % |
+| spline-wrap/from-25-to-75 | Spline Wrap | as `spline-wrap/arc`, From 25 %, To 75 % |
+| spline-wrap/banking-45 | Spline Wrap | as `spline-wrap/defaults` (Helix), Banking 45° |
+| spline-wrap/up-vector | Spline Wrap | as `spline-wrap/defaults`, Up Vector (1, 0, 0) |
+| spline-wrap/closed | Spline Wrap | a default Circle as the spline |
+| spline-deformer/lines | Spline | original and modifier: straight 2-point Linear splines along x, the modifier 100 higher |
+| spline-deformer/modifier-moved | Spline | as `spline-deformer/defaults`, the modifier spline translated (0, 50, 0) instead of rotated |
+| spline-deformer/radius-60 | Spline | as `spline-deformer/lines`, Radius 60 |
+| spline-deformer/use-length | Spline | as `spline-deformer/lines`, Use Length on |
+| spline-rail/limited | Spline Rail | as `spline-rail/defaults`, Limited on |
+| spline-rail/within-box | Spline Rail | as `spline-rail/defaults`, Within Box on |
+| spline-rail/scale-before-50 | Spline Rail | as `spline-rail/defaults`, Scale Before 50 % |
+| spline-rail/x-splines | Spline Rail | as `spline-rail/defaults` plus X splines top and bottom (two default Linear splines) |
+| spline-rail/one-spline | Spline Rail | only the left Z spline linked |
+| spline-rail/uneven | Spline Rail | Z splines of lengths 200 and 400 |
+
 ## Notes
 
 Folders: every family in this job keeps its folder named after the row's first component,

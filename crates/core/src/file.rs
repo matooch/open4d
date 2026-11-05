@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::layers::{self, Layer, Layers};
 use crate::{
-    Category, MeshData, Node, NodeId, Registry, Scene, SceneSettings, TimeConfig, Track, Value,
-    parse_target,
+    Category, LinkRow, MeshData, Node, NodeId, Registry, Scene, SceneSettings, TimeConfig, Track,
+    Value, parse_target,
 };
 
 pub const FORMAT: &str = "forge3d-scene";
@@ -19,8 +19,8 @@ pub const FORMAT: &str = "forge3d-scene";
 /// `object.*` params and adds the chunk section and file reference params, version 7 the
 /// time configuration (markers, preview range, playback mode), version 8 the expression
 /// tag and its graph parameter (brief 108), version 9 the layer table and the hidden
-/// `object.layer` param (brief 158). Version 10 (brief 189) marks the list-valued parameter kinds (`Vec3List`, CORE.md section 6.9). Older files still load, through [`MIGRATIONS`].
-pub const VERSION: u32 = 10;
+/// `object.layer` param (brief 158). Version 10 (brief 189) marks the list-valued parameter kinds (`Vec3List`, CORE.md section 6.9). Version 11 (brief 059) adds `LinkRows`, the field lists with per-row blend mode, strength and enable box (CORE.md section 6.10). Older files still load, through [`MIGRATIONS`].
+pub const VERSION: u32 = 11;
 
 /// A value whose binary payload is at least this many bytes is written as a chunk by
 /// [`save_with`] (CORE.md §6.2): 42 mesh points or 256 indices.
@@ -60,6 +60,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migrate_7_to_8,
     migrate_8_to_9,
     migrate_9_to_10,
+    migrate_10_to_11,
 ];
 
 /// Version 2 added `Value::Mesh`: additive, nothing to rewrite.
@@ -110,6 +111,64 @@ fn migrate_9_to_10(_: &mut SceneFile) -> Vec<String> {
     Vec::new()
 }
 
+/// Version 11 (brief 059) stores field lists as `LinkRows`: every `fields` link list (the field
+/// list of a deformer or an effector, the only link lists that were field lists) becomes rows
+/// whose strength is the target's `layer_strength` and whose enable box is the target's
+/// `object.enabled`; the `layer_strength` params are then removed from the nodes.
+fn migrate_10_to_11(file: &mut SceneFile) -> Vec<String> {
+    fn collect(r: &NodeRecord, out: &mut BTreeMap<NodeId, (Option<f64>, Option<bool>)>) {
+        let strength = match r.params.get(LEGACY_LAYER_STRENGTH) {
+            Some(StoredValue::Float(f)) => Some(*f),
+            _ => None,
+        };
+        let enabled = match r.params.get("object.enabled") {
+            Some(StoredValue::Bool(b)) => Some(*b),
+            _ => None,
+        };
+        out.insert(r.id, (strength, enabled));
+        for c in r.tags.iter().chain(&r.children) {
+            collect(c, out);
+        }
+    }
+    fn rewrite(r: &mut NodeRecord, rows: &BTreeMap<NodeId, (Option<f64>, Option<bool>)>) {
+        r.params.remove(LEGACY_LAYER_STRENGTH);
+        if let Some(StoredValue::LinkList(ids)) = r.params.get(LEGACY_FIELD_LIST) {
+            let converted = ids
+                .iter()
+                .map(|t| {
+                    let (strength, enabled) = rows.get(t).copied().unwrap_or((None, None));
+                    LinkRow {
+                        target: *t,
+                        blend: "normal".to_string(),
+                        strength: strength.unwrap_or(1.0),
+                        enabled: enabled.unwrap_or(true),
+                    }
+                })
+                .collect();
+            r.params.insert(
+                LEGACY_FIELD_LIST.to_string(),
+                StoredValue::LinkRows(converted),
+            );
+        }
+        for c in r.tags.iter_mut().chain(&mut r.children) {
+            rewrite(c, rows);
+        }
+    }
+    let mut rows = BTreeMap::new();
+    for r in &file.roots {
+        collect(r, &mut rows);
+    }
+    for r in &mut file.roots {
+        rewrite(r, &rows);
+    }
+    Vec::new()
+}
+
+/// Version 10 stored a field row's strength on the field node under this param.
+const LEGACY_LAYER_STRENGTH: &str = "layer_strength";
+/// The version 10 param id of every field list.
+const LEGACY_FIELD_LIST: &str = "fields";
+
 /// Runs the steps from `file.version` up to `target`; shared by `load_with` and the tests.
 fn migrate(file: &mut SceneFile, steps: &[Migration], target: u32) -> Vec<String> {
     let mut warnings = Vec::new();
@@ -134,6 +193,7 @@ enum StoredValue {
     String(String),
     Link(Option<NodeId>),
     LinkList(Vec<NodeId>),
+    LinkRows(Vec<LinkRow>),
     Mesh(Arc<MeshData>),
     IndexList(Vec<u32>),
     Vec3List(Vec<[f64; 3]>),
@@ -153,6 +213,7 @@ impl From<Value> for StoredValue {
             Value::String(x) => Self::String(x),
             Value::Link(x) => Self::Link(x),
             Value::LinkList(x) => Self::LinkList(x),
+            Value::LinkRows(x) => Self::LinkRows(x),
             Value::Mesh(x) => Self::Mesh(x),
             Value::IndexList(x) => Self::IndexList(x),
             Value::Vec3List(x) => Self::Vec3List(x),
@@ -736,6 +797,7 @@ impl Loader<'_> {
             StoredValue::String(x) => Value::String(x),
             StoredValue::Link(x) => Value::Link(x),
             StoredValue::LinkList(x) => Value::LinkList(x),
+            StoredValue::LinkRows(x) => Value::LinkRows(x),
             StoredValue::Mesh(x) => Value::Mesh(x),
             StoredValue::IndexList(x) => Value::IndexList(x),
             StoredValue::Vec3List(x) => Value::Vec3List(x),

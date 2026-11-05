@@ -29,7 +29,8 @@ evaluation of real node types (Phases 5+).
 | `Mesh` | `Arc<MeshData>` | an editable polygon mesh (see below) |
 | `IndexList` | `Vec<u32>` | a sorted set of element indices (component selections) |
 | `Vec3List` | `Vec<[f64; 3]>` | every component finite; ordered; hidden, not animatable (editable spline points and handles, SPLINES.md; brief 028) |
-| `LinkList` | `Vec<NodeId>` | an ordered list of node references (a cloner's effector list, an effector's field list); order is meaningful |
+| `LinkList` | `Vec<NodeId>` | an ordered list of node references (a cloner's effector list); order is meaningful |
+| `LinkRows` | `Vec<LinkRow>` | an ordered list of node references with a row of data each (blend id, strength, enable box): the field lists of effectors, deformers and Group fields (section 6.10) |
 
 `ParamDesc { id, label, kind, default, ui, animatable }`:
 - `id`: non-empty, chars `[a-z0-9_.]`, unique within its node type. Stable forever:
@@ -37,7 +38,7 @@ evaluation of real node types (Phases 5+).
 - `kind: ParamKind`: `Bool`, `Int { min, max }`, `Float { min, max }`,
   `Vec3 { min, max }` (per component), `Color`, `Enum { options }` (each option
   `{ id, label }`, ids unique, at least one), `String`, `Link { accepts }` (list of
-  categories; empty = any), `LinkList { accepts }` (the same for each entry), `Mesh`, `IndexList`, `Vec3List`.
+  categories; empty = any), `LinkList { accepts }` (the same for each entry), `LinkRows { accepts, blends }` (the same, plus the blend options of a row), `Mesh`, `IndexList`, `Vec3List`.
 - `ui: UiHint { group, unit, soft_min, soft_max, step, hidden }`. `unit` ∈
   `None | Distance | Angle | Percent | Time`. UI-only; never affects validation.
 - `animatable`: defaults to true for `Int/Float/Vec3/Color/Bool`, false otherwise.
@@ -71,7 +72,7 @@ evaluation of real node types (Phases 5+).
    tests/golden/cone), and Make Editable must keep the face lists exactly.
 7. `IndexList`: the list is **sorted ascending and deduplicated** (not an error). No range
    check (the kind does not know the element count).
-8. `LinkList`: the order is kept; a node twice in the list is `ParamError::DuplicateLink`.
+8. `LinkList`: the order is kept; a node twice in the list is `ParamError::DuplicateLink`. `LinkRows`: the same, and a `blend` that is not one of the kind's options is `UnknownOption`, a non-finite `strength` `NotFinite`.
    `Tx::set_param` checks every entry like a `Link` (exists, not the node itself, accepted
    category) and `param.set` takes an array of node ids. The default is the empty list and the
    parameter is not animatable. Targets count for `deep_revision`. Brief 068 added it for
@@ -223,7 +224,7 @@ frame, a parent's result needs its children's results.
 | ancestor | `Frame(n) -> Frame(parent(n))` |
 | child | `Result(n) -> Result(c)` for each child (generator inputs, deformer children, cloner prototypes, boolean A/B) |
 | tag | `Result(n) -> Result(t)` for each tag |
-| link | `Result(n) -> Result(t)` for each `Link` / `LinkList` param target that exists (effectors, field lists, instance reference, deformer `fields`) |
+| link | `Result(n) -> Result(t)` for each `Link` / `LinkList` param target that exists (effectors, field lists, instance reference, deformer `fields`; the targets of `LinkRows` count) |
 | extra | `Result(g) -> Result(d)` for the deformers of a geometry-less parent that also deform `g` (`forge_generators::eval_dependencies`, MODIFIERS.md section 0) |
 
 **Dirty rule.** The scheduler compares the evaluated scene of this pass (tracks, then
@@ -536,6 +537,28 @@ format's compatibility marker, a reader that knows only up to 9 meets `version: 
 simulates that reader. The fixtures `scene-v10*.forge` pin the current bytes (they hold an
 editable spline's `Vec3List` and `IndexList`); `scene-v9*.forge` stay as the v9 build wrote them.
 Tests pin the current version through the single constant `file::VERSION`.
+
+### 6.10 Version 11: list rows (brief 059)
+
+Version 11 adds `Value::LinkRows(Vec<LinkRow>)` / `ParamKind::LinkRows { accepts, blends }`: an ordered list
+of links with a row of data each (`LinkRow { target, blend, strength, enabled }`): the field lists of
+deformers, effectors and Group fields (FIELDS.md F7). In the RON text a value is
+`LinkRows([(target: 4, blend: "add", strength: 0.375, enabled: false), ...])`, written with the other
+params (never as a chunk). Validation: every target once, `blend` one of the kind's options, `strength`
+finite; targets are checked by the scene like those of a `LinkList` (category, existence, not the node
+itself). A `LinkList` set on a `LinkRows` parameter becomes default rows (first blend option, strength 1, on).
+The edge graph, cache revisions and copy / paste remap treat the targets of the rows as links.
+
+Migration 10 -> 11 (`migrate_10_to_11`): brief 061 stored a field row's strength on the field node as the
+param `layer_strength` and the field lists as `LinkList`s named `fields`. Every `fields` `LinkList`
+becomes `LinkRows` with one row per target: blend `normal`, strength the target's `layer_strength`
+(100 % when absent), enabled the target's `object.enabled` (on when absent); then the `layer_strength`
+param is removed from all nodes (the field types no longer have it, so no "unknown param" warning).
+`object.enabled` itself stays (a disabled field node is also left out of a list, FIELDS.md F7). This build
+always writes 11; a reader that knows up to 10 returns `UnsupportedVersion(11)`. Fixtures:
+`scene-v11*.forge` (a holder with two rows, one disabled at 37.5 %) pin the current bytes; `scene-v10*.forge`
+stay as the v10 build wrote them, and a hand-written v10 document in `native_format.rs` covers the field-list
+migration.
 
 ## 7. Layers (`layers`; brief 158)
 

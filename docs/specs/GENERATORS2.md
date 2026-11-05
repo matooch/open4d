@@ -130,22 +130,30 @@ for the rest). The helix biases and `reverse` → `Unsupported`. The circle's `e
   `sweep/helix` centre z −100), joined by lines, **skipping the second and the
   second-to-last point** (observed: the default helix path has 199 points at
   z = 0, −2, −3, …, −198, −200). **Parity-pending** for other settings.
-- **Helix, every other mode (R25 data, `splines-2/helix-uniform`)**: a Bezier spline of
-  `subdivision + 1` points (101 for the default: the count is the total, not per turn) at
-  `s_i = i/subdivision`, on the same curve `f(s) = (r cos a, r sin a, −height·s)`,
-  `a = start_angle + (end_angle − start_angle)·s`, `r` linear in `s`. Point `i` has its
-  handles along `f(s_i + 1/N) − f(s_i − 1/N)` (the analytic curve is extended past the
-  ends, so the end points have handles too), each of length `L/3` with `L` the length of
-  the helix piece the handle belongs to (`√((rθ)² + Δz²)` for constant radius, 25.2125
-  per piece by default); out handle forward, in handle backward.
-  **Known mismatch (`helix-uniform`):** the 901 sampled points are within 3.5e-4 of the
-  export (tolerance 1e-4). The exported handles carry a small inward radial part
-  (−2.95e-4 on 8.377 tangential, −0.668 in z, the same for every piece) that this
-  direction/length rule misses, and the exported points drift by ≈1e-7 of their
-  parameter. Variants tried (true helix tangent, chord direction with arc/3 length (above), chord direction with chord/3
-  length; equal-`t` and equal-arc sampling; the best has 3.5e-4 error). The
-  adaptive helix of R25 is not observed, so the two helix forms are told apart by the
-  mode only (**parity-pending**).
+- **Helix, every other mode (R25 data, `splines-2/helix-uniform`, `spline-tools/interp-f/helix-handles`)**:
+  a Bezier spline of `subdivision + 1` points (101 for the default: the count is the total, not
+  per turn) at `s_i = i/subdivision`, on the same curve `f(s) = (r cos a, r sin a, −height·s)`,
+  `a = start_angle + (end_angle − start_angle)·s`, `r` linear in `s`. Point `i` has its handles
+  along the **central difference** `f(s_i + 1/N) − f(s_i − 1/N)` (the analytic curve is extended
+  past the ends, so the end points have handles too), each of length `|f(s_{i+1}) − f(s_i)| / 3`
+  (a third of the **3-D chord** of the piece the handle belongs to; for the default helix
+  8.398571 per handle); out handle forward, in handle backward. Brief 191, three hypotheses on
+  the handles (maximum error over the 901 sampled points of `helix-uniform`):
+  1. a third of the helix arc length of the piece, along the central difference (the former
+     rule): 3.56e-4 (radius at the middle of a piece 2.5e-4 too large);
+  2. a third of the 3-D chord, along the central difference: radius to 4e-7. **Adopted.** It also
+     reproduces the form's tangents of `interp-f/helix-handles` exactly (point 0 right handle
+     `(0, 6.278974, −0.500982)` is 0.75 × `(0, 8.371965, −0.667976)`, which is `3-D chord / 3`
+     split by the direction `(0, 50.1332, −4)`; tolerance 2e-6 in
+     `editable_helix_points_and_tangents_match_the_notes`);
+  3. the xy chord / 3 along the xy tangent with `Δz / 3`: 4.5e-4 (z off by 1e-4 mid piece).
+  The points themselves are exact (`interp-f/helix-handles`: point 1 `(198.422940, 25.066647,
+  −2)`, point 100 `(200, 0, −200)`). What is left is in the sampler (§6.2): the Uniform steps of
+  an open spline lag the arc length by 1e-7 and the last one falls 1.26e-4 earlier than the
+  `1e-4` rule gives. With both, the 901 points are within 6e-7 of the export. For a helix whose
+  radius changes (`sweep/rail`'s second helix) the rule is **parity-pending**: no sampled data
+  of one exists. The adaptive helix of R25 is not observed, so the two helix forms are told
+  apart by the mode only (**parity-pending**).
 - **Plane:** `xy` as is; `xz` maps (x, y, z) → (x, −z, y) (the loft circles); `zy`
   (x, y, z) → (−z, y, x) (not observed).
 
@@ -163,7 +171,7 @@ Uniform, Angle by Adaptive and Subdivided, Maximum Length by Subdivided.
 | Mode | Interior samples of one curved segment | Evidence |
 |---|---|---|
 | None | none: only the spline's own points | – (**parity-pending**) |
-| Uniform | `segments · (number + 1)` equal steps of arc length over the **whole** spline (a closed spline keeps all of them, an open one gets the end point too); the spline's own points are not kept unless a step lands on one. Lengths are the polylines through every segment at `t = k/50`; the sample's `t` is interpolated linearly inside its piece | `splines-2/circle-uniform` (36 points of 4 quarters; 5e-7 with 50 pieces, 3e-3 with an exact length, 2e-3 with 40, 3e-3 with 64), `helix-uniform` (900 steps, mismatch of §6.1 aside), `arc-defaults` (37 points of 4 segments), `arc-sector` (45 points for 5 pieces: arc and chord are stepped as one outline, 5e-7) |
+| Uniform | `segments · (number + 1)` equal steps of arc length over the **whole** spline (a closed spline keeps all of them, an open one gets the end point too); the spline's own points are not kept unless a step lands on one. Lengths are the polylines through every segment at `t = k/50`; the sample's `t` is interpolated linearly inside its piece | `splines-2/circle-uniform` (36 points of 4 quarters; 5e-7 with 50 pieces, 3e-3 with an exact length, 2e-3 with 40, 3e-3 with 64), `helix-uniform` (900 steps, 6e-7 with the open-spline offsets below), `arc-defaults` (37 points of 4 segments), `arc-sector` (45 points for 5 pieces: arc and chord are stepped as one outline, 5e-7) |
 | Natural | `number` samples at `t = k/(number + 1)` (equal steps of the segment's own parameter) | **parity-pending**: no case. Equal-`t` was the first reading of Uniform and is 1.4 off `circle-uniform`, so it is not Uniform; Natural takes it as the only other even spacing |
 | Adaptive | walk `t` in steps of 1/50 and emit a sample once the tangent differs from the tangent at the previous sample by `angle` (the angle between the two tangents, not the accumulated turn: the flower petal, whose tangent turns back, needs this). If the turn still to come to the segment's end is smaller than the piece just closed, the sample goes to the middle of the previous sample and the end instead (on the 1/50 grid, rounded down), and later samples are measured from the candidate's tangent. For the circle: `t = 0.06·k` (k = 1..15) and 0.94, i.e. 17 points per quarter, 68 in all, for any radius. A piece that turns less than `angle` gets nothing | `extrude/defaults`, `lathe/circle`, `splines-2/{cycloid-defaults, cycloid-epi, flower-defaults, rectangle-rounding, nside-rounding}` (the lone sample at the middle of the cycloid pieces, grid points 18/34 of the epicycloid pieces, the S-shaped flower piece); 5° only, other angles **parity-pending** |
 | Subdivided | the smallest `m` such that each of `m` equal-`t` pieces turns by at most `angle` and has a chord of at most `max_length`; samples at `t = k/m` | **parity-pending**: no case |
@@ -171,6 +179,16 @@ Uniform, Angle by Adaptive and Subdivided, Maximum Length by Subdivided.
 - **Open end of Uniform:** the last point of an open spline is at `1 − 10⁻⁴` of the whole arc
   length, not at its end: `arc-defaults` ends 0.009° short of 90° (x 0.0315), `arc-angles`
   likewise, `helix-uniform` ends at z −199.98. With `number = 0` Uniform behaves like None.
+- **Open-spline offsets (fitted, parity-pending, brief 191):** the steps before the last one
+  of an open spline lie at `total·k/steps·(1 − 1e-7)` (`UNIFORM_OPEN_LAG`; `helix-uniform`
+  lags 1.00e-7 of its arc length from the first step to the last but one; `arc-defaults`
+  3.2e-5 → 1.9e-6 and `arc-angles` 9e-5 → 5e-6 with it; closed splines show none:
+  `circle-uniform`). The last point sits at `total·(1 − 1e-4) − 1.26e-8·segments²`
+  (`UNIFORM_END_EXTRA`): `helix-uniform` (100 segments) ends 1.26e-4 before the `1e-4` rule,
+  the 3–4 segment arcs allow 1e-6 at most (`spline-wrap/arc`, which extends its end chord 99
+  lengths, would show more). The square is only the simplest law through those two ends; the
+  cause is unknown (float rounding of the reference's length table was tried: it moves the arc
+  cases by 1.3e-4 and was rejected).
   The R20 Adaptive helix ends exactly on its end point (z −200), so the shortfall is taken as
   part of Uniform (**parity-pending** for None/Natural/Subdivided, which keep the exact end).
 - Uniform steps are global (`arc-sector`: the chord of the closed arc gets the same step as
@@ -421,14 +439,16 @@ a 3-array `size` on a cube is `size_x/y/z`; Symmetry's `weld_tolerance` is `tole
   With the reference's own ring ends as path and rail, every vertex and face matches
   (`two_rail_maps_the_profile_width_onto_the_rails`). Other combinations of the three rail
   flags, end scale/rotation with a rail, and rails of another segment count → `Unsupported`.
-- **Why the three helix sweeps still differ (`KNOWN_MISMATCH`).** `sweep/banking`,
-  `sweep/rail` and `sweep/scale-end` run along the R25 uniform helix, whose Bezier handles miss
+- **Why the three helix sweeps still differ (`KNOWN_MISMATCH`).** `sweep/rail` and
+  `sweep/scale-end` (and, until brief 191, `sweep/banking`) run along the R25 uniform helix, whose Bezier handles miss
   the export by up to 3.5e-4 (§6.1 `helix-uniform`; for the radius-changing rail helix
   up to 2e-2, angle 0.7985° where ours gives 0.8037° at ring 1). Banking off turns the route
   error into a normal error through `t_x/t_z` (t_x ≈ −0.007): 0.036 at ring 0, 0.004
   elsewhere, max 0.068. Along the reference's own ring centres, `sweep/banking` matches
-  exactly (`banking_off_follows_world_up`). Fixing the helix handles (brief 038's
-  follow-up) is all these two need.
+  exactly (`banking_off_follows_world_up`). **Brief 191 fixed the constant-radius helix
+  (§6.1): `sweep/banking` now matches exactly.** `sweep/rail` (max error 3.7e-2, from 3.8e-2)
+  is still off through its radius-400 rail helix, whose handle rule is unobserved, and
+  `sweep/scale-end` through the Banking-on frame below.
 - **Banking on, `sweep/scale-end` (parity-pending, 3+ hypotheses spent).** Along the exact
   route the frame still misses: the reference's ring 0 normal is the radial direction turned
   by −0.103° about the chord tangent (ours, "away from the bend at point 1", is 0.48° off the reference),
@@ -457,8 +477,9 @@ and reversal; §9a), the Banking-on frame (asserted to still differ), and lathe 
 
 `crates/generators/tests/spline_sampling.rs` runs the 22 O17 cases (`splines-2`): an Extrude
 of offset 20, caps off, over the spline, with the offset negated when the signed area of the
-spline is negative (§6.3, Direction Auto), compared strictly after `export_weld`. **19 of 22
-exact**; `helix-uniform` is a known mismatch (§6.1) and `cog-defaults` and `formula-defaults`
+spline is negative (§6.3, Direction Auto), compared strictly after `export_weld`. **20 of 22
+exact** (`helix-uniform` on its first ring, 6e-7: the second ring is displaced along a direction
+the Extrude does not model); `cog-defaults` and `formula-defaults`
 are `Unsupported` (§6.3). `tests/spline_prims.rs` covers defaults, options and the refusals.
 
 ### 11.1 R25 drift cases and the R25 extrude cap order

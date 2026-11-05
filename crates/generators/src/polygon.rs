@@ -29,6 +29,14 @@ pub enum EditableError {
     Edit(#[from] EditError),
 }
 
+/// Tag type of a named set of polygons (the `C1` / `C2` tags of the cap objects).
+pub const POLYGON_SELECTION: &str = "forge.polygon_selection";
+
+pub(crate) fn selection_tag_type() -> NodeType {
+    NodeType::new(POLYGON_SELECTION, "Polygon Selection", Category::Tag)
+        .param(ParamDesc::index_list("indices", "Polygons"))
+}
+
 pub(crate) fn node_type() -> NodeType {
     NodeType::new(TYPE, "Polygon Object", Category::Object)
         .param(ParamDesc::mesh("mesh", "Mesh"))
@@ -92,6 +100,18 @@ fn mesh_payload(mesh: &PolyMesh) -> Payload {
     }
 }
 
+/// Attaches a copy of every tag in `tags` to `host`, in order.
+fn copy_tags(tx: &mut Tx, tags: Vec<forge_core::Node>, host: NodeId) -> Result<(), EditError> {
+    for tag in tags {
+        let t = tx.attach_tag(&tag.type_id, host, None)?;
+        tx.rename(t, &tag.name)?;
+        for (k, v) in tag.params {
+            tx.set_param(t, &k, v)?;
+        }
+    }
+    Ok(())
+}
+
 /// Creates an editable object at `parent[index]` named like `src`, with copies of its tags,
 /// the `transform.*` params and tracks of `xform_src` and the payload's params.
 fn spawn_like(
@@ -123,11 +143,22 @@ fn spawn_like(
             .filter(|(k, _)| k.starts_with(PREFIX))
             .map(|(k, t)| (k.clone(), t.clone()))
             .collect();
-        let tags: Vec<_> = n
+        let mut tags: Vec<forge_core::Node> = n
             .tags
             .iter()
             .filter_map(|t| tx.scene().node(*t).cloned())
             .collect();
+        // The tags of a consumed input come along (`subdivision`: the smoothing tag is the
+        // cube's), except a type the object already has.
+        for c in n.children.iter().filter(|c| is_consumed(tx.scene(), **c)) {
+            for t in &tx.scene().node(*c).ok_or(EditError::UnknownNode(*c))?.tags {
+                if let Some(t) = tx.scene().node(*t)
+                    && !tags.iter().any(|have| have.type_id == t.type_id)
+                {
+                    tags.push(t.clone());
+                }
+            }
+        }
         (n.name.clone(), params, tracks, tags)
     };
     let id = tx.create(payload.type_id, parent, Some(index))?;
@@ -138,13 +169,7 @@ fn spawn_like(
     for (k, t) in tracks {
         tx.set_track(id, &k, Some(t))?;
     }
-    for tag in tags {
-        let t = tx.attach_tag(&tag.type_id, id, None)?;
-        tx.rename(t, &tag.name)?;
-        for (k, v) in tag.params {
-            tx.set_param(t, &k, v)?;
-        }
-    }
+    copy_tags(tx, tags, id)?;
     for (k, v) in payload.params {
         tx.set_param(id, &k, v)?;
     }
@@ -202,18 +227,36 @@ pub fn make_editable(tx: &mut Tx, id: NodeId) -> Result<NodeId, EditableError> {
     if node.type_id == TYPE || node.type_id == editable_spline::TYPE {
         return Ok(id);
     }
+    let mut caps = None;
     let payload = match spline_payload(&node.type_id, &node.params)? {
         Some(p) => p,
-        None => mesh_payload(
-            &evaluate_geometry(scene, id, &EvalCtx::default())?
-                .ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?,
-        ),
+        None => match crate::spline_gens::split_caps(scene, id)? {
+            Some(split) => {
+                let sides = mesh_payload(&split.sides);
+                caps = Some(split);
+                sides
+            }
+            None => mesh_payload(
+                &evaluate_geometry(scene, id, &EvalCtx::default())?
+                    .ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?,
+            ),
+        },
     };
     let (parent, index) = index_of(scene, id).ok_or(EditError::UnknownNode(id))?;
     let (consumed, kept): (Vec<NodeId>, Vec<NodeId>) =
         node.children.iter().partition(|c| is_consumed(scene, **c));
     let new = spawn_like(tx, id, id, parent, index, payload)?;
     redirect_links(tx, id, new)?;
+    if let Some(split) = caps {
+        let cap_objects = [("Cap 1", "C1", split.start), ("Cap 2", "C2", split.end)];
+        let mut at = 0;
+        for (name, tag, polys) in cap_objects {
+            if !polys.is_empty() {
+                spawn_cap(tx, id, new, at, name, tag, &split.sides.points, &polys)?;
+                at += 1;
+            }
+        }
+    }
     for c in kept {
         tx.move_node(c, Some(new), None)?;
     }
@@ -222,6 +265,55 @@ pub fn make_editable(tx: &mut Tx, id: NodeId) -> Result<NodeId, EditableError> {
     }
     tx.delete(id)?;
     Ok(new)
+}
+
+/// A cap object under `parent` at `index` (§1.2 step 5): the points the cap polygons use
+/// (ascending index) with the polygons renumbered, a polygon selection tag `tag_name` over
+/// all of them, and a copy of the source's tags.
+#[allow(clippy::too_many_arguments)]
+fn spawn_cap(
+    tx: &mut Tx,
+    src: NodeId,
+    parent: NodeId,
+    index: usize,
+    name: &str,
+    tag_name: &str,
+    points: &[DVec3],
+    polys: &[Vec<u32>],
+) -> Result<NodeId, EditableError> {
+    let used: std::collections::BTreeSet<u32> = polys.iter().flatten().copied().collect();
+    let renumber: std::collections::BTreeMap<u32, u32> = used
+        .iter()
+        .enumerate()
+        .map(|(new, old)| (*old, new as u32))
+        .collect();
+    let mesh = PolyMesh {
+        points: used.iter().map(|i| points[*i as usize]).collect(),
+        polys: polys
+            .iter()
+            .map(|p| p.iter().map(|i| renumber[i]).collect())
+            .collect(),
+    };
+    let tags: Vec<_> = tx
+        .scene()
+        .node(src)
+        .ok_or(EditError::UnknownNode(src))?
+        .tags
+        .iter()
+        .filter_map(|t| tx.scene().node(*t).cloned())
+        .collect();
+    let cap = tx.create(TYPE, Some(parent), Some(index))?;
+    tx.rename(cap, name)?;
+    tx.set_param(cap, "mesh", Value::Mesh(Arc::new(from_poly_mesh(&mesh))))?;
+    let sel = tx.attach_tag(POLYGON_SELECTION, cap, None)?;
+    tx.rename(sel, tag_name)?;
+    tx.set_param(
+        sel,
+        "indices",
+        Value::IndexList((0..mesh.polys.len() as u32).collect()),
+    )?;
+    copy_tags(tx, tags, cap)?;
+    Ok(cap)
 }
 
 /// Split (docs/specs/MODELING.md §4.7): a polygon object right after the polygon object `id`

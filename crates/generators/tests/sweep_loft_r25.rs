@@ -1,6 +1,6 @@
 //! docs/specs/GENERATORS2.md §9a / §10a: the R25 rules of brief 042 that the golden cases
-//! cannot show through our spline primitives (the uniform helix deviates from the reference
-//! by up to 3.5e-4, `helix-uniform`, which the sweep frames amplify). The paths here are the
+//! cannot show through our spline primitives (the radius-changing rail helix of `sweep/rail`
+//! deviates from the reference; the constant-radius helix has matched since brief 191). The paths here are the
 //! ring centres of the reference meshes themselves, so only the rule under test is measured.
 
 use std::collections::BTreeMap;

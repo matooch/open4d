@@ -50,6 +50,9 @@ pub enum Value {
     /// An ordered list of links (the effector list of a cloner, a field list); order is
     /// meaningful and a node appears at most once.
     LinkList(Vec<NodeId>),
+    /// An ordered list of links with a row of data each (a field list: blend mode, strength,
+    /// enable box; CORE.md section 6.10). Order is meaningful and a node appears at most once.
+    LinkRows(Vec<LinkRow>),
     Mesh(Arc<MeshData>),
     /// Element indices (a component selection), sorted ascending without duplicates once
     /// validated.
@@ -57,6 +60,30 @@ pub enum Value {
     /// An ordered list of 3D vectors (the points and tangents of an editable spline); every
     /// component finite, no range, order meaningful.
     Vec3List(Vec<[f64; 3]>),
+}
+
+/// One row of a [`Value::LinkRows`] list: the target and the row's own data.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LinkRow {
+    pub target: NodeId,
+    /// An option id of the kind's `blends`.
+    pub blend: String,
+    /// Row strength as a fraction (1 = 100 %), finite.
+    pub strength: f64,
+    /// A row that is off is skipped as if it were not in the list.
+    pub enabled: bool,
+}
+
+impl LinkRow {
+    /// A row with strength 100 % and the blend `blend`, switched on.
+    pub fn new(target: NodeId, blend: &str) -> LinkRow {
+        LinkRow {
+            target,
+            blend: blend.to_string(),
+            strength: 1.0,
+            enabled: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -93,6 +120,12 @@ pub enum ParamKind {
     /// Ordered list of links to nodes of the accepted categories; empty accepts any.
     LinkList {
         accepts: Vec<Category>,
+    },
+    /// Ordered list of links with per-row data; `blends` are the blend options of a row (the
+    /// first is the default).
+    LinkRows {
+        accepts: Vec<Category>,
+        blends: Vec<EnumOption>,
     },
     Mesh,
     IndexList,
@@ -266,6 +299,29 @@ impl ParamDesc {
         d
     }
 
+    /// An ordered list of links with a row of data each (blend mode from `blends`, strength,
+    /// enable box), empty by default. `blends` is `(id, label)` pairs; the first is the default.
+    pub fn link_rows(
+        id: &str,
+        label: &str,
+        accepts: &[Category],
+        blends: &[(&str, &str)],
+    ) -> ParamDesc {
+        let kind = ParamKind::LinkRows {
+            accepts: accepts.to_vec(),
+            blends: blends
+                .iter()
+                .map(|(i, l)| EnumOption {
+                    id: (*i).to_string(),
+                    label: (*l).to_string(),
+                })
+                .collect(),
+        };
+        let mut d = Self::new(id, label, kind, Value::LinkRows(Vec::new()));
+        d.animatable = false;
+        d
+    }
+
     /// A hidden, non-animatable mesh parameter whose default is the empty mesh.
     pub fn mesh(id: &str, label: &str) -> ParamDesc {
         let default = Value::Mesh(Arc::new(MeshData::default()));
@@ -393,6 +449,28 @@ impl ParamDesc {
                 } else {
                     Err(ParamError::DuplicateLink)
                 }
+            }
+            // A bare list of links (an older caller) becomes default rows: first blend option,
+            // 100 %, switched on.
+            (ParamKind::LinkRows { blends, .. }, Value::LinkList(ids)) => {
+                let first = blends.first().map(|b| b.id.as_str()).unwrap_or_default();
+                let rows = ids.iter().map(|t| LinkRow::new(*t, first)).collect();
+                self.validate(Value::LinkRows(rows))
+            }
+            (ParamKind::LinkRows { blends, .. }, Value::LinkRows(rows)) => {
+                let mut seen = std::collections::BTreeSet::new();
+                if !rows.iter().all(|r| seen.insert(r.target)) {
+                    return Err(ParamError::DuplicateLink);
+                }
+                for r in &rows {
+                    if !r.strength.is_finite() {
+                        return Err(ParamError::NotFinite);
+                    }
+                    if !blends.iter().any(|b| b.id == r.blend) {
+                        return Err(ParamError::UnknownOption);
+                    }
+                }
+                Ok(Value::LinkRows(rows))
             }
             (ParamKind::Mesh, Value::Mesh(m)) => m.validate().map(|()| Value::Mesh(m)),
             (ParamKind::IndexList, Value::IndexList(mut list)) => {

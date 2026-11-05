@@ -48,7 +48,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# HOOK(177): sign + notarize "$APP" here; skipped when secrets are absent.
+# Signing hook (brief 177): signs "$APP" when the workflow prepared an identity.
 sh "$(dirname "$0")/sign-hooks.sh" macos "$APP"
 
 ln -s /Applications "$WORK/dmg/Applications"

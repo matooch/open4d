@@ -92,7 +92,7 @@ pub(crate) fn instance_type() -> NodeType {
 /// Number of children a generator consumes, if it is one of these (§0).
 pub(crate) fn input_count(type_id: &str) -> Option<usize> {
     match type_id {
-        SYMMETRY | ARRAY => Some(1),
+        SYMMETRY | ARRAY | crate::atom_array::TYPE => Some(1),
         CONNECT => Some(usize::MAX),
         _ => None,
     }
@@ -172,6 +172,7 @@ pub(crate) fn evaluate_modeling(
     match type_id {
         SYMMETRY => symmetry(&inputs[0], values).map(Some),
         ARRAY => array(&inputs[0], values).map(Some),
+        crate::atom_array::TYPE => crate::atom_array::atom_array(&inputs[0], values).map(Some),
         _ => connect(&inputs, values).map(Some),
     }
 }

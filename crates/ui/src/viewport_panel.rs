@@ -23,8 +23,8 @@ use forge_viewport::lod::lod_proxy;
 use forge_viewport::nav;
 use forge_viewport::panes::Pane;
 use forge_viewport::render::{
-    DrawInstanced, DrawMesh, Frame, InstanceSet, MeshBuffers, Palette, RenderTargets, Renderer,
-    Settings, Shading,
+    DrawInstanced, DrawMesh, Frame, InstanceSet, LineSet, MeshBuffers, Palette, RenderTargets,
+    Renderer, Settings, Shading,
 };
 use glam::DMat4;
 
@@ -116,6 +116,9 @@ pub struct SceneView<'a> {
     /// (docs/specs/VIEWPORT.md §10.8). `None` evaluates `scene` from scratch (a live tool
     /// preview replaces a mesh in the scene).
     pub frame: Option<&'a schedule::Frame>,
+    /// The spline objects to draw as lines, with the controls of the edited one
+    /// (docs/specs/VIEWPORT.md section 11).
+    pub splines: &'a [forge_viewport::curves::SplineDraw],
 }
 
 /// Base colour of selected objects (our palette).
@@ -640,6 +643,7 @@ impl ViewportPanel {
             component,
             ctx,
             frame,
+            splines,
         } = view;
         let device = &rs.device;
         let samples = base.msaa.samples();
@@ -758,10 +762,19 @@ impl ViewportPanel {
             .as_ref()
             .expect("target created above");
         let grid = grid_lines(cam, size[1] as f64);
+        let curve_lines = crate::spline_edit::pane_lines(
+            splines,
+            base.shading,
+            &palette,
+            cam,
+            [f64::from(size[0]), f64::from(size[1])],
+        );
+        let curve_set = LineSet::new(device, &curve_lines);
         let frame = Frame {
             meshes: &draw,
             instanced: &draw_instanced,
             grid: Some(&grid),
+            lines: &[&curve_set],
             gizmo,
             settings: Settings {
                 shading: if component.is_some() {

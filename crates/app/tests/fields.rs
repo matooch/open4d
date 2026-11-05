@@ -149,3 +149,129 @@ fn new_field_types_set_params_save_and_report_unsupported_noise() {
     assert_eq!(value_at(&other, rnd, at), noise);
     assert!((value_at(&other, cyl, at) - 0.5).abs() < 1e-12);
 }
+
+fn rows(app: &App, owner: NodeId) -> Vec<forge_core::LinkRow> {
+    match app.doc.scene().param(owner, "fields") {
+        Some(forge_core::Value::LinkRows(r)) => r.clone(),
+        other => panic!("not a row list: {other:?}"),
+    }
+}
+
+#[test]
+fn group_formula_and_shader_fields_are_created_with_their_defaults() {
+    let mut app = App::new_default();
+    let g = create(&mut app, "forge.field.group");
+    let f = create(&mut app, "forge.field.formula");
+    let s = create(&mut app, "forge.field.shader");
+    assert_eq!(
+        app.doc.scene().param(g, "enable_remapping"),
+        Some(&forge_core::Value::Bool(false))
+    );
+    assert_eq!(
+        app.doc.scene().param(f, "clamp_min"),
+        Some(&forge_core::Value::Bool(false))
+    );
+    assert!(rows(&app, g).is_empty());
+    // an empty group has no value, the default formula is in 0..1, the shader field is Unsupported
+    assert_eq!(value_at(&app, g, DVec3::ZERO), 0.0);
+    let v = value_at(&app, f, DVec3::ZERO);
+    assert!((0.0..=1.0).contains(&v));
+    assert!(matches!(
+        FieldList::from_nodes(app.doc.scene(), &[s]).err(),
+        Some(FieldError::Unsupported(_))
+    ));
+    // a text that does not parse is reported, not silently zero
+    set(&mut app, f, "formula", json!("1 +"));
+    assert!(matches!(
+        FieldList::from_nodes(app.doc.scene(), &[f]).err(),
+        Some(FieldError::Formula(_))
+    ));
+}
+
+#[test]
+fn list_rows_are_edited_by_param_set_as_one_undo_step_and_read_back_by_the_query() {
+    let mut app = App::new_default();
+    let a = create(&mut app, "forge.field.spherical");
+    let b = create(&mut app, "forge.field.linear");
+    let bend = create(&mut app, "forge.bend");
+    // bare ids are default rows
+    set(&mut app, bend, "fields", json!([a.0, b.0]));
+    let r = rows(&app, bend);
+    assert_eq!(
+        r.iter()
+            .map(|x| (x.blend.as_str(), x.strength, x.enabled))
+            .collect::<Vec<_>>(),
+        vec![("normal", 1.0, true), ("normal", 1.0, true)]
+    );
+    // row objects carry blend, strength (percent) and enabled
+    let steps = app.doc.history().undo_labels().len();
+    set(
+        &mut app,
+        bend,
+        "fields",
+        json!([
+            {"target": a.0, "blend": "add", "strength": 50.0},
+            {"target": b.0, "enabled": false},
+        ]),
+    );
+    assert_eq!(app.doc.history().undo_labels().len(), steps + 1);
+    let r = rows(&app, bend);
+    assert_eq!(
+        (r[0].blend.as_str(), r[0].strength, r[0].enabled),
+        ("add", 0.5, true)
+    );
+    assert!(!r[1].enabled);
+    // the same field in another list has its own row
+    let taper = create(&mut app, "forge.taper");
+    set(&mut app, taper, "fields", json!([a.0]));
+    assert_eq!(rows(&app, taper)[0].strength, 1.0);
+    // the query shows rows with percent strengths
+    let node = forge_app::query::node_json(app.doc.scene(), bend);
+    let shown = &node["params"]["fields"];
+    assert_eq!(shown[0]["blend"], json!("add"));
+    assert_eq!(shown[0]["strength"], json!(50.0));
+    assert_eq!(shown[1]["enabled"], json!(false));
+    // bad rows are refused and change nothing
+    for bad in [
+        json!([{"target": a.0, "blend": "dissolve"}]),
+        json!([{"strength": 50.0}]),
+        json!([a.0, a.0]),
+    ] {
+        assert!(
+            app.run(
+                "param.set",
+                json!({"node": bend.0, "param": "fields", "value": bad})
+            )
+            .is_err()
+        );
+    }
+    assert_eq!(rows(&app, bend).len(), 2);
+    // undo steps back through the taper's list, the taper's creation, then the row edit of the bend
+    app.run("edit.undo", json!({})).unwrap();
+    assert!(rows(&app, taper).is_empty());
+    app.run("edit.undo", json!({})).unwrap();
+    app.run("edit.undo", json!({})).unwrap();
+    assert_eq!(rows(&app, bend)[0].blend, "normal");
+}
+
+#[test]
+fn rows_survive_save_and_load() {
+    let mut app = App::new_default();
+    let a = create(&mut app, "forge.field.spherical");
+    let bend = create(&mut app, "forge.bend");
+    set(
+        &mut app,
+        bend,
+        "fields",
+        json!([{"target": a.0, "blend": "multiply", "strength": 25.0, "enabled": false}]),
+    );
+    let text = forge_core::file::save(app.doc.scene());
+    assert!(text.contains("version: 11"));
+    let (scene, report) =
+        forge_core::file::load(app.doc.scene().registry().clone(), &text).unwrap();
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    assert_eq!(
+        scene.param(bend, "fields"),
+        app.doc.scene().param(bend, "fields")
+    );
+}

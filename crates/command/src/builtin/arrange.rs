@@ -181,6 +181,7 @@ fn points_inside(v: &Value, inside: &BTreeSet<NodeId>) -> bool {
     match v {
         Value::Link(Some(t)) => inside.contains(t),
         Value::LinkList(l) => l.iter().any(|t| inside.contains(t)),
+        Value::LinkRows(rows) => rows.iter().any(|r| inside.contains(&r.target)),
         _ => false,
     }
 }
@@ -190,6 +191,14 @@ fn remap(v: &Value, map: &BTreeMap<NodeId, NodeId>) -> Value {
     match v {
         Value::Link(Some(t)) => Value::Link(Some(to(t))),
         Value::LinkList(l) => Value::LinkList(l.iter().map(to).collect()),
+        Value::LinkRows(rows) => Value::LinkRows(
+            rows.iter()
+                .map(|r| forge_core::LinkRow {
+                    target: to(&r.target),
+                    ..r.clone()
+                })
+                .collect(),
+        ),
         other => other.clone(),
     }
 }

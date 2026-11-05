@@ -445,9 +445,9 @@ fn editable_helix_points_and_tangents_match_the_notes() {
     near(d.points[0], DVec3::new(200.0, 0.0, 0.0));
     near(d.points[100], DVec3::new(200.0, 0.0, -200.0));
     near_to(d.points[1], DVec3::new(198.422940, 25.066647, -2.0), 1e-5);
-    // our helix handle is a third of the piece length (GENERATORS2.md 6.1); the app's is
-    // 0.07 % shorter, so the read-back agrees to a relative 1e-3, not to the form's digits
-    let close = |a: DVec3, b: DVec3| near_to(a, b, 1e-3 * b.length());
+    // the handle is a third of the piece's chord along the central difference (brief 191,
+    // GENERATORS2.md 6.1): the read-back agrees with the form's six digits
+    let close = |a: DVec3, b: DVec3| near_to(a, b, 2e-6);
     close(
         tangent_readback(d.right[0]),
         DVec3::new(0.0, 6.278974, -0.500982),

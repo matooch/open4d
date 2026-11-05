@@ -635,20 +635,20 @@ is "cloner", "clone toolset", "effector".
 ### 16.1 Link list rows
 
 The cloner's `effectors` list, an effector's `fields` list and a deformer's `fields` list are
-all `LinkList` parameters drawn by `widgets::link_list` (UI.md §12). One row per entry:
+the cloner's list is a `LinkList`, the two `fields` lists are `LinkRows` parameters (FIELDS.md F7),
+both drawn by `widgets::link_list` (UI.md §12). One row per entry:
 
-`[x] name   [strength]   ^  v  x`
+`[x] name   [blend] [strength]   ^  v  x` (blend and strength only on `LinkRows`)
 
-- **Enable box** (`Enable <name>`): shown when the entry node has an `enabled` parameter
-  (effectors, deformers) or else the object state `object.enabled` (fields, TRANSFORM.md §2).
-  It edits that parameter **on the entry node**, not on the list's owner. A disabled entry
-  keeps its place in the list and is skipped when the list is applied (effector: no
-  effect, MOGRAPH.md E1; field: the layer is left out of the `FieldList`, FIELDS.md F2).
-- **Strength** (`Strength <name>`, percent): shown when the entry node has the `layer_strength`
-  parameter (every field node, FIELDS.md; brief 061 stored a row's layer strength there). It
-  edits `layer_strength` of the entry node. Own design, parity-pending: the strength belongs
-  to the node, so a field used by two lists has one strength in both (real per-row storage
-  comes with brief 059).
+- **Enable box** (`Enable <name>`): in a `LinkList` it is shown when the entry node has an
+  `enabled` parameter (effectors) and edits that parameter **on the entry node**. In a
+  `LinkRows` list (field rows) it is the row's own `enabled` and edits the list on its owner. A
+  disabled entry keeps its place and is skipped when the list is applied (effector: no effect,
+  MOGRAPH.md E1; field: the layer is left out of the `FieldList`, FIELDS.md F7).
+- **Blend** (`Blend <name>`, a combo of the nine blend modes) and **Strength** (`Strength <name>`,
+  percent): only in `LinkRows` lists; they edit the row (brief 059, FIELDS.md F7), so a field used by
+  two lists has one blend mode and strength per list. Every row edit writes the whole list with
+  `param.edit` on the owner: one undo step.
 - `^` / `v` (`Move <name> up/down`) reorder: the new list order is the order the effectors
   or layers apply in (effectors in list order, MOGRAPH.md E1; layers top to bottom).
 - `x` (`Remove <name>`) removes the entry from the list only; the node stays in the scene.
@@ -657,7 +657,7 @@ all `LinkList` parameters drawn by `widgets::link_list` (UI.md §12). One row pe
   node is appended; a node already in the list is ignored).
 
 Every change is one `param.edit` command: a list edit on the list's owner (all selected
-objects of that type), an enable or strength edit on the entry node. `Edit` carries an
+objects of that type), or an enable edit on the entry node of a `LinkList`. `Edit` carries an
 optional `target` (`param`, `node`) for the latter. One undo step per click.
 
 ### 16.2 Create menu and "Cloner from selection"
@@ -711,8 +711,8 @@ display. Cloners with enabled deformer children keep the expanded fallback (VIEW
   matrices after swapping the order differ from before (the order matters, O14
   `two-effectors`), and swap back restores them; undo of each step.
 - Enable box: the effector stops acting (clone matrices equal the no-effector ones) and undo
-  brings it back; the same for a field row; the strength box edits `layer_strength` and the
-  clone result follows.
+  brings it back; the same for a field row (the row's `enabled`); the strength box edits the row's
+  `strength` (the field node is untouched) and the clone result follows.
 - Pure: Create menu entries, `clone_marks` (counts, hidden clones, cap, behind camera,
   projection), the 10 000 clone instance data builds and culls.
 - Instancing: a cloner of 10 000 clones is one `DrawItem::Instanced`.

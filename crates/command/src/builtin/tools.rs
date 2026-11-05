@@ -456,7 +456,7 @@ impl CommandHandler for ToolCommand {
         if self.desc.id == "slide" {
             json!({"edges": [0], "settings": {"amount": 0.5}})
         } else if self.desc.id == "array" {
-            json!({"settings": {"copies": 2, "offset": [200.0, 0.0, 0.0]}})
+            json!({"settings": {"count_x": 2, "offset": [200.0, 0.0, 0.0]}})
         } else if self.desc.params.iter().any(|p| p.id == "offset") {
             json!({"polys": [0], "settings": {"offset": 10.0}})
         } else {

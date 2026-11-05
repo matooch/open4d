@@ -103,12 +103,12 @@ fn apply_array_on_an_editable_cube_previews_and_applies() {
     activate_tool(&mut st, "array");
     let before = steps(&st);
     let (_, preview) = tool_preview(&st).unwrap();
-    assert_eq!((preview.points.len(), preview.polys.len()), (32, 24));
+    assert_eq!((preview.points.len(), preview.polys.len()), (16, 8));
     assert_eq!(steps(&st), before, "the preview does not write");
     apply_tool(&mut st).unwrap();
     assert_eq!(steps(&st), before + 1);
     match st.doc.scene().param(id, "mesh") {
-        Some(Value::Mesh(m)) => assert_eq!((m.points.len(), m.polys.len()), (32, 24)),
+        Some(Value::Mesh(m)) => assert_eq!((m.points.len(), m.polys.len()), (16, 8)),
         _ => panic!("mesh"),
     }
 }

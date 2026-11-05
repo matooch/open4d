@@ -142,6 +142,8 @@ pub struct Editor {
     gizmo_drag: Option<(Drag, NodeId, Transform, u64)>,
     /// The gizmo drag on components in progress: drag state, component drag, gesture.
     component_drag: Option<(Drag, ComponentDrag, u64)>,
+    /// A drag of spline control points or a handle (VIEWPORT.md section 11.2).
+    spline_drag: Option<crate::spline_edit::SplineDrag>,
     /// The axis-mode gizmo drag in progress: drag state, the captured axis, gesture.
     axis_drag: Option<(Drag, AxisEdit, u64)>,
     /// What the snapping of the drag in progress can land on, collected when it began.
@@ -229,6 +231,7 @@ impl Editor {
             coord_draft_key: String::new(),
             gizmo_drag: None,
             component_drag: None,
+            spline_drag: None,
             axis_drag: None,
             drag_sources: SnapScene::default(),
             view_rect: egui::Rect::NOTHING,
@@ -1452,6 +1455,7 @@ impl Editor {
                     f64::from(shown.settings().fps),
                 ),
                 frame: previewed.is_none().then_some(&*scheduled),
+                splines: &crate::spline_edit::editor_draws(&shown, &self.state),
             },
         );
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
@@ -1825,6 +1829,37 @@ impl Editor {
                 }
                 return;
             }
+        }
+        // an editable spline in Points mode: its control points and handles take the pointer
+        // (VIEWPORT.md section 11.2)
+        if crate::spline_edit::edit_target(&self.state.app).is_some() {
+            if response.drag_started_by(egui::PointerButton::Primary) {
+                self.gesture_seq += 1;
+                self.spline_drag = crate::spline_edit::SplineDrag::begin(
+                    &mut self.state,
+                    [x, y],
+                    [w, h],
+                    mods,
+                    self.gesture_seq,
+                );
+            }
+            if let Some(drag) = &mut self.spline_drag {
+                if response.dragged_by(egui::PointerButton::Primary) {
+                    self.state.status =
+                        match drag.update(&mut self.state, [x, y], [w, h], mods.command) {
+                            Ok(()) => String::new(),
+                            Err(e) => e,
+                        };
+                }
+                if response.drag_stopped() {
+                    self.spline_drag = None;
+                }
+                return;
+            }
+            if response.clicked() {
+                crate::spline_edit::click(&mut self.state, [x, y], [w, h], mods);
+            }
+            return;
         }
         let cam = self.state.camera;
         let snap = self.state.app.transform_settings.snap.clone();

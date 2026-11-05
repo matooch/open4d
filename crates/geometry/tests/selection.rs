@@ -51,8 +51,14 @@ fn grow_and_shrink() {
     assert_eq!(ids(&grown), [1, 3, 4, 5, 7]);
     assert_eq!(ids(&shrink_points(&m, &grown)), [4]);
     let gp = grow_polys(&m, &set(&[0]));
-    assert_eq!(ids(&gp), [0, 1, 2], "shares an edge, not just a vertex");
-    assert_eq!(ids(&shrink_polys(&m, &gp)), [0]);
+    // O58 sel-grow-poly: a polygon sharing only a point is a neighbour too
+    assert_eq!(ids(&gp), [0, 1, 2, 3], "shares a vertex, not only an edge");
+    let one_row = set(&[0, 1]);
+    assert_eq!(
+        ids(&shrink_polys(&m, &grow_polys(&m, &one_row))),
+        [0, 1, 2, 3]
+    );
+    assert!(shrink_polys(&m, &one_row).is_empty());
     let all = set(&[0, 1, 2, 3]);
     assert_eq!(ids(&shrink_polys(&m, &all)), [0, 1, 2, 3]);
 }

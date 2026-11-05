@@ -942,14 +942,14 @@ Result: see docs/parity/STATUS.md.
 
 ## 9. Arrangement commands (`object.duplicate`, `object.arrange`, `object.randomize`, `object.transfer`, `mesh.array_command`; brief 031)
 
-Sources: **own design, all parity-pending.** The only observation is the array note of
-docs/parity/modeling-tools-2.md (case `array-command`, dropped): the probe's Array command on the
-default cube with 3 copies and offset (300, 0, 0) produced 24 points and 18 polygons, but with
-scaled and rotated copies and a third copy reaching x = 385 instead of 500, because the settings
-fields were not mapped to the dialog labels. Nothing in it fixes a rule, so no golden case exists
-and the parity count is 0/0. The settings are descriptors (`arrange_descs()`, the framework of
-§0), so the panel, the schema, the defaults and the clamping derive from one definition. The pure
-functions are in `crates/modeling/src/arrange.rs`; the commands in
+Sources: the Array command is fixed by the O58 cases `arr-f-array-3` and `arr-f-array-mode`
+(brief 187, §9.6); Duplicate, Arrange (linear) and Transfer are confirmed by `arr-f-duplicate`,
+`arr-f-arrange` and `arr-f-transfer`; Randomize is compared statistically (`arr-f-randomize`,
+§9.4). The rest (total mode, grid and circle Arrange, other Duplicate layouts) is **own design,
+parity-pending**. The earlier probe (docs/parity/modeling-tools-2.md, `array-command`, dropped)
+had unmapped fields and fixes no rule. The settings are descriptors (`arrange_descs()`, the
+framework of §0), so the panel, the schema, the defaults and the clamping derive from one
+definition. The pure functions are in `crates/modeling/src/arrange.rs`; the commands in
 `crates/command/src/builtin/arrange.rs` (objects) and `tools.rs` (`mesh.array_command`, a
 normal mesh tool command, §0.1).
 
@@ -979,6 +979,8 @@ Arguments (explicit numbers, no other keys): `nodes?` (default: the selection), 
 - Name: `<source name>.N` with the lowest free `N` over the whole scene (the Split rule, §4.7);
   children and tags keep their names. The transform tracks of the copy's root are not copied (its
   placement is the step); every other track is.
+- Confirmed by `arr-f-duplicate` (default cube, 3 copies, per-step move (200, 0, 0): the source stays,
+  copies `Cube.0`, `Cube.1`, `Cube.2` at x = 200 / 400 / 600, 32 points in world space).
 - One transaction "Duplicate", one undo step. The copies become the selection (the last node's last
   copy is active). Result `{created: [id…], count}`. No selection and no `nodes` is `Failed`.
 
@@ -994,6 +996,10 @@ Sets the local position of the nodes only; rotation and scale are unchanged. Arg
   axes are `(u, v)` = (X, Z) for `xz`, (X, Y) for `xy`, (Z, Y) for `zy`; node `i` at
   `c + radius·(cos θi · u + sin θi · v)`; the component along the plane's normal keeps `c`'s value.
 Positions are local values, so nodes with different parents are only aligned if the parents are.
+`arr-f-arrange` confirms `line` (three default cubes, step (200, 0, 0): x = 0 / 200 / 400, rotation
+untouched). The reference's Circle (Start 0, End 2pi, Radius 300) and Along Spline layouts returned
+success and changed nothing through the scripting interface of that build, so they give no data;
+our `circle` stays own design, **parity-pending** (follow-up: Circle by hand in the GUI).
 One transaction "Arrange". Result `{arranged: n}`. No nodes: `Failed`.
 
 ### 9.4 Randomize (`object.randomize`)
@@ -1009,6 +1015,15 @@ the order or the other nodes. New values: `pos += u·position`, `rot += radians(
 The offsets are added to the current values, so a second run with another seed accumulates. One
 transaction "Randomize", result `{randomized: n}`.
 
+Parity (`arr-f-randomize`, three default cubes, seed 1, position ±100, rotation ±30 degrees, scale
+±0.5): the amplitudes are the ranges of a uniform draw around the start value (position ±100 around
+the start, scale factor 1 ± 0.5, rotation ±30 degrees per axis; the reference stores the rotation
+range in radians), and the same seed repeats exactly. The reference's random stream is unknown, so
+the numbers cannot match: the test is level C (every recovered transform of the reference file and of
+ours lies inside the ranges, the same seed repeats, another seed differs). **Parity-pending**:
+distribution shape (uniform assumed, nine samples cannot tell) and the dependence on node order.
+Follow-up case: Randomize on 30 cubes, seed 1, to check the distribution (histogram of positions).
+
 ### 9.5 Transfer (`object.transfer`)
 Copies the placement of one object to another. Arguments: `target` (node id, required), `source?`
 (default: the active node), `position`, `rotation`, `scale` (bools, default on), `space` (`world`
@@ -1019,17 +1034,38 @@ columns, scale = column lengths); only the ticked components are written. Source
 missing node, a tag: `Failed`. One transaction "Transfer"; result `{node}`.
 
 ### 9.6 Array command (`mesh.array_command`)
-A mesh tool of the framework (§0.1, settings under `settings`): the polygon object gets, after
-its own points and polygons, `copies` transformed copies of the whole mesh (the polygon selection
-argument is ignored). Copy `k` is `T(f·offset) · R(f·rotation) · S(max(0.001, 1 + f·(scale − 1)))` applied to every point
-in object space, with `f` from §9.1 and the transform convention of TRANSFORM.md (heading about Y,
-pitch about X, bank about Z, applied bank, pitch, heading). Copy points follow copy after copy in
-original order; copy polygons likewise (the same corner order, so winding is kept). Result
-selection: the polygons of the copies. Defaults: `copies` 3, `offset` (200, 0, 0), `rotation_deg`
-0, `scale` 1, `mode` `step`. Whether the reference's "copies" counts the original (the probe's 24
-points would then be 3 instances) is **open**; `copies` here is the number of added copies. More
-than 4 million resulting points: `ToolError::Invalid`. One undo step "Array command" restores the
-mesh and selection.
+Sources: `arr-f-array-3`, `arr-f-array-mode` (O58). A mesh tool of the framework (§0.1, settings
+under `settings`). Settings: `count_x`, `count_y`, `count_z` (int 1..1000, default 3, 1, 1: the number
+of **instances** along each axis, the original included), `offset` (vec3, default (400, 0, 0): the
+**total** distance from the first to the last instance per axis), `rotation_deg` (vec3, default 0)
+and `scale` (vec3, default 1, 0.001..1000): the totals reached by the last instance.
+
+Rules:
+1. Instances are the grid `(i, j, k)` with `0 <= i < count_x` etc.; `(0, 0, 0)` is the original and
+   stays as it is, first in the mesh. `arr-f-array-3` (count 3, offset 300, all polygons): three
+   cubes, 24 points, x ranges -100..100, 50..250, 200..400.
+2. Per axis the step fraction is `f = i / (count - 1)` (0 when the count is 1): instance `(i, j, k)` is
+   moved by `(offset.x · fx, offset.y · fy, offset.z · fz)`. The spacing 150 of `arr-f-array-3` is
+   `300 / (3 - 1)`. An axis with count 1 ignores its offset: `arr-f-array-mode` (count 2 along x,
+   offset (0, 0, 300)) puts the copy exactly on the original (step `offset.x / 1 = 0`).
+   **Parity-pending**: whether the step is `offset / (count - 1)` or `offset / 2`; both give 150 for
+   count 3. Follow-up case: `arr-f-array-4` (count 4, offset (300, 0, 0): expect x steps of 100).
+3. Only the **selected polygons** are copied (`arr-f-array-mode`: top polygon selected, count 2 gives
+   12 points and 7 polygons: the original cube, then 4 points and 1 polygon). With no polygon
+   selected the whole mesh is copied (own design, parity-pending).
+4. A copy's points are the points used by the copied polygons in ascending original index, its polygons
+   follow in ascending original index with the same corner order (`arr-f-array-mode`: points 1, 3, 5, 7
+   become 9..12, the polygon `[1, 7, 5, 3]` becomes `[8, 11, 10, 9]`). Copies follow one another in the
+   order `i` fastest, then `j`, then `k` (**parity-pending**; only one axis was observed).
+5. Rotation and scale about the object origin, with `t = fx + fy + fz` (**parity-pending**, not
+   observed): rotation `t · rotation_deg`, scale `max(0.001, 1 + t · (scale − 1))` per axis, with the
+   transform convention of TRANSFORM.md (heading about Y, pitch about X, bank about Z, applied bank,
+   pitch, heading).
+6. Result selection: the polygons of the new copies. More than 4 million resulting points:
+   `ToolError::Invalid`. One undo step "Array command".
+
+This replaces the earlier own design (a `copies` count of added copies with a per-copy step and a
+`mode`); that design is kept for Duplicate only (§9.1).
 
 ### 9.7 UI
 The Mesh menu lists Duplicate, Arrange, Randomize, Transfer and Array command after the building
@@ -1040,9 +1076,20 @@ which is the id typed in the panel, or when -1 the first selected object other t
 one). There is no viewport preview and no drag for the object commands; the Array command previews
 live. Own design, parity-pending.
 
-### 9.8 Checks
-`crates/modeling/tests/arrange.rs` (step rule both modes, array counts, order, winding, closed
-cube copies, offsets, rotation/scale, the point cap), `crates/app/tests/arrange_commands.rs` (the five
+### 9.8 Parity (`crates/app/tests/o58_object_parity.rs`)
+The test discovers the `modeling-tools` cases whose `tool` is `array_command`, `duplicate`,
+`arrange`, `randomize` or `transfer`, rebuilds each scene through the registered commands, exports it
+with the OBJ writer and compares with `mesh.obj` (identical face lists, positions within the case
+tolerance). `arr-f-randomize` is compared statistically (§9.4). `arr-f-transfer` confirms §9.5 in
+world space: the command-list object (`target`) takes the position, rotation and scale of the
+source (the "Transfer to" link). The case text calls the source rotation "P 20"; the exported
+cube is turned about the Z axis (x axis to (cos 20°, −sin 20°, 0)), a bank of 20° in the TRANSFORM.md
+convention, so the test sets that; the file is the ground truth. **Parity-pending**: which of H, P, B the
+script's third component is; follow-up case: Transfer with distinguishable H, P and B on the source.
+
+### 9.9 Checks
+`crates/modeling/tests/arrange.rs` (step rule both modes, array grid counts, selection, order,
+winding, closed cube copies, offsets, rotation/scale, the point cap), `crates/app/tests/arrange_commands.rs` (the five
 commands headless, one undo step each, deep copies, determinism of Randomize, argument errors,
 schemas), `crates/ui/tests/arrange.rs` (menu entries, panel, Apply).
 

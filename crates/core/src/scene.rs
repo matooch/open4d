@@ -254,6 +254,7 @@ impl Scene {
         let links = n.params.values().flat_map(|v| match v {
             Value::Link(Some(t)) => vec![*t],
             Value::LinkList(ts) => ts.clone(),
+            Value::LinkRows(rows) => rows.iter().map(|r| r.target).collect(),
             _ => Vec::new(),
         });
         let deps: Vec<NodeId> = n

@@ -27,7 +27,7 @@ implementers can avoid collisions.
 | 027 | [Selection tags, vertex map tags, restriction tags](../agents/tasks/027-selection-vertexmap-restriction-tags.md) | B | 023 | waiting: O54 | core, generators, ui, modifiers |
 | 028 | [Editable spline object and point/tangent editing](../agents/tasks/028-editable-spline.md) | B | 003 | done | core, geometry, generators, ui |
 | 029 | [Spline tools and spline booleans](../agents/tasks/029-spline-tools.md) | B | 028 | done | geometry, modeling |
-| 030 | [Make Editable follow-ups from O3](../agents/tasks/030-make-editable-followups.md) | B | 003, 028 | ready | generators, ui |
+| 030 | [Make Editable follow-ups from O3](../agents/tasks/030-make-editable-followups.md) | B | 003, 028 | done | generators, ui |
 | 031 | [Duplicate, Arrange, Randomize, Transfer, Array command](../agents/tasks/031-duplicate-arrange-array-command.md) | B | 011 | done (parity-pending: no data; array-command probe, G3) | ui, modeling |
 | 032 | [Snapping 2.0 and axis/pivot editing](../agents/tasks/032-snapping-pivot.md) | B | 006 | done (parity-pending G2/G3) | viewport, ui, modeling, generators, command |
 | 033 | [N-gon handling: reference triangulation order and edge visibility](../agents/tasks/033-ngon-triangulation-order.md) | B | – | done | geometry, generators, viewport |
@@ -36,27 +36,27 @@ implementers can avoid collisions.
 | 036 | [Landscape primitive](../agents/tasks/036-landscape.md) | C | 063 | done | generators, noise |
 | 037 | [Spline primitives II](../agents/tasks/037-spline-primitives-2.md) | C | 038 | done | generators |
 | 038 | [Intermediate Points modes and R25 per-spline defaults](../agents/tasks/038-intermediate-points.md) | C | – | done | generators, geometry |
-| 039 | [Text spline (fonts)](../agents/tasks/039-text-spline.md) | C | 038 | ready | generators, text (new) |
+| 039 | [Text spline (fonts)](../agents/tasks/039-text-spline.md) | C | 038 | done (9/9 O48 cases on font-independent invariants; glyph shapes parity-pending until a re-observation with a licensed font) | generators, text (new) |
 | 040 | [Metaball generator](../agents/tasks/040-metaball.md) | C | 083 | waiting: 083 | generators, volume |
-| 041 | [Atom Array and Spline Mask](../agents/tasks/041-atom-array-spline-mask.md) | C | 029 | ready | generators |
+| 041 | [Atom Array and Spline Mask](../agents/tasks/041-atom-array-spline-mask.md) | C | 029 | done (4/4 O20 cases; other mask modes, axes, oblique atom edges parity-pending) | generators |
 | 042 | [Sweep rail/banking/scale, Loft linear/multi, Lathe partial/movement, cap fixes](../agents/tasks/042-sweep-loft-lathe-r25.md) | C | – | done (Lathe done; Loft/Sweep R25 cases parity-pending: R20/R25 conflict, helix route) | generators |
 | 043 | [Boole R25 modes and numbering, Subdivision types, Symmetry planes](../agents/tasks/043-boole-subdivision-symmetry-r25.md) | C | – | done (Boole R25 strict numbering parity-pending) | generators, geometry |
 | 044 | [Shared Caps/Bevel tabs and Extrude R25 options](../agents/tasks/044-caps-bevel-tab.md) | C | 042 | waiting: 042 | generators |
 | 045 | [Extrude R25 vertex order](../agents/tasks/045-extrude-r25-order.md) | C | 044 | ready | generators |
-| 046 | [Null display, Instance render modes, Connect weld options](../agents/tasks/046-null-instance-connect-options.md) | C | – | ready | generators, viewport |
+| 046 | [Null display, Instance render modes, Connect weld options](../agents/tasks/046-null-instance-connect-options.md) | C | – | waiting: O20 (follow-up cases), G8 | generators, viewport |
 | 047 | [Camera, Light, Environment, Floor and Sky as scene objects](../agents/tasks/047-scene-objects-camera-light.md) | C | – | waiting: O29 | generators, core, viewport |
 | 048 | [Generators as clone and volume inputs (consumed-input rules)](../agents/tasks/048-generators-in-clone-volume-contexts.md) | C | 065, 081 | ready | generators |
 | 049 | [Create menu organisation](../agents/tasks/049-create-menu-organisation.md) | C | 148 | ready | ui, core |
 | 050 | [Bend 3-axis gating fix + EvalCtx through evaluation](../agents/tasks/050-bend-gating-evalctx.md) | D | – | done | modifiers, generators, core |
 | 051 | [Squash & Stretch and Wrap deformers](../agents/tasks/051-squash-stretch-wrap.md) | D | 050 | done (11/11 level A; Center, Aspect, Smooth, Movement, Scale Z, Tension parity-pending, see MODIFIERS.md §7) | modifiers |
-| 052 | [Expression library; FFD, Formula and Melt deformers](../agents/tasks/052-expr-ffd-formula-melt.md) | D | 050, 063 | ready | expr (new), modifiers |
-| 053 | [Explosion, Shatter, Wind deformers](../agents/tasks/053-explosion-shatter-wind.md) | D | 050 | ready | modifiers |
+| 052 | [Expression library; FFD, Formula and Melt deformers](../agents/tasks/052-expr-ffd-formula-melt.md) | D | 050, 063 | done (5 exact + 2 statistical of 7; Melt values parity-pending, see MODIFIERS.md §16-19) | expr (new), modifiers |
+| 053 | [Explosion, Shatter, Wind deformers](../agents/tasks/053-explosion-shatter-wind.md) | D | 050 | done (2 exact + 3 statistical of 5; random stream and wind noise parity-pending, see MODIFIERS.md §11-13) | modifiers |
 | 054 | [Smoothing deformer, Displacer, Polygon Reduction, Bevel deformer](../agents/tasks/054-smoothing-displacer-reduction-bevel.md) | D | 050, 125 | waiting: 125 | modifiers, modeling |
-| 055 | [Spline Wrap, Spline and Spline Rail deformers](../agents/tasks/055-spline-deformers.md) | D | 050, 028 | ready | modifiers |
-| 056 | [Mesh (cage), Surface, Camera, Collision, Jiggle, Delta Mush, Correction deformers](../agents/tasks/056-mesh-surface-camera-collision-jiggle-deltamush-correction.md) | D | 050 | ready | modifiers |
+| 055 | [Spline Wrap, Spline and Spline Rail deformers](../agents/tasks/055-spline-deformers.md) | D | 050, 028 | done (0 exact of 4, all pinned: sampler digits and unresolved helix frame / Spline pairing; see MODIFIERS.md §20-21) | modifiers |
+| 056 | [Mesh (cage), Surface, Camera, Collision, Jiggle, Delta Mush, Correction deformers](../agents/tasks/056-mesh-surface-camera-collision-jiggle-deltamush-correction.md) | D | 050 | done (3 exact of 8, one vacuous; 5 pinned: the reference export did not run the solvers; algorithms parity-pending, see MODIFIERS.md §14-15) | modifiers |
 | 057 | [Fields framework + Linear, Spherical, Box + Remapping](../agents/tasks/057-fields-framework.md) | D | 050 | done (27/27 samples; remap order and Step/Quadratic parity-pending, see FIELDS.md F5) | fields |
 | 058 | [Field types II: Cylinder, Cone, Torus, Capsule, Radial, Random](../agents/tasks/058-field-types-2.md) | D | 057, 063 | done | fields, noise |
-| 059 | [Field lists: layers, blend modes, groups, Formula and Shader fields](../agents/tasks/059-field-lists.md) | D | 057, 052 | ready | fields |
+| 059 | [Field lists: layers, blend modes, groups, Formula and Shader fields](../agents/tasks/059-field-lists.md) | D | 057, 052 | done (16/17 exact; Shader field Unsupported until 125; native format 11, see FIELDS.md F7) | fields |
 | 060 | [Field modifier layers: Freeze, Decay, Delay, Remap, Curve, Colorize, Step](../agents/tasks/060-field-modifier-layers.md) | D | 059 | waiting: O49 | fields |
 | 061 | [Deformer falloff through field lists (all deformers)](../agents/tasks/061-deformer-falloff.md) | D | 057 | done (9/9 O24 cases at level A; object off the origin and weights outside 0..1 parity-pending, see MODIFIERS.md §10) | modifiers, fields |
 | 062 | [Vertex maps from fields; restriction](../agents/tasks/062-vertex-maps-from-fields.md) | D | 027, 059 | waiting: O49 | fields, modifiers |
@@ -67,7 +67,7 @@ implementers can avoid collisions.
 | 067 | [Clone order (iterate, random, blend, sort), multiple children, nesting](../agents/tasks/067-clone-order-nesting.md) | E | 065 | waiting: O50 | clone-engine |
 | 068 | [Effector framework + Plain effector (modes, spaces, colour, weight, min/max)](../agents/tasks/068-effector-framework-plain.md) | E | 065, 057 | done (14/14 Plain cases at level B and A; rules parity-pending, see MOGRAPH.md E10) | clone-engine, core |
 | 069 | [Random effector (all modes)](../agents/tasks/069-random-effector.md) | E | 068, 063 | done (exact: counts/visibility/untouched channels 8/8; random values statistical, reference sequence not reproduced) | clone-engine, noise |
-| 070 | [Step, Formula, Time, Delay and Target effectors](../agents/tasks/070-step-formula-time-delay-target.md) | E | 068, 052 | ready | clone-engine |
+| 070 | [Step, Formula, Time, Delay and Target effectors](../agents/tasks/070-step-formula-time-delay-target.md) | E | 068, 052 | done (level B 6/6, level A 5/6: `step-position` known mismatch; Delay has no golden case, all its rules parity-pending, see MOGRAPH.md E18-E25) | clone-engine |
 | 071 | [Shader, Spline, Push Apart, Inheritance, Volume and Group effectors](../agents/tasks/071-shader-spline-pushapart-etc.md) | E | 068, 125 | ready | clone-engine |
 | 072 | [Effector falloff via field lists](../agents/tasks/072-effector-field-falloff.md) | E | 068, 059 | ready | clone-engine, fields |
 | 073 | [Matrix object](../agents/tasks/073-matrix-object.md) | E | 065 | waiting: O31 | clone-engine |
@@ -174,7 +174,7 @@ implementers can avoid collisions.
 | 174 | [Toolchain pin and cargo-deny](../agents/tasks/174-toolchain-cargo-deny.md) | N | – | done | root |
 | 175 | [Cross-platform settings, paths, fonts, file dialogs, modifiers](../agents/tasks/175-cross-platform-basics.md) | N | 173 | done | core, ui |
 | 176 | [Release workflow: AppImage, dmg, zip/MSI, checksums, changelog](../agents/tasks/176-release-workflow.md) | N | 173 | done (pending first tagged run) | .github |
-| 177 | [Signing and notarization hooks](../agents/tasks/177-signing-hooks.md) | N | 176 | ready | .github |
+| 177 | [Signing and notarization hooks](../agents/tasks/177-signing-hooks.md) | N | 176 | done (pending first signed run) | .github |
 | 178 | [Crash handler and logging](../agents/tasks/178-crash-logging.md) | N | 175 | done | app |
 | 179 | [Autosave and recovery](../agents/tasks/179-autosave-recovery.md) | N | 175, 163 | done | app |
 | 180 | [Dependency-graph evaluation scheduler (parallel, dirty-only)](../agents/tasks/180-eval-scheduler.md) | N | 012 | done | core |
@@ -183,8 +183,9 @@ implementers can avoid collisions.
 | 183 | [User manual and generated references (mdBook, GitHub Pages)](../agents/tasks/183-manual.md) | N | 019 | done | docs |
 | 184 | [Rhai plugin packages](../agents/tasks/184-rhai-plugins.md) | N | 016 | done | plugin |
 | 186 | [Plugin host integration: evaluation hook and plugin folders](../agents/tasks/186-plugin-host.md) | N | 184 | done | core, generators, plugin, app, cli |
-| 187 | [O58 object-command and selection parity](../agents/tasks/187-o58-object-selection-parity.md) | B | 031, 034 | ready | modeling, command, app |
+| 187 | [O58 object-command and selection parity](../agents/tasks/187-o58-object-selection-parity.md) | B | 031, 034 | done | modeling, command, app |
 | 188 | [Adopt the R25 Loft ring and quad order (D18)](../agents/tasks/188-r25-loft-adoption.md) | C | 042 | done | generators, io |
 | 189 | [Native format v10 for list-valued parameters](../agents/tasks/189-format-v10.md) | M | 028, 163 | done | core, io |
-| 190 | [Viewport splines: drawing, points, handles and dragging](../agents/tasks/190-viewport-splines.md) | E | 028, 143 | ready | viewport, ui, command |
+| 190 | [Viewport splines: drawing, points, handles and dragging](../agents/tasks/190-viewport-splines.md) | E | 028, 143 | done | viewport, ui, command |
+| 191 | [R25 Helix Bézier construction (sampling parity)](../agents/tasks/191-helix-sampling.md) | B | 028, 042 | done | generators |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |
