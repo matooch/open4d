@@ -260,7 +260,7 @@ No Field list on Explosion FX.
 - correction/defaults: which corrected point to move is not specified by the row; corrected point 0
   moved by (50, 0, 0).
 
-## Follow-up cases (planner, after briefs 056 and 052) — interactive export needed for solver deformers
+## Follow-up cases (planner, after briefs 056, 052 and 055) — interactive export needed for solver deformers and Spline Wrap
 
 Brief 056 matched Correction and Delta Mush exactly; the Mesh, Surface, Camera, Collision and
 Jiggle cases above exported **undeformed** geometry because, as Findings says, the scripted path
@@ -307,6 +307,26 @@ case still exports undeformed, say so in its row and move on.
 | ffd/point-z | FFD | the lattice point at +z middle moved by (0, 0, 50) |
 | ffd/grid-2 | FFD | 2 × 2 × 2 grid points, one corner moved by (50, 50, 50) |
 | ffd/grid-small | FFD | Grid Size (150, 150, 150), the middle top point moved by (0, 50, 0) |
+| spline-wrap/box | Spline Wrap | as `spline-wrap/defaults` and `spline-wrap/arc`, exported interactively so the deformer has a real bounding box (two cases) |
+| spline-wrap/axis-y | Spline Wrap | as `spline-wrap/arc`, Axis +Y (one case each for +Z and −X) |
+| spline-wrap/keep-length | Spline Wrap | as `spline-wrap/arc`, Keep Length on |
+| spline-wrap/clamp | Spline Wrap | as `spline-wrap/arc`, Clamp on |
+| spline-wrap/strength-50 | Spline Wrap | as `spline-wrap/arc`, Strength 50 % |
+| spline-wrap/offset-25 | Spline Wrap | as `spline-wrap/arc`, Offset 25 % |
+| spline-wrap/from-25-to-75 | Spline Wrap | as `spline-wrap/arc`, From 25 %, To 75 % |
+| spline-wrap/banking-45 | Spline Wrap | as `spline-wrap/defaults` (Helix), Banking 45° |
+| spline-wrap/up-vector | Spline Wrap | as `spline-wrap/defaults`, Up Vector (1, 0, 0) |
+| spline-wrap/closed | Spline Wrap | a default Circle as the spline |
+| spline-deformer/lines | Spline | original and modifier: straight 2-point Linear splines along x, the modifier 100 higher |
+| spline-deformer/modifier-moved | Spline | as `spline-deformer/defaults`, the modifier spline translated (0, 50, 0) instead of rotated |
+| spline-deformer/radius-60 | Spline | as `spline-deformer/lines`, Radius 60 |
+| spline-deformer/use-length | Spline | as `spline-deformer/lines`, Use Length on |
+| spline-rail/limited | Spline Rail | as `spline-rail/defaults`, Limited on |
+| spline-rail/within-box | Spline Rail | as `spline-rail/defaults`, Within Box on |
+| spline-rail/scale-before-50 | Spline Rail | as `spline-rail/defaults`, Scale Before 50 % |
+| spline-rail/x-splines | Spline Rail | as `spline-rail/defaults` plus X splines top and bottom (two default Linear splines) |
+| spline-rail/one-spline | Spline Rail | only the left Z spline linked |
+| spline-rail/uneven | Spline Rail | Z splines of lengths 200 and 400 |
 
 ## Notes
 
