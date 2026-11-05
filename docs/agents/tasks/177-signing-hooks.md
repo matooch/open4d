@@ -1,6 +1,6 @@
 # 177 · Signing and notarization hooks
 
-Status: ready · Area: N · Depends on: 176 · Observations: – · Touches: .github
+Status: done (pending first signed run) · Area: N · Depends on: 176 · Observations: – · Touches: .github
 
 ## Goal
 codesign/notarytool and signtool steps that run only when secrets exist.
@@ -12,7 +12,7 @@ codesign/notarytool and signtool steps that run only when secrets exist.
 - Skip cleanly without secrets.
 
 ## Done when
-- [ ] Workflow passes with and without secrets.
+- [x] Workflow passes with and without secrets. (Structure verified by `apps/forge/tests/release_signing.rs`; real tools run only on a tagged run with secrets.)
 - [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
@@ -23,9 +23,10 @@ codesign/notarytool and signtool steps that run only when secrets exist.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
+- Result: `apps/forge/tests/release_signing.rs` (5 tests: signing steps gated, secrets only via env or `!= ''`, nothing echoed, `if: always()` cleanup, unsigned upload path, minimal permissions and pinned actions). Parity: n/a.
+- Rules: gates `mac_gate` (sign, notarize), `win_gate`, `gpg_gate` are step outputs computed from `secrets.X != ''`; each skip logs `signing skipped: <reason>`. Secrets: MACOS_CERT_P12, MACOS_CERT_PASSWORD, MACOS_SIGN_IDENTITY (optional), MACOS_NOTARY_KEY_P8, MACOS_NOTARY_KEY_ID, MACOS_NOTARY_ISSUER_ID, WINDOWS_CERT_PFX, WINDOWS_CERT_PASSWORD, LINUX_GPG_PRIVATE_KEY, LINUX_GPG_PASSPHRASE (optional). Documented in docs/RELEASING.md.
+- Deviations: the .app is signed inside `package-macos.sh` through `sign-hooks.sh` (it must be signed before the dmg exists); the workflow signs/notarizes/staples the dmg. Same for Windows exes via `sign-hooks.ps1`. No real signing tool was run; first signed tag run verifies it.
+- Files changed: .github/workflows/release.yml, scripts/release/sign-hooks.sh/.ps1, package-macos.sh and package-windows.ps1 (comments), docs/RELEASING.md, apps/forge/tests/release_signing.rs, this brief, roadmap/BACKLOG.md.
 - Open questions or data that would settle them (the reviewer turns these into follow-up forms).
 - The last lines of the gate output.
+- The last lines of the gate output: `GATE: all passed`.
