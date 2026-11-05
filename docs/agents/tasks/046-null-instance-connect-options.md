@@ -1,6 +1,6 @@
 # 046 · Null display, Instance render modes, Connect weld options
 
-Status: waiting: O20 · Area: C · Depends on: – · Observations: O20 · Touches: generators, viewport
+Status: blocked: O20 has no null/instance/connect cases · Area: C · Depends on: – · Observations: O20 · Touches: generators, viewport
 
 ## Goal
 The smaller R25 object options (Null display shapes, Instance modes, Connect weld tolerance) exist and match where observed.
@@ -27,7 +27,8 @@ The smaller R25 object options (Null display shapes, Instance modes, Connect wel
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
+- Result: blocked, nothing implemented. docs/parity/generators-3.md (O20, 59 cases) lists only metaball, atom-array, spline-mask, boole, subdivision, symmetry, sweep, loft, lathe, platonic, oil-tank, polygon-prim, figure, landscape cases; its Notes never mention Null display shapes, Instance modes or Connect weld/tolerance/Phong. tests/golden has no null folder; connect has only the R20 cases defaults/weld-off/apart/order (weld on/off already covered); instance has only defaults (Instance mode). No R25 observation exists for Null display, Render/Multi-Instance, Connect tolerance or Phong mode, so a spec could not cite a source (CLAUDE.md rule 4).
+- Follow-up: new observation form with cases null/shape-*, null/radius-aspect, instance/render-instance, instance/multi-instance, connect/tolerance-*, connect/phong-*.
 - Rules derived, with the case that proves each; parity-pending rules.
 - Deviations from the design decisions, and why.
 - Files changed.
