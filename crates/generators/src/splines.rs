@@ -177,8 +177,10 @@ pub(crate) fn helix_type() -> NodeType {
 }
 
 pub(crate) fn is_spline(type_id: &str) -> bool {
-    matches!(type_id, CIRCLE | RECTANGLE | HELIX | editable_spline::TYPE)
-        || spline_prims::node_type(type_id).is_some()
+    matches!(
+        type_id,
+        CIRCLE | RECTANGLE | HELIX | editable_spline::TYPE | crate::spline_mask::TYPE
+    ) || spline_prims::node_type(type_id).is_some()
 }
 
 /// Maps the spline's XY frame to its plane (§6.1).
@@ -267,6 +269,11 @@ fn node_type_of(type_id: &str) -> Option<NodeType> {
 pub fn build_curve(type_id: &str, values: &BTreeMap<String, Value>) -> Result<Curve, BuildError> {
     if type_id == editable_spline::TYPE {
         return editable_spline::build_curve(values);
+    }
+    if type_id == crate::spline_mask::TYPE {
+        return Err(BuildError::Failed(
+            "a spline mask is built from its children".into(),
+        ));
     }
     let ty = node_type_of(type_id).ok_or_else(|| BuildError::UnknownType(type_id.to_string()))?;
     let p = Params { ty: &ty, values };
@@ -486,7 +493,14 @@ pub(crate) fn placed_curve(scene: &Scene, id: NodeId) -> Result<Option<Curve>, B
     if !is_spline(&node.type_id) {
         return Ok(None);
     }
-    let curve = build_curve(&node.type_id, &node.params)?;
+    let curve = if node.type_id == crate::spline_mask::TYPE {
+        match crate::spline_mask::curve_of(scene, id)? {
+            Some(c) => c,
+            None => return Ok(None),
+        }
+    } else {
+        build_curve(&node.type_id, &node.params)?
+    };
     let m = scene.local_transform(id).expect("node exists").matrix();
     Ok(Some(curve.transformed(&m)))
 }

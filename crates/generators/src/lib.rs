@@ -1,6 +1,7 @@
 //! forge-generators: parametric primitives. Spec: docs/specs/PRIMITIVES.md
 //! (vertex and face orders come from docs/parity/{plane,cube,sphere}.md).
 
+pub mod atom_array;
 pub mod axis;
 mod boole;
 mod cloner;
@@ -20,6 +21,7 @@ mod round;
 mod solids;
 mod sphere;
 mod spline_gens;
+pub mod spline_mask;
 mod spline_prims;
 pub mod spline_sampling;
 pub mod spline_tools;
@@ -102,6 +104,8 @@ impl Plugin for Primitives {
         r.register(spline_gens::lathe_type())?;
         r.register(spline_gens::loft_type())?;
         r.register(spline_gens::sweep_type())?;
+        r.register(atom_array::node_type())?;
+        r.register(spline_mask::node_type())?;
         r.register(boole::node_type())?;
         r.register(polygon::node_type())
     }
@@ -358,6 +362,7 @@ pub fn is_consumed(scene: &Scene, id: NodeId) -> bool {
         boole::TYPE => boole::inputs_of(scene, p.id).contains(&id),
         cloner::TYPE => cloner::prototypes_of(scene, p.id).contains(&id),
         t if modeling::input_count(t).is_some() => modeling::inputs_of(scene, p.id).contains(&id),
+        spline_mask::TYPE => spline_mask::inputs_of(scene, p.id).contains(&id),
         t if spline_gens::spline_input_count(t).is_some() => {
             spline_gens::spline_inputs_of(scene, p.id).contains(&id)
         }
