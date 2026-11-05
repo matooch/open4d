@@ -1,11 +1,12 @@
 //! file.*
 
 use forge_core::{Document, NodeId, file};
-use forge_io::obj::{ReadOptions, WriteOptions, read, write};
-use forge_io::{export_scene, import_into};
+use forge_core::{ParamDesc, ParamKind};
+use forge_io::formats::{self, FormatInfo, IoError};
+use forge_io::import_into;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use super::{register_plain, spec};
 use crate::context::CommandContext;
@@ -38,6 +39,48 @@ struct AutosaveArgs {
 #[serde(deny_unknown_fields)]
 struct ExportArgs {
     path: String,
+    /// Export only the selected objects.
+    #[serde(default)]
+    selected: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ImportArgs {
+    path: String,
+    /// Format id (`io.formats`); default: from the file extension.
+    format: Option<String>,
+    /// Import options by id (`io.formats` lists them).
+    #[serde(default)]
+    options: Map<String, Value>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ExportFileArgs {
+    path: String,
+    /// Format id (`io.formats`); default: from the file extension.
+    format: Option<String>,
+    /// Export only the selected objects.
+    #[serde(default)]
+    selected: bool,
+    /// Export options by id (`io.formats` lists them).
+    #[serde(default)]
+    options: Map<String, Value>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ImportDialogArgs {
+    /// Format id; default `obj`.
+    format: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ExportDialogArgs {
+    /// Format id; default `obj`.
+    format: Option<String>,
     /// Export only the selected objects.
     #[serde(default)]
     selected: bool,
@@ -181,7 +224,7 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
             true,
             || json!({"path": "model.obj"}),
         ),
-        import_obj,
+        |c, a: PathArgs| import_file(c, &a.path, Some("obj"), &Map::new()),
     )?;
     r.register_fn(
         spec(
@@ -190,8 +233,155 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
             false,
             || json!({"path": "model.obj", "selected": false}),
         ),
-        export_obj,
+        |c, a: ExportArgs| export_file(c, &a.path, Some("obj"), a.selected, &Map::new()),
+    )?;
+    r.register_fn(
+        spec(
+            "file.import",
+            "Import",
+            true,
+            || json!({"path": "model.obj", "options": {"flip_z": false}}),
+        ),
+        |c, a: ImportArgs| import_file(c, &a.path, a.format.as_deref(), &a.options),
+    )?;
+    r.register_fn(
+        spec(
+            "file.export",
+            "Export",
+            false,
+            || json!({"path": "model.obj", "selected": false, "options": {"normals": true}}),
+        ),
+        |c, a: ExportFileArgs| export_file(c, &a.path, a.format.as_deref(), a.selected, &a.options),
+    )?;
+    r.register_fn(
+        spec("io.formats", "Exchange Formats", false, || json!({})),
+        |_, _: NoArgs| Ok(formats_json()),
+    )?;
+    r.register_fn(
+        spec("file.import_dialog", "Import...", false, || json!({})),
+        |c, a: ImportDialogArgs| {
+            let format = dialog_format(a.format, true)?;
+            c.request_ui(UiRequest::ImportDialog(format.id.to_string()))
+                .map(|()| Value::Null)
+                .map_err(CommandError::Failed)
+        },
+    )?;
+    r.register_fn(
+        spec(
+            "file.export_dialog",
+            "Export...",
+            false,
+            || json!({"selected": false}),
+        ),
+        |c, a: ExportDialogArgs| {
+            let format = dialog_format(a.format, false)?;
+            c.request_ui(UiRequest::ExportDialog {
+                format: format.id.to_string(),
+                selected: a.selected,
+            })
+            .map(|()| Value::Null)
+            .map_err(CommandError::Failed)
+        },
     )
+}
+
+/// The format a dialog command names (default OBJ) if it can do the direction.
+fn dialog_format(id: Option<String>, import: bool) -> Result<&'static FormatInfo, CommandError> {
+    let id = id.unwrap_or_else(|| "obj".into());
+    let info = formats::format_by_id(&id)
+        .ok_or_else(|| CommandError::InvalidArgs(IoError::UnknownFormat(id).to_string()))?;
+    if (import && !info.import) || (!import && !info.export) {
+        return Err(CommandError::InvalidArgs(format!(
+            "format \"{}\" cannot {}",
+            info.id,
+            if import { "import" } else { "export" }
+        )));
+    }
+    Ok(info)
+}
+
+/// A descriptor as JSON for `io.formats` (the dialogs and clients derive from it).
+fn option_json(d: &ParamDesc) -> Value {
+    let mut o = Map::new();
+    o.insert("id".into(), json!(d.id));
+    o.insert("label".into(), json!(d.label));
+    match &d.kind {
+        ParamKind::Bool => {
+            o.insert("kind".into(), json!("bool"));
+        }
+        ParamKind::Int { min, max } => {
+            o.insert("kind".into(), json!("int"));
+            o.insert("min".into(), json!(min));
+            o.insert("max".into(), json!(max));
+        }
+        ParamKind::Float { min, max } => {
+            o.insert("kind".into(), json!("float"));
+            o.insert("min".into(), json!(min));
+            o.insert("max".into(), json!(max));
+        }
+        ParamKind::Enum { options } => {
+            o.insert("kind".into(), json!("enum"));
+            let choices: Vec<Value> = options
+                .iter()
+                .map(|c| json!({"id": c.id, "label": c.label}))
+                .collect();
+            o.insert("choices".into(), Value::Array(choices));
+        }
+        _ => {
+            o.insert("kind".into(), json!("string"));
+        }
+    }
+    let default = match &d.default {
+        forge_core::Value::Bool(b) => json!(b),
+        forge_core::Value::Int(i) => json!(i),
+        forge_core::Value::Float(f) => json!(f),
+        forge_core::Value::Enum(s) | forge_core::Value::String(s) => json!(s),
+        _ => Value::Null,
+    };
+    o.insert("default".into(), default);
+    Value::Object(o)
+}
+
+fn formats_json() -> Value {
+    let list: Vec<Value> = formats::formats()
+        .iter()
+        .map(|f| {
+            let opts = |d: Option<Vec<ParamDesc>>| -> Vec<Value> {
+                d.unwrap_or_default().iter().map(option_json).collect()
+            };
+            json!({
+                "id": f.id,
+                "label": f.label,
+                "extensions": f.extensions,
+                "import": f.import,
+                "export": f.export,
+                "import_options": opts(formats::import_options(f.id)),
+                "export_options": opts(formats::export_options(f.id)),
+            })
+        })
+        .collect();
+    json!({"formats": list})
+}
+
+fn resolve_format(
+    path: &str,
+    format: Option<&str>,
+    verb: &str,
+) -> Result<&'static str, CommandError> {
+    let found = match format {
+        Some(id) => formats::format_by_id(id),
+        None => formats::format_for_path(path),
+    };
+    found.map(|f| f.id).ok_or_else(|| {
+        CommandError::Failed(format!(
+            "{verb} failed: {}",
+            IoError::UnknownFormat(format.map_or_else(|| path.to_string(), str::to_string))
+        ))
+    })
+}
+
+fn bad_option(e: IoError) -> CommandError {
+    CommandError::InvalidArgs(e.to_string())
 }
 
 /// The absolute folder of a scene file, the base of its external references.
@@ -233,14 +423,29 @@ fn save_to(ctx: &mut dyn CommandContext, path: String) -> Result<Value, CommandE
     Ok(json!({"path": path}))
 }
 
-fn import_obj(ctx: &mut dyn CommandContext, a: PathArgs) -> Result<Value, CommandError> {
-    let objects = std::fs::read_to_string(&a.path)
+fn import_file(
+    ctx: &mut dyn CommandContext,
+    path: &str,
+    format: Option<&str>,
+    options: &Map<String, Value>,
+) -> Result<Value, CommandError> {
+    let id = resolve_format(path, format, "Import")?;
+    let info = formats::format_by_id(id).ok_or_else(|| CommandError::failed("Import failed"))?;
+    let descs = formats::import_options(id).ok_or_else(|| {
+        CommandError::Failed(format!(
+            "Import failed: {}",
+            IoError::Unsupported(id.into(), "import")
+        ))
+    })?;
+    let options = formats::resolve_options(&descs, options).map_err(bad_option)?;
+    let objects = std::fs::read_to_string(path)
         .map_err(|e| e.to_string())
-        .and_then(|text| read(&text, &ReadOptions::default()).map_err(|e| e.to_string()))
+        .and_then(|text| formats::read_text(id, &text, &options).map_err(|e| e.to_string()))
         .map_err(|e| CommandError::Failed(format!("Import failed: {e}")))?;
+    let label = format!("Import {}", short_label(info));
     let ids = ctx
         .doc_mut()
-        .transact("Import OBJ", |tx| import_into(tx, &objects))
+        .transact(&label, |tx| import_into(tx, &objects))
         .map_err(|e| CommandError::Failed(format!("Import failed: {e}")))?;
     let Some((first, rest)) = ids.split_first() else {
         return Err(CommandError::failed("Import: no polygons found"));
@@ -251,21 +456,39 @@ fn import_obj(ctx: &mut dyn CommandContext, a: PathArgs) -> Result<Value, Comman
     for id in rest {
         sel.toggle(*id);
     }
-    Ok(json!({"nodes": ids.iter().map(|n| n.0).collect::<Vec<_>>()}))
+    Ok(json!({"nodes": ids.iter().map(|n| n.0).collect::<Vec<_>>(), "format": info.id}))
 }
 
-fn export_obj(ctx: &mut dyn CommandContext, a: ExportArgs) -> Result<Value, CommandError> {
+/// The upper-case id, the short name in undo labels ("Import OBJ").
+fn short_label(info: &FormatInfo) -> String {
+    info.id.to_ascii_uppercase()
+}
+
+fn export_file(
+    ctx: &mut dyn CommandContext,
+    path: &str,
+    format: Option<&str>,
+    selected: bool,
+    options: &Map<String, Value>,
+) -> Result<Value, CommandError> {
+    let id = resolve_format(path, format, "Export")?;
+    let descs = formats::export_options(id).ok_or_else(|| {
+        CommandError::Failed(format!(
+            "Export failed: {}",
+            IoError::Unsupported(id.into(), "export")
+        ))
+    })?;
+    let options = formats::resolve_options(&descs, options).map_err(bad_option)?;
     let roots: Vec<NodeId> = ctx.selection().nodes.iter().copied().collect();
     let scene = ctx.evaluated_scene();
-    let objects = export_scene(&scene, a.selected.then_some(&roots[..]));
-    if objects.is_empty() {
-        return Err(CommandError::failed("Nothing to export"));
-    }
-    let text = write(&objects, &WriteOptions::default());
-    std::fs::write(&a.path, text)
-        .map_err(|e| CommandError::Failed(format!("Export failed: {e}")))?;
+    let (text, count) = formats::export_text(id, &scene, selected.then_some(&roots[..]), &options)
+        .map_err(|e| match e {
+            IoError::NothingToExport => CommandError::failed("Nothing to export"),
+            other => CommandError::Failed(format!("Export failed: {other}")),
+        })?;
+    std::fs::write(path, text).map_err(|e| CommandError::Failed(format!("Export failed: {e}")))?;
     ctx.set_status(String::new());
-    Ok(json!({"objects": objects.len()}))
+    Ok(json!({"objects": count, "format": id}))
 }
 
 #[derive(Deserialize, JsonSchema)]

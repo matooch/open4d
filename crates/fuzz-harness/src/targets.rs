@@ -21,6 +21,8 @@ pub const FS_COMMANDS: &[&str] = &[
     "file.save_as",
     "file.import_obj",
     "file.export_obj",
+    "file.import",
+    "file.export",
     "file.autosave_now",
     "browser.save_preset",
     "browser.delete_preset",

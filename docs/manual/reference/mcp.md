@@ -189,6 +189,11 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `ui_scale` | UI Scale. Not an undoable edit. Runs command `ui.scale`. |
 | `file_import_obj` | Import OBJ. Undoable editing command. Runs command `file.import_obj`. |
 | `file_export_obj` | Export OBJ. Not an undoable edit. Runs command `file.export_obj`. |
+| `file_import` | Import. Undoable editing command. Runs command `file.import`. |
+| `file_export` | Export. Not an undoable edit. Runs command `file.export`. |
+| `io_formats` | Exchange Formats. Not an undoable edit. Runs command `io.formats`. |
+| `file_import_dialog` | Import.... Not an undoable edit. Runs command `file.import_dialog`. |
+| `file_export_dialog` | Export.... Not an undoable edit. Runs command `file.export_dialog`. |
 | `browser_list` | List Presets. Not an undoable edit. Runs command `browser.list`. |
 | `browser_load` | Load Preset. Undoable editing command. Runs command `browser.load`. |
 | `browser_save_preset` | Save Preset. Not an undoable edit. Runs command `browser.save_preset`. |

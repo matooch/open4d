@@ -231,6 +231,10 @@ pub enum UiRequest {
     Save,
     /// File > Save As with a file dialog.
     SaveAs,
+    /// File > Import with a file chooser and the options window (format id).
+    ImportDialog(String),
+    /// File > Export with a file chooser and the options window.
+    ExportDialog { format: String, selected: bool },
     /// Starts the inline rename of the active object.
     RenameActive,
     /// Opens the command palette (docs/specs/UI.md §18).

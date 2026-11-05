@@ -1485,6 +1485,7 @@ dependencies = [
  "forge-command",
  "forge-core",
  "forge-generators",
+ "forge-io",
  "forge-mcp",
  "forge-parity-harness",
  "forge-plugin",
@@ -1606,6 +1607,7 @@ dependencies = [
  "forge-modifiers",
  "forge-parity-harness",
  "glam",
+ "serde_json",
  "thiserror 2.0.21",
  "toml",
 ]

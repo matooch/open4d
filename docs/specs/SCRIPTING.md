@@ -58,8 +58,8 @@ Units are the commands' units: **degrees**, percent as shown, scene units for di
 `run`, `create` (two commands when it renames), `set_param`, `set_transform` and `frame(n)` count against `max_commands`, one per command run. Animation keys are written with `run("key.set", #{node, track, frame, value})` (COMMANDS.md §6).
 
 Commands that are not available in scripts (error, nothing runs): `edit.undo`,
-`edit.redo`, `file.new`, `file.open`, `file.save`, `file.save_as`, `file.import_obj`.
-`file.export_*` is allowed: the script names the path explicitly, which is the only
+`edit.redo`, `file.new`, `file.open`, `file.save`, `file.save_as`, `file.import_obj`, `file.import`.
+`file.export_*` and `file.export` are allowed: the script names the path explicitly, which is the only
 file-system access a script has (the host decides what else, see §5).
 
 ### Scene queries (read-only)

@@ -330,7 +330,7 @@ mini-fuzz tests call them.
 | `script` | `fuzz_script` | `forge_script::run_script` on a fresh `App` with tight limits (20 000 operations, 50 commands, 1 s) |
 
 Commands that read or write files (`file.open`, `file.save`, `file.save_as`, `file.import_obj`,
-`file.export_obj`, `file.new`, `file.autosave_now`, `browser.save_preset`, `browser.delete_preset`,
+`file.export_obj`, `file.import`, `file.export`, `file.new`, `file.autosave_now`, `browser.save_preset`, `browser.delete_preset`,
 `browser.open_recent`, `browser.clear_recent`; `forge_fuzz_harness::FS_COMMANDS`) are never run
 with fuzzed arguments: a fuzzer must not write to the disk it runs on. Their parsers are covered
 by the `scene_file` and `obj` targets. `viewport.screenshot` needs a GPU host and is not part of

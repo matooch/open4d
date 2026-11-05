@@ -22,8 +22,7 @@ use forge_core::{Document, EvalCtx, NodeId, Registry, RegistryError, Scene, Scen
 use forge_fields::FieldToolset;
 use forge_generators::{Primitives, evaluate};
 use forge_geometry::PolyMesh;
-use forge_io::export_scene;
-use forge_io::obj::{WriteOptions, write};
+use forge_io::formats::{IoError, Options, export_text};
 use forge_modifiers::Deformers;
 use serde_json::Value;
 
@@ -225,14 +224,26 @@ impl App {
         roots: Option<&[NodeId]>,
         frame: i64,
     ) -> Result<usize, AppError> {
+        self.export_at(path, "obj", roots, frame, &Options::new())
+    }
+
+    /// Writes the scene evaluated at `frame` in the format (`forge_io::formats`) with the
+    /// export options; the timeline does not move. Returns the object count.
+    pub fn export_at(
+        &self,
+        path: &str,
+        format: &str,
+        roots: Option<&[NodeId]>,
+        frame: i64,
+        options: &Options,
+    ) -> Result<usize, AppError> {
         let scene = self.eval.get(self.doc.scene(), frame);
-        let objects = export_scene(&scene, roots);
-        if objects.is_empty() {
-            return Err(AppError::NothingToExport);
-        }
-        std::fs::write(path, write(&objects, &WriteOptions::default()))
-            .map_err(|e| AppError::Io(e.to_string()))?;
-        Ok(objects.len())
+        let (text, count) = export_text(format, &scene, roots, options).map_err(|e| match e {
+            IoError::NothingToExport => AppError::NothingToExport,
+            other => AppError::Io(other.to_string()),
+        })?;
+        std::fs::write(path, text).map_err(|e| AppError::Io(e.to_string()))?;
+        Ok(count)
     }
 
     /// Replaces the document. `full` also resets everything but the command set.

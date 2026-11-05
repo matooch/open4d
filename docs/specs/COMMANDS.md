@@ -181,6 +181,10 @@ touch history.
 | `file.autosave_now` | `wait?` (flush the background write) | `{path, queued}` | no |
 | `file.import_obj` | `path` | `{nodes}` | yes |
 | `file.export_obj` | `path`, `selected?` | `{objects}` | no |
+| `file.import` | `path`, `format?`, `options?` (IO.md §3.4) | `{nodes, format}` | yes |
+| `file.export` | `path`, `format?`, `selected?`, `options?` | `{objects, format}` | no |
+| `io.formats` | - | `{formats}` | no |
+| `file.import_dialog` `file.export_dialog` | `format?` (`selected?` for export) | null | no |
 | `key.record` | - | `{keys}` | yes |
 | `key.delete_at_frame` | - | `{keys}` | yes |
 | `key.set` | `node`, `track`, `frame`, `value` | null | yes |

@@ -44,7 +44,7 @@ use crate::workspaces::{LayoutStore, Workspace};
 mod files;
 mod recovery;
 
-pub use files::{Dialogs, FileKind, NativeDialogs, Unsaved};
+pub use files::{Dialogs, FileKind, IoDialog, NativeDialogs, Unsaved};
 
 const SHADINGS: [(Shading, &str); 9] = [
     (Shading::Smooth, "Smooth"),
@@ -155,6 +155,8 @@ pub struct Editor {
     /// File menu (docs/specs/IO.md §2): dialogs, current file, revision at the last
     /// save or load, and the last window title sent.
     dialogs: Box<dyn Dialogs>,
+    /// The import/export options window while open (docs/specs/UI.md §27).
+    io_dialog: Option<IoDialog>,
     sent_title: String,
     applied_prefs: Option<(ThemeKind, f32)>,
     /// Requests from the RPC server, run between frames (docs/specs/RPC.md §5).
@@ -233,6 +235,7 @@ impl Editor {
             rect_drag: None,
             tool_drag: None,
             dialogs: Box::new(NativeDialogs),
+            io_dialog: None,
             sent_title: String::new(),
             applied_prefs: None,
             rpc: None,
@@ -412,6 +415,10 @@ impl Editor {
                 UiRequest::Save => self.file_action(FileAction::Save),
                 UiRequest::SaveAs => self.file_action(FileAction::SaveAs),
                 UiRequest::CommandPalette => self.palette.open_palette(),
+                UiRequest::ImportDialog(format) => self.begin_import(&format),
+                UiRequest::ExportDialog { format, selected } => {
+                    self.begin_export(&format, selected);
+                }
                 r @ (UiRequest::Workspace(_)
                 | UiRequest::LayoutSave(_)
                 | UiRequest::LayoutLoad(_)
@@ -515,6 +522,7 @@ impl Editor {
         egui::CentralPanel::no_frame().show(ui, |ui| self.area(ui, Area::Center, rs));
         self.keymap_editor.show(ui.ctx(), &mut self.state);
         self.save_layout_window(ui.ctx());
+        self.io_dialog_window(ui.ctx());
         let ctx = ui.ctx().clone();
         let registry = self.state.app.commands.clone();
         if let Some((id, args)) = self.palette.show(&ctx, &registry, &self.state.keys.map) {
@@ -579,9 +587,9 @@ impl Editor {
             FileAction::SaveAs => {
                 self.save_as();
             }
-            FileAction::ImportObj => self.import_obj(),
-            FileAction::ExportObj => self.export_obj(false),
-            FileAction::ExportSelectedObj => self.export_obj(true),
+            FileAction::ImportObj => self.begin_import("obj"),
+            FileAction::ExportObj => self.begin_export("obj", false),
+            FileAction::ExportSelectedObj => self.begin_export("obj", true),
         }
     }
 

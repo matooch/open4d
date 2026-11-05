@@ -23,7 +23,8 @@
 - [ ] **STL** (ASCII and binary) and **PLY** import/export.
 - [ ] **Unit and axis conversion:** centimetres, left-handed Y-up ⇄ metres, right-handed
   Y-up or Z-up per format, with options.
-- [ ] **Import/export dialogs** with options; batch export through the CLI.
+- [x] **Import/export dialogs** with options; batch export through the CLI (brief 172: option
+  descriptors, `file.import`/`file.export`, options window, `forge convert`; only OBJ so far).
 - [ ] **No reference-app scene files.** `.c4d` is forbidden by the cleanroom gate. Scenes
   come over only through exported standard formats.
 

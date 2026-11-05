@@ -2,7 +2,7 @@
 
 # Command reference
 
-149 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+154 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -136,6 +136,11 @@
 | [`ui.scale`](#uiscale) | UI Scale | no | `ui_scale` |
 | [`file.import_obj`](#fileimport_obj) | Import OBJ | yes | `file_import_obj` |
 | [`file.export_obj`](#fileexport_obj) | Export OBJ | no | `file_export_obj` |
+| [`file.import`](#fileimport) | Import | yes | `file_import` |
+| [`file.export`](#fileexport) | Export | no | `file_export` |
+| [`io.formats`](#ioformats) | Exchange Formats | no | `io_formats` |
+| [`file.import_dialog`](#fileimport_dialog) | Import... | no | `file_import_dialog` |
+| [`file.export_dialog`](#fileexport_dialog) | Export... | no | `file_export_dialog` |
 | [`browser.list`](#browserlist) | List Presets | no | `browser_list` |
 | [`browser.load`](#browserload) | Load Preset | yes | `browser_load` |
 | [`browser.save_preset`](#browsersave_preset) | Save Preset | no | `browser_save_preset` |
@@ -1618,6 +1623,52 @@ Export OBJ. Not an undoable edit.
 
 Example: `forge cmd scene.forge file.export_obj --args '{"path":"model.obj","selected":false}'`
 
+### `file.import`
+
+Import. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `path` | string | yes |  |
+| `format` | string or null | no | Format id (`io.formats`); default: from the file extension. |
+| `options` | object | no | Import options by id (`io.formats` lists them). Default: `{}`. |
+
+Example: `forge cmd scene.forge file.import --args '{"options":{"flip_z":false},"path":"model.obj"}'`
+
+### `file.export`
+
+Export. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `path` | string | yes |  |
+| `format` | string or null | no | Format id (`io.formats`); default: from the file extension. |
+| `options` | object | no | Export options by id (`io.formats` lists them). Default: `{}`. |
+| `selected` | boolean | no | Export only the selected objects. Default: `false`. |
+
+Example: `forge cmd scene.forge file.export --args '{"options":{"normals":true},"path":"model.obj","selected":false}'`
+
+### `file.import_dialog`
+
+Import.... Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `format` | string or null | no | Format id; default `obj`. |
+
+Example: `forge cmd scene.forge file.import_dialog --args '{}'`
+
+### `file.export_dialog`
+
+Export.... Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `format` | string or null | no | Format id; default `obj`. |
+| `selected` | boolean | no | Export only the selected objects. Default: `false`. |
+
+Example: `forge cmd scene.forge file.export_dialog --args '{"selected":false}'`
+
 
 ## `ui`
 
@@ -1688,6 +1739,17 @@ UI Scale. Not an undoable edit.
 | `factor` | number | yes | UI scale factor, 0.5 to 3 (1 = the OS scale). |
 
 Example: `forge cmd scene.forge ui.scale --args '{"factor":1.0}'`
+
+
+## `io`
+
+### `io.formats`
+
+Exchange Formats. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge io.formats --args '{}'`
 
 
 ## `browser`

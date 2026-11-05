@@ -169,7 +169,7 @@ implementers can avoid collisions.
 | 169 | [STL and PLY](../agents/tasks/169-stl-ply.md) | M | – | waiting: O44 | io |
 | 170 | [Camera, light and material exchange across formats](../agents/tasks/170-camera-light-material-exchange.md) | M | 047, 134 | waiting: O44 | io |
 | 171 | [Exchange parity tests (S9)](../agents/tasks/171-s9-exchange-tests.md) | M | 164–169 | waiting: O44 | tests |
-| 172 | [Import/export dialogs and CLI batch export](../agents/tasks/172-io-dialogs-batch.md) | M | 013, 150 | ready | ui, io |
+| 172 | [Import/export dialogs and CLI batch export](../agents/tasks/172-io-dialogs-batch.md) | M | 013, 150 | done (OBJ only; dialog layout parity-pending) | ui, io |
 | 173 | [CI matrix: Linux, macOS, Windows; per-OS GPU policy](../agents/tasks/173-ci-matrix.md) | N | – | done | .github |
 | 174 | [Toolchain pin and cargo-deny](../agents/tasks/174-toolchain-cargo-deny.md) | N | – | done | root |
 | 175 | [Cross-platform settings, paths, fonts, file dialogs, modifiers](../agents/tasks/175-cross-platform-basics.md) | N | 173 | done | core, ui |

@@ -2,8 +2,11 @@
 
 use std::path::{Path, PathBuf};
 
-use forge_core::NodeId;
+use std::collections::BTreeMap;
+
+use forge_core::{NodeId, ParamDesc, ParamKind, Value};
 use forge_io::export_scene;
+use forge_io::formats;
 use serde_json::json;
 
 use super::{Editor, cmd};
@@ -88,6 +91,54 @@ impl Dialogs for NativeDialogs {
             _ => Unsaved::Cancel,
         }
     }
+}
+
+/// The pending import/export options window (docs/specs/UI.md §27).
+#[derive(Debug, Clone, PartialEq)]
+pub struct IoDialog {
+    /// Format id (`forge_io::formats`).
+    pub format: String,
+    /// True for an export, false for an import.
+    pub export: bool,
+    /// Export only the selection.
+    pub selected: bool,
+    /// The file chosen in the file chooser.
+    pub path: PathBuf,
+    /// The option descriptors the controls derive from.
+    pub descs: Vec<ParamDesc>,
+    /// Current values by descriptor id.
+    pub values: BTreeMap<String, Value>,
+}
+
+impl IoDialog {
+    fn title(&self) -> String {
+        let label = formats::format_by_id(&self.format).map_or("", |f| f.label);
+        format!(
+            "{} {label} Options",
+            if self.export { "Export" } else { "Import" }
+        )
+    }
+
+    /// The values as the `options` argument of `file.import` / `file.export`.
+    fn options_json(&self) -> serde_json::Value {
+        let mut map = serde_json::Map::new();
+        for (id, v) in &self.values {
+            let json = match v {
+                Value::Bool(b) => json!(b),
+                Value::Int(i) => json!(i),
+                Value::Float(f) => json!(f),
+                Value::Enum(s) | Value::String(s) => json!(s),
+                _ => continue,
+            };
+            map.insert(id.clone(), json);
+        }
+        serde_json::Value::Object(map)
+    }
+}
+
+/// The file kind (chooser filter) of a format.
+fn kind_of(_format: &str) -> FileKind {
+    FileKind::Obj
 }
 
 fn with_extension(mut path: PathBuf, kind: FileKind) -> PathBuf {
@@ -194,6 +245,130 @@ impl Editor {
         self.run(("file.save_as", json!({"path": path_arg(path)})))
     }
 
+    /// The pending options window, if any.
+    pub fn io_dialog(&self) -> Option<&IoDialog> {
+        self.io_dialog.as_ref()
+    }
+
+    /// File > Import...: asks for a file, then opens the options window (nothing if the
+    /// chooser is cancelled or the format cannot import).
+    pub fn begin_import(&mut self, format: &str) {
+        let Some(descs) = formats::import_options(format) else {
+            self.state.status = format!("Import failed: unknown format \"{format}\"");
+            return;
+        };
+        let Some(path) = self.dialogs.pick_open(kind_of(format)) else {
+            return;
+        };
+        let values = formats::default_options(&descs);
+        self.io_dialog = Some(IoDialog {
+            format: format.to_string(),
+            export: false,
+            selected: false,
+            path,
+            descs,
+            values,
+        });
+    }
+
+    /// File > Export... / Export Selected...: asks for a file, then opens the options window.
+    pub fn begin_export(&mut self, format: &str, selected: bool) {
+        let Some(descs) = formats::export_options(format) else {
+            self.state.status = format!("Export failed: unknown format \"{format}\"");
+            return;
+        };
+        let roots: Vec<NodeId> = self.state.selection.nodes.iter().copied().collect();
+        if export_scene(self.state.doc.scene(), selected.then_some(&roots[..])).is_empty() {
+            self.state.status = "Nothing to export".into();
+            return;
+        }
+        let stem = self.file_path().and_then(|p| p.file_stem()).map_or_else(
+            || "Untitled".to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
+        let kind = kind_of(format);
+        let default = format!("{stem}.{}", kind.extension());
+        let Some(path) = self.dialogs.pick_save(kind, &default) else {
+            return;
+        };
+        let values = formats::default_options(&descs);
+        self.io_dialog = Some(IoDialog {
+            format: format.to_string(),
+            export: true,
+            selected,
+            path: with_extension(path, kind),
+            descs,
+            values,
+        });
+    }
+
+    /// Sets one option of the pending window (the control's job in the UI).
+    pub fn io_dialog_set(&mut self, id: &str, value: Value) {
+        if let Some(d) = &mut self.io_dialog
+            && d.values.contains_key(id)
+        {
+            d.values.insert(id.to_string(), value);
+        }
+    }
+
+    /// OK: runs `file.import` / `file.export` with the chosen values and closes the window.
+    pub fn io_dialog_confirm(&mut self) {
+        let Some(d) = self.io_dialog.take() else {
+            return;
+        };
+        let options = d.options_json();
+        let path = path_arg(&d.path);
+        if d.export {
+            self.run((
+                "file.export",
+                json!({"path": path, "format": d.format, "selected": d.selected,
+                    "options": options}),
+            ));
+        } else {
+            self.run((
+                "file.import",
+                json!({"path": path, "format": d.format, "options": options}),
+            ));
+        }
+    }
+
+    /// Cancel: closes the window, nothing happens.
+    pub fn io_dialog_cancel(&mut self) {
+        self.io_dialog = None;
+    }
+
+    /// The options window (egui), drawn every frame while it is pending.
+    pub(super) fn io_dialog_window(&mut self, ctx: &egui::Context) {
+        let Some(mut d) = self.io_dialog.take() else {
+            return;
+        };
+        let (mut ok, mut cancel) = (false, ctx.input(|i| i.key_pressed(egui::Key::Escape)));
+        egui::Window::new(d.title())
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.weak(d.path.display().to_string());
+                for desc in &d.descs {
+                    if let Some(value) = d.values.get_mut(&desc.id) {
+                        option_control(ui, desc, value);
+                    }
+                }
+                ui.horizontal(|ui| {
+                    ok = ui
+                        .button(if d.export { "Export" } else { "Import" })
+                        .clicked();
+                    cancel |= ui.button("Cancel").clicked();
+                });
+            });
+        if ok {
+            self.io_dialog = Some(d);
+            self.io_dialog_confirm();
+        } else if !cancel {
+            self.io_dialog = Some(d);
+        }
+    }
+
     /// File > Import OBJ...: one polygon object per OBJ object, one undo step.
     pub fn import_obj(&mut self) {
         let Some(path) = self.dialogs.pick_open(FileKind::Obj) else {
@@ -226,6 +401,54 @@ impl Editor {
             "file.export_obj",
             json!({"path": path_arg(&path), "selected": selected}),
         ));
+    }
+}
+
+/// One control for one option descriptor.
+fn option_control(ui: &mut egui::Ui, desc: &ParamDesc, value: &mut Value) {
+    match (&desc.kind, value) {
+        (ParamKind::Bool, Value::Bool(b)) => {
+            ui.checkbox(b, &desc.label);
+        }
+        (ParamKind::Int { min, max }, Value::Int(i)) => {
+            ui.horizontal(|ui| {
+                let label = ui.label(&desc.label);
+                ui.add(egui::DragValue::new(i).range(*min..=*max))
+                    .labelled_by(label.id);
+            });
+        }
+        (ParamKind::Float { min, max }, Value::Float(f)) => {
+            ui.horizontal(|ui| {
+                let label = ui.label(&desc.label);
+                ui.add(egui::DragValue::new(f).range(*min..=*max))
+                    .labelled_by(label.id);
+            });
+        }
+        (ParamKind::Enum { options }, Value::Enum(current)) => {
+            ui.horizontal(|ui| {
+                let label = ui.label(&desc.label);
+                let shown = options
+                    .iter()
+                    .find(|o| &o.id == current)
+                    .map_or(current.clone(), |o| o.label.clone());
+                egui::ComboBox::from_id_salt(&desc.id)
+                    .selected_text(shown)
+                    .show_ui(ui, |ui| {
+                        for o in options {
+                            ui.selectable_value(current, o.id.clone(), &o.label);
+                        }
+                    })
+                    .response
+                    .labelled_by(label.id);
+            });
+        }
+        (ParamKind::String, Value::String(s)) => {
+            ui.horizontal(|ui| {
+                let label = ui.label(&desc.label);
+                ui.text_edit_singleline(s).labelled_by(label.id);
+            });
+        }
+        _ => {}
     }
 }
 

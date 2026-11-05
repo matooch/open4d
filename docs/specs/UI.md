@@ -1475,3 +1475,30 @@ temp settings file next to foreign keys, `open_recent` (missing file removed), c
 bad arguments. `crates/ui/tests/content_browser.rs` (egui_kittest): panel opens from the Window
 menu, closed by default, clicking a preset loads it with one undo step, recent entries open a
 file, Open Recent submenu, search filter.
+
+## 27. Import/export options window (`app/files`; brief 172)
+
+Sources: IO.md §3 (own design). The reference app's dialog layout is not observed: **the window
+title, the order of the controls and the button names are parity-pending**.
+
+- The File menu items keep their labels (Import OBJ..., Export OBJ..., Export Selected as
+  OBJ...). Choosing one opens the file chooser (IO.md §2); when a file is chosen, the options
+  window opens instead of running at once. Cancelling the chooser opens nothing. "Nothing to
+  export" is reported before the chooser, as before.
+- The window is an egui `Window` titled `Import OBJ Options` / `Export OBJ Options` (the
+  format label), anchored at the centre, not resizable, shown above the docks until closed. It
+  lists the path and one row per option descriptor (IO.md §3.2) in descriptor order:
+  bool -> check box (label = descriptor label), int/float -> `DragValue`, enum -> combo box,
+  string -> text edit. Buttons: `Import` / `Export` (runs `file.import` / `file.export` with all
+  option values) and `Cancel`. Escape cancels.
+- `Editor` methods (the UI and the tests use the same ones): `begin_import(format)`,
+  `begin_export(format, selected)` (pick the file, open the window), `io_dialog()` (the pending
+  state: format, path, selected, descriptors, values), `io_dialog_set(id, Value)`,
+  `io_dialog_confirm()` (runs the command, closes), `io_dialog_cancel()`.
+  `import_obj()`/`export_obj(selected)` stay: immediate, default options (shortcuts, tests).
+- The commands `file.import_dialog` / `file.export_dialog` (UiRequest) call `begin_*`.
+- Only one options window exists; starting another replaces it.
+- Tests (`crates/ui/tests/io_dialog.rs`): scripted chooser answers; the window appears with the
+  descriptors' controls (kittest); toggling "Write normals" and confirming writes a file without
+  `vn`/`//`; Flip Z on import mirrors z; Cancel and a cancelled chooser change nothing; the request
+  commands open the window; headless run of `file.import_dialog` is refused.

@@ -477,6 +477,7 @@ fn undo_redo_and_file_commands_are_not_available() {
         "file.save",
         "file.save_as",
         "file.import_obj",
+        "file.import",
     ] {
         let e = fail(&mut app, &format!(r#"run("{id}", #{{ path: "/tmp/x" }})"#));
         assert!(e.message.contains("not available in scripts"), "{id}: {e}");

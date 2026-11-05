@@ -75,7 +75,7 @@
 
 ## Commands not available in scripts
 
-`edit.undo`, `edit.redo`, `file.new`, `file.open`, `file.save`, `file.save_as`, `file.import_obj`. `file.export_*` is allowed.
+`edit.undo`, `edit.redo`, `file.new`, `file.open`, `file.save`, `file.save_as`, `file.import_obj`, `file.import`. `file.export_*` is allowed.
 
 ## Sandbox limits
 
