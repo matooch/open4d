@@ -140,11 +140,14 @@ up.
   the user edits them).
 - No command takes a file path; the fuzz harness needs no exclusion.
 
-## 6. Viewport (not part of this brief's parity)
+## 6. Viewport
 
-Splines are not drawn by the viewport yet (the primitives are invisible too). Drawing the
-control points, handles and Points-mode dragging is left for a follow-up; point editing is
-available through `spline.edit_points` (CLI, RPC, MCP, scripts).
+Spline objects (primitives and `forge.spline`) draw as polylines from the same sampling as the
+generators; in Points mode an editable spline shows its points and Bezier handles, and they
+are dragged through `spline.edit_points` with one undo step per drag (brief 190,
+VIEWPORT.md section 11). `forge_generators::splines::sampled_loops(scene, id)` gives the
+sampled loops (object space) the viewport draws. The handle-link rule while dragging is
+**parity-pending** (GUI session G3 item 9).
 
 ## 7. Parity-pending and unsupported
 

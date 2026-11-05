@@ -5,10 +5,11 @@ use forge_viewport::camera::Camera;
 use forge_viewport::grid::grid_lines;
 use forge_viewport::panes::{PaneRect, arrange};
 use forge_viewport::render::{
-    DrawInstanced, DrawMesh, Frame, Gpu, Palette, Settings, render_to_rgba,
+    DrawInstanced, DrawMesh, Frame, Gpu, LineSet, Palette, Settings, render_to_rgba,
 };
 
 use crate::panes::{PANE_GAP, display_settings, scene_lights};
+use crate::spline_edit::{editor_draws, pane_lines};
 use crate::state::EditorState;
 use crate::viewport_panel::{
     GpuCache, GpuItem, UploadSettings, scheduled_draw_items, upload_items,
@@ -43,6 +44,7 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
     let selected = state.app.selection.nodes.clone();
     let lights = scene_lights(&scene);
     let views = state.views.clone();
+    let splines = editor_draws(&scene, state);
     let panes: Vec<(PaneRect, Camera, Settings)> = arrange(
         views.layout,
         views.active,
@@ -82,10 +84,21 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
     }
     let rgba = if let [(_, camera, settings)] = &panes[..] {
         let grid = grid_lines(camera, f64::from(height));
+        let curves = LineSet::new(
+            &gpu.device,
+            &pane_lines(
+                &splines,
+                settings.shading,
+                &palette,
+                camera,
+                [f64::from(width), f64::from(height)],
+            ),
+        );
         let frame = Frame {
             instanced: &draw_instanced,
             meshes: &draw,
             grid: Some(&grid),
+            lines: &[&curves],
             gizmo: None,
             settings: *settings,
         };
@@ -96,10 +109,21 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
             let (x0, y0) = (r.x as u32, r.y as u32);
             let (w, h) = ((r.w as u32).max(1), (r.h as u32).max(1));
             let grid = grid_lines(camera, f64::from(h));
+            let curves = LineSet::new(
+                &gpu.device,
+                &pane_lines(
+                    &splines,
+                    settings.shading,
+                    &palette,
+                    camera,
+                    [f64::from(w), f64::from(h)],
+                ),
+            );
             let frame = Frame {
                 instanced: &draw_instanced,
                 meshes: &draw,
                 grid: Some(&grid),
+                lines: &[&curves],
                 gizmo: None,
                 settings: *settings,
             };

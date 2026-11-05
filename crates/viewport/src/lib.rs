@@ -4,6 +4,7 @@
 pub mod cache;
 pub mod camera;
 pub mod cull;
+pub mod curves;
 pub mod gizmo;
 pub mod grid;
 pub mod instancing;

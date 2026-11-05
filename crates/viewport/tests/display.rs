@@ -11,9 +11,10 @@ use common::{boxed, unit_box};
 use forge_geometry::PolyMesh;
 use forge_geometry::selection::Selection;
 use forge_viewport::camera::Camera;
+use forge_viewport::curves::{Controls, Loop, SplineDraw, draw_list};
 use forge_viewport::lights::{Light, Lighting, SceneLights};
 use forge_viewport::render::{
-    DrawMesh, Frame, Gpu, MeshBuffers, Msaa, Palette, Settings, Shading, render_to_rgba,
+    DrawMesh, Frame, Gpu, LineSet, MeshBuffers, Msaa, Palette, Settings, Shading, render_to_rgba,
 };
 use glam::DVec3;
 
@@ -96,6 +97,7 @@ fn render(gpu: &Gpu, cam: &Camera, meshes: &[DrawMesh], settings: Settings) -> I
         instanced: &[],
         meshes,
         grid: None,
+        lines: &[],
         gizmo: None,
         settings,
     };
@@ -672,4 +674,91 @@ fn baseline_images_per_lighting_setup() {
         let img = render(gpu, &c, &it, s);
         check_baseline(gpu, &format!("light_{name}"), &img);
     }
+}
+
+// ---- splines (VIEWPORT.md section 11) ----------------------------------------------------
+
+/// A Bezier-like arc with its control points and handles, selected point in the middle.
+fn arc_draw() -> SplineDraw {
+    let pts: Vec<DVec3> = (0..=16)
+        .map(|i| {
+            let t = i as f64 / 16.0 * std::f64::consts::PI;
+            DVec3::new(-3.0 * t.cos(), 3.0 * t.sin() - 1.0, 0.0)
+        })
+        .collect();
+    let points = vec![
+        DVec3::new(-3.0, -1.0, 0.0),
+        DVec3::new(0.0, 2.0, 0.0),
+        DVec3::new(3.0, -1.0, 0.0),
+    ];
+    let off = DVec3::new(0.0, 1.5, 0.0);
+    let hs = [off, DVec3::new(1.5, 0.0, 0.0), -off];
+    SplineDraw {
+        loops: vec![Loop {
+            points: pts,
+            closed: false,
+        }],
+        selected: true,
+        controls: Some(Controls {
+            left: points.iter().zip(hs).map(|(p, h)| *p - h).collect(),
+            right: points.iter().zip(hs).map(|(p, h)| *p + h).collect(),
+            points,
+            selected: vec![false, true, false],
+            handles: true,
+        }),
+    }
+}
+
+fn render_splines(gpu: &Gpu, c: &Camera, d: &SplineDraw, shading: Shading) -> Image {
+    let pal = Palette::default();
+    let list = draw_list(d, shading, &pal, c, [W as f64, H as f64]);
+    let set = LineSet::new(&gpu.device, &list);
+    let frame = Frame {
+        instanced: &[],
+        meshes: &[],
+        grid: None,
+        lines: &[&set],
+        gizmo: None,
+        settings: settings(shading),
+    };
+    Image(render_to_rgba(gpu, W, H, c, &frame))
+}
+
+#[test]
+fn splines_render_in_every_display_mode() {
+    let Some((_lock, gpu)) = gpu() else { return };
+    let c = Camera {
+        distance: 12.0,
+        ..Camera::default()
+    };
+    let d = arc_draw();
+    let sel = u8c(Palette::default().selection, 1.0);
+    let top = DVec3::new(0.0, 2.0, 0.0);
+    for mode in Shading::ALL {
+        let img = render_splines(gpu, &c, &d, mode);
+        if mode == Shading::BoundingBox {
+            // the box edge passes through the corners of the curve's box, not through the arc
+            assert!(img.near(&c, DVec3::new(-3.0, 2.0, 0.0), sel), "{mode:?}");
+        } else {
+            // a curve sample away from every control marker
+            assert!(
+                img.near(&c, DVec3::new(-2.121_320_3, 1.121_320_3, 0.0), sel),
+                "{mode:?}"
+            );
+        }
+        // the selected control point is a 7 px square: its right edge is 3.5 px from the point
+        let edge = top + DVec3::new(3.5 * c.world_per_pixel(H as f64), 0.0, 0.0);
+        assert!(img.near(&c, edge, sel), "{mode:?}");
+    }
+}
+
+#[test]
+fn baseline_image_spline_points() {
+    let Some((_lock, gpu)) = gpu() else { return };
+    let c = Camera {
+        distance: 12.0,
+        ..Camera::default()
+    };
+    let img = render_splines(gpu, &c, &arc_draw(), Shading::Smooth);
+    check_baseline(gpu, "spline_points", &img);
 }

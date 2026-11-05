@@ -36,6 +36,7 @@ pub mod prefs;
 pub mod screenshot;
 pub mod script_panel;
 pub mod snapping;
+pub mod spline_edit;
 pub mod state;
 pub mod theme;
 pub mod timeline;

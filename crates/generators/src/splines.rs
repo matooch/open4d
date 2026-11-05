@@ -494,6 +494,27 @@ pub(crate) fn placed_curve(scene: &Scene, id: NodeId) -> Result<Option<Curve>, B
     Ok(Some(curve.transformed(&m)))
 }
 
+/// The sampled loops of a spline node in its own space, each with whether it is closed: what the
+/// viewport draws (VIEWPORT.md section 11). `None` if `id` is no spline or has no curve; loops of
+/// fewer than two points are left out.
+pub fn sampled_loops(scene: &Scene, id: NodeId) -> Option<Vec<(Vec<DVec3>, bool)>> {
+    let node = scene.node(id)?;
+    if !is_spline(&node.type_id) {
+        return None;
+    }
+    let curve = if node.type_id == crate::spline_mask::TYPE {
+        crate::spline_mask::curve_of(scene, id).ok()??
+    } else {
+        build_curve(&node.type_id, &node.params).ok()?
+    };
+    let loops: Vec<(Vec<DVec3>, bool)> = std::iter::once(&curve)
+        .chain(curve.extra.iter())
+        .map(|c| (c.points(), c.closed))
+        .filter(|(p, _)| p.len() >= 2)
+        .collect();
+    (!loops.is_empty()).then_some(loops)
+}
+
 /// A spline node as a polyline helper mesh for the spline-driven deformers (MODIFIERS.md
 /// §20.0): its sampled points in its own space, one 2-point edge per chord (plus the closing
 /// edge of a closed spline). `None` if `id` is no spline or has no curve.
