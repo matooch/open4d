@@ -36,9 +36,10 @@ const UNSUPPORTED: &[&str] = &[];
 const KNOWN_MISMATCH: &[&str] = &[
     "loft/mesh-subdivision",
     "sweep/helix",
-    // brief 042: R20/R25 loft conflict (U points per ring, quad order)
-    "loft/three-circles",
-    "loft/linear",
+    // D18: R25 wins (U points per ring, R25 quad order)
+    "loft/defaults", // superseded by R25 (D18): loft/three-circles
+    "loft/three",    // superseded by R25 (D18): loft/three-circles
+    "loft/caps-off", // superseded by R25 (D18): loft/three-circles
     // brief 042: the uniform helix route is off by up to 3.5e-4; scale-end also the
     // Banking-on frame
     "sweep/banking",
@@ -51,7 +52,7 @@ const KNOWN_MISMATCH: &[&str] = &[
 /// whole mesh for the slices (PRIMITIVES2.md §10), of the caps alone for `loft/three`
 /// (GENERATORS2.md §9–10).
 const CUT_GEOMETRIC: &[&str] = &["torus/slice", "capsule/slice"];
-const CAP_GEOMETRIC: &[&str] = &["loft/three"];
+const CAP_GEOMETRIC: &[&str] = &[];
 
 /// Generator cases compared after the harness's tolerant weld on both sides, as in
 /// `generators_parity.rs` (reference rounding noise creates near-duplicate points).
@@ -261,7 +262,7 @@ fn golden_scenes_through_the_writer_match_the_reference() {
         set(KNOWN_MISMATCH),
         "known-mismatch set changed"
     );
-    assert_eq!(matched.len(), 75 + 33 + 3, "{matched:?}");
+    assert_eq!(matched.len(), 75 + 33 + 2, "{matched:?}");
 }
 
 #[test]

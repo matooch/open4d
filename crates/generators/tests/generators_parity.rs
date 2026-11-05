@@ -25,11 +25,11 @@ const UNSUPPORTED: &[&str] = &[];
 const KNOWN_MISMATCH: &[&str] = &[
     "loft/mesh-subdivision",
     "sweep/helix",
-    // brief 042, R20/R25 conflict (GENERATORS2.md §9a): the R25 loft has U points per ring
-    // (R20: U - 1) and lists its quads in the other order; the production default stays R20.
-    // Positions and face set match with U + 1 (`tests/sweep_loft_r25.rs`).
-    "loft/three-circles",
-    "loft/linear",
+    // D18: R25 wins. Loft now has U points per ring and the R25 quad order (GENERATORS2.md
+    // §9a), so the R20 loft cases (U - 1 points per ring) differ.
+    "loft/defaults", // superseded by R25 (D18): loft/three-circles
+    "loft/three",    // superseded by R25 (D18): loft/three-circles
+    "loft/caps-off", // superseded by R25 (D18): loft/three-circles
     // brief 042, the R25 uniform helix route is off by up to 3.5e-4 (`splines-2/helix-uniform`,
     // GENERATORS2.md §6.1) and the sweep frames amplify it. Banking off (`sweep/banking`) and
     // the 2-Rail mapping (`sweep/rail`: the rail helix is off by 2e-2) match along the
@@ -41,9 +41,9 @@ const KNOWN_MISMATCH: &[&str] = &[
 ];
 
 /// Cases whose caps contain an exactly cocircular quad that the reference splits the other
-/// way (GEOMETRY.md §6.1 R1; `loft/three` end cap, 2 of 54 cap triangles): exact except the
-/// trailing cap triangles, plus a geometric comparison.
-const CAP_GEOMETRIC: &[&str] = &["loft/three"];
+/// way (GEOMETRY.md §6.1 R1): exact except the trailing cap triangles, plus a geometric
+/// comparison. None now: the only one, `loft/three`, is superseded by R25 (D18).
+const CAP_GEOMETRIC: &[&str] = &[];
 
 #[test]
 fn generators_match_the_reference() {
@@ -132,7 +132,7 @@ fn generators_match_the_reference() {
     let want: std::collections::BTreeSet<String> =
         UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 13 + 11 + 9 + 3, "{matched:?}");
+    assert_eq!(matched.len(), 13 + 11 + 9 + 2, "{matched:?}");
 }
 
 /// Exact positions and faces up to a trailing run of triangles in both meshes (the

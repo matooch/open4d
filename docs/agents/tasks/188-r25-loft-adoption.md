@@ -1,6 +1,6 @@
 # 188 · Adopt the R25 Loft ring and quad order (D18)
 
-Status: ready · Area: C · Depends on: 042 · Observations: O20 · Touches: generators, io
+Status: done · Area: C · Depends on: 042 · Observations: O20 · Touches: generators, io
 
 ## Goal
 Make Loft follow R25 per decision D18, so `loft/three-circles` and `loft/linear` match exactly.
@@ -16,9 +16,9 @@ Make Loft follow R25 per decision D18, so `loft/three-circles` and `loft/linear`
 - Update §9 to the R25 rule and turn §9a into a short D18 note.
 
 ## Done when
-- [ ] `loft/three-circles` and `loft/linear` match exactly in `generators_parity` and `export_parity`; every other currently-matching case still matches.
-- [ ] Superseded R20 cases are listed with the D18 reason.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] `loft/three-circles` and `loft/linear` match exactly in `generators_parity` and `export_parity`; every other currently-matching case still matches.
+- [x] Superseded R20 cases are listed with the D18 reason.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -28,4 +28,4 @@ Make Loft follow R25 per decision D18, so `loft/three-circles` and `loft/linear`
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: parity N/M; superseded R20 cases; files changed; last gate lines.
+- Result: loft/three-circles and loft/linear exact in generators_parity and export_parity (loft 2/6; generators_parity 35 exact, export_parity 110/118). Superseded R20 cases (KNOWN_MISMATCH, `superseded by R25 (D18): loft/three-circles`): loft/defaults, loft/three, loft/caps-off (loft/mesh-subdivision was already a mismatch). Files: crates/generators/src/spline_gens.rs, tests generators_parity.rs, sweep_loft_r25.rs, io export_parity.rs, GENERATORS2.md, STATUS.md, BACKLOG.md, this brief. Gate: GATE: all passed.

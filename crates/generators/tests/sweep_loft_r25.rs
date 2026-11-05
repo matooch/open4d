@@ -133,13 +133,12 @@ fn canonical(f: &[u32]) -> Vec<u32> {
     best.unwrap()
 }
 
-/// `loft/three-circles`, `loft/linear`: the reference's R25 loft has `U` points per ring
-/// where the R20 loft has `U - 1` and lists each quad `[r(j,i), r(j+1,i), r(j+1,i+1),
-/// r(j,i+1)]` (ours: the R20 order, reversed and rotated). With `U + 1` asked of our loft the
-/// points match in order and the faces match up to rotation and reversal. Documented
-/// R20/R25 conflict (§9a); the production default stays R20, the cases stay parity-pending.
+/// `loft/three-circles`, `loft/linear`: the R25 loft has `U` points per ring and lists each
+/// quad `[r(j,i), r(j+1,i), r(j+1,i+1), r(j,i+1)]` (D18, GENERATORS2.md §9). The points match
+/// in order and the face set matches up to rotation and reversal (the strict comparison of
+/// the two cases is in `generators_parity`).
 #[test]
-fn r25_loft_is_ours_with_one_more_sample_and_the_other_quad_order() {
+fn r25_loft_has_u_points_per_ring_and_the_r25_quad_order() {
     for (case, linear) in [("loft/three-circles", false), ("loft/linear", true)] {
         let expected = golden(case);
         let sections: Vec<Curve> = [(0.0, 200.0), (200.0, 100.0), (400.0, 200.0)]
@@ -155,7 +154,7 @@ fn r25_loft_is_ours_with_one_more_sample_and_the_other_quad_order() {
             })
             .collect();
         let values = BTreeMap::from([
-            ("mesh_subdivision_u".to_string(), Value::Int(17)),
+            ("mesh_subdivision_u".to_string(), Value::Int(16)),
             ("mesh_subdivision_v".to_string(), Value::Int(4)),
             ("linear_interpolation".to_string(), Value::Bool(linear)),
         ]);

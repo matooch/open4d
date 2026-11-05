@@ -391,7 +391,7 @@ fn triangle_caps(
     Ok(out)
 }
 
-/// Loft (§9): closed sections sampled uniformly in spline parameter, joined by cubic
+/// Loft (§9, R25 per D18): `U` points per ring, closed sections sampled uniformly in spline parameter, joined by cubic
 /// Hermite curves per sample.
 pub fn loft(curves: &[Curve], values: &BTreeMap<String, Value>) -> Result<PolyMesh, BuildError> {
     let ty = loft_type();
@@ -408,7 +408,7 @@ pub fn loft(curves: &[Curve], values: &BTreeMap<String, Value>) -> Result<PolyMe
     if curves.iter().any(|c| !c.closed) {
         return Err(BuildError::Unsupported("loft of open sections"));
     }
-    let u = p.int("mesh_subdivision_u") - 1;
+    let u = p.int("mesh_subdivision_u");
     let v = p.int("mesh_subdivision_v");
     let linear = p.bool("linear_interpolation");
     let sections: Vec<Vec<DVec3>> = curves
@@ -464,7 +464,7 @@ pub fn loft(curves: &[Curve], values: &BTreeMap<String, Value>) -> Result<PolyMe
     let mut polys = Vec::new();
     for j in 0..rows - 1 {
         for i in 0..u {
-            polys.push(vec![r(j, i + 1), r(j + 1, i + 1), r(j + 1, i), r(j, i)]);
+            polys.push(vec![r(j, i), r(j + 1, i), r(j + 1, i + 1), r(j, i + 1)]);
         }
     }
     let start: Vec<u32> = (0..u).map(|i| r(0, i)).collect();

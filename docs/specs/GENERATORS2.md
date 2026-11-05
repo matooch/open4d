@@ -329,9 +329,10 @@ Params: `mesh_subdivision_u` 16 (R20: 30), `mesh_subdivision_v` 4 (R20: 10), `or
 `cap_type` default N-gons (R20: triangles, §0a); `organic_form`, `loop`, `subdivision_per_segment`
 off, quadrangle caps, open sections and a single section → `Unsupported`.
 - **Sections:** every spline child (child order), placed by its transform, sampled at
-  `U − 1` points uniform in spline parameter, `s_i = segments·i/(U − 1)` (the closed
-  seam not repeated; `loft/defaults`: none of the 29 points lands on ±200).
-  **Known mismatch:** with U = 7 the reference takes s = 0, 2/3, 1, 2, 8/3, 3 instead of
+  `U` points uniform in spline parameter, `s_i = segments·i/U` (the closed seam not
+  repeated; R25 per D18, `loft/three-circles`, `loft/linear`: 16 points per ring; the R20
+  rule had `U − 1`, `loft/defaults`).
+  **Known mismatch (R20):** with U = 7 the reference takes s = 0, 2/3, 1, 2, 8/3, 3 instead of
   0, 2/3, 4/3, 2, 8/3, 10/3 (`loft/mesh-subdivision`; not understood).
 - **Between sections:** per sample index, a cubic Hermite curve through the sections'
   samples, V rows per section pair (`t = j/V`). Tangent at an end section: the chord to
@@ -341,32 +342,23 @@ off, quadrangle caps, open sections and a single section → `Unsupported`.
 - **Linear Interpolation** (brief 042, `loft/linear`): the rows between two sections are
   straight lines, `P(k) + (P(k+1) − P(k))·j/V`, per sample index. Same points, rows and faces
   otherwise; the end tangents of the Hermite rule are not used.
-- **Faces:** per row pair, `[r(j,i+1), r(j+1,i+1), r(j+1,i), r(j,i)]` (wound opposite to
-  Extrude, and against the caps: the exported loft is not consistently oriented), i
-  wrapping. Triangle caps (the R20 default): from the first ring (wound as the ring) and the
+- **Faces:** per row pair, `[r(j,i), r(j+1,i), r(j+1,i+1), r(j,i+1)]` (R25, D18: consistently oriented with
+  the caps; the R20 order was `[r(j,i+1), r(j+1,i+1), r(j+1,i), r(j,i)]`), i wrapping. Triangle caps (the R20 default): from the first ring (wound as the ring) and the
   last ring (reversed), the constrained Delaunay triangulation of the ring in the
   reference's listing (GEOMETRY.md §6.1). N-gon caps (the R25 default, `rechecks/loft-defaults`,
   `loft/three-circles`): one polygon per cap, the first ring in ring order `[0..U)` and the
-  last ring reversed. `loft/defaults` is exact; `loft/three` differs in its end
-  cap by one exactly cocircular (mirror-symmetric) quad whose diagonal the export takes
-  the other way, so parity compares those caps geometrically (§11).
+  last ring reversed. `loft/three-circles` and `loft/linear` are exact. The R20 cases `loft/defaults`, `loft/three`
+  and `loft/caps-off` are superseded by R25 (D18) and pinned in KNOWN_MISMATCH.
 
-### 9a. R25 loft against R20: a documented conflict (brief 042)
+### 9a. R25 against R20 (D18)
 
-`loft/three-circles` and `loft/linear` (R25, U 16, V 4, three circles) differ from the R20
-rules of §9 in two ways that do not depend on any option. Along the reference's points, with
-`U + 1` asked of our loft, **all 144 points match in order to 5e-7** and the face set equals
-the reference's up to rotation and reversal (`tests/sweep_loft_r25.rs`, both cases, linear
-included). What differs:
-1. **Points per ring:** R25 `U` (16); R20 `U − 1` (`loft/defaults`: U 30, 29 points per ring;
-   `loft/mesh-subdivision`: U 7, 6 points per ring).
-2. **Quad order:** R25 `[r(j,i), r(j+1,i), r(j+1,i+1), r(j,i+1)]` (consistently oriented with
-   the caps, so the R25 loft is a consistent solid); R20 the order of §9.
-The same scene (`loft/defaults` against `rechecks/loft-defaults`, two circles at y 0 and 200)
-shows both. Our loft has no version switch, and the R20 behaviour is the default, so the two R25
-cases stay in `KNOWN_MISMATCH` (they fail the strict comparison on the point count). Derived R25
-rule, **not implemented**: ring points `U`, `s_i = segments·i/U`, quad order above, N-gon caps.
-It needs a decision on how app versions are told apart in the generators (planner).
+`loft/three-circles` and `loft/linear` (R25, U 16, V 4) differ from the R20 cases in two
+rules that depend on no option: R25 has `U` points per ring (R20 `U − 1`: `loft/defaults`, U 30,
+29 points; `loft/mesh-subdivision`, U 7, 6 points) and lists the quads in the order of §9
+(R20 the reverse, not consistent with the caps). Per decision D18 R25 wins; there is no version
+switch. R20 cases that now differ (`loft/defaults`, `loft/three`, `loft/caps-off`) are in
+KNOWN_MISMATCH with `superseded by R25 (D18): loft/three-circles`. Both R25 cases are exact
+(`generators_parity`, `export_parity`); `tests/sweep_loft_r25.rs` checks the rule on its own.
 
 ## 10. Sweep (`forge.sweep`)
 
@@ -455,7 +447,7 @@ points and every face before the caps exactly).
 
 `crates/generators/tests/sweep_loft_r25.rs` (brief 042) measures the R25 rules the helix route error
 and the R20/R25 conflict hide from the golden cases: banking off and the 2-Rail mapping along the
-reference's own ring centres (exact), the R25 loft with `U + 1` (points exact, faces up to rotation
+reference's own ring centres (exact), the R25 loft rule (points exact, faces up to rotation
 and reversal; §9a), the Banking-on frame (asserted to still differ), and lathe movement/scaling.
 
 `crates/generators/tests/spline_sampling.rs` runs the 22 O17 cases (`splines-2`): an Extrude
