@@ -429,6 +429,58 @@ pub(crate) fn evaluate_spline_gen(
     }
 }
 
+/// A cap-making generator's mesh split into side walls and its two caps (EDITABLE.md §1.2
+/// step 5): `sides` is the build with both caps off, `start` / `end` the cap polygons that
+/// the full build appends after the sides (same points).
+pub(crate) struct CapSplit {
+    pub sides: PolyMesh,
+    pub start: Vec<Vec<u32>>,
+    pub end: Vec<Vec<u32>>,
+}
+
+/// `Ok(None)` when `id` is not a spline generator, has no caps, or the build with caps off
+/// is not a prefix of the full build.
+pub(crate) fn split_caps(scene: &Scene, id: NodeId) -> Result<Option<CapSplit>, BuildError> {
+    let Some(node) = scene.node(id) else {
+        return Ok(None);
+    };
+    if spline_input_count(&node.type_id).is_none() {
+        return Ok(None);
+    }
+    let build = |start: Option<&str>, end: Option<&str>| {
+        let mut values = node.params.clone();
+        for (k, v) in [("cap_start", start), ("cap_end", end)] {
+            if let Some(v) = v {
+                values.insert(k.to_string(), Value::Enum(v.to_string()));
+            }
+        }
+        evaluate_spline_gen(scene, id, &node.type_id, &values)
+    };
+    let Some(full) = build(None, None)? else {
+        return Ok(None);
+    };
+    let keep = match node.params.get("cap_start") {
+        Some(Value::Enum(e)) => e.clone(),
+        _ => "cap".to_string(),
+    };
+    let (Some(sides), Some(mid)) = (
+        build(Some("none"), Some("none"))?,
+        build(Some(&keep), Some("none"))?,
+    ) else {
+        return Ok(None);
+    };
+    let (s, m) = (sides.polys.len(), mid.polys.len());
+    let prefix = |a: &PolyMesh| a.points == full.points && full.polys.starts_with(&a.polys);
+    if !prefix(&sides) || !prefix(&mid) || s >= full.polys.len() || m < s {
+        return Ok(None);
+    }
+    Ok(Some(CapSplit {
+        start: full.polys[s..m].to_vec(),
+        end: full.polys[m..].to_vec(),
+        sides,
+    }))
+}
+
 /// Start and end caps of a ring `q` (closed outline) as Delaunay triangles in the
 /// reference's listing: the start wound like `q`, the end reversed (§9, §10;
 /// GEOMETRY.md §6.1).

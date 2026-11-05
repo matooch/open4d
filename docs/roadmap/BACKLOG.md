@@ -27,7 +27,7 @@ implementers can avoid collisions.
 | 027 | [Selection tags, vertex map tags, restriction tags](../agents/tasks/027-selection-vertexmap-restriction-tags.md) | B | 023 | waiting: O54 | core, generators, ui, modifiers |
 | 028 | [Editable spline object and point/tangent editing](../agents/tasks/028-editable-spline.md) | B | 003 | done | core, geometry, generators, ui |
 | 029 | [Spline tools and spline booleans](../agents/tasks/029-spline-tools.md) | B | 028 | done | geometry, modeling |
-| 030 | [Make Editable follow-ups from O3](../agents/tasks/030-make-editable-followups.md) | B | 003, 028 | ready | generators, ui |
+| 030 | [Make Editable follow-ups from O3](../agents/tasks/030-make-editable-followups.md) | B | 003, 028 | done | generators, ui |
 | 031 | [Duplicate, Arrange, Randomize, Transfer, Array command](../agents/tasks/031-duplicate-arrange-array-command.md) | B | 011 | done (parity-pending: no data; array-command probe, G3) | ui, modeling |
 | 032 | [Snapping 2.0 and axis/pivot editing](../agents/tasks/032-snapping-pivot.md) | B | 006 | done (parity-pending G2/G3) | viewport, ui, modeling, generators, command |
 | 033 | [N-gon handling: reference triangulation order and edge visibility](../agents/tasks/033-ngon-triangulation-order.md) | B | – | done | geometry, generators, viewport |

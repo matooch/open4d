@@ -1,9 +1,10 @@
 # Editable polygon objects (`crates/generators/src/polygon.rs`)
 
-Sources: own design (brief docs/agents/tasks/03-polygon-object-make-editable.md). The
-observation docs/parity/make-editable.md has no data yet, so **every rule below that says
-what the commands do is parity-pending**; the geometry itself is checked against the
-primitive golden cases (§1.5). Mesh values: CORE.md §1; file format: CORE.md §6.
+Sources: own design (brief docs/agents/tasks/03-polygon-object-make-editable.md), then
+the observation docs/parity/make-editable.md (O3, cases in `tests/golden/make-editable/`)
+with brief 030. Rules that an O3 case shows cite the case; the rest of §1.2 to §1.4 stays
+**parity-pending** (own design). The geometry itself is checked against the primitive golden
+cases (§1.5) and the O3 cases (§1.6). Mesh values: CORE.md §1; file format: CORE.md §6.
 
 ## 1. Polygon object, Make Editable, Current State to Object
 
@@ -20,16 +21,34 @@ primitive golden cases (§1.5). Mesh values: CORE.md §1; file format: CORE.md �
 - `forge_generators::{to_poly_mesh, from_poly_mesh}` convert between `MeshData` and
   `PolyMesh`; both keep order and values exactly.
 
-### 1.2 Make Editable (`make_editable(tx, id) -> Result<NodeId, EditableError>`) — parity-pending
+### 1.2 Make Editable (`make_editable(tx, id) -> Result<NodeId, EditableError>`)
 For a node for which `evaluate_geometry` builds a mesh:
 1. A new `forge.polygon` is created at the source's place (same parent, same index). It
    gets the source's name, the `transform.*` params, and a copy of every tag in order
-   (type, name and params; the smoothing tag included).
-2. Its `mesh` is `evaluate_geometry`'s result: **deformers are not applied**.
-3. Children of the source: those the generator consumed (`is_consumed`) are deleted;
-   every other child (deformers, other objects) is moved under the new polygon object,
-   keeping their order and local params.
-4. The source is deleted. The function returns the new id.
+   (type, name and params; the smoothing tag included). Name and tags: `cube`; position
+   and rotation stay on the object, nothing is baked: `sphere-moved`. (The UVW tag and the
+   two data tags of the observed tree are not modelled: meshes have no UVs yet, the data
+   tags are storage; **parity-pending** until UVs exist.)
+2. Its `mesh` is `evaluate_geometry`'s result: **deformers are not applied**
+   (`cube-deformed`: the stored points are the unbent box, the Bend stays and bends live).
+3. Children of the source: those the generator consumed (`is_consumed`) are deleted
+   (`subdivision`, `extrude`: the input is gone); every other child (deformers, other
+   objects) is moved under the new polygon object, keeping their order and local params
+   (`cube-deformed`: Bend child kept, strength unchanged).
+4. The source is deleted. The function returns the new id. A generator with consumed
+   inputs gives **one** object named after the generator (`subdivision`).
+5. **Caps** (`extrude`). A generator with `cap_start` / `cap_end` params (extrude, lathe,
+   loft, sweep) whose build has cap polygons gives its **side walls** as the object (the
+   mesh built with both caps off: same points, the polygons before the caps), plus one child
+   polygon object per cap, placed before the other kept children: `Cap 1` for the start
+   cap, `Cap 2` for the end cap. A cap object has the identity transform, only the points
+   its cap polygons use (ascending index of the generator's mesh) with the polygons
+   renumbered, a copy of the source's tags, and a polygon selection tag (`forge.polygon_selection`,
+   param `indices`) named `C1` / `C2` holding all its polygons. The observed 8-point,
+   4-polygon sides and the two 4-point, 1-polygon caps: `extrude`. A cap off gives no child;
+   the tag order of the observed cap (UVW, selection, Phong), the corner each cap polygon
+   starts at (R25 start cap `[3, 2, 1, 0]`, GENERATORS2.md §11.1) and lathe/loft/sweep caps
+   are **parity-pending** (the test compares `extrude` geometrically, as its form does).
 - A `forge.polygon` is already editable: nothing changes, its own id is returned.
 - A node without a mesh (Null, spline, deformer, a generator with no usable input) gives
   `EditableError::NoMesh(name)` before anything is edited. A tag gives `NoMesh` too.
@@ -40,11 +59,15 @@ For a node for which `evaluate_geometry` builds a mesh:
   (**parity-pending**). A link whose `accepts` list excludes the `Object` category makes
   the whole step fail and revert.
 
-### 1.3 Current State to Object (`current_state_to_object(tx, id) -> Result<NodeId, EditableError>`) — parity-pending
+### 1.3 Current State to Object (`current_state_to_object(tx, id) -> Result<NodeId, EditableError>`)
 - A new `forge.polygon` is inserted directly after the source (same parent, index + 1),
-  named like the source, with the source's `transform.*` params and copies of its tags.
-- Its `mesh` is `evaluate`'s result: the source's deformers **are applied**. The source
-  and its children are untouched; the new object has no children.
+  named like the source (**no suffix**), with the source's `transform.*` params and copies
+  of its tags: `cube-deformed-csto`, `subdivision-csto`.
+- Its `mesh` is `evaluate`'s result: the source's deformers **are applied**
+  (`cube-deformed-csto`: bbox -100…359.15 × -200…259.15). The source and its children are
+  untouched (`subdivision-csto`: the generator keeps its input and is still drawn
+  subdivided); the new object has no children. Unlike Make Editable, a cap-making
+  generator gives one object with the caps in its mesh (**parity-pending**: no case).
 - The mesh generators produce exactly one mesh each, so there is nothing to merge; if a
   generator with several outputs appears, the outputs must be merged into one mesh.
 - Same errors as §1.2.
@@ -64,8 +87,11 @@ ascending id order, inside one transaction (one undo step, labels "Make Editable
 "Current State to Object"). A node that no longer exists (it was a consumed child of an
 earlier selected node) is skipped silently. A `NoMesh` node is skipped and its message
 `"<command>: <name> has no mesh"` goes to `EditorState.status`; any other error aborts and
-reverts the whole step. Afterwards the selection is the new objects (for Make Editable on
-a `forge.polygon`, the polygon itself).
+reverts the whole step. Afterwards (O3 "Selection after", all nine cases) the object the command ran on stays the
+only selected one: for Make Editable that is the converted object (for a `forge.polygon`,
+itself; the caps are not selected), for Current State to Object the **original**, not the
+copy. With several nodes selected the same holds per node (**parity-pending**: the form did
+not read it). Each command is one undo step (O3 "Undo").
 
 ### 1.5 Checks
 - Every primitive golden case that matches `tests/golden/<feature>/` in
@@ -74,6 +100,24 @@ a `forge.polygon`, the polygon itself).
 - Deformer child kept and still applied; Current State to Object bakes the deformer and
   leaves the source; one undo restores the original; consumed children removed.
 - Save and load keep the mesh (CORE.md §6).
+
+### 1.6 Observed cases (`tests/golden/make-editable/`, `crates/generators/tests/make_editable_parity.rs`)
+The test rebuilds each case's scene from `[params.input]` (child table = first child), runs
+the command, and compares the whole scene as the exporter writes it: every non-consumed
+object that has a mesh, in tree order, each taken to world space with the deformers of its
+children applied, concatenated (a generator with a consumed input shows its output once).
+The tolerance is the case's (`cube`, `cube-deformed`, `sphere-moved`, `subdivision`: strict
+faces and 1e-4; the others `geometric`). It also asserts the observed tree (names, types,
+tags without the UVW and data tags, children) and, for the spline, the editable spline.
+
+| Case | Rule it proves |
+|---|---|
+| `cube`, `sphere-moved`, `subdivision` | §1.2 steps 1, 2, 4 |
+| `cube-deformed` | §1.2 steps 2 and 3 (bent only live) |
+| `cube-deformed-csto`, `subdivision-csto` | §1.3 |
+| `extrude` | §1.2 step 5 |
+| `spline` | the primitive becomes `forge.spline` with 4 closed points (SPLINES.md §3); tree only |
+| `array` | mesh only: the eight cubes at the Array's offsets. The form's tree column is empty and the export names eight objects `Cube.8` … `Cube.1` ("this command does not make them polygon objects"), so our single merged polygon object matches the surface but **not the tree**: **parity-pending**, see the follow-up cases in the brief report |
 
 ## 2. Component modes and selection (`crates/ui/src/components.rs`)
 

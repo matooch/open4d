@@ -315,6 +315,7 @@ pub(crate) const ICON_MAP: &[(&str, &str)] = &[
     ("forge.platonic", "platonic"),
     ("forge.polygon", "polygon"),
     ("forge.polygon_prim", "polygon_prim"),
+    ("forge.polygon_selection", "select_all"),
     ("forge.profile_spline", "profile"),
     ("forge.pyramid", "pyramid"),
     ("forge.rectangle_spline", "rectangle"),

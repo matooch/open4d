@@ -36,8 +36,9 @@ pub use cloner::{
 };
 pub use modeling::{array, connect, inputs_of as modeling_inputs_of, symmetry};
 pub use polygon::{
-    EditableError, SELECTION_EDGES, SELECTION_POINTS, SELECTION_POLYS, TYPE as POLYGON,
-    current_state_to_object, from_poly_mesh, make_editable, spawn_split, to_poly_mesh,
+    EditableError, POLYGON_SELECTION, SELECTION_EDGES, SELECTION_POINTS, SELECTION_POLYS,
+    TYPE as POLYGON, current_state_to_object, from_poly_mesh, make_editable, spawn_split,
+    to_poly_mesh,
 };
 pub use spline_gens::{extrude, lathe, loft, spline_inputs_of, sweep};
 pub use subdivision::{input_of, subdivide, subdivide_with_creases};
@@ -109,6 +110,7 @@ impl Plugin for Primitives {
         r.register(atom_array::node_type())?;
         r.register(spline_mask::node_type())?;
         r.register(boole::node_type())?;
+        r.register(polygon::selection_tag_type())?;
         r.register(polygon::node_type())
     }
 }
