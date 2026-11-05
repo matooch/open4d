@@ -382,14 +382,23 @@ fn step_params(copies: i64) -> Vec<ParamDesc> {
     ]
 }
 
-/// The Array command (`mesh.array_command`; MODELING.md §9.6), a mesh tool.
+/// The Array command (`mesh.array_command`; MODELING.md §9.6), a mesh tool: a grid of
+/// instances (the original included), `offset`, `rotation_deg` and `scale` are the totals
+/// reached by the last instance.
 pub fn array_descs() -> Vec<ToolDesc> {
     vec![command_desc(
         "array",
         "Array",
         "mesh.array_command",
         false,
-        step_params(3),
+        vec![
+            ParamDesc::int("count_x", "Count X", 3).range(1, 1000),
+            ParamDesc::int("count_y", "Count Y", 1).range(1, 1000),
+            ParamDesc::int("count_z", "Count Z", 1).range(1, 1000),
+            ParamDesc::vec3("offset", "Offset", [400.0, 0.0, 0.0]).range(-BIG, BIG),
+            ParamDesc::vec3("rotation_deg", "Rotation", [0.0; 3]).range(-BIG, BIG),
+            ParamDesc::vec3("scale", "Scale", [1.0; 3]).range(0.001, 1000.0),
+        ],
     )]
 }
 

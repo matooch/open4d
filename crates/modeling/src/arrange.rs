@@ -59,7 +59,7 @@ pub fn copy_step(
     }
 }
 
-/// The step of copy `k` from the settings of Duplicate or the Array command.
+/// The step of copy `k` from the settings of Duplicate.
 pub fn step_of(k: usize, s: &Settings) -> Step {
     copy_step(
         k,
@@ -71,32 +71,97 @@ pub fn step_of(k: usize, s: &Settings) -> Step {
     )
 }
 
-/// The Array command (§9.6): the mesh followed by `copies` transformed copies of itself.
-/// The selection that comes back holds the polygons of the copies.
+/// The step fraction of instance `i` of `count` along one axis: `i / (count - 1)`, 0 for a
+/// single instance.
+fn axis_fraction(i: u32, count: u32) -> f64 {
+    if count > 1 {
+        f64::from(i) / f64::from(count - 1)
+    } else {
+        0.0
+    }
+}
+
+/// The Array command (§9.6): a grid of `count_x * count_y * count_z` instances, the original
+/// first and untouched, then copies of the selected polygons (all polygons when none is
+/// selected) with `i` varying fastest. The selection that comes back holds the new polygons.
 pub fn array(
     mesh: &PolyMesh,
-    _sel: &Selection,
+    sel: &Selection,
     s: &Settings,
 ) -> Result<(PolyMesh, Selection), ToolError> {
-    let copies = s.int("copies").max(1) as usize;
+    let count = |id: &str| s.int(id).max(1) as u32;
+    let (nx, ny, nz) = (count("count_x"), count("count_y"), count("count_z"));
     if mesh.points.is_empty() || mesh.polys.is_empty() {
         return Err(ToolError::Invalid("the mesh is empty".into()));
     }
-    if mesh.points.len().saturating_mul(copies + 1) > MAX_ARRAY_POINTS {
+    let chosen: Vec<u32> = if sel.polys.is_empty() {
+        (0..mesh.polys.len() as u32).collect()
+    } else {
+        sel.polys
+            .iter()
+            .filter(|f| (*f as usize) < mesh.polys.len())
+            .collect()
+    };
+    if chosen.is_empty() {
+        return Err(ToolError::Invalid("no selected polygon exists".into()));
+    }
+    // points used by the chosen polygons, ascending, and their new local index
+    let mut used: Vec<u32> = chosen
+        .iter()
+        .flat_map(|f| mesh.polys[*f as usize].iter().copied())
+        .filter(|p| (*p as usize) < mesh.points.len())
+        .collect();
+    used.sort_unstable();
+    used.dedup();
+    let local: std::collections::HashMap<u32, u32> = used
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (*p, i as u32))
+        .collect();
+    let instances = u64::from(nx) * u64::from(ny) * u64::from(nz);
+    let new_points = (instances - 1).saturating_mul(used.len() as u64);
+    if (mesh.points.len() as u64).saturating_add(new_points) > MAX_ARRAY_POINTS as u64 {
         return Err(ToolError::Invalid(format!(
             "the result would have more than {MAX_ARRAY_POINTS} points"
         )));
     }
+    let (offset, rotation, scale) = (s.vec3("offset"), s.vec3("rotation_deg"), s.vec3("scale"));
     let mut out = mesh.clone();
     let mut selected = IndexSet::new();
-    for k in 1..=copies {
-        let m = step_of(k, s).transform().matrix();
-        let base = out.points.len() as u32;
-        out.points
-            .extend(mesh.points.iter().map(|p| m.transform_point3(*p)));
-        for poly in &mesh.polys {
-            selected.insert(out.polys.len() as u32);
-            out.polys.push(poly.iter().map(|c| c + base).collect());
+    for k in 0..nz {
+        for j in 0..ny {
+            for i in 0..nx {
+                if (i, j, k) == (0, 0, 0) {
+                    continue;
+                }
+                let f = DVec3::new(
+                    axis_fraction(i, nx),
+                    axis_fraction(j, ny),
+                    axis_fraction(k, nz),
+                );
+                let t = f.x + f.y + f.z;
+                let m = Step {
+                    pos: offset * f,
+                    rot_deg: rotation * t,
+                    scale: scale.map(|c| (1.0 + t * (c - 1.0)).max(MIN_SCALE)),
+                }
+                .transform()
+                .matrix();
+                let base = out.points.len() as u32;
+                out.points.extend(
+                    used.iter()
+                        .map(|p| m.transform_point3(mesh.points[*p as usize])),
+                );
+                for f in &chosen {
+                    selected.insert(out.polys.len() as u32);
+                    let poly = &mesh.polys[*f as usize];
+                    out.polys.push(
+                        poly.iter()
+                            .map(|c| base + local.get(c).copied().unwrap_or(0))
+                            .collect(),
+                    );
+                }
+            }
         }
     }
     Ok((

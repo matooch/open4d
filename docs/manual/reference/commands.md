@@ -1101,7 +1101,7 @@ Array. One undo step.
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
-Example: `forge cmd scene.forge mesh.array_command --args '{"settings":{"copies":2,"offset":[200.0,0.0,0.0]}}'`
+Example: `forge cmd scene.forge mesh.array_command --args '{"settings":{"count_x":2,"offset":[200.0,0.0,0.0]}}'`
 
 ### `mesh.loop_cut`
 

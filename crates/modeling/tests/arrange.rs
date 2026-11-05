@@ -74,10 +74,23 @@ fn step_rule_in_both_modes() {
     assert!(close(t2.pos, o) && close(t2.rot_deg, r) && close(t2.scale, s));
 }
 
+fn array_sel(
+    mesh: &PolyMesh,
+    polys: &[u32],
+    v: serde_json::Value,
+) -> Result<(PolyMesh, Selection), ToolError> {
+    let sel = Selection {
+        polys: polys.iter().copied().collect(),
+        ..Selection::default()
+    };
+    tool_fn("array").unwrap()(mesh, &sel, &settings("array", v))
+}
+
 #[test]
-fn array_appends_copies_in_order() {
+fn array_appends_instances_in_order() {
+    // count 4 includes the original; the offset is the total span (O58 arr-f-array-3)
     let m = cube();
-    let (out, sel) = array(&m, json!({"copies": 3, "offset": [10.0, 0.0, 0.0]})).unwrap();
+    let (out, sel) = array(&m, json!({"count_x": 4, "offset": [30.0, 0.0, 0.0]})).unwrap();
     assert_eq!((out.points.len(), out.polys.len()), (32, 24));
     // the original is untouched and first
     assert_eq!(&out.points[..8], &m.points[..]);
@@ -103,10 +116,53 @@ fn array_appends_copies_in_order() {
 }
 
 #[test]
+fn array_grid_order_and_single_axis_offsets() {
+    let m = cube();
+    // 2 x 2 x 1: i fastest; the z offset is ignored while count_z is 1
+    let (out, _) = array(
+        &m,
+        json!({"count_x": 2, "count_y": 2, "offset": [10.0, 20.0, 99.0]}),
+    )
+    .unwrap();
+    assert_eq!(out.points.len(), 32);
+    let first = |k: usize| out.points[8 * k] - m.points[0];
+    assert!(close(first(1), DVec3::new(10.0, 0.0, 0.0)));
+    assert!(close(first(2), DVec3::new(0.0, 20.0, 0.0)));
+    assert!(close(first(3), DVec3::new(10.0, 20.0, 0.0)));
+    // count 1 along x: the x offset is ignored (arr-f-array-mode)
+    let (out, _) = array(
+        &m,
+        json!({"count_x": 1, "count_z": 2, "offset": [50.0, 0.0, 8.0]}),
+    )
+    .unwrap();
+    assert!(close(
+        out.points[8] - m.points[0],
+        DVec3::new(0.0, 0.0, 8.0)
+    ));
+}
+
+#[test]
+fn array_copies_only_the_selected_polygons() {
+    // arr-f-array-mode: the top polygon of a cube, count 2, no displacement
+    let m = cube();
+    let (out, sel) = array_sel(&m, &[3], json!({"count_x": 2, "offset": [0.0, 0.0, 0.0]})).unwrap();
+    assert_eq!((out.points.len(), out.polys.len()), (12, 7));
+    // used points ascending: 2, 3, 6, 7 become 8, 9, 10, 11
+    for (i, p) in [2usize, 3, 6, 7].iter().enumerate() {
+        assert!(close(out.points[8 + i], m.points[*p]));
+    }
+    assert_eq!(out.polys[6], vec![8, 9, 11, 10]);
+    assert_eq!(sel.polys.iter().collect::<Vec<_>>(), [6]);
+    // a polygon that does not exist is ignored, none at all is an error
+    assert!(array_sel(&m, &[99], json!({})).is_err());
+}
+
+#[test]
 fn array_copies_stay_closed_and_keep_winding() {
     let (out, _) = array(
         &cube(),
-        json!({"copies": 2, "rotation_deg": [30.0, 10.0, 5.0], "scale": [2.0, 1.0, 0.8]}),
+        json!({"count_x": 3, "rotation_deg": [30.0, 10.0, 5.0], "scale": [2.0, 1.0, 0.8],
+               "offset": [10.0, 0.0, 0.0]}),
     )
     .unwrap();
     let mut uses: HashMap<(u32, u32), u32> = HashMap::new();
@@ -116,10 +172,10 @@ fn array_copies_stay_closed_and_keep_winding() {
         }
     }
     assert!(uses.values().all(|n| *n == 2));
-    // outward winding is preserved: signed volume of each cube stays positive
-    for k in 0..3usize {
+    // outward winding is preserved: signed volume of each cube keeps the sign
+    let volume = |polys: &[Vec<u32>]| {
         let mut vol = 0.0;
-        for poly in &out.polys[6 * k..6 * k + 6] {
+        for poly in polys {
             let p0 = out.points[poly[0] as usize];
             for w in 1..poly.len() - 1 {
                 let (a, b) = (
@@ -129,33 +185,22 @@ fn array_copies_stay_closed_and_keep_winding() {
                 vol += p0.dot(a.cross(b)) / 6.0;
             }
         }
+        vol
+    };
+    let sign0 = volume(&out.polys[0..6]).signum();
+    for k in 1..3usize {
+        let vol = volume(&out.polys[6 * k..6 * k + 6]);
         assert!(vol.abs() > 0.1);
-        // all polygons of the original cube wind the same way as the copies
-        let sign0 = {
-            let mut v = 0.0;
-            for poly in &out.polys[0..6] {
-                let p0 = out.points[poly[0] as usize];
-                for w in 1..poly.len() - 1 {
-                    let (a, b) = (
-                        out.points[poly[w] as usize],
-                        out.points[poly[w + 1] as usize],
-                    );
-                    v += p0.dot(a.cross(b)) / 6.0;
-                }
-            }
-            v.signum()
-        };
         assert_eq!(vol.signum(), sign0);
     }
 }
 
 #[test]
-fn array_rotation_and_total_mode() {
-    // total mode with 2 copies and a bank of 180: the first copy is turned by 90 degrees
+fn array_rotation_reaches_the_total_at_the_last_instance() {
+    // 3 instances and a bank of 180: the middle one is turned by 90 degrees
     let (out, _) = array(
         &cube(),
-        json!({"copies": 2, "mode": "total", "rotation_deg": [0.0, 0.0, 180.0],
-               "offset": [0.0, 0.0, 0.0]}),
+        json!({"count_x": 3, "rotation_deg": [0.0, 0.0, 180.0], "offset": [0.0, 0.0, 0.0]}),
     )
     .unwrap();
     // the bank turns about Z by the negated angle (TRANSFORM.md): (1, 0) -> (0, -1) at 90
@@ -171,22 +216,22 @@ fn array_errors() {
     assert!(
         Settings::from_json(
             &tool_desc("array").unwrap(),
-            json!({"copies": 5, "nope": 1}).as_object().unwrap()
+            json!({"count_x": 5, "nope": 1}).as_object().unwrap()
         )
         .is_err()
     );
-    // copies clamp into 1..1000
-    let s = settings("array", json!({"copies": 0}));
-    assert_eq!(s.int("copies"), 1);
-    let s = settings("array", json!({"copies": 99999}));
-    assert_eq!(s.int("copies"), 1000);
+    // counts clamp into 1..1000
+    let s = settings("array", json!({"count_x": 0}));
+    assert_eq!(s.int("count_x"), 1);
+    let s = settings("array", json!({"count_y": 99999}));
+    assert_eq!(s.int("count_y"), 1000);
     // the point cap
     let big = PolyMesh {
         points: (0..5000).map(|i| DVec3::new(i as f64, 0.0, 0.0)).collect(),
-        polys: vec![vec![0, 1, 2]],
+        polys: vec![(0..5000).collect()],
     };
     assert!(matches!(
-        array(&big, json!({"copies": 1000})),
+        array(&big, json!({"count_x": 1000})),
         Err(ToolError::Invalid(_))
     ));
     assert!(array(&PolyMesh::default(), json!({})).is_err());

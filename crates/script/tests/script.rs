@@ -649,7 +649,7 @@ fn arrangement_commands_are_commands_for_scripts() {
         run("object.randomize", #{ nodes: d.created, seed: 4, position: [10.0, 0.0, 0.0] });
         run("object.arrange", #{ nodes: d.created, spacing: [0.0, 50.0, 0.0] });
         run("mesh.make_editable", #{ nodes: [a] });
-        let r = run("mesh.array_command", #{ settings: #{ copies: 2 } });
+        let r = run("mesh.array_command", #{ settings: #{ count_x: 3 } });
         [d.count, r.points, r.polys]
     "#;
     let report = ok(&mut app, src);

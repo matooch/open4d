@@ -214,10 +214,12 @@ nothing changes). Edge ids are those of `PolyMesh::edges()`.
 | `select.loop` | `across?` 0 or 1 (polys only, default 0) | edges or polys | edge loops / polygon loops of the selected elements |
 | `select.ring` | `across?` | edges or polys | edge rings / the orthogonal polygon strips |
 
-Neighbours: points are neighbours along an edge; edges share a point; polygons share an
-**edge** (`grow-poly` and `grow-point` were not observed, the dialog "Grow Selection…" crashed
-the observer: **parity-pending**). Grow and shrink are exact inverses on the observed shrink
-case only.
+Neighbours: points are neighbours along an edge; edges share a point; polygons share a
+**point** (O58, brief 187: `sel-grow-point` grows the start point of a 4x4x4 cube to its four
+edge neighbours, `sel-grow-edge` the start edge to the 7 edges at its end points, `sel-grow-poly` the
+start quad to the 3x3 patch, diagonals included; Use Edge off, its dialog default is a G3 read).
+Shrink uses the same neighbours (`shrink-poly`, O26, gives the same 5, 6, 9, 10 with either
+polygon neighbourhood).
 
 **Convert** (`convert(mesh, sel, from, to, mode)`). Same kind is a no-op. Strict needs all
 parts of the target element selected, tolerant any part:
@@ -226,17 +228,22 @@ parts of the target element selected, tolerant any part:
 |---|---|---|
 | polys → points, edges | every point / edge of the selected polys (no tolerance) | same |
 | points → edges | both end points selected | either |
-| points → polys | all corners selected (`convert-point-to-poly`: 9 top points give polys 16-19; side polys with 2 selected points are not chosen) | any corner (not observed) |
+| points → polys | all corners selected (`convert-point-to-poly`: 9 top points give polys 16-19; side polys with 2 selected points are not chosen) | any corner (`sel-convert-tolerant-p2poly`, O58: the same 9 points give the 12 polygons 2, 3, 6, 7, 10, 11, 14-19: the top four and every side polygon touching the top) |
 | edges → points | end points of the selected edges | same |
-| edges → polys | all edges of the polygon selected (`convert-edge-to-poly`: the 8 border edges of the top give no polygon) | any edge (not observed) |
+| edges → polys | all edges of the polygon selected (`convert-edge-to-poly`: the 8 border edges of the top give no polygon) | any edge (`sel-convert-tolerant-e2poly`, O58: the 8 border edges give the same 12 polygons) |
 
 `convert-poly-to-point`: the 4 top polys give the 9 top points, polys stay selected.
 
-**Connected** uses shared **points**: two polygons are in one piece if they share a point
-(union-find over polygon corners). Points mode: pieces of points; edges mode: edges of the
-pieces. `select-connected` (after Disconnect every top polygon owns its points): poly 16 stays
-alone. Spreading through shared points, versus through shared edges only, was not observed:
-**parity-pending** (the case cannot tell, see report).
+**Connected** uses shared **edges**: two polygons are in one piece if they share an edge that
+exactly two polygons use (union-find over polygons). Points mode: all points of the pieces
+holding a selected point; edges mode: all edges of the pieces holding a selected edge. A point or
+edge on two pieces belongs to both. `select-connected` (O26; after Disconnect every top polygon owns its
+points): poly 16 stays alone. `sel-connected-point-only` (O58): two cubes welded along a shared point
+pair (an edge used by four polygons) are **not** connected, so selecting one polygon gives the six
+polygons of its cube. Sharing a corner point alone does not connect polygons either (the
+earlier point-based rule selected both cubes). **Parity-pending**: points mode and edges mode, and
+whether an edge shared by three polygons connects; follow-up case: two cubes sharing one
+corner point only (a true corner touch), and a T-junction of three polygons on one edge.
 
 **Loop and ring** (own design, parity-pending; `loop-edge`, `loop-poly`, `ring-edge` need
 the GUI, O26).
@@ -261,7 +268,9 @@ Checks: `crates/geometry/tests/selection_ops_parity.rs` rebuilds each O26 case f
 `mesh.obj` and `case.toml` start sets and compares with `selection.json` exactly; unit tests
 for loop, ring, connected, tolerant convert and edge grow/shrink (`selection.rs`); command
 tests in `crates/app/tests/select_commands.rs` (headless run, one undo step, no step when
-nothing changes).
+nothing changes). `crates/app/tests/o58_selection_parity.rs` (brief 187) runs the six O58
+`sel-*` cases (discovered by `tool`: `grow`, `convert_selection`, `select_connected`) through
+the registry against `selection.json`: 6/6 exact.
 
 ## 3. Moving, rotating and scaling components (`crates/ui/src/component_edit.rs`)
 
