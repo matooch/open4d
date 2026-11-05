@@ -24,7 +24,12 @@ const WEIGHT: &str = "Weight";
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CommonDefaults {
     pub minimum: f64,
+    pub position: bool,
     pub p: [f64; 3],
+    pub rotation: bool,
+    /// Radians.
+    pub r: [f64; 3],
+    pub scale: bool,
     pub color_mode: &'static str,
     pub uniform_scale: bool,
     pub scale_value: f64,
@@ -32,9 +37,13 @@ pub(crate) struct CommonDefaults {
 }
 
 impl CommonDefaults {
-    const PLAIN: CommonDefaults = CommonDefaults {
+    pub(crate) const PLAIN: CommonDefaults = CommonDefaults {
         minimum: 0.0,
+        position: true,
         p: [0.0, 100.0, 0.0],
+        rotation: false,
+        r: [0.0; 3],
+        scale: false,
         color_mode: "fields_color",
         uniform_scale: false,
         scale_value: 0.0,
@@ -102,21 +111,21 @@ pub(crate) fn common_type(id: &str, name: &str, d: &CommonDefaults) -> NodeType 
             )
             .group(PAR),
         )
-        .param(ParamDesc::bool("position", "Position", true).group(PAR))
+        .param(ParamDesc::bool("position", "Position", d.position).group(PAR))
         .param(
             ParamDesc::vec3("p", "P", d.p)
                 .range(-BIG, BIG)
                 .unit(Unit::Distance)
                 .group(PAR),
         )
-        .param(ParamDesc::bool("rotation", "Rotation", false).group(PAR))
+        .param(ParamDesc::bool("rotation", "Rotation", d.rotation).group(PAR))
         .param(
-            ParamDesc::vec3("r", "R", [0.0; 3])
+            ParamDesc::vec3("r", "R", d.r)
                 .range(-BIG, BIG)
                 .unit(Unit::Angle)
                 .group(PAR),
         )
-        .param(ParamDesc::bool("scale", "Scale", false).group(PAR))
+        .param(ParamDesc::bool("scale", "Scale", d.scale).group(PAR))
         .param(ParamDesc::bool("uniform_scale", "Uniform Scale", d.uniform_scale).group(PAR))
         .param(ParamDesc::bool("absolute_scale", "Absolute Scale", false).group(PAR))
         .param(ParamDesc::vec3("s", "S", d.s).range(-BIG, BIG).group(PAR))
@@ -311,7 +320,7 @@ pub(crate) fn settings_from_params(
 }
 
 /// The matrix with its three axes normalised (the rotation of a possibly scaled frame).
-fn frame(m: &DMat4) -> DMat3 {
+pub(crate) fn frame(m: &DMat4) -> DMat3 {
     let unit = |v: glam::DVec4, fallback: DVec3| v.truncate().try_normalize().unwrap_or(fallback);
     DMat3::from_cols(
         unit(m.x_axis, DVec3::X),
@@ -323,7 +332,7 @@ fn frame(m: &DMat4) -> DMat3 {
 impl Plain {
     /// The effect weight of a clone: strength times the field value, remapped between
     /// Minimum and Maximum in Remap mode (spec E3).
-    fn amount(&self, value: f64) -> f64 {
+    pub(crate) fn amount(&self, value: f64) -> f64 {
         let w = self.strength * value;
         match self.mode {
             TransformMode::Remap => self.minimum + w * (self.maximum - self.minimum),

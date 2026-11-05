@@ -67,7 +67,7 @@ implementers can avoid collisions.
 | 067 | [Clone order (iterate, random, blend, sort), multiple children, nesting](../agents/tasks/067-clone-order-nesting.md) | E | 065 | waiting: O50 | clone-engine |
 | 068 | [Effector framework + Plain effector (modes, spaces, colour, weight, min/max)](../agents/tasks/068-effector-framework-plain.md) | E | 065, 057 | done (14/14 Plain cases at level B and A; rules parity-pending, see MOGRAPH.md E10) | clone-engine, core |
 | 069 | [Random effector (all modes)](../agents/tasks/069-random-effector.md) | E | 068, 063 | done (exact: counts/visibility/untouched channels 8/8; random values statistical, reference sequence not reproduced) | clone-engine, noise |
-| 070 | [Step, Formula, Time, Delay and Target effectors](../agents/tasks/070-step-formula-time-delay-target.md) | E | 068, 052 | ready | clone-engine |
+| 070 | [Step, Formula, Time, Delay and Target effectors](../agents/tasks/070-step-formula-time-delay-target.md) | E | 068, 052 | done (level B 6/6, level A 5/6: `step-position` known mismatch; Delay has no golden case, all its rules parity-pending, see MOGRAPH.md E18-E25) | clone-engine |
 | 071 | [Shader, Spline, Push Apart, Inheritance, Volume and Group effectors](../agents/tasks/071-shader-spline-pushapart-etc.md) | E | 068, 125 | ready | clone-engine |
 | 072 | [Effector falloff via field lists](../agents/tasks/072-effector-field-falloff.md) | E | 068, 059 | ready | clone-engine, fields |
 | 073 | [Matrix object](../agents/tasks/073-matrix-object.md) | E | 065 | waiting: O31 | clone-engine |
