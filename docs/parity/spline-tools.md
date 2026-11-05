@@ -63,6 +63,32 @@ Also export each as a case (`editable-circle`, `editable-rectangle`).
 | prim-f/reverse | a default Star with Reverse on, extruded | – |
 | prim-f/direction-auto | a clockwise closed spline (Star with Reverse) extruded with Direction Auto; and a Circle in the XZ plane, Direction Auto | – |
 
+## Follow-up cases (planner, after briefs 028 and 029)
+
+Briefs 028 and 029 matched the cases above except Create Outline's offset (the export is the
+circle scaled by 1.100013 for distance 20, not a plain offset), and left the rows below open.
+Same export procedure as above.
+
+| Case | Input | Command and settings |
+|---|---|---|
+| outline-r100-d10 | editable circle, radius 100 | Create Outline, distance 10 |
+| outline-rect | editable rectangle | Create Outline, distance 20 |
+| outline-arc-open | editable default Arc (open) | Create Outline, distance 20 |
+| subdivide-3 | editable rectangle, all points selected | Subdivide, subdivisions 3 |
+| chamfer-flat | editable rectangle, all points selected | Chamfer, radius 40, Flat on |
+| chamfer-star | editable default Star, all points selected | Chamfer, radius 10 |
+| bool-circle-rect | an editable circle and an editable rectangle 300 × 100, same centre | Spline Union |
+| bool-nested | an editable circle (radius 200) and one of radius 100, same centre | Spline Subtract |
+| bool-disjoint | two editable circles at x −300 and x 300 | Spline Union |
+| interp-cubic-natural | editable rectangle with point 0 moved by (50, 50, 0) | Type Cubic, Intermediate Points Natural, Number 8 |
+| interp-akima-natural | the same | Type Akima, Intermediate Points Natural, Number 8 |
+| interp-bspline-natural | the same | Type B-Spline, Intermediate Points Natural, Number 8 |
+| tangent-readback-moved | editable circle with point 0 moved by (50, 0, 0) | none; record every point's tangent read-back |
+| editable-bezier-moved-extrude | editable circle, point 0 moved by (50, 0, 0) and its right handle scaled ×2 | Extrude, movement (0, 0, 20) |
+| editable-ring | default Ring made editable | none; record segments and closed flags |
+
+Cross Section is GUI-only: answer it in GUI session G3 if possible.
+
 ## Notes
 
 ### Editable spline facts (default Circle and Rectangle, each Made Editable)
