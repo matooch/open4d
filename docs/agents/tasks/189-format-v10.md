@@ -1,6 +1,6 @@
 # 189 · Native format v10 for list-valued parameters
 
-Status: ready · Area: M · Depends on: 028, 163 · Observations: – · Touches: core, io
+Status: done · Area: M · Depends on: 028, 163 · Observations: – · Touches: core, io
 
 ## Goal
 Brief 028 added `Value::Vec3List` (editable spline points and handles) inside format 9, so an
@@ -14,9 +14,9 @@ Bump the native format to 10 so version checks stay meaningful.
 - CORE.md: the format table gets v10 and the 028 follow-up note is closed.
 
 ## Done when
-- [ ] Loading every existing fixture works; a v10 file read by a simulated v9 reader gives `UnsupportedVersion`.
-- [ ] Round-trip of a scene with an editable spline is bit-identical.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Loading every existing fixture works; a v10 file read by a simulated v9 reader gives `UnsupportedVersion`.
+- [x] Round-trip of a scene with an editable spline is bit-identical.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code.
@@ -26,4 +26,7 @@ Bump the native format to 10 so version checks stay meaningful.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Files changed, tests added, deviations, last gate lines.
+- Files changed: crates/core/src/file.rs (VERSION 10, `migrate_9_to_10` identity, `load_as_reader` for simulating an older reader), crates/core/tests/{native_format,file,tracks,time}.rs and crates/nodes/tests/expression.rs (pinned `version: 9` now use `file::VERSION`; two future-version probes use 99), new fixtures `scene-v10*.forge` (with an editable spline) in crates/core/tests/fixtures and fuzz/corpus/scene_file, docs/specs/CORE.md (section 6.9, 028 note closed), docs/roadmap/BACKLOG.md, this brief.
+- Tests added: v10 fixtures byte stable, v9 fixtures still load and resave as current, v9 reader refuses v10 (`UnsupportedVersion(10)`), editable spline round trip bit-identical (text and chunked). v1-v9 fixtures untouched.
+- Deviations: none. Preset .forge files stay version 9 (they migrate on load).
+- Gate: GATE: all passed

@@ -19,8 +19,8 @@ pub const FORMAT: &str = "forge3d-scene";
 /// `object.*` params and adds the chunk section and file reference params, version 7 the
 /// time configuration (markers, preview range, playback mode), version 8 the expression
 /// tag and its graph parameter (brief 108), version 9 the layer table and the hidden
-/// `object.layer` param (brief 158). `Value::Vec3List` (brief 028) is additive under version 9 (CORE.md section 6.8). Older files still load, through [`MIGRATIONS`].
-pub const VERSION: u32 = 9;
+/// `object.layer` param (brief 158). Version 10 (brief 189) marks the list-valued parameter kinds (`Vec3List`, CORE.md section 6.9). Older files still load, through [`MIGRATIONS`].
+pub const VERSION: u32 = 10;
 
 /// A value whose binary payload is at least this many bytes is written as a chunk by
 /// [`save_with`] (CORE.md §6.2): 42 mesh points or 256 indices.
@@ -59,6 +59,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migrate_6_to_7,
     migrate_7_to_8,
     migrate_8_to_9,
+    migrate_9_to_10,
 ];
 
 /// Version 2 added `Value::Mesh`: additive, nothing to rewrite.
@@ -101,6 +102,11 @@ fn migrate_7_to_8(_: &mut SceneFile) -> Vec<String> {
 /// Version 9 added `layers` and the hidden `object.layer` link: a missing field is read as
 /// no layers by serde and a missing param takes its default on load.
 fn migrate_8_to_9(_: &mut SceneFile) -> Vec<String> {
+    Vec::new()
+}
+
+/// Version 10 marks list-valued parameters (`Vec3List`, brief 189): the encoding is unchanged.
+fn migrate_9_to_10(_: &mut SceneFile) -> Vec<String> {
     Vec::new()
 }
 
@@ -336,6 +342,25 @@ pub fn load_with(
     bytes: &[u8],
     opts: &LoadOptions,
 ) -> Result<(Scene, LoadReport), LoadError> {
+    load_inner(registry, bytes, opts, VERSION)
+}
+
+/// Loads as a reader whose newest known version is `reader_version` would: a newer file is
+/// refused with `UnsupportedVersion` (CORE.md section 6.9). For tests of the version check.
+pub fn load_as_reader(
+    registry: Arc<Registry>,
+    bytes: &[u8],
+    reader_version: u32,
+) -> Result<(Scene, LoadReport), LoadError> {
+    load_inner(registry, bytes, &LoadOptions::default(), reader_version)
+}
+
+fn load_inner(
+    registry: Arc<Registry>,
+    bytes: &[u8],
+    opts: &LoadOptions,
+    reader_version: u32,
+) -> Result<(Scene, LoadReport), LoadError> {
     let (text, section) = match bytes.windows(MARKER.len()).position(|w| w == MARKER) {
         Some(at) => (&bytes[..at], Some(&bytes[at + MARKER.len()..])),
         None => (bytes, None),
@@ -351,7 +376,7 @@ pub fn load_with(
                 version: u32,
             }
             return Err(match ron::from_str::<Header>(text) {
-                Ok(h) if h.format == FORMAT && h.version > VERSION => {
+                Ok(h) if h.format == FORMAT && h.version > reader_version => {
                     LoadError::UnsupportedVersion(h.version)
                 }
                 _ => LoadError::Parse(e.to_string()),
@@ -361,7 +386,7 @@ pub fn load_with(
     if file.format != FORMAT {
         return Err(LoadError::WrongFormat(file.format));
     }
-    if file.version == 0 || file.version > VERSION {
+    if file.version == 0 || file.version > reader_version {
         return Err(LoadError::UnsupportedVersion(file.version));
     }
     let chunks = match section {

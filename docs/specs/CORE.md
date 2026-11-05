@@ -518,13 +518,24 @@ no layers). Every hierarchy type also gets the hidden `object.layer` link param 
 a file written before it loads with the default (no layer). On load: a layer id that repeats or
 equals a node id drops that layer, a `object.layer` link that names no layer is cleared; both with
 a warning. The id counter starts above every node and layer id. Older builds reject a version 9
-file with `UnsupportedVersion`. The fixtures `scene-v9*.forge` pin the current bytes (they hold a
+file with `UnsupportedVersion`. The fixtures `scene-v9*.forge` pin the version 9 bytes (they hold a
 layer and a member); `scene-v8*.forge` stay as the old build wrote them.
 
-`Value::Vec3List` (brief 028, SPLINES.md) is also additive under version 9: it is written inline
-as `Vec3List([(x, y, z), ...])` (never as a chunk), and no migration step exists. A build older
-than brief 028 rejects such a file with a parse error instead of `UnsupportedVersion`; the next
-format change should bump the version and cover it (planner follow-up).
+`Value::Vec3List` (brief 028, SPLINES.md) was first stored under version 9 without a bump (inline as
+`Vec3List([(x, y, z), ...])`, never as a chunk); a build older than brief 028 rejected such a file with
+a parse error. Version 10 closes that gap (section 6.9).
+
+### 6.9 Version 10: list-valued parameters (brief 189)
+
+Version 10 = 9 plus the list-valued parameter kinds: `Vec3List` (editable spline points and
+handles) and the integer lists editable splines use (`IndexList`, `LinkList`). The encoding is
+unchanged, so step 9 -> 10 is the identity and a version 9 file loads and saves as version 10.
+This build always writes 10, whether or not the scene holds a list. Because the version is the
+format's compatibility marker, a reader that knows only up to 9 meets `version: 10` and returns
+`UnsupportedVersion(10)` instead of a parse error; `file::load_as_reader(registry, bytes, 9)`
+simulates that reader. The fixtures `scene-v10*.forge` pin the current bytes (they hold an
+editable spline's `Vec3List` and `IndexList`); `scene-v9*.forge` stay as the v9 build wrote them.
+Tests pin the current version through the single constant `file::VERSION`.
 
 ## 7. Layers (`layers`; brief 158)
 

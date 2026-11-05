@@ -185,6 +185,6 @@ implementers can avoid collisions.
 | 186 | [Plugin host integration: evaluation hook and plugin folders](../agents/tasks/186-plugin-host.md) | N | 184 | done | core, generators, plugin, app, cli |
 | 187 | [O58 object-command and selection parity](../agents/tasks/187-o58-object-selection-parity.md) | B | 031, 034 | ready | modeling, command, app |
 | 188 | [Adopt the R25 Loft ring and quad order (D18)](../agents/tasks/188-r25-loft-adoption.md) | C | 042 | done | generators, io |
-| 189 | [Native format v10 for list-valued parameters](../agents/tasks/189-format-v10.md) | M | 028, 163 | ready | core, io |
+| 189 | [Native format v10 for list-valued parameters](../agents/tasks/189-format-v10.md) | M | 028, 163 | done | core, io |
 | 190 | [Viewport splines: drawing, points, handles and dragging](../agents/tasks/190-viewport-splines.md) | E | 028, 143 | ready | viewport, ui, command |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |
