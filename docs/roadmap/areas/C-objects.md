@@ -58,7 +58,7 @@
 - **Spline primitives** live in `splines.rs`. Intermediate points are one shared module
   (`spline_sampling.rs`) that every spline uses.
 - **Text:**
-  - `ttf-parser` reads system fonts, with a bundled open font (DejaVu Sans, Bitstream Vera
+  - `skrifa` reads system fonts, with a bundled open font (DejaVu Sans, Bitstream Vera
     licence) as the default;
   - glyph outlines become Bezier segments, then go through spline sampling;
   - parity is level B: the reference uses the system font, so the observer records which

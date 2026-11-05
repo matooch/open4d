@@ -27,6 +27,7 @@ pub mod spline_sampling;
 pub mod spline_tools;
 pub mod splines;
 mod subdivision;
+pub mod text_spline;
 
 pub use boole::{boole, boole_objects, inputs_of as boole_inputs_of};
 pub use cloner::{
@@ -97,6 +98,7 @@ impl Plugin for Primitives {
         r.register(splines::rectangle_type())?;
         r.register(splines::helix_type())?;
         r.register(editable_spline::node_type())?;
+        r.register(text_spline::node_type())?;
         for id in spline_prims::TYPES {
             r.register(spline_prims::node_type(id).expect("listed spline type"))?;
         }
@@ -151,6 +153,13 @@ impl Params<'_> {
         match self.get(id) {
             Value::Link(l) => l,
             other => unreachable!("{id} is not a link: {other:?}"),
+        }
+    }
+
+    pub(crate) fn string(&self, id: &str) -> String {
+        match self.get(id) {
+            Value::String(s) => s,
+            other => unreachable!("{id} is not a string: {other:?}"),
         }
     }
 

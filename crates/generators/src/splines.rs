@@ -179,12 +179,17 @@ pub(crate) fn helix_type() -> NodeType {
 pub(crate) fn is_spline(type_id: &str) -> bool {
     matches!(
         type_id,
-        CIRCLE | RECTANGLE | HELIX | editable_spline::TYPE | crate::spline_mask::TYPE
+        CIRCLE
+            | RECTANGLE
+            | HELIX
+            | editable_spline::TYPE
+            | crate::spline_mask::TYPE
+            | crate::text_spline::TYPE
     ) || spline_prims::node_type(type_id).is_some()
 }
 
 /// Maps the spline's XY frame to its plane (§6.1).
-fn on_plane(plane: &str, p: DVec3) -> DVec3 {
+pub(crate) fn on_plane(plane: &str, p: DVec3) -> DVec3 {
     match plane {
         "xz" => DVec3::new(p.x, -p.z, p.y),
         "zy" => DVec3::new(-p.z, p.y, p.x),
@@ -261,6 +266,7 @@ fn node_type_of(type_id: &str) -> Option<NodeType> {
         RECTANGLE => Some(rectangle_type()),
         HELIX => Some(helix_type()),
         editable_spline::TYPE => Some(editable_spline::node_type()),
+        crate::text_spline::TYPE => Some(crate::text_spline::node_type()),
         other => spline_prims::node_type(other),
     }
 }
@@ -269,6 +275,9 @@ fn node_type_of(type_id: &str) -> Option<NodeType> {
 pub fn build_curve(type_id: &str, values: &BTreeMap<String, Value>) -> Result<Curve, BuildError> {
     if type_id == editable_spline::TYPE {
         return editable_spline::build_curve(values);
+    }
+    if type_id == crate::text_spline::TYPE {
+        return crate::text_spline::build_curve(values);
     }
     if type_id == crate::spline_mask::TYPE {
         return Err(BuildError::Failed(

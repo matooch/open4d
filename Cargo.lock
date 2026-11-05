@@ -1573,6 +1573,7 @@ dependencies = [
  "forge-modifiers",
  "forge-noise",
  "forge-parity-harness",
+ "forge-text",
  "glam",
  "rayon",
  "thiserror 2.0.21",
@@ -1767,6 +1768,13 @@ dependencies = [
  "forge-rpc",
  "forge-ui",
  "tracing",
+]
+
+[[package]]
+name = "forge-text"
+version = "0.1.0"
+dependencies = [
+ "skrifa",
 ]
 
 [[package]]
