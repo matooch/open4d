@@ -1,0 +1,11 @@
+[package]
+name = "forge-expr"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Scalar formula language: parser and deterministic evaluator (docs/specs/EXPR.md)."
+
+[lints]
+workspace = true
+
+[dependencies]

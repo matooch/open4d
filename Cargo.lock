@@ -1536,6 +1536,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-expr"
+version = "0.1.0"
+
+[[package]]
 name = "forge-fields"
 version = "0.1.0"
 dependencies = [
@@ -1645,6 +1649,7 @@ version = "0.1.0"
 dependencies = [
  "forge-anim",
  "forge-core",
+ "forge-expr",
  "forge-fields",
  "forge-generators",
  "forge-geometry",

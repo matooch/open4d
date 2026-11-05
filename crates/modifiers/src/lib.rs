@@ -11,8 +11,11 @@ pub mod common;
 pub mod correction;
 pub mod delta_mush;
 pub mod explosion;
+pub mod ffd;
+pub mod formula;
 pub mod helper;
 pub mod jiggle;
+pub mod melt;
 pub mod shear;
 pub mod spherify;
 pub mod squash;
@@ -34,10 +37,14 @@ use crate::bend::bend;
 use crate::bulge::bulge;
 use crate::common::{
     BendParams, BulgeParams, DEFAULT_SIZE, MODE_OPTIONS, ShearParams, SpherifyParams, SquashParams,
-    TaperParams, TwistParams, WrapParams, read_bool, read_enum, read_float, read_vec3,
+    TaperParams, TwistParams, WrapParams, read_bool, read_enum, read_float, read_int, read_string,
+    read_vec3,
 };
 use crate::explosion::{BlastParams, Kind, blast};
+use crate::ffd::{FfdParams, ffd};
+use crate::formula::{Effect, FormulaParams, formula};
 pub use crate::helper::Resolver;
+use crate::melt::{MeltParams, melt};
 use crate::shear::shear;
 use crate::spherify::spherify;
 use crate::squash::squash_stretch;
@@ -69,6 +76,13 @@ pub const EXPLOSION: &str = "forge.explosion";
 pub const SHATTER: &str = "forge.shatter";
 /// Type id of the Wind deformer (MODIFIERS.md §12).
 pub const WIND: &str = "forge.wind";
+
+/// Type id of the FFD deformer (MODIFIERS.md §16).
+pub const FFD: &str = "forge.ffd";
+/// Type id of the Formula deformer (MODIFIERS.md §17).
+pub const FORMULA: &str = "forge.formula";
+/// Type id of the Melt deformer (MODIFIERS.md §18).
+pub const MELT: &str = "forge.melt";
 
 /// Type id of the Mesh (cage) deformer (MODIFIERS.md §14.1).
 pub const MESH_DEFORMER: &str = "forge.mesh_deformer";
@@ -287,6 +301,61 @@ impl Deformers {
             .param(enabled_param())
     }
 
+    /// FFD: a Bézier volume over a lattice (MODIFIERS.md §16).
+    pub fn ffd_type() -> NodeType {
+        let points = |id: &str, label: &str| ParamDesc::int(id, label, 3).range(2, 200);
+        NodeType::new(FFD, "FFD", Category::Deformer)
+            .param(ParamDesc::vec3("grid_size", "Grid Size", [300.0; 3]))
+            .param(points("grid_points_x", "Grid Points X"))
+            .param(points("grid_points_y", "Grid Points Y"))
+            .param(points("grid_points_z", "Grid Points Z"))
+            .param(ParamDesc::vec3_list("grid", "Lattice points").hidden())
+            .param(fields_param())
+            .param(enabled_param())
+    }
+
+    /// Formula: text formulas for the displacement and the point (MODIFIERS.md §17).
+    pub fn formula_type() -> NodeType {
+        NodeType::new(FORMULA, "Formula", Category::Deformer)
+            .param(ParamDesc::vec3("size", "Size", [400.0; 3]).range(0.0, f64::MAX))
+            .param(ParamDesc::enumeration(
+                "effect",
+                "Effect",
+                "y_radial",
+                &[
+                    ("manual", "Manual"),
+                    ("spherical", "Spherical"),
+                    ("cylindrical", "Cylindrical"),
+                    ("x_radial", "X Radial"),
+                    ("y_radial", "Y Radial"),
+                    ("z_radial", "Z Radial"),
+                ],
+            ))
+            .param(ParamDesc::string(
+                "formula_d",
+                "d(u,v,x,y,z,t)",
+                "Sin((u+t)*2.0*PI)*0.2",
+            ))
+            .param(ParamDesc::string("formula_x", "X(x,y,z,t)", "x"))
+            .param(ParamDesc::string("formula_y", "Y(x,y,z,t)", "y"))
+            .param(ParamDesc::string("formula_z", "Z(x,y,z,t)", "z"))
+            .param(fields_param())
+            .param(enabled_param())
+    }
+
+    /// Melt: spreads the points out and collapses their height (MODIFIERS.md §18).
+    pub fn melt_type() -> NodeType {
+        NodeType::new(MELT, "Melt", Category::Deformer)
+            .param(percent("strength", "Strength", 25.0).range(0.0, 100.0))
+            .param(ParamDesc::float("radius", "Radius", 100.0).range(0.0, f64::MAX))
+            .param(percent("vertical_randomness", "Vertical Randomness", 100.0).range(0.0, 100.0))
+            .param(percent("radial_randomness", "Radial Randomness", 100.0).range(0.0, 100.0))
+            .param(percent("melted_size", "Melted Size", 400.0).range(100.0, 1000.0))
+            .param(percent("noise_scale", "Noise Scale", 10.0).range(0.0, f64::MAX))
+            .param(fields_param())
+            .param(enabled_param())
+    }
+
     /// Mesh (cage): mean value coordinates of the linked cages (MODIFIERS.md §14.1).
     pub fn mesh_deformer_type() -> NodeType {
         NodeType::new(MESH_DEFORMER, "Mesh", Category::Deformer)
@@ -440,6 +509,9 @@ impl Plugin for Deformers {
         r.register(Deformers::explosion_type())?;
         r.register(Deformers::shatter_type())?;
         r.register(Deformers::wind_type())?;
+        r.register(Deformers::ffd_type())?;
+        r.register(Deformers::formula_type())?;
+        r.register(Deformers::melt_type())?;
         r.register(Deformers::mesh_deformer_type())?;
         r.register(Deformers::surface_deformer_type())?;
         r.register(Deformers::camera_deformer_type())?;
@@ -474,6 +546,9 @@ enum Job {
     Squash(SquashParams),
     Wrap(WrapParams),
     Wind(WindParams),
+    Ffd(FfdParams),
+    Formula(FormulaParams),
+    Melt(MeltParams),
 }
 
 /// Applies one deformer node to `points` expressed in `target`'s local space
@@ -574,6 +649,34 @@ pub fn apply_deformer(
             fy: read_float(ty, params, "fy"),
             flag: read_bool(ty, params, "flag"),
         }),
+        FFD => {
+            let count = |id: &str| read_int(ty, params, id).clamp(2, 200) as usize;
+            Job::Ffd(FfdParams {
+                size: read_vec3(ty, params, "grid_size"),
+                counts: [
+                    count("grid_points_x"),
+                    count("grid_points_y"),
+                    count("grid_points_z"),
+                ],
+                grid: helper::vec3_list(scene, deformer, "grid"),
+            })
+        }
+        FORMULA => Job::Formula(FormulaParams {
+            size: read_vec3(ty, params, "size"),
+            effect: Effect::from_id(&read_enum(ty, params, "effect")),
+            d: read_string(ty, params, "formula_d"),
+            x: read_string(ty, params, "formula_x"),
+            y: read_string(ty, params, "formula_y"),
+            z: read_string(ty, params, "formula_z"),
+        }),
+        MELT => Job::Melt(MeltParams {
+            strength: read_float(ty, params, "strength"),
+            radius: read_float(ty, params, "radius"),
+            vertical_randomness: read_float(ty, params, "vertical_randomness"),
+            radial_randomness: read_float(ty, params, "radial_randomness"),
+            melted_size: read_float(ty, params, "melted_size"),
+            noise_scale: read_float(ty, params, "noise_scale"),
+        }),
         // Explosion and Shatter change the topology: `apply_deformer_mesh`.
         _ => return,
     };
@@ -609,6 +712,9 @@ pub fn apply_deformer(
         Job::Squash(p) => squash_stretch(points, &p),
         Job::Wrap(p) => wrap(points, &p),
         Job::Wind(p) => wind(points, &p, ctx.time, ctx.seed),
+        Job::Ffd(p) => ffd(points, &p),
+        Job::Formula(p) => formula(points, &p, ctx.time),
+        Job::Melt(p) => melt(points, &p, ctx.seed),
     }
     if to_target != DMat4::IDENTITY {
         for p in points.iter_mut() {

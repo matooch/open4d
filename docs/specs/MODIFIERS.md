@@ -930,3 +930,138 @@ cube (`export_weld`).
   Outside and Inside on a cube collider and Distance 0 / 50, Strength 50 %; Jiggle on a plane keyed over 0–5 frames with
   Stiffness 100 %, Drag 0 and 100 %, Gravity −980, one export per frame 1…8 (the lag curve); Delta Mush with Iterations 0 and 1
   and a bent pose (Bend 90 above, Initialize before the bend); Correction with Mapping UV and Normals, Strength 50 %.
+
+## 16. FFD (`forge.ffd`) (brief 052)
+
+Source: O9 [deformers-2.md](../parity/deformers-2.md) (`ffd/defaults`, `ffd/point-moved`) and O45
+[deformers-4.md](../parity/deformers-4.md) (`ffd/ffd-grid-5`); golden `tests/golden/ffd` (3 cases).
+(The brief names its sections §9–11; those numbers are taken, so FFD, Formula and Melt are
+§16–18 and their parity is §19.)
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `grid_size` | Grid Size | vec3 | (300, 300, 300) |
+| `grid_points_x`, `grid_points_y`, `grid_points_z` | Grid Points X / Y / Z | int, 2…200 | 3 |
+| `grid` | (hidden) lattice points | `Vec3List` | empty |
+| `fields`, `enabled` | §10, §0 | | |
+
+`grid` holds the position of every lattice point in the deformer's space, **x fastest, then y,
+then z** (point `i + nx·(j + ny·k)`; O9 note: point 0 is (−150, −150, −150), point 8 of the
+3×3×3 grid is (150, 150, −150), point 26 is (150, 150, 150)). Empty, or a length other than
+`nx·ny·nz`, means the regular lattice `P⁰_ijk = (i/(nx−1) − ½, j/(ny−1) − ½, k/(nz−1) − ½) ⊙ size`.
+There is no mode and no box param: the lattice is the box.
+
+### Math (derived)
+`t = p ⊘ size + ½` per axis. A point with any `t` outside `[0, 1]` is **not moved**
+(`ffd/point-moved`: the cube is taller than the 300 grid and its 18 points at y = ±200 keep
+their place, while the neighbouring ones at y = ±150 move). Otherwise
+`p' = p + Σ B_i^{nx−1}(tx) · B_j^{ny−1}(ty) · B_k^{nz−1}(tz) · (P_ijk − P⁰_ijk)`
+with the Bernstein basis `B_i^n(t) = C(n, i) tᶦ (1−t)ⁿ⁻ᶦ` (a Bézier volume; the regular lattice
+reproduces `p` exactly, which `ffd/defaults` shows). Axes with `size = 0` leave the point alone.
+Proof: `ffd/point-moved` (degree 2, point 8 up by 100: all 162 points within 5e-7 of the export,
+which prints 6 decimals) and `ffd/ffd-grid-5` (degree 4, centre point 62 up by 100: 80 points
+move, up to 1.63, all within 4e-7). The degree is the point count minus one on each axis.
+
+Parity-pending: the cut-off at the lattice boundary (a point just outside might fade instead of
+stop: no case has a point between the box and a distance away); non-uniform lattices other than
+one moved point; a negative `size`.
+
+## 17. Formula (`forge.formula`) (brief 052)
+
+Source: O9 (`formula/defaults`, `formula/frame-10`); text language [EXPR.md](EXPR.md).
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `size` | Size | vec3 ≥ 0 | (400, 400, 400) |
+| `effect` | Effect | enum `manual`, `spherical`, `cylindrical`, `x_radial`, `y_radial`, `z_radial` | `y_radial` |
+| `formula_d` | d(u,v,x,y,z,t) | string | `Sin((u+t)*2.0*PI)*0.2` |
+| `formula_x`, `formula_y`, `formula_z` | X(x,y,z,t), Y, Z | string | `x`, `y`, `z` |
+| `fields`, `enabled` | §10, §0 | | |
+
+Variables: `d` sees `u v x y z t`, `X`/`Y`/`Z` see `x y z t`. `x y z` are the point's
+coordinates in the deformer's space (cm), `t` is `ctx.time` in seconds (`formula/frame-10`: frame 10 at
+30 fps is `t = 1/3`). With `h = size/2`, the point becomes
+`p' = (X, Y, Z) + dir · d · amp`.
+
+### Derived (`formula/defaults`, `formula/frame-10`, all 324 points)
+Effect `y_radial`: `u = sqrt((x/hx)² + (z/hz)²)`, `dir = +y`, `amp = hy`; X, Y, Z are the identity.
+Evidence: the offset along y is the same for every point of an (x, z) column and nothing moves in
+x or z; at the axis points (x or z = 0, r = 100 so `u = ½`) `d = 0` at t = 0 and
+`−0.2·sin(2π/3)·200 = −34.641` at t = 1/3; the corner column (r = 141.42, `u = 0.7071`) moves by
+`0.2·sin(2π·0.7071)·200 = −38.556`; the (50, 100) column (`u = 0.559`) by −14.495; the point
+(50, 0) (`u = ¼`) by +40 (bbox y max 240). Frame 10 agrees at all 81 columns.
+
+### Own design (parity-pending, no observation)
+- The other effects, by the same rules with the axes exchanged or the plane rule changed:
+  `x_radial` (`u` from y, z; `dir = +x`; `amp = hx`), `z_radial` (`u` from x, y; `dir = +z`;
+  `amp = hz`), `cylindrical` (`u` = angle about y over 2π in [0,1), `dir` = outward in xz,
+  `amp = hx`), `spherical` (`u` = longitude/2π, `v` = latitude/π + ½, `dir` = outward from the origin,
+  `amp = hx`), `manual` (`u = x/sx + ½`, `v = z/sz + ½`, `dir = +y`, `amp = hy`).
+- `v` for the radial effects is the position along the axis, `0…1` over `size`.
+- No box: the formula applies to every point, also outside `size`.
+- A formula that does not parse acts as the identity for X, Y, Z and as 0 for `d`; a non-finite
+  value of one component keeps that component of the original point (for `d`: 0).
+
+## 18. Melt (`forge.melt`) (brief 052)
+
+Source: O9 (`melt/defaults`, `melt/strength`), parameter table of deformers-2.md.
+
+| Key | Label | Default |
+|---|---|---|
+| `strength` | Strength | 25 % (0…100) |
+| `radius` | Radius | 100 |
+| `vertical_randomness` | Vertical Randomness | 100 % |
+| `radial_randomness` | Radial Randomness | 100 % |
+| `melted_size` | Melted Size | 400 % (100…1000) |
+| `noise_scale` | Noise Scale | 10 % |
+| `fields`, `enabled` | §10, §0 | |
+
+### What the data shows (both cases, 162 points, same topology as the cube)
+1. Each point keeps its direction in xz; only the distance from the y axis changes, by a factor
+   `k` that is the **same for every point of a ray from the axis** (`(−100,−100)` and `(−50,−50)`
+   both 2.2385 at strength 25 %), so `k` is a function of the angle (the radial noise), and
+   opposite directions differ.
+2. `k − 1` scales with strength by the **same factor for all 24 rays**: `(k₅₀ − 1)/(k₂₅ − 1) = 1.6905`
+   (to 4 digits). So `k = 1 + g(s)·N(θ)`, `g(0.5)/g(0.25) = 1.6905` (not 2: g is not linear in
+   the strength, and `1 − (1−s)²` gives 1.714, so that is not it either). `k₂₅` runs 2.135…2.508
+   (mean 2.33), `k₅₀` 2.919…3.549.
+3. y: every point with `y ≤ 0` ends at exactly 0 (bbox y from 0). Every point with `y > 0` ends
+   at `0 < y' < y`, **also on the inner rays and the top cap** (checked point by point). On the
+   cap (`y = 200`) `y' = y·exp(−8 s²·F)` with `s` the strength fraction and `F` **independent
+   of the strength**: `ln(200/y')/(8 s²)` is the same at 25 % and at 50 % for the 14 of the 25 cap
+   points whose `y'` at 50 % is above 0.2 (the export has 6 decimals; agreement to 2e-3). `F = 1` exactly at the axis point (0, 200, 0)
+   (`200·e^−0.5 = 121.306`, `200·e^−2 = 27.067`: both cases). Away from the axis `F` grows with
+   the distance and scatters with the noise: about 2.5…2.7 at r = 50, 3.0…3.2 at 70.7, 3.1…3.8 at 100,
+   3.0…4.3 at 111.8, 4.1…4.8 at 141.4. Along a column `F` falls slowly with y (4.9, 4.5, 4.3, 4.15
+   for y = 50…200 on the ray (−100, −100)); the law in y is not derived.
+
+### Our model (own design, parity-pending; the random stream is not matchable)
+With `s = strength/100`, `m = melted_size/100`, `rr`, `vr` the randomness fractions and `n1, n2 ∈ [0,1]`
+two noises of the angle `θ = atan2(z, x)` (Perlin on the unit circle, seeded by `ctx.seed`, lattice
+scale `10·noise_scale`):
+- `g(s) = (1 − e^(−1.4803 s)) / (1 − e^(−1.4803))` (fitted so that `g(½)/g(¼) = 1.6905`; `g(1) = 1`),
+  `k = 1 + (m − 1)·g·(1.1 + 0.15·rr·(2 n1 − 1))` scales x and z (so `k` = 2.2…2.5 at 25 %);
+- `y' = 0` for `y ≤ 0`, else `y' = y·exp(−8 s²·F)`, `F = (1 + 1.7·(r/(radius/2))^0.65)·(1 + 0.12·vr·(2 n2 − 1))`
+  (the fit of the cap points). `y` itself does not enter `F`.
+The structure (facts 1 to 3) holds; the values do **not** reproduce the reference. `radius` only
+rescales `F` in our model: the cases never changed it (the reference's use of Radius is unobserved).
+
+## 19. Parity of §16–18
+
+Test: `crates/modifiers/tests/ffd_formula_melt_parity.rs`; features `ffd` (3), `formula` (2),
+`melt` (2); compared like the other deformers (`export_weld`, `compare_meshes`).
+
+- Exact: `ffd/defaults`, `ffd/point-moved`, `ffd/ffd-grid-5` (3/3); `formula/defaults`,
+  `formula/frame-10` (2/2).
+- `KNOWN_MISMATCH` (must still fail the exact comparison): `melt/defaults`, `melt/strength`. The
+  reference noise is not reproduced (only the structure above is derived). Instead the test asserts,
+  on the golden and on ours alike: same topology as the cube, xz direction preserved and farther from
+  the axis, `y' = 0` for `y ≤ 0`, `0 < y' < y` above, the axis point at `200·e^(−8 s²)`, and `F`
+  independent of the strength on the cap; on the golden, the `k − 1` ratio 1.6905 across all rays.
+- Follow-up cases (planner): Melt with Radial Randomness 0 and Vertical Randomness 0 (removes the
+  noise: gives `g(s)` and the vertical law directly), at Strength 0, 10, 50, 100; Melt with
+  Melted Size 100 and 200; Melt with Radius 50 and 200; Melt with Noise Scale 50 (what the noise frequency is);
+  Formula with `d = 0.1`, with `d = u` and `d = v` (gives `u`, `v` of each effect), each other effect
+  (Spherical, Cylindrical, X Radial, Z Radial, Manual), a non-uniform `size`, and `X(x,y,z,t) = x*2`;
+  FFD with a point moved on the x and z axes (confirms the axis orientation), 2 points per axis,
+  `grid_size` 150 (more cube points outside), and a lattice with the cube fully inside.
