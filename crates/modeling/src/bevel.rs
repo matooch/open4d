@@ -100,21 +100,24 @@ pub fn bevel(
     }
 }
 
-/// Point mode (O58 `bevel-point`): every selected point is cut off at `offset` along each of
-/// its edges; the point is replaced by a polygon of the cut points. Returns the new polygons
-/// as the selection.
+/// Point mode (O58 `bevel-point*`, MODELING.md §3.6): every selected point is cut off at
+/// `offset` along each of its edges; the point is replaced by a polygon of the cut points.
+/// Returns the new polygons as the selection.
 fn bevel_points(
     mesh: &PolyMesh,
     points: &IndexSet,
     offset: f64,
 ) -> Result<(PolyMesh, Selection), ToolError> {
     let chosen: Vec<u32> = points.iter().collect();
-    let mut out = mesh.clone();
-    let mut ring_of: HashMap<u32, Vec<(u32, u32)>> = HashMap::new();
-    let mut cut: HashMap<(u32, u32), u32> = HashMap::new();
+    let n0 = mesh.points.len();
+    let mut made: Vec<DVec3> = Vec::new();
     // per point: the polygons around it in ascending index, their (previous, next) neighbours
+    let mut ring_of: HashMap<u32, Vec<(u32, u32)>> = HashMap::new();
+    // creation id of the cut point of `v` on the edge to a neighbour, and its creation order
+    let mut cut: HashMap<(u32, u32), u32> = HashMap::new();
+    let mut created: HashMap<u32, Vec<u32>> = HashMap::new();
     for &v in &chosen {
-        if v as usize >= mesh.points.len() {
+        if v as usize >= n0 {
             return Err(ToolError::BadPoint(v));
         }
         let mut ring = Vec::new();
@@ -135,47 +138,78 @@ fn bevel_points(
         {
             return unsupported("two adjacent beveled points (no reference data)");
         }
-        // cut points in ring order: on the edge to each polygon's next point (the first takes
-        // the slot of `v`, the others are appended)
-        for (k, (_, next)) in ring.iter().enumerate() {
+        // creation order: the polygons around `v` in ascending index, the last one first;
+        // each makes the cut point on the edge to its previous point
+        let n = ring.len();
+        let mut ids = Vec::new();
+        for k in (0..n).map(|i| (i + n - 1) % n) {
             let at = mesh.points[v as usize];
-            let to = mesh.points[*next as usize];
-            let dir = (to - at).normalize_or_zero();
-            let p = at + dir * offset;
-            let id = if k == 0 {
-                out.points[v as usize] = p;
-                v
-            } else {
-                out.points.push(p);
-                (out.points.len() - 1) as u32
-            };
-            cut.insert((v, *next), id);
+            let to = mesh.points[ring[k].0 as usize];
+            made.push(at + (to - at).normalize_or_zero() * offset);
+            let id = (n0 + made.len() - 1) as u32;
+            cut.insert((v, ring[k].0), id);
+            ids.push(id);
         }
+        created.insert(v, ids);
         ring_of.insert(v, ring);
     }
-    for poly in &mut out.polys {
+    // the originals leave by swap-remove, in ascending order (as the edge bevel)
+    let mut all = mesh.points.clone();
+    all.extend(made);
+    let mut slots: Vec<u32> = (0..all.len() as u32).collect();
+    for v in &chosen {
+        let last = slots.pop().expect("points");
+        if (*v as usize) < slots.len() {
+            slots[*v as usize] = last;
+        }
+    }
+    let mut final_of = vec![0u32; all.len()];
+    for (slot, id) in slots.iter().enumerate() {
+        final_of[*id as usize] = slot as u32;
+    }
+    let mut out = PolyMesh {
+        points: slots.iter().map(|id| all[*id as usize]).collect(),
+        polys: Vec::new(),
+    };
+    for poly in &mesh.polys {
         let m = poly.len();
-        let old = poly.clone();
         let mut next_poly = Vec::new();
+        let mut tail = None;
         for k in 0..m {
-            let v = old[k];
+            let v = poly[k];
             if ring_of.contains_key(&v) {
-                next_poly.push(cut[&(v, old[(k + m - 1) % m])]);
-                next_poly.push(cut[&(v, old[(k + 1) % m])]);
+                let (before, after) = (
+                    cut[&(v, poly[(k + m - 1) % m])],
+                    cut[&(v, poly[(k + 1) % m])],
+                );
+                if k == 0 {
+                    // the polygon keeps its first corner slot: the cut on the next edge
+                    // takes it, the one on the previous edge closes the polygon
+                    next_poly.push(after);
+                    tail = Some(before);
+                } else {
+                    next_poly.push(before);
+                    next_poly.push(after);
+                }
             } else {
                 next_poly.push(v);
             }
         }
-        *poly = next_poly;
+        next_poly.extend(tail);
+        out.polys
+            .push(next_poly.iter().map(|id| final_of[*id as usize]).collect());
     }
     let mut selected = IndexSet::new();
-    for &v in &chosen {
-        // the cap lists the cut points against the ring order
-        let ring = &ring_of[&v];
-        let mut cap = vec![cut[&(v, ring[0].1)]];
-        cap.extend(ring.iter().skip(1).rev().map(|r| cut[&(v, r.1)]));
+    for v in &chosen {
+        // the cap lists the cut points against their creation order
         selected.insert(out.polys.len() as u32);
-        out.polys.push(cap);
+        out.polys.push(
+            created[v]
+                .iter()
+                .rev()
+                .map(|id| final_of[*id as usize])
+                .collect(),
+        );
     }
     Ok((
         out,

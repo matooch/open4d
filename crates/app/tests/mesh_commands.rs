@@ -197,10 +197,7 @@ fn errors_change_nothing() {
         "one point"
     );
     assert!(failed(app.run("mesh.weld", json!({"points": [0, 99]}))));
-    assert!(
-        failed(app.run("mesh.melt", json!({"polys": [4]}))),
-        "one polygon"
-    );
+    assert!(failed(app.run("mesh.melt", json!({}))), "no polygons");
     assert!(failed(app.run("mesh.split", json!({}))), "no polygons");
     assert!(failed(app.run("mesh.disconnect", json!({"polys": [99]}))));
     assert!(failed(
@@ -213,7 +210,7 @@ fn errors_change_nothing() {
         "mesh.mirror",
         json!({"settings": {"plane_normal": [0.0, 0.0, 0.0]}})
     )));
-    assert!(failed(app.run("mesh.subdivide", json!({"polys": [0]}))));
+    assert!(failed(app.run("mesh.subdivide", json!({"polys": [99]}))));
     for bad in [
         json!({"settings": {"nope": 1}}),
         json!({"settings": {"subdivisions": "two"}}),

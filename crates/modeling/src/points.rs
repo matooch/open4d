@@ -110,6 +110,11 @@ pub fn disconnect(mesh: &PolyMesh, sel: &Selection, s: &Settings) -> ToolResult 
                 out.points.push(mesh.points[*point as usize]);
             }
         }
+        // the group no longer uses the originals it copied: later groups see only the
+        // polygons still on them (`disconnect-all`: the last polygons keep the originals)
+        for point in copy.keys() {
+            total[*point as usize] -= inside[point];
+        }
         for p in group {
             for c in out.polys[*p as usize].iter_mut() {
                 if let Some(n) = copy.get(c) {

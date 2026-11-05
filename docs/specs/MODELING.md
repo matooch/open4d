@@ -1045,3 +1045,16 @@ live. Own design, parity-pending.
 cube copies, offsets, rotation/scale, the point cap), `crates/app/tests/arrange_commands.rs` (the five
 commands headless, one undo step each, deep copies, determinism of Randomize, argument errors,
 schemas), `crates/ui/tests/arrange.rs` (menu entries, panel, Apply).
+
+### Update (O58 remaining cases)
+- Bevel point (`bevel-point`, `bevel-point-two`): per selected point the cut points are created
+  on the edge to each ring entry's **previous** point, the last ring entry first; the originals
+  leave by swap-remove in ascending order; in a polygon whose first corner is beveled the cut
+  on the next edge takes the first slot and the one on the previous edge closes the polygon;
+  the cap lists the creation order reversed.
+- Subdivide of some quads (`subdivide-subset`): the chosen quads follow the all-quad rule; the
+  other polygons gain the edge points along edges shared with a chosen quad. Hyper and n-gons
+  among the chosen stay `Unsupported`.
+- Melt (`melt-single`, `melt-ring`): a single polygon, a ring around a hole or a closed surface
+  is left as it is. `melt-ring` stays a known mismatch (the reference re-creates the ring polygons).
+
