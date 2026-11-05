@@ -38,3 +38,9 @@ decides (the Formula deformer treats a non-finite result as "no change", MODIFIE
 ## E4 Tests
 Unit tests in `crates/expr/src/lib.rs`: precedence, `^`, comparisons, the O9 formula text,
 case-insensitivity, error offsets. Formula parity is MODIFIERS.md §17–19.
+
+## E5 Degrees mode (brief 059)
+`Expr::parse_degrees(src, vars)` compiles the same language with the angle functions in degrees:
+`sin cos tan` take degrees, `asin acos atan atan2` return degrees. `PI` stays 3.14159... The
+Formula field uses it: its default text `0.5 + sin( ( subfields + ( id / count ) + d ) * f * 360 ) * 0.5`
+only matches the observed values with degrees (FIELDS.md F7, case `formula-defaults`).

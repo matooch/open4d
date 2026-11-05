@@ -72,15 +72,18 @@ impl Func {
         })
     }
 
-    fn call(self, a: &[f64]) -> f64 {
+    /// `degrees`: the angle functions take and return degrees instead of radians (E5).
+    fn call(self, a: &[f64], degrees: bool) -> f64 {
+        let to_rad = |x: f64| if degrees { x.to_radians() } else { x };
+        let from_rad = |x: f64| if degrees { x.to_degrees() } else { x };
         match self {
-            Func::Sin => a[0].sin(),
-            Func::Cos => a[0].cos(),
-            Func::Tan => a[0].tan(),
-            Func::Asin => a[0].asin(),
-            Func::Acos => a[0].acos(),
-            Func::Atan => a[0].atan(),
-            Func::Atan2 => a[0].atan2(a[1]),
+            Func::Sin => to_rad(a[0]).sin(),
+            Func::Cos => to_rad(a[0]).cos(),
+            Func::Tan => to_rad(a[0]).tan(),
+            Func::Asin => from_rad(a[0].asin()),
+            Func::Acos => from_rad(a[0].acos()),
+            Func::Atan => from_rad(a[0].atan()),
+            Func::Atan2 => from_rad(a[0].atan2(a[1])),
             Func::Sqrt => a[0].sqrt(),
             Func::Abs => a[0].abs(),
             Func::Exp => a[0].exp(),
@@ -129,13 +132,13 @@ enum Node {
 }
 
 impl Node {
-    fn eval(&self, vars: &[f64]) -> f64 {
+    fn eval(&self, vars: &[f64], degrees: bool) -> f64 {
         match self {
             Node::Num(n) => *n,
             Node::Var(i) => vars.get(*i).copied().unwrap_or(f64::NAN),
-            Node::Neg(a) => -a.eval(vars),
+            Node::Neg(a) => -a.eval(vars, degrees),
             Node::Bin(op, a, b) => {
-                let (x, y) = (a.eval(vars), b.eval(vars));
+                let (x, y) = (a.eval(vars, degrees), b.eval(vars, degrees));
                 let flag = |c: bool| if c { 1.0 } else { 0.0 };
                 match op {
                     Bin::Add => x + y,
@@ -154,9 +157,9 @@ impl Node {
             Node::Call(f, args) => {
                 let mut buf = [0.0; 3];
                 for (slot, a) in buf.iter_mut().zip(args) {
-                    *slot = a.eval(vars);
+                    *slot = a.eval(vars, degrees);
                 }
-                f.call(&buf[..args.len()])
+                f.call(&buf[..args.len()], degrees)
             }
         }
     }
@@ -407,6 +410,7 @@ impl Parser<'_> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expr {
     root: Node,
+    degrees: bool,
 }
 
 impl Expr {
@@ -423,13 +427,25 @@ impl Expr {
         if !matches!(p.peek(), Tok::End) {
             return p.err("unexpected input after the formula");
         }
-        Ok(Expr { root })
+        Ok(Expr {
+            root,
+            degrees: false,
+        })
+    }
+
+    /// Like [`Expr::parse`], but `sin cos tan` take degrees and `asin acos atan atan2` return
+    /// degrees (the Formula field, E5).
+    pub fn parse_degrees(src: &str, vars: &[&str]) -> Result<Expr, ParseError> {
+        Ok(Expr {
+            degrees: true,
+            ..Expr::parse(src, vars)?
+        })
     }
 
     /// The value with `vars[i]` bound to the i-th declared name. May be NaN or infinite
     /// (division by zero, `sqrt` of a negative); callers decide what that means.
     pub fn eval(&self, vars: &[f64]) -> f64 {
-        self.root.eval(vars)
+        self.root.eval(vars, self.degrees)
     }
 }
 
@@ -439,6 +455,15 @@ mod tests {
 
     fn run(src: &str) -> f64 {
         Expr::parse(src, &[]).unwrap().eval(&[])
+    }
+
+    #[test]
+    fn degrees_mode_converts_the_angle_functions() {
+        let e = Expr::parse_degrees("sin(30) + cos(60) + asin(0.5) / 30", &[]).unwrap();
+        assert!((e.eval(&[]) - 2.0).abs() < 1e-12);
+        // radians stay the default
+        assert!((run("sin(PI / 6)") - 0.5).abs() < 1e-12);
+        assert!((Expr::parse_degrees("atan2(1, 1)", &[]).unwrap().eval(&[]) - 45.0).abs() < 1e-12);
     }
 
     #[test]

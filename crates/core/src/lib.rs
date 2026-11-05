@@ -22,7 +22,8 @@ pub use eval::EvalCtx;
 pub use file::{LoadError, LoadReport};
 pub use layers::{Layer, LayerId, Layers};
 pub use param::{
-    EnumOption, MeshData, ParamDesc, ParamError, ParamKind, RangeValue, UiHint, Unit, Value,
+    EnumOption, LinkRow, MeshData, ParamDesc, ParamError, ParamKind, RangeValue, UiHint, Unit,
+    Value,
 };
 pub use registry::{Category, NodeEvaluator, NodeType, Plugin, Registry, RegistryError};
 pub use scene::{Node, NodeId, Scene, SceneSettings};

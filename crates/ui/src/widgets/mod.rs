@@ -104,6 +104,7 @@ pub fn show(ui: &mut egui::Ui, cx: &Cx, row: &AttrRow) -> Option<Edit> {
         W::Text => string::show(ui, cx, row),
         W::Link { accepts } => link::show(ui, cx, row, accepts),
         W::LinkList { accepts } => link_list::show(ui, cx, row, accepts),
+        W::LinkRows { accepts, blends } => link_list::show_rows(ui, cx, row, accepts, blends),
         W::ReadOnly => readonly::show(ui, row),
     }
 }

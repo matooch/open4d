@@ -55,22 +55,10 @@ pub fn effector_from_node(
     }
 }
 
-/// The field list of an effector node (its `fields` list, top to bottom).
+/// The field list of an effector node (its `fields` rows, top to bottom). A row that is off, or
+/// a link to a deleted or non-field node, is skipped, like an empty slot.
 fn falloff_of(scene: &Scene, id: NodeId) -> Result<FieldList, CloneError> {
-    let ids: Vec<NodeId> = match scene.param(id, "fields") {
-        Some(Value::LinkList(l)) => l.clone(),
-        _ => Vec::new(),
-    };
-    // A link to a deleted or non-field node is skipped, like an empty slot.
-    let ids: Vec<NodeId> = ids
-        .into_iter()
-        .filter(|f| {
-            scene
-                .node_type(*f)
-                .is_some_and(|t| t.category == Category::Field)
-        })
-        .collect();
-    FieldList::from_nodes(scene, &ids)
+    FieldList::from_param(scene, id, "fields")
         .map_err(|_| CloneError::Unsupported("a field type the effector falloff cannot read"))
 }
 

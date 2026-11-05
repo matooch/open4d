@@ -79,6 +79,7 @@ pub fn link_targets(value: &Value) -> Vec<NodeId> {
     match value {
         Value::Link(Some(t)) => vec![*t],
         Value::LinkList(ts) => ts.clone(),
+        Value::LinkRows(rows) => rows.iter().map(|r| r.target).collect(),
         _ => Vec::new(),
     }
 }
@@ -328,8 +329,12 @@ pub fn diff(old: &Scene, new: &Scene) -> SceneDiff {
             if same {
                 continue;
             }
-            let linkish =
-                |v: Option<&Value>| matches!(v, Some(Value::Link(_) | Value::LinkList(_)));
+            let linkish = |v: Option<&Value>| {
+                matches!(
+                    v,
+                    Some(Value::Link(_) | Value::LinkList(_) | Value::LinkRows(_))
+                )
+            };
             if linkish(o.params.get(k)) || linkish(n.params.get(k)) {
                 d.structure_changed = true;
             }

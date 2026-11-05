@@ -28,6 +28,15 @@ fn registry() -> Arc<Registry> {
     )
     .unwrap();
     r.register(
+        NodeType::new("test.holder", "Row holder", Category::Object).param(ParamDesc::link_rows(
+            "fields",
+            "Fields",
+            &[Category::Object],
+            &[("normal", "Normal"), ("add", "Add")],
+        )),
+    )
+    .unwrap();
+    r.register(
         NodeType::new("test.tex", "Texture holder", Category::Object)
             .param(ParamDesc::file_path("file", "File", ""))
             .param(ParamDesc::string("note", "Note", "")),
@@ -111,7 +120,7 @@ fn every_old_version_has_a_fixture_that_loads_and_migrates() {
 }
 
 #[test]
-fn version_10_fixtures_are_current_and_byte_stable() {
+fn version_11_fixtures_are_current_and_byte_stable() {
     // The current fixtures pin the on-disk format: change them only with a version bump.
     let (text_scene, bin_scene) = (fixture_scene(false), fixture_scene(true));
     let opts = SaveOptions::default();
@@ -119,13 +128,13 @@ fn version_10_fixtures_are_current_and_byte_stable() {
     let bin = file::save_with(&bin_scene, &opts);
     if std::env::var_os("FORGE_WRITE_FIXTURES").is_some() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-        std::fs::write(dir.join("scene-v10.forge"), &text).unwrap();
-        std::fs::write(dir.join("scene-v10-chunked.forge"), &bin).unwrap();
+        std::fs::write(dir.join("scene-v11.forge"), &text).unwrap();
+        std::fs::write(dir.join("scene-v11-chunked.forge"), &bin).unwrap();
     }
-    assert_eq!(text, fixture("scene-v10.forge"), "text fixture drifted");
+    assert_eq!(text, fixture("scene-v11.forge"), "text fixture drifted");
     assert_eq!(
         bin,
-        fixture("scene-v10-chunked.forge"),
+        fixture("scene-v11-chunked.forge"),
         "chunk fixture drifted"
     );
     assert!(!contains(&text, b"%%FORGE-CHUNKS"));
@@ -135,6 +144,62 @@ fn version_10_fixtures_are_current_and_byte_stable() {
         assert!(report.warnings.is_empty(), "{:?}", report.warnings);
         assert_eq!(file::save(&loaded), file::save(scene));
     }
+}
+
+#[test]
+fn version_10_fixtures_still_load_and_resave_as_the_current_version() {
+    // Written by the build of format version 10 (before brief 059); never regenerate.
+    for name in ["scene-v10.forge", "scene-v10-chunked.forge"] {
+        let bytes = fixture(name);
+        assert!(contains(&bytes, b"version: 10,"), "{name}");
+        let (scene, report) = file::load_bytes(registry(), &bytes).unwrap();
+        assert!(report.warnings.is_empty(), "{name}: {:?}", report.warnings);
+        let text = file::save(&scene);
+        assert!(text.contains(&format!("version: {VERSION}")), "{text}");
+        let (again, _) = file::load(registry(), &text).unwrap();
+        assert_eq!(file::save(&again), text, "{name}");
+    }
+}
+
+/// A version 10 document: a holder whose `fields` link list names two nodes, one of which has a
+/// `layer_strength` and is switched off, in a tag-free tree with a nested child.
+const V10_FIELD_LIST: &str = r#"(
+    format: "forge3d-scene",
+    version: 10,
+    settings: (fps: 30, start: 0, end: 90),
+    roots: [
+        (id: 1, type_id: "test.holder", name: "H", params: {"fields": LinkList([2, 3])}, tracks: {}, tags: [], children: [
+            (id: 2, type_id: "forge.null", name: "A", params: {"layer_strength": Float(0.5), "object.enabled": Bool(false)}, tracks: {}, tags: [], children: []),
+        ]),
+        (id: 3, type_id: "forge.null", name: "B", params: {"layer_strength": Float(2.0)}, tracks: {}, tags: [], children: []),
+    ],
+)"#;
+
+#[test]
+fn version_10_field_lists_migrate_to_rows_with_the_nodes_strength_and_enable_state() {
+    // the test registry has no `layer_strength` params on null nodes, so migration must have
+    // removed them for the load to be warning free
+    let (scene, report) = file::load(registry(), V10_FIELD_LIST).unwrap();
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    let want = Value::LinkRows(vec![
+        forge_core::LinkRow {
+            strength: 0.5,
+            enabled: false,
+            ..forge_core::LinkRow::new(NodeId(2), "normal")
+        },
+        forge_core::LinkRow {
+            strength: 2.0,
+            ..forge_core::LinkRow::new(NodeId(3), "normal")
+        },
+    ]);
+    assert_eq!(scene.param(NodeId(1), "fields"), Some(&want));
+    let text = file::save(&scene);
+    assert!(text.contains("version: 11"), "{text}");
+    assert!(!text.contains("layer_strength"), "{text}");
+    let (again, report) = file::load(registry(), &text).unwrap();
+    assert!(report.warnings.is_empty());
+    assert_eq!(again.param(NodeId(1), "fields"), Some(&want));
+    assert_eq!(file::save(&again), text);
 }
 
 #[test]
@@ -154,25 +219,25 @@ fn version_9_fixtures_still_load_and_resave_as_the_current_version() {
 }
 
 #[test]
-fn a_version_9_reader_refuses_version_10_files() {
-    for name in ["scene-v10.forge", "scene-v10-chunked.forge"] {
+fn a_version_10_reader_refuses_version_11_files() {
+    for name in ["scene-v11.forge", "scene-v11-chunked.forge"] {
         let bytes = fixture(name);
-        assert!(contains(&bytes, b"version: 10,"), "{name}");
+        assert!(contains(&bytes, b"version: 11,"), "{name}");
         assert_eq!(
-            file::load_as_reader(registry(), &bytes, 9).err(),
-            Some(LoadError::UnsupportedVersion(10)),
+            file::load_as_reader(registry(), &bytes, 10).err(),
+            Some(LoadError::UnsupportedVersion(11)),
             "{name}"
         );
         assert!(
-            file::load_as_reader(registry(), &bytes, 10).is_ok(),
+            file::load_as_reader(registry(), &bytes, 11).is_ok(),
             "{name}"
         );
     }
-    // a file this build wrote today is a version 10 file, so a 9 reader refuses it too
+    // a file this build wrote today is a version 11 file, so a 10 reader refuses it too
     let saved = file::save(&fixture_scene(false));
     assert_eq!(
-        file::load_as_reader(registry(), saved.as_bytes(), 9).err(),
-        Some(LoadError::UnsupportedVersion(10))
+        file::load_as_reader(registry(), saved.as_bytes(), 10).err(),
+        Some(LoadError::UnsupportedVersion(11))
     );
 }
 
@@ -201,6 +266,29 @@ fn an_editable_spline_round_trips_bit_identically() {
             panic!()
         };
         assert_eq!(l[2][1].to_bits(), (1.0f64 / 3.0).to_bits());
+        assert_eq!(file::save_with(&loaded, &SaveOptions::default()), bytes);
+    }
+}
+
+#[test]
+fn field_rows_round_trip_bit_identically_and_the_fixture_holds_them() {
+    let scene = fixture_scene(false);
+    let want = Value::LinkRows(vec![
+        forge_core::LinkRow {
+            strength: 0.375,
+            enabled: false,
+            ..forge_core::LinkRow::new(NodeId(1), "add")
+        },
+        forge_core::LinkRow::new(NodeId(2), "normal"),
+    ]);
+    assert_eq!(scene.param(NodeId(3), "fields"), Some(&want));
+    for bytes in [
+        file::save_with(&scene, &SaveOptions::default()),
+        file::save_with(&fixture_scene(true), &SaveOptions::default()),
+    ] {
+        let (loaded, report) = file::load_bytes(registry(), &bytes).unwrap();
+        assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+        assert_eq!(loaded.param(NodeId(3), "fields"), Some(&want));
         assert_eq!(file::save_with(&loaded, &SaveOptions::default()), bytes);
     }
 }
@@ -283,6 +371,19 @@ fn fixture_scene(big: bool) -> forge_core::Scene {
             ]),
         )?;
         tx.set_param(sp, "selection.points", Value::IndexList(vec![0, 2]))?;
+        let h = tx.create("test.holder", None, None)?;
+        tx.set_param(
+            h,
+            "fields",
+            Value::LinkRows(vec![
+                forge_core::LinkRow {
+                    strength: 0.375,
+                    enabled: false,
+                    ..forge_core::LinkRow::new(p, "add")
+                },
+                forge_core::LinkRow::new(sp, "normal"),
+            ]),
+        )?;
         if big {
             tx.set_param(p, "mesh", Value::Mesh(Arc::new(grid_mesh(20))))?;
             tx.set_param(p, "selection.points", Value::IndexList((0..300).collect()))?;

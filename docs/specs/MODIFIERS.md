@@ -530,7 +530,7 @@ Test: `crates/modifiers/tests/deformers_parity.rs` — features `deformer-fallof
 - Feature `deformer-falloff` (9 cases, §10) is built as: the cube, a deformer child with
   the case's parameters (for the 051 features `squash-stretch` and `wrap` the same key translation applies: `*_percent`, `*_deg` suffixes dropped, option labels lower-cased, type `forge.squash_stretch`); (`strength_deg` is `strength` in degrees, `keep_length` is
   `keep_y_axis_length`, `alignment` is the fixed Y axis), the `[params.field]` field node
-  linked into `fields` (its `layer_strength_percent` is the node's `layer_strength`).
+  linked into `fields` (its `layer_strength_percent` is the strength of the list row).
 - Evaluation order and placement rules are §0; the modifier maths are §1–§6.
 - Parity-pending (implemented, seen in one configuration only): sibling deformers below
   the object (§0), `fillet` together with
@@ -548,12 +548,12 @@ Source: O24 [deformer-falloff.md](../parity/deformer-falloff.md), golden `tests/
 ### Parameter
 
 Every deformer (Bend, Twist, Taper, Bulge, Shear, Spherify, Squash & Stretch, Wrap) has a `fields` param:
-`ParamKind::LinkList` accepting `Category::Field` nodes, **top to bottom**, default empty
+`ParamKind::LinkRows` accepting `Category::Field` nodes (FIELDS.md F7), **top to bottom**, default empty
 (label "Fields", group "Falloff"). The O24 deformer's list parameter is labelled "Field"
 on its Fields tab. The list row's *layer strength* (O24 `layer_strength_percent`) is the
-field node's `layer_strength` param (percent, default 100 %, see FIELDS.md F1): one field
-node is one row, which is all the data covers; real list rows (a field in several lists)
-come with brief 059.
+strength of the row in the deformer's `fields` list (percent, default 100 %, FIELDS.md F7): a
+field used by two deformers has one strength per list. Brief 061 stored it on the field node; the
+version 11 file migration moved it into the rows (CORE.md section 6.10).
 
 ### Rule
 

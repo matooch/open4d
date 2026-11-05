@@ -72,7 +72,16 @@ fn st<'a>(h: &'a Harness<'_, Editor>) -> &'a EditorState {
 fn list(h: &Harness<'_, Editor>, id: NodeId, param: &str) -> Vec<NodeId> {
     match st(h).doc.scene().param(id, param) {
         Some(Value::LinkList(l)) => l.clone(),
+        Some(Value::LinkRows(rows)) => rows.iter().map(|r| r.target).collect(),
         other => panic!("not a list: {other:?}"),
+    }
+}
+
+/// The rows of a field list parameter.
+fn rows(h: &Harness<'_, Editor>, id: NodeId, param: &str) -> Vec<forge_core::LinkRow> {
+    match st(h).doc.scene().param(id, param) {
+        Some(Value::LinkRows(rows)) => rows.clone(),
+        other => panic!("not a row list: {other:?}"),
     }
 }
 
@@ -357,22 +366,21 @@ fn a_field_row_has_an_enable_box_and_a_strength_that_drive_the_effect() {
     assert_eq!(list(&h, eff, "fields"), vec![field]);
     let full = shift1(&h, cloner);
     assert!((full - 50.0).abs() < 1e-9, "{full}");
-    // the row strength is the field node's layer strength (brief 061), shown in percent
+    // the row strength is stored in the list row of the effector (brief 059), shown in percent
     let before = undo_steps(&h);
     h.get_by_label("Strength Ball").set_value_accesskit(50.0);
     h.run();
-    assert_eq!(
-        st(&h).doc.scene().param(field, "layer_strength"),
-        Some(&Value::Float(0.5))
-    );
+    assert_eq!(rows(&h, eff, "fields")[0].strength, 0.5);
     assert_eq!(undo_steps(&h), before + 1);
     assert!((shift1(&h, cloner) - 0.5 * full).abs() < 1e-9);
     // the enable box switches the layer off: back to full effect (empty list)
     h.get_by_label("Enable Ball").click();
     h.run();
+    assert!(!rows(&h, eff, "fields")[0].enabled);
+    // the field node itself is untouched
     assert_eq!(
         st(&h).doc.scene().param(field, "object.enabled"),
-        Some(&Value::Bool(false))
+        Some(&Value::Bool(true))
     );
     assert_eq!(list(&h, eff, "fields"), vec![field]);
     assert!((shift1(&h, cloner) - 100.0).abs() < 1e-9);
@@ -396,10 +404,48 @@ fn a_deformer_field_list_uses_the_same_rows() {
     assert_eq!(list(&h, bend, "fields"), vec![field]);
     h.get_by_label("Strength Ramp").set_value_accesskit(25.0);
     h.run();
+    assert_eq!(rows(&h, bend, "fields")[0].strength, 0.25);
+    // the row belongs to the deformer: a field used in two lists has two strengths
+    assert!(st(&h).doc.scene().param(field, "layer_strength").is_none());
+}
+
+#[test]
+fn a_field_row_has_a_blend_combo_and_reordering_keeps_the_row_data() {
+    let mut s = state();
+    make(&mut s, "forge.cube", "Cube");
+    let bend = make(&mut s, "forge.bend", "Bender");
+    let a = make(&mut s, "forge.field.linear", "Ramp");
+    let b = make(&mut s, "forge.field.spherical", "Ball");
+    s.selection.click(bend);
+    let mut h = harness(s);
+    h.run();
+    combo(&mut h, "Fields");
+    pick(&mut h, "Ramp");
+    combo(&mut h, "Fields");
+    pick(&mut h, "Ball");
+    assert_eq!(list(&h, bend, "fields"), vec![a, b]);
+    let before = undo_steps(&h);
+    h.get_by_role_and_label(egui::accesskit::Role::ComboBox, "Blend Ball")
+        .click();
+    h.run();
+    pick(&mut h, "Add");
+    assert_eq!(rows(&h, bend, "fields")[1].blend, "add");
+    assert_eq!(undo_steps(&h), before + 1);
+    h.get_by_label("Strength Ball").set_value_accesskit(40.0);
+    h.run();
+    // moving the row up carries its blend mode and strength with it
+    h.get_by_label("Move Ball up").click();
+    h.run();
+    let r = rows(&h, bend, "fields");
     assert_eq!(
-        st(&h).doc.scene().param(field, "layer_strength"),
-        Some(&Value::Float(0.25))
+        (r[0].target, r[0].blend.as_str(), r[0].strength),
+        (b, "add", 0.4)
     );
+    assert_eq!(r[1].blend, "normal");
+    h.get_by_label("Remove Ball").click();
+    h.run();
+    assert_eq!(list(&h, bend, "fields"), vec![a]);
+    assert_eq!(rows(&h, bend, "fields")[0].blend, "normal");
 }
 
 fn clones_at(points: &[DVec3]) -> CloneData {

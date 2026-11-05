@@ -635,7 +635,7 @@ fn fillet_param() -> ParamDesc {
 
 /// The deformer's field list (falloff, MODIFIERS.md §10): top to bottom, empty = full effect.
 fn fields_param() -> ParamDesc {
-    ParamDesc::link_list("fields", "Fields", &[Category::Field]).group("Falloff")
+    forge_fields::field_list_param("fields", "Fields").group("Falloff")
 }
 
 /// The object's green tick in the reference app, as a param so it survives
@@ -1285,20 +1285,7 @@ fn falloff(
     points: &[DVec3],
     ctx: &EvalCtx,
 ) -> Result<Option<Vec<f64>>, ()> {
-    let Some(Value::LinkList(links)) = scene.param(deformer, "fields") else {
-        return Ok(None);
-    };
-    // A link to a deleted or non-field node is skipped, like an empty slot.
-    let ids: Vec<NodeId> = links
-        .iter()
-        .copied()
-        .filter(|f| {
-            scene
-                .node_type(*f)
-                .is_some_and(|t| t.category == Category::Field)
-        })
-        .collect();
-    let list = FieldList::from_nodes(scene, &ids).map_err(|_| ())?;
+    let list = FieldList::from_param(scene, deformer, "fields").map_err(|_| ())?;
     if list.is_empty() {
         return Ok(None);
     }

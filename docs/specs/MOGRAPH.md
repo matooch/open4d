@@ -384,8 +384,8 @@ pub struct EffectorCtx<'a> { pub eval: &'a EvalCtx, pub cloner_world: DMat4 }
   (CLI, RPC, MCP, Rhai `set_param`), is undoable, saved, and its targets count for the cloner's
   cache revision. Effectors are applied **in list order** (`apply_effectors`): the second effector
   sees the clone data the first one left. A link to a deleted node is skipped.
-- **Falloff.** An effector has the link list `fields` (category `Field`, **top to bottom**, the order
-  of FIELDS.md F1). `FieldList::from_nodes` builds the list and the effector samples it at the **world**
+- **Falloff.** An effector has the row list `fields` (`Value::LinkRows`, category `Field`, **top to bottom**, the order
+  of FIELDS.md F1; per-row blend mode, strength and enable box, F7). `FieldList::from_param` builds the list and the effector samples it at the **world**
   position of each clone (`cloner_world · clone position`, taken when the effector starts). An empty
   list is value 1 (full effect, FIELDS.md F1). A clone's effect weight is `w = strength · value`.
 - The result of all effectors is the clone data of the cloner; `clone_data(scene, cloner, ctx)` and the

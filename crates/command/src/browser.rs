@@ -298,6 +298,7 @@ fn points_inside(v: &Value, inside: &BTreeSet<NodeId>) -> bool {
     match v {
         Value::Link(Some(t)) => inside.contains(t),
         Value::LinkList(l) => l.iter().any(|t| inside.contains(t)),
+        Value::LinkRows(rows) => rows.iter().any(|r| inside.contains(&r.target)),
         _ => false,
     }
 }
@@ -308,6 +309,16 @@ fn remap(v: &Value, map: &BTreeMap<NodeId, NodeId>) -> Value {
         Value::LinkList(l) => {
             Value::LinkList(l.iter().filter_map(|t| map.get(t).copied()).collect())
         }
+        Value::LinkRows(rows) => Value::LinkRows(
+            rows.iter()
+                .filter_map(|r| {
+                    map.get(&r.target).map(|t| forge_core::LinkRow {
+                        target: *t,
+                        ..r.clone()
+                    })
+                })
+                .collect(),
+        ),
         other => other.clone(),
     }
 }
@@ -364,7 +375,10 @@ impl Grafter<'_> {
             if key == LAYER_PARAM {
                 continue;
             }
-            let has_link = matches!(value, Value::Link(Some(_)) | Value::LinkList(_));
+            let has_link = matches!(
+                value,
+                Value::Link(Some(_)) | Value::LinkList(_) | Value::LinkRows(_)
+            );
             if points_inside(value, self.inside) {
                 self.pending.push((to, key.clone(), value.clone()));
             } else if has_link {

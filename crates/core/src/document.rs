@@ -315,9 +315,15 @@ impl Tx<'_> {
                 )));
             }
         }
-        if let (ParamKind::LinkList { accepts }, Value::LinkList(targets)) = (&desc.kind, &value) {
+        let list_targets = match (&desc.kind, &value) {
+            (ParamKind::LinkList { accepts }, Value::LinkList(ts)) => Some((accepts, ts.clone())),
+            (ParamKind::LinkRows { accepts, .. }, Value::LinkRows(rows)) => {
+                Some((accepts, rows.iter().map(|r| r.target).collect()))
+            }
+            _ => None,
+        };
+        if let Some((accepts, targets)) = list_targets {
             for target in targets {
-                let target = *target;
                 if target == id {
                     return Err(EditError::InvalidLink(
                         "a node cannot link to itself".into(),

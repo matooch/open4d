@@ -1,9 +1,9 @@
-//! Link list (ordered, e.g. an effector or field list): one line per entry with an enable box,
-//! a strength field (field layers), move and remove buttons, an "add" drop-down and a drop
+//! Link list (ordered, e.g. an effector list): one line per entry with an enable box,
+//! move and remove buttons, an "add" drop-down and a drop
 //! target for dragged objects (docs/specs/UI.md §16.1).
 
 use forge_core::visibility::ENABLED;
-use forge_core::{Category, NodeId, Scene, Unit, Value};
+use forge_core::{Category, EnumOption, LinkRow, NodeId, Scene, Value};
 use serde_json::json;
 
 use super::link::{candidates, name_of};
@@ -34,14 +34,6 @@ pub fn enable_param(scene: &Scene, id: NodeId) -> Option<(&'static str, bool)> {
             Some(Value::Bool(b)) => Some((p, *b)),
             _ => None,
         })
-}
-
-/// A list entry's row strength in percent: the node's `layer_strength` (fields, FIELDS.md).
-pub fn row_strength(scene: &Scene, id: NodeId) -> Option<f64> {
-    match scene.param(id, forge_fields::LAYER_STRENGTH) {
-        Some(Value::Float(v)) => Some(crate::attributes::to_display(Unit::Percent, *v)),
-        _ => None,
-    }
 }
 
 fn button(ui: &mut egui::Ui, text: &str, label: String) -> bool {
@@ -78,18 +70,6 @@ pub fn show(ui: &mut egui::Ui, cx: &Cx, row: &AttrRow, accepts: &[Category]) -> 
                     }
                 }
                 ui.label(&name);
-                if let Some(pct) = row_strength(cx.scene, *id) {
-                    let mut v = pct;
-                    let r = ui.add(egui::DragValue::new(&mut v).speed(1.0).suffix(" %"));
-                    r.widget_info(|| {
-                        let mut info = egui::WidgetInfo::drag_value(true, pct);
-                        info.label = Some(format!("Strength {name}"));
-                        info
-                    });
-                    if r.changed() {
-                        edit = Some(Edit::on_node(*id, forge_fields::LAYER_STRENGTH, json!(v)));
-                    }
-                }
                 if button(ui, "^", format!("Move {name} up")) {
                     edit = Some(Edit::commit(ids(&moved(items, i, -1))));
                 }
@@ -121,6 +101,129 @@ pub fn show(ui: &mut egui::Ui, cx: &Cx, row: &AttrRow, accepts: &[Category]) -> 
             let mut more = items.clone();
             more.push(*dropped);
             edit = Some(Edit::commit(ids(&more)));
+        }
+    });
+    edit
+}
+
+fn rows_json(rows: &[LinkRow]) -> serde_json::Value {
+    json!(
+        rows.iter()
+            .map(|r| json!({
+                "target": r.target.0,
+                "blend": r.blend,
+                "strength": r.strength * 100.0,
+                "enabled": r.enabled,
+            }))
+            .collect::<Vec<_>>()
+    )
+}
+
+/// A list with a row of data per entry (a field list, FIELDS.md F7): enable box, name, blend
+/// mode, strength in percent, move and remove buttons. Every change writes the whole list, one
+/// undo step.
+pub fn show_rows(
+    ui: &mut egui::Ui,
+    cx: &Cx,
+    row: &AttrRow,
+    accepts: &[Category],
+    blends: &[EnumOption],
+) -> Option<Edit> {
+    let Value::LinkRows(items) = &row.value else {
+        return None;
+    };
+    let mut edit = None;
+    let default_blend = blends.first().map(|b| b.id.as_str()).unwrap_or_default();
+    ui.vertical(|ui| {
+        if row.mixed {
+            ui.weak("mixed (the list shown is the active object's)");
+        }
+        for (i, item) in items.iter().enumerate() {
+            let name = name_of(cx.scene, item.target);
+            ui.horizontal(|ui| {
+                let mut on = item.enabled;
+                let r = ui.add(egui::Checkbox::without_text(&mut on));
+                r.widget_info(|| {
+                    egui::WidgetInfo::selected(
+                        egui::Role::CheckBox,
+                        true,
+                        item.enabled,
+                        format!("Enable {name}"),
+                    )
+                });
+                if r.changed() {
+                    let mut rows = items.clone();
+                    rows[i].enabled = on;
+                    edit = Some(Edit::commit(rows_json(&rows)));
+                }
+                ui.label(&name);
+                let current = blends
+                    .iter()
+                    .find(|b| b.id == item.blend)
+                    .map_or(item.blend.as_str(), |b| b.label.as_str());
+                let combo = egui::ComboBox::from_id_salt(("rowblend", cx.node, &row.param, i))
+                    .selected_text(current)
+                    .show_ui(ui, |ui| {
+                        for b in blends {
+                            if ui.selectable_label(b.id == item.blend, &b.label).clicked() {
+                                let mut rows = items.clone();
+                                rows[i].blend = b.id.clone();
+                                edit = Some(Edit::commit(rows_json(&rows)));
+                            }
+                        }
+                    });
+                combo.response.widget_info(|| {
+                    egui::WidgetInfo::labeled(egui::Role::ComboBox, true, format!("Blend {name}"))
+                });
+                let pct = item.strength * 100.0;
+                let mut v = pct;
+                let r = ui.add(egui::DragValue::new(&mut v).speed(1.0).suffix(" %"));
+                r.widget_info(|| {
+                    let mut info = egui::WidgetInfo::drag_value(true, pct);
+                    info.label = Some(format!("Strength {name}"));
+                    info
+                });
+                if r.changed() {
+                    let mut rows = items.clone();
+                    rows[i].strength = v / 100.0;
+                    edit = Some(Edit::commit(rows_json(&rows)));
+                }
+                for (text, delta, what) in [("^", -1isize, "up"), ("v", 1, "down")] {
+                    if button(ui, text, format!("Move {name} {what}")) {
+                        let mut rows = items.clone();
+                        let j = i as isize + delta;
+                        if j >= 0 && (j as usize) < rows.len() {
+                            rows.swap(i, j as usize);
+                        }
+                        edit = Some(Edit::commit(rows_json(&rows)));
+                    }
+                }
+                if button(ui, "x", format!("Remove {name}")) {
+                    let mut rows = items.clone();
+                    rows.remove(i);
+                    edit = Some(Edit::commit(rows_json(&rows)));
+                }
+            });
+        }
+        let has = |id: NodeId| items.iter().any(|r| r.target == id);
+        let combo = egui::ComboBox::from_id_salt(("linkrows", cx.node, &row.param))
+            .selected_text("Add...")
+            .show_ui(ui, |ui| {
+                for (cid, name) in candidates(cx.scene, accepts, cx.node) {
+                    if !has(cid) && ui.selectable_label(false, name).clicked() {
+                        let mut rows = items.clone();
+                        rows.push(LinkRow::new(cid, default_blend));
+                        edit = Some(Edit::commit(rows_json(&rows)));
+                    }
+                }
+            });
+        combo.response.clone().labelled_by(cx.label);
+        if let Some(dropped) = combo.response.dnd_release_payload::<NodeId>()
+            && !has(*dropped)
+        {
+            let mut rows = items.clone();
+            rows.push(LinkRow::new(*dropped, default_blend));
+            edit = Some(Edit::commit(rows_json(&rows)));
         }
     });
     edit

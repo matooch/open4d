@@ -73,7 +73,7 @@ pub(crate) fn common_type(id: &str, name: &str, d: &CommonDefaults) -> NodeType 
             )
             .group(EFF),
         )
-        .param(ParamDesc::link_list("fields", "Fields", &[Category::Field]).group(EFF))
+        .param(forge_fields::field_list_param("fields", "Fields").group(EFF))
         .param(pct("maximum", "Maximum", 1.0, EFF))
         .param(pct("minimum", "Minimum", d.minimum, EFF))
         .param(
