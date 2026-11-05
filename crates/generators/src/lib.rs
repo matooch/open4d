@@ -24,7 +24,7 @@ pub mod spline_sampling;
 pub mod splines;
 mod subdivision;
 
-pub use boole::{boole, inputs_of as boole_inputs_of};
+pub use boole::{boole, boole_objects, inputs_of as boole_inputs_of};
 pub use cloner::{
     ClonerInstances, PARALLEL_POINTS, clone_data, cloner_instances, expand as expand_clones,
     prototypes_of as cloner_prototypes,

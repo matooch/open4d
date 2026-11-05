@@ -7,7 +7,7 @@ mod common;
 
 use common::{Table, resolved_params, typed_params};
 use forge_core::{Registry, Value};
-use forge_generators::{BuildError, Primitives, boole, build};
+use forge_generators::{BuildError, Primitives, boole, boole_objects, build};
 use forge_parity_harness::{Compare, Mesh, compare_geometric, compare_meshes, discover_cases};
 use glam::DVec3;
 
@@ -38,8 +38,9 @@ const UNSUPPORTED: &[&str] = &["boole/quality-off"];
 
 /// Built, but the strict comparison (R25 point set and numbering) differs.
 const KNOWN_MISMATCH: &[&str] = &[
-    // pending brief 043: Boole R25 modes and numbering (the R25 export keeps the cut faces
-    // as a second object with its own 7 points: 13 + 7 = 20 points for a_minus_b, not our 14)
+    // pending brief 043 (BOOLE.md §5a): the objects, point counts, face counts, polygon
+    // sizes and surface match; the new points' numbering, the face order of the union
+    // family and the start corners of the cut faces are not derived for all four cases.
     "boole/r25-a_minus_b",
     "boole/r25-a_without_b",
     "boole/r25-intersect",
@@ -96,7 +97,13 @@ fn boole_matches_the_reference_geometrically() {
             values.insert(k.clone(), v);
         }
 
-        match boole(&a, &b, &values) {
+        // R25 cases are compared in the export layout (two objects, own points).
+        let result = if r25 {
+            boole_objects(&a, &b, &values)
+        } else {
+            boole(&a, &b, &values)
+        };
+        match result {
             Err(BuildError::Unsupported(what)) => {
                 println!("{key}: unsupported ({what})");
                 unsupported.insert(key);
@@ -120,6 +127,16 @@ fn boole_matches_the_reference_geometrically() {
                     matched.push(key);
                 } else {
                     println!("{key}: known mismatch (strict)");
+                    // what is derived: layout, counts, polygon sizes and the surface
+                    assert_eq!(expected.positions.len(), ours.positions.len(), "{key}");
+                    let sizes = |m: &Mesh| {
+                        let mut s: Vec<usize> = m.faces.iter().map(Vec::len).collect();
+                        s.sort();
+                        s
+                    };
+                    assert_eq!(sizes(&expected), sizes(&ours), "{key}: polygon sizes");
+                    let r = compare_geometric(&expected, &ours, &m.tolerance);
+                    assert!(r.passed(), "{key}: {:?}", r.failures);
                     mismatch.insert(key);
                 }
             }

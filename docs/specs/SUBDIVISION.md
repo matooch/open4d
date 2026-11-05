@@ -73,7 +73,7 @@ Order (observed, `cube-1`, `tris-1`):
 | `osd_catmull_clark` | §2 positions in the **OpenSubdiv order** (§3.1) |
 | `osd_bilinear` | linear positions (face point = average, edge point = midpoint, vertices unchanged) in the OpenSubdiv order (§3.1) |
 | `osd_catmull_clark_adaptive` | the **input, unsubdivided** (observed: the export ignores the adaptive level) |
-| `osd_loop` | `Unsupported` (triangulates first; the split is not derived) |
+| `osd_loop` | Loop subdivision in the OpenSubdiv order (§3.3); with sharp input edges `Unsupported` |
 
 ### 3.1 OpenSubdiv order (observed, `scheme-osd_bilinear`, `scheme-osd_catmull_clark`)
 
@@ -95,9 +95,39 @@ The R25 Type list is `catmull_clark`, `catmull_clark_ngons` (default), `osd_catm
 `osd_loop`, `osd_bilinear` (no adaptive); `r12_compatibility` (off) and `level_view` /
 `level_render` 2 are stored. On a default cube at level 2 the first, second, third and fifth
 types equal §2 / §3 exactly (`r25-type-catmull_clark`, `-catmull_clark_ngons`,
-`-osd_catmull_clark`, `-osd_bilinear`: 98 points, 96 quads). `osd_loop` (98 points, 192
-triangles) is `Unsupported` as in R20: **parity-pending, `pending brief 043: Subdivision
-type OpenSubdiv Loop`** (`r25-type-osd_loop`, `scheme-osd_loop`).
+`-osd_catmull_clark`, `-osd_bilinear`: 98 points, 96 quads). `osd_loop` (98 points, 192 triangles) is §3.3 (`r25-type-osd_loop`, `scheme-osd_loop`).
+
+### 3.3 Loop (`osd_loop`; `forge_geometry::subdivide::subdivide_loop`)
+
+Sources: C. Loop, "Smooth subdivision surfaces based on triangles", M.Sc. thesis, Univ. of
+Utah (1987); parity observations `subdivision/scheme-osd_loop` (R20) and
+`subdivision/r25-type-osd_loop` (R25); the two meshes are the same.
+
+- **Triangulation.** Every polygon `[v0, v1, …]` is fan-triangulated `(v0, v_j, v_{j+1})`
+  (a cube quad `[0,1,3,2]` gives `(0,1,3)`, `(0,3,2)`). Output faces keep polygon-major order.
+- **Positions** (Loop): interior edge point `3/8 (a + b) + 1/8 (c + d)` (`c`, `d` the
+  vertices opposite the edge); interior vertex of valence `n`: `(1 − nβ) v + β Σ neighbours`,
+  `β = (5/8 − (3/8 + cos(2π/n)/4)²) / n`; boundary edge → midpoint, boundary vertex →
+  `(6v + a + b) / 8`. The cube at level 2 matches to the export's precision, including the
+  unequal Z extent (181.445 against 179.091; the fan diagonals make the cube valences differ).
+- **Numbering** (level by level, as §3.1): the previous vertices, then one point per edge
+  (edge-list order). Each triangle `(t0, t1, t2)` with edge points `m0 = E(t0,t1)`,
+  `m1 = E(t1,t2)`, `m2 = E(t2,t0)` gives four children in this order:
+  `(t0, m0, m2)`, `(m0, t1, m1)`, `(m2, m1, t2)`, `(m1, m2, m0)`.
+- **Edge list of level 0.** Edges are numbered by first appearance walking the triangles in
+  the **internal order**: the first fan triangle of every polygon (polygon order), then the
+  second fan triangles, and so on, each triangle's edges `(t0,t1)`, `(t1,t2)`, `(t2,t0)`
+  with the first-seen direction. This explains why a cube quad's closing edge, the one that
+  only the second triangle contains, gets a late number (`r25-type-osd_loop`: edge points 8–25,
+  `(2,0)` = 22, the `y-` face last).
+- **Edge list of the next level.** Per face in the internal order its three inner edges
+  `(m0, m2)`, `(m0, m1)`, `(m1, m2)`, then per previous edge `(a, b)` its halves
+  `(a, m)`, `(m, b)`. The next internal order is each face's four children, in internal order.
+  Proven by the level-2 points 26–97 of `r25-type-osd_loop` (inner edges 26–61 in the order
+  face 0, 2, 4, …, 1, 3, 5, …; halves 62–97).
+- **Parity-pending:** polygons with more than four corners (fan index, then polygon, is the
+  assumed internal order), non-manifold edges (midpoint), sharp edges (`Unsupported`) and the
+  inner edges' direction (only matters from level 3).
 
 ## 4. Evaluation and display
 

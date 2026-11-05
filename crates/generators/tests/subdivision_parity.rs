@@ -15,11 +15,7 @@ use forge_parity_harness::{Mesh, compare_meshes, discover_cases, parse_obj};
 use glam::DVec3;
 
 /// Observed schemes whose geometry is not derived yet.
-const UNSUPPORTED: &[&str] = &[
-    "subdivision/scheme-osd_loop",
-    // pending brief 043: Subdivision type OpenSubdiv Loop (R25 export: 98 points, 192 triangles)
-    "subdivision/r25-type-osd_loop",
-];
+const UNSUPPORTED: &[&str] = &[];
 
 /// The reference cylinder's caps are separate surfaces (docs/specs/SUBDIVISION.md §2,
 /// `ngon-1`), but the export welds them: mark the rim — edges whose two faces meet at
@@ -142,5 +138,5 @@ fn subdivision_matches_the_reference() {
     println!("matched exactly: {}", matched.join(", "));
     let want: BTreeSet<String> = UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 14, "{matched:?}");
+    assert_eq!(matched.len(), 16, "{matched:?}");
 }

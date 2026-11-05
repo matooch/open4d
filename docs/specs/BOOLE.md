@@ -113,17 +113,47 @@ the same region split into quads (two per L-shaped face in `mode-a_minus_b`).
 - Open or self-intersecting inputs give whatever the winding-number classification
   gives (no observation yet).
 
-## 5a. R25 cases (`boole/r25-*`, O20) — parity-pending, brief 043
+## 5a. R25 cases (`boole/r25-*`, O20) — brief 043
 
-The R25 export of the four modes keeps the cut faces of B as a **second object** with its
-own copies of the points (`r25-a_minus_b`: object `Cube` with 13 points and 6 faces, object
-`Cube_1` with 7 points and 3 faces, 20 points / 9 faces in the merged mesh; ours welds to
-14 points). The case form is `[params.input]` / `[params.input2]` cube tables plus `mode`,
-`hide_new_edges` (R25 default on), `high_quality`, `optimize_points` (0.01). Our modes
-reproduce the geometry (R20 `hide-edges` etc. still match) but not the R25 point sets and
-numbering: `r25-union`, `r25-a_minus_b`, `r25-intersect`, `r25-a_without_b` are pinned in
-`KNOWN_MISMATCH` as `pending brief 043: Boole R25 modes and numbering`. The cases declare
-the strict comparison, so the test compares them strictly (never geometrically).
+Sources: observation O20 ([docs/parity/generators-3.md](../parity/generators-3.md)) and the
+golden cases `boole/r25-union`, `-a_minus_b`, `-intersect`, `-a_without_b`; Sutherland and
+Hodgman, "Reentrant polygon clipping", CACM 17(1) (1974).
+
+The case form is `[params.input]` / `[params.input2]` cube tables plus `mode`,
+`hide_new_edges` (R25 default on), `high_quality`, `optimize_points` (0.01).
+
+**Layout (derived, all four cases).** The R25 export holds two objects: A's polygons with
+their own points (`Cube`), then B's polygons with their own copies of the points (`Cube_1`).
+Points shared by both are duplicated: `r25-a_minus_b` is 13 + 7 = 20 points (6 + 3 faces),
+`r25-union` 13 + 13 = 26 (6 + 6), `r25-intersect` 7 + 7 = 14 (3 + 3), `r25-a_without_b` 13
+(6 + 0: B has no faces). `forge_generators::boole_objects` returns this layout (`boole`
+stays welded for the viewport). Inside an object the points are: the surviving input points
+in the input's order, then the new points. B's polygons of `a_minus_b` are reversed.
+Polygon sizes (hide on) and the surface per plane match, checked by `boole_parity.rs`
+(point count, polygon sizes, `compare_geometric`).
+
+**Start corners (derived by hand on `r25-intersect` A `x+`, `z+`, B `z-` and `r25-a_minus_b` B `z-`; not implemented, because the numbering below blocks a strict match anyway).** A kept-inside polygon
+is the Sutherland–Hodgman clip of its source polygon (reversed first for the B polygons of
+`a_minus_b`) against the other solid's planes in that solid's polygon order, e.g.
+`r25-intersect` A `x+` face `[2,3,5,4]` → `[P2, P1, c5, P3]`, B `z-` face → `[P1, P2, c0, P5]`,
+and the face order is the source order. For the outside parts (`union`, `a_minus_b`,
+`a_without_b` A part, `union` B part) an untouched polygon keeps its source start and a cut
+polygon starts at the last new point of its cut run (`r25-union`: A `x+` face
+`[P3, 4, 2, 3, P1, P2]`, B `z-` face starts at `P5`; all 6 cut faces of the union).
+
+**Not derived (parity-pending, so the four cases stay in `KNOWN_MISMATCH`):**
+1. The numbering of the new points. A part (all modes): `P1 (100,100,-50)`, `P2 (100,-50,-50)`,
+   `P3 (100,-50,100)`, `P4 (-50,100,100)`, `P5 (-50,100,-50)`, `P6 (-50,-50,100)` as 7…12
+   (union, a_without_b) or 1…6 after the one surviving corner (intersect); B part: `P1, P6, P2, P5,
+   P3, P4`. A walk of A's faces `x+`, `y+`, `z+` reproduces the first order and nothing
+   simple reproduces the second (three hypotheses tried: first use in output order, Sutherland–
+   Hodgman creation order in source and in axis order, sorting by coordinates).
+2. The face order of the union family: A `z-, x+, y-, z+, y+, x-` (source order is
+   `z-, x+, z+, x-, y+, y-`), B (union) `z-, y-, x+, z+, x-, y+`. Plane-major and face-major
+   emission orders over B's planes (every plane permutation) do not give either.
+Follow-up cases proposed in the brief report: B moved along one axis only, B smaller than A
+(strictly inside) and B shifted by a different amount per axis, which separate numbering from
+geometry.
 
 ## 6. Parity tests
 
@@ -131,6 +161,6 @@ the strict comparison, so the test compares them strictly (never geometrically).
 our default cube, B = our default cube translated by the case's `b_pos`, options from
 `[params]` (or the cube tables of `[params.input]`, `[params.input2]` for the R25 cases,
 §5a); compared with `compare_geometric` (the R20 cases set
-`[tolerance] compare = "geometric"`; the R25 cases are strict). `boole/quality-off` is pinned as unsupported.
+`[tolerance] compare = "geometric"`; the R25 cases are strict, in the `boole_objects` layout, §5a). `boole/quality-off` is pinned as unsupported.
 Unit tests (`crates/geometry/tests/boolean.rs`): all modes on overlapping, disjoint,
 touching and nested boxes (volumes, closedness, point sets) and a box with a hole.

@@ -362,6 +362,8 @@ a 3-array `size` on a cube is `size_x/y/z`; Symmetry's `weld_tolerance` is `tole
 - **Symmetry** (§1): `r25-plane-xy/-zy/-xz` match exactly (same rules as R20). New params
   `clamp_points_on_axis`, `delete_polygons_on_axis`, `auto_flip` (all off; modeling aids, a
   true value is `Unsupported`).
+- **Symmetry planes (brief 043):** nothing to change; the three `r25-plane-*` cases still match exactly.
+- **Boole / Subdivision (brief 043):** Subdivision Loop is SUBDIVISION.md §3.3; the Boole R25 layout is BOOLE.md §5a.
 - **Loft:** new param `adapt_uv` (true; UV only, no effect on the mesh).
 - **Sweep:** new params `start_growth` 0 %, `end_growth` 100 %, `parallel_movement` off,
   `keep_segments` off (non-default → `Unsupported`), `use_rail_direction`, `two_rail`,

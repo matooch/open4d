@@ -394,3 +394,122 @@ pub fn subdivide_osd(
     }
     cur
 }
+
+/// Loop's vertex weight for an interior vertex of valence `n` (Loop 1987).
+fn loop_beta(n: usize) -> f64 {
+    let n = n as f64;
+    let c = 3.0 / 8.0 + 0.25 * (std::f64::consts::TAU / n).cos();
+    (5.0 / 8.0 - c * c) / n
+}
+
+/// The next level's mesh, edge list `(a, b)` and internal face order.
+type LoopLevel = (PolyMesh, Vec<(u32, u32)>, Vec<usize>);
+
+/// One Loop step on a triangle mesh whose faces are listed in output order; `edges` is
+/// the current level's edge list, `internal` the face order the reference numbers inner
+/// edges in.
+fn loop_step(mesh: &PolyMesh, edges: &[(u32, u32)], internal: &[usize]) -> LoopLevel {
+    let nv = mesh.points.len();
+    let slot: BTreeMap<Edge, usize> = edges
+        .iter()
+        .enumerate()
+        .map(|(i, &(a, b))| (Edge::new(a, b), i))
+        .collect();
+    let mut opposite: Vec<Vec<u32>> = vec![Vec::new(); edges.len()];
+    let mut neighbours: Vec<BTreeSet<u32>> = vec![BTreeSet::new(); nv];
+    for t in &mesh.polys {
+        for k in 0..3 {
+            let (a, b, c) = (t[k], t[(k + 1) % 3], t[(k + 2) % 3]);
+            opposite[slot[&Edge::new(a, b)]].push(c);
+            neighbours[a as usize].insert(b);
+            neighbours[b as usize].insert(a);
+        }
+    }
+    let p = |i: u32| mesh.points[i as usize];
+    let mut points = Vec::with_capacity(nv + edges.len());
+    for (v, nb) in neighbours.iter().enumerate() {
+        let boundary: Vec<u32> = nb
+            .iter()
+            .copied()
+            .filter(|&w| opposite[slot[&Edge::new(v as u32, w)]].len() == 1)
+            .collect();
+        let at = p(v as u32);
+        points.push(if boundary.len() == 2 {
+            // boundary vertex: (6v + a + b) / 8
+            (6.0 * at + p(boundary[0]) + p(boundary[1])) / 8.0
+        } else if nb.is_empty() {
+            at
+        } else {
+            let beta = loop_beta(nb.len());
+            let sum: DVec3 = nb.iter().map(|&w| p(w)).sum();
+            at * (1.0 - nb.len() as f64 * beta) + sum * beta
+        });
+    }
+    for (i, &(a, b)) in edges.iter().enumerate() {
+        points.push(match opposite[i].as_slice() {
+            [c, d] => (3.0 * (p(a) + p(b)) + p(*c) + p(*d)) / 8.0,
+            _ => (p(a) + p(b)) / 2.0,
+        });
+    }
+    let ep = |a: u32, b: u32| (nv + slot[&Edge::new(a, b)]) as u32;
+
+    let mut polys = Vec::with_capacity(mesh.polys.len() * 4);
+    for t in &mesh.polys {
+        let (m0, m1, m2) = (ep(t[0], t[1]), ep(t[1], t[2]), ep(t[2], t[0]));
+        polys.push(vec![t[0], m0, m2]);
+        polys.push(vec![m0, t[1], m1]);
+        polys.push(vec![m2, m1, t[2]]);
+        polys.push(vec![m1, m2, m0]);
+    }
+    // Next edges: three inner edges per face (internal order), then the halves.
+    let mut next = Vec::with_capacity(edges.len() * 2 + mesh.polys.len() * 3);
+    for &f in internal {
+        let t = &mesh.polys[f];
+        let (m0, m1, m2) = (ep(t[0], t[1]), ep(t[1], t[2]), ep(t[2], t[0]));
+        next.extend([(m0, m2), (m0, m1), (m1, m2)]);
+    }
+    for &(a, b) in edges {
+        let m = ep(a, b);
+        next.extend([(a, m), (m, b)]);
+    }
+    let order = internal
+        .iter()
+        .flat_map(|&f| (0..4).map(move |k| 4 * f + k))
+        .collect();
+    (PolyMesh { points, polys }, next, order)
+}
+
+/// `levels` Loop steps in the OpenSubdiv order (docs/specs/SUBDIVISION.md §3.3). Polygons
+/// are fan-triangulated first.
+pub fn subdivide_loop(input: &PolyMesh, levels: usize) -> PolyMesh {
+    let mut tris = Vec::new();
+    let mut rank = Vec::new();
+    for (q, poly) in input.polys.iter().enumerate() {
+        for j in 1..poly.len().saturating_sub(1) {
+            rank.push((j, q, tris.len()));
+            tris.push(vec![poly[0], poly[j], poly[j + 1]]);
+        }
+    }
+    // The reference numbers by the first fan triangle of every polygon, then the second…
+    rank.sort();
+    let mut internal: Vec<usize> = rank.iter().map(|r| r.2).collect();
+    let mut cur = PolyMesh {
+        points: input.points.clone(),
+        polys: tris,
+    };
+    let mut edges = Vec::new();
+    let mut seen = BTreeSet::new();
+    for &f in &internal {
+        let t = &cur.polys[f];
+        for k in 0..3 {
+            let (a, b) = (t[k], t[(k + 1) % 3]);
+            if seen.insert(Edge::new(a, b)) {
+                edges.push((a, b));
+            }
+        }
+    }
+    for _ in 0..levels {
+        (cur, edges, internal) = loop_step(&cur, &edges, &internal);
+    }
+    cur
+}
