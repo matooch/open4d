@@ -14,13 +14,15 @@ a finite clamp that differs from the previous one: `array` `copies` 1–1000, `f
 `intermediate_max_length` ≥ 0.01; helix `radial_bias`, `height_bias` 0–100 %, `height` ≥ 0;
 extrude `subdivision` 1–4000; lathe `subdivision` 1–4000, `scaling` ≥ 0; loft
 `mesh_subdivision_u` / `_v` 2–4000; sweep `end_scale` ≥ 0.
-**R25 defaults not yet applied:** loft `cap_type`
-N-gon (R25) vs Triangles (loft caps are always Delaunay triangles, §9). The arc, circle and helix
+**Caps Type (brief 042):** the R25 default is **N-gons** for extrude (as before), lathe, loft and
+sweep (`rechecks/loft-defaults`, `lathe/partial`, `loft/three-circles`, `sweep/scale-end`).
+The R20 meshes of loft, lathe and sweep have Triangle caps (`loft/defaults`, `lathe/angle`,
+`sweep/helix`), so `tests/defaults/r20.toml` carries `cap_type = "triangles"`
+for `[loft]` (an O4 `!` row), `[lathe]` and `[sweep]` (derived from the meshes: O4 lists no `!`
+for those two, its R20 column is wrong or was not re-read). The arc, circle and helix
 `intermediate` default is **Uniform** (R25, [splines-2.md](../parity/splines-2.md); brief 038,
 §6.2); the R20 cases keep Adaptive through the `[circle_spline]` and `[helix_spline]` rows of
-`tests/defaults/r20.toml`. O4 lists no `!` for
-lathe and sweep `cap_type` (it records N-gon for R25 and, for lathe, N-gons for R20), but the
-R20 meshes show Triangles (§8, `lathe/angle`): left as Triangles, **to be re-observed**.
+`tests/defaults/r20.toml`.
 The
 R25-only parameters (extrude Direction, bevel tabs, sweep rotation from/to, "use new
 version" switches of cylinder and torus, tube and cone fillet defaults) are out of scope.
@@ -297,13 +299,25 @@ Closed splines get caps from the first and last row (they share the rows' points
 ## 8. Lathe (`forge.lathe`)
 
 Params: `angle` 360°, `subdivision` 32 (R20: 24), `movement` 0, `scaling` 100 %, caps as Extrude
-with `cap_type` default **triangles** (observed: the 270° rectangle caps are triangles).
-Movement/scaling other than default → `Unsupported`. The first spline child's points
-(placed by its transform) are rotated about Y by `angle·k/subdivision`,
-`(x cos φ − z sin φ, y, x sin φ + z cos φ)`: `subdivision` columns for a full turn,
-`subdivision + 1` otherwise. Faces per column k, profile index j inner:
-`[c(k,j), c(k,j+1), c(k+1,j+1), c(k+1,j)]`. Partial turns of closed profiles get caps
-from the first and last columns as Extrude's (start from column 0, end from the last).
+with `cap_type` default **N-gons** (R20: triangles, §0a: the 270° rectangle of `lathe/angle`).
+The first spline child's points (placed by its transform) are rotated about Y by
+`angle·k/subdivision`, `(x cos φ − z sin φ, y, x sin φ + z cos φ)`:
+`subdivision` columns when the turn closes on itself, `subdivision + 1` otherwise. Faces per
+column k, profile index j inner: `[c(k,j), c(k,j+1), c(k+1,j+1), c(k+1,j)]`.
+- **Movement** (brief 042, `lathe/movement`: rectangle at x 300, movement 200): column k is
+  lifted by `movement·k/subdivision` along Y (the turn then spans y −200 to 400, size
+  600). A moved turn does not close: 33 columns, and the first and last column get caps.
+- **Scaling** (**parity-pending**, no case): x and z are scaled by
+  `1 + (scaling/100 − 1)·k/subdivision` before the rotation; a scaled full turn is open like a
+  moved one.
+- **Caps** of an open lathe (partial angle or movement or scaling) of a closed profile come
+  from the first and last columns. Triangles: as Extrude's (start from column 0, end from
+  the last). **N-gons** (`lathe/partial`, `lathe/movement`, 4-point profile): the start cap
+  lists column 0 in reverse profile order, `[q3, q2, q1, q0]`; the end cap lists the last
+  column in profile order, `[q0, q1, q2, q3]`. This is the R25 order of
+  `r25-drift/extrude-rectangle-caps-quadrangles` (§11.1, hypothesis (1)); the R20 Extrude
+  n-gon order of §7 differs. There is no R20 lathe n-gon case, so the lathe takes the R25 order
+  without a conflict of its own; one-case rule for larger profiles (**parity-pending**).
 The reference writes the end cap's points separately (they differ from the last column
 only by ~1e-14 and survive its exact weld); ours share the last column, and parity
 compares both sides after `export_weld` (§0).
@@ -312,8 +326,8 @@ compares both sides after `export_weld` (§0).
 
 Params: `mesh_subdivision_u` 16 (R20: 30), `mesh_subdivision_v` 4 (R20: 10), `organic_form`, `loop`,
 `linear_interpolation` false, `subdivision_per_segment` true, caps as Extrude with
-`cap_type` default triangles; other option values, open sections and a single section
-→ `Unsupported`.
+`cap_type` default N-gons (R20: triangles, §0a); `organic_form`, `loop`, `subdivision_per_segment`
+off, quadrangle caps, open sections and a single section → `Unsupported`.
 - **Sections:** every spline child (child order), placed by its transform, sampled at
   `U − 1` points uniform in spline parameter, `s_i = segments·i/(U − 1)` (the closed
   seam not repeated; `loft/defaults`: none of the 29 points lands on ±200).
@@ -324,20 +338,43 @@ Params: `mesh_subdivision_u` 16 (R20: 30), `mesh_subdivision_v` 4 (R20: 10), `or
   its neighbour; at an inner section m: the unit of `P(m+1) − P(m−1)` times the chord of
   the segment being built (fitted to `loft/three` to 4 digits; two sections give
   straight, evenly spaced rows).
+- **Linear Interpolation** (brief 042, `loft/linear`): the rows between two sections are
+  straight lines, `P(k) + (P(k+1) − P(k))·j/V`, per sample index. Same points, rows and faces
+  otherwise; the end tangents of the Hermite rule are not used.
 - **Faces:** per row pair, `[r(j,i+1), r(j+1,i+1), r(j+1,i), r(j,i)]` (wound opposite to
   Extrude, and against the caps: the exported loft is not consistently oriented), i
-  wrapping. Caps from the first ring (wound as the ring) and the last ring
-  (reversed), the constrained Delaunay triangulation of the ring in the reference's
-  listing (GEOMETRY.md §6.1). `loft/defaults` is exact; `loft/three` differs in its end
+  wrapping. Triangle caps (the R20 default): from the first ring (wound as the ring) and the
+  last ring (reversed), the constrained Delaunay triangulation of the ring in the
+  reference's listing (GEOMETRY.md §6.1). N-gon caps (the R25 default, `rechecks/loft-defaults`,
+  `loft/three-circles`): one polygon per cap, the first ring in ring order `[0..U)` and the
+  last ring reversed. `loft/defaults` is exact; `loft/three` differs in its end
   cap by one exactly cocircular (mirror-symmetric) quad whose diagonal the export takes
   the other way, so parity compares those caps geometrically (§11).
+
+### 9a. R25 loft against R20: a documented conflict (brief 042)
+
+`loft/three-circles` and `loft/linear` (R25, U 16, V 4, three circles) differ from the R20
+rules of §9 in two ways that do not depend on any option. Along the reference's points, with
+`U + 1` asked of our loft, **all 144 points match in order to 5e-7** and the face set equals
+the reference's up to rotation and reversal (`tests/sweep_loft_r25.rs`, both cases, linear
+included). What differs:
+1. **Points per ring:** R25 `U` (16); R20 `U − 1` (`loft/defaults`: U 30, 29 points per ring;
+   `loft/mesh-subdivision`: U 7, 6 points per ring).
+2. **Quad order:** R25 `[r(j,i), r(j+1,i), r(j+1,i+1), r(j,i+1)]` (consistently oriented with
+   the caps, so the R25 loft is a consistent solid); R20 the order of §9.
+The same scene (`loft/defaults` against `rechecks/loft-defaults`, two circles at y 0 and 200)
+shows both. Our loft has no version switch, and the R20 behaviour is the default, so the two R25
+cases stay in `KNOWN_MISMATCH` (they fail the strict comparison on the point count). Derived R25
+rule, **not implemented**: ring points `U`, `s_i = segments·i/U`, quad order above, N-gon caps.
+It needs a decision on how app versions are told apart in the generators (planner).
 
 ## 10. Sweep (`forge.sweep`)
 
 Params: `end_scale` 100 %, `end_rotation` 0°, `banking` true, `constant_cross_section`
-true, caps as Extrude with `cap_type` default triangles; other values → `Unsupported`.
-Inputs: the first spline child is the profile, the second the path (both placed by
-their transforms; the profile is read in its XY coordinates).
+true, caps as Extrude with `cap_type` default N-gons (R20: triangles, §0a); growth, parallel
+movement and keep segments other than the defaults → `Unsupported`.
+Inputs: the first spline child is the profile, the second the path, an optional third the
+rail (§10a); all placed by their transforms; the profile is read in its XY coordinates.
 - **Rings:** one per path point (closed paths don't repeat the first). Tangent: the
   bisector of the unit incoming and outgoing chords (ends: the one chord). Normal: at
   the first point away from the bend, then parallel-transported point to point;
@@ -348,13 +385,20 @@ their transforms; the profile is read in its XY coordinates).
 - **Scale and twist:** with f = length along the path / total length (closed paths
   include the closing chord), the profile is scaled by `1 + (end_scale − 1)·f` and
   rotated by `−end_rotation·f` before the mitre (`sweep/end-scale`, `end-rotation`).
+- **Banking off** (brief 042, `sweep/banking`): the normal is not transported but
+  `Y × tangent`, normalised (world up; the profile's x axis stays horizontal), with the same
+  bisector tangent; where the tangent is parallel to Y the previous normal is kept
+  (**parity-pending**). Whether "up" is the world Y or the path's own frame is not told by the
+  case (identity transform), the world Y is taken.
 - **Faces:** `[g(k,i), g(k,i+1), g(k+1,i+1), g(k+1,i)]` per ring pair and profile span;
-  open paths with closed profiles get triangulated caps.
+  open paths with closed profiles get caps: N-gons (R25 default, `sweep/banking`,
+  `sweep/scale-end`, `sweep/rail`: start cap `[m−1, …, 0]` of ring 0, end cap
+  `[0, …, m−1]` of the last ring) or triangulated caps (R20: `sweep/helix`; the R25 option: `rechecks/sweep-open-triangles`).
 - **Known mismatch:** along a non-planar path (`sweep/helix`) the reference's frame starts
   0.4° tilted and twists less than parallel transport (48° against 56° over the default
   helix); not derived.
 
-### 10a. O20 additions (R25 cases of `generators-3.md`)
+### 10a. O20 additions (R25 cases of `generators-3.md`, brief 042)
 
 Case spellings the parity tests translate: `fillet_subdivision` is our `fillet_segments`;
 a 3-array `size` on a cube is `size_x/y/z`; Symmetry's `weld_tolerance` is `tolerance`;
@@ -368,15 +412,36 @@ a 3-array `size` on a cube is `size_x/y/z`; Symmetry's `weld_tolerance` is `tole
 - **Sweep:** new params `start_growth` 0 %, `end_growth` 100 %, `parallel_movement` off,
   `keep_segments` off (non-default → `Unsupported`), `use_rail_direction`, `two_rail`,
   `use_rail_scale` (R25 defaults on; only meaningful with a rail) and `stick_uvs` (UV only).
-  A **third spline child** (the rail) is `Unsupported("sweep with a rail spline")`.
-- **Parity-pending (brief 042):** `lathe/movement` (movement/scaling: `Unsupported`);
-  `lathe/partial` (builds, 132 faces against 130: the open lathe's cut faces differ);
-  `loft/linear` (`Unsupported`); `loft/three-circles` (R25 rings have `U` = 16 points, not
-  `U − 1`, and the default Caps Type is N-gon, so the caps are two 16-gons: 144 points, 130
-  faces; the same appears in `rechecks/loft-defaults`); `sweep/rail`, `sweep/banking`
-  (Banking off: `Unsupported`) and `sweep/scale-end` (rings 0 to 590 of 901 equal, later
-  rings drift by up to 2.3, and the R25 caps are N-gons). All are pinned in `UNSUPPORTED` /
-  `KNOWN_MISMATCH` as `pending brief 042: ...`.
+  A **third spline child** is the rail (below).
+- **Sweep 2-Rail** (brief 042, `sweep/rail`: Circle profile, Helix path, second Helix with
+  End Radius 400, R25 defaults 2-Rail, Use Rail Direction, Use Rail Scale on). Ring `k` has
+  the profile's x extent `[x_min, x_max]` mapped onto the segment from path point `k`
+  (at `x_min`) to rail point `k` (at `x_max`): `P_k + (R_k − P_k)·(x − x_min)/(x_max − x_min)`.
+  The profile's y is dropped: every ring is a straight line (the circle's 36 points lie on a
+  segment to 1e-6, ring 0 collapses to one point where the rails meet). The rail point is the
+  rail at the path sample's spline parameter (the rail rings' z fractions are exactly
+  k/900 although its arc length per angle differs); polylines pair point by point.
+  With the reference's own ring ends as path and rail, every vertex and face matches
+  (`two_rail_maps_the_profile_width_onto_the_rails`). Other combinations of the three rail
+  flags, end scale/rotation with a rail, and rails of another segment count → `Unsupported`.
+- **Why the three helix sweeps still differ (`KNOWN_MISMATCH`).** `sweep/banking`,
+  `sweep/rail` and `sweep/scale-end` run along the R25 uniform helix, whose Bezier handles miss
+  the export by up to 3.5e-4 (§6.1 `helix-uniform`; for the radius-changing rail helix
+  up to 2e-2, angle 0.7985° where ours gives 0.8037° at ring 1). Banking off turns the route
+  error into a normal error through `t_x/t_z` (t_x ≈ −0.007): 0.036 at ring 0, 0.004
+  elsewhere, max 0.068. Along the reference's own ring centres, `sweep/banking` matches
+  exactly (`banking_off_follows_world_up`). Fixing the helix handles (brief 038's
+  follow-up) is all these two need.
+- **Banking on, `sweep/scale-end` (parity-pending, 3+ hypotheses spent).** Along the exact
+  route the frame still misses: the reference's ring 0 normal is the radial direction turned
+  by −0.103° about the chord tangent (ours, "away from the bend at point 1", is 0.48° off the reference),
+  and it twists 55.3° over the 2-turn helix where the discrete parallel transport (rotation
+  arcs between bisector tangents, the projection method, double reflection, chords, the
+  101 spline points only) gives 57.0° (the analytic torsion integral, 57.1°); the
+  difference is 1.75° at the end and the twist rate falls from 0.0636 to 0.0608 °/ring.
+  Not derived: Frenet, bend at point 1, parallel transport (four discretisations), coarse
+  transport, and projection are rejected. `sweep/helix` (R20) shows the same lag.
+  The end scale/rotation rule (§10) is otherwise unchanged.
 
 ## 11. Parity tests
 
@@ -384,9 +449,14 @@ a 3-array `size` on a cube is `size_x/y/z`; Symmetry's `weld_tolerance` is `tole
 `[params.input]`, `[params.input2]`, … (`type` = a primitive id suffix, `pos` the
 position, other keys that primitive's params) in a scene, evaluates the generator, and
 compares `export_weld` of ours and of the export strictly (topology, 1e-4); its
-`KNOWN_MISMATCH` list pins the two cases above that we build but don't match, and
+`KNOWN_MISMATCH` list pins the cases we build but don't match (§6.1, §9a, §10a), and
 `CAP_GEOMETRIC` the loft case (`loft/three`) whose caps are compared geometrically (all
 points and every face before the caps exactly).
+
+`crates/generators/tests/sweep_loft_r25.rs` (brief 042) measures the R25 rules the helix route error
+and the R20/R25 conflict hide from the golden cases: banking off and the 2-Rail mapping along the
+reference's own ring centres (exact), the R25 loft with `U + 1` (points exact, faces up to rotation
+and reversal; §9a), the Banking-on frame (asserted to still differ), and lathe movement/scaling.
 
 `crates/generators/tests/spline_sampling.rs` runs the 22 O17 cases (`splines-2`): an Extrude
 of offset 20, caps off, over the spline, with the offset negated when the signed area of the

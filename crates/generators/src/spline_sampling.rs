@@ -151,6 +151,15 @@ const LENGTH_PIECES: usize = 50;
 /// its segments' lengths. Lengths are measured on the polyline through every segment at
 /// `t = k/50` and the parameter is interpolated linearly inside a piece.
 fn uniform_points(curve: &Curve, number: usize) -> Vec<DVec3> {
+    uniform_params(curve, number)
+        .into_iter()
+        .map(|s| curve.at(s))
+        .collect()
+}
+
+/// The global parameters (`0..=segments`, see [`Curve::at`]) of the Uniform samples of
+/// [`uniform_points`]; a sweep pairs its rail with its path through them (§10a).
+pub fn uniform_params(curve: &Curve, number: usize) -> Vec<f64> {
     let n_seg = curve.segments.len();
     let mut table = vec![0.0];
     for seg in &curve.segments {
@@ -183,11 +192,8 @@ fn uniform_points(curve: &Curve, number: usize) -> Vec<DVec3> {
                 0.0
             };
             let piece = hi - 1;
-            let (seg, local) = (piece / LENGTH_PIECES, piece % LENGTH_PIECES);
-            Curve::bezier(
-                &curve.segments[seg],
-                (local as f64 + f) / LENGTH_PIECES as f64,
-            )
+            (piece / LENGTH_PIECES) as f64
+                + ((piece % LENGTH_PIECES) as f64 + f) / LENGTH_PIECES as f64
         })
         .collect()
 }

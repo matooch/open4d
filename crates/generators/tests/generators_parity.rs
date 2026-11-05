@@ -16,17 +16,8 @@ const FEATURES: &[&str] = &[
     "symmetry", "array", "connect", "instance", "extrude", "lathe", "loft", "sweep",
 ];
 
-/// Observed cases not derived yet.
-const UNSUPPORTED: &[&str] = &[
-    // pending brief 042: Lathe movement/scaling
-    "lathe/movement",
-    // pending brief 042: Loft linear interpolation
-    "loft/linear",
-    // pending brief 042: Sweep rail spline (2-Rail, rail direction and scale)
-    "sweep/rail",
-    // pending brief 042: Sweep with Banking off
-    "sweep/banking",
-];
+/// Observed cases not derived yet (none: every observed option is built).
+const UNSUPPORTED: &[&str] = &[];
 
 /// Cases we build but that differ, pinned so a fix shows up (GENERATORS2.md §9–10: a
 /// 6-point loft section snaps two samples to segment starts; the sweep frame along a
@@ -34,14 +25,19 @@ const UNSUPPORTED: &[&str] = &[
 const KNOWN_MISMATCH: &[&str] = &[
     "loft/mesh-subdivision",
     "sweep/helix",
-    // pending brief 042: Lathe partial angle (the open lathe's end cap / seam faces)
-    "lathe/partial",
-    // pending brief 042: Sweep end scale/rotation in R25 (rings 0..590 of 901 match, later
-    // rings drift up to 2.3; end caps are N-gons in R25, ours triangles)
-    "sweep/scale-end",
-    // pending brief 042: Loft R25 ring and caps (the R25 export has U = 16 points per ring,
-    // ours U - 1, and N-gon end caps, ours triangles; same in rechecks/loft-defaults)
+    // brief 042, R20/R25 conflict (GENERATORS2.md §9a): the R25 loft has U points per ring
+    // (R20: U - 1) and lists its quads in the other order; the production default stays R20.
+    // Positions and face set match with U + 1 (`tests/sweep_loft_r25.rs`).
     "loft/three-circles",
+    "loft/linear",
+    // brief 042, the R25 uniform helix route is off by up to 3.5e-4 (`splines-2/helix-uniform`,
+    // GENERATORS2.md §6.1) and the sweep frames amplify it. Banking off (`sweep/banking`) and
+    // the 2-Rail mapping (`sweep/rail`: the rail helix is off by 2e-2) match along the
+    // reference's own ring centres (`tests/sweep_loft_r25.rs`). `sweep/scale-end` also has
+    // the Banking-on frame mismatch of `sweep/helix` (GENERATORS2.md §10a).
+    "sweep/banking",
+    "sweep/rail",
+    "sweep/scale-end",
 ];
 
 /// Cases whose caps contain an exactly cocircular quad that the reference splits the other
@@ -136,7 +132,7 @@ fn generators_match_the_reference() {
     let want: std::collections::BTreeSet<String> =
         UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 13 + 11 + 7 + 3, "{matched:?}");
+    assert_eq!(matched.len(), 13 + 11 + 9 + 3, "{matched:?}");
 }
 
 /// Exact positions and faces up to a trailing run of triangles in both meshes (the

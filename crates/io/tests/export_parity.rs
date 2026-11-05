@@ -29,28 +29,21 @@ const GENERATORS: &[&str] = &[
 ];
 
 /// Cases whose options are observed but not built (none today; asserted exactly).
-const UNSUPPORTED: &[&str] = &[
-    // pending brief 042: Lathe movement/scaling
-    "lathe/movement",
-    // pending brief 042: Loft linear interpolation
-    "loft/linear",
-    // pending brief 042: Sweep rail spline (2-Rail, rail direction and scale)
-    "sweep/rail",
-    // pending brief 042: Sweep with Banking off
-    "sweep/banking",
-];
+const UNSUPPORTED: &[&str] = &[];
 
 /// Built but differing from the reference, pinned like in `generators_parity.rs`
-/// (GENERATORS2.md §9–10). Through the writer they still differ.
+/// (GENERATORS2.md §9–10, §9a, §10a). Through the writer they still differ.
 const KNOWN_MISMATCH: &[&str] = &[
     "loft/mesh-subdivision",
     "sweep/helix",
-    // pending brief 042: Lathe partial angle (open lathe caps / seam faces)
-    "lathe/partial",
-    // pending brief 042: Sweep end scale/rotation in R25
-    "sweep/scale-end",
-    // pending brief 042: Loft R25 ring (U points) and N-gon caps
+    // brief 042: R20/R25 loft conflict (U points per ring, quad order)
     "loft/three-circles",
+    "loft/linear",
+    // brief 042: the uniform helix route is off by up to 3.5e-4; scale-end also the
+    // Banking-on frame
+    "sweep/banking",
+    "sweep/rail",
+    "sweep/scale-end",
 ];
 
 /// Exact except for trailing cut / cap triangles whose cocircular Delaunay ties the
@@ -268,7 +261,7 @@ fn golden_scenes_through_the_writer_match_the_reference() {
         set(KNOWN_MISMATCH),
         "known-mismatch set changed"
     );
-    assert_eq!(matched.len(), 75 + 31 + 3, "{matched:?}");
+    assert_eq!(matched.len(), 75 + 33 + 3, "{matched:?}");
 }
 
 #[test]

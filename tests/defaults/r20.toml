@@ -72,8 +72,12 @@ movement = [0.0, 0.0, 20.0]  # O4 row `movement_z`; R25 has one Offset number in
 
 [lathe]
 subdivision = 24
+cap_type = "triangles"
 
 [loft]
 mesh_subdivision_u = 30
 mesh_subdivision_v = 10
+cap_type = "triangles"
+
+[sweep]
 cap_type = "triangles"

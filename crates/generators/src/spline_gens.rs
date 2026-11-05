@@ -7,6 +7,7 @@ use forge_geometry::PolyMesh;
 use forge_geometry::triangulate::{triangulate_delaunay, triangulate_poly};
 use glam::DVec3;
 
+use crate::spline_sampling::{Interpolation, uniform_params};
 use crate::splines::{Curve, is_spline, placed_curve};
 use crate::{BuildError, Params};
 
@@ -15,11 +16,12 @@ pub const LATHE: &str = "forge.lathe";
 pub const LOFT: &str = "forge.loft";
 pub const SWEEP: &str = "forge.sweep";
 
-/// The spline children a generator consumes (§0): extrude/lathe 1, sweep 2, loft all.
+/// The spline children a generator consumes (§0): extrude/lathe 1, sweep 3 (profile, path,
+/// rail), loft all.
 pub(crate) fn spline_input_count(type_id: &str) -> Option<usize> {
     match type_id {
         EXTRUDE | LATHE => Some(1),
-        SWEEP => Some(2),
+        SWEEP => Some(3),
         LOFT => Some(usize::MAX),
         _ => None,
     }
@@ -87,7 +89,7 @@ pub(crate) fn lathe_type() -> NodeType {
                     .range(0.0, f64::MAX)
                     .unit(Unit::Percent),
             ),
-        "triangles",
+        "ngons",
     )
 }
 
@@ -110,7 +112,7 @@ pub(crate) fn loft_type() -> NodeType {
             ))
             // UV-only: the mesh is the same either way (loft observation, Adapt UV row).
             .param(ParamDesc::bool("adapt_uv", "Adapt UV", true)),
-        "triangles",
+        "ngons",
     )
 }
 
@@ -155,7 +157,7 @@ pub(crate) fn sweep_type() -> NodeType {
             .param(ParamDesc::bool("use_rail_scale", "Use rail scale", true))
             // UV-only.
             .param(ParamDesc::bool("stick_uvs", "Stick UVs", false)),
-        "triangles",
+        "ngons",
     )
 }
 
@@ -269,22 +271,24 @@ pub fn lathe(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMesh
     let ty = lathe_type();
     let p = Params { ty: &ty, values };
     no_fillets(&p)?;
-    if p.float("movement") != 0.0 || (p.float("scaling") - 100.0).abs() > 1e-9 {
-        return Err(BuildError::Unsupported("lathe movement/scaling"));
-    }
+    let (movement, scaling) = (p.float("movement"), p.float("scaling") / 100.0);
     let profile = curve.points();
     let m = profile.len();
     let (angle, seg) = (p.float("angle"), p.int("subdivision"));
-    let full = (angle.abs() - std::f64::consts::TAU).abs() < 1e-9;
+    // A full turn closes on itself only when nothing moves or scales along it (§8).
+    let full = (angle.abs() - std::f64::consts::TAU).abs() < 1e-9
+        && movement == 0.0
+        && (scaling - 1.0).abs() < 1e-12;
     let columns = if full { seg } else { seg + 1 };
     let mut points = Vec::with_capacity(columns * m);
     for k in 0..columns {
-        let (s, c) = (angle * k as f64 / seg as f64).sin_cos();
-        points.extend(
-            profile
-                .iter()
-                .map(|q| DVec3::new(q.x * c - q.z * s, q.y, q.x * s + q.z * c)),
-        );
+        let f = k as f64 / seg as f64;
+        let (s, c) = (angle * f).sin_cos();
+        let scale = 1.0 + (scaling - 1.0) * f;
+        points.extend(profile.iter().map(|q| {
+            let (x, z) = (q.x * scale, q.z * scale);
+            DVec3::new(x * c - z * s, q.y + movement * f, x * s + z * c)
+        }));
     }
     let at = |k: usize, j: usize| ((k % columns) * m + j % m) as u32;
     let rows = if curve.closed { m } else { m - 1 };
@@ -296,13 +300,23 @@ pub fn lathe(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMesh
     }
     if !full && curve.closed {
         let cap_type = p.enumeration("cap_type");
+        let ngon = cap_type == "ngons";
         if p.enumeration("cap_start") == "cap" {
             let q: Vec<u32> = (0..m).map(|j| at(0, j)).collect();
-            polys.extend(cap_faces(&points, &q, true, &cap_type)?);
+            if ngon {
+                // R25 lathe n-gon: the reversed outline from the last point (`lathe/partial`)
+                polys.push(q.iter().rev().copied().collect());
+            } else {
+                polys.extend(cap_faces(&points, &q, true, &cap_type)?);
+            }
         }
         if p.enumeration("cap_end") == "cap" {
             let q: Vec<u32> = (0..m).map(|j| at(seg, j)).collect();
-            polys.extend(cap_faces(&points, &q, false, &cap_type)?);
+            if ngon {
+                polys.push(q);
+            } else {
+                polys.extend(cap_faces(&points, &q, false, &cap_type)?);
+            }
         }
     }
     Ok(PolyMesh { points, polys })
@@ -323,15 +337,6 @@ pub(crate) fn evaluate_spline_gen(
     let Some(first) = curves.first() else {
         return Ok(None);
     };
-    if type_id == SWEEP
-        && scene.node(id).is_some_and(|n| {
-            let splines = |c: &&NodeId| scene.node(**c).is_some_and(|n| is_spline(&n.type_id));
-            n.children.iter().filter(splines).count() > 2
-        })
-    {
-        // A third spline is the rail (profile, path, rail); its rules are not derived.
-        return Err(BuildError::Unsupported("sweep with a rail spline"));
-    }
     if type_id != EXTRUDE && curves.iter().any(|c| !c.extra.is_empty()) {
         return Err(BuildError::Unsupported("a spline with several loops"));
     }
@@ -340,15 +345,34 @@ pub(crate) fn evaluate_spline_gen(
         LATHE => lathe(first, values).map(Some),
         LOFT => loft(&curves, values).map(Some),
         _ if curves.len() < 2 => Ok(None),
-        _ => sweep(&curves[0], &curves[1], values).map(Some),
+        _ => sweep(&curves[0], &curves[1], curves.get(2), values).map(Some),
     }
 }
 
 /// Start and end caps of a ring `q` (closed outline) as Delaunay triangles in the
 /// reference's listing: the start wound like `q`, the end reversed (§9, §10;
 /// GEOMETRY.md §6.1).
-fn triangle_caps(points: &[DVec3], start: &[u32], end: &[u32], p: &Params) -> Vec<Vec<u32>> {
+fn triangle_caps(
+    points: &[DVec3],
+    start: &[u32],
+    end: &[u32],
+    p: &Params,
+) -> Result<Vec<Vec<u32>>, BuildError> {
     let mut out = Vec::new();
+    match p.enumeration("cap_type").as_str() {
+        "ngons" => {
+            // one n-gon per cap, wound like the triangles (`rechecks/loft-defaults`)
+            if p.enumeration("cap_start") == "cap" {
+                out.push(start.to_vec());
+            }
+            if p.enumeration("cap_end") == "cap" {
+                out.push(end.iter().rev().copied().collect());
+            }
+            return Ok(out);
+        }
+        "quadrangles" => return Err(BuildError::Unsupported("quadrangle caps of rings")),
+        _ => {}
+    }
     if p.enumeration("cap_start") == "cap" {
         out.extend(
             triangulate_delaunay(points, start)
@@ -364,7 +388,7 @@ fn triangle_caps(points: &[DVec3], start: &[u32], end: &[u32], p: &Params) -> Ve
                 .map(|t| t.to_vec()),
         );
     }
-    out
+    Ok(out)
 }
 
 /// Loft (§9): closed sections sampled uniformly in spline parameter, joined by cubic
@@ -373,11 +397,7 @@ pub fn loft(curves: &[Curve], values: &BTreeMap<String, Value>) -> Result<PolyMe
     let ty = loft_type();
     let p = Params { ty: &ty, values };
     no_fillets(&p)?;
-    if p.bool("organic_form")
-        || p.bool("loop")
-        || p.bool("linear_interpolation")
-        || !p.bool("subdivision_per_segment")
-    {
+    if p.bool("organic_form") || p.bool("loop") || !p.bool("subdivision_per_segment") {
         return Err(BuildError::Unsupported(
             "loft options other than the defaults",
         ));
@@ -390,6 +410,7 @@ pub fn loft(curves: &[Curve], values: &BTreeMap<String, Value>) -> Result<PolyMe
     }
     let u = p.int("mesh_subdivision_u") - 1;
     let v = p.int("mesh_subdivision_v");
+    let linear = p.bool("linear_interpolation");
     let sections: Vec<Vec<DVec3>> = curves
         .iter()
         .map(|c| {
@@ -416,6 +437,10 @@ pub fn loft(curves: &[Curve], values: &BTreeMap<String, Value>) -> Result<PolyMe
             for column in &columns {
                 let pt = |m: usize| column[m];
                 let (p0, p1) = (pt(k), pt(k + 1));
+                if linear {
+                    points.push(p0 + (p1 - p0) * t);
+                    continue;
+                }
                 // Tangent at section m, scaled to the chord of the segment it serves.
                 let tangent = |m: usize, chord: f64| {
                     let dir = if m == 0 {
@@ -444,7 +469,7 @@ pub fn loft(curves: &[Curve], values: &BTreeMap<String, Value>) -> Result<PolyMe
     }
     let start: Vec<u32> = (0..u).map(|i| r(0, i)).collect();
     let end: Vec<u32> = (0..u).map(|i| r(rows - 1, i)).collect();
-    polys.extend(triangle_caps(&points, &start, &end, &p));
+    polys.extend(triangle_caps(&points, &start, &end, &p)?);
     Ok(PolyMesh { points, polys })
 }
 
@@ -453,13 +478,13 @@ pub fn loft(curves: &[Curve], values: &BTreeMap<String, Value>) -> Result<PolyMe
 pub fn sweep(
     profile: &Curve,
     path: &Curve,
+    rail: Option<&Curve>,
     values: &BTreeMap<String, Value>,
 ) -> Result<PolyMesh, BuildError> {
     let ty = sweep_type();
     let p = Params { ty: &ty, values };
     no_fillets(&p)?;
-    if !p.bool("banking")
-        || !p.bool("constant_cross_section")
+    if !p.bool("constant_cross_section")
         || p.float("start_growth") != 0.0
         || p.float("end_growth") != 100.0
         || p.bool("parallel_movement")
@@ -476,6 +501,11 @@ pub fn sweep(
         return Err(BuildError::Unsupported("sweep along a single point"));
     }
     let closed = path.closed;
+    let banking = p.bool("banking");
+    if let Some(rail) = rail {
+        let points = rail_rings(&shape, path, rail, &p)?;
+        return sweep_faces(points, n, m, profile.closed, closed, &p);
+    }
     let unit = |a: DVec3, b: DVec3| (b - a).normalize_or_zero();
     let (incoming, outgoing): (Vec<Option<DVec3>>, Vec<Option<DVec3>>) = (0..n)
         .map(|k| {
@@ -534,7 +564,14 @@ pub fn sweep(
     let mut points = Vec::with_capacity(n * m);
     for k in 0..n {
         let t = tangents[k];
-        if k > 0 {
+        if !banking {
+            // Banking off: the profile's x axis stays horizontal, `Y × tangent` (`sweep/banking`);
+            // where the tangent is vertical it keeps the previous normal.
+            let side = DVec3::Y.cross(t);
+            if side.length() > 1e-6 {
+                normal = side.normalize();
+            }
+        } else if k > 0 {
             // parallel transport of the normal from the previous tangent to this one
             let q = glam::DQuat::from_rotation_arc(tangents[k - 1], t);
             normal = (q * normal).normalize_or_zero();
@@ -558,8 +595,82 @@ pub fn sweep(
             route[k] + normal * (x * mitre) + binormal * y
         }));
     }
+    sweep_faces(points, n, m, profile.closed, closed, &p)
+}
+
+/// 2-Rail sweep (§10a): ring `k` is the profile's x extent mapped onto the segment from path
+/// point `k` to the rail point at the same spline parameter; the profile's y is dropped
+/// (`sweep/rail`, parity-pending).
+fn rail_rings(
+    shape: &[DVec3],
+    path: &Curve,
+    rail: &Curve,
+    p: &Params,
+) -> Result<Vec<DVec3>, BuildError> {
+    if !(p.bool("two_rail") && p.bool("use_rail_direction") && p.bool("use_rail_scale")) {
+        return Err(BuildError::Unsupported(
+            "sweep rail options other than the defaults",
+        ));
+    }
+    if p.float("end_scale") != 100.0 || p.float("end_rotation") != 0.0 {
+        return Err(BuildError::Unsupported(
+            "sweep rail with end scale or rotation",
+        ));
+    }
+    // Rail point k: the rail at the path point's spline parameter (`sweep/rail`: the rail rings'
+    // z fractions are exactly k/900); polylines pair point by point.
+    let route = path.points();
+    let rail_points: Vec<DVec3> = if path.linear || rail.linear {
+        let r = rail.points();
+        if r.len() != route.len() {
+            return Err(BuildError::Unsupported(
+                "sweep rail with another point count",
+            ));
+        }
+        r
+    } else if path.sampling.mode == Interpolation::Uniform
+        && path.sampling.number > 0
+        && !path.closed
+        && rail.segments.len() == path.segments.len()
+    {
+        uniform_params(path, path.sampling.number)
+            .into_iter()
+            .map(|s| rail.at(s))
+            .collect()
+    } else {
+        return Err(BuildError::Unsupported(
+            "sweep rail other than a curve with the path's segments and uniform points",
+        ));
+    };
+    let lo = shape.iter().map(|q| q.x).fold(f64::INFINITY, f64::min);
+    let hi = shape.iter().map(|q| q.x).fold(f64::NEG_INFINITY, f64::max);
+    if hi - lo < 1e-9 {
+        return Err(BuildError::Unsupported(
+            "sweep rail with a profile of no width",
+        ));
+    }
+    let mut points = Vec::with_capacity(route.len() * shape.len());
+    for (a, b) in route.iter().zip(&rail_points) {
+        points.extend(
+            shape
+                .iter()
+                .map(|q| *a + (*b - *a) * ((q.x - lo) / (hi - lo))),
+        );
+    }
+    Ok(points)
+}
+
+/// Quads per ring pair and profile span, plus the caps of open paths.
+fn sweep_faces(
+    points: Vec<DVec3>,
+    n: usize,
+    m: usize,
+    profile_closed: bool,
+    closed: bool,
+    p: &Params,
+) -> Result<PolyMesh, BuildError> {
     let ring = |k: usize, i: usize| ((k % n) * m + i % m) as u32;
-    let spans = if profile.closed { m } else { m - 1 };
+    let spans = if profile_closed { m } else { m - 1 };
     let rings = if closed { n } else { n - 1 };
     let mut polys = Vec::new();
     for k in 0..rings {
@@ -572,10 +683,10 @@ pub fn sweep(
             ]);
         }
     }
-    if !closed && profile.closed {
+    if !closed && profile_closed {
         let start: Vec<u32> = (0..m).rev().map(|i| ring(0, i)).collect();
         let end: Vec<u32> = (0..m).rev().map(|i| ring(n - 1, i)).collect();
-        polys.extend(triangle_caps(&points, &start, &end, &p));
+        polys.extend(triangle_caps(&points, &start, &end, p)?);
     }
     Ok(PolyMesh { points, polys })
 }
