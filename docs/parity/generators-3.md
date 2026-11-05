@@ -120,7 +120,7 @@ Every case below was exported and has `case.toml` + `mesh.obj` under
 
 Brief 043 matched every case above except the strict point and face numbering of the four
 `boole/r25-*` cases (BOOLE.md §5a, parity-pending), and Loop on non-quad input. These cases
-separate the hypotheses it could not; run them like the cases above, R25 defaults.
+separate the hypotheses it could not; run them like the cases above, R25 defaults. The `sweep/` and `lathe/` rows come from brief 042 (helix route, banking frame, 2-Rail profile, Lathe scaling).
 
 | Case (folder) | Generator | Children | Changed from default |
 |---|---|---|---|
@@ -131,6 +131,14 @@ separate the hypotheses it could not; run them like the cases above, R25 default
 | boole/r25-union-uneven | Boole | two default cubes, the second at (30, 50, 70) | Boolean Type A union B |
 | boole/r25-a_minus_b-uneven | Boole | the same | Boolean Type A subtract B |
 | subdivision/r25-loop-pyramid | Subdivision Surface | a default Pyramid | Type OpenSubdiv Loop |
+| sweep/r25-helix-sub4 | Sweep | a Circle profile (radius 20) and a default Helix with Subdivision 4 | – (also export the Helix alone as a spline with its Bezier handles) |
+| sweep/r25-helix-sub8 | Sweep | the same, Helix Subdivision 8 | – |
+| sweep/r25-helix-radius | Sweep | the same, Helix End Radius 400 | – |
+| sweep/r25-banking-planar | Sweep | a Circle profile (radius 20) and a default Flower spline | Banking on (default) |
+| sweep/r25-scale-end-only | Sweep | a Circle profile and a straight 2-point Linear spline of length 400 | End Scale 50 % |
+| sweep/r25-banking-off-rotated | Sweep | a Circle profile and a default Helix rotated 90° about X | Banking off |
+| sweep/r25-rail-rectangle | Sweep | a Rectangle profile (100 × 50), a default Helix and a second Helix with End Radius 400 | – (2-Rail on by default) |
+| lathe/r25-scaling-50 | Lathe | a default Arc spline | Scaling 50 % |
 
 ## Notes
 
