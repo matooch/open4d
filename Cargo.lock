@@ -1647,6 +1647,7 @@ dependencies = [
  "forge-fields",
  "forge-generators",
  "forge-geometry",
+ "forge-noise",
  "forge-parity-harness",
  "glam",
  "toml",

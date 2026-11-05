@@ -210,7 +210,7 @@ pub fn evaluate(scene: &Scene, id: NodeId, ctx: &EvalCtx) -> Result<Option<PolyM
     let mut mesh = evaluate_geometry(scene, id, ctx)?;
     if let Some(mesh) = mesh.as_mut() {
         for d in deformer_children(scene, id) {
-            forge_modifiers::apply_deformer(scene, d, id, &mut mesh.points, ctx);
+            forge_modifiers::apply_deformer_mesh(scene, d, id, mesh, ctx);
         }
     }
     Ok(mesh)

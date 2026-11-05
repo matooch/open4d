@@ -4,7 +4,8 @@
 - Each: parameter list, defaults, math, golden mesh comparison.
 
 Bend, Twist, Taper, Bulge, Shear, Spherify, Squash & Stretch and Wrap are specified below
-(§0–7, §9); falloff is §10. Sources:
+(§0–7, §9); falloff is §10; Explosion, Shatter and Wind are §11–12 (brief 053, source
+docs/parity/deformers-3.md O19). Sources:
 docs/parity/{bend,twist,deformer-common,taper,bulge,shear,spherify,deformers-2,followups-1}.md and their golden
 cases. Everything else is still a checklist item.
 
@@ -599,3 +600,121 @@ own list).
 - A negative or >1 weight (Strength 200 % on the field) extrapolating vs. clamping: a Bend
   with Strength 200 % and Clamp Max off.
 - Spherify's `p/|p|` with falloff at the origin (no data).
+
+## 11. Explosion (`forge.explosion`) and Shatter (`forge.shatter`)
+
+Source: O19 [deformers-3.md](../parity/deformers-3.md); golden `tests/golden/{explosion,shatter}`
+(`defaults`, `strength-50` each). `explosion-fx/frame-10` belongs to O45 / another brief and
+is not covered here. Neither deformer has a Falloff group in the reference, so neither has
+a `fields` param; both carry `enabled` (§0).
+
+| Key | Label | Type | Default | Range | On |
+|---|---|---|---|---|---|
+| `strength` | Strength | percent | 0 | 0…100 | both |
+| `speed` | Speed | float | 100 | any | Explosion |
+| `angle_speed` | Angle Speed | angle | 100° | any | both |
+| `end_size` | End Size | percent | 0 | 0…1000 | both |
+| `randomness` | Randomness | percent | 100 | 0…100 | both |
+
+Case files use `strength_percent`, `angle_speed_deg`, `end_size`, `randomness_percent`.
+
+### Topology (derived)
+Both deformers **split the mesh into its polygons**: the result has the same polygon list
+(same order, same corner order) but every polygon owns its own points, polygon `i` using
+points `n·i … n·i + n − 1` (`explosion/strength-50`, `shatter/strength-50`: 640 points,
+160 faces, face `i` = `4i+1…4i+4`). The points of an island are moved rigidly. This needs the
+whole mesh, so the two deformers use `apply_deformer_mesh` (the points-only
+`apply_deformer` ignores them). With `strength = 0` the mesh is returned **unchanged and
+not split** (`explosion/defaults`, `shatter/defaults`: the export of the cube is identical
+to the undeformed cube).
+
+### Rigid motion per polygon (derived, proven by both strength-50 cases)
+Each polygon `P` with centre `c` (mean of its points) goes to
+`c' + k · Rot · (p − c)` for every point `p`, with a rotation `Rot`, a uniform scale `k` and
+a new centre `c'`. A Kabsch fit of all 160 polygons of each case gives residual 0 (≤ 1e-6)
+with `k = 0.5` exactly. With `s = strength/100`:
+
+- `k = 1 + (end_size/100 − 1)·s` (`strength-50`, `end_size 0`: `1 − s = 0.5`).
+  **Parity-pending:** linear in `s` and the unit of `end_size`: one strength only.
+- `Rot = Ry(ey) · Rx(ex) · Rz(ez)` with the three angles independent and uniform in
+  `±h`, `h = 0.75 · angle_speed · s` (37.5° at 100°, 50 %). Proven by the Euler fit of the
+  320 rotations: of the six axis orders only `Y X Z` gives a symmetric spread, max
+  |angle| 36.6–37.5° on each of the three axes (both deformers), std ≈ 21.5 ≈ 37.5/√3.
+  **Parity-pending:** the factor 0.75 and the linearity in `s` and `angle_speed`.
+
+### Centre `c'`
+- **Explosion:** `c' = c + d`, `|d|` uniform in `[0, 15 · speed · s]` (max measured 749.06
+  of 750 = 15·100·0.5; the 160 lengths fill 8 histogram bins evenly), direction a unit
+  vector with a **radial bias**: `normalize(normalize(c) + 1.5·R·v)` with `v` a uniform unit
+  vector and `R = randomness/100`. Measured mean of `dir·normalize(c)` is 0.405 (a pure random
+  direction would give 0; the blend factor 1.5 gives 0.44, 1.65 gives 0.40).
+  **Parity-pending:** all of it (one strength, one speed, one randomness); the 15, the bias
+  law and the role of `R`.
+- **Shatter:** `y' = y · (1 − min(1, 2s))` (all 160 centres land exactly on y = 0 at
+  `s = 0.5`; the law between 0 and 0.5 is a guess), and `x' = x + dx`, `z' = z + dz` with
+  `dx, dz = 100 · s · R · (u1 + u2 − 1)` (a triangular spread: measured std 20.8 and 19.1,
+  max 46.7 of 50, lengths peaked around 25). **Parity-pending:** all of it.
+
+`R < 1`: every uniform draw `u` is replaced by `(1 − R)/2 + R·u`, so `R = 0` gives no
+rotation and no random offset. **Parity-pending** (never observed below 100 %).
+
+### Random stream (not matchable; compared statistically)
+The reference draws from one seeded stream polygon by polygon: Shatter polygon `7m + 6` has
+the same rotation as Explosion polygon `6m + 5` for every block `m` (22 pairs, equal to
+1e-4°), i.e. Shatter consumes 6 values and Explosion 7 per polygon from the same seed.
+The generator itself is not known, so values cannot be reproduced. Ours is SplitMix64
+seeded with `ctx.seed` (deterministic, each polygon draws in order). The strength-50 cases
+therefore **cannot match point by point**; `KNOWN_MISMATCH` pins the exact comparison and the
+parity test applies the same *statistical* checks to the golden and to our mesh (§9):
+topology, `k`, rigidity, Euler range / spread, Shatter `y = 0` and offset bounds, Explosion
+`|d|` bound and radial bias.
+Follow-up case suggestions: strength 25 % and 100 %, End Size 100 %, Randomness 0 %, Speed
+and Angle Speed 0 and 200 on a 1-polygon plane (a single polygon pins each law
+in one read), and the same on a 2-polygon plane to see the stream order.
+
+## 12. Wind (`forge.wind`)
+
+Source: O19; golden `tests/golden/wind/frame-10` (cube 4/8/4, defaults, frame 10 at 30 fps).
+
+| Key | Label | Type | Default | Range |
+|---|---|---|---|---|
+| `amplitude` | Amplitude | float | 50 | ≥ 0 |
+| `size` | Size | float | 100 | ≥ 0 |
+| `frequency` | Frequency | float | 1 | ≥ 0 |
+| `turbulence` | Turbulence | percent | 50 | 0…100 |
+| `fx`, `fy` | fx, fy | float | 1, 1 | ≥ 0 |
+| `flag` | Flag | bool | on | – |
+| `fields`, `enabled` | | | | §10, §0 |
+
+The cube keeps its topology. Time comes from `EvalCtx.time` (frame 10 at 30 fps = 1/3 s).
+
+### Derived (all 162 points of `wind/frame-10`)
+- Only **z** moves; x and y are exact, the face list is unchanged.
+- The offset `dz` is a function of `(x, y)` only (equal for every z).
+- `dz = 0` exactly at `x = 0`; `dz` has the sign of `x`; `|dz|` is at most 72.44, below
+  `1.5 · amplitude = 75`. Along y it is smooth, peaking near y = −50 for x = 100 (61.4)
+  and falling to 27–42 at y = ±200.
+
+### Model (ours, parity-pending)
+In the deformer's local space with `q = (x·fx/size, y·fy/size, t·frequency)`, `t` seconds,
+`turb = turbulence/100`:
+`n = 1 + 0.5 · (perlin(q) + turb · perlin(2q + offset)) / (1 + turb)` (a gust in
+`0.5…1.5`, never reversing: the golden `dz` has the sign of `x` at all 162 points), and
+`dz = amplitude · n · g(x)` with `g(x) = sign(x) · sqrt(min(1, |x|/size))` when `flag` is on
+(pinned along x = 0), else 1. `size = 0` or `amplitude = 0` leaves the points alone.
+The reference noise function is not known, so the exact values cannot be matched; the
+test checks the invariants above on both meshes plus `max|dz| ≤ 1.5·amplitude`.
+**Parity-pending:** noise type and range, the weight `g` (measured mean `|dz|/amplitude` is
+about 0.81 at |x| = 50 and 0.94 at |x| = 100, between a square-root and a linear weight),
+`fx`/`fy` as sampling factors, `flag` off, the role of `frequency` and `turbulence`.
+The case file has no `frame` / `fps` keys although its description and the form (O19) say
+frame 10 at 30 fps; the test uses 10 / 30 when they are absent.
+Follow-up case suggestions: frame 0 and frame 20 (does it move over time), `flag` off,
+`size` 50 / 200, a plane with 1 row of points along x (to read `g` and the noise).
+
+## 13. Parity of §11–12
+
+Test: `crates/modifiers/tests/destructive_parity.rs`, features `explosion` (2), `shatter`
+(2), `wind` (1). Exact (`export_weld`, `compare_meshes`): `explosion/defaults`,
+`shatter/defaults`. `KNOWN_MISMATCH` (statistical checks pass instead): `explosion/strength-50`,
+`shatter/strength-50` (random stream), `wind/frame-10` (noise function).

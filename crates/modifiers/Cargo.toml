@@ -11,6 +11,7 @@ workspace = true
 forge-core = { path = "../core" }
 forge-fields = { path = "../fields" }
 forge-geometry = { path = "../geometry" }
+forge-noise = { path = "../noise" }
 glam = "0.34"
 
 [dev-dependencies]

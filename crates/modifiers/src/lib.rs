@@ -5,11 +5,13 @@
 pub mod bend;
 pub mod bulge;
 pub mod common;
+pub mod explosion;
 pub mod shear;
 pub mod spherify;
 pub mod squash;
 pub mod taper;
 pub mod twist;
+pub mod wind;
 pub mod wrap;
 
 use forge_core::{
@@ -17,6 +19,7 @@ use forge_core::{
     Value,
 };
 use forge_fields::FieldList;
+use forge_geometry::PolyMesh;
 use glam::{DMat4, DVec3};
 
 use crate::bend::bend;
@@ -25,11 +28,13 @@ use crate::common::{
     BendParams, BulgeParams, DEFAULT_SIZE, MODE_OPTIONS, ShearParams, SpherifyParams, SquashParams,
     TaperParams, TwistParams, WrapParams, read_bool, read_enum, read_float, read_vec3,
 };
+use crate::explosion::{BlastParams, Kind, blast};
 use crate::shear::shear;
 use crate::spherify::spherify;
 use crate::squash::squash_stretch;
 use crate::taper::taper;
 use crate::twist::twist;
+use crate::wind::{WindParams, wind};
 use crate::wrap::wrap;
 
 /// Type id of the Bend deformer (MODIFIERS.md §1).
@@ -48,6 +53,13 @@ pub const SPHERIFY: &str = "forge.spherify";
 pub const SQUASH_STRETCH: &str = "forge.squash_stretch";
 /// Type id of the Wrap deformer (MODIFIERS.md §7.2).
 pub const WRAP: &str = "forge.wrap";
+
+/// Type id of the Explosion deformer (MODIFIERS.md §11).
+pub const EXPLOSION: &str = "forge.explosion";
+/// Type id of the Shatter deformer (MODIFIERS.md §11).
+pub const SHATTER: &str = "forge.shatter";
+/// Type id of the Wind deformer (MODIFIERS.md §12).
+pub const WIND: &str = "forge.wind";
 
 /// The deformer node types.
 pub struct Deformers;
@@ -202,6 +214,54 @@ impl Deformers {
             .param(fields_param())
             .param(enabled_param())
     }
+
+    fn blast_type(id: &str, label: &str, with_speed: bool) -> NodeType {
+        let pct = |id: &str, label: &str, default: f64| {
+            ParamDesc::float(id, label, default).unit(Unit::Percent)
+        };
+        let mut ty = NodeType::new(id, label, Category::Deformer)
+            .param(pct("strength", "Strength", 0.0).range(0.0, 100.0));
+        if with_speed {
+            ty = ty.param(ParamDesc::float("speed", "Speed", 100.0));
+        }
+        ty.param(
+            ParamDesc::float("angle_speed", "Angle Speed", 100f64.to_radians()).unit(Unit::Angle),
+        )
+        .param(pct("end_size", "End Size", 0.0).range(0.0, 1000.0))
+        .param(pct("randomness", "Randomness", 100.0).range(0.0, 100.0))
+        .param(enabled_param())
+    }
+
+    /// Explosion: splits the polygons and flies them apart (MODIFIERS.md §11).
+    pub fn explosion_type() -> NodeType {
+        Self::blast_type(EXPLOSION, "Explosion", true)
+    }
+
+    /// Shatter: splits the polygons and tumbles them in place (MODIFIERS.md §11).
+    pub fn shatter_type() -> NodeType {
+        Self::blast_type(SHATTER, "Shatter", false)
+    }
+
+    /// Wind: a time-dependent noise wave along z (MODIFIERS.md §12).
+    pub fn wind_type() -> NodeType {
+        let len = |id: &str, label: &str, default: f64| {
+            ParamDesc::float(id, label, default).range(0.0, f64::MAX)
+        };
+        NodeType::new(WIND, "Wind", Category::Deformer)
+            .param(len("amplitude", "Amplitude", 50.0))
+            .param(len("size", "Size", 100.0))
+            .param(len("frequency", "Frequency", 1.0))
+            .param(
+                ParamDesc::float("turbulence", "Turbulence", 50.0)
+                    .unit(Unit::Percent)
+                    .range(0.0, 100.0),
+            )
+            .param(len("fx", "fx", 1.0))
+            .param(len("fy", "fy", 1.0))
+            .param(ParamDesc::bool("flag", "Flag", true))
+            .param(fields_param())
+            .param(enabled_param())
+    }
 }
 
 fn box_param() -> ParamDesc {
@@ -255,6 +315,9 @@ impl Plugin for Deformers {
         r.register(Deformers::spherify_type())?;
         r.register(Deformers::squash_stretch_type())?;
         r.register(Deformers::wrap_type())?;
+        r.register(Deformers::explosion_type())?;
+        r.register(Deformers::shatter_type())?;
+        r.register(Deformers::wind_type())?;
         Ok(())
     }
 }
@@ -281,6 +344,7 @@ enum Job {
     Spherify(SpherifyParams),
     Squash(SquashParams),
     Wrap(WrapParams),
+    Wind(WindParams),
 }
 
 /// Applies one deformer node to `points` expressed in `target`'s local space
@@ -372,6 +436,16 @@ pub fn apply_deformer(
             scale_z: read_float(ty, params, "scale_z"),
             tension: read_float(ty, params, "tension"),
         }),
+        WIND => Job::Wind(WindParams {
+            amplitude: read_float(ty, params, "amplitude"),
+            size: read_float(ty, params, "size"),
+            frequency: read_float(ty, params, "frequency"),
+            turbulence: read_float(ty, params, "turbulence"),
+            fx: read_float(ty, params, "fx"),
+            fy: read_float(ty, params, "fy"),
+            flag: read_bool(ty, params, "flag"),
+        }),
+        // Explosion and Shatter change the topology: `apply_deformer_mesh`.
         _ => return,
     };
 
@@ -405,6 +479,7 @@ pub fn apply_deformer(
         Job::Spherify(p) => spherify(points, &p),
         Job::Squash(p) => squash_stretch(points, &p),
         Job::Wrap(p) => wrap(points, &p),
+        Job::Wind(p) => wind(points, &p, ctx.time, ctx.seed),
     }
     if to_target != DMat4::IDENTITY {
         for p in points.iter_mut() {
@@ -415,6 +490,55 @@ pub fn apply_deformer(
         for ((p, p0), w) in points.iter_mut().zip(before).zip(w) {
             *p = p0 + (*p - p0) * w;
         }
+    }
+}
+
+/// [`apply_deformer`] for a whole mesh: Explosion and Shatter split the mesh into its
+/// polygons (MODIFIERS.md §11), every other deformer moves the points only.
+pub fn apply_deformer_mesh(
+    scene: &Scene,
+    deformer: NodeId,
+    target: NodeId,
+    mesh: &mut PolyMesh,
+    ctx: &EvalCtx,
+) {
+    let kind = match scene.node(deformer).map(|n| n.type_id.as_str()) {
+        Some(EXPLOSION) => Kind::Explosion,
+        Some(SHATTER) => Kind::Shatter,
+        _ => return apply_deformer(scene, deformer, target, &mut mesh.points, ctx),
+    };
+    let (Some(node), Some(ty)) = (scene.node(deformer), scene.node_type(deformer)) else {
+        return;
+    };
+    if !is_enabled(ty, node) || !forge_core::layers::deformers_on(scene, deformer) {
+        return;
+    }
+    let params = &node.params;
+    let p = BlastParams {
+        strength: read_float(ty, params, "strength"),
+        speed: if kind == Kind::Explosion {
+            read_float(ty, params, "speed")
+        } else {
+            0.0
+        },
+        angle_speed: read_float(ty, params, "angle_speed"),
+        end_size: read_float(ty, params, "end_size"),
+        randomness: read_float(ty, params, "randomness"),
+    };
+    let (Some(tw), Some(dw)) = (scene.world_matrix(target), scene.world_matrix(deformer)) else {
+        return;
+    };
+    let to_target = tw.inverse() * dw;
+    let to_deformer = to_target.inverse();
+    if !to_deformer.is_finite() {
+        return;
+    }
+    for q in mesh.points.iter_mut() {
+        *q = to_deformer.transform_point3(*q);
+    }
+    blast(mesh, kind, &p, ctx.seed);
+    for q in mesh.points.iter_mut() {
+        *q = to_target.transform_point3(*q);
     }
 }
 
