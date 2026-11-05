@@ -1,0 +1,32 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Cube made editable with 2 x 2 x 2 segments; the 4 top polygons ([16, 17, 18, 19]) beveled in polygon (chamfer) mode with offset 20 and Extrusion 10, the polygon extrusion default (other settings at their Reset Values defaults)"
+mesh = "mesh.obj"
+
+[params]
+tool = "bevel"
+segments = [2, 2, 2]
+select_polys = [16, 17, 18, 19]
+
+[params.settings]
+bevel_mode = "chamfer"
+offset_mode = "fixed_distance"
+offset = 20.0
+subdivision = 0
+depth = 1.0
+limit = true
+shape = "round"
+tension = 1.0
+mitering = "default"
+ending = "default"
+partial_rounding = "none"
+corner_ngons = false
+rounding_ngons = false
+phong_break_rounding = false
+phong_break_miters = false
+realtime_update = true
+extrusion = 10.0
+
+[import]
+scale = 1.0
+flip_z = false

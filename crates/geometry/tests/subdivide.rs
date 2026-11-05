@@ -102,3 +102,35 @@ fn levels_zero_and_one_and_counts() {
     b.sort();
     assert_eq!(a, b);
 }
+
+/// Loop (docs/specs/SUBDIVISION.md §3.3): a closed triangle mesh stays closed, the counts
+/// follow V' = V + E, F' = 4F, and a flat boundary stays flat.
+#[test]
+fn loop_counts_and_boundary() {
+    use forge_geometry::subdivide::subdivide_loop;
+    let tet = forge_geometry::PolyMesh {
+        points: vec![
+            DVec3::new(1.0, 1.0, 1.0),
+            DVec3::new(1.0, -1.0, -1.0),
+            DVec3::new(-1.0, 1.0, -1.0),
+            DVec3::new(-1.0, -1.0, 1.0),
+        ],
+        polys: vec![vec![0, 1, 2], vec![0, 3, 1], vec![0, 2, 3], vec![1, 3, 2]],
+    };
+    let one = subdivide_loop(&tet, 1);
+    assert_eq!((one.points.len(), one.polys.len()), (4 + 6, 16));
+    let two = subdivide_loop(&tet, 2);
+    assert_eq!((two.points.len(), two.polys.len()), (10 + 24, 64));
+    let quad = forge_geometry::PolyMesh {
+        points: vec![
+            DVec3::new(0.0, 0.0, 0.0),
+            DVec3::new(1.0, 0.0, 0.0),
+            DVec3::new(1.0, 1.0, 0.0),
+            DVec3::new(0.0, 1.0, 0.0),
+        ],
+        polys: vec![vec![0, 1, 2, 3]],
+    };
+    let flat = subdivide_loop(&quad, 2);
+    assert!(flat.points.iter().all(|p| p.z == 0.0));
+    assert_eq!(flat.polys.len(), 2 * 16);
+}

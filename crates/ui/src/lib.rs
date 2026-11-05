@@ -12,21 +12,30 @@ pub mod clone_overlay;
 pub mod commands;
 pub mod component_edit;
 pub mod components;
+pub mod console;
+pub mod content_browser;
 pub mod coordinates;
 pub mod crash_notice;
 pub mod cutting;
 pub mod dock;
+pub mod history_panel;
+pub mod hud;
+pub mod icons;
 pub mod keymap;
 pub mod keymap_editor;
+pub mod layer_manager;
 pub mod layout;
 pub mod manipulate;
 pub mod navigation;
 pub mod node_canvas;
 pub mod node_editor;
 pub mod object_manager;
+pub mod palette;
 pub mod panes;
+pub mod prefs;
 pub mod screenshot;
 pub mod script_panel;
+pub mod snapping;
 pub mod state;
 pub mod theme;
 pub mod timeline;
@@ -34,6 +43,7 @@ pub mod tools;
 pub mod tree;
 pub mod viewport_panel;
 pub mod widgets;
+pub mod workspaces;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -141,6 +151,12 @@ pub fn run(registry: Arc<Registry>) -> eframe::Result {
 
 /// Like [`run`], serving the RPC server's requests between frames (docs/specs/RPC.md).
 pub fn run_with_rpc(registry: Arc<Registry>, rpc: Option<forge_rpc::Inbox>) -> eframe::Result {
+    run_with_app(forge_app::App::new(registry), rpc)
+}
+
+/// Like [`run_with_rpc`] over a prepared application (plugins installed by the host).
+pub fn run_with_app(app: forge_app::App, rpc: Option<forge_rpc::Inbox>) -> eframe::Result {
+    let mut app = Some(app);
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         viewport: egui::ViewportBuilder::default()
@@ -160,13 +176,20 @@ pub fn run_with_rpc(registry: Arc<Registry>, rpc: Option<forge_rpc::Inbox>) -> e
                     a.name, a.backend, a.driver, a.driver_info
                 ));
             }
-            let mut state = state::EditorState::new(registry);
+            let mut state = state::EditorState::with_app(app.take().expect("built once"));
             state
                 .script
                 .use_settings_file(forge_platform::settings_path());
             state
                 .keys
                 .use_settings_file(forge_platform::settings_path());
+            state
+                .prefs
+                .use_settings_file(forge_platform::settings_path());
+            state.app.browser.use_files(
+                forge_platform::settings_path(),
+                forge_platform::presets_dir(),
+            );
             if let Some(inbox) = &rpc {
                 let ctx = cc.egui_ctx.clone();
                 inbox.set_wake(move || ctx.request_repaint());
@@ -187,6 +210,8 @@ pub fn run_with_rpc(registry: Arc<Registry>, rpc: Option<forge_rpc::Inbox>) -> e
                     );
                     state.crash_notice = crash_notice::CrashNotice::start_default();
                     let mut editor = app::Editor::new(state);
+                    editor.set_layout_store(workspaces::LayoutStore::platform());
+                    editor.restore_last_layout();
                     if let Some(inbox) = rpc {
                         editor.attach_rpc(inbox);
                     }

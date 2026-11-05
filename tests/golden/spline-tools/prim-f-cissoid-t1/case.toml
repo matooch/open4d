@@ -1,0 +1,27 @@
+feature = "spline-tools"
+observation = "docs/parity/spline-tools.md"
+description = "Default Cissoid with Tension 1 (readback in case.toml, may be clamped)"
+mesh = "mesh.obj"
+
+[params]
+type = "extrude"
+caps = false
+extrude_offset = 20.0
+
+[params.input]
+type = "cissoid_spline"
+cissoid_type = "cissoid"
+width = 400.0
+tension = 1.5
+plane = "xy"
+reverse = false
+intermediate = "adaptive"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+
+
+[import]
+scale = 1.0
+flip_z = false

@@ -1,6 +1,6 @@
 # Spline tools and editable splines — observation (O46)
 
-Status: not observed · App version: TODO · OS: TODO · Observer: TODO · Date: TODO
+Status: done · App version: R25 (25010) · OS: macOS (Darwin 25.6.0) · Observer: Claude (unattended O46 session) · Date: 2026-11-04
 Method: scripted. One modeling command per probe, then a `ping` (QUEUE.md rule 11). No
 dialog commands.
 
@@ -63,5 +63,110 @@ Also export each as a case (`editable-circle`, `editable-rectangle`).
 | prim-f/reverse | a default Star with Reverse on, extruded | – |
 | prim-f/direction-auto | a clockwise closed spline (Star with Reverse) extruded with Direction Auto; and a Circle in the XZ plane, Direction Auto | – |
 
+## Follow-up cases (planner, after briefs 028 and 029)
+
+Briefs 028 and 029 matched the cases above except Create Outline's offset (the export is the
+circle scaled by 1.100013 for distance 20, not a plain offset), and left the rows below open.
+Same export procedure as above.
+
+| Case | Input | Command and settings |
+|---|---|---|
+| outline-r100-d10 | editable circle, radius 100 | Create Outline, distance 10 |
+| outline-rect | editable rectangle | Create Outline, distance 20 |
+| outline-arc-open | editable default Arc (open) | Create Outline, distance 20 |
+| subdivide-3 | editable rectangle, all points selected | Subdivide, subdivisions 3 |
+| chamfer-flat | editable rectangle, all points selected | Chamfer, radius 40, Flat on |
+| chamfer-star | editable default Star, all points selected | Chamfer, radius 10 |
+| bool-circle-rect | an editable circle and an editable rectangle 300 × 100, same centre | Spline Union |
+| bool-nested | an editable circle (radius 200) and one of radius 100, same centre | Spline Subtract |
+| bool-disjoint | two editable circles at x −300 and x 300 | Spline Union |
+| interp-cubic-natural | editable rectangle with point 0 moved by (50, 50, 0) | Type Cubic, Intermediate Points Natural, Number 8 |
+| interp-akima-natural | the same | Type Akima, Intermediate Points Natural, Number 8 |
+| interp-bspline-natural | the same | Type B-Spline, Intermediate Points Natural, Number 8 |
+| tangent-readback-moved | editable circle with point 0 moved by (50, 0, 0) | none; record every point's tangent read-back |
+| editable-bezier-moved-extrude | editable circle, point 0 moved by (50, 0, 0) and its right handle scaled ×2 | Extrude, movement (0, 0, 20) |
+| editable-ring | default Ring made editable | none; record segments and closed flags |
+
+Cross Section is GUI-only: answer it in GUI session G3 if possible.
+
 ## Notes
-TODO
+
+### Editable spline facts (default Circle and Rectangle, each Made Editable)
+
+Read through the app's public point/tangent access after Make Editable; raw values of the
+editable spline's Type / Intermediate Points enums are given as index numbers.
+
+- **Circle** (editable): 4 points, closed, one segment, Type raw 4 (Bezier, the editable
+  default), Intermediate Points raw 2 (Uniform). Positions in order:
+  (200, 0, 0), (0, 200, 0), (−200, 0, 0), (0, −200, 0). Left/right handle vectors
+  (same length ±83):
+  | point | left handle | right handle |
+  |---|---|---|
+  | 0 (200, 0, 0) | (0, −83, 0) | (0, 83, 0) |
+  | 1 (0, 200, 0) | (83, 0, 0) | (−83, 0, 0) |
+  | 2 (−200, 0, 0) | (0, 83, 0) | (0, −83, 0) |
+  | 3 (0, −200, 0) | (−83, 0, 0) | (83, 0, 0) |
+- **Rectangle** (editable): 4 points, closed, one segment, Type raw 0 (Linear — a hard-edge
+  editable spline), Intermediate Points raw 3 (Adaptive). No tangent handles at all (the
+  tangent read returns zero handles). Positions in order: (200, 200, 0), (−200, 200, 0),
+  (−200, −200, 0), (200, −200, 0).
+  A default Circle made editable therefore arrives as a Bezier spline with handles, a
+  default Rectangle as a Linear spline without them.
+
+### interp-f/helix-handles (form only)
+
+Default Helix made editable: 101 points (Subdivision 100), open, Type raw 4 (Bezier),
+Intermediate Points raw 2 (Uniform). Positions and handle vectors of points 0, 1 and 100:
+
+| point | position | left handle | right handle |
+|---|---|---|---|
+| 0 | (200, 0, 0) | (−0, −6.278974, 0.500982) | (0, 6.278974, −0.500982) |
+| 1 | (198.422940, 25.066647, −2) | (0.786964, −6.229462, 0.500982) | (−0.786964, 6.229462, −0.500982) |
+| 100 | (200, 0, −200) | (−0, −6.278974, 0.500982) | (0, 6.278974, −0.500982) |
+
+(The sweep cases under `interp-f-helix-adaptive*` pin the swept geometry.)
+
+### prim-f/cog-tooth — editable Cogwheel structure
+
+Default Cogwheel (20 teeth, see `prim-f-cog-tooth/case.toml` for all input parameters) made
+editable: 244 points, closed, **2 segments**: the outer gear outline (240 points, 12 per
+tooth) followed by the optional centre hole at the end of the list (4 points, radius 15:
+(15, 0, 0), (0, −15, 0), (−15, 0, 0), (0, 15, 0)). Type raw 4 (Bezier), Intermediate Points
+raw 3 (Adaptive). First tooth = points 0–11. Positions and handle vectors:
+
+| pt | position | left handle | right handle |
+|---|---|---|---|
+| 0 | (179.728974, −9.873994, 0) | (−0.058397, −1.062963, 0) | (0.168696, 3.037410, 0) |
+| 1 | (187.479175, −2.794469, 0) | (−3.040238, 0.106165, 0) | (0.773157, 0.063786, 0) |
+| 2 | (190.571804, −2.539326, 0) | (−0.773157, −0.063786, 0) | (1.695476, 0.253842, 0) |
+| 3 | (201.623325, 0.614709, 0) | (−3.739623, −1.465900, 0) | (3.739623, 1.465900, 0) |
+| 4 | (219.763495, 10.329676, 0) | (−5.239800, −3.534309, 0) | (−0.081528, 1.734514, 0) |
+| 5 | (219.321813, 17.261001, 0) | (0.136239, −1.731076, 0) | (−0.136239, 1.731076, 0) |
+| 6 | (218.673759, 24.176085, 0) | (0.190813, −1.725913, 0) | (−5.728177, 2.671110, 0) |
+| 7 | (199.237169, 30.933697, 0) | (3.922899, −0.862846, 0) | (−3.922899, 0.862846, 0) |
+| 8 | (187.828310, 32.320061, 0) | (1.714312, 0.014514, 0) | (−0.773617, −0.057948, 0) |
+| 9 | (184.733844, 32.088268, 0) | (0.773617, 0.057948, 0) | (−2.986199, −0.580456, 0) |
+| 10 | (175.971580, 37.868235, 0) | (0.641775, −2.973624, 0) | (−0.223962, 1.040741, 0) |
+| 11 | (175.026586, 42.020165, 0) | (0.248518, −1.035152, 0) | (−0.248518, 1.035152, 0) |
+
+All z = 0. `prim-f-cog-ratio` changes the tooth Radial Ratio to 3 (default 1.5).
+
+### prim-f/arc-types — Type labels
+
+The Arc Type enum shows, in order: **Arc, Sector, Segment, Ring** (raw 0–3). The other
+three are exported as cases (`prim-f-arc-sector/-segment/-ring`; Ring produces two
+segments); the default Arc itself is already pinned by [splines-2.md](splines-2.md).
+Readback labels used by other enums observed here: Cycloid = Cycloid / Epicycloid /
+Hypocycloid; Cissoid = Cissoid / Lemniscate / Strophoid.
+
+### Other observations
+
+- **Cissoid Tension clamps upward**: 4 was accepted, but a set of 1 reads back as **1.5**
+  (see `prim-f-cissoid-t1`), so the effective minimum is 1.5.
+- **Uniform with Number 0** collapses the spline to its control points (the extruded
+  `interp-f-uniform-0` mesh has only 8 vertices).
+- **Boolean commands order**: for Subtract we got A-at-origin minus overlap with B (at
+  x 150) selected first and A added second; the recipe is pinned in the case commands.
+- **cross-section**: skipped. The Cross Section tool is not reachable from the scripting
+  surface: it has no modeling-command entry and is not registered as a menu command, so
+  driving it without a dialog would need a raw tool id. Needs the GUI (O10 territory).

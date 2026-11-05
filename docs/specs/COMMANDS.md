@@ -44,7 +44,7 @@ the message only, so the editor can put it in the status bar.
 ## 2. Ids
 
 Lowercase ASCII `a-z 0-9 _`, segments joined by `.`, at least two segments
-(`domain.verb[_noun]`). Domains: `object edit view mesh select file key timeline transform
+(`domain.verb[_noun]`). Domains: `object edit view mesh spline select file key timeline transform
 param`. Ids are stable: renaming one is a breaking change.
 
 ## 3. Context
@@ -104,8 +104,22 @@ touch history.
 | `object.create_cloner` | `nodes?` (selection), `name?` (default "Cloner") | `{node}` | yes |
 | `object.visibility` | `nodes?`, `editor?`, `render?` each `default`\|`on`\|`off` (at least one) | null | yes |
 | `object.enable` | `nodes?`, `enabled` | null | yes |
+| `layer.create` | `name?` (default "Layer N"), `color?` [r,g,b] 0..1, `assign?` (true: the new layer takes `nodes`/the selection) | `{layer}` | yes |
+| `layer.delete` | `layers` (ids) | `{deleted, released}` | yes |
+| `layer.rename` | `layer`, `name` | null | yes |
+| `layer.set` | `layers?` (ids; `layer` for one), then at least one of `name`, `color`, `solo`, `view`, `render`, `manager`, `locked`, `animation`, `generators`, `deformers`, `expressions` | `{changed}` | yes |
+| `layer.assign` | `layer` (id, null removes the objects from their layer), `nodes?` (selection) | `{assigned}` | yes |
+| `layer.merge` | `layers` (ids, at least two), `into` (id, one of them) | `{merged, members}` | yes |
+| `browser.list` | `kind?` (`objects`), `query?` (substring of the name) | `{presets: [{id, name, kind, source}]}` | no |
+| `browser.load` | `id`, `parent?` (node id; absent = top level) | `{preset, nodes}` | yes |
+| `browser.save_preset` | `name`, `nodes?` (selection), `overwrite?` (false) | `{id, path}` | no |
+| `browser.delete_preset` | `id` (a `user:` id) | `{deleted}` | no |
+| `browser.recent` | none | `{files: [{index, path, name, exists}]}` | no |
+| `browser.open_recent` | `index` (0 = newest) | as `file.open` | no |
+| `browser.clear_recent` | none | `{cleared}` | no |
 | `edit.undo` | - | `{done}` | no |
 | `edit.redo` | - | `{done}` | no |
+| `edit.history_jump` | `position` (steps applied, 0 ..= undo + redo steps) | `{position, undone, redone}` | no |
 | `view.shading` | `mode` smooth, flat, wire, smooth_wire, flat_wire, quick, constant, hidden_line, bounding_box; `pane?` perspective, top, front, right (default: the active pane) | null | no |
 | `view.frame_all` | - | null | no |
 | `view.frame_selected` | - | null | no |
@@ -116,6 +130,7 @@ touch history.
 | `view.shadows` | `enabled` | null | no |
 | `view.antialias` | `enabled` | null | no |
 | `view.clone_display` | `indices?`, `axes?` (at least one) | null | no |
+| `view.hud` | `item` fps, counts, tool, frame, camera, safe_frames; `pane?` perspective, top, front, right (default: the active pane); `all_panes?` (true: every pane, `pane` ignored); `enabled?` (absent toggles) | null | no |
 | `view.set_camera` | `target?` [x,y,z] world, `distance?`, `yaw?`, `pitch?` (degrees), `projection?` perspective, orthographic, `fov?` (degrees), `height?` (orthographic) | null | no |
 | `view.get_camera` | - | `{target, eye, distance, yaw, pitch, projection, fov?, height?}` | no |
 | `view.gizmo_mode` | `mode` move, rotate, scale | null | no |
@@ -123,6 +138,17 @@ touch history.
 | `object.begin_rename` | - | null | no |
 | `view.toggle_expanded` | `node` | null | no |
 | `mesh.make_editable` | `nodes?` | `{made, skipped}` | yes |
+| `spline.create` | `points` (at least 2), `closed?`, `type?`, `name?`, `parent?` (SPLINES.md §5) | `{node}` | yes |
+| `spline.edit_points` | `node`, `edits: [{index, position?, left?, right?}]`, `gesture?` | `{changed}` | yes (a gesture merges) |
+| `spline.insert_point` | `node`, `index`, `position`, `left?`, `right?` | `{index}` | yes |
+| `spline.delete_points` | `node`, `indices` | `{deleted}` | yes |
+| `spline.set_closed` | `node`, `segment?`, `closed` | null | yes |
+| `spline.set_type` | `nodes?`, `type` linear, cubic, akima, bspline, bezier | `{changed}` | yes |
+| `spline.chamfer` | `node`, `radius?`, `flat?`, `indices?` (SPLINES.md §8.1) | `{points}` | yes |
+| `spline.outline` | `node`, `distance?` (§8.2) | `{segments}` | yes |
+| `spline.boolean` | `op` union, and, or, subtract, intersect; `a`, `b`, `keep_inputs?` (§8.3) | `{node}` | yes |
+| `spline.reverse` | `node` (§8.4) | `{points}` | yes |
+| `spline.subdivide` | `node`, `subdivisions?` (§8.5) | `{points}` | yes |
 | `mesh.current_state_to_object` | `nodes?` | `{made, skipped}` | yes |
 | `mesh.extrude` `mesh.extrude_inner` `mesh.bevel` | `node?`, `polys?`, `settings?`; bevel also `edges?`, `points?` (MODELING.md §0.1, §3) | `{node, points, polys, selected}` | yes |
 | `mesh.subdivide` `mesh.triangulate` `mesh.untriangulate` `mesh.reverse_normals` `mesh.optimize` `mesh.weld` `mesh.melt` `mesh.dissolve` `mesh.split` `mesh.disconnect` `mesh.connect_points` `mesh.mirror` `mesh.center_axis` | `node?`, `polys?`, `settings?`; weld, dissolve and connect_points also `edges?`, `points?` (MODELING.md §0.1, §4) | `{node, points, polys, selected}`; split adds `created`, center_axis adds `center` | yes |
@@ -133,13 +159,18 @@ touch history.
 | `mesh.close_hole` | `node?`, `edge` (id or point pair of a border edge) (MODELING.md §6.3) | `{node, points, polys, new_polys, new_points}` | yes |
 | `mesh.stitch` | `node?`, `points: [[a, b]]` or `edges: [[e, e]]`, `position?` middle\|first (MODELING.md §6.4) | `{node, points, polys, merged}` | yes |
 | `mesh.pen` | `node?`, `corners: [{point} \| {pos}]` (MODELING.md §6.5) | `{node, points, polys, new_polys, new_points}` | yes |
-| `mesh.transform` | `node?`, `points?`, `move?`, `rotate? {axis, angle}`, `scale?`, `pivot?`, `soft?`, `symmetry?` (EDITABLE.md §5.5) | `{node, moved, soft, symmetry}` | yes |
+| `object.duplicate` | `nodes?`, `copies?`, `offset?`, `rotation_deg?`, `scale?`, `mode?` step\|total (MODELING.md §9.2) | `{created, count}` | yes |
+| `object.arrange` | `nodes?`, `mode?` line\|grid\|circle, `spacing?`, `row_spacing?`, `columns?`, `radius?`, `plane?`, `start_angle_deg?` (MODELING.md §9.3) | `{arranged}` | yes |
+| `object.randomize` | `nodes?`, `seed?`, `position?`, `rotation_deg?`, `scale?`, `uniform_scale?` (MODELING.md §9.4) | `{randomized}` | yes |
+| `object.transfer` | `target`, `source?`, `position?`, `rotation?`, `scale?`, `space?` world\|local (MODELING.md §9.5) | `{node}` | yes |
+| `mesh.array_command` | `node?`, `polys?`, `settings?: {copies, offset, rotation_deg, scale, mode}` (MODELING.md §9.6) | `{node, points, polys, selected}` | yes |
+| `mesh.transform` | `node?`, `nodes?`, `space?` (EDITABLE.md §6.4), `points?`, `move?`, `rotate? {axis, angle}`, `scale?`, `pivot?`, `soft?`, `symmetry?` (EDITABLE.md §5.5), `gesture?` | `{node, moved, soft, symmetry}` | yes |
 | `edit.soft_selection` | `enabled?`, `radius?`, `falloff?`, `distance?`, `curve?` (EDITABLE.md §5.1) | the soft selection settings | no |
 | `edit.symmetry` | `enabled?`, `axis?`, `offset?`, `tolerance?` (EDITABLE.md §5.1) | the symmetry settings | no |
 | `select.mode` | `mode` model, points, edges, polys | null | no |
-| `select.all` `select.none` `select.invert` `select.grow` `select.shrink` `select.connected` | - | null | yes |
-| `select.convert` | `to` points, edges, polys; `mode?` strict, tolerant (EDITABLE.md §2.8) | null | yes |
-| `select.loop` `select.ring` | `across?` 0 or 1 (EDITABLE.md §2.8) | null | yes |
+| `select.all` `select.none` `select.invert` `select.grow` `select.shrink` `select.connected` | `nodes?` (polygon objects; the component targets when absent, EDITABLE.md §6.3) | null | yes |
+| `select.convert` | `nodes?`, `to` points, edges, polys; `mode?` strict, tolerant (EDITABLE.md §2.8) | null | yes |
+| `select.loop` `select.ring` | `nodes?`, `across?` 0 or 1 (EDITABLE.md §2.8) | null | yes |
 | `graph.add_node` | `tag`, `type`, `values?`, `pos?` (NODES.md §6) | `{node}` | yes |
 | `graph.remove` | `tag`, `node?`, `nodes?` | `{removed_links}` | yes |
 | `graph.connect` | `tag`, `from_node`, `from_port`, `to_node`, `to_port`, `release_node?`, `release_port?` (type and cycle checked) | `{replaced}` | yes |
@@ -153,9 +184,18 @@ touch history.
 | `file.save` | `path?` (default: current file) | `{path}` | no |
 | `file.save_as` | `path` | `{path}` | no |
 | `file.open_dialog` `file.save_dialog` `file.save_as_dialog` | - | null | no |
+| `ui.command_palette` | - | null | no |
+| `ui.workspace` | `name` (Standard, Modeling, Animate, UV, Rigging, Node) | null | no |
+| `ui.layout_save` | `name` | null | no |
+| `ui.layout_load` | `name` | null | no |
+| `ui.layout_delete` | `name` | null | no |
 | `file.autosave_now` | `wait?` (flush the background write) | `{path, queued}` | no |
 | `file.import_obj` | `path` | `{nodes}` | yes |
 | `file.export_obj` | `path`, `selected?` | `{objects}` | no |
+| `file.import` | `path`, `format?`, `options?` (IO.md §3.4) | `{nodes, format}` | yes |
+| `file.export` | `path`, `format?`, `selected?`, `options?` | `{objects, format}` | no |
+| `io.formats` | - | `{formats}` | no |
+| `file.import_dialog` `file.export_dialog` | `format?` (`selected?` for export) | null | no |
 | `key.record` | - | `{keys}` | yes |
 | `key.delete_at_frame` | - | `{keys}` | yes |
 | `key.set` | `node`, `track`, `frame`, `value` | null | yes |
@@ -180,6 +220,15 @@ touch history.
 | `marker.list` | - | `{markers:[{id,frame,name,color}]}` | no |
 | `marker.jump` | `forward` | `{frame,found}` | no |
 | `transform.set` | `node`, `pos?`, `rot?` (degrees), `scale?` | null | yes |
+| `transform.edit` | `nodes?`, `space?` (`local`, `world`), `pos?`, `rot?` (degrees), `scale?`, `size?` (each `[x|null, y|null, z|null]`), `gesture?` | `{changed}` | yes |
+| `object.set_axis` | `node?`, `pos?`, `rot?` (degrees), `scale?`, `space?` (`local`, `world`) (MANIPULATE.md §7.2) | `{nodes}` | yes |
+| `object.center_axis` | `nodes?`, `to?` (`bounding_box`, `points`, `selection`, `children`) | `{nodes, centers}` | yes |
+| `object.align_axis` | `nodes?`, `to` (`world`, `parent`, `normal`) | `{nodes}` | yes |
+| `edit.axis_mode` | `enabled?` (toggles when absent) | `{enabled}` | no |
+| `snap.set` | `enabled?`, `mode?`, `radius?`, `visible_only?`, `grid_spacing?`, `targets?`, `workplane?`, `quantize?` (MANIPULATE.md §6.1) | the snap settings | no |
+| `snap.toggle` | `enabled?` | `{enabled}` | no |
+| `snap.reset` | - | the snap settings | no |
+| `snap.query` | `point`, `radius?`, `nodes?` (MANIPULATE.md §6.4) | `{hit}` | no |
 | `param.set` | `node`, `param`, `value` | null | yes |
 | `param.edit` | `param`, `value`, `nodes?`, `component?`, `gesture?` | `{changed}` | yes |
 
@@ -192,9 +241,23 @@ the nodes into it in the order given (nested ones dropped as above), then select
 tag, like `object.create`) under the first top-level node's parent at its position, moves the
 nodes (nested ones dropped, as `object.group`) into it in the order given and selects it, in one
 undo step "Create Cloner". With no nodes it creates an empty cloner. `view.clone_display`
-(UI.md §16.3) switches the viewport's clone index and axes overlay; view state only.
+(UI.md §16.3) switches the viewport's clone index and axes overlay; view state only. `view.hud`
+(UI.md §23) switches one heads-up item of one pane (or of all four); view state only, saved with
+layouts, headless contexts ignore it.
 `object.visibility` / `object.enable` write the `object.*` params (TRANSFORM.md §2) of every
 named node in one undo step; tags and non-hierarchy nodes are skipped.
+
+`layer.*` (brief 158, CORE.md section 7, UI.md section 22): layers are document level, every
+command is one undo step. An unknown layer id is `InvalidArgs`. `layer.delete` releases the
+members (their `object.layer` becomes none). `layer.set` applies the given fields to every
+listed layer in one step (a name must be non-empty, a colour channel is clamped to 0..1).
+`layer.assign` skips tags and non-hierarchy nodes and returns how many nodes it set.
+`layer.merge` moves the members of every other listed layer to `into` and deletes the others.
+
+`browser.*` (brief 154, UI.md section 26): the preset library and the recent file list. `browser.load`
+is one undo step; the others touch files or application state only. An unknown preset id,
+index or kind is `InvalidArgs`; failed reads are `Failed`. `file.open`, `file.save` and
+`file.save_as` record the path in the recent list on success.
 
 Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and ANIM.md §2):
 
@@ -204,6 +267,15 @@ Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and A
 - `object.delete`: skips nodes inside another selected node's subtree; clears the selection.
 - `edit.undo` / `edit.redo`: then `retain_existing` and clamp the timeline. `done` is false
   when there was nothing to undo.
+- `edit.history_jump` (brief 159, UI.md §18.6): undoes or redoes until exactly `position` steps
+  are applied, then retain_existing and clamp the timeline like `edit.undo`. `position` above the
+  number of undo plus redo steps is `InvalidArgs`. It is the history panel's click.
+- `ui.command_palette` (brief 159, UI.md §18): a window action like the `file.*_dialog` ones.
+- `ui.workspace`, `ui.layout_save`, `ui.layout_load`, `ui.layout_delete` (brief 156, UI.md §21):
+  window actions too (headless: `needs the editor window`, unknown keys `InvalidArgs`); view state,
+  not undoable, the document is untouched. Errors of the window go to the status bar.
+- `spline.*` (brief 028, SPLINES.md §5): editable splines; `node` must be a `forge.spline`, else
+  `Failed` ("make it editable first"). `param.set` refuses the point-list params.
 - `mesh.*`: EDITABLE.md §1; skipped nodes (no mesh) are listed in `skipped` and in the
   status text. Empty selection is `Failed`.
 - `select.*`: EDITABLE.md §2.5 (model mode selects objects).
@@ -256,6 +328,20 @@ Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and A
 - `transform.set`: sets only the given components of the object's pos/rot/scale in one step
   ("Set Transform"); it does not write animation keys (autokey is a gizmo/attribute
   panel feature; replaying a gizmo drag as a command comes with brief 012+).
+- `transform.edit` (registered by forge-app, UI.md §20; brief 151): the Coordinates manager's
+  edit. For every node in `nodes` (default the selection; nodes without a transform are
+  skipped) it sets the given rows in `space` (default `local`): `pos`, `rot`, and `scale`
+  or `size` (not both). A `null` axis keeps that axis as it is shown in `space`. World rows:
+  position `P⁻¹ · v`, rotation `R_P⁻¹ · R(v)`, scale `v / parent scale`; `size` divides by the
+  mesh bounding box (an axis with zero size keeps its scale), MANIPULATE.md §4. One undo step
+  "Set Coordinates" for all nodes and rows; the values are the evaluated ones, written through
+  the animation rules (ANIM.md §2.4). `gesture` merges edits with the same number and nodes.
+  No node with a transform is `Failed`; nothing is written on an error.
+- `mesh.transform` also takes `gesture` (integer): steps with the same number and nodes merge
+  into one undo step (the Coordinates manager's dragged fields, UI.md §20.3).
+- `object.set_axis`, `object.center_axis`, `object.align_axis` (brief 032): edit the axis (the
+  transform) without moving the content, one transaction each (MANIPULATE.md §7). `snap.*` and
+  `edit.axis_mode` change the editor's transform settings only (MANIPULATE.md §6, §7.4).
 - `param.set`: converts `value` by the parameter kind: bool, integer, float (a `Unit::Angle`
   float is degrees, `Unit::Percent` is percent), `[x,y,z]` vec3 (angle vec3 in degrees)
   and color, string/enum id, link (node id or null), index list (array of integers). Mesh

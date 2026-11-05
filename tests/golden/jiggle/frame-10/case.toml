@@ -1,0 +1,51 @@
+feature = "jiggle"
+observation = "docs/parity/deformers-4.md"
+description = "Cube keyed in position X 0 to 300 over frames 0-10; frame-stepped 0..10 and exported at frame 10"
+mesh = "mesh.obj"
+
+[params]
+on_stopped = false
+local = false
+p536871444 = ""
+strength_percent = 100.0
+p536871445 = ""
+stiffness_percent = 40.0
+map = ""
+structural_percent = 100.0
+map_2025 = ""
+drag_percent = 10.0
+map_2010 = ""
+motion_scale_percent = 100.0
+p536871446 = ""
+springs = 4
+iterations = 4
+gravity = 0.0
+map_2011 = ""
+p536871447 = ""
+enable = false
+compress = false
+memory = "0 B"
+p536871450 = ""
+auto_time = true
+p536871451 = ""
+scale_percent = 100.0
+p536871453 = ""
+cache = 20
+maximum_undo_limit_mb = ""
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+
+frame = 10
+fps = 30
+pos_x_end = 300.0
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false

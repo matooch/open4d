@@ -23,5 +23,5 @@ pub use jobs::MAX_ACTIVE_JOBS;
 pub use protocol::{RpcError, code};
 pub use server::{
     Inbox, MAX_CONNECTIONS, MAX_MESSAGE_BYTES, MAX_REQUESTS_PER_SECOND, Server, ServerConfig,
-    StartError,
+    StartError, handle_request_line,
 };

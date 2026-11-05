@@ -54,6 +54,9 @@ pub enum Value {
     /// Element indices (a component selection), sorted ascending without duplicates once
     /// validated.
     IndexList(Vec<u32>),
+    /// An ordered list of 3D vectors (the points and tangents of an editable spline); every
+    /// component finite, no range, order meaningful.
+    Vec3List(Vec<[f64; 3]>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -93,6 +96,7 @@ pub enum ParamKind {
     },
     Mesh,
     IndexList,
+    Vec3List,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -284,6 +288,14 @@ impl ParamDesc {
         d
     }
 
+    /// A hidden, non-animatable list of 3D vectors whose default is empty.
+    pub fn vec3_list(id: &str, label: &str) -> ParamDesc {
+        let mut d = Self::new(id, label, ParamKind::Vec3List, Value::Vec3List(Vec::new()));
+        d.ui.hidden = true;
+        d.animatable = false;
+        d
+    }
+
     /// Hard range for `Int`, `Float` and `Vec3` parameters.
     ///
     /// # Panics
@@ -387,6 +399,12 @@ impl ParamDesc {
                 list.sort_unstable();
                 list.dedup();
                 Ok(Value::IndexList(list))
+            }
+            (ParamKind::Vec3List, Value::Vec3List(list)) => {
+                for c in list.iter().flatten() {
+                    finite(*c)?;
+                }
+                Ok(Value::Vec3List(list))
             }
             _ => Err(ParamError::TypeMismatch),
         }

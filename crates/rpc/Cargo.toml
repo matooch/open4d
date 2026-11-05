@@ -10,6 +10,7 @@ forge-app = { path = "../app" }
 forge-command = { path = "../command" }
 forge-core = { path = "../core" }
 forge-platform = { path = "../platform" }
+forge-plugin = { path = "../plugin" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"

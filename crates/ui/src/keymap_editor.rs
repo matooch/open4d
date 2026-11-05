@@ -266,7 +266,7 @@ impl KeyMapEditor {
     }
 
     fn ui(&mut self, ui: &mut Ui, state: &mut EditorState) {
-        let theme = Theme::default();
+        let theme = Theme::current(ui.ctx());
         let registry = state.app.commands.clone();
         ui.horizontal(|ui| {
             let label = ui.label("Search");
@@ -328,7 +328,7 @@ impl KeyMapEditor {
         let name = if row.known {
             RichText::new(&row.label)
         } else {
-            RichText::new(format!("{} (unknown)", row.label)).color(Theme::default().error)
+            RichText::new(format!("{} (unknown)", row.label)).color(Theme::current(ui.ctx()).error)
         };
         ui.label(name);
         let args = Binding {

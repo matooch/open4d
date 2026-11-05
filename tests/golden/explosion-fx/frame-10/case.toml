@@ -1,0 +1,62 @@
+feature = "explosion-fx"
+observation = "docs/parity/deformers-4.md"
+description = "Explosion FX defaults, exported at document frame 10"
+mesh = "mesh.obj"
+
+[params]
+time_percent = 10.0
+cl_thickness = 10.0
+cl_thickness_variation_percent = 0.0
+cl_density = 1000.0
+cl_density_variation_percent = 0.0
+cl_cluster_type = "Automatic"
+cl_mask = ""
+cl_fix_unselected = true
+cl_min_polys = 5
+cl_max_polys = 10
+cl_disappear = false
+cl_disappear_kind = "Time"
+cl_disappear_start = 10.0
+cl_disappear_duration = 10.0
+ex_strength = 1000.0
+ex_strength_decay_percent = 0.0
+ex_strength_variation_percent = 0.0
+ex_direction = "All"
+ex_direction_linear = false
+ex_direction_variation_percent = 0.0
+ex_blast_time = 1000.0
+ex_blast_speed = 50.0
+ex_blast_speed_decay_percent = 0.0
+ex_blast_speed_variation_percent = 0.0
+ex_blast_range = 200.0
+ex_blast_range_variation_percent = 0.0
+gr_acceleration = 9.81
+gr_acceleration_variation_percent = 0.0
+gr_direction = "-Y World"
+gr_range = 300.0
+gr_range_variation_percent = 0.0
+rt_speed = 0.0
+rt_speed_decay_percent = 0.0
+rt_speed_variation_percent = 0.0
+rt_rotation_axis = "Center Of Gravity"
+rt_rotation_axis_variation_percent = 0.0
+sp_wind = 0.0
+sp_wind_variation_percent = 0.0
+sp_twist = 0.0
+sp_twist_variation_percent = 0.0
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+
+frame = 10
+fps = 30
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false

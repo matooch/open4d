@@ -13,6 +13,7 @@ use crate::state::EditorState;
 
 pub use forge_app::select::{
     EditMode, SelectCmd, base_mesh, selection_of, stored_selection, write_selection,
+    write_selections,
 };
 
 /// The viewport element a component mode picks.
@@ -30,9 +31,15 @@ pub fn target(s: &EditorState) -> Option<NodeId> {
     forge_app::select::target(&s.app)
 }
 
+/// The component targets: the selected polygon objects while a component mode is on and the
+/// active node is a polygon object (EDITABLE.md §6.1).
+pub fn targets(s: &EditorState) -> Vec<NodeId> {
+    forge_app::select::targets(&s.app)
+}
+
 /// Select All / Deselect All / Invert / Grow / Shrink on the current mode's set.
 pub fn run_select(s: &mut EditorState, cmd: SelectCmd) -> Result<(), String> {
-    forge_app::select::run_select(&mut s.app, cmd)
+    forge_app::select::run_select(&mut s.app, cmd, None)
 }
 
 /// Pick radius of points and edges, in render pixels (EDITABLE.md §2.4).
@@ -153,8 +160,40 @@ pub fn rect_components(
     }
 }
 
-/// A left click at pixel `cursor` in a viewport of `size`. With a component target it
-/// edits that object's set of the current mode; otherwise it picks objects (the
+/// The nearest element for `mode` under the cursor over several objects (EDITABLE.md §6.3):
+/// the object and the element index. Depth is measured along the pick ray (the point, the
+/// middle of the edge, the polygon hit); ties go to the lower node id.
+pub fn pick_across(
+    meshes: &[(NodeId, PolyMesh)],
+    cam: &Camera,
+    cursor: [f64; 2],
+    size: [f64; 2],
+    mode: EditMode,
+) -> Option<(NodeId, u32)> {
+    let ([x, y], [w, h]) = (cursor, size);
+    let ray = cam.ray(x, y, w, h);
+    let depth = |p: glam::DVec3| (p - ray.origin).dot(ray.dir);
+    meshes
+        .iter()
+        .filter_map(|(id, mesh)| {
+            let hit = pick_component(mesh, cam, x, y, w, h, mode)?;
+            let d = match mode {
+                EditMode::Model => return None,
+                EditMode::Points => depth(mesh.points[hit as usize]),
+                EditMode::Edges => {
+                    let e = mesh.edges()[hit as usize];
+                    depth((mesh.points[e.0 as usize] + mesh.points[e.1 as usize]) * 0.5)
+                }
+                EditMode::Polys => pick_poly(mesh, &ray)?.t,
+            };
+            Some((d, *id, hit))
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
+        .map(|(_, id, hit)| (id, hit))
+}
+
+/// A left click at pixel `cursor` in a viewport of `size`. With component targets it edits
+/// their sets of the current mode (EDITABLE.md §6.3); otherwise it picks objects (the
 /// Model-mode rules: Ctrl/Cmd toggles, an empty plain click clears).
 pub fn viewport_click(
     s: &mut EditorState,
@@ -163,7 +202,8 @@ pub fn viewport_click(
     mods: ClickModifiers,
 ) -> Result<(), String> {
     let ([x, y], [w, h]) = (cursor, size);
-    let Some(id) = target(s) else {
+    let ids = targets(s);
+    if ids.is_empty() {
         match pick_node(&s.evaluated(), &s.camera, x, y, w, h) {
             Some(id) if mods.command => s.selection.toggle(id),
             Some(id) => s.selection.click(id),
@@ -171,40 +211,53 @@ pub fn viewport_click(
             None => {}
         }
         return Ok(());
-    };
-    let Some(mesh) = pick_mesh(s.doc.scene(), id) else {
-        return Ok(());
-    };
-    let picked = pick_component(&mesh, &s.camera, x, y, w, h, s.mode);
-    let next = apply_click(
-        &selection_of(s.doc.scene(), id, s.mode),
-        picked,
-        mods.into(),
-    );
-    write_selection(&mut s.app.doc, id, s.app.mode, &next).map_err(|e| e.to_string())?;
+    }
+    let meshes: Vec<(NodeId, PolyMesh)> = ids
+        .iter()
+        .filter_map(|id| Some((*id, pick_mesh(s.doc.scene(), *id)?)))
+        .collect();
+    let hit = pick_across(&meshes, &s.camera, cursor, size, s.mode);
+    let op = SelectOp::from(mods);
+    let next: Vec<(NodeId, IndexSet)> = meshes
+        .iter()
+        .map(|(id, _)| {
+            let current = selection_of(s.doc.scene(), *id, s.mode);
+            let set = match hit {
+                Some((hit_id, e)) if hit_id == *id => apply_click(&current, Some(e), op),
+                // a plain click on an element of another object leaves nothing selected here
+                Some(_) if op == SelectOp::Replace => IndexSet::new(),
+                Some(_) => current,
+                None => apply_click(&current, None, op),
+            };
+            (*id, set)
+        })
+        .collect();
+    write_selections(&mut s.app.doc, s.app.mode, &next).map_err(|e| e.to_string())?;
     Ok(())
 }
 
-/// A rectangle drag `[x0, y0, x1, y1]` released in a viewport of `size`; one transaction.
-/// Without a component target nothing happens.
+/// A rectangle drag `[x0, y0, x1, y1]` released in a viewport of `size`; one transaction for
+/// all targets. Without component targets nothing happens.
 pub fn viewport_rect(
     s: &mut EditorState,
     rect: [f64; 4],
     size: [f64; 2],
     mods: ClickModifiers,
 ) -> Result<(), String> {
-    let Some(id) = target(s) else {
-        return Ok(());
-    };
-    let Some(mesh) = pick_mesh(s.doc.scene(), id) else {
-        return Ok(());
-    };
-    let picked = rect_components(&mesh, &s.camera, rect, size[0], size[1], s.mode);
-    let next = apply_op(
-        &selection_of(s.doc.scene(), id, s.mode),
-        &picked,
-        mods.into(),
-    );
-    write_selection(&mut s.app.doc, id, s.app.mode, &next).map_err(|e| e.to_string())?;
+    let ids = targets(s);
+    let mut next = Vec::new();
+    for id in ids {
+        let Some(mesh) = pick_mesh(s.doc.scene(), id) else {
+            continue;
+        };
+        let picked = rect_components(&mesh, &s.camera, rect, size[0], size[1], s.mode);
+        let set = apply_op(
+            &selection_of(s.doc.scene(), id, s.mode),
+            &picked,
+            mods.into(),
+        );
+        next.push((id, set));
+    }
+    write_selections(&mut s.app.doc, s.app.mode, &next).map_err(|e| e.to_string())?;
     Ok(())
 }

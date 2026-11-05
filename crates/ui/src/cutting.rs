@@ -104,6 +104,29 @@ fn offsets(ts: &ToolState, hover: Option<&EdgeHit>) -> Option<Vec<f64>> {
     hover.map(|h| vec![h.t.clamp(0.001, 0.999)])
 }
 
+/// With snapping on and the `edge_midpoint` target enabled, an offset whose cursor is within
+/// the snap radius of the projected edge midpoint becomes 0.5 (MANIPULATE.md §6.7).
+fn snap_to_midpoint(
+    state: &EditorState,
+    mesh: &PolyMesh,
+    hit: EdgeHit,
+    cursor: (f64, f64),
+    size: (f64, f64),
+) -> EdgeHit {
+    let snap = &state.app.transform_settings.snap;
+    if !snap.enabled || !snap.targets.edge_midpoint {
+        return hit;
+    }
+    let e = mesh.edges()[hit.edge as usize];
+    let mid = (mesh.points[e.0 as usize] + mesh.points[e.1 as usize]) * 0.5;
+    match state.camera.project(mid, size.0, size.1) {
+        Some(p) if (p.x - cursor.0).hypot(p.y - cursor.1) <= snap.radius => {
+            EdgeHit { t: 0.5, ..hit }
+        }
+        _ => hit,
+    }
+}
+
 /// Updates the hover edge for the cursor at pixel `(x, y)` of a `w x h` viewport. Does nothing for
 /// the line and plane knife.
 pub fn hover(state: &mut EditorState, x: f64, y: f64, w: f64, h: f64) {
@@ -115,7 +138,8 @@ pub fn hover(state: &mut EditorState, x: f64, y: f64, w: f64, h: f64) {
     }
     let hit = cut_target(state).and_then(|(node, _)| {
         let mesh = pick_mesh(state.doc.scene(), node)?;
-        pick_edge_param(&mesh, &state.camera, x, y, w, h, EDGE_RADIUS, true)
+        let hit = pick_edge_param(&mesh, &state.camera, x, y, w, h, EDGE_RADIUS, true)?;
+        Some(snap_to_midpoint(state, &mesh, hit, (x, y), (w, h)))
     });
     if let Some(ts) = state.tool.as_mut() {
         ts.interaction.hover = hit;
@@ -187,6 +211,7 @@ fn drag_line(
 
 /// Starts a knife drag at pixel `(x, y)`.
 pub fn drag_begin(state: &mut EditorState, x: f64, y: f64, size: [f64; 2]) {
+    let (x, y) = crate::snapping::snap_pixel(state, x, y, size[0], size[1]);
     if let Some(ts) = state.tool.as_mut().filter(|t| !is_loop(t.tool().id())) {
         ts.interaction.drag = Some(([x, y, x, y], size));
     }
@@ -194,6 +219,15 @@ pub fn drag_begin(state: &mut EditorState, x: f64, y: f64, size: [f64; 2]) {
 
 /// Moves the end of the knife line.
 pub fn drag_update(state: &mut EditorState, x: f64, y: f64) {
+    let Some(size) = state
+        .tool
+        .as_ref()
+        .and_then(|t| t.interaction.drag)
+        .map(|(_, size)| size)
+    else {
+        return;
+    };
+    let (x, y) = crate::snapping::snap_pixel(state, x, y, size[0], size[1]);
     if let Some((rect, _)) = state
         .tool
         .as_mut()

@@ -4,11 +4,13 @@ use std::sync::Arc;
 
 use forge_core::{Document, NodeId, Scene};
 use forge_modeling::ComponentSettings;
+use forge_modeling::snap::TransformSettings;
 use serde_json::Value;
 
+use crate::browser::Browser;
 use crate::state::{
-    CameraSet, GizmoModeArg, GizmoSpaceArg, LayoutArg, LightingArg, ModeArg, NodeSelection,
-    PaneArg, SelectExtra, SelectOp, ShadingMode, UiRequest, ViewArg,
+    CameraSet, GizmoModeArg, GizmoSpaceArg, HudItemArg, LayoutArg, LightingArg, ModeArg,
+    NodeSelection, PaneArg, SelectExtra, SelectOp, ShadingMode, UiRequest, ViewArg,
 };
 use crate::timeline::Timeline;
 
@@ -22,6 +24,9 @@ pub trait CommandContext {
     /// Soft selection and symmetry for component transforms (EDITABLE.md §5).
     fn component_settings(&self) -> &ComponentSettings;
     fn component_settings_mut(&mut self) -> &mut ComponentSettings;
+    /// Snapping and axis mode (MANIPULATE.md §6, §7.4).
+    fn transform_settings(&self) -> &TransformSettings;
+    fn transform_settings_mut(&mut self) -> &mut TransformSettings;
     fn timeline(&self) -> &Timeline;
     fn timeline_mut(&mut self) -> &mut Timeline;
     fn autokey(&self) -> bool;
@@ -30,9 +35,12 @@ pub trait CommandContext {
     fn set_status(&mut self, text: String);
 
     /// Select All / None / Invert / Grow / Shrink on the current mode's set (EDITABLE.md §2.5).
-    fn select_components(&mut self, op: SelectOp) -> Result<(), String>;
+    ///
+    /// `nodes` names the polygon objects to work on; the component targets when `None`
+    /// (EDITABLE.md §6.3).
+    fn select_components(&mut self, op: SelectOp, nodes: Option<&[NodeId]>) -> Result<(), String>;
     /// Connected, Convert, Loop and Ring on the current mode's set (EDITABLE.md §2.8).
-    fn select_extra(&mut self, _cmd: SelectExtra) -> Result<(), String> {
+    fn select_extra(&mut self, _cmd: SelectExtra, _nodes: Option<&[NodeId]>) -> Result<(), String> {
         Err("no components headless".into())
     }
     /// Keys the selected objects' transform at the current frame; returns the key count.
@@ -55,6 +63,14 @@ pub trait CommandContext {
     /// Records that the scene was saved to `path` (clears the dirty state).
     fn mark_saved(&mut self, path: String);
 
+    /// The preset library and recent files (UI.md §26); `None` in contexts without them.
+    fn browser(&self) -> Option<&Browser> {
+        None
+    }
+    fn browser_mut(&mut self) -> Option<&mut Browser> {
+        None
+    }
+
     /// The scene at the current frame (animation applied). Contexts without an animation
     /// evaluator return the stored scene.
     fn evaluated_scene(&self) -> Arc<Scene> {
@@ -76,6 +92,16 @@ pub trait CommandContext {
     fn set_lighting(&mut self, _lighting: LightingArg) {}
     fn set_shadows(&mut self, _on: bool) {}
     fn set_antialias(&mut self, _on: bool) {}
+    /// Shows or hides a HUD item in a pane (`None`: the active pane), in all panes, or
+    /// toggles it (`enabled` `None`).
+    fn set_hud(
+        &mut self,
+        _item: HudItemArg,
+        _pane: Option<PaneArg>,
+        _all_panes: bool,
+        _enabled: Option<bool>,
+    ) {
+    }
     /// Switches the clone index and axes overlay (`None` keeps a setting).
     fn set_clone_display(&mut self, _indices: Option<bool>, _axes: Option<bool>) {}
     /// Applies validated camera fields.

@@ -21,6 +21,51 @@ pub fn node_type(key: &str) -> &str {
     }
 }
 
+/// Our param id for a case-file key: the case files of the O20 batch spell the fillet
+/// segment count `fillet_subdivision`.
+pub fn param_key(key: &str) -> &str {
+    match key {
+        "fillet_subdivision" => "fillet_segments",
+        other => other,
+    }
+}
+
+/// A case table in our param ids: renamed keys (`param_key`), and a 3-array `size` / `scale`
+/// style key spelled for a type that stores `<key>_x`, `<key>_y`, `<key>_z` split up.
+pub fn normalize(ty: &forge_core::NodeType, table: &Table) -> Table {
+    let mut out = Table::new();
+    for (k, v) in table {
+        let k = param_key(k);
+        // The symmetry cases spell its weld tolerance `weld_tolerance`.
+        let k = if k == "weld_tolerance" && ty.find_param(k).is_none() {
+            "tolerance"
+        } else {
+            k
+        };
+        match v {
+            toml::Value::Array(a)
+                if a.len() == 3
+                    && ty.find_param(k).is_none()
+                    && ty.find_param(&format!("{k}_x")).is_some() =>
+            {
+                for (axis, x) in ["x", "y", "z"].iter().zip(a) {
+                    out.insert(format!("{k}_{axis}"), x.clone());
+                }
+            }
+            _ => {
+                out.insert(k.to_string(), v.clone());
+            }
+        }
+    }
+    out
+}
+
+/// Case keys that are editor display settings (isoparm lines drawn in the viewport); they
+/// do not change the exported mesh, so no node type stores them.
+pub fn is_display_only(key: &str) -> bool {
+    key.starts_with("isoparm_subdivision")
+}
+
 /// `overlay(version of the case, node type) ∪ table`; the table's keys win.
 pub fn with_defaults(case: &GoldenCase, manifest: &CaseManifest, ty: &str, table: &Table) -> Table {
     let version = app_version(&repo_root(), manifest)

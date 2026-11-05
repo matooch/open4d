@@ -267,3 +267,12 @@ impl Effector for Random {
         })
     }
 }
+
+/// True if the effector node `id` changes with time: a Random effector in a noise or
+/// turbulence mode with a non-zero animation speed (CORE.md section 5b).
+pub fn effector_reads_time(scene: &Scene, id: NodeId) -> bool {
+    scene.node(id).is_some_and(|n| n.type_id == RANDOM)
+        && from_node(scene, id).is_some_and(|r| {
+            matches!(r.mode, RandomMode::Noise | RandomMode::Turbulence) && r.animation_speed != 0.0
+        })
+}

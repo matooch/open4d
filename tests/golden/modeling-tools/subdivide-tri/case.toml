@@ -1,0 +1,16 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "A default Pyramid made editable (5 points, 5 polygons); all polygons selected and the Subdivide command run with 1 subdivision and Hyper (smoothing) off"
+mesh = "mesh.obj"
+
+[params]
+tool = "subdivide"
+segments = []
+
+[params.settings]
+subdivisions = 1
+hyper = false
+
+[import]
+scale = 1.0
+flip_z = false

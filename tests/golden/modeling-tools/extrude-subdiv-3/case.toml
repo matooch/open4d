@@ -1,0 +1,28 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Default cube made editable with 1 x 1 x 1 segments; the top polygon (4) extruded by 60 with Subdivision 3 (other Extrude settings at their Reset Values defaults)"
+mesh = "mesh.obj"
+
+[params]
+tool = "extrude"
+segments = [1, 1, 1]
+select_polys = [4]
+
+[params.settings]
+offset = 60.0
+offset_variation = 0.0
+subdivision = 3
+create_ngons = false
+preserve_groups = true
+create_caps = false
+maximum_angle_deg = 91.0
+rotation_deg = 0.0
+quantize_rotation = true
+quantize_angle_deg = 5.0
+bevel = 5.0
+bevel_variation = 0.0
+realtime_update = true
+
+[import]
+scale = 1.0
+flip_z = false

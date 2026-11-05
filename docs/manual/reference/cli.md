@@ -20,6 +20,8 @@ Headless Forge3D: scenes, commands and export.
 | Argument | Required | Default | Description |
 |---|---|---|---|
 | `--json` | no |  | Machine output: one JSON object on stdout, messages on stderr |
+| `--plugins` | no |  | Load the plugins in this folder too (repeatable; docs/specs/PLUGINS.md section 9) |
+| `--no-plugins` | no |  | Load no plugins at all (also: FORGE_NO_PLUGINS=1) |
 
 ## Subcommands
 
@@ -30,6 +32,7 @@ Headless Forge3D: scenes, commands and export.
 | [`validate`](#forge-validate) | Load the scene and build every node |
 | [`eval`](#forge-eval) | Evaluate a frame, report geometry, optionally export it |
 | [`export`](#forge-export) | Export the scene evaluated at a frame |
+| [`convert`](#forge-convert) | Convert a scene file, or every scene file of a folder, to another format |
 | [`cmd`](#forge-cmd) | Run one command on a scene file |
 | [`commands`](#forge-commands) | List the command registry with argument schemas |
 | [`docs`](#forge-docs) | Write the generated reference (commands, CLI, RPC, MCP, scripting) as markdown |
@@ -94,7 +97,7 @@ forge eval <scene> [--frame] [--node] [--export]
 Export the scene evaluated at a frame
 
 ```
-forge export <scene> [--format] --out [--selected] [--frame]
+forge export <scene> [--format] --out [--selected] [--frame] [--option]
 ```
 
 | Argument | Required | Default | Description |
@@ -104,6 +107,25 @@ forge export <scene> [--format] --out [--selected] [--frame]
 | `--out` | yes |  |  |
 | `--selected` | no |  | Only these node ids (and their descendants), comma separated |
 | `--frame` | no | `0` |  |
+| `--option` | no |  | An export option `key=value` (repeatable; `forge commands` -> `io.formats`) |
+
+### `forge convert`
+
+Convert a scene file, or every scene file of a folder, to another format
+
+```
+forge convert <input> --out [--format] [--option] [--frame] [--recursive] [--force]
+```
+
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `<input>` | yes |  | A file or a folder |
+| `--out` | yes |  | Output folder (created) |
+| `--format` | no | `obj` | Target format id (`obj`), or `forge` to import other formats into native scenes |
+| `--option` | no |  | A format option `key=value` (repeatable) |
+| `--frame` | no | `0` | Frame to evaluate when exporting |
+| `--recursive` | no |  | Descend into sub folders (the output mirrors them) |
+| `--force` | no |  | Overwrite existing output files |
 
 ### `forge cmd`
 

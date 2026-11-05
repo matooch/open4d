@@ -45,11 +45,15 @@ pub enum Panel {
     Coordinates,
     Script,
     NodeEditor,
+    History,
+    Console,
+    Layers,
+    ContentBrowser,
 }
 
 impl Panel {
     /// Every panel, in Window menu order.
-    pub const ALL: [Panel; 9] = [
+    pub const ALL: [Panel; 13] = [
         Panel::CommandBar,
         Panel::ToolPalette,
         Panel::Viewport,
@@ -59,6 +63,10 @@ impl Panel {
         Panel::Coordinates,
         Panel::Script,
         Panel::NodeEditor,
+        Panel::History,
+        Panel::Console,
+        Panel::Layers,
+        Panel::ContentBrowser,
     ];
 
     /// The panels `Dock::default()` opens; the others open from the Window menu.
@@ -83,6 +91,10 @@ impl Panel {
             Panel::Coordinates => "Coordinates",
             Panel::Script => "Script Manager",
             Panel::NodeEditor => "Node Editor",
+            Panel::History => "History",
+            Panel::Console => "Console",
+            Panel::Layers => "Layers",
+            Panel::ContentBrowser => "Content Browser",
         }
     }
 
@@ -97,6 +109,10 @@ impl Panel {
             Panel::Coordinates => Area::Bottom,
             Panel::Script => Area::Bottom,
             Panel::NodeEditor => Area::Center,
+            Panel::History => Area::RightBottom,
+            Panel::Console => Area::Bottom,
+            Panel::Layers => Area::RightBottom,
+            Panel::ContentBrowser => Area::RightBottom,
         }
     }
 }
@@ -125,6 +141,22 @@ impl Default for Dock {
 }
 
 impl Dock {
+    /// A dock with exactly the listed tabs per area (the first tab of each is shown); areas
+    /// not listed are empty. A panel listed twice keeps its first place.
+    pub fn arranged(areas: &[(Area, &[Panel])]) -> Dock {
+        let mut d = Dock {
+            areas: Default::default(),
+        };
+        for (area, tabs) in areas {
+            for p in *tabs {
+                if d.area_of(*p).is_none() {
+                    d.areas[*area as usize].tabs.push(*p);
+                }
+            }
+        }
+        d
+    }
+
     /// True if no panel appears twice and every active index is in range (a loaded dock
     /// must satisfy this; the editing methods keep it).
     pub fn is_valid(&self) -> bool {

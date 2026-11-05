@@ -73,8 +73,14 @@ forge cmd scene.forge param.set --args '{"node":1,"param":"size_x","value":300}'
 forge info scene.forge                   # the node tree
 forge eval scene.forge --frame 15        # counts and bounding boxes at frame 15
 forge export scene.forge --format obj --out cube.obj --frame 15
+forge export scene.forge --out cube.obj --option normals=false   # format options
+forge convert scenes/ --out obj/ --recursive                     # a whole folder of scenes
 forge --json commands                    # every command with its argument schema
 ```
+
+`convert` writes one file per scene, keeps going when one scene is bad (exit 1 at the end), and
+refuses to overwrite files unless you pass `--force`. `forge --json cmd scene.forge io.formats`
+lists the formats and their options.
 
 `cmd` is a dry run unless you pass `--save`. Selection is not stored in scene files, so give
 `nodes` explicitly to commands that default to the selection.

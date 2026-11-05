@@ -5,7 +5,7 @@ use forge_geometry::PolyMesh;
 use std::collections::BTreeSet;
 
 use forge_geometry::Edge;
-use forge_geometry::subdivide::{subdivide_levels_with_creases, subdivide_osd};
+use forge_geometry::subdivide::{subdivide_levels_with_creases, subdivide_loop, subdivide_osd};
 
 use crate::{BuildError, Params, evaluate, evaluate_geometry};
 
@@ -62,7 +62,8 @@ pub fn subdivide_with_creases(
         "osd_bilinear" => return Ok(subdivide_osd(mesh, level, false, creases)),
         // Observed: the export ignores the adaptive level and keeps the input.
         "osd_catmull_clark_adaptive" => return Ok(mesh.clone()),
-        "osd_loop" => return Err(BuildError::Unsupported("Loop subdivision")),
+        "osd_loop" if creases.is_empty() => return Ok(subdivide_loop(mesh, level)),
+        "osd_loop" => return Err(BuildError::Unsupported("Loop subdivision with creases")),
         _ => return Err(BuildError::Unsupported("unknown subdivision scheme")),
     };
     Ok(subdivide_levels_with_creases(mesh, level, smooth, creases))

@@ -5,7 +5,6 @@ use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use forge_app::App;
 use forge_mcp::{Backend, EditorBackend, HeadlessBackend, Server};
 use forge_rpc::RpcSettings;
 
@@ -107,7 +106,9 @@ fn main() -> ExitCode {
         }
         Ok(Some(Mode::Headless { scene })) => {
             install_diagnostics(RpcSettings::from_environment().token);
-            let mut app = App::new_default();
+            let mut app =
+                forge_plugin::load_host(&forge_plugin::HostOptions::from_env(Vec::new(), false))
+                    .new_app();
             if let Some(path) = scene
                 && let Err(e) = app.open(&path)
             {

@@ -1,6 +1,6 @@
 # 032 · Snapping 2.0 and axis/pivot editing
 
-Status: ready · Area: B · Depends on: 006 · Observations: G3 · Touches: viewport, ui
+Status: done (parity-pending G2/G3) · Area: B · Depends on: 006 · Observations: G3 · Touches: viewport, ui
 
 ## Goal
 Snapping to points, edges, polygons, grid and workplane, quantize steps, and moving an object's axis without moving its points.
@@ -15,8 +15,8 @@ Snapping to points, edges, polygons, grid and workplane, quantize steps, and mov
 - Axis mode: a transform edits the object matrix, and the inverse is applied to its points (polygon objects) or its children (other types).
 
 ## Done when
-- [ ] MANIPULATE.md updated; tests for each snap target type and for axis moves keeping world points fixed.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] MANIPULATE.md updated; tests for each snap target type and for axis moves keeping world points fixed.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -26,9 +26,12 @@ Snapping to points, edges, polygons, grid and workplane, quantize steps, and mov
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: tests added (53): `crates/modeling/tests/snap.rs` (12: settings defaults, JSON round trip, atomic validation errors, each target type in world space, the priority chain point > edge > polygon > grid point > workplane, equal-rank ordering by distance then kind, skipped points, 2D projection, quantize = setting xor Ctrl, workplane basis and triangle helpers, normal basis), `crates/viewport/tests/snap_targets.rs` (10: each target under the cursor, radius, priority, grid point / grid line / automatic spacing, `visible_only`, skipped points, 2D, orthographic camera, `Drag::translate_to` per handle and its no-op for rotate / scale), `crates/generators/tests/axis.rs` (9: `decompose` round trip, translate / rotate / scale of the axis keep world points and children at 1e-9, repeated applies from the start do not accumulate and are one undo step, translation-only leaves rotation / scale params bit for bit, generator keeps its children, a rotation of an earlier update is reset by a later one, helpers), `crates/app/tests/axis_snap_commands.rs` (12: `object.set_axis` local / world / errors, `object.center_axis` bounding box / selection / children / all-or-nothing, one undo step, `object.align_axis` world / parent / normal and errors, `edit.axis_mode` and `snap.*` not undoable, `snap.query` priority / 2D / node filter, schemas), `crates/ui/tests/snapping.rs` (10: sources exclusion and skip points, target hit vs quantize vs Ctrl in `drag_step`, `hit_at`, axis drags keep the world and are one undo step, pen corners on snap targets, pen without snapping unchanged, knife end points, loop cut midpoint, **egui_kittest**: a snapped gizmo drag lands on the target vertex (and does not when snapping is off), the axis mode toggle by key L and by the Edit menu, an axis drag in axis mode and undo). No parity data exists; no `UNSUPPORTED` / `KNOWN_MISMATCH` lists are involved.
+- Rules (docs/specs/MANIPULATE.md §6–7), all own design, **parity-pending G2/G3**:
+  - Targets: vertex, edge, edge midpoint, polygon centre, polygon surface, grid point, grid line, workplane, object axis. Priority by rank (vertex / midpoint / centre / object axis 0, edge 1, polygon 2, grid point 3, grid line 4, workplane 5), then screen distance, depth, kind order. 3D keeps the target, 2D projects it onto the workplane. Radius default 10 px. Quantize steps (move 10, angle 15 deg, percent 10) replace the old fixed Ctrl steps (same defaults); Ctrl xor `quantize.enabled`.
+  - Applied to: gizmo translate drags of objects, component drags (selected points are not targets), axis-mode drags, Polygon Pen corners (vertex of the target = `Point`, any other hit = `New`), Knife Line / Plane end points (projected pixel) and the Loop Cut offset (0.5 near the midpoint). Rotate and scale drags quantize only.
+  - Axis edit: `K = N^-1 O` applied to a polygon object's points and to its direct children (TRS decomposition; exact except rotation mixed with non-uniform scale, where children are approximated); other object types keep only their children in place (their own geometry follows the axis, per the brief). Commands `object.set_axis`, `object.center_axis` (bounding_box, points, selection, children), `object.align_axis` (world, parent, normal), `edit.axis_mode`, `snap.set`, `snap.toggle`, `snap.reset`, `snap.query`. Each axis command is one transaction.
+- Deviations from the design decisions: (1) snap settings (`SnapSettings`, `TransformSettings`) live in `forge-modeling` and the world-space solver beside them, so the headless `snap.query` can use it without the GPU crate; the screen-space resolution is in `forge-viewport` (which now depends on `forge-modeling`). (2) The axis math lives in `forge_generators::axis` (needs `Tx` and the polygon type). (3) The viewport interaction now also runs without a GPU (the pane's pointer handling no longer sits behind the render state), which is what lets the kittest drive gizmo drags; the rendered image and overlays are unchanged. (4) The snap toggle key is Shift+S because X is the Pan hold key. (5) `CommandContext` gained `transform_settings(_mut)`; the test context in `crates/command/tests/registry.rs` implements them. (6) Axis edits write stored params and never animation keys (autokey is ignored).
+- Files changed: crates/modeling/src/{lib,snap}.rs, crates/generators/src/{lib,axis}.rs, crates/viewport/{Cargo.toml,src/{snap,grid,gizmo}.rs}, crates/command/src/{context.rs,builtin/{mod,axis,snap}.rs}, crates/app/src/lib.rs, crates/ui/src/{app,building,commands,component_edit,cutting,lib,manipulate,snapping,state}.rs, crates/ui/keymap/default.toml, tests: crates/{modeling/tests/snap,viewport/tests/snap_targets,generators/tests/axis,app/tests/axis_snap_commands,ui/tests/snapping}.rs and crates/command/tests/registry.rs (context impl), crates/ui/tests/keymap.rs (the two new default bindings), docs/specs/{MANIPULATE,VIEWPORT,COMMANDS,UI,MODELING,EDITABLE}.md, docs/manual/reference/{commands,mcp}.md (regenerated), docs/parity/STATUS.md, docs/roadmap/BACKLOG.md, this brief, Cargo.lock.
+- Open questions or data that would settle them (follow-up observation forms): the reference app's snap dialog (which targets exist, defaults, radius, priority, whether 2D means projection onto the workplane or the view plane); the quantize step names and defaults; how its axis mode treats generators (does the geometry stay?) and children; what "align to normal" does with the second and third axes; whether Center Axis offers selection / children targets; the keys. Also GUI session G2 for the key choices.
+- The last lines of the gate output: `GATE: 1396 tests passed, 0 failed` / `cleanroom: ok` / `ok: 471 cases` / `GATE: all passed`

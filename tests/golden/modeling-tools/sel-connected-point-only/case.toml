@@ -1,0 +1,17 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Two default cubes made editable, the second at (200, 200, 0), joined with Connect Objects into one object (16 points, 12 polygons), then Optimize with tolerance 0.01 welded the one corner point where they touch (14 points, 12 polygons); polygon 0 (of the first cube) selected and Select Connected run"
+mesh = "mesh.obj"
+
+[params]
+tool = "select_connected"
+segments = [1, 1, 1]
+select_polys = [0]
+setup_second_at = [200.0, 200.0, 0.0]
+
+[params.settings]
+optimize_tolerance = 0.01
+
+[import]
+scale = 1.0
+flip_z = false

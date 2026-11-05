@@ -1,0 +1,45 @@
+feature = "spline-mask"
+observation = "docs/parity/generators-3.md"
+description = "The same Spline Mask scene with Mode A subtract B"
+mesh = "mesh.obj"
+
+[params]
+mode = "a_minus_b"
+axis = "xy"
+create_cap = false
+extrude_offset = 20.0
+caps = false
+
+[params.input]
+type = "circle_spline"
+pos = [0.0, 0.0, 0.0]
+ellipse = false
+ring = false
+radius = 200.0
+radius_y = 200.0
+inner_radius = 100.0
+plane = "xy"
+reverse = false
+intermediate = "uniform"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+[params.input2]
+type = "circle_spline"
+pos = [150.0, 0.0, 0.0]
+ellipse = false
+ring = false
+radius = 200.0
+radius_y = 200.0
+inner_radius = 100.0
+plane = "xy"
+reverse = false
+intermediate = "uniform"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+[import]
+scale = 1.0
+flip_z = false

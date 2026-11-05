@@ -33,7 +33,7 @@ For a node for which `evaluate_geometry` builds a mesh:
 - A `forge.polygon` is already editable: nothing changes, its own id is returned.
 - A node without a mesh (Null, spline, deformer, a generator with no usable input) gives
   `EditableError::NoMesh(name)` before anything is edited. A tag gives `NoMesh` too.
-  Editable splines are out of scope.
+  A spline primitive becomes an editable spline (`forge.spline`, SPLINES.md §3) instead.
 - A generator whose build returns `BuildError::Unsupported` gives `EditableError::Build`.
 - Every `Link` param of any other node (tags included, e.g. an Instance's `reference`)
   that points to the replaced node is set to the new polygon object in the same step
@@ -113,7 +113,8 @@ undoable.
 The **component target** is the active node when `mode != Model` and the active node is a
 `forge.polygon`. Otherwise (Model mode, nothing active, or an active node of another type)
 there is no target and viewport clicks pick objects exactly as in Model mode (MANIPULATE.md
-§5). Component modes never touch other objects' selections.
+§5). Component modes never touch the selections of objects that are not targets. With
+several polygon objects selected there are several targets (§6).
 
 ### 2.3 Picking space
 The pick mesh is `forge_generators::evaluate` of the target (deformers applied) with every
@@ -312,8 +313,8 @@ and the pivot `c` taken at the start. On every frame
 `doc.transact_merged(label, "gizmo:<id>:<n>", ...)`, the pattern of `apply_drag`
 (MANIPULATE.md §3): the whole drag is one undo step ("Move", "Rotate", "Scale"), and undo
 restores the mesh at drag start. Only the `mesh` param is written; the stored selection
-sets are unchanged. Snapping is the gizmo's own (`Drag::update` with the Ctrl/Cmd step,
-`snap.rs`): 10 units, 15 degrees, 0.1.
+sets are unchanged. Snapping is the gizmo's own (`Drag::update` with the quantize step, `snap.rs`; defaults 10 units,
+15 degrees, 0.1) plus target snapping (MANIPULATE.md §6.7, brief 032).
 
 A component mode with a target but an empty affected set draws no gizmo, and a press on
 the spot where it would be does nothing special (it is a click or a rectangle select). In
@@ -324,8 +325,8 @@ Model mode. In Model mode nothing changes.
 With a target and a non-empty set the gizmo is drawn at `P` (the pivot of the current
 mesh, so it follows the drag). The Coordinates panel gets a read-only "Pivot" row in
 component modes: the pivot in object space (Local) or world space (World), whichever
-coordinate space is chosen; it shows "no selection" if the set is empty. Numeric entry for
-components is out of scope.
+coordinate space is chosen; it shows "no selection" if the set is empty. Numeric entry is
+§6.7 (brief 034). With several targets the pivot is the one of §6.4.
 
 ### 3.7 Checks (`crates/ui/tests/component_edit.rs`)
 - `transform_points` on a made-editable default cube: top polygon +50 in y gives y = 150 for
@@ -446,3 +447,118 @@ Soft (checkbox, radius, falloff, distance) and Sym (checkbox, axis) controls.
   change nothing, schemas.
 - `crates/ui/tests/component_edit.rs`: a drag with soft selection and symmetry active.
 
+
+## 6. Multi-object component editing (brief 034; `forge_app::select`, `forge_ui::component_edit`)
+
+Sources: own design (brief docs/agents/tasks/034-multi-object-component-editing.md, roadmap
+area B). GUI session G3 has no answer for multi-object component editing, so **every rule in
+this section is parity-pending**. Single-object behaviour (§2, §3, §5) is unchanged: with one
+polygon object selected every rule below reduces to the old one.
+
+### 6.1 The targets
+The **component targets** are the selected polygon objects (`forge.polygon`, members of
+`NodeSelection.nodes`) in ascending node-id order, when `mode != Model` and the **active**
+node is a polygon object (the old rule of §2.2; an active node of another type means no
+targets). `select::targets(app)` returns the list, `select::target(app)` stays the active
+node. Headless commands take an optional `nodes` list instead: every id must be a polygon
+object (else `Failed`, nothing changes); without it the targets above are used.
+
+### 6.2 Model
+There is no combined selection object. Each target keeps its own three stored sets
+(`selection.points|edges|polys`, §2.1), indices refer to that object's stored mesh, and each
+object keeps its own topology. A combined view exists only in the editor: all targets are
+drawn with their components (VIEWPORT.md §6, one `component` mode for all), and a command
+walks the targets one by one. Nothing crosses objects: Grow, Shrink, Connected, Loop, Ring and
+Convert use each object's own topology, so a selected point of object A never selects anything
+in object B.
+
+### 6.3 Selection
+- Commands `select.all|none|invert|grow|shrink|connected|convert|loop|ring` take `nodes?`
+  (`select.mode` does not). Each target gets the result of the single-object rule; all
+  changes are written in **one "Select" step**, none if no object changes. If the rule fails
+  for any object (for example Loop on points) nothing is written. In Model mode `nodes` is an
+  error ("nodes needs a component mode"); the Model-mode rules are unchanged.
+- Click: the element is picked on every target and the nearest one wins (depth along the pick
+  ray: the point, the middle of the edge, the polygon hit). `Replace`: the picked element is
+  the only selected element of the mode in all targets (the other targets' sets of this mode
+  are emptied); `Add`/`Remove`: only the hit object's set changes. A click on nothing
+  `Replace`s every target's set by the empty set; `Add` and `Remove` change nothing.
+- Rectangle drag: each target's set becomes the combination of its old set with the
+  elements inside the rectangle (`Replace` also empties targets with no element inside).
+  One "Select" step for the whole drag.
+
+### 6.4 Pivot and transform
+The pivot `P` is the mean world position of **all affected points of all targets** (each
+point counts once; §3.2 decides the affected points per object). Gizmo drags and
+`mesh.transform` build one world matrix `M` per delta (translation; rotation about `P`; scale
+about `P` along the axes of the **active** object's frame, §3.4) and apply to every target the
+object-space matrix `W_i⁻¹ · M · W_i` (`W_i` the object's world matrix), so moving points in
+two objects moves them by the same world vector. A target with no affected points is left
+alone. All meshes are written in **one undo step** ("Move", "Rotate", "Scale"; a drag merges
+like §3.5, key `gizmo:<first target>:<n>`).
+
+`mesh.transform` (§5.5) takes `nodes?` (or `node?`) and `space?` (`object` | `world`).
+Default `object` for one object (unchanged), `world` for several. In `world`, `move`,
+`rotate`, `scale` and `pivot` are world-space and the default pivot is `P`; each object gets
+`W_i⁻¹ · M · W_i`. In `object` with several objects the same arguments are applied literally
+in every object's object space and the default pivot is that object's own mean. `points`
+names one object's indices, so it needs exactly one object. Each object's points come from
+its stored selection of the current edit mode; an object with no affected points is skipped
+(`moved: 0`), no affected points anywhere is `Failed`. Result: `{node, moved, soft,
+symmetry}` for the first object plus `nodes: [{node, moved}]`; `moved` at top level is the
+total.
+
+**Soft selection and symmetry do not cross objects (decision).** `ComponentPlan` (§5) is
+built per object from that object's mesh and selected points: weights come from the distance
+to the *same object's* selected points (volume: object-space straight line; surface: along
+its own edges), the radius is in that object's object-space units, and the symmetry plane is
+that object's own object-space plane. A selected point therefore never drags a neighbouring
+object's points, even when they touch in the world. Reasons: objects have separate topology
+and units (a scaled object would need a world-to-object radius conversion), partners and
+surface distance are defined on one mesh, and the user expects an unselected object to stay
+put. Cross-object falloff by world distance is a possible later option.
+
+### 6.5 Modeling commands
+The commands of `ToolCommand` (MODELING.md §0.1: `mesh.extrude`, `extrude_inner`, `bevel`,
+`slide`, `subdivide`, `triangulate`, `untriangulate`, `reverse_normals`, `optimize`, `weld`,
+`melt`, `dissolve`, `split`, `disconnect`, `connect_points`, `mirror`, `center_axis`, `array`)
+take `nodes?` next to `node?` and work on every target in **one undo step** labelled with the
+tool; each object uses its own stored selection and its own topology. Details in MODELING.md
+§0.1. The single-object tools (`mesh.loop_cut`, `mesh.knife`, `mesh.bridge`, `mesh.stitch`,
+`mesh.close_hole`, `mesh.pen`) act on one object (`node`, else the active
+one): they read an edge or points of one mesh, and joining components of two objects would
+mean merging objects, which is `Connect Objects`, not a component tool. They reject a `nodes`
+argument and the viewport tools say "<Tool> works on the active object only" in the status
+bar and the tool panel when more than one polygon object is selected.
+
+### 6.6 Snapping and display
+The points moved by a drag are excluded as snap targets in every target
+(`collect_sources_multi`, MANIPULATE.md §6.7). All targets are drawn in the component display
+of §2.6 (the active one is not special); the other selected objects keep the object colour.
+
+### 6.7 Numeric coordinates
+With targets and a non-empty affected set the Coordinates panel shows three editable rows
+instead of the read-only "Pivot":
+
+| Row | Shown | Entering `v` |
+|---|---|---|
+| Pivot X Y Z | `P` (Local: the active object's object space when there is one target, else World) | moves all affected points by `v - P` |
+| Rotation H P B | always `0 0 0` (a selection has no orientation) | rotates about `P` by the HPB rotation `v` (degrees) |
+| Size X Y Z | extent of the affected points' bounding box (Local with one target: object space; else the world axis-aligned box) | scales about `P` so that the extent becomes `v`; an axis with extent 0 keeps its value |
+
+Each entry is one `Gesture` like the object rows (`Commit` on typing, merged while dragging
+the field) and writes through the same per-object matrices as §6.4 ("Set coordinates"), with
+soft selection and symmetry as for a gizmo drag; with soft selection on, a dragged field is
+relative to the mesh of the previous frame, so use typed values for exactness. Local with one
+target uses the object-space matrix directly.
+
+### 6.8 Checks
+- `crates/app/tests/multi_object.rs`: selection commands on two objects (select.all,
+  invert, grow, convert, loop; explicit `nodes`; one step; nothing crosses objects; errors
+  write nothing), `mesh.transform` on two objects as one step (world-space `move`, pivot is
+  the common centroid, rotation about it), extrude / bevel / subdivide / weld on two objects
+  in one step with per-object selections and skipping of an object with an empty selection,
+  soft selection not crossing objects, single-object tools rejecting `nodes`.
+- `crates/ui/tests/multi_object.rs`: `targets`, click picking the nearer object, rectangle
+  select across two objects, a gizmo `ComponentDrag` on two objects (one step), numeric
+  coordinates, snap exclusion; an egui_kittest box select and drag across two objects.

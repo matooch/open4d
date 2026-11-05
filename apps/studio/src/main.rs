@@ -2,7 +2,6 @@
 //! tool instead (docs/specs/CLI.md §3), so one installed binary does both.
 
 use std::process::ExitCode;
-use std::sync::Arc;
 
 fn main() -> ExitCode {
     let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
@@ -30,10 +29,17 @@ fn main() -> ExitCode {
 }
 
 fn run_editor(insecure_local: bool) -> Result<(), Box<dyn std::error::Error>> {
-    let registry = forge_app::default_registry()?;
+    let host = forge_plugin::load_host(&forge_plugin::HostOptions::from_env(Vec::new(), false));
+    for skipped in &host.report.skipped {
+        tracing::warn!(
+            "plugin skipped: {}: {}",
+            skipped.dir.display(),
+            skipped.reason
+        );
+    }
     // Held until the window closes; dropping it stops the server.
     let (_server, inbox) = start_rpc(insecure_local).unzip();
-    forge_ui::run_with_rpc(Arc::new(registry), inbox)?;
+    forge_ui::run_with_app(host.new_app(), inbox)?;
     Ok(())
 }
 

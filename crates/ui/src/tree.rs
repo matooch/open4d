@@ -4,10 +4,10 @@ use std::collections::BTreeSet;
 
 use forge_command::NodeSelection;
 use forge_core::visibility::{self, Vis};
-use forge_core::{Category, NodeId, Scene};
+use forge_core::{Category, LayerId, NodeId, Scene, layers};
 use serde_json::{Value as Json, json};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TreeRow {
     pub id: NodeId,
     pub depth: usize,
@@ -24,6 +24,8 @@ pub struct TreeRow {
     pub enabled: bool,
     /// Shown only because a descendant matches the search (UI.md §13.5).
     pub dim: bool,
+    /// The object's own layer: id, name and colour (UI.md §22.2).
+    pub layer: Option<(LayerId, String, [f64; 3])>,
 }
 
 /// Label of a node's type, and whether the type is missing from the registry.
@@ -56,6 +58,7 @@ fn make_row(scene: &Scene, id: NodeId, depth: usize, expanded: bool) -> TreeRow 
         render_vis,
         enabled,
         dim: false,
+        layer: layers::of(scene, id).map(|l| (l.id, l.name.clone(), l.color)),
     }
 }
 
@@ -66,9 +69,14 @@ pub fn tree_rows(scene: &Scene, expanded: &BTreeSet<NodeId>) -> Vec<TreeRow> {
     while let Some((id, depth)) = stack.pop() {
         let Some(n) = scene.node(id) else { continue };
         let open = expanded.contains(&id);
-        out.push(make_row(scene, id, depth, open));
-        if open {
-            stack.extend(n.children.iter().rev().map(|c| (*c, depth + 1)));
+        // a layer with the manager off omits the row; its children stay, one level up
+        let listed = layers::in_manager(scene, id);
+        if listed {
+            out.push(make_row(scene, id, depth, open));
+        }
+        if open || !listed {
+            let below = depth + usize::from(listed);
+            stack.extend(n.children.iter().rev().map(|c| (*c, below)));
         }
     }
     out
@@ -243,6 +251,13 @@ pub fn filter_rows(scene: &Scene, query: &str) -> Vec<TreeRow> {
         let Some(n) = scene.node(id) else {
             return false;
         };
+        if !layers::in_manager(scene, id) {
+            // the row is omitted, its children are still searched at the same depth
+            return n
+                .children
+                .iter()
+                .fold(false, |any, c| walk(scene, *c, depth, hit, out) | any);
+        }
         let mut row = make_row(scene, id, depth, false);
         let own = hit(&row);
         let mark = out.len();
@@ -351,5 +366,53 @@ pub fn context_menu(scene: &Scene, selection: &BTreeSet<NodeId>) -> Vec<MenuItem
         json!({"nodes": nodes, "parent": null}),
     ));
     out.push(item("Delete", "object.delete", json!({"nodes": nodes})));
+    out
+}
+
+// ---- layer sub menu (UI.md §22.2) ---------------------------------------------------
+
+/// One entry of the row context menu's "Layer" sub menu.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LayerMenuItem {
+    pub label: String,
+    pub command: &'static str,
+    pub args: Json,
+    /// The whole selection is on this layer already.
+    pub checked: bool,
+}
+
+/// "No layer", one entry per layer and "New layer from selection", acting on the selected
+/// hierarchy nodes; empty when none is selected.
+pub fn layer_menu(scene: &Scene, selection: &BTreeSet<NodeId>) -> Vec<LayerMenuItem> {
+    let ids: Vec<NodeId> = selection
+        .iter()
+        .copied()
+        .filter(|id| scene.node(*id).is_some_and(|n| !n.is_tag()))
+        .collect();
+    if ids.is_empty() {
+        return Vec::new();
+    }
+    let nodes: Vec<u64> = ids.iter().map(|i| i.0).collect();
+    let on = |l: Option<LayerId>| ids.iter().all(|id| layers::layer_id(scene, *id) == l);
+    let mut out = vec![LayerMenuItem {
+        label: "No layer".into(),
+        command: "layer.assign",
+        args: json!({"layer": null, "nodes": nodes}),
+        checked: on(None),
+    }];
+    for l in scene.layers().iter() {
+        out.push(LayerMenuItem {
+            label: l.name.clone(),
+            command: "layer.assign",
+            args: json!({"layer": l.id.0, "nodes": nodes}),
+            checked: on(Some(l.id)),
+        });
+    }
+    out.push(LayerMenuItem {
+        label: "New layer from selection".into(),
+        command: "layer.create",
+        args: json!({"assign": true, "nodes": nodes}),
+        checked: false,
+    });
     out
 }

@@ -644,7 +644,43 @@ pub struct GoldenCase {
     pub dir: PathBuf,
 }
 
+/// First line of a Git LFS pointer file (checkouts without LFS leave these in place of data).
+pub const LFS_POINTER_MARKER: &str = "version https://git-lfs.github.com/spec/v1";
+
+/// True if `src` is a Git LFS pointer instead of real data.
+pub fn is_lfs_pointer(src: &str) -> bool {
+    src.starts_with(LFS_POINTER_MARKER)
+}
+
+/// Reads at most the first 128 bytes of a file and tests them for an LFS pointer.
+fn file_is_lfs_pointer(path: &Path) -> bool {
+    use std::io::Read;
+    let mut buf = Vec::new();
+    fs::File::open(path)
+        .and_then(|f| f.take(128).read_to_end(&mut buf))
+        .is_ok()
+        && is_lfs_pointer(&String::from_utf8_lossy(&buf))
+}
+
 impl GoldenCase {
+    /// `Some(note)` if the case's mesh or samples files are Git LFS pointers (data not
+    /// fetched). Such a case is skipped with the note, never failed and never passed.
+    pub fn data_not_fetched(&self) -> Option<String> {
+        let mut files: Vec<String> = self.samples_files();
+        if let Ok(m) = self.manifest()
+            && let Some(rel) = m.mesh
+        {
+            files.push(rel);
+        }
+        let hit = files
+            .into_iter()
+            .find(|f| file_is_lfs_pointer(&self.dir.join(f)))?;
+        Some(format!(
+            "{}/{}: data not fetched ({hit} is a Git LFS pointer; run `git lfs pull`) - skipped",
+            self.feature, self.name
+        ))
+    }
+
     pub fn manifest(&self) -> Result<CaseManifest, String> {
         let path = self.dir.join("case.toml");
         let src = fs::read_to_string(&path).map_err(|e| format!("missing case.toml ({e})"))?;
@@ -818,6 +854,9 @@ pub fn validate_case(repo_root: &Path, case: &GoldenCase) -> Vec<String> {
         problems.push(format!("observation {obs:?} must be under docs/parity/"));
     } else if !repo_root.join(obs).is_file() {
         problems.push(format!("observation {obs:?} does not exist"));
+    }
+    if case.data_not_fetched().is_some() {
+        return problems;
     }
     let mesh = case.expected_mesh();
     if let Err(e) = mesh {

@@ -57,11 +57,36 @@ with the bounding box of the world-space points. With `--export` it also writes 
 exactly like `export` (below) and adds `"export": {"path", "objects"}`. An unknown node is
 exit 1; a node without geometry is exit 1 (`node N has no geometry`).
 
-### `forge export <scene> --format obj --out <path> [--selected ID,ID,...] [--frame N]`
-Writes the scene **evaluated at frame `N`** (default 0) as OBJ (`App::export_obj`; the
-same as `file.export_obj` at that frame). `--selected` limits it to those nodes and their
-descendants. Only `obj` is accepted. Nothing to export is exit 1.
+### `forge export <scene> --format obj --out <path> [--selected ID,ID,...] [--frame N] [--option key=value]...`
+Writes the scene **evaluated at frame `N`** (default 0) in the given format (`App::export_at`; the
+same as `file.export` at that frame). `--selected` limits it to those nodes and their
+descendants. `--format` is a format id from `forge_io::formats` that can export (today `obj`); any
+other value is exit 1 and the message lists the supported ids. `--option key=value` sets an
+export option (IO.md §3.2; repeatable; the value `true`/`false`, a number or else a string; an
+unknown key or a wrong type is exit 1). Nothing to export is exit 1.
 JSON: `{"ok": true, "path": "<out>", "objects": n, "frame": N}`.
+
+### `forge convert <input> --out <dir> [--format obj] [--option key=value]... [--frame N] [--recursive] [--force]`
+Batch conversion (brief 172, IO.md §3.6); no window, no editor.
+- `<input>` is a file or a folder. A folder is searched for files (direct children; every
+  level with `--recursive`) in path order (byte order of the relative path), so runs are
+  reproducible.
+- `--format obj` (default): every `.forge` file (extension case-insensitive) is loaded and
+  exported evaluated at `--frame` (default 0) with the export options. Files of other kinds
+  are skipped (reported, not an error).
+- `--format forge`: every file whose extension belongs to a format that can import (`.obj`)
+  is imported into an empty scene (import options from `--option`) and saved as a native
+  scene. `.forge` files are skipped.
+- `--out <dir>` is created if needed. The output of `a/b.forge` is `<dir>/b.obj`
+  (`<dir>/a/b.obj` with `--recursive`, mirroring the folders under `<input>`). An existing
+  output is a failure for that file unless `--force`.
+- One file failing (unreadable, corrupt scene, nothing to export, bad import, existing output)
+  does not stop the others; each failure is printed to stderr as `error: <file>: <message>`.
+  Exit 0 when every converted file succeeded and at least one file was converted; exit 1 if
+  any failed or none was convertible (message `no convertible files in <input>`); a missing
+  input is exit 1; a bad `--option` or unknown `--format` is exit 1 before any file is touched.
+- JSON: `{"ok": true, "format", "out", "converted": n, "skipped": [paths], "files":
+  [{"input", "output", "objects"|"nodes"}]}`; paths are as given/joined, not canonicalised.
 
 ### `forge cmd <scene> <command-id> [--args JSON] [--save]`
 Opens the scene, runs one command with the JSON object `--args` (default `{}`), and
@@ -125,6 +150,7 @@ and exits with its code. Without `--headless` the editor starts.
 - Exit codes: unknown command id and bad args exit 1, missing scene exits 2, stubs exit 1;
   `cmd` without `--save` leaves the file unchanged; JSON errors carry the code.
 - `file.export_obj` of an animated scene writes the evaluated frame (`crates/app/tests`).
+- `convert` (`apps/forge/tests/convert.rs`): a folder of scenes becomes a folder of OBJ files equal to `export` of each; recursion mirrors folders; `--option normals=false weld=false`; `--force`; skipped files; one bad scene fails the exit code but the others are written; `--format forge` imports OBJ files; unknown format/option exits 1; no plugins (`FORGE_NO_PLUGINS=1`).
 - `forge rpc` against an in-process server (port 0): version, `command.run`, `eval.mesh`,
   `--port/--token`, wrong token, unknown method, bad `--params`, no editor (exit 1).
 - `forge run`: a script that builds a scene with `--save` (the file loads and has the

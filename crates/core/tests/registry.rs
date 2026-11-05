@@ -16,7 +16,7 @@ fn builtins_contain_null() {
     assert_eq!(null.label, "Null");
     assert_eq!(
         null.params.len(),
-        6,
+        7,
         "transform params and object state params only"
     );
     assert!(

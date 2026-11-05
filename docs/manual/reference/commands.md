@@ -2,7 +2,7 @@
 
 # Command reference
 
-112 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+165 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -18,12 +18,14 @@
 | [`object.enable`](#objectenable) | Enable | yes | `object_enable` |
 | [`edit.undo`](#editundo) | Undo | no | `edit_undo` |
 | [`edit.redo`](#editredo) | Redo | no | `edit_redo` |
+| [`edit.history_jump`](#edithistory_jump) | Jump in History | no | `edit_history_jump` |
 | [`view.shading`](#viewshading) | Shading | no | `view_shading` |
 | [`view.layout`](#viewlayout) | Viewport Layout | no | `view_layout` |
 | [`view.maximize`](#viewmaximize) | Maximize Pane | no | `view_maximize` |
 | [`view.lighting`](#viewlighting) | Viewport Lighting | no | `view_lighting` |
 | [`view.shadows`](#viewshadows) | Viewport Shadows | no | `view_shadows` |
 | [`view.antialias`](#viewantialias) | Viewport Anti-aliasing | no | `view_antialias` |
+| [`view.hud`](#viewhud) | Viewport HUD | no | `view_hud` |
 | [`view.gizmo_mode`](#viewgizmo_mode) | Gizmo Mode | no | `view_gizmo_mode` |
 | [`view.gizmo_space`](#viewgizmo_space) | Gizmo Space | no | `view_gizmo_space` |
 | [`object.begin_rename`](#objectbegin_rename) | Rename Active | no | `object_begin_rename` |
@@ -44,8 +46,25 @@
 | [`select.loop`](#selectloop) | Loop Selection | yes | `select_loop` |
 | [`select.ring`](#selectring) | Ring Selection | yes | `select_ring` |
 | [`transform.set`](#transformset) | Set Transform | yes | `transform_set` |
+| [`layer.create`](#layercreate) | New Layer | yes | `layer_create` |
+| [`layer.delete`](#layerdelete) | Delete Layer | yes | `layer_delete` |
+| [`layer.rename`](#layerrename) | Rename Layer | yes | `layer_rename` |
+| [`layer.set`](#layerset) | Set Layer | yes | `layer_set` |
+| [`layer.assign`](#layerassign) | Assign to Layer | yes | `layer_assign` |
+| [`layer.merge`](#layermerge) | Merge Layers | yes | `layer_merge` |
 | [`mesh.make_editable`](#meshmake_editable) | Make Editable | yes | `mesh_make_editable` |
 | [`mesh.current_state_to_object`](#meshcurrent_state_to_object) | Current State to Object | yes | `mesh_current_state_to_object` |
+| [`spline.create`](#splinecreate) | Create Spline | yes | `spline_create` |
+| [`spline.edit_points`](#splineedit_points) | Edit Spline Points | yes | `spline_edit_points` |
+| [`spline.insert_point`](#splineinsert_point) | Insert Spline Point | yes | `spline_insert_point` |
+| [`spline.delete_points`](#splinedelete_points) | Delete Spline Points | yes | `spline_delete_points` |
+| [`spline.set_closed`](#splineset_closed) | Close Spline | yes | `spline_set_closed` |
+| [`spline.set_type`](#splineset_type) | Set Spline Type | yes | `spline_set_type` |
+| [`spline.chamfer`](#splinechamfer) | Chamfer Spline | yes | `spline_chamfer` |
+| [`spline.outline`](#splineoutline) | Create Spline Outline | yes | `spline_outline` |
+| [`spline.boolean`](#splineboolean) | Spline Boolean | yes | `spline_boolean` |
+| [`spline.reverse`](#splinereverse) | Reverse Spline | yes | `spline_reverse` |
+| [`spline.subdivide`](#splinesubdivide) | Subdivide Spline | yes | `spline_subdivide` |
 | [`mesh.extrude`](#meshextrude) | Extrude | yes | `mesh_extrude` |
 | [`mesh.extrude_inner`](#meshextrude_inner) | Extrude Inner | yes | `mesh_extrude_inner` |
 | [`mesh.bevel`](#meshbevel) | Bevel | yes | `mesh_bevel` |
@@ -63,6 +82,11 @@
 | [`mesh.mirror`](#meshmirror) | Mirror | yes | `mesh_mirror` |
 | [`mesh.center_axis`](#meshcenter_axis) | Center Axis to | yes | `mesh_center_axis` |
 | [`mesh.slide`](#meshslide) | Slide | yes | `mesh_slide` |
+| [`mesh.array_command`](#mesharray_command) | Array | yes | `mesh_array_command` |
+| [`object.duplicate`](#objectduplicate) | Duplicate | yes | `object_duplicate` |
+| [`object.arrange`](#objectarrange) | Arrange | yes | `object_arrange` |
+| [`object.randomize`](#objectrandomize) | Randomize | yes | `object_randomize` |
+| [`object.transfer`](#objecttransfer) | Transfer | yes | `object_transfer` |
 | [`mesh.loop_cut`](#meshloop_cut) | Loop Cut | yes | `mesh_loop_cut` |
 | [`mesh.knife`](#meshknife) | Knife | yes | `mesh_knife` |
 | [`mesh.bridge`](#meshbridge) | Bridge | yes | `mesh_bridge` |
@@ -72,6 +96,14 @@
 | [`mesh.transform`](#meshtransform) | Transform Components | yes | `mesh_transform` |
 | [`edit.soft_selection`](#editsoft_selection) | Soft Selection | no | `edit_soft_selection` |
 | [`edit.symmetry`](#editsymmetry) | Symmetry | no | `edit_symmetry` |
+| [`object.set_axis`](#objectset_axis) | Set Axis | yes | `object_set_axis` |
+| [`object.center_axis`](#objectcenter_axis) | Center Axis | yes | `object_center_axis` |
+| [`object.align_axis`](#objectalign_axis) | Align Axis | yes | `object_align_axis` |
+| [`edit.axis_mode`](#editaxis_mode) | Axis Mode | no | `edit_axis_mode` |
+| [`snap.set`](#snapset) | Snap Settings | no | `snap_set` |
+| [`snap.toggle`](#snaptoggle) | Snapping | no | `snap_toggle` |
+| [`snap.reset`](#snapreset) | Reset Snapping | no | `snap_reset` |
+| [`snap.query`](#snapquery) | Snap Query | no | `snap_query` |
 | [`param.set`](#paramset) | Set Parameter | yes | `param_set` |
 | [`key.record`](#keyrecord) | Record | yes | `key_record` |
 | [`key.delete_at_frame`](#keydelete_at_frame) | Delete Keys | yes | `key_delete_at_frame` |
@@ -106,9 +138,29 @@
 | [`file.open_dialog`](#fileopen_dialog) | Open... | no | `file_open_dialog` |
 | [`file.save_dialog`](#filesave_dialog) | Save | no | `file_save_dialog` |
 | [`file.save_as_dialog`](#filesave_as_dialog) | Save As... | no | `file_save_as_dialog` |
+| [`ui.command_palette`](#uicommand_palette) | Command Palette... | no | `ui_command_palette` |
+| [`ui.workspace`](#uiworkspace) | Workspace | no | `ui_workspace` |
+| [`ui.layout_save`](#uilayout_save) | Save Layout | no | `ui_layout_save` |
+| [`ui.layout_load`](#uilayout_load) | Load Layout | no | `ui_layout_load` |
+| [`ui.layout_delete`](#uilayout_delete) | Delete Layout | no | `ui_layout_delete` |
+| [`ui.theme`](#uitheme) | Theme | no | `ui_theme` |
+| [`ui.scale`](#uiscale) | UI Scale | no | `ui_scale` |
 | [`file.import_obj`](#fileimport_obj) | Import OBJ | yes | `file_import_obj` |
 | [`file.export_obj`](#fileexport_obj) | Export OBJ | no | `file_export_obj` |
+| [`file.import`](#fileimport) | Import | yes | `file_import` |
+| [`file.export`](#fileexport) | Export | no | `file_export` |
+| [`io.formats`](#ioformats) | Exchange Formats | no | `io_formats` |
+| [`file.import_dialog`](#fileimport_dialog) | Import... | no | `file_import_dialog` |
+| [`file.export_dialog`](#fileexport_dialog) | Export... | no | `file_export_dialog` |
+| [`browser.list`](#browserlist) | List Presets | no | `browser_list` |
+| [`browser.load`](#browserload) | Load Preset | yes | `browser_load` |
+| [`browser.save_preset`](#browsersave_preset) | Save Preset | no | `browser_save_preset` |
+| [`browser.delete_preset`](#browserdelete_preset) | Delete Preset | no | `browser_delete_preset` |
+| [`browser.recent`](#browserrecent) | Recent Files | no | `browser_recent` |
+| [`browser.open_recent`](#browseropen_recent) | Open Recent | no | `browser_open_recent` |
+| [`browser.clear_recent`](#browserclear_recent) | Clear Recent Files | no | `browser_clear_recent` |
 | [`param.edit`](#paramedit) | Edit Parameter | yes | `param_edit` |
+| [`transform.edit`](#transformedit) | Set Coordinates | yes | `transform_edit` |
 | [`graph.add_node`](#graphadd_node) | Add Graph Node | yes | `graph_add_node` |
 | [`graph.remove`](#graphremove) | Remove Graph Node | yes | `graph_remove` |
 | [`graph.connect`](#graphconnect) | Connect Graph Ports | yes | `graph_connect` |
@@ -118,6 +170,7 @@
 | [`graph.get`](#graphget) | Get Graph | no | `graph_get` |
 | [`graph.node_types`](#graphnode_types) | List Graph Node Types | no | `graph_node_types` |
 | [`graph.evaluate`](#graphevaluate) | Evaluate Graph | no | `graph_evaluate` |
+| [`plugin.list`](#pluginlist) | List Plugins | no | `plugin_list` |
 
 ## `object`
 
@@ -228,6 +281,104 @@ No arguments.
 
 Example: `forge cmd scene.forge object.begin_rename --args '{}'`
 
+### `object.duplicate`
+
+Duplicate. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `copies` | integer | no | Default: `1`. |
+| `mode` | `"step"` \| `"total"` | no | Default: `"step"`. |
+| `nodes` | array of integer or null | no | Nodes to work on; the current selection when absent. |
+| `offset` | array of number (length 3) | no | Default: `[0.0,0.0,0.0]`. |
+| `rotation_deg` | array of number (length 3) | no | Default: `[0.0,0.0,0.0]`. |
+| `scale` | array of number (length 3) | no | Default: `[1.0,1.0,1.0]`. |
+
+Example: `forge cmd scene.forge object.duplicate --args '{"copies":2,"nodes":[1],"offset":[200.0,0.0,0.0]}'`
+
+### `object.arrange`
+
+Arrange. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `columns` | integer | no | Default: `3`. |
+| `mode` | `"line"` \| `"grid"` \| `"circle"` | no | Default: `"line"`. |
+| `nodes` | array of integer or null | no | Nodes to work on; the current selection when absent. |
+| `plane` | `"xz"` \| `"xy"` \| `"zy"` | no | Default: `"xz"`. |
+| `radius` | number | no | Default: `200.0`. |
+| `row_spacing` | array of number (length 3) | no | Default: `[0.0,0.0,200.0]`. |
+| `spacing` | array of number (length 3) | no | Default: `[200.0,0.0,0.0]`. |
+| `start_angle_deg` | number | no | Default: `0.0`. |
+
+Example: `forge cmd scene.forge object.arrange --args '{"mode":"line","nodes":[1,2],"spacing":[200.0,0.0,0.0]}'`
+
+### `object.randomize`
+
+Randomize. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Nodes to work on; the current selection when absent. |
+| `position` | array of number (length 3) | no | Default: `[50.0,50.0,50.0]`. |
+| `rotation_deg` | array of number (length 3) | no | Default: `[0.0,0.0,0.0]`. |
+| `scale` | array of number (length 3) | no | Default: `[0.0,0.0,0.0]`. |
+| `seed` | integer | no | Default: `1`. |
+| `uniform_scale` | boolean | no | Default: `false`. |
+
+Example: `forge cmd scene.forge object.randomize --args '{"nodes":[1],"position":[50.0,50.0,50.0],"seed":7}'`
+
+### `object.transfer`
+
+Transfer. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `position` | boolean | no | Default: `true`. |
+| `rotation` | boolean | no | Default: `true`. |
+| `scale` | boolean | no | Default: `true`. |
+| `source` | integer or null | no | Node to copy from; the active node when absent. |
+| `space` | `"world"` \| `"local"` | no | Default: `"world"`. |
+| `target` | integer | no | Default: `-1`. |
+
+Example: `forge cmd scene.forge object.transfer --args '{"source":1,"space":"world","target":2}'`
+
+### `object.set_axis`
+
+Set Axis. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | The object; the active node when absent. |
+| `pos` | array of number (length 3) or null | no | New axis position `[x, y, z]`. |
+| `rot` | array of number (length 3) or null | no | New axis rotation `[h, p, b]` in degrees. |
+| `scale` | array of number (length 3) or null | no | New axis scale `[x, y, z]` (always the object's own scale). |
+| `space` | string \| string \| null | no | Whether `pos` and `rot` are local (default) or world values. |
+
+Example: `forge cmd scene.forge object.set_axis --args '{"pos":[0.0,50.0,0.0],"space":"world"}'`
+
+### `object.center_axis`
+
+Center Axis. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Objects; the current selection when absent. |
+| `to` | string \| string \| string \| string \| null | no | What to centre on (default `bounding_box`). |
+
+Example: `forge cmd scene.forge object.center_axis --args '{"to":"bounding_box"}'`
+
+### `object.align_axis`
+
+Align Axis. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `to` | string \| string \| string | yes |  |
+| `nodes` | array of integer or null | no | Objects; the current selection when absent. |
+
+Example: `forge cmd scene.forge object.align_axis --args '{"to":"world"}'`
+
 
 ## `view`
 
@@ -302,6 +453,19 @@ Viewport Anti-aliasing. Not an undoable edit.
 | `enabled` | boolean | yes |  |
 
 Example: `forge cmd scene.forge view.antialias --args '{"enabled":true}'`
+
+### `view.hud`
+
+Viewport HUD. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `item` | `"fps"` \| `"counts"` \| `"tool"` \| `"frame"` \| `"camera"` \| `"safe_frames"` | yes | A heads-up display item of a viewport pane (docs/specs/UI.md §23). |
+| `all_panes` | boolean | no | Apply to all four panes (`pane` is ignored). Default: `false`. |
+| `enabled` | boolean or null | no | Absent toggles. |
+| `pane` | `"perspective"` \| `"top"` \| `"front"` \| `"right"` \| null | no | Viewport pane; absent = the active pane. |
+
+Example: `forge cmd scene.forge view.hud --args '{"enabled":true,"item":"counts","pane":"perspective"}'`
 
 ### `view.gizmo_mode`
 
@@ -405,6 +569,16 @@ No arguments.
 
 Example: `forge cmd scene.forge edit.redo --args '{}'`
 
+### `edit.history_jump`
+
+Jump in History. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `position` | integer | yes | Number of history steps that should be applied: 0 is the original state, the number of undo steps the current one, and undo plus redo steps the newest. |
+
+Example: `forge cmd scene.forge edit.history_jump --args '{"position":0}'`
+
 ### `edit.soft_selection`
 
 Soft Selection. Not an undoable edit.
@@ -432,6 +606,16 @@ Symmetry. Not an undoable edit.
 
 Example: `forge cmd scene.forge edit.symmetry --args '{"axis":"x","enabled":true}'`
 
+### `edit.axis_mode`
+
+Axis Mode. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean or null | no | Switch axis mode on or off; toggles when absent. |
+
+Example: `forge cmd scene.forge edit.axis_mode --args '{"enabled":true}'`
+
 
 ## `select`
 
@@ -449,7 +633,9 @@ Example: `forge cmd scene.forge select.mode --args '{"mode":"points"}'`
 
 Select All. One undo step.
 
-No arguments.
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.all --args '{}'`
 
@@ -457,7 +643,9 @@ Example: `forge cmd scene.forge select.all --args '{}'`
 
 Deselect All. One undo step.
 
-No arguments.
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.none --args '{}'`
 
@@ -465,7 +653,9 @@ Example: `forge cmd scene.forge select.none --args '{}'`
 
 Invert Selection. One undo step.
 
-No arguments.
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.invert --args '{}'`
 
@@ -473,7 +663,9 @@ Example: `forge cmd scene.forge select.invert --args '{}'`
 
 Grow Selection. One undo step.
 
-No arguments.
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.grow --args '{}'`
 
@@ -481,7 +673,9 @@ Example: `forge cmd scene.forge select.grow --args '{}'`
 
 Shrink Selection. One undo step.
 
-No arguments.
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.shrink --args '{}'`
 
@@ -489,7 +683,9 @@ Example: `forge cmd scene.forge select.shrink --args '{}'`
 
 Select Connected. One undo step.
 
-No arguments.
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.connected --args '{}'`
 
@@ -501,6 +697,7 @@ Convert Selection. One undo step.
 |---|---|---|---|
 | `to` | `"model"` \| `"points"` \| `"edges"` \| `"polys"` | yes | Element kind to convert to: points, edges or polys (not model). |
 | `mode` | string \| string | no | `strict` (default): all parts selected; `tolerant`: any part. Default: `"strict"`. |
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.convert --args '{"mode":"strict","to":"polys"}'`
 
@@ -511,6 +708,7 @@ Loop Selection. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `across` | integer | no | Polygons only: which edge pair of a quad the strip crosses (0 or 1, default 0). Default: `0`. |
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.loop --args '{"across":0}'`
 
@@ -521,6 +719,7 @@ Ring Selection. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `across` | integer | no | Polygons only: which edge pair of a quad the strip crosses (0 or 1, default 0). Default: `0`. |
+| `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.ring --args '{"across":0}'`
 
@@ -539,6 +738,103 @@ Set Transform. One undo step.
 | `scale` | array of number (length 3) or null | no | Scale `[x, y, z]`. |
 
 Example: `forge cmd scene.forge transform.set --args '{"node":1,"pos":[0.0,100.0,0.0],"rot":[90.0,0.0,0.0],"scale":[1.0,1.0,1.0]}'`
+
+### `transform.edit`
+
+Set Coordinates. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `gesture` | integer or null | no | Edits with the same gesture number and nodes merge into one undo step. |
+| `nodes` | array of integer or null | no | Objects to edit; absent means the current selection. |
+| `pos` | array of number or null (length 3) or null | no | Position `[x, y, z]`; a `null` axis keeps the shown value. |
+| `rot` | array of number or null (length 3) or null | no | Rotation `[h, p, b]` in degrees; `null` keeps an axis. |
+| `scale` | array of number or null (length 3) or null | no | Scale factors; `null` keeps an axis. Not together with `size`. |
+| `size` | array of number or null (length 3) or null | no | Size (mesh bounding box times scale); `null` keeps an axis. |
+| `space` | string or null | no | `local` (default) or `world`. |
+
+Example: `forge cmd scene.forge transform.edit --args '{"gesture":1,"nodes":[1],"pos":[0.0,100.0,null],"space":"world"}'`
+
+
+## `layer`
+
+### `layer.create`
+
+New Layer. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `assign` | boolean | no | Put `nodes` (the selection when absent) on the new layer. Default: `false`. |
+| `color` | array of number (length 3) or null | no | Colour `[r, g, b]`, each 0..1; the next palette colour when absent. |
+| `name` | string or null | no | Name; "Layer N" when absent. |
+| `nodes` | array of integer or null | no |  |
+
+Example: `forge cmd scene.forge layer.create --args '{"name":"Props"}'`
+
+### `layer.delete`
+
+Delete Layer. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `layers` | array of integer | yes | Layer ids. |
+
+Example: `forge cmd scene.forge layer.delete --args '{"layers":[10]}'`
+
+### `layer.rename`
+
+Rename Layer. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `layer` | integer | yes |  |
+| `name` | string | yes |  |
+
+Example: `forge cmd scene.forge layer.rename --args '{"layer":10,"name":"Walls"}'`
+
+### `layer.set`
+
+Set Layer. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `animation` | boolean or null | no | Tracks of the members are evaluated. |
+| `color` | array of number (length 3) or null | no |  |
+| `deformers` | boolean or null | no | Deformer members deform. |
+| `expressions` | boolean or null | no | Expression tags of the members run. |
+| `generators` | boolean or null | no | Generator members produce geometry. |
+| `layer` | integer or null | no | One layer id. |
+| `layers` | array of integer or null | no | Several layer ids (instead of `layer`). |
+| `locked` | boolean or null | no | Not pickable or draggable in the viewport. |
+| `manager` | boolean or null | no | Listed in the object manager. |
+| `name` | string or null | no |  |
+| `render` | boolean or null | no | Render visibility. |
+| `solo` | boolean or null | no | Only soloed layers are shown while any is soloed. |
+| `view` | boolean or null | no | Viewport visibility. |
+
+Example: `forge cmd scene.forge layer.set --args '{"layer":10,"locked":true,"view":false}'`
+
+### `layer.assign`
+
+Assign to Layer. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `layer` | integer or null | no | The layer; null (or absent) removes the nodes from their layer. |
+| `nodes` | array of integer or null | no | Nodes; the current selection when absent. |
+
+Example: `forge cmd scene.forge layer.assign --args '{"layer":10,"nodes":[2,3]}'`
+
+### `layer.merge`
+
+Merge Layers. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `layers` | array of integer | yes | Layers to merge, at least two, including `into`. |
+| `into` | integer | yes | The layer that stays and receives the members. |
+
+Example: `forge cmd scene.forge layer.merge --args '{"into":10,"layers":[10,11]}'`
 
 
 ## `mesh`
@@ -570,6 +866,7 @@ Extrude. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -582,6 +879,7 @@ Extrude Inner. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -595,6 +893,7 @@ Bevel. One undo step.
 |---|---|---|---|
 | `edges` | array of integer \| array of integer (length 2) or null | no | Edges (edge mode): edge ids of the mesh, or point pairs [a, b]. |
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `points` | array of integer or null | no | Point indices (point mode). |
 | `polys` | array of integer or null | no | Polygon indices (polygon mode). When none of polys, edges, points is given the stored selection is used. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
@@ -608,6 +907,7 @@ Subdivide. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -620,6 +920,7 @@ Triangulate. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -632,6 +933,7 @@ Untriangulate. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -644,6 +946,7 @@ Reverse Normals. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -656,6 +959,7 @@ Optimize. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -669,6 +973,7 @@ Weld. One undo step.
 |---|---|---|---|
 | `edges` | array of integer \| array of integer (length 2) or null | no | Edges (edge mode): edge ids of the mesh, or point pairs [a, b]. |
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `points` | array of integer or null | no | Point indices (point mode). |
 | `polys` | array of integer or null | no | Polygon indices (polygon mode). When none of polys, edges, points is given the stored selection is used. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
@@ -682,6 +987,7 @@ Melt. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -695,6 +1001,7 @@ Dissolve. One undo step.
 |---|---|---|---|
 | `edges` | array of integer \| array of integer (length 2) or null | no | Edges (edge mode): edge ids of the mesh, or point pairs [a, b]. |
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `points` | array of integer or null | no | Point indices (point mode). |
 | `polys` | array of integer or null | no | Polygon indices (polygon mode). When none of polys, edges, points is given the stored selection is used. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
@@ -708,6 +1015,7 @@ Split. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -720,6 +1028,7 @@ Disconnect. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -733,6 +1042,7 @@ Connect Points/Edges. One undo step.
 |---|---|---|---|
 | `edges` | array of integer \| array of integer (length 2) or null | no | Edges (edge mode): edge ids of the mesh, or point pairs [a, b]. |
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `points` | array of integer or null | no | Point indices (point mode). |
 | `polys` | array of integer or null | no | Polygon indices (polygon mode). When none of polys, edges, points is given the stored selection is used. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
@@ -746,6 +1056,7 @@ Mirror. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -758,6 +1069,7 @@ Center Axis to. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
@@ -771,11 +1083,25 @@ Slide. One undo step.
 |---|---|---|---|
 | `edges` | array of integer \| array of integer (length 2) or null | no | Edges (edge mode): edge ids of the mesh, or point pairs [a, b]. |
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
 | `points` | array of integer or null | no | Point indices (point mode). |
 | `polys` | array of integer or null | no | Polygon indices (polygon mode). When none of polys, edges, points is given the stored selection is used. |
 | `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
 
 Example: `forge cmd scene.forge mesh.slide --args '{"edges":[0],"settings":{"amount":0.5}}'`
+
+### `mesh.array_command`
+
+Array. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects, all edited in one undo step, each with its own stored selection. Absent (and no node): every selected polygon object. Not together with node; polys, edges and points need a single object. |
+| `polys` | array of integer or null | no | Polygon indices; the stored polygon selection when absent. |
+| `settings` | object | no | Tool settings; absent keys keep the factory defaults. |
+
+Example: `forge cmd scene.forge mesh.array_command --args '{"settings":{"copies":2,"offset":[200.0,0.0,0.0]}}'`
 
 ### `mesh.loop_cut`
 
@@ -865,16 +1191,204 @@ Transform Components. One undo step.
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
+| `gesture` | integer or null | no | Steps with the same gesture number and objects merge into one undo step (a dragged Coordinates field). |
 | `move` | array of number (length 3) | no | Translation in object space. |
 | `node` | integer or null | no | Polygon object; the active node when absent. |
+| `nodes` | array of integer or null | no | Polygon objects transformed together in one undo step; every selected polygon object when node and nodes are absent (EDITABLE.md section 6.4). |
 | `pivot` | array of number (length 3) | no | Pivot, object space; the mean of the selected points when absent. |
-| `points` | array of integer or null | no | Point ids; the stored selection of the current mode (points, points of the edges or of the polygons) when absent. |
+| `points` | array of integer or null | no | Point ids (one object only); the stored selection of the current mode (points, points of the edges or of the polygons) when absent. |
 | `rotate` | object | no | Rotation about the pivot, angle in degrees. |
 | `scale` | number \| array of number (length 3) | no | Scale about the pivot: one number or [x, y, z]. |
 | `soft` | boolean \| object | no | false: off, true: on with the editor settings, object: on with these values over the editor settings. Absent: the editor setting. |
+| `space` | `"object"` \| `"world"` \| `null` | no | object: the arguments are in each object's object space (default for one object); world: in world space, one pivot for all objects (default for several). |
 | `symmetry` | boolean \| object | no | As soft, for the symmetry plane. |
 
 Example: `forge cmd scene.forge mesh.transform --args '{"move":[0.0,10.0,0.0],"points":[0],"soft":{"falloff":"bell","radius":100.0},"symmetry":{"axis":"x"}}'`
+
+
+## `spline`
+
+### `spline.create`
+
+Create Spline. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `points` | array of array of number (length 3) | yes | The points `[x, y, z]`, at least two. |
+| `closed` | boolean or null | no | Join the last point to the first (default false). |
+| `name` | string or null | no | Object name (default "Spline"). |
+| `parent` | integer or null | no | Parent node; the top level when absent. |
+| `type` | `"linear"` \| `"cubic"` \| `"akima"` \| `"bspline"` \| `"bezier"` \| null | no | Interpolation type (default `bezier`; all handles start at zero). |
+
+Example: `forge cmd scene.forge spline.create --args '{"closed":false,"points":[[0,0,0],[100,0,0],[100,100,0]]}'`
+
+### `spline.edit_points`
+
+Edit Spline Points. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline. |
+| `edits` | array of object | yes | At least one edit; each sets at least one of position, left, right. |
+| `gesture` | integer or null | no | Edits with the same gesture number on the same spline merge into one undo step. |
+
+Example: `forge cmd scene.forge spline.edit_points --args '{"edits":[{"index":0,"position":[10,0,0]}],"node":1}'`
+
+### `spline.insert_point`
+
+Insert Spline Point. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline. |
+| `index` | integer | yes | Where the point ends up in the list, 0 ..= the number of points. |
+| `position` | array of number (length 3) | yes |  |
+| `left` | array of number (length 3) or null | no | Left handle (default zero). |
+| `right` | array of number (length 3) or null | no | Right handle (default zero). |
+
+Example: `forge cmd scene.forge spline.insert_point --args '{"index":1,"node":1,"position":[50,0,0]}'`
+
+### `spline.delete_points`
+
+Delete Spline Points. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline. |
+| `indices` | array of integer | yes | Point indices to remove; a segment keeps at least two points. |
+
+Example: `forge cmd scene.forge spline.delete_points --args '{"indices":[1],"node":1}'`
+
+### `spline.set_closed`
+
+Close Spline. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline. |
+| `closed` | boolean | yes |  |
+| `segment` | integer or null | no | Segment index (default 0). |
+
+Example: `forge cmd scene.forge spline.set_closed --args '{"closed":true,"node":1}'`
+
+### `spline.set_type`
+
+Set Spline Type. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `type` | `"linear"` \| `"cubic"` \| `"akima"` \| `"bspline"` \| `"bezier"` | yes | The interpolation types (SPLINES.md §1.1). |
+| `nodes` | array of integer or null | no | Editable splines; the current selection when absent. |
+
+Example: `forge cmd scene.forge spline.set_type --args '{"nodes":[1],"type":"akima"}'`
+
+### `spline.chamfer`
+
+Chamfer Spline. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline. |
+| `flat` | boolean or null | no | A straight cut instead of an arc (default false). |
+| `indices` | array of integer or null | no | Points to chamfer; all points when absent. |
+| `radius` | number or null | no | Distance from each corner along both edges (default 10; at most half an edge). |
+
+Example: `forge cmd scene.forge spline.chamfer --args '{"flat":false,"node":1,"radius":40}'`
+
+### `spline.outline`
+
+Create Spline Outline. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline (every segment closed). |
+| `distance` | number or null | no | Offset to the right of the direction of travel (outward for a counter-clockwise spline); default 10, never 0. |
+
+Example: `forge cmd scene.forge spline.outline --args '{"distance":20,"node":1}'`
+
+### `spline.boolean`
+
+Spline Boolean. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `op` | `"union"` \| `"and"` \| `"or"` \| `"subtract"` \| `"intersect"` | yes | The operation. |
+| `a` | integer | yes | The first editable spline (closed, one segment); the result takes its place and transform. |
+| `b` | integer | yes | The second editable spline. |
+| `keep_inputs` | boolean or null | no | Keep the two inputs (default false: they are replaced by the result). |
+
+Example: `forge cmd scene.forge spline.boolean --args '{"a":1,"b":2,"op":"union"}'`
+
+### `spline.reverse`
+
+Reverse Spline. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline. |
+
+Example: `forge cmd scene.forge spline.reverse --args '{"node":1}'`
+
+### `spline.subdivide`
+
+Subdivide Spline. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline. |
+| `subdivisions` | integer or null | no | Parts every span is cut into (default 1 = unchanged, so 2 adds one point per span). |
+
+Example: `forge cmd scene.forge spline.subdivide --args '{"node":1,"subdivisions":2}'`
+
+
+## `snap`
+
+### `snap.set`
+
+Snap Settings. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean | no |  |
+| `grid_spacing` | number | no |  |
+| `mode` | `"3d"` \| `"2d"` | no |  |
+| `quantize` | object | no |  |
+| `radius` | number | no |  |
+| `targets` | object | no |  |
+| `visible_only` | boolean | no |  |
+| `workplane` | object | no |  |
+
+Example: `forge cmd scene.forge snap.set --args '{"enabled":true,"radius":12,"targets":{"grid_point":true,"vertex":true}}'`
+
+### `snap.toggle`
+
+Snapping. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean | no |  |
+
+Example: `forge cmd scene.forge snap.toggle --args '{}'`
+
+### `snap.reset`
+
+Reset Snapping. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge snap.reset --args '{}'`
+
+### `snap.query`
+
+Snap Query. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `point` | array of number (length 3) | yes | World point to snap. |
+| `nodes` | array of integer or null | no | Only snap to these nodes; the whole scene when absent. |
+| `radius` | number | no | World units (default 10). |
+
+Example: `forge cmd scene.forge snap.query --args '{"point":[0.0,0.0,0.0],"radius":25}'`
 
 
 ## `param`
@@ -1255,6 +1769,207 @@ Export OBJ. Not an undoable edit.
 
 Example: `forge cmd scene.forge file.export_obj --args '{"path":"model.obj","selected":false}'`
 
+### `file.import`
+
+Import. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `path` | string | yes |  |
+| `format` | string or null | no | Format id (`io.formats`); default: from the file extension. |
+| `options` | object | no | Import options by id (`io.formats` lists them). Default: `{}`. |
+
+Example: `forge cmd scene.forge file.import --args '{"options":{"flip_z":false},"path":"model.obj"}'`
+
+### `file.export`
+
+Export. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `path` | string | yes |  |
+| `format` | string or null | no | Format id (`io.formats`); default: from the file extension. |
+| `options` | object | no | Export options by id (`io.formats` lists them). Default: `{}`. |
+| `selected` | boolean | no | Export only the selected objects. Default: `false`. |
+
+Example: `forge cmd scene.forge file.export --args '{"options":{"normals":true},"path":"model.obj","selected":false}'`
+
+### `file.import_dialog`
+
+Import.... Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `format` | string or null | no | Format id; default `obj`. |
+
+Example: `forge cmd scene.forge file.import_dialog --args '{}'`
+
+### `file.export_dialog`
+
+Export.... Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `format` | string or null | no | Format id; default `obj`. |
+| `selected` | boolean | no | Export only the selected objects. Default: `false`. |
+
+Example: `forge cmd scene.forge file.export_dialog --args '{"selected":false}'`
+
+
+## `ui`
+
+### `ui.command_palette`
+
+Command Palette.... Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge ui.command_palette --args '{}'`
+
+### `ui.workspace`
+
+Workspace. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | A workspace name (`ui.workspace`) or the name of a saved layout. |
+
+Example: `forge cmd scene.forge ui.workspace --args '{"name":"Modeling"}'`
+
+### `ui.layout_save`
+
+Save Layout. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | A workspace name (`ui.workspace`) or the name of a saved layout. |
+
+Example: `forge cmd scene.forge ui.layout_save --args '{"name":"My layout"}'`
+
+### `ui.layout_load`
+
+Load Layout. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | A workspace name (`ui.workspace`) or the name of a saved layout. |
+
+Example: `forge cmd scene.forge ui.layout_load --args '{"name":"My layout"}'`
+
+### `ui.layout_delete`
+
+Delete Layout. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | A workspace name (`ui.workspace`) or the name of a saved layout. |
+
+Example: `forge cmd scene.forge ui.layout_delete --args '{"name":"My layout"}'`
+
+### `ui.theme`
+
+Theme. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | A workspace name (`ui.workspace`) or the name of a saved layout. |
+
+Example: `forge cmd scene.forge ui.theme --args '{"name":"dark"}'`
+
+### `ui.scale`
+
+UI Scale. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `factor` | number | yes | UI scale factor, 0.5 to 3 (1 = the OS scale). |
+
+Example: `forge cmd scene.forge ui.scale --args '{"factor":1.0}'`
+
+
+## `io`
+
+### `io.formats`
+
+Exchange Formats. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge io.formats --args '{}'`
+
+
+## `browser`
+
+### `browser.list`
+
+List Presets. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `kind` | `"objects"` \| null | no | Preset kind; only `objects` exists. |
+| `query` | string or null | no | Keep the presets whose name contains this text (case-insensitive). |
+
+Example: `forge cmd scene.forge browser.list --args '{"query":"table"}'`
+
+### `browser.load`
+
+Load Preset. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | `builtin:<name>` or `user:<name>`. |
+| `parent` | integer or null | no | Parent node of the loaded objects; the top level when absent. |
+
+Example: `forge cmd scene.forge browser.load --args '{"id":"builtin:table"}'`
+
+### `browser.save_preset`
+
+Save Preset. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | Preset name; the file name is derived from it. |
+| `nodes` | array of integer or null | no | Nodes to save; the selection when absent. |
+| `overwrite` | boolean | no | Replace an existing preset of the same name. Default: `false`. |
+
+Example: `forge cmd scene.forge browser.save_preset --args '{"name":"My preset","overwrite":false}'`
+
+### `browser.delete_preset`
+
+Delete Preset. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | A `user:<name>` preset id. |
+
+Example: `forge cmd scene.forge browser.delete_preset --args '{"id":"user:my-preset"}'`
+
+### `browser.recent`
+
+Recent Files. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge browser.recent --args '{}'`
+
+### `browser.open_recent`
+
+Open Recent. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `index` | integer | yes | Position in the recent list, 0 = newest. |
+
+Example: `forge cmd scene.forge browser.open_recent --args '{"index":0}'`
+
+### `browser.clear_recent`
+
+Clear Recent Files. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge browser.clear_recent --args '{}'`
+
 
 ## `graph`
 
@@ -1364,4 +2079,15 @@ Evaluate Graph. Not an undoable edit.
 | `tag` | integer | yes |  |
 
 Example: `forge cmd scene.forge graph.evaluate --args '{"tag":1}'`
+
+
+## `plugin`
+
+### `plugin.list`
+
+List Plugins. Not an undoable edit.
+
+No arguments.
+
+Example: `forge cmd scene.forge plugin.list --args '{}'`
 

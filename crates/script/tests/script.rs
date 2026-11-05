@@ -477,6 +477,7 @@ fn undo_redo_and_file_commands_are_not_available() {
         "file.save",
         "file.save_as",
         "file.import_obj",
+        "file.import",
     ] {
         let e = fail(&mut app, &format!(r#"run("{id}", #{{ path: "/tmp/x" }})"#));
         assert!(e.message.contains("not available in scripts"), "{id}: {e}");
@@ -636,6 +637,23 @@ fn modeling_tools_are_commands_for_scripts() {
     "#;
     let report = ok(&mut app, src);
     assert_eq!(report.value, json!([10, 7]));
+}
+
+#[test]
+fn arrangement_commands_are_commands_for_scripts() {
+    // docs/specs/MODELING.md §9: explicit numeric arguments, deterministic Randomize
+    let mut app = App::new_default();
+    let src = r#"
+        let a = run("object.create", #{ type: "forge.cube" }).node;
+        let d = run("object.duplicate", #{ nodes: [a], copies: 3, offset: [100.0, 0.0, 0.0] });
+        run("object.randomize", #{ nodes: d.created, seed: 4, position: [10.0, 0.0, 0.0] });
+        run("object.arrange", #{ nodes: d.created, spacing: [0.0, 50.0, 0.0] });
+        run("mesh.make_editable", #{ nodes: [a] });
+        let r = run("mesh.array_command", #{ settings: #{ copies: 2 } });
+        [d.count, r.points, r.polys]
+    "#;
+    let report = ok(&mut app, src);
+    assert_eq!(report.value, json!([3, 24, 18]));
 }
 
 #[test]

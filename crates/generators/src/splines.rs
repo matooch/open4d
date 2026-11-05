@@ -7,9 +7,9 @@ use std::collections::BTreeMap;
 use forge_core::{Category, NodeId, NodeType, ParamDesc, Scene, Unit, Value};
 use glam::DVec3;
 
-use crate::spline_prims;
 use crate::spline_sampling::{Interpolation, Sampling, add_params, sample};
 use crate::{BuildError, Params};
+use crate::{editable_spline, spline_prims};
 
 pub const CIRCLE: &str = "forge.circle_spline";
 pub const RECTANGLE: &str = "forge.rectangle_spline";
@@ -177,7 +177,8 @@ pub(crate) fn helix_type() -> NodeType {
 }
 
 pub(crate) fn is_spline(type_id: &str) -> bool {
-    matches!(type_id, CIRCLE | RECTANGLE | HELIX) || spline_prims::node_type(type_id).is_some()
+    matches!(type_id, CIRCLE | RECTANGLE | HELIX | editable_spline::TYPE)
+        || spline_prims::node_type(type_id).is_some()
 }
 
 /// Maps the spline's XY frame to its plane (§6.1).
@@ -257,12 +258,16 @@ fn node_type_of(type_id: &str) -> Option<NodeType> {
         CIRCLE => Some(circle_type()),
         RECTANGLE => Some(rectangle_type()),
         HELIX => Some(helix_type()),
+        editable_spline::TYPE => Some(editable_spline::node_type()),
         other => spline_prims::node_type(other),
     }
 }
 
 /// The spline of a spline-primitive node, in its local space.
 pub fn build_curve(type_id: &str, values: &BTreeMap<String, Value>) -> Result<Curve, BuildError> {
+    if type_id == editable_spline::TYPE {
+        return editable_spline::build_curve(values);
+    }
     let ty = node_type_of(type_id).ok_or_else(|| BuildError::UnknownType(type_id.to_string()))?;
     let p = Params { ty: &ty, values };
     let sampling = Sampling::from_params(&p);

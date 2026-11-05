@@ -1,0 +1,13 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Cube made editable with 1 x 1 x 1 segments; the top polygon ([4]) melted"
+mesh = "mesh.obj"
+
+[params]
+tool = "melt"
+segments = [1, 1, 1]
+select_polys = [4]
+
+[import]
+scale = 1.0
+flip_z = false

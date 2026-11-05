@@ -29,6 +29,10 @@ You can also do a sitting **with an observer session's help**:
    menu's submenus.
 5. **Command bar and tool palette:** the order of the button groups (describe the icons
    in words only).
+6. **Content browser and recent files** (brief 154, parity-pending):
+   - where the content browser opens by default and its tabs or top-level folders;
+   - how many files File > Open Recent keeps, and whether opening one moves it to the top;
+   - whether a saved preset of a selection keeps links to objects outside the selection.
 
 ## G2 · Shortcuts and navigation
 1. For each of these, the key it uses (write "none" if none):
@@ -81,6 +85,10 @@ You can also do a sitting **with an observer session's help**:
      snap radius and how to finish the polygon.
 8. Extrude drag: how far the offset changes per screen pixel at the default camera
    (drag 100 px and read the offset).
+
+9. **Spline point and handle dragging** (brief 190, parity-pending): on an editable Bezier
+   spline in Points mode, drag one tangent handle. Does the opposite handle follow (mirrored),
+   and which key breaks the link? Does dragging a point move its handles with it?
 
 ## G4 · Attribute manager widgets and field lists
 1. Number fields: drag to scrub? With which modifier for fine/coarse steps? What arrow

@@ -1,6 +1,6 @@
-# Modeling tools III: follow-ups from briefs 020–024 — observation (O58)
+# Modeling tools III: follow-ups from briefs 020–024 and 031 — observation (O58)
 
-Status: not observed · App version: TODO · OS: TODO · Observer: TODO · Date: TODO
+Status: done · App version: R25 (25010) · OS: macOS (Darwin 25.6.0) · Observer: Claude (unattended O58 session) · Date: 2026-11-04
 Method: exactly as [modeling-tools-2.md](modeling-tools-2.md) (O25): a default cube made
 editable with the segments given, the tool's **Reset Values** before each case, selection by
 position (record the indices or point pairs), only the named values changed. Export as
@@ -60,6 +60,12 @@ Unblocks: confirms 020/021; no brief waits on it.
 | knife-plane-mid | 1/1/1 | all polygons | Knife in Plane mode, plane through (0, 0, 0) with normal (0, 1, 0), if it can be set by script (else write "gui-only" and skip) |
 | slide-loop | 2/2/2 | the 4 middle edges around the cube at y = 0 (an edge loop) | Slide, offset 0.5 toward +y (if scriptable; record the settings and their range; else "gui-only") |
 | slide-edge | 2/2/2 | one middle edge at y = 0 on the front face | Slide, offset 0.5 (if scriptable) |
+| arr-f/array-3 | follow-up from brief 031: 1/1/1 cube made editable | – | Array command with 3 copies (record every dialog field label and default); export, and note whether the result has 3 or 4 cubes |
+| arr-f/array-mode | 1/1/1 | the top polygon | Array command, 2 copies, offset (0, 0, 300), each mode the dialog offers; note whether only the selection is copied |
+| arr-f/duplicate | default cube (not editable) | – | Duplicate, 3 copies, offset (200, 0, 0) per step if offered; record the copy names and positions (`scene_snapshot` in Notes) |
+| arr-f/arrange | three default cubes | – | Arrange (each layout it offers); record the resulting positions in Notes |
+| arr-f/randomize | three default cubes | – | Randomize with seed 1 and ranges P 100, R 30°, S 0.5; record the resulting transforms in Notes |
+| arr-f/transfer | two cubes, the second moved to (200, 100, 0) and rotated H 45° | – | Transfer from the second to the first; record what changed (position, rotation, scale) and in which space |
 
 GUI read (add to G3): the default of every setting in the Subdivide, Optimize, Weld, Melt,
 Dissolve, Disconnect, Mirror and Triangulate dialogs.
@@ -68,4 +74,52 @@ GUI-only: the drag scale (how many units the Extrude offset changes per screen p
 default camera). Add it to [GUI-SESSIONS.md](GUI-SESSIONS.md) G3 when someone sits at the app.
 
 ## Notes
-TODO
+- `bevel-proportional-rect` crashed the app in the run of 2026-11-03/04 (leftover
+  CURRENT_CASE said so at the start of the next run). Skipped for good, per the queue
+  rules.
+- `knife-plane-mid`: gui-only. The knife command (line mode API) accepts a container but
+  cuts nothing, and the Knife tool's plane mode cannot be driven through the command
+  interface (returns False on a 1/1/1 cube with all polygons selected, plane preset XZ
+  through the origin in world space). Needs a human at the viewport (G3).
+- `slide-loop`, `slide-edge`: gui-only. Both Slide tools return False through the command
+  interface with Percent 0.5 and Weld on (edges selected). Interactive drag only.
+- `sel/grow-*` ran through the selection-grow modeling command with the command defaults
+  (Use Edge off): poly mode grows to the 3×3 patch around the start quad; point mode grows
+  to the 4 face-neighbour points of the start point within the same face; edge mode grows
+  to the 7 edges sharing an endpoint with the start edge. The dialog default of Use Edge
+  is a G3 read; a default command container reads it as off.
+- `bevel-point-two`, `bevel-solid-sub2`, `bevel-point-valence4`: all three ran (2026-11-04).
+  `bevel-point-two` (points 0 and 3 on a 1/1/1 cube, both at non-adjacent bottom corners):
+  bevel created the two cut rings independently, 8 → 12 points, 6 → 14 polygons; each
+  selected point got its own ring, no interaction between the two. `bevel-solid-sub2`
+  (top edge, Shape Solid, Subdivision 2): 12 points / 12 polygons — the same topology
+  Shape Solid with Subdivision 1 gives, so Subdivision has no effect for the Solid shape
+  at 2 or more. `bevel-point-valence4` (default Pyramid apex, point mode, offset 20):
+  5 → 8 points, 6 polygons; the ring cut around the apex stays a single 4-corner cut
+  (result mesh is the golden output).
+- `arr-f/arrange`: the Arrange dialog offers three layouts — Linear, Circle, Along Spline
+  (plus a selector entry). Linear works through the scripting interface: with Per Step and
+  move (200, 0, 0) the three cubes end at x = 0/200/400, rotation untouched. Circle and
+  Along Spline return success but change nothing (positions and rotations identical before
+  and after, also with objects selected and a spline linked) — no-op through the
+  command interface in this build. The linear result is in `arr-f-arrange/mesh.obj`.
+- `arr-f/randomize`: seed is honoured (a repeat with the same seed on a fresh scene gives
+  identical transforms). The move range is in position units (±100 around the start).
+  The rotate range is stored in radians by the container: writing 30 meant 30 rad
+  (observed rotations up to ±2.8 rad), so R 30° had to be written as 0.5236 rad.
+  Scale range 0.5 gives factors within 1 ± 0.5 (0.8–1.46 observed). Result transforms in
+  `arr-f-randomize/mesh.obj` (see the values above).
+- `arr-f/transfer`: the "Transfer to" link is the **source**; the objects passed to the
+  command receive its transform. With move, rotation and scale enabled, cube b took
+  exactly cube a's position, rotation and scale (verified with distinguishable transforms
+  on both cubes: a at (50, 0, 20) P 20°, b at (200, 100, 0) H 45° → b ended at a's).
+  Each channel has its own enable key (move with per-axis enables, rotation, scale),
+  dialog defaults all on. The after-transforms are baked into `arr-f-transfer/mesh.obj` (cube b ended on cube a, both stacks coincide).
+- Corrected on 2026-11-04: the three `arr-f` result cases (arrange, randomize, transfer)
+  now export `mesh.obj` (the app's OBJ export bakes object transforms into world-space
+  vertices); the earlier `samples.json` variants were removed because the golden
+  checker only parses `track`, `field` and `clones` kinds.
+- `arr-f/duplicate` (run on 2026-11-03): the result keeps the original and adds 3 copies
+  named `Cube.0`, `Cube.1`, `Cube.2` (copies start counting at 0), per-step move
+  (200, 0, 0) puts them at x = 0/200/400/600 (world-space mesh in
+  `arr-f-duplicate/mesh.obj`).

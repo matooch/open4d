@@ -212,8 +212,11 @@ fn bevel_errors_change_nothing() {
     );
     assert!(failed(app.run("mesh.bevel", json!({"edges": [999]}))));
     assert!(
-        failed(app.run("mesh.bevel", json!({"points": [1]}))),
-        "point mode"
+        failed(app.run(
+            "mesh.bevel",
+            json!({"points": [1], "settings": {"subdivision": 1}})
+        )),
+        "point mode with subdivision"
     );
     assert!(failed(app.run(
         "mesh.bevel",

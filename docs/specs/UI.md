@@ -184,7 +184,9 @@ Component modes (EDITABLE.md §2): the header of the viewport holds four toggle 
 click and left drag (not on a gizmo handle) select components instead of objects, and the
 target is drawn with its points / edges / polygon outlines and selected components in the
 component selection colour (§8); the panel rebuilds its GPU meshes when the revision, the
-node selection, the mode or the target changes.
+node selection, the mode or the target changes. With several polygon objects selected every
+selected polygon object is a target and is drawn this way (EDITABLE.md §6); the Coordinates
+panel shows editable Pivot, Rotation and Size rows (§6.7).
 
 ### 6.2 Panes, 4-view layout, lights and anti-aliasing (brief 143)
 
@@ -260,6 +262,9 @@ Behaviour, data and rules: docs/specs/ANIM.md §2. Panel summary (own design,
 
 ## 8. Theme (`theme`)
 
+Three themes (own palettes, §24.1): dark (default), light, high contrast. The text below is
+the dark one.
+
 Our own dark palette (sRGB): window `#1E2024`, panel `#25282D`, faint
 `#2E3238`, text `#D6D9DE`, weak text `#9AA0A8`, accent `#E08A2E` (selection), accent
 text `#1A1A1A`, error `#E5534B`, component selection `#38C6E8` (selected points, edges
@@ -333,8 +338,10 @@ History (`edit.undo`, `edit.redo`, `object.delete`); Objects (`object.create` fo
 `select.mode` and `view.shading` buttons show as selected for the current value. A failed
 command goes to the status bar like any other.
 
-Not in the palette yet (no registry command exists): snapping, workplane, axis mode.
-Pointer-driven tools (cuts, bridge, pen) stay in the Mesh menu.
+Snapping and axis mode exist as commands (`snap.*`, `edit.axis_mode`, MANIPULATE.md §6–7) and as Edit menu entries; they are not palette buttons yet.
+Pointer-driven tools (cuts, bridge, pen) stay in the Mesh menu, as do the arrangement tools
+(Array, Duplicate, Arrange, Randomize, Transfer; MODELING.md §9.7), which have a settings panel and no
+viewport interaction.
 
 ## 12. Attribute manager (`attributes`, `widgets`; brief 150)
 
@@ -511,12 +518,15 @@ Default bindings (all parity-pending, ours):
 | Mod+A / Mod+Shift+A / Mod+I | `select.all` / `select.none` / `select.invert` |
 | Alt+1 / Alt+2 / Alt+3 / Alt+4 | `select.mode` model / points / edges / polys |
 | Mod+Shift+E | `mesh.make_editable` |
+| Mod+Shift+P | `ui.command_palette` (brief 159, §18) |
 | 1 .. 5 | `view.shading` smooth, flat, wire, smooth_wire, flat_wire |
 | 6 .. 9 | `view.shading` quick, constant, hidden_line, bounding_box (brief 143) |
 | F4 | `view.layout` (toggle single / four; brief 143) |
 | Mod+M | `view.maximize` (toggle the active pane; brief 143) |
 | W / E / R | `view.gizmo_mode` move / rotate / scale |
 | Q | `view.gizmo_space` (toggle) |
+| Shift+S | `snap.toggle` (brief 032; X is the Pan hold key) |
+| L | `edit.axis_mode` (toggle; brief 032) |
 | H / S | `view.frame_all` / `view.frame_selected` (brief 153) |
 | Mod+1 .. Mod+7 | `view.set_view` perspective, front, right, top, back, left, bottom (brief 153) |
 | K / Shift+K | `key.record` / `key.autokey` |
@@ -828,3 +838,667 @@ but they are part of the tag's `graph` parameter, so moving a node is an edit of
   go); a value edit (`graph.set_value`); live values appear on ports; and the expression
   built in the editor drives the scene (a cube's position follows the graph after the edits, and
   after undo returns).
+
+## 18. Command palette and undo history (`palette`, `history_panel`; brief 159)
+
+Sources: own design from docs/roadmap/areas/L-ui.md (command-palette search is a common editor
+convention); no reference-app observation. The binding Mod+Shift+P is ours (parity-pending like
+every §14.2 default; it collides with no other default). Nothing is hard-coded: the palette reads
+the command registry (COMMANDS.md) and the key map (§14).
+
+### 18.1 Commands
+
+- `ui.command_palette` (no arguments, not undoable): asks the window to open the palette
+  (`UiRequest::CommandPalette`, like the file dialogs; headless contexts fail with `needs the
+  editor window`). Bound to Mod+Shift+P; also Window > "Command palette...".
+- `edit.history_jump {position}` (not undoable itself; moves along the document history): see §18.5.
+
+### 18.2 Fuzzy matcher (pure, `palette::fuzzy_score(query, text) -> Option<i32>`)
+
+Case-insensitive subsequence match: every character of `query` occurs in `text`, in order.
+`None` if not; an empty query gives `Some(0)`. The best alignment (dynamic programming over all
+alignments) maximises the sum of
+
+- +10 per matched character,
+- +20 when the matched character starts a word (text index 0, or the previous character is
+  one of ` ` `.` `_` `-` `/` `:` `=` `,`),
+- +15 when it directly follows the previous matched character (a run),
+- +15 when the first match is at index 0,
+- -1 per skipped character between two matches, and -1 per skipped leading character (at most 5),
+
+minus `len(text) / 4` so that a shorter text wins a tie. Consequences the tests pin: a prefix
+beats a later word start, a word start beats a mid-word hit, a contiguous run beats scattered
+letters, and `undo` finds `edit.undo` and "Undo".
+
+### 18.3 Entries (`palette::entries(registry, keys, shown)`)
+
+One entry per registry command, in registry order: id, label, whether it needs a form, and the
+first key-map binding of that command with no arguments (`shown` spells a chord for the platform,
+as in the key map editor). In addition one *preset* entry per key-map binding with non-empty
+arguments (`view.shading` `{"mode":"wire"}` bound to 3, ...): its label is the command label
+followed by the arguments summary (`Shading: mode=wire`), its chord that binding's, and it runs
+with those arguments without a form. So the palette lists every chord the key map has.
+
+A command *needs a form* when `{}` does not validate against its `args_schema()`
+(`forge_command::schema::validate`), i.e. it has required arguments. Other commands run
+directly with `{}` (their optional arguments stay at their defaults).
+
+### 18.4 Search and order (`palette::search(entries, query, recent) -> Vec<usize>`)
+
+The query is split on whitespace; every token must match at least one *field* of the entry (id,
+label, arguments summary, chord canonical text `Mod+Shift+P` and the shown spelling). An entry's
+score is the sum over tokens of the best field score. Order: score descending, then recently run
+first, then label, then id. With an empty query nothing is filtered: recent entries first (newest
+first), then the others by label (case-insensitive), then id.
+
+*Recent*: `Palette::recent`, keys of the commands run from anywhere in the window (menus, shortcuts,
+palette; not `ui.command_palette`), newest first, at most 20, no duplicates. The key of a run is the
+command id, or `id` + space + compact JSON arguments when the arguments are not empty; a run with
+arguments records both keys (so a command run through its form comes back to the top as the generic
+entry, and a preset recurs as itself). In memory only; it is not saved.
+
+### 18.5 The palette window
+
+A floating window anchored at the top centre of the editor (not part of the layout), opened by
+`ui.command_palette`; Escape closes it. A single-line search field has the focus on opening. Below
+it a scrolling list (at most 12 rows visible) of the matches: label, id in weak text, the chord
+right-aligned. Up/Down move the selected row (wrapping not), Enter or a click runs it, the first
+row is selected after every query change. Running closes the palette, then `Editor::run_id` runs the
+command, so a failure shows in the status bar, exactly as for a menu item.
+
+An entry that needs a form replaces the list by a form generated from `args_schema()`
+(`palette::form_fields(schema)`): a heading with the label and id, one row per property of the schema
+(required ones first, marked `*`, the description as hover text), with **Run** and **Back** buttons.
+Field kinds: `string` a text field; `integer` / `number` a text field parsed as such; `boolean` and
+enumerations (`enum`, `oneOf` of constants, `$ref` to such a definition, nullable `anyOf`) a drop
+down (optional ones have an empty entry that omits the key); everything else (arrays, objects,
+`null`able composites) a text field holding JSON. `palette::build_args(fields, values)` turns the
+texts into the argument object: empty optional fields are left out, an empty required one is
+`"<name> is required"`, a text that does not parse is `"<name>: ..."`; the object is then checked
+with `schema::validate` and a failure is shown in the form (error colour) without closing it.
+Enter in a text field also runs.
+
+### 18.6 History panel (`history_panel`)
+
+Window > "History panel" (panel `Panel::History`, title "History", default area right bottom, closed
+by default, `Dock::default()` unchanged). It lists the document's transactions (CORE.md §4)
+from `Document::history()`: first a row "0. Original state", then one row per undo step oldest
+first ("1. Create Cube"), then the redo steps in the order they were done (dimmed). A gesture whose
+edits were merged (CORE.md §4 merge keys, e.g. a drag) is one transaction and shows once. The row
+of the current state (as many steps applied as the undo stack is long) is marked: strong text and a
+"current" tag. Pure helper `history_rows(undo_labels, redo_labels) -> Vec<HistoryRow {position,
+label, kind: Past | Current | Future}>`.
+
+Clicking the row at `position` runs `edit.history_jump {position}`: `position` is the number of
+steps that should be applied, 0 ..= undo steps + redo steps. The command calls undo (or redo)
+repeatedly until the stack depth equals `position`, then does what `edit.undo` does afterwards
+(`retain_existing`, clamp the timeline), and returns `{position, undone, redone}`. A `position` out
+of range is `InvalidArgs` and changes nothing. Jumping to the current position does nothing. The
+jump is not a new history step; a later edit clears the redo steps as usual, which the panel then
+shows.
+
+### 18.7 Tests
+
+- Unit (`palette.rs`): `fuzzy_score` (subsequence, case, empty query, no match, the orderings of
+  §18.2), `search` (tokens, fields, chord text, recency order, empty query order), `entries`
+  (presets from bindings, `needs_form` from the schema), `form_fields` and `build_args` on schemas
+  of real commands (`object.create`, `view.shading`, optional and enum fields, errors), recent
+  bookkeeping; `history_rows`.
+- `crates/command/tests/registry.rs`: `edit.history_jump` jumps back and forth over a headless
+  document, and refuses a position out of range.
+- `crates/ui/tests/palette.rs` (egui_kittest, no GPU): Mod+Shift+P opens the palette; typing finds
+  a command, Enter runs it (a document edit with its undo step); a click runs another; a command
+  with required arguments opens a form, a wrong value shows an error, a right one runs it; Escape
+  closes; the recent order; the panels are closed by default and open from the Window menu. History
+  panel: rows and the current mark follow edits, undo and redo; clicking an older row undoes to
+  that state and a future row redoes; a merged gesture is one row.
+
+## 19. Console (`console`; brief 160)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; the log line format is PLATFORM.md §8.2 (brief
+178), the REPL runs the sandbox of SCRIPTING.md. No reference-app observation.
+
+Window > "Console panel" (panel `Panel::Console`, title "Console", default area Bottom, closed by
+default; `Dock::default()` unchanged). Two halves side by side (`ui.columns(2)`): the **log** on the
+left, the **REPL** on the right.
+
+### 19.1 Log
+
+The lines come from `forge_platform::logging::recent_lines()`, the in-memory tail of the last 200
+log lines (PLATFORM.md §8.2: `<time> <LEVEL> <target>: <message>`), read again every frame (the
+panel requests a repaint once a second while it is open, so new lines show up). The source is a
+function held by `ConsoleState::log_source` so that tests can feed lines.
+
+- **Level filter**: a drop-down "Level" with Trace (all), Debug, Info, Warn, Error; a line shows
+  when its level is at least the chosen one. Default Trace.
+- **Search**: a text field "Search log"; a line shows when it contains the text, case-insensitive
+  (an empty text shows all).
+- **Copy**: the button "Copy" puts the shown lines, joined by newlines, on the clipboard
+  (`Context::copy_text`) and remembers the text in `ConsoleState::last_copy`.
+- Shown with the level colour (error: theme error colour, warn: amber, info: text, debug and trace:
+  weak text), monospace, sticking to the bottom while the scroll is at the end. A count "N of M lines"
+  is shown next to the toolbar.
+
+Pure functions (unit-tested):
+
+- `parse_level(line) -> Option<LogLevel>`: the level is the second whitespace-separated token of the
+  line when it is exactly `TRACE`, `DEBUG`, `INFO`, `WARN` or `ERROR`; other lines have none.
+- `filter_log(lines, min_level, search) -> Vec<LogLine {index, level, text}>`: a line without a
+  level (a continuation line of a multi-line message) takes the level of the line before it, or Info
+  at the start; then the two conditions above. `index` is the position in `lines`.
+- `log_text(&[LogLine])`: the lines joined by `\n`.
+
+### 19.2 REPL
+
+A multi-line monospace text field "REPL input" (hint "Rhai: Enter runs, Shift+Enter adds a line, Up /
+Down recall") and a **Run** button, **Clear** empties the transcript. Above them the transcript.
+
+- **Enter** (no Shift) runs the text; **Shift+Enter** inserts a newline at the cursor. An empty or
+  blank entry does nothing.
+- **History**: every run text is kept (at most 200, a repeat of the last entry is not added). **Up**
+  recalls the previous entry, **Down** the next, and past the newest the text that was being typed
+  comes back. They apply while the text has no newline (in a multi-line text the keys move the
+  cursor as usual); recalling replaces the field's text.
+- **Running** is `forge_script::run_script` on the editor's own context with the default limits
+  (SCRIPTING.md §5), i.e. the same sandbox and the same undo rule as the Script Manager (§10): the
+  commands go through the registry, **one entry is one undo step** (`Run Script`, so the History
+  panel shows one row per entry) and a failing entry is rolled back and changes nothing. A run
+  that changes nothing leaves no step. Every entry starts a fresh scope: variables do not survive
+  to the next entry (the document does; `scene()` reads it).
+- **Transcript** (`ConsoleState::repl`, at most 1000 lines): the entry echoed as `> first line`
+  (further lines `. line`), then its `print` lines, then `=> <value>` for a last expression that is
+  not `()`/null (JSON text, strings quoted), or for a failure the message in the error colour
+  (`line N: ...`, with the `print` lines before it). Entries with a successful run that made
+  commands add no extra summary line.
+
+### 19.3 Tests
+
+- Unit (`console.rs`): `parse_level` on real tracing lines and on junk; `filter_log` for each level,
+  search (case, empty), continuation lines, indices; `log_text`; the REPL history (up, down, restore
+  of the typed text, duplicates, cap).
+- `crates/ui/tests/console.rs` (egui_kittest, no GPU): the panel is closed by default and opens from
+  the Window menu; fed lines show, the Level drop-down hides lower levels, the search field filters,
+  Copy fills `last_copy` with exactly the shown lines; the REPL runs `create("test.box")` through
+  the Run button and through Enter (the node exists, the transcript has the echo and the result), a
+  multi-line entry typed with Shift+Enter, `print` output, a value result, one entry with two
+  commands is one undo step and undo removes both, a failing entry shows its error and changes
+  nothing, Up / Down recall earlier entries, and Clear empties the transcript.
+
+## 20. Coordinates manager (`coordinates`, `forge_app::coords`, `app`; brief 151)
+
+Sources: own design from docs/roadmap/areas/L-ui.md and MANIPULATE.md §4; GUI session G1
+(docs/parity/GUI-SESSIONS.md) is unanswered, so **the layout, the mode names and the Apply
+behaviour are parity-pending**. Component rows are EDITABLE.md §6.7 (brief 034).
+
+### 20.1 Modes
+- **Space** `Local | World` (`Space`): the object's own parameters, or the world matrix.
+- **Third row** `Scale | Size` (`Third`): scale factors, or mesh bounding box times scale
+  (a node without a mesh shows "no mesh" for Size).
+- **Apply**: `Immediate` (default; every field change is applied at once, a drag of a field is
+  one undo step) or `Manual` (check box "Manual"): field changes only fill a draft, shown in
+  the fields in place of the object's values; the **Apply** button writes the draft in one
+  command and one undo step, **Reset** drops the draft. In Immediate mode Apply and Reset are
+  disabled. The draft is dropped when the selection, the space or the third row changes.
+- Rotation is shown as H / P / B in degrees (MANIPULATE.md §1).
+
+### 20.2 Several objects (brief 150 multi-edit rules)
+The panel shows the active object. An axis is `mixed` when its value in the chosen space
+differs (more than 1e-9 relative) between the selected objects: the field then reads "mixed".
+Typing into a field sets that axis on every selected object and keeps each object's other
+axes. Rows are the same for all objects; nodes without a transform (tags) are ignored.
+`coord_view_multi(scene, ids, space, third) -> Option<(CoordView, Mixed)>` is pure.
+
+### 20.3 Commands
+Object edits run `transform.edit` (COMMANDS.md §6): one command, one undo step, for every
+selected object and every row of an Apply. It is the animation-aware sibling of
+`transform.set` (as `param.edit` is of `param.set`): autokey and ANIM.md §2.4 apply, a value
+equal to the shown one is not written. Plain edits of one parameter, if a row ever needs
+them, use `param.edit`. In a component mode (a polygon object with an affected point set) the
+panel shows **Pivot, Rotation, Size** of the components instead of the object rows (the
+Scale|Size switch is hidden; Local|World and Manual/Apply stay) and runs `mesh.transform`
+(`gesture`, EDITABLE.md §6.7): Pivot becomes `move`, Rotation `rotate` (HPB turned into an
+axis and angle), Size `scale`; a draft with several rows is one `mesh.transform`, applied as
+`T(move) T(pivot) R S T(-pivot)`, so the result has the typed size and the typed pivot.
+
+### 20.4 Tests
+`crates/app/tests/transform_edit.rs` (command: local/world, axes with null, multi-object,
+size, one step, autokey, errors, no change on error); `crates/ui/tests/coordinates_manager.rs`
+(pure mixed detection, each mode through egui_kittest: world move of two objects is one
+undo step, scale/size switch, manual draft and Apply, component rows via `mesh.transform`).
+
+## 21. Workspaces and saved layouts (`workspaces`, `layout`, `app`; brief 156)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; the per-OS directories are PLATFORM.md §8.
+GUI session G1 (docs/parity/GUI-SESSIONS.md) is unanswered, so **the workspace names' contents,
+the panel placement and the menu bar switcher are parity-pending**. View state only: nothing
+here touches the document, the selection or the undo history.
+
+### 21.1 Layout data and versions
+`Layout { version, dock, sizes, workspace }` (§11). `workspace` is the name of the workspace the
+arrangement started from (`#[serde(default)]`, empty for none). `LAYOUT_VERSION` stays `1`: a
+field added with a serde default keeps the version; the version is raised only for an
+incompatible change. `Layout::load_text(text) -> Loaded { layout, warning }` never fails: a
+file that is not JSON, has a missing or wrong field type, lists a panel twice, has an active tab
+out of range, or has a version other than `LAYOUT_VERSION` ("older" below it, "newer" above)
+gives `Layout::standard()` and a one-line warning that names the reason. `from_json` is the
+strict parser (an error for each of those cases) and stays as it was.
+
+### 21.2 Workspaces (`workspaces::Workspace`)
+Six built-in arrangements, each `Workspace::layout() -> Layout` with `workspace` set to its
+name. Names (also the `ui.workspace` argument, matched case-insensitively): `Standard`,
+`Modeling`, `Animate`, `UV`, `Rigging`, `Node`. Every panel (Panel::ALL) is open in no more
+than one area; the Viewport is open in all of them (the UV workspace has no UV editor panel yet,
+brief 129 adds it), and panels not listed are closed (reopen from the Window menu).
+
+| Workspace | Top | Left | Centre | Right top | Right bottom | Bottom | Sizes (left, right, fraction, bottom) |
+|---|---|---|---|---|---|---|---|
+| Standard | Command bar | Tools | Viewport | Objects | Attributes | Timeline, Coordinates | 150, 340, 0.45, 120 |
+| Modeling | Command bar | Tools | Viewport | Objects | Attributes, Coordinates | History, Console | 150, 360, 0.35, 150 |
+| Animate | Command bar | Tools | Viewport | Objects | Attributes, Coordinates | Timeline, History | 150, 340, 0.40, 240 |
+| UV | Command bar | Tools | Viewport | - | Attributes, Coordinates, Objects | History | 150, 400, 0.45, 120 |
+| Rigging | Command bar | Tools | Viewport | Objects | Attributes | Timeline, Coordinates, Script | 150, 380, 0.60, 160 |
+| Node | Command bar | - | Node Editor, Viewport | Objects | Attributes | Console, History, Script | 150, 340, 0.45, 200 |
+
+`Standard` equals `Layout::standard()`. Each tab list starts with the shown tab. Switching
+applies the dock and the sizes (egui forgets its remembered panel sizes: a new size generation
+re-seeds them).
+
+### 21.3 Layout files (`workspaces::LayoutStore`)
+User layouts live in `<config>/layouts/<name>.json` (PLATFORM.md §8), the layout as
+`Layout::to_json`. A name is 1 to 48 characters of letters, digits, space, `-` and `_`, starting
+with a letter or digit, without leading or trailing space, and is not a workspace name
+(case-insensitive); otherwise the request fails with the reason. Saving replaces a file of the
+same name (written to a temporary file and renamed). `list()` is the names, sorted, of valid
+`*.json` files (hidden `_`-files and other extensions are ignored). `load(name)` returns a
+`Loaded`: a missing file is an error ("no layout named X"), a broken or old file the standard
+layout and a warning. `delete(name)` removes the file (missing: error). Without a config
+directory (no home folder) save fails with "no layout folder", `list` is empty.
+`_last.json` in the same folder remembers the arrangement at exit; the studio restores it at
+start (`Editor::restore_last_layout`), a broken file falls back to the standard layout and
+puts the warning into the status bar. Tests use a store over a temporary folder
+(`Editor::set_layout_store`); the default store of `Editor::new` is empty so tests never touch
+the user's folder.
+
+### 21.4 Commands (COMMANDS.md §6; window actions like `ui.command_palette`)
+`ui.workspace {name}`, `ui.layout_save {name}`, `ui.layout_load {name}`,
+`ui.layout_delete {name}`. Not undoable, no document change. They ask the window
+(`UiRequest::Workspace`, `LayoutSave`, `LayoutLoad`, `LayoutDelete`); headless contexts and the
+RPC server refuse with `needs the editor window`. Errors from the window (bad name, no such
+layout, no folder, I/O) and warnings (a broken file replaced by the standard layout) go to the
+status bar. `ui.layout_save` stores the current arrangement; `ui.layout_load` applies a saved
+one and takes its `workspace` as the shown name.
+
+### 21.5 Menu bar
+A "Workspace" menu in the menu bar (right of Window) lists the six workspaces (the current one
+checked), then the saved layouts, then "Save layout as..." (a name field and a Save button in a
+small window), "Delete layout" (a submenu of saved layouts) and "Reset layout" (the standard
+workspace). Each entry runs the command above, so it is also in the command palette. The
+Window menu's "Reset layout" is unchanged.
+
+### 21.6 Tests
+Pure in `workspaces.rs` (names, every workspace valid and containing the Viewport, store round
+trip in a temporary folder, bad names, listing, delete, broken/old/newer/duplicated files fall
+back with a warning); `crates/ui/tests/workspaces.rs` (egui_kittest: each workspace switch via
+command and menu, the document and undo history untouched, save/load/delete through commands,
+a broken file on disk loads the standard layout with a warning in the status bar, the last
+layout restore); `crates/command/tests/registry.rs` (headless refusal).
+
+
+## 22. Layer manager (`layer_manager`, `tree`, `object_manager`; brief 158)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G1 is unanswered, so **the
+column set and order, the toggle letters, the colour display and the menu placement are
+parity-pending**. What the toggles do is CORE.md section 7. All edits are registry commands
+(COMMANDS.md §6, `layer.*`); the panel only computes arguments, one gesture is one undo step.
+
+### 22.1 Panel
+
+`Panel::Layers`, title "Layers", default area right bottom, closed by default; the Window menu
+lists it as "Layers panel". Rows are the layers in table order. Columns: colour swatch (click
+opens a colour picker, the result runs `layer.set` `color`), name (double-click renames via
+`layer.rename`; Enter commits, Escape cancels), then nine toggle cells in this order: Solo `S`,
+View `V`, Render `R`, Manager `M`, Locked `L`, Animation `A`, Generators `G`, Deformers `D`,
+Expressions `E`. A cell is a small button that is filled when the flag is on; click runs
+`layer.set` for the row (for every selected row when the row is selected). Accessibility labels:
+`Solo: <layer>`, `View: <layer>`, `Render: <layer>`, `Manager: <layer>`, `Locked: <layer>`,
+`Animation: <layer>`, `Generators: <layer>`, `Deformers: <layer>`, `Expressions: <layer>`; the
+name cell is `Layer <name>`. Clicking a name selects the row (Ctrl toggles); panel state only.
+Buttons under the grid: "New layer" (`layer.create`), "Delete" (`layer.delete` of the selected
+rows), "Merge" (`layer.merge` of the selected rows into the first selected one, two or more),
+"Assign selection" (`layer.assign` of the selected objects to the selected row, exactly one
+row), "Remove from layer" (`layer.assign` with none). Disabled buttons when the precondition
+fails. With no layers the panel says "No layers".
+
+### 22.2 Object manager
+
+A row whose object is on a layer shows a small swatch in the layer colour before the name
+(accessibility label `Layer: <layer name>`); `TreeRow` carries `layer: Option<(LayerId, String,
+[f64; 3])>`. Rows of layers with `manager` off are omitted (CORE.md 7.4), also in search results.
+The row context menu gets a "Layer" sub menu (pure, `tree::layer_menu`): "No layer" and one entry
+per layer, each running `layer.assign` for the menu's selection; the layer the whole selection
+shares is checked.
+
+### 22.3 Tests
+
+`crates/ui/tests/layer_manager.rs`: pure (`tree::layer_menu`, row colours, manager filtering);
+egui_kittest: the Window menu opens the panel (closed by default), New/rename/toggle cells/
+delete/merge/assign with undo after each, toggling View hides the object in the viewport draw
+items and the object manager colour swatch, the context menu assignment, save/load.
+
+## 23. Viewport HUD and overlays (`hud`, `app`, `layout`; brief 157)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G8 (docs/parity/GUI-SESSIONS.md)
+is unanswered, so **which items exist, their wording, their places, the safe frame percentages and
+the defaults (everything off) are parity-pending**. View state only: nothing here touches the
+document, the selection or the undo history.
+
+### 23.1 Items and settings
+
+Six items per pane, each a flag in `HudFlags` (all `false` by default so a fresh viewport looks as
+before): `fps` (frame time of the editor), `counts` (objects, points, polygons of the scene and of
+the selection), `tool` (active tool and snap state), `frame` (current frame/time), `camera` (name
+and projection), `safe_frames`. `HudSettings { perspective, top, front, right }` holds one
+`HudFlags` per pane (brief 143 panes), `HudSettings::flags(pane)`, `set(pane, item, on)`.
+They live in `EditorState.hud`. Command `view.hud {item, pane?, all_panes?, enabled?}`
+(COMMANDS.md §6). The View menu has a "HUD" sub menu with one sub menu per pane, each with a
+check box per item (labels "Frame rate", "Counts", "Tool and snap", "Frame", "Camera", "Safe
+frames"), running `view.hud`.
+
+### 23.2 Persistence
+
+`Layout` (§11, §21) gets `hud: Option<HudSettings>` with `#[serde(default)]`; `LAYOUT_VERSION`
+stays 1. `Editor::layout()` writes `Some(current settings)` when any item is on (otherwise
+`None`, so a session without a HUD still equals `Layout::standard()`) and `set_layout` applies a
+`Some` (saved layouts and the layout remembered at exit carry the HUD); built-in workspaces and
+layouts without a block have `None`, so switching workspace keeps the user's HUD. A settings block with an unknown field is read
+leniently by serde (unknown fields are ignored, missing ones are `false`).
+
+### 23.3 Draw list (pure, `hud::draw_list`)
+
+`draw_list(&HudContext, &HudFlags, size: [f32; 2]) -> Vec<HudPrim>` in pane-local points
+(origin top left, `size` = the pane). `HudPrim` is `Text { pos, anchor, text, tone }` or
+`Rect { min, max, tone }` (a 1 point outline); `tone` is `Normal`, `Weak` or `Guide`. Placement
+(left column starts at y = 26, below the pane label, line height 14, x = 8):
+
+- left column, top to bottom: camera, tool and snap, then the three count lines;
+- top right (x = width - 8, y = 6, right aligned): frame rate;
+- bottom right (x = width - 8, y = height - 6, right aligned bottom): frame;
+- safe frames: outlines only, no text.
+
+Texts (`format_count` groups thousands with a comma):
+
+| item | text |
+|---|---|
+| fps | `"{fps:.1} fps  {ms:.1} ms"`, or `"-- fps"` before the first measurement |
+| counts | `"Objects  {n}  (selected {k})"`, `"Points  {n}  (selected {k})"`, `"Polygons  {n}  (selected {k})"` |
+| tool | `"Tool  {name}"`, `"Snap  off"` or `"Snap  on  {3D\|2D}"`; with axis mode `"  Axis mode"` is appended to the tool line |
+| frame | `"Frame  {format_time(frame, fps, display)}  /  {format_time(end, ...)}"` using the scene's time display (ANIM.md §2.9) |
+| camera | `"Camera  {pane} ({Perspective, fov 45°\|Orthographic})"` |
+
+Counts: the drawn objects of the scheduled frame (CORE.md §5b); points and polygons are those of
+their evaluated meshes, a cloner drawn by instancing counts prototype geometry times visible
+clones; "selected" sums the drawn objects that are selected. `HudContext` carries the numbers; it
+is built by `hud::context(state, pane, frame, timing)` from the editor state.
+
+### 23.4 Safe frames (pure, `hud::safe_frames`)
+
+`safe_frames(size: [f32; 2], render: Option<[u32; 2]>) -> SafeFrames { frame, action, title }`,
+each `[min_x, min_y, max_x, max_y]` in pane-local points. The frame is the render aspect fitted
+inside the pane (centred, as large as fits, a 0 pixel size counts as absent); with no render size
+(the scene has no render settings yet, so today always) it is the whole pane. Action safe is the
+frame scaled to 90 % about its centre, title safe to 80 % (own values, parity-pending). The draw
+list holds the three outlines (`Weak` frame when the render size is present, `Guide` action and
+title), the frame outline is omitted when it equals the pane.
+
+### 23.5 Frame rate
+
+`hud::FrameTimer` keeps an exponential moving average of the frame time (`push(dt)`, factor 0.1,
+the first sample taken as is, non-finite or non-positive samples ignored); `fps() = 1 / avg`,
+`ms() = avg * 1000`. The editor pushes egui's `unstable_dt` once per frame, not per pane.
+
+### 23.6 Painting
+
+The editor paints the draw list over the viewport image of each visible pane after the existing
+pane label (`Editor::paint_hud`), and also over the "Viewport unavailable" placeholder so
+headless tests see it. The primitives of the last frame are kept in `EditorState.hud_last`
+(`Vec<(Pane, Vec<HudPrim>)>`) for tests.
+
+### 23.7 Tests
+
+`crates/ui/tests/hud.rs`: pure (counts format, safe frame geometry for each aspect, draw list text
+for each item, placement, ordering, settings round trip and leniency, `FrameTimer`, layout
+persistence with `None`/`Some`, workspace switch keeps the HUD), a rasterised **baseline image**
+of the draw list (`tests/baselines/hud_*.png`, own images; `FORGE_UPDATE_BASELINES=1` rewrites
+them; text is drawn as 6 x 10 point boxes per glyph so the image does not depend on fonts), the
+command (toggle, panes, all panes, errors), and egui_kittest (View > HUD menu check boxes, items
+appear in `hud_last` only for enabled panes, four-view layout, layout save/load round trip).
+
+## 24. HiDPI, IME, themes, keyboard navigation (`theme`, `prefs`, `app`; brief 161)
+
+Sources: own design from docs/roadmap/areas/L-ui.md ("HiDPI, IME, keyboard-only navigation,
+high-contrast theme"); egui's public input model (`Event::Ime`, `Memory::focused`). No reference
+observation; the palettes are our own.
+
+### 24.1 Theme tokens (one module, `theme`)
+`ThemeKind { Dark, Light, HighContrast }`, names `dark`, `light`, `high-contrast`
+(`name()`, `from_name()`, `ThemeKind::ALL`). `Theme::of(kind)` returns the token set; the UI
+takes its colours from it. Tokens: `window`, `panel`, `faint`, `text`, `weak_text`, `accent`,
+`accent_text`, `error`, `component_selection` and `focus` (keyboard focus ring and IME
+composition underline). `Theme::default()` is `of(Dark)`, unchanged (§8).
+
+| token | dark | light | high contrast |
+|---|---|---|---|
+| window | `#1E2024` | `#F4F5F7` | `#000000` |
+| panel | `#25282D` | `#ECEEF1` | `#000000` |
+| faint | `#2E3238` | `#DDE0E5` | `#1A1A1A` |
+| text | `#D6D9DE` | `#1B1E22` | `#FFFFFF` |
+| weak text | `#9AA0A8` | `#4A515A` | `#D8D8D8` |
+| accent | `#E08A2E` | `#A64B00` | `#FFD400` |
+| accent text | `#1A1A1A` | `#FFFFFF` | `#000000` |
+| error | `#E5534B` | `#B3261E` | `#FF7B72` |
+| component selection | `#38C6E8` | `#006C99` | `#00E5FF` |
+| focus | `#5AA9FF` | `#0B57D0` | `#5CE1FF` |
+
+Contrast (WCAG ratio, tested for every theme): text on panel and window >= 7 (high contrast
+>= 15), weak text on panel >= 4.5, accent text on accent >= 4.5, focus on panel >= 3, error on
+panel >= 3 (dark) or >= 4.5 (light, high contrast).
+`Theme::visuals()` builds from egui's dark visuals (light visuals for Light) and sets the focus
+style: the active/focused widget outline is a 2 point stroke in `focus`, and the IME
+composition underlines use `focus`. `Theme::apply(ctx)` installs visuals and fonts and stores
+the theme in the context; `Theme::current(&Context)` reads it back (dark before the first
+apply). `Theme::apply_visuals` does the same without reinstalling fonts (used when switching).
+
+### 24.2 Preferences (`prefs::UiPrefs`)
+`UiPrefs { theme: ThemeKind, scale: f32 }`, default dark and 1.0. `scale` is the UI scale
+factor, clamped to `0.5..=3.0` (`MIN_SCALE`, `MAX_SCALE`), multiplied with the OS scale
+(`pixels_per_point = native * scale`, egui `set_zoom_factor`). Persistence: the `ui` key of the
+settings file (`{"ui": {"theme": "light", "scale": 1.5}}`), other keys kept, written on every
+change; `use_settings_file(path)` loads; an unknown theme name or a non-finite or out-of-range
+scale falls back per field to the default (lenient, like the key map). `EditorState.prefs`
+holds it.
+
+### 24.3 Commands (not undoable, window actions like `ui.workspace`)
+`ui.theme {name}` (`dark`, `light`, `high-contrast`) and `ui.scale {factor}`; a factor outside
+`0.5..=3.0` or non-finite is `InvalidArgs`. They ask the window (`UiRequest::Theme`,
+`UiRequest::Scale`); headless contexts and RPC refuse with `needs the editor window`. An unknown
+theme name goes to the status bar listing the valid ones. The window applies the preferences at
+the start of each frame when they differ from what is applied (`Editor::apply_prefs`). View
+menu: a "Theme" submenu (one checked item per theme) and a "UI scale" submenu (50 %, 75 %,
+100 %, 125 %, 150 %, 200 %, 300 %); both run the commands, so they are in the command palette.
+
+### 24.4 HiDPI
+All layout is in points; nothing assumes `pixels_per_point == 1`. The viewport image is sized in
+physical pixels (`rect * pixels_per_point`, as before). Tested at pixels-per-point 1, 1.5 and 2
+and at UI scale 1.5: the editor lays out, the central viewport has a positive area inside the
+screen, and the screen size in points is `physical / (native * scale)`.
+
+### 24.5 IME
+Text fields are egui `TextEdit`s, which take `Event::Ime` (preedit, commit). Requirement: the
+command palette search accepts composed text. Tested by feeding `Ime::Preedit` then
+`Ime::Commit`: egui shows the preedit in the field while composing, the commit replaces it with exactly the
+committed text, and non-ASCII (CJK) text is kept intact.
+The default fonts have no CJK glyphs, so `install_fonts` adds the first system CJK font found
+(`theme::system_cjk_font`, a list of usual Linux, macOS and Windows paths; read at start-up,
+never bundled) as the last fallback of both families; without one, egui draws tofu boxes.
+
+### 24.6 Keyboard navigation
+Tab and Shift+Tab move keyboard focus through the widgets (egui's focus order); the default key
+map binds neither (tested), so the shortcuts layer never swallows them. The focused widget is
+drawn with the focus ring (§24.1). Test: with the editor shown, Tab moves focus from none to a
+widget and then to a different one, Shift+Tab goes back.
+
+### 24.7 Tests
+`crates/ui/tests/accessibility.rs`: token tables and contrast for the three themes, names round
+trip, `Theme::of(Dark) == Theme::default()`, visuals (focus stroke, light base), `UiPrefs`
+clamp, settings round trip and leniency, commands (refused headless, argument validation),
+window (switching theme changes `Theme::current` and the saved file, scale sets the zoom
+factor), layout at pixels-per-point 1, 1.5 and 2, IME in the palette search, Tab focus order.
+
+## 25. Icon set and icon atlas (`icons`; brief 148)
+
+Sources: own design from docs/roadmap/areas/L-ui.md. GUI session G1 (docs/parity/GUI-SESSIONS.md) is
+unanswered, so **which glyph stands for which command is parity-pending** (only layout was ever to
+come from G1; icons are never traced or imitated). Every glyph is a simple geometric drawing made
+for this project; no file comes from any other application.
+
+### 25.1 Files
+`crates/ui/icons/<glyph>.svg`, one per glyph, compiled into the binary (`include_str!`). All
+share one form: `viewBox 0 0 24 24`, white (`#fff`) strokes of width 1.5 on a transparent
+background, no text, no raster images, no external references. White means the atlas is a
+tint mask: the UI multiplies it by the wanted colour (so themes need no second atlas). The
+glyph name is the file stem (lowercase letters, digits, `_`).
+
+### 25.2 Mapping (`icon_name`)
+`icon_name(id) -> Option<&'static str>` maps a node-type id (`forge.cube`) or a command id
+(`mesh.bevel`) to a glyph name. Several ids may share a glyph (`marker.add` and
+`marker.rename` use `marker`/`rename`; the two gizmo commands share `gizmo`). The table is
+`ICON_MAP`, sorted by id, with no duplicate ids.
+- Every node type of `forge_app::default_registry()` (62 at the time of writing) has its own
+  glyph. Every command of `forge_app::default_command_registry()` (141) maps to a glyph.
+- Fallback: an id not in the table (a plugin type, a later command) gets `IconRef::Letter(c)`,
+  where `c` is the first alphanumeric character of its label, upper-cased (`'?'` if none).
+  The UI draws the letter with the normal font inside a rounded square. `icon_ref(id, label)`
+  returns `IconRef::Glyph(name)` or the letter.
+- Every glyph file is used by at least one id, and every mapped name has a file (tested), so
+  the set cannot rot.
+
+### 25.3 Atlas (`IconAtlas`)
+`IconAtlas::build(pixels_per_point)` renders every glyph with `resvg` (no text or system-font
+features, so it needs no fonts or GPU and runs headless). Scale `s` is clamped to `0.5..=4.0`.
+- Cell size `cell = ceil(24 * s) + 2 * PAD` pixels (`PAD = 1`, transparent, so bilinear
+  sampling never bleeds into a neighbour); the glyph is drawn into the inner `ceil(24 * s)`
+  square, scaled by `ceil(24 * s) / 24`.
+- Layout: glyphs in name order, row-major, 16 per row; the image is `16 * cell` wide and
+  `rows * cell` high. `rect(name)` is the inner pixel rectangle `[x0, y0, x1, y1]`;
+  `uv(name)` the same in 0..1 texture coordinates.
+- Pixels are premultiplied RGBA8 (`pixels`), directly usable as
+  `egui::ColorImage::from_rgba_premultiplied` (`to_color_image`). `IconAtlas::texture(ctx)`
+  uploads it with linear filtering.
+- Deterministic: the same scale gives byte-identical pixels.
+- A glyph that fails to parse is a build error caught by the tests, never a runtime panic:
+  `build` skips it (and logs a warning), so it then falls back to its letter.
+
+### 25.4 Tests (`crates/ui/tests/icons.rs`)
+Every node type and command resolves to a glyph that exists; the map is sorted and unique;
+no unused file; every file has the shared form of §25.1 and; the atlas has
+the documented size, every glyph's rectangle contains inked pixels and the padding is empty;
+scale 2 doubles the cell; two builds are identical; the letter fallback; unknown ids; the
+atlas converts to a `ColorImage` of the same size.
+
+## 26. Content browser and recent files (`browser`, `content_browser`; brief 154)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; no reference-app observation exists, so
+**the panel layout, the tab names, the folder structure of the library and the number of recent
+files are parity-pending**. The presets are written for this project (simple primitive
+assemblies saved with the native format, CORE.md section 6); no preset, thumbnail or folder
+layout comes from any other application. Every action is a registry command (COMMANDS.md §6,
+`browser.*`), so it works headless; the panel only computes arguments.
+
+### 26.1 Library (`forge_command::browser`)
+A preset is a native scene file (`.forge`). Its root nodes are what loading adds to the open
+document. Kinds: `objects` only. A materials kind waits for material nodes (area J); no
+material node type is registered today, so there is nothing to browse or load for it.
+- Built-in presets are our own files in `crates/command/presets/objects/`, compiled in
+  (`include_str!`). Ids: `builtin:<slug>`. Today: `pedestal`, `table`, `snowman`.
+- User presets are files `<library>/objects/<slug>.forge`. `<library>` is `<data dir>/presets`
+  (PLATFORM.md section 2) in the editor and none in a headless run unless the host sets it
+  (`Browser::use_files`); tests use a temporary folder. Ids: `user:<slug>`.
+- `list` returns the built-in presets, then the user presets, each group sorted by name
+  (case-insensitive, then id). The name is the title-cased slug (`-` becomes a space). A user
+  file that is not a `.forge` file is ignored; an unreadable folder lists as empty.
+- A slug is the name lower-cased with every run of characters other than ASCII letters and
+  digits replaced by one `-`, trimmed of `-`; an empty slug is refused.
+
+### 26.2 Loading
+`browser.load` reads the preset (user files through `file::load_with` with the document's
+registry, so older format versions migrate) and copies every root with its subtree, tags,
+parameters and tracks under the given parent (none: the top level), after the existing
+children, in one undo step "Load Preset". Parameters that link to nodes inside the preset
+are remapped to the copies; links to nodes outside it and the layer link `object.layer` are
+dropped. Names are kept. The new roots become the selection. A preset with no roots, an
+unknown id or a node type the registry lacks is an error and the document is unchanged.
+Load warnings go to the status bar.
+
+### 26.3 Saving and deleting user presets
+`browser.save_preset` copies the given nodes (default: the selection; nodes inside another
+listed node are skipped) into a new scene and writes it to `<library>/objects/<slug>.forge`.
+Existing files are only replaced with `overwrite: true`. Not undoable (it touches no
+document). Without a library folder it fails. `browser.delete_preset` removes a user preset
+file; built-in ids are refused.
+
+### 26.4 Recent files
+`Browser.recent` holds absolute paths, newest first, at most `MAX_RECENT_FILES` (10,
+parity-pending), no duplicates. `file.open`, `file.save` and `file.save_as` record the path
+after they succeed (`browser.recent` itself never records). With a settings file the list is
+loaded from and stored under the key `recent.files` (other keys are kept; a missing or
+malformed key is an empty list). `browser.recent` returns `{files: [{index, path, name,
+exists}]}`. `browser.open_recent {index}` runs `file.open` on that entry; a file that no longer
+exists is removed from the list and the command fails. `browser.clear_recent` empties it.
+
+### 26.5 Panel and menu
+`Panel::ContentBrowser`, title "Content Browser", default area right bottom, closed by default;
+the Window menu lists "Content Browser panel". Two tabs (panel state only): "Presets" and
+"Recent". Presets: a search box (case-insensitive substring of the name), one row per preset
+(a button showing the name, accessibility label `Load <name>`, tooltip with the source) running `browser.load`, and a "Save
+selection as preset" row (name box + button, `browser.save_preset`) shown only when a library
+folder exists. Recent: one button per file (shows the file name, accessibility label `Recent <file name>`, tooltip = path; a missing file is struck through) running
+`browser.open_recent`, and a "Clear recent" button; "No recent files" when empty. The File menu
+gets an "Open Recent" sub menu with the same entries (disabled when empty). Opening a recent file
+with unsaved changes asks like File > Open does.
+
+### 26.6 Tests
+`crates/command` unit tests: slugs, names, sorting, search. `crates/app/tests/browser.rs`: every
+built-in preset loads into an empty document and into a nested parent (parameters, tags and
+tracks preserved, link remap, one undo step, undo and redo), save/list/load round trip in a temp
+library, overwrite and delete rules, recent list order, limit, de-duplication, persistence in a
+temp settings file next to foreign keys, `open_recent` (missing file removed), commands refuse
+bad arguments. `crates/ui/tests/content_browser.rs` (egui_kittest): panel opens from the Window
+menu, closed by default, clicking a preset loads it with one undo step, recent entries open a
+file, Open Recent submenu, search filter.
+
+## 27. Import/export options window (`app/files`; brief 172)
+
+Sources: IO.md §3 (own design). The reference app's dialog layout is not observed: **the window
+title, the order of the controls and the button names are parity-pending**.
+
+- The File menu items keep their labels (Import OBJ..., Export OBJ..., Export Selected as
+  OBJ...). Choosing one opens the file chooser (IO.md §2); when a file is chosen, the options
+  window opens instead of running at once. Cancelling the chooser opens nothing. "Nothing to
+  export" is reported before the chooser, as before.
+- The window is an egui `Window` titled `Import OBJ Options` / `Export OBJ Options` (the
+  format label), anchored at the centre, not resizable, shown above the docks until closed. It
+  lists the path and one row per option descriptor (IO.md §3.2) in descriptor order:
+  bool -> check box (label = descriptor label), int/float -> `DragValue`, enum -> combo box,
+  string -> text edit. Buttons: `Import` / `Export` (runs `file.import` / `file.export` with all
+  option values) and `Cancel`. Escape cancels.
+- `Editor` methods (the UI and the tests use the same ones): `begin_import(format)`,
+  `begin_export(format, selected)` (pick the file, open the window), `io_dialog()` (the pending
+  state: format, path, selected, descriptors, values), `io_dialog_set(id, Value)`,
+  `io_dialog_confirm()` (runs the command, closes), `io_dialog_cancel()`.
+  `import_obj()`/`export_obj(selected)` stay: immediate, default options (shortcuts, tests).
+- The commands `file.import_dialog` / `file.export_dialog` (UiRequest) call `begin_*`.
+- Only one options window exists; starting another replaces it.
+- Tests (`crates/ui/tests/io_dialog.rs`): scripted chooser answers; the window appears with the
+  descriptors' controls (kittest); toggling "Write normals" and confirming writes a file without
+  `vn`/`//`; Flip Z on import mirrors z; Cancel and a cancelled chooser change nothing; the request
+  commands open the window; headless run of `file.import_dialog` is refused.

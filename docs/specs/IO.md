@@ -135,7 +135,7 @@ Items: **New**, **Open...**, **Save**, **Save As...**, separator, **Import OBJ..
 - **Unsaved changes.** New and Open on a dirty scene first ask: **Save**, **Don't
   Save**, **Cancel**. Save saves (asking for a path when needed; if the user cancels
   that dialog the whole action is cancelled) and continues. Cancel stops.
-- **Import OBJ** reads the file with `ReadOptions::default()`, then creates the objects
+- **Import OBJ** (since brief 172 the menu item opens the options window of §3.5/UI.md §27 after the chooser; the text here is what OK runs with default options) reads the file with `ReadOptions::default()`, then creates the objects
   with `import_into` in one undo step labelled "Import OBJ"; they become the selection.
   There is no flip-Z checkbox in the menu yet: a default-settings reference export needs
   `flip_z`, which only the API offers (parity-pending UI).
@@ -154,3 +154,87 @@ Items: **New**, **Open...**, **Save**, **Save As...**, separator, **Import OBJ..
 - **Scripting for tests.** The menu items and shortcuts call the same methods of
   `Editor` (`new_scene`, `open_scene`, `save`, `save_as`, `import_obj`, `export_obj`),
   so tests drive them without clicking.
+
+## 3. Exchange options, generic commands, dialogs and batch conversion (brief 172)
+
+Sources: own design (area M, `docs/roadmap/areas/M-io.md`: "Import/export dialogs with
+options; batch export through the CLI"). The reference app's dialog layouts have no
+observation, so **the dialog layout, the option names and their order are parity-pending**.
+The options themselves are the ones §1 already defines. Every action is a registry command
+(COMMANDS.md §6), so everything works headless; the dialog only collects arguments.
+
+### 3.1 Format table (`forge_io::formats`)
+`FormatInfo { id, label, extensions, import, export }`. `formats()` lists them in a fixed
+order; today one entry: `obj`, "Wavefront OBJ", extensions `["obj"]`, import and export.
+`format_for_path(path)` matches the extension case-insensitively; `format_by_id(id)` matches
+the id exactly (lower case). New formats (area M briefs 164 to 171) add one entry, one pair of
+option lists and one reader/writer arm each.
+
+### 3.2 Options are parameter descriptors
+`import_options(id)` and `export_options(id)` return `Vec<ParamDesc>` (CORE.md §2), so the
+dialog, the command schema, `io.formats` and the CLI all derive from one definition. An unknown
+id gives `None`.
+
+| Format | Direction | Id | Label | Kind | Default | Meaning |
+|---|---|---|---|---|---|---|
+| obj | import | `flip_z` | Flip Z | bool | false | `ReadOptions::flip_z` (§1.3) |
+| obj | export | `normals` | Write normals | bool | true | `WriteOptions::normals` (§1.2) |
+| obj | export | `weld` | Merge equal points | bool | true | `WriteOptions::weld` (§1.2) |
+
+The defaults are the `Default` values of `ReadOptions` and `WriteOptions` (a test pins this).
+
+`Options` is `BTreeMap<String, forge_core::Value>`. `resolve_options(descs, given: &serde_json::Map)
+-> Result<Options, IoError>` starts from the defaults and applies `given`: a key that is not a
+descriptor id is an error (`unknown option "x"`); a JSON value of the wrong type (a bool for a
+bool, an integer for an int, a number for a float, an option id for an enum, a string for a
+string) is an error (`option "x" must be a boolean`, ...); numbers are clamped by
+`ParamDesc::validate`. `obj_read_options(&Options)` and `obj_write_options(&Options)` build
+the structs of §1.1.
+
+### 3.3 Text entry points
+- `export_text(id, scene, roots, &Options) -> Result<(String, usize), IoError>`:
+  `export_scene` (§1.4) followed by the format's writer; the count is the number of objects;
+  nothing to export is `IoError::NothingToExport`.
+- `read_text(id, text, &Options) -> Result<Vec<ObjObject>, IoError>`: the reader (§1.3) with the
+  options.
+- `IoError` has `UnknownFormat(String)`, `Unsupported(id, "import"|"export")`,
+  `BadOption(String)`, `NothingToExport` and `Parse(String)`; its `Display` is the message the
+  commands show.
+
+### 3.4 Commands (COMMANDS.md §6)
+- `file.import {path, format?, options?}` -> `{nodes, format}`; undoable ("Import <label>"
+  such as "Import OBJ"). `format` defaults to the one matching the extension of `path`; an
+  unknown extension is `Import failed: unknown format ...`. Same selection and messages as
+  `file.import_obj` (§2), which stays and equals `file.import` with `format: "obj"` and no
+  options.
+- `file.export {path, format?, selected?, options?}` -> `{objects, format}`; not undoable;
+  writes the scene evaluated at the current frame like `file.export_obj`, which stays.
+- `io.formats {}` -> `{formats: [{id, label, extensions, import, export, import_options,
+  export_options}]}`, each option `{id, label, kind, default, ...}` with `min`/`max` for
+  numbers and `choices: [{id, label}]` for enums. Not undoable, read-only.
+- `file.import_dialog {format?}` and `file.export_dialog {format?, selected?}` ask the editor
+  window to run the dialog of §3.5 (UiRequest `ImportDialog`, `ExportDialog`); headless
+  contexts refuse with "needs the editor window".
+Errors keep the §2 wording: `Import failed: ...`, `Export failed: ...`, `Nothing to export`,
+`Import: no polygons found`; a bad option is `InvalidArgs`.
+
+### 3.5 Dialog (UI.md §27)
+After the file chooser, the File menu items show an options window built from the descriptors
+(a check box per bool, a drag value per number, a combo box per enum, a text box per string).
+OK runs `file.import` / `file.export` with the chosen values; Cancel does nothing.
+
+### 3.6 Batch conversion (CLI.md `forge convert`)
+`forge convert <input> --out <dir> [--format obj] [--option key=value]... [--frame N] [--recursive]
+[--force]` converts one scene file or every scene file of a folder. The glue is in `apps/forge`;
+the formats and options are those above. Rules in CLI.md.
+
+### 3.7 Checks
+- `crates/io/tests/formats.rs`: the format table, extension lookup (case-insensitive), option
+  lists and defaults equal to the struct defaults, `resolve_options` (defaults, overrides, unknown
+  key, wrong types), `export_text`/`read_text` equal `write`/`read` for the option combinations
+  (normals off gives `f v v v`, weld off keeps all points, `flip_z` on read), unknown format.
+- `crates/app/tests/io_commands.rs`: `file.import`/`file.export` round trip and equality with the
+  `_obj` commands, inferred format, options applied, errors, one undo step, `io.formats` schema.
+- `apps/forge/tests/convert.rs`: folder conversion, recursion, options, `--force`, skipped files,
+  failures with exit code, `--format forge` from OBJ files, no window.
+- `crates/ui/tests/io_dialog.rs`: the options window (UI.md §27).

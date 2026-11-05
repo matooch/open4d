@@ -8,16 +8,33 @@ use crate::value_at;
 /// Vec3 components without a track keep the stored value. Tracks that no longer address
 /// a valid parameter are ignored.
 pub fn scene_at(scene: &Scene, time: f64) -> Scene {
-    scene.with_params(overrides(scene, time)).0
+    scene
+        .with_params(overrides(scene, &track_nodes(scene), time))
+        .0
 }
 
-fn overrides(scene: &Scene, time: f64) -> Vec<(NodeId, String, Value)> {
+/// The nodes that own at least one track, in document order.
+pub fn track_nodes(scene: &Scene) -> Vec<NodeId> {
+    all_nodes(scene)
+        .into_iter()
+        .filter(|id| scene.node(*id).is_some_and(|n| !n.tracks.is_empty()))
+        .collect()
+}
+
+/// The parameter values the tracks of `ids` give at `time` (seconds), in the order
+/// [`scene_at`] applies them; `scene` holds the stored values. Applying them to a copy of
+/// `scene` with `Scene::apply_params` is exactly `scene_at` when `ids` is [`track_nodes`].
+pub fn overrides(scene: &Scene, ids: &[NodeId], time: f64) -> Vec<(NodeId, String, Value)> {
     let mut out: Vec<(NodeId, String, Value)> = Vec::new();
-    for id in all_nodes(scene) {
+    for &id in ids {
         let Some(node) = scene.node(id) else { continue };
         let Some(ty) = scene.node_type(id) else {
             continue;
         };
+        // a layer with animation off keeps the stored values (CORE.md §7.4)
+        if !forge_core::layers::animation_on(scene, id) {
+            continue;
+        }
         for (key, track) in &node.tracks {
             let Ok(target) = parse_target(key, |p| ty.find_param(p)) else {
                 continue;

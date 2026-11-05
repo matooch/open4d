@@ -1,0 +1,64 @@
+feature = "caps-bevel"
+observation = "docs/parity/caps-bevel.md"
+description = "The defaults Extrude with Caps Type Triangles"
+mesh = "mesh.obj"
+
+[params]
+type = "extrude"
+direction = "Auto"
+offset = 100.0
+movement = [0.0, 0.0, 100.0]
+subdivision = 1
+isoparm_subdivision = 10
+flip_normals = false
+hierarchical = false
+caps_type = "Triangles"
+start_cap = true
+end_cap = true
+caps_grid_size = 10.0
+caps_density = 0.2
+quad_dominant = false
+separate_bevel_controls = false
+bevel_shape = "Round"
+bevel_size = 0.0
+bevel_extended_shape = false
+bevel_height = 0.0
+bevel_shape_depth = 1.0
+bevel_segments = 3.0
+end_bevel_shape = "Round"
+end_bevel_size = 0.0
+end_bevel_extended_shape = false
+end_bevel_height = 0.0
+end_bevel_shape_depth = 1.0
+end_bevel_segments = 3.0
+bevel_outside = false
+break_phong_rounding = true
+avoid_self_intersections = true
+polygon_selection_shell = false
+polygon_selection_start_cap = false
+polygon_selection_end_cap = false
+polygon_selection_start_bevel = false
+polygon_selection_end_bevel = false
+edge_selection_start_shell = false
+edge_selection_end_shell = false
+edge_selection_start_cap = false
+edge_selection_end_cap = false
+edge_selection_start_step = false
+edge_selection_end_step = false
+
+[params.input]
+type = "rectangle"
+width = 400.0
+height = 400.0
+rounding = false
+rounding_radius = 50.0
+plane = "XY"
+reverse = false
+intermediate = "Adaptive"
+intermediate_number = 8
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+[import]
+scale = 1.0
+flip_z = false

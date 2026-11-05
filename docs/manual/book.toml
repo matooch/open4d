@@ -1,0 +1,12 @@
+[book]
+title = "Forge3D Manual"
+description = "User manual and generated references for Forge3D"
+language = "en"
+src = "."
+
+[build]
+build-dir = "../../target/book"
+create-missing = false
+
+[output.html]
+git-repository-url = "https://github.com/"

@@ -19,7 +19,7 @@ use crate::util::{
 };
 
 /// One level for meshes that are not all quads: originals, edge points in `edges()` order,
-/// face points; polygon `i` becomes its last corner's quad, the other quads are appended.
+/// face points; each polygon becomes quads around its corners (see `corner` below).
 fn subdivide_once(mesh: &PolyMesh, smooth: bool) -> PolyMesh {
     let generated = if smooth {
         catmull_clark(mesh)
@@ -50,18 +50,29 @@ fn subdivide_once(mesh: &PolyMesh, smooth: bool) -> PolyMesh {
         let n = poly.len();
         let face = (n0 + ne + f) as u32;
         let edge = |a: u32, b: u32| (n0 + ids[&Edge::new(a, b)] as usize) as u32;
-        let mut quads: Vec<Vec<u32>> = (0..n)
-            .map(|k| {
-                vec![
-                    poly[k],
-                    edge(poly[k], poly[(k + 1) % n]),
-                    face,
-                    edge(poly[(k + n - 1) % n], poly[k]),
-                ]
-            })
-            .collect();
-        polys[f] = quads.pop().unwrap_or_default();
-        appended.extend(quads);
+        // corner `k`'s quad; a quad polygon follows the lattice order of the all-quad rule
+        // (§4.1: cells (0,0), (0,1), (1,0) appended, (1,1) in place), the others start every
+        // quad at the face point and keep corner 0's quad in place (`subdivide-tri`)
+        let corner = |k: usize| {
+            let (prev, next) = (poly[(k + n - 1) % n], poly[(k + 1) % n]);
+            if n == 4 {
+                match k {
+                    0 => vec![poly[0], edge(poly[0], next), face, edge(prev, poly[0])],
+                    1 => vec![edge(poly[1], prev), poly[1], edge(poly[1], next), face],
+                    3 => vec![edge(poly[3], next), face, edge(prev, poly[3]), poly[3]],
+                    _ => vec![face, edge(prev, poly[2]), poly[2], edge(poly[2], next)],
+                }
+            } else {
+                vec![face, edge(prev, poly[k]), poly[k], edge(poly[k], next)]
+            }
+        };
+        let order: Vec<usize> = if n == 4 {
+            vec![2, 0, 1, 3]
+        } else {
+            (0..n).collect()
+        };
+        polys[f] = corner(order[0]);
+        appended.extend(order[1..].iter().map(|k| corner(*k)));
     }
     polys.extend(appended);
     PolyMesh { points, polys }
@@ -159,16 +170,86 @@ fn subdivide_quads(mesh: &PolyMesh, levels: usize, smooth: bool) -> PolyMesh {
     PolyMesh { points, polys }
 }
 
+/// Subdivide of some quad polygons (§4.1, `subdivide-subset`): the chosen quads follow the
+/// all-quad rule on their own; the other polygons get the new edge points along the edges
+/// they share with a chosen quad (they become n-gons).
+fn subdivide_subset(mesh: &PolyMesh, chosen: &[u32], levels: usize, smooth: bool) -> ToolResult {
+    let unsupported = |what: &str| Err(ToolError::Unsupported(what.to_string()));
+    if smooth {
+        return unsupported("Hyper Subdivide of a part of the polygons (no golden data)");
+    }
+    if chosen.iter().any(|&i| mesh.polys[i as usize].len() != 4) {
+        return unsupported("Subdivide of a part of the polygons with n-gons (no golden data)");
+    }
+    let chosen_set: HashSet<u32> = chosen.iter().copied().collect();
+    let sub = PolyMesh {
+        points: mesh.points.clone(),
+        polys: chosen
+            .iter()
+            .map(|&i| mesh.polys[i as usize].clone())
+            .collect(),
+    };
+    let done = subdivide_quads(&sub, levels, false);
+    // the edge points of the chosen quads: first met walking them in order, from the
+    // corner `k` to `k + 1`, `2^L - 1` points each, right after the originals
+    let per_edge = (1usize << levels) - 1;
+    let mut along: HashMap<Edge, (u32, usize)> = HashMap::new();
+    let mut next = mesh.points.len();
+    for &i in chosen {
+        let poly = &mesh.polys[i as usize];
+        for k in 0..4 {
+            let (a, b) = (poly[k], poly[(k + 1) % 4]);
+            if let std::collections::hash_map::Entry::Vacant(v) = along.entry(Edge::new(a, b)) {
+                v.insert((a, next));
+                next += per_edge;
+            }
+        }
+    }
+    let mut polys: Vec<Vec<u32>> = Vec::new();
+    let mut in_place = done.polys.iter();
+    for (i, poly) in mesh.polys.iter().enumerate() {
+        if chosen_set.contains(&(i as u32)) {
+            polys.push(in_place.next().cloned().unwrap_or_default());
+            continue;
+        }
+        let mut grown = Vec::new();
+        for k in 0..poly.len() {
+            let (a, b) = (poly[k], poly[(k + 1) % poly.len()]);
+            grown.push(a);
+            if let Some(&(from, first)) = along.get(&Edge::new(a, b)) {
+                let ids = (first..first + per_edge).map(|v| v as u32);
+                if from == a {
+                    grown.extend(ids);
+                } else {
+                    grown.extend(ids.rev());
+                }
+            }
+        }
+        polys.push(grown);
+    }
+    polys.extend(in_place.cloned());
+    let appended_from = mesh.polys.len() as u32;
+    let selected = chosen
+        .iter()
+        .copied()
+        .chain(appended_from..polys.len() as u32);
+    Ok((
+        PolyMesh {
+            points: done.points,
+            polys,
+        },
+        polys_selection(selected),
+    ))
+}
+
 /// Subdivide (§4.1).
 pub fn subdivide(mesh: &PolyMesh, sel: &Selection, s: &Settings) -> ToolResult {
     let chosen = polys_or_all(mesh, &sel.polys)?;
-    if chosen.len() != mesh.polys.len() {
-        return Err(ToolError::Unsupported(
-            "Subdivide of a part of the polygons (no golden data)".to_string(),
-        ));
-    }
     let smooth = s.bool("hyper");
     let levels = s.int("subdivisions").max(1) as usize;
+    if chosen.len() != mesh.polys.len() {
+        return subdivide_subset(mesh, &chosen, levels, smooth);
+    }
     let out = if mesh.polys.iter().all(|p| p.len() == 4) {
         subdivide_quads(mesh, levels, smooth)
     } else {

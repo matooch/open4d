@@ -108,6 +108,14 @@ impl CommandContext for EditorState {
         self.app.component_settings_mut()
     }
 
+    fn transform_settings(&self) -> &forge_modeling::snap::TransformSettings {
+        self.app.transform_settings()
+    }
+
+    fn transform_settings_mut(&mut self) -> &mut forge_modeling::snap::TransformSettings {
+        self.app.transform_settings_mut()
+    }
+
     fn timeline(&self) -> &Timeline {
         self.app.timeline()
     }
@@ -128,12 +136,12 @@ impl CommandContext for EditorState {
         self.app.set_status(text);
     }
 
-    fn select_components(&mut self, op: SelectOp) -> Result<(), String> {
-        self.app.select_components(op)
+    fn select_components(&mut self, op: SelectOp, nodes: Option<&[NodeId]>) -> Result<(), String> {
+        self.app.select_components(op, nodes)
     }
 
-    fn select_extra(&mut self, cmd: SelectExtra) -> Result<(), String> {
-        self.app.select_extra(cmd)
+    fn select_extra(&mut self, cmd: SelectExtra, nodes: Option<&[NodeId]>) -> Result<(), String> {
+        self.app.select_extra(cmd, nodes)
     }
 
     fn record_keys(&mut self) -> Result<usize, String> {
@@ -185,6 +193,14 @@ impl CommandContext for EditorState {
         self.app.mark_saved(path);
     }
 
+    fn browser(&self) -> Option<&forge_command::browser::Browser> {
+        Some(&self.app.browser)
+    }
+
+    fn browser_mut(&mut self) -> Option<&mut forge_command::browser::Browser> {
+        Some(&mut self.app.browser)
+    }
+
     fn set_shading(&mut self, shading: ShadingMode, pane: Option<PaneArg>) {
         let shading = shading_of(shading);
         self.with_pane(pane.map(pane_of), |s| s.shading = shading);
@@ -220,6 +236,25 @@ impl CommandContext for EditorState {
 
     fn set_antialias(&mut self, on: bool) {
         self.views.antialias = on;
+    }
+
+    fn set_hud(
+        &mut self,
+        item: forge_command::HudItemArg,
+        pane: Option<PaneArg>,
+        all_panes: bool,
+        enabled: Option<bool>,
+    ) {
+        let item = crate::hud::HudItem::from(item);
+        let panes = if all_panes {
+            forge_viewport::panes::Pane::ALL.to_vec()
+        } else {
+            vec![pane.map_or(self.views.active, pane_of)]
+        };
+        for p in panes {
+            let on = enabled.unwrap_or(!self.hud.flags(p).get(item));
+            self.hud.set(p, item, on);
+        }
     }
 
     fn set_clone_display(&mut self, indices: Option<bool>, axes: Option<bool>) {

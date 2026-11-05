@@ -114,11 +114,13 @@ pub fn melt(mesh: &PolyMesh, sel: &Selection, _s: &Settings) -> ToolResult {
     let groups: Vec<Vec<u32>> = edge_groups(mesh, &chosen)
         .into_iter()
         .filter(|g| g.len() > 1)
+        // a group without one simple boundary loop (a ring around a hole, a closed
+        // surface) is left as it is (`melt-ring`)
+        .filter(|g| loop_of(mesh, g, &BTreeSet::new()).is_ok())
         .collect();
     if groups.is_empty() {
-        return Err(ToolError::Invalid(
-            "select two or more polygons that share an edge".to_string(),
-        ));
+        // single polygons stay as they are (`melt-single`, `dissolve-poly`)
+        return Ok((mesh.clone(), polys_selection(chosen)));
     }
     let (out, merged) = merge_groups(mesh, &groups, &BTreeSet::new())?;
     Ok((out, polys_selection(merged)))

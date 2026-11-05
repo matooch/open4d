@@ -50,6 +50,21 @@ Setting enums are option ids (`"chamfer"`); the schema lists them.
   same step, so one undo restores mesh and selection. Result:
   `{ "node", "points", "polys", "selected": [index] }`.
 - Edit mode and the object selection are not changed.
+- Several objects (brief 034, EDITABLE.md §6.5; parity-pending): `nodes?: [id]` is accepted
+  next to `node` (both together are an error). Without either, the targets are the selected
+  polygon objects (the active node must be a polygon object, as before). The tool runs on
+  each object with *that object's* stored selection and topology; all meshes and selections
+  are written in the one transaction, so one undo step restores every object. An object
+  whose stored selection is empty and for which the tool fails is skipped and listed in
+  `skipped` (a tool like Subdivide that accepts an empty selection runs on it); a failure on an
+  object with a non-empty selection, or on every object, is `Failed` and nothing changes.
+  `polys`, `edges` and `points` name one object's indices, so they need exactly one object.
+  The result keeps the single-object keys for the first object processed and adds
+  `nodes: [{node, points, polys, selected}]` and `skipped: [node]`. `mesh.split` creates one
+  split object per source (`created` lists them, the first is also `created` of the top
+  level result) and selects them; `mesh.center_axis` moves each object's axis.
+- `mesh.loop_cut`, `mesh.knife`, `mesh.bridge`, `mesh.stitch`, `mesh.close_hole` and
+  `mesh.pen` work on one object and reject `nodes` (EDITABLE.md §6.5).
 
 ### 0.2 UI framework (`forge-ui`, `tools.rs`)
 ```rust
@@ -114,24 +129,27 @@ addressable. `realtime_update` only affects the UI preview.
 ### 1.2 Groups (case: `extrude-two`, `extrude-two-separate`)
 - Preserve Groups **off**: every selected polygon is its own group.
 - Preserve Groups **on**: selected polygons that share an edge and whose unit normals differ by
-  at most `maximum_angle_deg` are one group (union-find over shared edges). **parity-pending**
-  for the angle test: every golden group is flat (angle 0), so only "edge-connected selected
-  polygons form a group" is proven (`extrude-two` vs `-separate`). The angle test is the
-  public manual's description of Maximum Angle.
+  at most `maximum_angle_deg` are one group (union-find over shared edges). A 90° bend
+  with Maximum Angle 91° is one group (`extrude-bent-group`, O58); `extrude-max-angle` (O58)
+  covers the split side. The exact threshold comparison (≤ vs <) is unobserved.
 - Groups are processed in ascending order of their smallest polygon index; within a group the
   polygons are in ascending index order.
 
 ### 1.3 New points (cases: all)
-- For each group, one new point per point of the group, in **ascending original point index**
-  (`extrude-two`: copies of 1,3,5,7,9,11 are points 12..17; `extrude-two-separate`: group 6 gives
-  12..15, group 7 gives 16..19, so a point shared by two groups is copied twice and the file
-  keeps both).
-- The original points stay where they are and keep their index. The new points are appended
-  after all existing points, group after group.
-- Position: `p + offset · d`, `d` the unit normal of the group's polygons at `p` (the
-  normalised sum of the unit polygon normals of the group's polygons that use `p`; for a flat
-  group this is the polygon normal). Cases `extrude-top` (+50: y 150) and `extrude-top-negative`
-  (−50: y 50, same faces). **parity-pending** for non-flat groups.
+- For each group, one new point per **boundary** point of the group (a point on a boundary
+  edge, §1.4), in **ascending original point index** (`extrude-two`: copies of 1,3,5,7,9,11 are
+  points 12..17; `extrude-two-separate`: group 6 gives 12..15, group 7 gives 16..19, so a point
+  shared by two groups is copied twice and the file keeps both).
+- An **interior** point of a group (all its edges shared by two polygons of the group) gets no
+  new point: it moves in place and keeps its index (`extrude-bent-group`: point 11, the middle
+  of the bend, moves to (150, 150, 0); 26 + 8 = 34 points, not 35).
+- The original boundary points stay where they are and keep their index. The new points are
+  appended after all existing points, group after group.
+- Position: `p + offset · m / |m|²`, `m` the mean of the unit polygon normals of the group's
+  polygons that use `p`. The point lands `offset` from each of those polygons' planes (a
+  mitre); for a flat group `m` is the polygon normal. Cases `extrude-top` (+50: y 150),
+  `extrude-top-negative` (−50: y 50, same faces) and, for a 90° bend, `extrude-bent-group` /
+  `extrude-bent-ngon` (O58: (100, 100, z) → (150, 150, z), not (135.4, 135.4, z)).
 
 ### 1.4 Faces (all extrude cases)
 - Polygons keep their index. Each selected polygon is **replaced in place** by its cap: the same
@@ -152,13 +170,15 @@ addressable. `realtime_update` only affects the UI preview.
 Each side is cut into `N + 1` rows. Between `a'` and `a` there are `N` intermediate points
 `c_1(a) … c_N(a)` at `a' + (a − a')·k/(N+1)`, `k = 1..N`, **top (cap side) first**
 (`133.33`, then `116.67`).
-- Column points are numbered after the group's new points. Columns are created in the order of
-  the boundary edges, one column per edge start point `a` (each point once): `extrude-subdiv`
-  columns of points 1, 7, 5, 3 (the polygon's corner order, not ascending order), two points
-  each: 12,13 / 14,15 / 16,17 / 18,19. **parity-pending** for groups with several
-  boundary loops (a start-point-only order is the simplest rule that fits; ascending order of
-  the new points does not fit `extrude-subdiv`). A point that is only ever an edge end gets its
-  column after all start-point columns.
+- Column points are numbered after the group's new points. Columns are created walking the
+  boundary edges in order (§1.4), for each edge its start point `a` then its end point `b`,
+  each point once. `extrude-subdiv`: edges 1→7, 7→5, 5→3, 3→1 give columns of 1, 7, 5, 3 (the
+  polygon's corner order, not ascending order), two points each: 12,13 / 14,15 / 16,17 /
+  18,19. `inset-patch-sub` (O58, 3x1x3 patch, 12 boundary points, N = 2) proves the "then
+  end point" part: edge 1→23 gives columns 1 and 23 before the next edge's 3, so the column
+  order is 1, 23, 3, 5, 9, 7, 21, 11, 19, 17, 15, 13 (a start-points-first rule gives 1, 3,
+  5, 9, 7, ... and does not fit). **parity-pending** only for groups with several boundary
+  loops of different sizes (not observed).
 - Rails: `L = [a', c_1(a)…c_N(a), a]`, `R = [b', c_1(b)…c_N(b), b]`. Row `j` (0 = cap side,
   `0..=N`) is `[L_j, L_{j+1}, R_{j+1}, R_j]`, except **inner rows** (`1 ≤ j ≤ N−1`) which are
   the same cycle started at `R_{j+1}`: `[R_{j+1}, R_j, L_j, L_{j+1}]` (`extrude-subdiv` face 7 =
@@ -250,7 +270,7 @@ The mode is the selection that is given: edges, else polygons, else points (when
 non-empty, in that order). Edge ids are indices into `PolyMesh::edges()` (GEOMETRY.md §1); the
 command also accepts point pairs `[a, b]`. The result selects the new polygons: the cap
 polygons in polygon mode, every strip polygon in edge mode.
-**Point mode is `Unsupported`**: no golden case.
+Point mode: §3.6.
 
 ### 3.3 Polygon mode (cases: `bevel-poly`, `bevel-poly-extrusion0`)
 An inset (§2.2, same groups, mitre and numbering) plus a lift. Each new point is the inset
@@ -264,7 +284,8 @@ edge as `[a', a, b, b']`, exactly as Extrude (§1.4).
 - Preserve Groups (on) and Maximum Angle (89) are the hidden values of the reference tool;
   they are fixed here. Interior points of a group (none in the data) move by the lift only
   (**parity-pending**).
-- `subdivision > 0`, `bevel_mode` solid, `offset_mode` other than fixed: `Unsupported`.
+- `subdivision > 0`, `bevel_mode` solid, `offset_mode` other than fixed: `Unsupported`
+  (no golden case).
 
 ### 3.4 Edge mode, chamfer (cases: `bevel-edge`, `bevel-edge-sub`, `bevel-edges-top`,
 `bevel-mitering-uniform`, `bevel-proportional`)
@@ -292,10 +313,27 @@ Level `j` (`t = j/(N+1)`) is the rational quadratic (a circle arc)
 `t = 1/3, 2/3` (they lie on the radius-20 circle but not at equal angles; equal angles would
 give 97.32), and the 45-degree point (94.142136) of `bevel-edges-top` is `t = 1/2`.
 The level line of the strip is `Q_j + s · (b − a)/|b − a|`.
-**Tension 1 and Depth 1 only**; other values are `Unsupported` (no data). **parity-pending**
-for angles other than 90 degrees (all data are cube edges).
+(This is the profile of the cross-section through `a`; only the end points `j = 0` and
+`j = N + 1` of a vertex are taken from it, §End points.)
+**Tension 1 and Depth 1 only**; other values are `Unsupported` (no data). Angles other than 90 degrees: see the end-point rule
+below (`bevel-wedge`, a 63.4 degree edge, proves the weight rule).
 
 **End points.**
+- **Inner levels `1 … N` of a vertex** are not the strip's cross-section points moved along
+  the edge. They are the rational quadratic of the *cap-plane* cross-section at that vertex:
+  control point `K` = the original vertex `v`, end points `E_0`, `E_{N+1}` (the level 0 and
+  level `N+1` points of the vertex as defined below), weight `w = cos(ψ/2)` with
+  `cos ψ = −û_0 · û_{N+1}`, `û` the unit vectors from `v` to the end points, and
+  `t = j/(N+1)`. For a cap square to the edge this is the strip profile above (all cube cases).
+  `bevel-wedge` (pyramid base edge, end faces slanted): the end points are
+  (80, −100, 100) and (91.0557, −82.1115, 91.0557), so `|v E_{N+1}| = 21.91 ≠ 20`,
+  `cos ψ = −1/√6`, `w = 0.543944` (not 0.525731 of the dihedral angle), giving the golden
+  (87.604931, −97.507094, 98.753547) and (92.227034, −90.028375, 95.014188). The same rule
+  gives the two-edge corner: `bevel-uniform-wedge`, corner (100, −100, 100) with `C_0` =
+  (80, −100, 80) and `C_3` = (91.0557, −82.1115, 91.0557): `cos ψ = −1/√3`, `C_1` =
+  (86.994176, −97.384258, 86.994176), `C_2` = (91.844028, −89.537033, 91.844028). The end
+  points `E_0`, `E_{N+1}` themselves are unchanged (hit of the level line with the cap plane,
+  closest approach of two level lines).
 - A vertex with one selected edge: the cap polygon is the polygon `(n1 -> v)` where `n1` is
   the next point after `v` in the polygon that holds `x -> v` (`x` the other end of the edge).
   Level point `j` is the intersection of the level line with the plane of the cap polygon
@@ -342,10 +380,13 @@ edge in edge order, then, edge by edge, rows `1 … N` (`bevel-mitering-uniform`
 the row 0 of the four edges, 10, 11 are rows 1, 2 of the first edge).
 **parity-pending**: rows `j ≥ 1` for `N ≥ 3` and the row order for more than three rows.
 
-### 3.5 Edge mode, solid (case: `bevel-solid`)
+### 3.5 Edge mode, solid (cases: `bevel-solid`, `bevel-solid-sub1`)
 `bevel_mode` solid keeps the old points and adds the same four end points as the chamfer, in
-the same order (8..11), no point is removed. Only one selected edge per vertex, `subdivision`
-0 and one selected edge per polygon are supported (`Unsupported` otherwise).
+the same order (8..11), no point is removed. Only one selected edge per vertex and one
+selected edge per polygon are supported (`Unsupported` otherwise).
+- **Subdivision has no effect in solid mode**: `bevel-solid-sub1` (Subdivision 1) equals
+  `bevel-solid` face for face and point for point. It is read as 0 (**parity-pending** for
+  larger values, one case).
 - The polygons `fA` and `fB` are cut by the line through their two new points. Let the cut
   edges be the polygon's edges next to the beveled edge, `X` on the earlier one, `Y` on the
   later one in the polygon's walk (indices `i < j`): the part that holds the polygon's first
@@ -355,7 +396,24 @@ the same order (8..11), no point is removed. Only one selected edge per vertex, 
   appended. Appended parts are in ascending order of the original polygon.
 - The cap polygons get `[incoming end point, v, outgoing end point]` (`2 10 3 11 5 4`).
 
-### 3.6 Settings without an effect or without data
+### 3.6 Point mode (case: `bevel-point`)
+Selected points are cut off, each independently (adjacent selected points, points that are not
+interior to a closed surface, `subdivision > 0`, proportional offset and solid mode are
+`Unsupported`).
+- For a point `v`, let the *ring* be its polygons in ascending index, each giving the pair
+  (previous point, next point) of `v` in it. The cut points sit `offset` from `v` along the
+  edge to each ring entry's **next** point, in ring order (`bevel-point`, point 3 of the cube:
+  ring = polygons 0, 1, 4 with next points 2, 5, 1 → (100, 80, −100), (100, 100, −80),
+  (80, 100, −100)).
+- The first cut point takes the slot of `v` (index 3), the others are appended (slots 8, 9);
+  no swap-remove (a swap-remove would need the creation order 5, 1, 2, which no rule here
+  explains). **parity-pending** for several selected points (the data have one).
+- Each polygon through `v` gets the cut point on its previous edge then the one on its next
+  edge in place of `v` (polygon 0 `0 1 3 2` → `0 1 [80,100,−100] [100,80,−100] 2`). The new
+  polygon is appended: first cut point, then the others in reverse ring order
+  (`4 10 9` = (100,80,−100), (80,100,−100), (100,100,−80)). Selection: the new polygon.
+
+### 3.7 Settings without an effect or without data
 - `limit`: no effect seen (all offsets are inside the geometry); ignored. **parity-pending**.
   (The note of `bevel-proportional` that offset 30 gave a degenerate mesh is consistent with
   Limit not clamping, but it does not prove it.)
@@ -368,7 +426,7 @@ the same order (8..11), no point is removed. Only one selected edge per vertex, 
 - **Unsupported** (no golden case): `shape` user/profile (out of scope, v1.1), `offset_mode`
   radial, `tension ≠ 1`, `depth ≠ 1`, `mitering` radial/patch, `ending` ≠ default,
   `partial_rounding` ≠ none, `corner_ngons`, `rounding_ngons`, `bevel_mode` solid together
-  with `subdivision > 0` or in polygon mode, point mode, open or non-manifold edges, vertices
+  in polygon or point mode, point mode with `subdivision > 0` or a proportional offset, open or non-manifold edges, vertices
   that are not valence 3, three selected edges at a vertex.
 
 ## 4. Mesh commands (`mesh.subdivide` ... `mesh.center_axis`)
@@ -714,6 +772,9 @@ loop tools at the hovered edge. The tools reuse `ToolState`; hover and drag live
   `mesh.knife` (line mode, `eye` or `direction` from the camera). A drag shorter than 3 pixels
   does nothing. **Knife Plane**: the same drag, with an unbounded segment (plane mode: the plane
   through the eye and the dragged line). **Knife Loop**: hover and click as the loop cut with one cut (settings `lock_offset`, `offset`).
+- **Snapping** (brief 032, MANIPULATE.md §6.7): with `snap.enabled` the Knife drag end points move to the
+  pixel of the snap hit, and the loop offset snaps to 0.5 within the snap radius of the edge midpoint
+  (`edge_midpoint` target on).
 - **Slide**: the standard tool drag (§0.2) sets `amount` (one viewport height = 2.0); the release
   applies.
 - Nothing is written during hover or drag; the target is the active polygon object; all three
@@ -807,7 +868,9 @@ active polygon object.
   (preview while the second is hovered). Apply runs the command with the two picked edges, or with
   exactly two selected border edges. Bridge setting: `segments`; Stitch setting: `position`.
 - **Polygon Pen**: each click adds a corner, snapped to an existing point within the point pick radius
-  (else a point on the plane through the camera target facing the viewer); a click on the first
+  (else a point on the plane through the camera target facing the viewer); with snapping on
+  (MANIPULATE.md §6.7) the snap hit decides first: a vertex of the target is the `Point` corner, any
+  other target a `New` corner at the hit; a click on the first
   corner with three or more corners, or Apply, runs `mesh.pen`. Reset Values / Done discard the
   corners. The preview shows the polygon once there are three corners.
 Nothing is written during hover.
@@ -876,3 +939,122 @@ Result: see docs/parity/STATUS.md.
   headless (one undo step, stored selection, argument errors, schemas).
 - `crates/ui/tests/building.rs`: hover previews without touching the document, clicks commit one
   undo step, pen corners and snapping, menu entries.
+
+## 9. Arrangement commands (`object.duplicate`, `object.arrange`, `object.randomize`, `object.transfer`, `mesh.array_command`; brief 031)
+
+Sources: **own design, all parity-pending.** The only observation is the array note of
+docs/parity/modeling-tools-2.md (case `array-command`, dropped): the probe's Array command on the
+default cube with 3 copies and offset (300, 0, 0) produced 24 points and 18 polygons, but with
+scaled and rotated copies and a third copy reaching x = 385 instead of 500, because the settings
+fields were not mapped to the dialog labels. Nothing in it fixes a rule, so no golden case exists
+and the parity count is 0/0. The settings are descriptors (`arrange_descs()`, the framework of
+§0), so the panel, the schema, the defaults and the clamping derive from one definition. The pure
+functions are in `crates/modeling/src/arrange.rs`; the commands in
+`crates/command/src/builtin/arrange.rs` (objects) and `tools.rs` (`mesh.array_command`, a
+normal mesh tool command, §0.1).
+
+### 9.1 Step rule (`copy_step`)
+Shared by Duplicate and the Array command. Settings: `copies` (int, 1..1000, default 1 for
+Duplicate, 3 for Array), `offset` (vec3, distance), `rotation_deg` (vec3 heading, pitch, bank in
+degrees), `scale` (vec3, per-axis factor, 0.001..1000, default 1), `mode` (`step` default | `total`).
+Copy `k` (1-based) uses the fraction `f = k` in `step` mode (each copy adds the settings once more:
+offset `k·offset`, rotation `k·rotation`, scale factor `1 + k·(scale − 1)` per axis) and `f = k / copies` in `total`
+mode (the settings are the totals reached by the last copy). Position delta `f·offset`, rotation
+delta `f·rotation`, scale factor `max(0.001, 1 + f·(scale − 1))` per axis. The scale is linear in the
+index, as the observed Linear mode of the clone toolset (MOGRAPH.md, `1 + i(S − 1)`), and clamped so a
+shrinking series never reaches zero or turns negative. Equal formulas for objects and meshes keep the
+two commands interchangeable.
+
+### 9.2 Duplicate (`object.duplicate`)
+Arguments (explicit numbers, no other keys): `nodes?` (default: the selection), `copies`,
+`offset`, `rotation_deg`, `scale`, `mode` (§9.1).
+- Nested nodes are dropped as in `object.group`; the rest are processed in the order given (the
+  selection is in ascending id order).
+- A copy is a deep copy: the node, its tags, its children recursively, all params (links that point
+  inside the copied subtree are remapped to the copies; links to other nodes are kept) and
+  transform tracks. Copy `k` of a node is inserted in the same parent at `index_of_source + k`
+  (copies follow their source); the source stays.
+- Transform of the copy's root: the source's local transform plus the §9.1 deltas, i.e.
+  `pos + Δpos`, `rot + Δrot`, `scale ⊙ factor` (all in the parent's space; heading/pitch/bank add).
+- Name: `<source name>.N` with the lowest free `N` over the whole scene (the Split rule, §4.7);
+  children and tags keep their names. The transform tracks of the copy's root are not copied (its
+  placement is the step); every other track is.
+- One transaction "Duplicate", one undo step. The copies become the selection (the last node's last
+  copy is active). Result `{created: [id…], count}`. No selection and no `nodes` is `Failed`.
+
+### 9.3 Arrange (`object.arrange`)
+Sets the local position of the nodes only; rotation and scale are unchanged. Arguments: `nodes?`,
+`mode` (`line` default | `grid` | `circle`), `spacing` (vec3, default (200, 0, 0)), `row_spacing`
+(vec3, default (0, 0, 200)), `columns` (int ≥ 1, default 3), `radius` (default 200), `plane`
+(`xz` default | `xy` | `zy`), `start_angle_deg` (default 0). Nodes are used in the order given
+(selection: ascending id), nested nodes dropped. With `n` nodes and `a` the first node's position:
+- `line`: node `i` at `a + i·spacing`.
+- `grid`: node `i` at `a + (i mod columns)·spacing + (i div columns)·row_spacing`.
+- `circle`: centre `c` = mean of the nodes' positions; angle `θi = start_angle + 360°·i/n`; the plane
+  axes are `(u, v)` = (X, Z) for `xz`, (X, Y) for `xy`, (Z, Y) for `zy`; node `i` at
+  `c + radius·(cos θi · u + sin θi · v)`; the component along the plane's normal keeps `c`'s value.
+Positions are local values, so nodes with different parents are only aligned if the parents are.
+One transaction "Arrange". Result `{arranged: n}`. No nodes: `Failed`.
+
+### 9.4 Randomize (`object.randomize`)
+Arguments: `nodes?`, `seed` (int, default 1), `position` (vec3 ± amplitude, default (50, 50, 50)),
+`rotation_deg` (vec3 ± degrees, default 0), `scale` (vec3, 0..0.999, default 0), `uniform_scale`
+(bool, default off). Deterministic: for each node a SplitMix64 stream (public-domain algorithm, local to
+the module) starts at `seed ⊕ node_id·0x9E3779B97F4A7C15`;
+it is advanced for nine draws in a fixed order (position x y z, rotation h p b, scale x y z), each
+mapped to `u ∈ [−1, 1)` by `2·(bits >> 11)/2^53 − 1`. All nine are always drawn, so changing one
+range never shifts the others, and a node's result depends on its id and the seed only, not on
+the order or the other nodes. New values: `pos += u·position`, `rot += radians(u·rotation_deg)`,
+`scale ⊙= 1 + u·scale` per axis (with `uniform_scale` all three axes use the factor `1 + u_x·scale_x`).
+The offsets are added to the current values, so a second run with another seed accumulates. One
+transaction "Randomize", result `{randomized: n}`.
+
+### 9.5 Transfer (`object.transfer`)
+Copies the placement of one object to another. Arguments: `target` (node id, required), `source?`
+(default: the active node), `position`, `rotation`, `scale` (bools, default on), `space` (`world`
+default | `local`). `local` copies the chosen local params. `world` sets the target so that its
+world matrix equals the source's world matrix (`target_local = inverse(parent_world(target)) ·
+source_world`, then position = translation, rotation = `hpb_from_rotation` of the normalised
+columns, scale = column lengths); only the ticked components are written. Source = target, a
+missing node, a tag: `Failed`. One transaction "Transfer"; result `{node}`.
+
+### 9.6 Array command (`mesh.array_command`)
+A mesh tool of the framework (§0.1, settings under `settings`): the polygon object gets, after
+its own points and polygons, `copies` transformed copies of the whole mesh (the polygon selection
+argument is ignored). Copy `k` is `T(f·offset) · R(f·rotation) · S(max(0.001, 1 + f·(scale − 1)))` applied to every point
+in object space, with `f` from §9.1 and the transform convention of TRANSFORM.md (heading about Y,
+pitch about X, bank about Z, applied bank, pitch, heading). Copy points follow copy after copy in
+original order; copy polygons likewise (the same corner order, so winding is kept). Result
+selection: the polygons of the copies. Defaults: `copies` 3, `offset` (200, 0, 0), `rotation_deg`
+0, `scale` 1, `mode` `step`. Whether the reference's "copies" counts the original (the probe's 24
+points would then be 3 instances) is **open**; `copies` here is the number of added copies. More
+than 4 million resulting points: `ToolError::Invalid`. One undo step "Array command" restores the
+mesh and selection.
+
+### 9.7 UI
+The Mesh menu lists Duplicate, Arrange, Randomize, Transfer and Array command after the building
+tools. Choosing one activates the tool: the Attribute panel shows its descriptor rows with
+Reset Values and Apply (§0.2). Apply runs the command with the panel values (Array: under
+`settings`; the object commands: the values as top-level arguments, plus `target` for Transfer,
+which is the id typed in the panel, or when -1 the first selected object other than the active
+one). There is no viewport preview and no drag for the object commands; the Array command previews
+live. Own design, parity-pending.
+
+### 9.8 Checks
+`crates/modeling/tests/arrange.rs` (step rule both modes, array counts, order, winding, closed
+cube copies, offsets, rotation/scale, the point cap), `crates/app/tests/arrange_commands.rs` (the five
+commands headless, one undo step each, deep copies, determinism of Randomize, argument errors,
+schemas), `crates/ui/tests/arrange.rs` (menu entries, panel, Apply).
+
+### Update (O58 remaining cases)
+- Bevel point (`bevel-point`, `bevel-point-two`): per selected point the cut points are created
+  on the edge to each ring entry's **previous** point, the last ring entry first; the originals
+  leave by swap-remove in ascending order; in a polygon whose first corner is beveled the cut
+  on the next edge takes the first slot and the one on the previous edge closes the polygon;
+  the cap lists the creation order reversed.
+- Subdivide of some quads (`subdivide-subset`): the chosen quads follow the all-quad rule; the
+  other polygons gain the edge points along edges shared with a chosen quad. Hyper and n-gons
+  among the chosen stay `Unsupported`.
+- Melt (`melt-single`, `melt-ring`): a single polygon, a ring around a hole or a closed surface
+  is left as it is. `melt-ring` stays a known mismatch (the reference re-creates the ring polygons).
+

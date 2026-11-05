@@ -34,11 +34,18 @@ pub(crate) fn build(p: &Params) -> Result<PolyMesh, BuildError> {
     let cap = p.float("cap_height").min(height / 2.0);
     let c = (height / 2.0 - cap).max(0.0);
     // Point k of the cap, measured from the pole: (radius, offset along the axis).
+    // The arc's end angle grows with the cap height: 90 degrees * cap_height / radius
+    // (oil-tank/cap, cap-r50); a flat or zero-radius cap keeps the default angle.
+    let end = if r > 0.0 && cap > 0.0 {
+        std::f64::consts::FRAC_PI_2 * cap / r
+    } else {
+        CAP_ARC
+    };
     let arc = |k: usize| {
-        let t = CAP_ARC * k as f64 / cs as f64;
+        let t = end * k as f64 / cs as f64;
         DVec2::new(
-            r * t.sin() / CAP_ARC.sin(),
-            cap * (1.0 - t.cos()) / (1.0 - CAP_ARC.cos()),
+            r * t.sin() / end.sin(),
+            cap * (1.0 - t.cos()) / (1.0 - end.cos()),
         )
     };
     let mut pts: Vec<DVec2> = (1..=cs)

@@ -1,0 +1,31 @@
+feature = "box-gate"
+observation = "docs/parity/deformers-4.md"
+description = "Taper strength 50 percent, mode Within Box, size (100, 250, 400); input cube 200x200x200 segments 4/4/4"
+mesh = "mesh.obj"
+
+[params]
+size = [100.0, 250.0, 400.0]
+p536871510 = ""
+alignment = "Y+"
+mode = "Within Box"
+p536871511 = ""
+strength_percent = 50.0
+p536871512 = ""
+p536871513 = ""
+curvature_percent = 100.0
+p536871514 = ""
+fillet = false
+p536871515 = ""
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+
+[params.input]
+type = "cube"
+size = [200.0, 200.0, 200.0]
+segments_x = 4
+segments_y = 4
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false

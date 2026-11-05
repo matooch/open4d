@@ -1,38 +1,18 @@
 //! Gizmo drags → transform params, and object picking (docs/specs/MANIPULATE.md §3, §5).
 
-use forge_core::transform::{self, Transform, hpb_from_rotation, rotation_part};
-use forge_core::{Document, EditError, EvalCtx, NodeId, Scene, Tx, Value};
+use forge_core::transform::{Transform, hpb_from_rotation, rotation_part};
+use forge_core::{Document, EditError, EvalCtx, NodeId, Scene, Tx};
+use forge_generators::axis::AxisEdit;
 use forge_viewport::camera::Camera;
 use forge_viewport::gizmo::DragDelta;
 use forge_viewport::picking::{pick_instances, pick_poly};
 use glam::DMat3;
 
-use crate::animate::{AnimEdit, unchanged, write_param};
+use crate::animate::AnimEdit;
 use crate::attributes::Gesture;
 use crate::viewport_panel::{DrawItem, instance_input, scene_draw_items_at};
 
-/// Writes the three transform params. With `anim` the params that already hold the
-/// shown value are skipped and animated ones get keys (docs/specs/ANIM.md §2.4); without
-/// it all three are set.
-pub(crate) fn write_transform(
-    tx: &mut Tx,
-    id: NodeId,
-    t: &Transform,
-    anim: Option<&AnimEdit>,
-) -> Result<(), EditError> {
-    for (param, v) in [
-        (transform::POS, t.pos),
-        (transform::ROT, t.rot),
-        (transform::SCALE, t.scale),
-    ] {
-        let value = Value::Vec3(v.to_array());
-        if unchanged(anim, id, param, &value) {
-            continue;
-        }
-        write_param(tx, id, param, value, anim.map(|a| &a.ctx))?;
-    }
-    Ok(())
-}
+pub(crate) use forge_app::coords::write_transform;
 
 /// Sets the node's transform to `start` changed by `delta` (one undo step per drag).
 pub fn apply_drag(
@@ -59,8 +39,23 @@ pub fn apply_drag_anim(
         .map_or(doc.scene(), |a| a.eval)
         .parent_world_matrix(id)
         .ok_or(EditError::UnknownNode(id))?;
-    let rp = rotation_part(&parent);
-    let (label, next) = match delta {
+    let (label, next) = dragged_transform(start, &parent, delta);
+    let edit = |tx: &mut Tx| write_transform(tx, id, &next, anim);
+    match gesture {
+        Gesture::Commit => doc.transact(label, edit),
+        Gesture::Drag(n) => doc.transact_merged(label, &format!("gizmo:{id}:{n}"), edit),
+    }
+}
+
+/// The transform a gizmo `delta` makes of `start` under a parent with world matrix `parent`
+/// (the rules of [`apply_drag`]) and the undo label.
+pub fn dragged_transform(
+    start: &Transform,
+    parent: &glam::DMat4,
+    delta: DragDelta,
+) -> (&'static str, Transform) {
+    let rp = rotation_part(parent);
+    match delta {
         DragDelta::Translate(w) => (
             "Move",
             Transform {
@@ -85,11 +80,28 @@ pub fn apply_drag_anim(
                 ..*start
             },
         ),
-    };
-    let edit = |tx: &mut Tx| write_transform(tx, id, &next, anim);
+    }
+}
+
+/// Sets the axis of the captured object to the start axis changed by `delta`; the points and
+/// children keep their world place (MANIPULATE.md §7.4). One undo step per drag.
+pub fn apply_axis_drag(
+    doc: &mut Document,
+    edit: &AxisEdit,
+    delta: DragDelta,
+    gesture: Gesture,
+) -> Result<(), EditError> {
+    let id = edit.node;
+    let parent = doc
+        .scene()
+        .parent_world_matrix(id)
+        .ok_or(EditError::UnknownNode(id))?;
+    let (label, next) = dragged_transform(&edit.start, &parent, delta);
+    let label = format!("{label} axis");
+    let run = |tx: &mut Tx| edit.apply(tx, &next);
     match gesture {
-        Gesture::Commit => doc.transact(label, edit),
-        Gesture::Drag(n) => doc.transact_merged(label, &format!("gizmo:{id}:{n}"), edit),
+        Gesture::Commit => doc.transact(&label, run),
+        Gesture::Drag(n) => doc.transact_merged(&label, &format!("axis:{id}:{n}"), run),
     }
 }
 
@@ -107,6 +119,8 @@ pub fn pick_object(scene: &Scene, cam: &Camera, x: f64, y: f64, w: f64, h: f64) 
     let ray = cam.ray(x, y, w, h);
     scene_draw_items_at(scene, &Default::default(), &EvalCtx::default())
         .into_iter()
+        // a locked layer's objects cannot be picked (CORE.md §7.4)
+        .filter(|item| !forge_core::layers::locked(scene, item.id()))
         .filter_map(|item| match item {
             DrawItem::Mesh { id, mesh, .. } => pick_poly(&mesh, &ray).map(|hit| (hit.t, id, None)),
             DrawItem::Instanced {

@@ -36,11 +36,8 @@ pub(crate) fn build(p: &Params) -> Result<PolyMesh, BuildError> {
         "tetra" => Ok(triangles("tetrahedron", r, n)),
         "octa" => Ok(triangles("octahedron", r, n)),
         "hexa" => Ok(hexa(r, n)),
-        "dodeca" if n == 1 => Ok(dodeca(r)),
-        "bucky" if n == 1 => Ok(bucky(r)),
-        "dodeca" | "bucky" => Err(BuildError::Unsupported(
-            "platonic dodecahedron/bucky segments",
-        )),
+        "dodeca" => Ok(cut_flat(dodeca(r), n)),
+        "bucky" => Ok(cut_flat(bucky(r), n)),
         _ => Ok(triangles("icosahedron", r, n)),
     }
 }
@@ -64,29 +61,36 @@ fn triangles(kind: &str, r: f64, n: usize) -> PolyMesh {
     flat_subdivision(&base, &faces, n, |q| q)
 }
 
-/// The cube with circumradius `r` (P1).
+/// The cube with circumradius `r` (P1, P2): the Cube primitive's point and face order with
+/// edge length `2r/√3` and `n` segments per axis (`platonic/hexa-seg3`, `type-hexa`).
 fn hexa(r: f64, n: usize) -> PolyMesh {
-    let s = r / 3f64.sqrt();
-    let corner = |x: f64, y: f64, z: f64| DVec3::new(x, y, z) * s;
-    let base = [
-        corner(-1.0, -1.0, -1.0),
-        corner(-1.0, 1.0, -1.0),
-        corner(1.0, -1.0, -1.0),
-        corner(1.0, 1.0, -1.0),
-        corner(1.0, -1.0, 1.0),
-        corner(1.0, 1.0, 1.0),
-        corner(-1.0, -1.0, 1.0),
-        corner(-1.0, 1.0, 1.0),
-    ];
-    let faces = [
-        vec![0, 1, 3, 2],
-        vec![2, 3, 5, 4],
-        vec![4, 5, 7, 6],
-        vec![6, 7, 1, 0],
-        vec![1, 7, 5, 3],
-        vec![6, 0, 2, 4],
-    ];
-    flat_subdivision(&base, &faces, n, |q| q)
+    use forge_core::Value;
+    let edge = 2.0 * r / 3f64.sqrt();
+    let ty = crate::cube::node_type();
+    let mut values = BTreeMap::new();
+    for axis in ["x", "y", "z"] {
+        values.insert(format!("size_{axis}"), Value::Float(edge));
+        values.insert(format!("segments_{axis}"), Value::Int(n as i64));
+    }
+    for q in &ty.params {
+        values
+            .entry(q.id.clone())
+            .or_insert_with(|| q.default.clone());
+    }
+    crate::cube::build(&Params {
+        ty: &ty,
+        values: &values,
+    })
+    .expect("a plain cube always builds")
+}
+
+/// The exported triangles and quads of a dodeca/bucky cut flat at `n` (P2): every face is
+/// cut as a triangle or quad (`platonic/dodeca-seg2`: 74 points, 48 + 48 faces).
+fn cut_flat(mesh: PolyMesh, n: usize) -> PolyMesh {
+    if n == 1 {
+        return mesh;
+    }
+    flat_subdivision(&mesh.points, &mesh.polys, n, |q| q)
 }
 
 /// Pentagon rings of the dodecahedron, ear tip first, in face winding: face `i` of the

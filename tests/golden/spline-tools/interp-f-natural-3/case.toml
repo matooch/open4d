@@ -1,0 +1,29 @@
+feature = "spline-tools"
+observation = "docs/parity/spline-tools.md"
+description = "Default Circle with Intermediate Points Natural, Number 3, Extrude offset 100"
+mesh = "mesh.obj"
+
+[params]
+type = "extrude"
+caps = false
+extrude_offset = 100.0
+
+[params.input]
+type = "circle_spline"
+ellipse = false
+ring = false
+radius = 200.0
+radius_y = 200.0
+inner_radius = 100.0
+plane = "xy"
+reverse = false
+intermediate = "natural"
+intermediate_number = 3
+intermediate_angle = 5.0
+intermediate_max_length = 5.0
+
+
+
+[import]
+scale = 1.0
+flip_z = false

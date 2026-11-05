@@ -136,6 +136,18 @@ pub enum PaneArg {
     Right,
 }
 
+/// A heads-up display item of a viewport pane (docs/specs/UI.md §23).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum HudItemArg {
+    Fps,
+    Counts,
+    Tool,
+    Frame,
+    Camera,
+    SafeFrames,
+}
+
 /// `view.layout`: one viewport or the 2x2 four-view grid.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -211,7 +223,7 @@ pub struct CameraSet {
 
 /// Something only the editor window can do (file dialogs, inline rename). A command asks
 /// for it through [`crate::CommandContext::request_ui`]; headless contexts refuse.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UiRequest {
     /// File > Open with a file dialog.
     Open,
@@ -219,6 +231,24 @@ pub enum UiRequest {
     Save,
     /// File > Save As with a file dialog.
     SaveAs,
+    /// File > Import with a file chooser and the options window (format id).
+    ImportDialog(String),
+    /// File > Export with a file chooser and the options window.
+    ExportDialog { format: String, selected: bool },
     /// Starts the inline rename of the active object.
     RenameActive,
+    /// Opens the command palette (docs/specs/UI.md §18).
+    CommandPalette,
+    /// Switches to a built-in workspace (docs/specs/UI.md §21).
+    Workspace(String),
+    /// Saves the current arrangement as a named layout.
+    LayoutSave(String),
+    /// Applies a saved layout.
+    LayoutLoad(String),
+    /// Deletes a saved layout.
+    LayoutDelete(String),
+    /// Switches the theme by name (docs/specs/UI.md §24.3).
+    Theme(String),
+    /// Sets the UI scale factor.
+    Scale(f64),
 }

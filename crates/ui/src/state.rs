@@ -9,14 +9,20 @@ use forge_command::UiRequest;
 use forge_core::{NodeId, Registry};
 use forge_viewport::camera::{Camera, Handedness};
 use forge_viewport::gizmo::{GizmoMode, Space as GizmoSpace};
+use forge_viewport::panes::Pane;
 use forge_viewport::render::Shading;
 
 use crate::autosave::Autosave;
+use crate::console::ConsoleState;
+use crate::content_browser::BrowserPanel;
 use crate::crash_notice::CrashNotice;
 use crate::dock::Dock;
+use crate::hud::{FrameTimer, HudPrim, HudSettings};
 use crate::keymap::KeyMapState;
+use crate::layer_manager::LayerPanel;
 use crate::node_editor::NodeEditorState;
 use crate::panes::{DEFAULT_SHADING, Views};
+use crate::prefs::UiPrefs;
 use crate::screenshot::OffscreenGpu;
 use crate::script_panel::ScriptPanelState;
 use crate::tools::ToolState;
@@ -39,6 +45,12 @@ pub struct EditorState {
     pub views: Views,
     /// Script Manager source, console and recent list (docs/specs/UI.md §10).
     pub script: ScriptPanelState,
+    /// The Console panel: log filter and the REPL (docs/specs/UI.md §19).
+    pub console: ConsoleState,
+    /// The Layers panel: selected rows and rename (docs/specs/UI.md §22).
+    pub layer_panel: LayerPanel,
+    /// The Content Browser panel: tab, search and the name box (docs/specs/UI.md §26).
+    pub browser_panel: BrowserPanel,
     /// The Node Editor's tag, canvas and cache (docs/specs/UI.md §17).
     pub node_editor: NodeEditorState,
     /// The headless GPU device `viewport.screenshot` renders with (RPC.md §10.2).
@@ -47,6 +59,8 @@ pub struct EditorState {
     pub tool: Option<ToolState>,
     /// Key chords to commands, defaults and overrides (docs/specs/UI.md §14).
     pub keys: KeyMapState,
+    /// Theme and UI scale (UI.md §24).
+    pub prefs: UiPrefs,
     /// The viewport gizmo's mode and axes (`view.gizmo_mode`, `view.gizmo_space`).
     pub gizmo_mode: GizmoMode,
     pub gizmo_space: GizmoSpace,
@@ -56,6 +70,15 @@ pub struct EditorState {
     pub autosave: Autosave,
     /// The "crashed last time" notice (docs/specs/UI.md §15.2).
     pub crash_notice: CrashNotice,
+    /// Which heads-up items each pane shows (docs/specs/UI.md §23). Saved with layouts.
+    pub hud: HudSettings,
+    /// Smoothed editor frame time for the frame rate item. Not saved.
+    pub hud_timer: FrameTimer,
+    /// The HUD primitives painted in the last frame, per pane (for tests). Not saved.
+    pub hud_last: Vec<(Pane, Vec<HudPrim>)>,
+    /// The snap target under the pointer during a drag or tool hover, for the marker
+    /// (MANIPULATE.md §6.7). Not saved.
+    pub snap_hit: Option<forge_modeling::snap::SnapHit>,
 }
 
 impl Deref for EditorState {
@@ -86,8 +109,13 @@ impl EditorState {
     }
 
     pub fn new(registry: Arc<Registry>) -> EditorState {
+        EditorState::with_app(App::new(registry))
+    }
+
+    /// An editor over an application built elsewhere (plugins installed, own commands).
+    pub fn with_app(app: App) -> EditorState {
         EditorState {
-            app: App::new(registry),
+            app,
             expanded: BTreeSet::new(),
             dock: Dock::default(),
             camera: Self::default_camera(),
@@ -95,15 +123,23 @@ impl EditorState {
             shading: DEFAULT_SHADING,
             views: Views::new(&Self::default_camera()),
             script: ScriptPanelState::default(),
+            console: ConsoleState::default(),
+            layer_panel: LayerPanel::default(),
+            browser_panel: BrowserPanel::default(),
             node_editor: NodeEditorState::default(),
             offscreen: OffscreenGpu::default(),
             tool: None,
             keys: KeyMapState::default(),
+            prefs: UiPrefs::default(),
             gizmo_mode: GizmoMode::Translate,
             gizmo_space: GizmoSpace::Object,
             ui_requests: Vec::new(),
             autosave: Autosave::default(),
             crash_notice: CrashNotice::default(),
+            hud: HudSettings::default(),
+            hud_timer: FrameTimer::default(),
+            hud_last: Vec::new(),
+            snap_hit: None,
         }
     }
 }

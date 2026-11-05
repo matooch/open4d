@@ -28,6 +28,7 @@ evaluation of real node types (Phases 5+).
 | `Link` | `Option<NodeId>` | reference to another node |
 | `Mesh` | `Arc<MeshData>` | an editable polygon mesh (see below) |
 | `IndexList` | `Vec<u32>` | a sorted set of element indices (component selections) |
+| `Vec3List` | `Vec<[f64; 3]>` | every component finite; ordered; hidden, not animatable (editable spline points and handles, SPLINES.md; brief 028) |
 | `LinkList` | `Vec<NodeId>` | an ordered list of node references (a cloner's effector list, an effector's field list); order is meaningful |
 
 `ParamDesc { id, label, kind, default, ui, animatable }`:
@@ -36,7 +37,7 @@ evaluation of real node types (Phases 5+).
 - `kind: ParamKind`: `Bool`, `Int { min, max }`, `Float { min, max }`,
   `Vec3 { min, max }` (per component), `Color`, `Enum { options }` (each option
   `{ id, label }`, ids unique, at least one), `String`, `Link { accepts }` (list of
-  categories; empty = any), `LinkList { accepts }` (the same for each entry), `Mesh`, `IndexList`.
+  categories; empty = any), `LinkList { accepts }` (the same for each entry), `Mesh`, `IndexList`, `Vec3List`.
 - `ui: UiHint { group, unit, soft_min, soft_max, step, hidden }`. `unit` ∈
   `None | Distance | Angle | Percent | Time`. UI-only; never affects validation.
 - `animatable`: defaults to true for `Int/Float/Vec3/Color/Bool`, false otherwise.
@@ -200,6 +201,131 @@ ones; (3) generators and deformers, which read the evaluated scene when geometry
 for; (4) dynamics (later). An expression therefore overrides an animated value of the same
 parameter and every generator sees the expression's output. Priorities between expression tags
 and constraints/IK are brief 111. Details: NODES.md section 5.
+
+### 5b. Dependency graph and evaluation scheduler (brief 180)
+
+Source: own design (no reference-app observation). Code: `forge_core::depgraph` (graph,
+diff), `forge_app::schedule` (scheduler), `forge_generators::eval_dependencies`,
+`forge_fields::reads_time`, `forge_clone_engine::effector_reads_time`,
+`forge_nodes::tag_reads_time`.
+
+**Vertices.** Every node `n` has two vertices. `Frame(n)` is what flows *down* the
+hierarchy: the `transform.*` params and the `object.*` visibility/enable params, composed
+with the ancestors. `Result(n)` is the evaluated output of `n` (its world-space mesh).
+Two vertices keep the parent/child relation acyclic: a child's result needs its parent's
+frame, a parent's result needs its children's results.
+
+**Edges** (`a -> b` means "`a` depends on `b`"):
+
+| Edge | Rule |
+|---|---|
+| own frame | `Result(n) -> Frame(n)` (not for tags) |
+| ancestor | `Frame(n) -> Frame(parent(n))` |
+| child | `Result(n) -> Result(c)` for each child (generator inputs, deformer children, cloner prototypes, boolean A/B) |
+| tag | `Result(n) -> Result(t)` for each tag |
+| link | `Result(n) -> Result(t)` for each `Link` / `LinkList` param target that exists (effectors, field lists, instance reference, deformer `fields`) |
+| extra | `Result(g) -> Result(d)` for the deformers of a geometry-less parent that also deform `g` (`forge_generators::eval_dependencies`, MODIFIERS.md section 0) |
+
+**Dirty rule.** The scheduler compares the evaluated scene of this pass (tracks, then
+expressions) with the previous one, bit-exactly (`f64` by bit pattern, so `-0.0 != 0.0`).
+A changed node seeds `Frame(n)` if a `transform.*` or `object.*` param (or its parent)
+changed, otherwise `Result(n)`; a changed type, child list or tag list seeds `Result(n)`.
+Added and removed nodes seed their vertices. The dirty set is the set of vertices that
+reach a seed over the edges, taken in the new graph and in the previous graph (so a
+removed link or node still dirties its former dependants). A changed fps or seed dirties
+everything. A pass whose scene revision, node count and time are unchanged does nothing.
+
+**Time.** A frame change dirties (a) whatever the diff finds changed (animated tracks,
+expression writes) and (b) every implicit time reader: a Random field in a noise mode
+with `animation_speed != 0`, a Random effector in a noise/turbulence mode with
+`animation_speed != 0`, and the nodes depending on them. The time-dependent set reported
+by the scheduler is these readers plus nodes with tracks plus all their dependants. A scene
+with no tracks, no readers and no enabled expression tag does no work at all on a frame
+change.
+
+**Expressions** stay one ordered stage (section 5a): the stage reruns as a whole whenever
+the document changes or the frame changes and an enabled tag exists, in document order,
+each tag seeing the earlier writes. Independence of tags is never assumed.
+
+**Change set (brief 098).** When only the time moved (same document revision, node count,
+fps and seed as the last pass) the tracks and expression stage does not copy the scene and
+does not diff it. It reports what it wrote, `touched: Vec<(NodeId, param)>`: every
+parameter a track override or an enabled tag's `ParamWrite` addressed (a write that leaves
+the value as it was still counts). Starting from the stored document, only these pairs can
+differ between two evaluated scenes of the same document, so the dirty seeds are found by
+comparing, bit-exactly (`depgraph::identical`), the old and new value of the pairs touched
+in the previous pass or in this one: a changed `transform.*` / `object.*` param of a
+non-tag seeds `Frame(n)`, any other seeds `Result(n)`, the same rule as the diff. A
+changed `Link` / `LinkList` value (edges may differ) falls back to the full diff. The
+time-reader set is updated only for the nodes that changed (the readers are node-local),
+the dependency graph is kept, the node lists (all nodes, nodes with tracks, expression tags)
+are kept per document revision, and the drawn list is recomputed only when a dirty node or
+one of its children can have changed its drawn state. The full diff stays the path for a
+changed document (first pass, edit, undo, fps) and is the validator: `Scheduler::
+with_validation(true)` runs it on every change-set pass and panics if the seeds differ
+(all scheduler tests run with it on). `Stats::path` says which path a pass took
+(`None`, `ChangeSet`, `Diff`).
+
+**Sharing.** `Scene` stores nodes as `Arc<Node>`; cloning a scene clones one pointer per
+node, and the mutating primitives (`Scene::apply_params`, the document edits) copy a node
+on write (`Arc::make_mut`). `forge_app::schedule::animate` builds the evaluated scene as
+`scene.clone()` plus the track overrides plus the tags' writes, so a frame copies only the
+animated nodes and the nodes tags write to; every other node is the same allocation as in
+the document (tested with pointer equality). `animate` equals
+`apply_expressions(scene_at(scene, t), t)` (the tests compare the schedulers against the old
+`Evaluated` path bit for bit, and `Evaluated` itself now goes through `animate`).
+
+**Parallelism.** The units of work are the drawn nodes (enabled, editor-visible,
+not consumed by a parent generator) that are dirty or have no result yet. Each is a pure
+function of the immutable evaluated scene and the `EvalCtx`, so they run in parallel
+(rayon `par_iter`, indexed collect) and the results are stored in node id order. No
+evaluator keeps mutable shared state, and every random draw is a hash of
+(seed, clone/point index), so output does not depend on thread scheduling: serial
+(`Threads::Serial`) and parallel results are bit-identical (tests compare point bit
+patterns). Cloner expansion also runs in parallel over clones (offsets by prefix sum,
+per-clone arithmetic unchanged) once there are at least 4096 output points.
+
+**Cycles.** Links can form cycles. A depth-first walk from the vertices in ascending
+`(node id, Frame < Result)` order, following dependencies in ascending order, removes every
+edge that points at a vertex on the current path; each removal is reported as a
+`CycleBreak { from, to, kind, path }`. The remaining graph is acyclic and gives
+`levels()` (0 = no dependencies). Dirty propagation uses the unbroken graph (cycles are
+harmless for reachability). The scheduler returns the breaks in its stats; evaluation
+itself does not follow links recursively beyond what the evaluators already guard.
+
+**Outputs for drawing.** `Scheduler::with_instancing(true)` (the app's `draw_scheduler`,
+`App::scheduled_draw`) stores a cloner that `cloner_instances` can show as
+`NodeOutput::instances` instead of an expanded mesh (VIEWPORT.md section 10.8); every other
+output is unchanged. `Frame` carries `drawn` (the drawn nodes in scene order) and
+`generation`, which changes exactly when some output was recomputed or the drawn list
+changed; a pass that reused everything keeps the previous generation. OBJ export keeps
+`export_scene` on the evaluated scene of `Evaluated` (it exports hidden objects and
+evaluates with the default context, so it is not the drawn set; only its animation stage is
+shared).
+
+**Benchmark** (`crates/app/benches/schedule.rs`, criterion): see the table below.
+
+Measured on 4 cores, release bench profile (criterion, median of 10 samples, frame advanced
+by one per iteration). "180" is the pass of brief 180 (scene copy plus bit-exact diff);
+"098" the change-set pass:
+
+| Scene | Path | Time | vs old full serial |
+|---|---|---|---|
+| 1 animated cube + 1000 static cubes | old path: animate, evaluate every drawn node | 29.0 ms | 1.0x |
+| | scheduler, full evaluation, serial | 36.4 ms (180: 40.0) | 0.8x |
+| | scheduler, full evaluation, 4 threads | 11.9 ms (180: 14.2) | 2.4x |
+| | scheduler, dirty only, serial | **192 us** (180: 6.2 ms) | **151x** |
+| | scheduler, dirty only, 4 threads | **101 us** (180: 6.6 ms) | **287x** |
+| One cloner, 10 000 clones of a cube (full evaluation) | serial (1-thread pool) | 8.5 ms | 1.0x |
+| | 4 threads (parallel expansion) | 5.6 ms | 1.5x |
+
+The target of brief 098 (playback at least 10x the full-evaluation rate) is met by more
+than 15x. What is left of the 190 us is cloning the node map (1001 pointers), the output
+map, one dirty-set walk and the bookkeeping; it still grows with the node count but at
+microseconds per thousand nodes, not milliseconds. A single node cannot be spread over
+nodes, so the 10k cloner gains only from the parallel expansion (effectors stay serial: the
+Random effector's draws are index-keyed hashes but the effector trait takes a sequential
+closure). The old path's variance between runs is about 10 %.
 
 ## 6. Native scene file (`file`)
 
@@ -380,3 +506,117 @@ parameter `graph` (JSON), so the file schema does not change and step 7 -> 8 has
 rewrite; a version 7 file loads unchanged and saves as version 8. Older builds reject a version 8
 file with `UnsupportedVersion` instead of loading a scene whose expressions they could not run.
 The fixtures `scene-v8*.forge` pin the current bytes; `scene-v7*.forge` stay as the old build wrote them.
+
+### 6.8 Version 9: layers (brief 158)
+
+Adds `layers: [(id: 12, name: "Layer 1", color: (r, g, b), solo: false, view: true, render: true,
+manager: true, locked: false, animation: true, generators: true, deformers: true, expressions:
+true)]` at the top level, after `time` (section 7). The field has a serde default and is not
+written while the list is empty, so a scene without layers saves exactly as a version 8 scene
+does apart from the version number, and step 8 -> 9 has nothing to rewrite (a version 1-8 file has
+no layers). Every hierarchy type also gets the hidden `object.layer` link param (section 7.1);
+a file written before it loads with the default (no layer). On load: a layer id that repeats or
+equals a node id drops that layer, a `object.layer` link that names no layer is cleared; both with
+a warning. The id counter starts above every node and layer id. Older builds reject a version 9
+file with `UnsupportedVersion`. The fixtures `scene-v9*.forge` pin the version 9 bytes (they hold a
+layer and a member); `scene-v8*.forge` stay as the old build wrote them.
+
+`Value::Vec3List` (brief 028, SPLINES.md) was first stored under version 9 without a bump (inline as
+`Vec3List([(x, y, z), ...])`, never as a chunk); a build older than brief 028 rejected such a file with
+a parse error. Version 10 closes that gap (section 6.9).
+
+### 6.9 Version 10: list-valued parameters (brief 189)
+
+Version 10 = 9 plus the list-valued parameter kinds: `Vec3List` (editable spline points and
+handles) and the integer lists editable splines use (`IndexList`, `LinkList`). The encoding is
+unchanged, so step 9 -> 10 is the identity and a version 9 file loads and saves as version 10.
+This build always writes 10, whether or not the scene holds a list. Because the version is the
+format's compatibility marker, a reader that knows only up to 9 meets `version: 10` and returns
+`UnsupportedVersion(10)` instead of a parse error; `file::load_as_reader(registry, bytes, 9)`
+simulates that reader. The fixtures `scene-v10*.forge` pin the current bytes (they hold an
+editable spline's `Vec3List` and `IndexList`); `scene-v9*.forge` stay as the v9 build wrote them.
+Tests pin the current version through the single constant `file::VERSION`.
+
+## 7. Layers (`layers`; brief 158)
+
+Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G1 (docs/parity/GUI-SESSIONS.md)
+is unanswered, so **the toggle set's meaning (what "solo" hides, whether a layer reaches the
+children of its members, what "generators off" leaves) is parity-pending**.
+
+### 7.1 Data
+
+A layer is document level data, not a tree node: `Layer { id, name, color, solo, view, render,
+manager, locked, animation, generators, deformers, expressions }`, kept in order of creation in
+`Scene::layers() -> &Layers`. `id` is a `NodeId` taken from the scene's id counter, so a layer id
+never equals a node id. Defaults of a new layer: `solo` off, `locked` off, every other toggle on;
+`color` is taken from an 8-colour palette by the layer count. A name is non-empty after trimming
+and need not be unique.
+
+Objects link to at most one layer through the hidden param `object.layer` (`Link`, default none,
+in the reserved `object.` group, hidden from the attribute manager like the other `object.*`
+params). A tag has no param of its own: it belongs to its host's layer. Membership is the node's
+**own** link; children do not inherit it (parity-pending). `Tx::set_param` accepts for this
+param only an existing layer id (or none); the link is not a node reference, so it is skipped by
+the dependency graph and by copy remapping and a copy of an object stays on the layer.
+
+### 7.2 Edits
+
+The table is replaced as a whole by one primitive edit `SetLayers`, so undo restores it exactly.
+`Tx` offers `add_layer(name) -> LayerId`, `update_layer(Layer)`, `remove_layer(id)` (clears the
+`object.layer` of every member in the same transaction) and `merge_layers(from, into)` (members
+of each `from` layer move to `into`, the `from` layers go). Assigning is `set_param`.
+
+### 7.3 Resolution (`forge_core::layers`, all pure)
+
+| function | value for a node whose own layer is `L` (none = no layer) |
+|---|---|
+| `shown(scene, id)` | `L.view` and (no layer is solo, or `L.solo`); a node without a layer is shown iff no layer is solo |
+| `render_shown` | `L.render` (none: true); solo does not affect rendering |
+| `locked` | `L.locked` |
+| `in_manager` | `L.manager` |
+| `animation_on`, `generators_on`, `deformers_on`, `expressions_on` | the toggle (none: true) |
+
+`visibility::editor_visible` is its old value and `layers::shown`; `render_visible` is its old
+value and `layers::render_shown` (TRANSFORM.md §2). Hiding by layer does not change the
+`object.*` params.
+
+### 7.4 How the toggles take effect
+
+- **view, solo**: through `editor_visible`, so the viewport, snapping and the scheduler's drawn
+  list skip the node (the OBJ export exports hidden objects as before, brief 098).
+- **render**: `render_visible` (the render bridge does not read it yet, brief 149).
+- **locked**: the viewport cannot pick the object (`pick_object`, `viewport_click`) and does not
+  start a gizmo, axis or component drag on it, and a locked polygon object is not a component
+  target. Object manager selection, attribute editing and commands still work (parity-pending:
+  the reference may also block those).
+- **animation off**: `forge_anim::overrides` skips the node (and its tags), so its tracks are not
+  evaluated and it keeps its stored values at every time.
+- **expressions off**: an expression tag whose host is on the layer does not run.
+- **deformers off**: `apply_deformer` leaves the points alone for a deformer on the layer (the
+  deformer's own `enabled` is untouched).
+- **generators off**: a `Category::Generator` node on the layer is pass-through: it produces no
+  geometry of its own and the objects it consumes as inputs (subdivision, boole, cloner
+  prototypes, modeling and spline generators) are no longer consumed, so they are drawn as
+  themselves; its instances are not drawn.
+- **manager off**: the object manager omits the row (its children are still listed, at the same
+  depth).
+
+### 7.5 Scheduling and dirtiness (briefs 180, 098)
+
+The layer table is part of the scene, so editing it raises the revision and the next pass is a
+diff pass. `depgraph::diff` additionally compares, when the two tables differ or a node's
+`object.layer` differs, the node's effect `layers::effect(scene, id)` (shown, render, animation,
+generators, deformers, expressions bits; a tag uses its host's) and seeds the frame and result
+vertices of every node whose effect changed, so dependants (parents, cloners reading the node,
+hosts of changed tags) are re-evaluated and nothing else is. A toggle that does not change any
+node's effect (a lock, a colour, a rename) seeds nothing. The animation stage reads the toggles
+directly: with animation off the evaluated scene holds the stored values, which the diff sees as
+param changes.
+
+### 7.6 Tests
+
+`crates/core/tests/layers.rs` (table edits and undo, resolution, link validation, delete and merge,
+file round trip, bad layer data, the dependency diff), `crates/core/tests/native_format.rs` (v8
+fixtures migrate to 9 without layers, v9 fixtures byte stable), `crates/app/tests/layers.rs` (the
+commands, one undo step each, each toggle's effect on evaluation, scheduler dirtiness against a
+fresh full evaluation, a seeded random edit sequence), `crates/ui/tests/layer_manager.rs` (UI.md §22).

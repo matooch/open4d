@@ -7,6 +7,7 @@ use egui::{RichText, Sense, Ui};
 use forge_command::UiRequest;
 use forge_core::transform::{Transform, rotation_part};
 use forge_core::{NodeId, Value};
+use forge_generators::axis::AxisEdit;
 use forge_viewport::gizmo::{Drag, Gizmo, GizmoMode, Space as GizmoSpace};
 use forge_viewport::panes::{Layout as PaneLayout, Pane, arrange};
 use forge_viewport::render::Shading;
@@ -17,27 +18,33 @@ use crate::animate::{AnimEdit, KeyState, key_frames, key_states};
 use crate::attributes::{Gesture, Widget, attribute_rows_multi};
 use crate::clone_overlay::{OverlayOptions, selected_cloner_marks};
 use crate::commands::{category_label, clone_toolset_menu, create_menu, execute};
-use crate::component_edit::{ComponentDrag, pivot_view, pivot_world};
+use crate::component_edit::{
+    ComponentDrag, component_coords, component_transform_args, pivot_world,
+};
 use crate::components::{
     ClickModifiers, EditMode, SelectCmd, target as component_target, viewport_click, viewport_rect,
 };
-use crate::coordinates::{Row, Space, Third, coord_view, set_coord_anim};
+use crate::content_browser::{BrowserAction, menu_entries};
+use crate::coordinates::{CoordDraft, Mixed, Space, Third, coord_view_multi};
 use crate::dock::{Area, Panel};
 use crate::keymap_editor::KeyMapEditor;
 use crate::layout::{ButtonGroup, Layout, Sizes, command_bar, tool_palette};
-use crate::manipulate::apply_drag_anim;
+use crate::manipulate::{apply_axis_drag, apply_drag_anim};
 use crate::object_manager::ObjectManager;
+use crate::palette::Palette;
 use crate::panes::{PANE_GAP, display_settings};
+use crate::snapping::{SnapScene, collect_sources, collect_sources_multi, drag_step};
 use crate::state::EditorState;
-use crate::theme::Theme;
+use crate::theme::{Theme, ThemeKind};
 use crate::viewport_panel::{
     NavAction, NavInput, NavMode, SceneView, ViewportPanel, apply_nav, nav_action,
 };
+use crate::workspaces::{LayoutStore, Workspace};
 
 mod files;
 mod recovery;
 
-pub use files::{Dialogs, FileKind, NativeDialogs, Unsaved};
+pub use files::{Dialogs, FileKind, IoDialog, NativeDialogs, Unsaved};
 
 const SHADINGS: [(Shading, &str); 9] = [
     (Shading::Smooth, "Smooth"),
@@ -106,6 +113,8 @@ pub struct Editor {
     objects: ObjectManager,
     /// The key map editor window (UI.md §14.5).
     keymap_editor: KeyMapEditor,
+    /// The command palette window (UI.md §18).
+    palette: Palette,
     /// Name field buffer in the attribute panel.
     name_edit: Option<(NodeId, String)>,
     /// The attribute manager tab shown (UI.md §12).
@@ -115,12 +124,30 @@ pub struct Editor {
     gesture: Option<u64>,
     /// The pointer was over the viewport last frame (Space plays only then).
     viewport_hot: bool,
+    /// The workspace the arrangement started from, shown in the Workspace menu (UI.md §21).
+    workspace: String,
+    /// Where saved layouts live; empty by default so tests never touch the user's folder.
+    layout_store: LayoutStore,
+    /// Bumped on every `set_layout`: egui forgets the remembered panel sizes (UI.md §21.2).
+    layout_gen: u32,
+    /// The name field of the "Save layout as" window while it is open.
+    save_layout_name: Option<String>,
     coord_space: Space,
     coord_third: Third,
+    /// Manual apply mode, the typed values waiting for Apply, and what they belong to (UI.md §20).
+    coord_manual: bool,
+    coord_draft: CoordDraft,
+    coord_draft_key: String,
     /// The gizmo drag in progress: drag state, node, its transform at the start, gesture.
     gizmo_drag: Option<(Drag, NodeId, Transform, u64)>,
     /// The gizmo drag on components in progress: drag state, component drag, gesture.
     component_drag: Option<(Drag, ComponentDrag, u64)>,
+    /// The axis-mode gizmo drag in progress: drag state, the captured axis, gesture.
+    axis_drag: Option<(Drag, AxisEdit, u64)>,
+    /// What the snapping of the drag in progress can land on, collected when it began.
+    drag_sources: SnapScene,
+    /// Where the viewport was drawn last (egui points); tests aim pointers with it.
+    view_rect: egui::Rect,
     /// The rectangle select in progress, `[x0, y0, x1, y1]` in render pixels.
     rect_drag: Option<[f64; 4]>,
     /// The interactive drag of the active modeling tool (docs/specs/MODELING.md §0.2).
@@ -128,7 +155,10 @@ pub struct Editor {
     /// File menu (docs/specs/IO.md §2): dialogs, current file, revision at the last
     /// save or load, and the last window title sent.
     dialogs: Box<dyn Dialogs>,
+    /// The import/export options window while open (docs/specs/UI.md §27).
+    io_dialog: Option<IoDialog>,
     sent_title: String,
+    applied_prefs: Option<(ThemeKind, f32)>,
     /// Requests from the RPC server, run between frames (docs/specs/RPC.md §5).
     rpc: Option<forge_rpc::Inbox>,
 }
@@ -141,10 +171,17 @@ impl eframe::App for Editor {
     /// Clean exit: the session's autosaves and marker go (docs/specs/PLATFORM.md §7.6).
     fn on_exit(&mut self) {
         self.state.autosave.finish();
+        // remembered for the next start; an unwritable folder is not worth a message now
+        let _ = self.layout_store.save_last(&self.layout());
     }
 }
 
 impl Editor {
+    /// The rectangle of the last drawn viewport pane (egui points).
+    pub fn view_rect(&self) -> egui::Rect {
+        self.view_rect
+    }
+
     /// The key map editor window's state.
     pub fn keymap_editor(&self) -> &KeyMapEditor {
         &self.keymap_editor
@@ -152,6 +189,15 @@ impl Editor {
 
     pub fn keymap_editor_mut(&mut self) -> &mut KeyMapEditor {
         &mut self.keymap_editor
+    }
+
+    /// The command palette's state.
+    pub fn palette(&self) -> &Palette {
+        &self.palette
+    }
+
+    pub fn palette_mut(&mut self) -> &mut Palette {
+        &mut self.palette
     }
 
     /// The object manager's panel state.
@@ -166,19 +212,32 @@ impl Editor {
             viewport: ViewportPanel::default(),
             objects: ObjectManager::default(),
             keymap_editor: KeyMapEditor::default(),
+            palette: Palette::default(),
             name_edit: None,
             attr_tab: String::new(),
             gesture_seq: 0,
             gesture: None,
             viewport_hot: false,
+            workspace: "Standard".into(),
+            layout_store: LayoutStore::default(),
+            layout_gen: 0,
+            save_layout_name: None,
             coord_space: Space::Local,
             coord_third: Third::Scale,
+            coord_manual: false,
+            coord_draft: CoordDraft::default(),
+            coord_draft_key: String::new(),
             gizmo_drag: None,
             component_drag: None,
+            axis_drag: None,
+            drag_sources: SnapScene::default(),
+            view_rect: egui::Rect::NOTHING,
             rect_drag: None,
             tool_drag: None,
             dialogs: Box::new(NativeDialogs),
+            io_dialog: None,
             sent_title: String::new(),
+            applied_prefs: None,
             rpc: None,
         }
     }
@@ -194,6 +253,8 @@ impl Editor {
             version: crate::layout::LAYOUT_VERSION,
             dock: self.state.dock.clone(),
             sizes: self.sizes,
+            workspace: self.workspace.clone(),
+            hud: (self.state.hud != crate::hud::HudSettings::default()).then_some(self.state.hud),
         }
     }
 
@@ -201,6 +262,125 @@ impl Editor {
     pub fn set_layout(&mut self, layout: Layout) {
         self.state.dock = layout.dock;
         self.sizes = layout.sizes;
+        self.workspace = layout.workspace;
+        if let Some(hud) = layout.hud {
+            self.state.hud = hud;
+        }
+        self.layout_gen += 1;
+    }
+
+    /// Replaces where saved layouts are kept (tests use a temporary folder).
+    pub fn set_layout_store(&mut self, store: LayoutStore) {
+        self.layout_store = store;
+    }
+
+    /// The saved layout names.
+    pub fn saved_layouts(&self) -> Vec<String> {
+        self.layout_store.list()
+    }
+
+    /// The workspace name shown in the Workspace menu.
+    pub fn workspace(&self) -> &str {
+        &self.workspace
+    }
+
+    /// Restores the arrangement remembered at the last exit, if any; a broken file gives the
+    /// standard layout and a warning in the status bar (UI.md §21.3).
+    pub fn restore_last_layout(&mut self) {
+        match self.layout_store.load_last() {
+            Ok(Some(l)) => {
+                self.set_layout(l.layout);
+                if let Some(w) = l.warning {
+                    self.state.status = w;
+                }
+            }
+            Ok(None) => {}
+            Err(e) => self.state.status = e,
+        }
+    }
+
+    /// View > Theme and View > UI scale (UI.md §24.3); both run commands.
+    fn appearance_menu(&mut self, ui: &mut Ui) {
+        ui.menu_button("Theme", |ui| {
+            for kind in ThemeKind::ALL {
+                if ui
+                    .radio(self.state.prefs.theme == kind, kind.name())
+                    .clicked()
+                {
+                    self.run(("ui.theme", json!({"name": kind.name()})));
+                    ui.close();
+                }
+            }
+        });
+        ui.menu_button("UI scale", |ui| {
+            for percent in [50, 75, 100, 125, 150, 200, 300] {
+                let factor = percent as f32 / 100.0;
+                if ui
+                    .radio(
+                        (self.state.prefs.scale - factor).abs() < 1e-3,
+                        format!("{percent} %"),
+                    )
+                    .clicked()
+                {
+                    self.run(("ui.scale", json!({"factor": factor})));
+                    ui.close();
+                }
+            }
+        });
+    }
+
+    /// Does one layout request of a command (UI.md §21.4); the error is for the status bar.
+    fn layout_request(&mut self, request: UiRequest) -> Result<(), String> {
+        match request {
+            UiRequest::Workspace(name) => {
+                let w = Workspace::from_name(&name).ok_or_else(|| {
+                    let all: Vec<&str> = Workspace::ALL.iter().map(|w| w.name()).collect();
+                    format!("no workspace named \"{name}\" (use {})", all.join(", "))
+                })?;
+                self.set_layout(w.layout());
+            }
+            UiRequest::LayoutSave(name) => {
+                self.layout_store.save(&name, &self.layout())?;
+            }
+            UiRequest::LayoutLoad(name) => {
+                let loaded = self.layout_store.load(&name)?;
+                self.set_layout(loaded.layout);
+                if let Some(w) = loaded.warning {
+                    return Err(w);
+                }
+            }
+            UiRequest::LayoutDelete(name) => self.layout_store.delete(&name)?,
+            UiRequest::Theme(name) => {
+                let kind = ThemeKind::from_name(&name).ok_or_else(|| {
+                    let all: Vec<&str> = ThemeKind::ALL.iter().map(|k| k.name()).collect();
+                    format!("no theme named \"{name}\" (use {})", all.join(", "))
+                })?;
+                self.state.prefs.theme = kind;
+                self.state.prefs.save()?;
+            }
+            UiRequest::Scale(factor) => {
+                if !crate::prefs::scale_in_range(factor) {
+                    return Err("UI scale must be between 0.5 and 3".into());
+                }
+                self.state.prefs.scale = factor as f32;
+                self.state.prefs.save()?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Applies the theme and scale of the preferences when they changed (UI.md §24.3).
+    fn apply_prefs(&mut self, ctx: &egui::Context) {
+        let wanted = (self.state.prefs.theme, self.state.prefs.scale);
+        if self.applied_prefs == Some(wanted) {
+            return;
+        }
+        Theme::of(wanted.0).apply_visuals(ctx);
+        if (ctx.zoom_factor() - wanted.1).abs() > f32::EPSILON {
+            ctx.set_zoom_factor(wanted.1);
+        }
+        self.applied_prefs = Some(wanted);
     }
 
     /// Runs a command; an error goes to the status bar. True if it succeeded.
@@ -212,6 +392,7 @@ impl Editor {
     fn run_id(&mut self, id: &str, args: Json) -> bool {
         // A command may leave a message of its own (e.g. skipped nodes) in the status.
         self.state.status.clear();
+        let noted = args.clone();
         let ok = match execute(&mut self.state, id, args) {
             Ok(_) => true,
             Err(e) => {
@@ -219,6 +400,9 @@ impl Editor {
                 false
             }
         };
+        if ok {
+            self.palette.note_run(id, &noted);
+        }
         self.serve_ui_requests();
         ok
     }
@@ -230,6 +414,21 @@ impl Editor {
                 UiRequest::Open => self.file_action(FileAction::Open),
                 UiRequest::Save => self.file_action(FileAction::Save),
                 UiRequest::SaveAs => self.file_action(FileAction::SaveAs),
+                UiRequest::CommandPalette => self.palette.open_palette(),
+                UiRequest::ImportDialog(format) => self.begin_import(&format),
+                UiRequest::ExportDialog { format, selected } => {
+                    self.begin_export(&format, selected);
+                }
+                r @ (UiRequest::Workspace(_)
+                | UiRequest::LayoutSave(_)
+                | UiRequest::LayoutLoad(_)
+                | UiRequest::LayoutDelete(_)
+                | UiRequest::Theme(_)
+                | UiRequest::Scale(_)) => {
+                    if let Err(e) = self.layout_request(r) {
+                        self.state.status = e;
+                    }
+                }
                 UiRequest::RenameActive => {
                     if let Some(id) = self.state.selection.active
                         && let Some(n) = self.state.doc.scene().node(id)
@@ -259,6 +458,9 @@ impl Editor {
             }
             self.rpc = Some(inbox);
         }
+        // requests left by commands run outside `run_id` (a script, a test) (UI.md §21.4)
+        self.serve_ui_requests();
+        self.apply_prefs(ui.ctx());
         // Closing the window with unsaved changes asks first (UI.md §15).
         if ui.ctx().input(|i| i.viewport().close_requested()) && !self.confirm_discard() {
             ui.ctx()
@@ -276,19 +478,20 @@ impl Editor {
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
         let sizes = self.sizes;
+        let salt = self.layout_gen;
         if !self.state.dock.tabs(Area::Top).is_empty() {
             egui::Panel::top("area_top")
                 .resizable(false)
                 .show(ui, |ui| self.area(ui, Area::Top, rs));
         }
         if !self.state.dock.tabs(Area::Bottom).is_empty() {
-            egui::Panel::bottom("area_bottom")
+            egui::Panel::bottom(("area_bottom", salt))
                 .resizable(true)
                 .default_size(sizes.bottom_height)
                 .show(ui, |ui| self.area(ui, Area::Bottom, rs));
         }
         if !self.state.dock.tabs(Area::Left).is_empty() {
-            egui::Panel::left("area_left")
+            egui::Panel::left(("area_left", salt))
                 .resizable(true)
                 .default_size(sizes.left_width)
                 .show(ui, |ui| self.area(ui, Area::Left, rs));
@@ -298,13 +501,13 @@ impl Editor {
             !self.state.dock.tabs(Area::RightBottom).is_empty(),
         );
         if top || bottom {
-            egui::Panel::right("area_right")
+            egui::Panel::right(("area_right", salt))
                 .resizable(true)
                 .default_size(sizes.right_width)
                 .show(ui, |ui| {
                     if top && bottom {
                         let h = ui.available_height();
-                        egui::Panel::top("area_right_top")
+                        egui::Panel::top(("area_right_top", salt))
                             .resizable(true)
                             .default_size(h * sizes.right_top_fraction)
                             .show(ui, |ui| self.area(ui, Area::RightTop, rs));
@@ -318,6 +521,13 @@ impl Editor {
         }
         egui::CentralPanel::no_frame().show(ui, |ui| self.area(ui, Area::Center, rs));
         self.keymap_editor.show(ui.ctx(), &mut self.state);
+        self.save_layout_window(ui.ctx());
+        self.io_dialog_window(ui.ctx());
+        let ctx = ui.ctx().clone();
+        let registry = self.state.app.commands.clone();
+        if let Some((id, args)) = self.palette.show(&ctx, &registry, &self.state.keys.map) {
+            self.run_id(&id, args);
+        }
     }
 
     /// Advances the current frame from the frame clock while playing (ANIM.md §2.6).
@@ -342,7 +552,7 @@ impl Editor {
             }
             return;
         }
-        if ctx.egui_wants_keyboard_input() {
+        if ctx.egui_wants_keyboard_input() || self.palette.open {
             return;
         }
         let hot = self.viewport_hot;
@@ -377,9 +587,9 @@ impl Editor {
             FileAction::SaveAs => {
                 self.save_as();
             }
-            FileAction::ImportObj => self.import_obj(),
-            FileAction::ExportObj => self.export_obj(false),
-            FileAction::ExportSelectedObj => self.export_obj(true),
+            FileAction::ImportObj => self.begin_import("obj"),
+            FileAction::ExportObj => self.begin_export("obj", false),
+            FileAction::ExportSelectedObj => self.begin_export("obj", true),
         }
     }
 
@@ -423,6 +633,19 @@ impl Editor {
                         ui.close();
                         self.file_action(action);
                     }
+                    if matches!(action, FileAction::Open) {
+                        let entries = menu_entries(&self.state.app.browser);
+                        ui.add_enabled_ui(!entries.is_empty(), |ui| {
+                            ui.menu_button("Open Recent", |ui| {
+                                for (i, name) in &entries {
+                                    if ui.button(name).clicked() {
+                                        ui.close();
+                                        self.open_recent(*i);
+                                    }
+                                }
+                            });
+                        });
+                    }
                 }
             });
             ui.menu_button("Edit", |ui| {
@@ -461,6 +684,8 @@ impl Editor {
                     self.run(cmd("mesh.current_state_to_object"));
                     ui.close();
                 }
+                ui.separator();
+                self.snapping_menu(ui);
             });
             ui.menu_button("Select", |ui| {
                 if ui.button("Grow Selection").clicked() {
@@ -522,6 +747,14 @@ impl Editor {
                 // Bridge, Close Polygon Hole, Stitch and Sew, Polygon Pen (MODELING.md §6)
                 ui.separator();
                 for tool in crate::tools::building_tools() {
+                    if ui.button(tool.label()).clicked() {
+                        crate::tools::activate_tool(&mut self.state, tool.id());
+                        ui.close();
+                    }
+                }
+                // Array command, Duplicate, Arrange, Randomize, Transfer (MODELING.md §9)
+                ui.separator();
+                for tool in crate::tools::arrange_tools() {
                     if ui.button(tool.label()).clicked() {
                         crate::tools::activate_tool(&mut self.state, tool.id());
                         ui.close();
@@ -590,6 +823,8 @@ impl Editor {
                 }
                 ui.separator();
                 self.view_options_menu(ui);
+                self.hud_menu(ui);
+                self.appearance_menu(ui);
                 ui.separator();
                 ui.radio_value(
                     &mut self.state.gizmo_space,
@@ -660,6 +895,10 @@ impl Editor {
                     });
                 }
                 ui.separator();
+                if ui.button("Command palette\u{2026}").clicked() {
+                    self.run(cmd("ui.command_palette"));
+                    ui.close();
+                }
                 if ui.button("Key map\u{2026}").clicked() {
                     self.keymap_editor.open = true;
                     ui.close();
@@ -669,7 +908,76 @@ impl Editor {
                     ui.close();
                 }
             });
+            self.workspace_menu(ui);
         });
+    }
+
+    /// The workspace switcher (UI.md §21.5): every entry runs a registry command.
+    fn workspace_menu(&mut self, ui: &mut Ui) {
+        ui.menu_button("Workspace", |ui| {
+            for w in Workspace::ALL {
+                let on = self.workspace.eq_ignore_ascii_case(w.name());
+                if ui.selectable_label(on, w.name()).clicked() {
+                    self.run(("ui.workspace", json!({"name": w.name()})));
+                    ui.close();
+                }
+            }
+            let saved = self.layout_store.list();
+            if !saved.is_empty() {
+                ui.separator();
+                for name in &saved {
+                    let on = self.workspace == *name;
+                    if ui.selectable_label(on, name).clicked() {
+                        self.run(("ui.layout_load", json!({"name": name})));
+                        ui.close();
+                    }
+                }
+            }
+            ui.separator();
+            if ui.button("Save layout as\u{2026}").clicked() {
+                self.save_layout_name = Some(String::new());
+                ui.close();
+            }
+            if !saved.is_empty() {
+                ui.menu_button("Delete layout", |ui| {
+                    for name in &saved {
+                        if ui.button(name).clicked() {
+                            self.run(("ui.layout_delete", json!({"name": name})));
+                            ui.close();
+                        }
+                    }
+                });
+            }
+            if ui.button("Reset layout").clicked() {
+                self.run(("ui.workspace", json!({"name": "Standard"})));
+                ui.close();
+            }
+        });
+    }
+
+    /// The small "Save layout as" window.
+    fn save_layout_window(&mut self, ctx: &egui::Context) {
+        let Some(mut name) = self.save_layout_name.take() else {
+            return;
+        };
+        let (mut save, mut cancel) = (false, false);
+        egui::Window::new("Save layout as")
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                let label = ui.label("Name");
+                let r = ui.text_edit_singleline(&mut name).labelled_by(label.id);
+                let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                ui.horizontal(|ui| {
+                    save = ui.button("Save").clicked() || enter;
+                    cancel = ui.button("Cancel").clicked();
+                });
+            });
+        if save {
+            self.run(("ui.layout_save", json!({"name": name})));
+        } else if !cancel {
+            self.save_layout_name = Some(name);
+        }
     }
 
     fn status_bar(&mut self, ui: &mut Ui) {
@@ -677,7 +985,7 @@ impl Editor {
             if self.state.status.is_empty() {
                 ui.weak("Ready");
             } else {
-                ui.colored_label(Theme::default().error, &self.state.status);
+                ui.colored_label(Theme::current(ui.ctx()).error, &self.state.status);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.weak(format!("{} nodes", self.state.doc.scene().len()));
@@ -714,6 +1022,28 @@ impl Editor {
                 crate::script_panel::script_panel_ui(ui, &mut self.state, self.dialogs.as_mut())
             }
             Panel::NodeEditor => crate::node_editor::node_editor_ui(ui, &mut self.state),
+            Panel::Console => crate::console::console_ui(ui, &mut self.state),
+            Panel::Layers => {
+                for c in crate::layer_manager::layer_panel_ui(ui, &mut self.state) {
+                    self.run(c);
+                }
+            }
+            Panel::ContentBrowser => {
+                for a in crate::content_browser::content_browser_ui(ui, &mut self.state) {
+                    match a {
+                        BrowserAction::Run(c) => {
+                            self.run(c);
+                        }
+                        BrowserAction::OpenRecent(i) => self.open_recent(i),
+                    }
+                }
+            }
+            Panel::History => {
+                if let Some(position) = crate::history_panel::history_panel_ui(ui, &self.state.doc)
+                {
+                    self.run_id("edit.history_jump", json!({"position": position}));
+                }
+            }
         }
     }
 
@@ -813,8 +1143,80 @@ impl Editor {
         }
     }
 
+    /// Edit menu: snapping and axis mode (docs/specs/MANIPULATE.md §6, §7.4). Each entry runs
+    /// its registry command.
+    fn snapping_menu(&mut self, ui: &mut Ui) {
+        let t = self.state.app.transform_settings.clone();
+        let mut runs: Vec<Cmd> = Vec::new();
+        let mut item = |ui: &mut Ui, this: &Self, on: bool, label: &str, command: Cmd| {
+            let mut button = egui::Button::new(label).selected(on);
+            if let Some(sc) = this.chord_text(ui.ctx(), &command) {
+                button = button.shortcut_text(sc);
+            }
+            if ui.add(button).clicked() {
+                runs.push(command);
+                ui.close();
+            }
+        };
+        item(ui, self, t.axis_mode, "Axis mode", cmd("edit.axis_mode"));
+        ui.separator();
+        item(ui, self, t.snap.enabled, "Snapping", cmd("snap.toggle"));
+        ui.menu_button("Snap targets", |ui| {
+            for kind in forge_modeling::snap::SnapKind::ALL {
+                let on = t.snap.targets.get(kind);
+                if ui
+                    .add(egui::Button::new(kind.label()).selected(on))
+                    .clicked()
+                {
+                    runs.push(("snap.set", json!({"targets": {kind.id(): !on}})));
+                    ui.close();
+                }
+            }
+        });
+        let two_d = t.snap.mode == forge_modeling::snap::SnapMode::D2;
+        let mode = if two_d { "3d" } else { "2d" };
+        if ui
+            .add(egui::Button::new("2D snapping").selected(two_d))
+            .clicked()
+        {
+            runs.push(("snap.set", json!({"mode": mode})));
+            ui.close();
+        }
+        let q = t.snap.quantize.enabled;
+        if ui.add(egui::Button::new("Quantize").selected(q)).clicked() {
+            runs.push(("snap.set", json!({"quantize": {"enabled": !q}})));
+            ui.close();
+        }
+        for command in runs {
+            self.run(command);
+        }
+    }
+
     /// View menu: layout, maximise, lighting, shadows, anti-aliasing (docs/specs/UI.md §6.2).
     /// Each entry runs its registry command.
+    /// View > HUD: one sub menu per pane with a check box per item (UI.md §23.1).
+    fn hud_menu(&mut self, ui: &mut Ui) {
+        let mut runs: Vec<Cmd> = Vec::new();
+        ui.menu_button("HUD", |ui| {
+            for pane in Pane::ALL {
+                ui.menu_button(pane.label(), |ui| {
+                    for item in crate::hud::HudItem::ALL {
+                        let on = self.state.hud.flags(pane).get(item);
+                        if ui.selectable_label(on, item.label()).clicked() {
+                            runs.push((
+                                "view.hud",
+                                json!({"item": item.id(), "pane": pane.id(), "enabled": !on}),
+                            ));
+                        }
+                    }
+                });
+            }
+        });
+        for c in runs {
+            self.run(c);
+        }
+    }
+
     fn view_options_menu(&mut self, ui: &mut Ui) {
         let v = self.state.views.clone();
         let four = v.layout == PaneLayout::Four;
@@ -929,6 +1331,10 @@ impl Editor {
             PANE_GAP,
         );
         self.viewport_hot = false;
+        // the frame time of the editor, once per frame (UI.md §23.5)
+        let dt = f64::from(ui.input(|i| i.unstable_dt));
+        self.state.hud_timer.push(dt);
+        self.state.hud_last.clear();
         let four = rects.len() > 1;
         let active = self.state.views.active;
         for r in rects {
@@ -940,7 +1346,7 @@ impl Editor {
                 ui.painter().rect_stroke(
                     rect,
                     0.0,
-                    egui::Stroke::new(1.5, Theme::default().component_selection),
+                    egui::Stroke::new(1.5, Theme::current(ui.ctx()).component_selection),
                     egui::StrokeKind::Inside,
                 );
             }
@@ -998,15 +1404,9 @@ impl Editor {
                 self.state.view_aspect = view_size[0] / view_size[1];
             }
         }
-        let Some(rs) = rs else {
-            // not selectable: a selectable label would take the pointer from the navigation
-            ui.put(
-                rect,
-                egui::Label::new("Viewport unavailable").selectable(false),
-            );
-            return;
-        };
-
+        if pane == self.state.views.active {
+            self.view_rect = rect;
+        }
         let ppp = ui.ctx().pixels_per_point();
         let size = [
             (rect.width() * ppp).round() as u32,
@@ -1017,10 +1417,24 @@ impl Editor {
         } else {
             self.viewport_interaction(ui, &response, rect, ppp, size);
         }
+        let Some(rs) = rs else {
+            // not selectable: a selectable label would take the pointer from the navigation
+            ui.put(
+                rect,
+                egui::Label::new("Viewport unavailable").selectable(false),
+            );
+            let frame = self.state.app.scheduled_draw(self.state.timeline.current);
+            self.paint_hud(ui, pane, rect, &frame);
+            return;
+        };
         let gizmo = self.current_gizmo();
-        let shown = self.state.evaluated();
-        // a live tool preview replaces the target's mesh in the drawn scene only
-        let shown = crate::tools::with_preview(&self.state, &shown).unwrap_or(shown);
+        // the scheduler's pass: only what changed since the last frame is evaluated and
+        // rebuilt (CORE.md section 5b); a live tool preview replaces the target's mesh in
+        // the drawn scene only, which the scheduler does not know, so it draws from scratch
+        let current = self.state.timeline.current;
+        let scheduled = self.state.app.scheduled_draw(current);
+        let previewed = crate::tools::with_preview(&self.state, &scheduled.scene);
+        let shown = previewed.clone().unwrap_or_else(|| scheduled.scene.clone());
         let lights = crate::panes::scene_lights(&shown);
         let tex = self.viewport.render(
             rs,
@@ -1037,6 +1451,7 @@ impl Editor {
                     self.state.timeline.current,
                     f64::from(shown.settings().fps),
                 ),
+                frame: previewed.is_none().then_some(&*scheduled),
             },
         );
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
@@ -1047,7 +1462,7 @@ impl Editor {
             let to_points = |x: f64, y: f64| {
                 rect.min + egui::vec2((x / ppp as f64) as f32, (y / ppp as f64) as f32)
             };
-            let colour = Theme::default().component_selection;
+            let colour = Theme::current(ui.ctx()).component_selection;
             ui.painter().rect_stroke(
                 egui::Rect::from_two_pos(to_points(x0, y0), to_points(x1, y1)),
                 0.0,
@@ -1056,6 +1471,9 @@ impl Editor {
             );
         }
         self.paint_clone_overlay(ui, &shown, pane, rect);
+        if pane == self.state.views.active {
+            self.paint_snap_marker(ui, rect, ppp, size);
+        }
         let label = SHADINGS
             .iter()
             .find(|(s, _)| *s == self.state.pane_shading(pane))
@@ -1063,13 +1481,21 @@ impl Editor {
         ui.painter().text(
             rect.left_top() + egui::vec2(8.0, 6.0),
             egui::Align2::LEFT_TOP,
-            match self.state.mode {
-                EditMode::Model => format!("{} · {label}", pane.label()),
-                mode => format!("{} · {label} · {} mode", pane.label(), mode.label()),
+            {
+                let axis = if self.state.app.transform_settings.axis_mode {
+                    " · Axis mode"
+                } else {
+                    ""
+                };
+                match self.state.mode {
+                    EditMode::Model => format!("{} · {label}{axis}", pane.label()),
+                    mode => format!("{} · {label} · {} mode{axis}", pane.label(), mode.label()),
+                }
             },
             egui::FontId::proportional(12.0),
-            Theme::default().weak_text,
+            Theme::current(ui.ctx()).weak_text,
         );
+        self.paint_hud(ui, pane, rect, &scheduled);
         // cutting tools: the knife line being dragged and the heads-up line (MODELING.md §5.5)
         if let Some(hud) =
             crate::cutting::hud(&self.state).or_else(|| crate::building::hud(&self.state))
@@ -1079,7 +1505,7 @@ impl Editor {
                 egui::Align2::LEFT_BOTTOM,
                 hud,
                 egui::FontId::proportional(12.0),
-                Theme::default().component_selection,
+                Theme::current(ui.ctx()).component_selection,
             );
         }
         if let Some(([x0, y0, x1, y1], _)) =
@@ -1090,7 +1516,7 @@ impl Editor {
             };
             ui.painter().line_segment(
                 [to_points(x0, y0), to_points(x1, y1)],
-                egui::Stroke::new(1.5, Theme::default().component_selection),
+                egui::Stroke::new(1.5, Theme::current(ui.ctx()).component_selection),
             );
         }
         // Polygon Pen: the corners placed so far (MODELING.md §6.7)
@@ -1100,9 +1526,88 @@ impl Editor {
             ui.painter().circle_filled(
                 rect.min + egui::vec2((x / ppp as f64) as f32, (y / ppp as f64) as f32),
                 4.0,
-                Theme::default().component_selection,
+                Theme::current(ui.ctx()).component_selection,
             );
         }
+    }
+
+    /// The HUD items of `pane` over its image (UI.md §23.6).
+    fn paint_hud(
+        &mut self,
+        ui: &Ui,
+        pane: Pane,
+        rect: egui::Rect,
+        frame: &forge_app::schedule::Frame,
+    ) {
+        use crate::hud::{Anchor, HudPrim, Tone};
+        let flags = *self.state.hud.flags(pane);
+        if !flags.any() {
+            return;
+        }
+        let ctx = crate::hud::context(&self.state, pane, frame, &self.state.hud_timer);
+        let list = crate::hud::draw_list(&ctx, &flags, [rect.width(), rect.height()]);
+        let theme = Theme::current(ui.ctx());
+        let painter = ui.painter().with_clip_rect(rect);
+        let tone = |t: Tone| match t {
+            Tone::Normal => theme.text,
+            Tone::Weak => theme.weak_text,
+            Tone::Guide => theme.accent,
+        };
+        let at = |p: [f32; 2]| rect.min + egui::vec2(p[0], p[1]);
+        for prim in &list {
+            match prim {
+                HudPrim::Text {
+                    pos,
+                    anchor,
+                    text,
+                    tone: t,
+                } => {
+                    let align = match anchor {
+                        Anchor::LeftTop => egui::Align2::LEFT_TOP,
+                        Anchor::RightTop => egui::Align2::RIGHT_TOP,
+                        Anchor::RightBottom => egui::Align2::RIGHT_BOTTOM,
+                    };
+                    painter.text(
+                        at(*pos),
+                        align,
+                        text,
+                        egui::FontId::monospace(11.0),
+                        tone(*t),
+                    );
+                }
+                HudPrim::Rect { min, max, tone: t } => {
+                    painter.rect_stroke(
+                        egui::Rect::from_min_max(at(*min), at(*max)),
+                        0.0,
+                        egui::Stroke::new(1.0, tone(*t)),
+                        egui::StrokeKind::Inside,
+                    );
+                }
+            }
+        }
+        self.state.hud_last.push((pane, list));
+    }
+
+    /// The snap target under the pointer: a ring at its projection and its kind (MANIPULATE.md §6.7).
+    fn paint_snap_marker(&self, ui: &Ui, rect: egui::Rect, ppp: f32, size: [u32; 2]) {
+        let Some(hit) = self.state.snap_hit else {
+            return;
+        };
+        let (w, h) = (size[0].max(1) as f64, size[1].max(1) as f64);
+        let Some(p) = crate::snapping::pixel_of(&self.state.camera, hit.position, w, h) else {
+            return;
+        };
+        let at = rect.min + egui::vec2((p.0 / ppp as f64) as f32, (p.1 / ppp as f64) as f32);
+        let colour = Theme::current(ui.ctx()).component_selection;
+        ui.painter()
+            .circle_stroke(at, 6.0, egui::Stroke::new(2.0, colour));
+        ui.painter().text(
+            at + egui::vec2(10.0, -10.0),
+            egui::Align2::LEFT_BOTTOM,
+            hit.kind.label(),
+            egui::FontId::proportional(11.0),
+            colour,
+        );
     }
 
     /// Clone indices and axes of the selected cloners (UI.md §16.3), painted over the image.
@@ -1148,7 +1653,7 @@ impl Editor {
                     egui::Align2::LEFT_BOTTOM,
                     mark.index.to_string(),
                     egui::FontId::proportional(11.0),
-                    Theme::default().weak_text,
+                    Theme::current(ui.ctx()).weak_text,
                 );
             }
         }
@@ -1226,7 +1731,9 @@ impl Editor {
         let id = self.state.selection.active?;
         let m = self.state.evaluated().world_matrix(id)?;
         // component modes: the gizmo sits on the selected components (EDITABLE.md §3.6)
-        let origin = if component_target(&self.state).is_some() {
+        let origin = if component_target(&self.state).is_some()
+            && !self.state.app.transform_settings.axis_mode
+        {
             pivot_world(&self.state)?
         } else {
             m.w_axis.truncate()
@@ -1320,34 +1827,91 @@ impl Editor {
             }
         }
         let cam = self.state.camera;
-        let snap_step = |mode: GizmoMode| {
-            modifiers.command.then_some(match mode {
-                GizmoMode::Translate => 10.0,
-                GizmoMode::Rotate => 15f64.to_radians(),
-                GizmoMode::Scale => 0.1,
-            })
-        };
+        let snap = self.state.app.transform_settings.snap.clone();
+        let axis_mode = self.state.app.transform_settings.axis_mode;
+        let mode = self.state.gizmo_mode;
         if response.drag_started_by(egui::PointerButton::Primary)
             && let Some(g) = self.current_gizmo()
             && let Some(handle) = g.hit_test(&cam, x, y, w, h)
             && let Some(drag) = Drag::begin(&g, handle, &cam, x, y, w, h)
         {
-            if component_target(&self.state).is_some() {
+            if axis_mode {
+                // axis mode: the drag edits the axis of the active object (MANIPULATE.md §7.4)
+                if let Some(id) = self.state.selection.active
+                    && !forge_core::layers::locked(self.state.doc.scene(), id)
+                    && let Ok(edit) = AxisEdit::capture(self.state.doc.scene(), id)
+                {
+                    self.gesture_seq += 1;
+                    self.drag_sources = if snap.enabled {
+                        collect_sources(&self.state, &[], None)
+                    } else {
+                        SnapScene::default()
+                    };
+                    self.axis_drag = Some((drag, edit, self.gesture_seq));
+                }
+            } else if component_target(&self.state).is_some() {
                 // a gizmo drag in a component mode edits the components (EDITABLE.md §3.5)
                 if let Some(cd) = ComponentDrag::begin(&self.state) {
                     self.gesture_seq += 1;
+                    self.drag_sources = if snap.enabled {
+                        collect_sources_multi(&self.state, &[], &cd.moved())
+                    } else {
+                        SnapScene::default()
+                    };
                     self.component_drag = Some((drag, cd, self.gesture_seq));
                 }
             } else if let Some(id) = self.state.selection.active
+                && !forge_core::layers::locked(self.state.doc.scene(), id)
                 && let Some(start) = self.state.evaluated().local_transform(id)
             {
                 self.gesture_seq += 1;
+                self.drag_sources = if snap.enabled {
+                    collect_sources(&self.state, &[id], None)
+                } else {
+                    SnapScene::default()
+                };
                 self.gizmo_drag = Some((drag, id, start, self.gesture_seq));
             }
         }
+        let ctrl = modifiers.command;
+        if let Some((drag, edit, n)) = &mut self.axis_drag {
+            if response.dragged_by(egui::PointerButton::Primary) {
+                let (delta, hit) = drag_step(
+                    &snap,
+                    &self.drag_sources.sources,
+                    drag,
+                    &cam,
+                    (x, y),
+                    (w, h),
+                    mode,
+                    ctrl,
+                );
+                self.state.snap_hit = hit;
+                self.state.status =
+                    match apply_axis_drag(&mut self.state.doc, edit, delta, Gesture::Drag(*n)) {
+                        Ok(()) => String::new(),
+                        Err(e) => e.to_string(),
+                    };
+            }
+            if response.drag_stopped() {
+                self.axis_drag = None;
+                self.state.snap_hit = None;
+            }
+            return;
+        }
         if let Some((drag, cd, n)) = &mut self.component_drag {
             if response.dragged_by(egui::PointerButton::Primary) {
-                let delta = drag.update(&cam, x, y, w, h, snap_step(self.state.gizmo_mode));
+                let (delta, hit) = drag_step(
+                    &snap,
+                    &self.drag_sources.sources,
+                    drag,
+                    &cam,
+                    (x, y),
+                    (w, h),
+                    mode,
+                    ctrl,
+                );
+                self.state.snap_hit = hit;
                 self.state.status = match cd.apply(&mut self.state.doc, delta, Gesture::Drag(*n)) {
                     Ok(()) => String::new(),
                     Err(e) => e.to_string(),
@@ -1355,12 +1919,23 @@ impl Editor {
             }
             if response.drag_stopped() {
                 self.component_drag = None;
+                self.state.snap_hit = None;
             }
             return;
         }
         if let Some((drag, id, start, n)) = &mut self.gizmo_drag {
             if response.dragged_by(egui::PointerButton::Primary) {
-                let delta = drag.update(&cam, x, y, w, h, snap_step(self.state.gizmo_mode));
+                let (delta, hit) = drag_step(
+                    &snap,
+                    &self.drag_sources.sources,
+                    drag,
+                    &cam,
+                    (x, y),
+                    (w, h),
+                    mode,
+                    ctrl,
+                );
+                self.state.snap_hit = hit;
                 let (id, start, n) = (*id, *start, *n);
                 let (ctx, eval) = (self.state.anim_ctx(), self.state.evaluated());
                 let anim = AnimEdit { ctx, eval: &eval };
@@ -1378,6 +1953,7 @@ impl Editor {
             }
             if response.drag_stopped() {
                 self.gizmo_drag = None;
+                self.state.snap_hit = None;
             }
             return;
         }
@@ -1400,121 +1976,165 @@ impl Editor {
     }
 
     fn coordinates_ui(&mut self, ui: &mut Ui) {
-        let Some(id) = self.state.selection.active else {
+        let Some(active) = self.state.selection.active else {
             ui.weak("Nothing selected");
             return;
         };
+        // component rows replace the object rows while components are selected (UI.md §20.3)
+        let comp = if component_target(&self.state).is_some() {
+            component_coords(&self.state, self.coord_space == Space::World)
+        } else {
+            None
+        };
+        let mut ids = vec![active];
+        ids.extend(
+            self.state
+                .selection
+                .nodes
+                .iter()
+                .copied()
+                .filter(|n| *n != active),
+        );
+        // a draft belongs to one selection, space and row set
+        let key = format!(
+            "{ids:?}|{:?}|{:?}|{}",
+            self.coord_space,
+            self.coord_third,
+            comp.is_some()
+        );
+        if key != self.coord_draft_key {
+            self.coord_draft_key = key;
+            self.coord_draft.clear();
+        }
         ui.horizontal(|ui| {
             ui.radio_value(&mut self.coord_space, Space::Local, "Local");
             ui.radio_value(&mut self.coord_space, Space::World, "World");
+            if comp.is_none() {
+                ui.separator();
+                ui.radio_value(&mut self.coord_third, Third::Scale, "Scale");
+                ui.radio_value(&mut self.coord_third, Third::Size, "Size");
+            }
             ui.separator();
-            ui.radio_value(&mut self.coord_third, Third::Scale, "Scale");
-            ui.radio_value(&mut self.coord_third, Third::Size, "Size");
+            ui.checkbox(&mut self.coord_manual, "Manual");
+            let pending = self.coord_manual && !self.coord_draft.is_empty();
+            if ui
+                .add_enabled(pending, egui::Button::new("Apply"))
+                .clicked()
+            {
+                self.coord_apply(comp.is_some());
+            }
+            if ui
+                .add_enabled(pending, egui::Button::new("Reset"))
+                .clicked()
+            {
+                self.coord_draft.clear();
+            }
         });
         let eval_scene = self.state.evaluated();
-        let Some(view) = coord_view(&eval_scene, id, self.coord_space, self.coord_third) else {
-            return;
+        let (labels, values, mixed, degrees): (_, [Option<DVec3>; 3], Mixed, _) = match comp {
+            Some(c) => (
+                ["Pivot", "Rotation", "Size"],
+                [Some(c.pivot), Some(DVec3::ZERO), Some(c.size)],
+                [[false; 3]; 3],
+                [false, true, false],
+            ),
+            None => {
+                let Some((view, mixed)) =
+                    coord_view_multi(&eval_scene, &ids, self.coord_space, self.coord_third)
+                else {
+                    return;
+                };
+                (
+                    [
+                        "Position",
+                        "Rotation",
+                        match self.coord_third {
+                            Third::Scale => "Scale",
+                            Third::Size => "Size",
+                        },
+                    ],
+                    [Some(view.pos), Some(view.rot), view.third],
+                    mixed,
+                    [false, true, false],
+                )
+            }
         };
-        let third_label = match self.coord_third {
-            Third::Scale => "Scale",
-            Third::Size => "Size",
-        };
-        let rows = [
-            (
-                Row::Position,
-                "Position",
-                ["X", "Y", "Z"],
-                Some(view.pos),
-                false,
-            ),
-            (
-                Row::Rotation,
-                "Rotation",
-                ["H", "P", "B"],
-                Some(view.rot),
-                true,
-            ),
-            (
-                Row::Third(self.coord_third),
-                third_label,
-                ["X", "Y", "Z"],
-                view.third,
-                false,
-            ),
-        ];
-        egui::Grid::new(("coords", id))
+        let axes = [["X", "Y", "Z"], ["H", "P", "B"], ["X", "Y", "Z"]];
+        let mut edit: Option<(usize, usize, f64, Gesture)> = None;
+        egui::Grid::new(("coords", active))
             .num_columns(4)
             .show(ui, |ui| {
-                for (row, label, axes, value, degrees) in rows {
-                    let l = ui.label(label);
-                    let Some(value) = value else {
+                for row in 0..3 {
+                    let l = ui.label(labels[row]);
+                    let Some(value) = values[row] else {
                         ui.weak("no mesh");
                         ui.end_row();
                         continue;
                     };
-                    let mut shown = if degrees {
-                        value.map(f64::to_degrees)
-                    } else {
-                        value
-                    };
-                    let mut gesture = None;
-                    for (k, axis) in axes.iter().enumerate() {
-                        let r = ui
-                            .add(
-                                egui::DragValue::new(&mut shown[k])
-                                    .speed(0.1)
-                                    .prefix(format!("{axis} ")),
-                            )
-                            .labelled_by(l.id);
+                    for k in 0..3 {
+                        let draft = self.coord_draft.value(row, k);
+                        let base = if degrees[row] {
+                            value[k].to_degrees()
+                        } else {
+                            value[k]
+                        };
+                        let mut shown = draft.unwrap_or(base);
+                        let is_mixed = mixed[row][k] && draft.is_none();
+                        let mut field = egui::DragValue::new(&mut shown)
+                            .speed(0.1)
+                            .prefix(format!("{} ", axes[row][k]));
+                        if is_mixed {
+                            field = field.custom_formatter(|_, _| "mixed".into());
+                        }
+                        let r = ui.add(field).labelled_by(l.id);
                         if r.changed() {
-                            gesture = Some(if r.dragged() {
+                            let g = if r.dragged() {
                                 self.gesture_for(r.drag_started())
                             } else {
                                 Gesture::Commit
-                            });
-                        }
-                    }
-                    if let Some(g) = gesture {
-                        let value = if degrees {
-                            shown.map(f64::to_radians)
-                        } else {
-                            shown
-                        };
-                        let anim = AnimEdit {
-                            ctx: self.state.anim_ctx(),
-                            eval: &eval_scene,
-                        };
-                        self.state.status = match set_coord_anim(
-                            &mut self.state.doc,
-                            id,
-                            self.coord_space,
-                            row,
-                            value,
-                            g,
-                            Some(&anim),
-                        ) {
-                            Ok(()) => String::new(),
-                            Err(e) => e.to_string(),
-                        };
-                    }
-                    ui.end_row();
-                }
-                // component modes: the pivot of the selected components (EDITABLE.md §3.6)
-                if component_target(&self.state).is_some() {
-                    ui.label("Pivot");
-                    match pivot_view(&self.state, self.coord_space == Space::World) {
-                        Some(p) => {
-                            for (k, axis) in ["X", "Y", "Z"].iter().enumerate() {
-                                ui.label(format!("{axis} {:.3}", p[k]));
-                            }
-                        }
-                        None => {
-                            ui.weak("no selection");
+                            };
+                            edit = Some((row, k, shown, g));
                         }
                     }
                     ui.end_row();
                 }
             });
+        if let Some((row, k, v, g)) = edit {
+            if self.coord_manual {
+                self.coord_draft.set(row, k, v);
+            } else {
+                let mut one = CoordDraft::default();
+                one.set(row, k, v);
+                let gesture = match g {
+                    Gesture::Commit => None,
+                    Gesture::Drag(n) => Some(n),
+                };
+                self.coord_run(&one, comp.is_some(), gesture);
+            }
+        }
+    }
+
+    /// Writes the Manual-mode draft in one step and drops it.
+    fn coord_apply(&mut self, component: bool) {
+        let draft = std::mem::take(&mut self.coord_draft);
+        self.coord_run(&draft, component, None);
+    }
+
+    /// Runs the registry command for a draft: `mesh.transform` for components, else
+    /// `transform.edit` (UI.md §20.3).
+    fn coord_run(&mut self, draft: &CoordDraft, component: bool, gesture: Option<u64>) {
+        let world = self.coord_space == Space::World;
+        let cmd = if component {
+            component_transform_args(&self.state, draft, world, gesture)
+                .map(|a| ("mesh.transform", a))
+        } else {
+            draft
+                .transform_args(self.coord_space, self.coord_third, gesture)
+                .map(|a| ("transform.edit", a))
+        };
+        if let Some((id, args)) = cmd {
+            self.state.status = execute(&mut self.state, id, args).err().unwrap_or_default();
+        }
     }
 
     fn tree_ui(&mut self, ui: &mut Ui) {
@@ -1533,8 +2153,12 @@ impl Editor {
             return;
         };
         let label = ts.tool().label();
+        let note = crate::tools::scope_note(&self.state);
         let rows = crate::attributes::tool_rows(ts.tool().settings(), ts.values());
         ui.heading(label);
+        if let Some(note) = note {
+            ui.weak(note);
+        }
         let (mut reset, mut apply, mut done) = (false, false, false);
         ui.horizontal(|ui| {
             reset = ui.button("Reset Values").clicked();
@@ -1692,7 +2316,7 @@ impl Editor {
             return;
         };
         let marks = key_states(&shown, id, self.state.timeline.current);
-        let theme = Theme::default();
+        let theme = Theme::current(ui.ctx());
         let mut rename = None;
         ui.horizontal(|ui| {
             let type_label = ui.label(RichText::new(&view.type_label).color(theme.weak_text));
@@ -1885,7 +2509,7 @@ fn key_marker(ui: &mut Ui, state: Option<KeyState>, name: &str) {
     let (rect, response) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), Sense::hover());
     let Some(state) = state else { return };
     let (text, fill) = match state {
-        KeyState::Keyed => ("keyed", Theme::default().accent),
+        KeyState::Keyed => ("keyed", Theme::current(ui.ctx()).accent),
         KeyState::Animated => ("animated", egui::Color32::TRANSPARENT),
     };
     response.widget_info(|| {
@@ -1902,6 +2526,6 @@ fn key_marker(ui: &mut Ui, state: Option<KeyState>, name: &str) {
     ui.painter().add(egui::Shape::convex_polygon(
         points,
         fill,
-        egui::Stroke::new(1.5, Theme::default().accent),
+        egui::Stroke::new(1.5, Theme::current(ui.ctx()).accent),
     ));
 }

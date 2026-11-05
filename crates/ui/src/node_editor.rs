@@ -458,7 +458,7 @@ pub fn node_editor_ui(ui: &mut Ui, st: &mut EditorState) {
             create = true;
         }
         if let Some(e) = st.node_editor.eval_error() {
-            ui.colored_label(crate::theme::Theme::default().error, e);
+            ui.colored_label(crate::theme::Theme::current(ui.ctx()).error, e);
         }
     });
     if let Some(t) = chosen {

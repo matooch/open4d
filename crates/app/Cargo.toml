@@ -6,6 +6,7 @@ license.workspace = true
 description = "Headless application core: documents, commands, evaluation and export without a window (docs/specs/APP.md)."
 
 [dependencies]
+rayon = "1"
 forge-anim = { path = "../anim" }
 forge-clone-engine = { path = "../clone-engine" }
 forge-command = { path = "../command" }
@@ -29,6 +30,17 @@ forge-parity-harness = { path = "../parity-harness" }
 toml = "1"
 tempfile = "3"
 tracing = "0.1"
+
+# Benchmark (docs/specs/CORE.md section 5b); no plotting or parallel features (deny.toml).
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "schedule"
+harness = false
+
+[[bench]]
+name = "s10"
+harness = false
 
 [lints]
 workspace = true

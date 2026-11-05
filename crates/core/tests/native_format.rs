@@ -22,6 +22,12 @@ fn registry() -> Arc<Registry> {
     )
     .unwrap();
     r.register(
+        NodeType::new("test.spline", "Spline", Category::Object)
+            .param(ParamDesc::vec3_list("points", "Points"))
+            .param(ParamDesc::index_list("selection.points", "Selected points")),
+    )
+    .unwrap();
+    r.register(
         NodeType::new("test.tex", "Texture holder", Category::Object)
             .param(ParamDesc::file_path("file", "File", ""))
             .param(ParamDesc::string("note", "Note", "")),
@@ -81,7 +87,6 @@ fn check_logical_scene(scene: &forge_core::Scene, v: u32) {
 #[test]
 fn the_migration_table_has_one_step_per_version() {
     assert_eq!(MIGRATIONS.len() as u32, VERSION - 1);
-    assert_eq!(VERSION, 8);
 }
 
 #[test]
@@ -106,7 +111,7 @@ fn every_old_version_has_a_fixture_that_loads_and_migrates() {
 }
 
 #[test]
-fn version_8_fixtures_are_current_and_byte_stable() {
+fn version_10_fixtures_are_current_and_byte_stable() {
     // The current fixtures pin the on-disk format: change them only with a version bump.
     let (text_scene, bin_scene) = (fixture_scene(false), fixture_scene(true));
     let opts = SaveOptions::default();
@@ -114,13 +119,13 @@ fn version_8_fixtures_are_current_and_byte_stable() {
     let bin = file::save_with(&bin_scene, &opts);
     if std::env::var_os("FORGE_WRITE_FIXTURES").is_some() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-        std::fs::write(dir.join("scene-v8.forge"), &text).unwrap();
-        std::fs::write(dir.join("scene-v8-chunked.forge"), &bin).unwrap();
+        std::fs::write(dir.join("scene-v10.forge"), &text).unwrap();
+        std::fs::write(dir.join("scene-v10-chunked.forge"), &bin).unwrap();
     }
-    assert_eq!(text, fixture("scene-v8.forge"), "text fixture drifted");
+    assert_eq!(text, fixture("scene-v10.forge"), "text fixture drifted");
     assert_eq!(
         bin,
-        fixture("scene-v8-chunked.forge"),
+        fixture("scene-v10-chunked.forge"),
         "chunk fixture drifted"
     );
     assert!(!contains(&text, b"%%FORGE-CHUNKS"));
@@ -129,6 +134,74 @@ fn version_8_fixtures_are_current_and_byte_stable() {
         let (loaded, report) = file::load_bytes(registry(), bytes).unwrap();
         assert!(report.warnings.is_empty(), "{:?}", report.warnings);
         assert_eq!(file::save(&loaded), file::save(scene));
+    }
+}
+
+#[test]
+fn version_9_fixtures_still_load_and_resave_as_the_current_version() {
+    // Written by the build of format version 9 (before brief 189); never regenerate.
+    for name in ["scene-v9.forge", "scene-v9-chunked.forge"] {
+        let bytes = fixture(name);
+        assert!(contains(&bytes, b"version: 9,"), "{name}");
+        let (scene, report) = file::load_bytes(registry(), &bytes).unwrap();
+        assert!(report.warnings.is_empty(), "{name}: {:?}", report.warnings);
+        assert_eq!(scene.layers().len(), 1, "{name}");
+        let text = file::save(&scene);
+        assert!(text.contains(&format!("version: {VERSION}")), "{text}");
+        let (again, _) = file::load(registry(), &text).unwrap();
+        assert_eq!(file::save(&again), text, "{name}");
+    }
+}
+
+#[test]
+fn a_version_9_reader_refuses_version_10_files() {
+    for name in ["scene-v10.forge", "scene-v10-chunked.forge"] {
+        let bytes = fixture(name);
+        assert!(contains(&bytes, b"version: 10,"), "{name}");
+        assert_eq!(
+            file::load_as_reader(registry(), &bytes, 9).err(),
+            Some(LoadError::UnsupportedVersion(10)),
+            "{name}"
+        );
+        assert!(
+            file::load_as_reader(registry(), &bytes, 10).is_ok(),
+            "{name}"
+        );
+    }
+    // a file this build wrote today is a version 10 file, so a 9 reader refuses it too
+    let saved = file::save(&fixture_scene(false));
+    assert_eq!(
+        file::load_as_reader(registry(), saved.as_bytes(), 9).err(),
+        Some(LoadError::UnsupportedVersion(10))
+    );
+}
+
+#[test]
+fn an_editable_spline_round_trips_bit_identically() {
+    let scene = fixture_scene(false);
+    let sp = NodeId(2);
+    let want = Value::Vec3List(vec![
+        [0.0, 0.0, 0.0],
+        [1.5, 0.1, -2.25],
+        [1e-9, 1.0 / 3.0, 8.0],
+    ]);
+    assert_eq!(scene.param(sp, "points"), Some(&want));
+    for bytes in [
+        file::save_with(&scene, &SaveOptions::default()),
+        file::save_with(&fixture_scene(true), &SaveOptions::default()),
+    ] {
+        let (loaded, report) = file::load_bytes(registry(), &bytes).unwrap();
+        assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+        assert_eq!(loaded.param(sp, "points"), Some(&want));
+        assert_eq!(
+            loaded.param(sp, "selection.points"),
+            Some(&Value::IndexList(vec![0, 2]))
+        );
+        let Some(Value::Vec3List(l)) = loaded.param(sp, "points") else {
+            panic!()
+        };
+        assert_eq!(l[2][1].to_bits(), (1.0f64 / 3.0).to_bits());
+        assert_eq!(file::save_with(&loaded, &SaveOptions::default()), bytes);
     }
 }
 
@@ -142,14 +215,14 @@ fn version_6_fixtures_still_load_and_get_the_default_time_configuration() {
         assert!(report.warnings.is_empty(), "{name}: {:?}", report.warnings);
         assert_eq!(scene.time(), &forge_core::TimeConfig::default(), "{name}");
         let text = file::save(&scene);
-        assert!(text.contains("version: 8"), "{text}");
+        assert!(text.contains(&format!("version: {VERSION}")), "{text}");
         let (again, _) = file::load(registry(), &text).unwrap();
         assert_eq!(file::save(&again), text, "{name}");
     }
 }
 
 #[test]
-fn version_7_fixtures_still_load_and_migrate_to_8() {
+fn version_7_fixtures_still_load_and_migrate_to_current() {
     // Written by the build of format version 7 (before brief 108); never regenerate.
     for name in ["scene-v7.forge", "scene-v7-chunked.forge"] {
         let bytes = fixture(name);
@@ -157,12 +230,39 @@ fn version_7_fixtures_still_load_and_migrate_to_8() {
         let (scene, report) = file::load_bytes(registry(), &bytes).unwrap();
         assert!(report.warnings.is_empty(), "{name}: {:?}", report.warnings);
         let text = file::save(&scene);
-        assert!(text.contains("version: 8"), "{text}");
+        assert!(text.contains(&format!("version: {VERSION}")), "{text}");
         assert!(!text.contains("version: 7"), "{text}");
         let (again, _) = file::load(registry(), &text).unwrap();
         assert_eq!(file::save(&again), text, "{name}");
-        // the migration step itself changes nothing but the version
-        assert_eq!(MIGRATIONS.len(), 7, "{name}");
+        // the migration steps themselves change nothing but the version
+        assert_eq!(MIGRATIONS.len() as u32, VERSION - 1, "{name}");
+    }
+}
+
+#[test]
+fn version_8_fixtures_still_load_and_migrate_to_current_without_layers() {
+    // Written by the build of format version 8 (before brief 158); never regenerate.
+    for name in ["scene-v8.forge", "scene-v8-chunked.forge"] {
+        let bytes = fixture(name);
+        assert!(contains(&bytes, b"version: 8,"), "{name}");
+        let (scene, report) = file::load_bytes(registry(), &bytes).unwrap();
+        assert!(report.warnings.is_empty(), "{name}: {:?}", report.warnings);
+        assert!(scene.layers().is_empty(), "{name}");
+        // every member has no layer: the param is absent in the file and defaults on load
+        assert_eq!(
+            scene.param(NodeId(1), forge_core::layers::LAYER),
+            Some(&Value::Link(None)),
+            "{name}"
+        );
+        let text = file::save(&scene);
+        assert!(text.contains(&format!("version: {VERSION}")), "{text}");
+        assert!(!text.contains("layers:"), "{text}");
+        let (again, report) = file::load(registry(), &text).unwrap();
+        assert!(report.warnings.is_empty(), "{name}");
+        assert_eq!(file::save(&again), text, "{name}");
+        // the step is pure: the scene is the one the v8 file described
+        assert_eq!(scene.settings().fps, 24, "{name}");
+        assert_eq!(scene.time().markers.len(), 2, "{name}");
     }
 }
 
@@ -172,6 +272,17 @@ fn fixture_scene(big: bool) -> forge_core::Scene {
     doc.transact("build", |tx| {
         let p = tx.create("test.poly", None, None)?;
         tx.rename(p, "Poly")?;
+        let sp = tx.create("test.spline", None, None)?;
+        tx.set_param(
+            sp,
+            "points",
+            Value::Vec3List(vec![
+                [0.0, 0.0, 0.0],
+                [1.5, 0.1, -2.25],
+                [1e-9, 1.0 / 3.0, 8.0],
+            ]),
+        )?;
+        tx.set_param(sp, "selection.points", Value::IndexList(vec![0, 2]))?;
         if big {
             tx.set_param(p, "mesh", Value::Mesh(Arc::new(grid_mesh(20))))?;
             tx.set_param(p, "selection.points", Value::IndexList((0..300).collect()))?;
@@ -179,6 +290,11 @@ fn fixture_scene(big: bool) -> forge_core::Scene {
             tx.set_param(p, "mesh", Value::Mesh(Arc::new(quad())))?;
             tx.set_param(p, "selection.points", Value::IndexList(vec![1, 3]))?;
         }
+        let layer = tx.add_layer(Some("Props"), Some([0.25, 0.5, 0.75]))?;
+        let mut l = tx.scene().layers().get(layer).unwrap().clone();
+        (l.solo, l.locked, l.generators) = (true, true, false);
+        tx.update_layer(l)?;
+        tx.set_param(p, forge_core::layers::LAYER, Value::Link(Some(layer)))?;
         tx.set_settings(forge_core::SceneSettings {
             fps: 24,
             start: 0,
@@ -247,7 +363,7 @@ fn small_values_stay_text_and_large_ones_become_chunks() {
     let marker = b"\n%%FORGE-CHUNKS 1\n";
     let at = big.windows(marker.len()).position(|w| w == marker).unwrap();
     let head = std::str::from_utf8(&big[..at]).unwrap();
-    assert!(head.contains("version: 8"), "{head}");
+    assert!(head.contains(&format!("version: {VERSION}")), "{head}");
     assert!(head.contains("\"mesh\": MeshChunk(0)"), "{head}");
     assert!(
         head.contains("\"selection.points\": IndexListChunk(1)"),

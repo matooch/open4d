@@ -1,0 +1,18 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Cube made editable with 2 x 2 x 2 segments; the 8 border edges (point pairs [[2, 5], [2, 23], [5, 8], [8, 11], [11, 14], [14, 17], [17, 20], [20, 23]]) of the top face selected, as the start of the selection-ops convert-edge-to-poly case, and Convert Selection run edges-to-polygons with Tolerant on"
+mesh = "mesh.obj"
+
+[params]
+tool = "convert_selection"
+segments = [2, 2, 2]
+start_edges = [[2, 5], [2, 23], [5, 8], [8, 11], [11, 14], [14, 17], [17, 20], [20, 23]]
+
+[params.settings]
+from_edges = true
+to_polygons = true
+tolerant = true
+
+[import]
+scale = 1.0
+flip_z = false

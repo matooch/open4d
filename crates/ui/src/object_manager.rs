@@ -10,7 +10,7 @@ use serde_json::{Value as Json, json};
 use crate::state::EditorState;
 use crate::tree::{
     DropTarget, DropZone, TreeRow, click_selection, context_menu, drop_target, drop_zone,
-    filter_rows, menu_target, moved_set, tree_rows,
+    filter_rows, layer_menu, menu_target, moved_set, tree_rows,
 };
 
 /// A command to run: registry id and JSON arguments.
@@ -162,6 +162,23 @@ impl ObjectManager {
                 }
                 return;
             }
+            // the layer colour (UI.md §22.2)
+            if let Some((_, layer_name, c)) = &row.layer {
+                let (rect, r) = ui.allocate_exact_size(vec2(5.0, DOT), Sense::hover());
+                let col = Color32::from_rgb(
+                    (c[0] * 255.0).round() as u8,
+                    (c[1] * 255.0).round() as u8,
+                    (c[2] * 255.0).round() as u8,
+                );
+                ui.painter().rect_filled(rect, 1.0, col);
+                r.widget_info(|| {
+                    egui::WidgetInfo::labeled(
+                        egui::Role::Label,
+                        true,
+                        format!("Layer: {layer_name}"),
+                    )
+                });
+            }
             let selected = st.selection.nodes.contains(&row.id);
             let mut text = RichText::new(&row.name);
             if row.missing_type {
@@ -184,6 +201,7 @@ impl ObjectManager {
                 menu_target(&mut st.selection, row.id);
             }
             let items = context_menu(st.doc.scene(), &st.selection.nodes);
+            let layer_items = layer_menu(st.doc.scene(), &st.selection.nodes);
             r.context_menu(|ui| {
                 for item in items {
                     if ui.button(item.label).clicked() {
@@ -194,6 +212,14 @@ impl ObjectManager {
                         ui.close();
                     }
                 }
+                ui.menu_button("Layer", |ui| {
+                    for item in layer_items {
+                        if ui.selectable_label(item.checked, &item.label).clicked() {
+                            cmds.push((item.command, item.args));
+                            ui.close();
+                        }
+                    }
+                });
             });
             ui.weak(&row.type_label);
             for (tag_id, tag) in &row.tags {

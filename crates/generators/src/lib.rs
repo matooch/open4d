@@ -1,10 +1,13 @@
 //! forge-generators: parametric primitives. Spec: docs/specs/PRIMITIVES.md
 //! (vertex and face orders come from docs/parity/{plane,cube,sphere}.md).
 
+pub mod axis;
 mod boole;
 mod cloner;
 mod cube;
+pub mod editable_spline;
 mod figure;
+mod landscape;
 mod lathe;
 mod modeling;
 mod oil_tank;
@@ -19,12 +22,14 @@ mod sphere;
 mod spline_gens;
 mod spline_prims;
 pub mod spline_sampling;
+pub mod spline_tools;
 pub mod splines;
 mod subdivision;
 
-pub use boole::{boole, inputs_of as boole_inputs_of};
+pub use boole::{boole, boole_objects, inputs_of as boole_inputs_of};
 pub use cloner::{
-    ClonerInstances, clone_data, cloner_instances, prototypes_of as cloner_prototypes,
+    ClonerInstances, PARALLEL_POINTS, clone_data, cloner_instances, expand as expand_clones,
+    prototypes_of as cloner_prototypes,
 };
 pub use modeling::{array, connect, inputs_of as modeling_inputs_of, symmetry};
 pub use polygon::{
@@ -46,12 +51,15 @@ pub enum BuildError {
     /// An observed option whose geometry is not derived yet.
     #[error("not supported yet: {0}")]
     Unsupported(&'static str),
+    /// A plugin evaluator failed (docs/specs/PLUGINS.md section 8).
+    #[error("{0}")]
+    Failed(String),
 }
 
 /// The primitive node types.
 pub struct Primitives;
 
-fn types() -> [NodeType; 14] {
+fn types() -> [NodeType; 15] {
     [
         plane::node_type(),
         cube::node_type(),
@@ -67,6 +75,7 @@ fn types() -> [NodeType; 14] {
         oil_tank::node_type(),
         polygon_prim::node_type(),
         figure::node_type(),
+        landscape::node_type(),
     ]
 }
 
@@ -85,6 +94,7 @@ impl Plugin for Primitives {
         r.register(splines::circle_type())?;
         r.register(splines::rectangle_type())?;
         r.register(splines::helix_type())?;
+        r.register(editable_spline::node_type())?;
         for id in spline_prims::TYPES {
             r.register(spline_prims::node_type(id).expect("listed spline type"))?;
         }
@@ -170,6 +180,7 @@ pub fn build(type_id: &str, values: &BTreeMap<String, Value>) -> Result<PolyMesh
         "forge.oil_tank" => oil_tank::build(&p),
         "forge.polygon_prim" => polygon_prim::build(&p),
         "forge.figure" => figure::build(&p),
+        "forge.landscape" => landscape::build(&p),
         _ => unreachable!("types() and build() list the same ids"),
     }
 }
@@ -202,6 +213,10 @@ pub(crate) fn evaluate_geometry(
     let Some(node) = scene.node(id) else {
         return Ok(None);
     };
+    // a layer with generators off: pass-through, no geometry of its own (CORE.md §7.4)
+    if !forge_core::layers::generators_on(scene, id) {
+        return Ok(None);
+    }
     if node.type_id == subdivision::TYPE {
         let ty = subdivision::node_type();
         let p = Params {
@@ -225,10 +240,37 @@ pub(crate) fn evaluate_geometry(
     if modeling::input_count(&node.type_id).is_some() || node.type_id == modeling::INSTANCE {
         return modeling::evaluate_modeling(scene, id, &node.type_id, &node.params, ctx);
     }
+    if let Some(ev) = scene.registry().evaluator(&node.type_id) {
+        return plugin_mesh(ev.as_ref(), scene, id, ctx);
+    }
     match build(&node.type_id, &node.params) {
         Ok(mesh) => Ok(Some(mesh)),
         Err(BuildError::UnknownType(_)) => Ok(None),
         Err(e) => Err(e),
+    }
+}
+
+/// Runs a plugin evaluator; a panic inside it is a node error too.
+fn plugin_mesh(
+    ev: &dyn forge_core::NodeEvaluator,
+    scene: &Scene,
+    id: NodeId,
+    ctx: &EvalCtx,
+) -> Result<Option<PolyMesh>, BuildError> {
+    let out =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ev.evaluate(scene, id, ctx)))
+            .unwrap_or_else(|_| Err("the plugin evaluator panicked".to_string()));
+    match out {
+        Ok(Some(m)) => Ok(Some(PolyMesh {
+            points: m
+                .points
+                .iter()
+                .map(|p| glam::DVec3::from_array(*p))
+                .collect(),
+            polys: m.polys,
+        })),
+        Ok(None) => Ok(None),
+        Err(e) => Err(BuildError::Failed(e)),
     }
 }
 
@@ -249,7 +291,7 @@ fn deformer_children(scene: &Scene, id: NodeId) -> Vec<NodeId> {
     };
     let mut out = deformers(node);
     if let Some(parent) = node.parent.and_then(|p| scene.node(p))
-        && !produces_geometry(&parent.type_id)
+        && !produces_geometry(scene, &parent.type_id)
     {
         out.extend(deformers(parent));
     }
@@ -260,7 +302,7 @@ fn deformer_children(scene: &Scene, id: NodeId) -> Vec<NodeId> {
 /// deformer children), if any.
 pub(crate) fn sibling_deformer_parent(scene: &Scene, id: NodeId) -> Option<NodeId> {
     let parent = scene.node(scene.node(id)?.parent?)?;
-    (!produces_geometry(&parent.type_id)
+    (!produces_geometry(scene, &parent.type_id)
         && parent
             .children
             .iter()
@@ -270,8 +312,9 @@ pub(crate) fn sibling_deformer_parent(scene: &Scene, id: NodeId) -> Option<NodeI
 
 /// True for the node types that build a mesh of their own, so a parent that only
 /// groups objects (a Null) passes its deformers on to them (MODIFIERS.md §0).
-fn produces_geometry(type_id: &str) -> bool {
+fn produces_geometry(scene: &Scene, type_id: &str) -> bool {
     types().iter().any(|t| t.id == type_id)
+        || scene.registry().evaluator(type_id).is_some()
         || type_id == subdivision::TYPE
         || type_id == boole::TYPE
         || type_id == cloner::TYPE
@@ -279,6 +322,21 @@ fn produces_geometry(type_id: &str) -> bool {
         || type_id == modeling::INSTANCE
         || modeling::input_count(type_id).is_some()
         || spline_gens::spline_input_count(type_id).is_some()
+}
+
+/// Nodes whose result `id` depends on beyond its children, tags and links: the deformers
+/// of a geometry-less parent that also deform `id` (MODIFIERS.md section 0). Used for the
+/// dependency graph (CORE.md section 5b).
+pub fn eval_dependencies(scene: &Scene, id: NodeId) -> Vec<NodeId> {
+    let Some(parent) = sibling_deformer_parent(scene, id).and_then(|p| scene.node(p)) else {
+        return Vec::new();
+    };
+    parent
+        .children
+        .iter()
+        .copied()
+        .filter(|c| forge_modifiers::is_deformer(scene, *c))
+        .collect()
 }
 
 /// True if the node is an input a parent generator consumes (not drawn itself):
@@ -291,6 +349,10 @@ pub fn is_consumed(scene: &Scene, id: NodeId) -> bool {
     else {
         return false;
     };
+    // the inputs of a bypassed generator are drawn as themselves
+    if !forge_core::layers::generators_on(scene, p.id) {
+        return false;
+    }
     match p.type_id.as_str() {
         subdivision::TYPE => input_of(scene, p.id) == Some(id),
         boole::TYPE => boole::inputs_of(scene, p.id).contains(&id),

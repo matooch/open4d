@@ -20,6 +20,7 @@ struct Headless {
     status: String,
     path: Option<String>,
     component_settings: forge_modeling::ComponentSettings,
+    transform_settings: forge_modeling::snap::TransformSettings,
 }
 
 impl Headless {
@@ -41,6 +42,7 @@ impl Headless {
             status: String::new(),
             path: None,
             component_settings: Default::default(),
+            transform_settings: Default::default(),
         }
     }
 }
@@ -70,6 +72,12 @@ impl CommandContext for Headless {
     fn component_settings_mut(&mut self) -> &mut forge_modeling::ComponentSettings {
         &mut self.component_settings
     }
+    fn transform_settings(&self) -> &forge_modeling::snap::TransformSettings {
+        &self.transform_settings
+    }
+    fn transform_settings_mut(&mut self) -> &mut forge_modeling::snap::TransformSettings {
+        &mut self.transform_settings
+    }
     fn timeline(&self) -> &Timeline {
         &self.timeline
     }
@@ -85,7 +93,11 @@ impl CommandContext for Headless {
     fn set_status(&mut self, text: String) {
         self.status = text;
     }
-    fn select_components(&mut self, _op: SelectOp) -> Result<(), String> {
+    fn select_components(
+        &mut self,
+        _op: SelectOp,
+        _nodes: Option<&[NodeId]>,
+    ) -> Result<(), String> {
         Err("no components headless".into())
     }
     fn record_keys(&mut self) -> Result<usize, String> {
@@ -183,6 +195,8 @@ fn brief_command_ids_exist() {
         "file.open_dialog",
         "file.save_dialog",
         "file.save_as_dialog",
+        "ui.command_palette",
+        "edit.history_jump",
         "file.autosave_now",
         "timeline.stop",
         "timeline.settings",
@@ -430,6 +444,7 @@ fn window_commands_toggle_play_and_refuse_headless() {
         "file.save_as_dialog",
         "file.autosave_now",
         "object.begin_rename",
+        "ui.command_palette",
     ] {
         match r.run(&mut c, id, json!({})) {
             Err(CommandError::Failed(m)) => assert_eq!(m, "needs the editor window", "{id}"),
@@ -439,6 +454,82 @@ fn window_commands_toggle_play_and_refuse_headless() {
             r.run(&mut c, id, json!({"x": 1})),
             Err(CommandError::InvalidArgs(_))
         ));
+    }
+    assert_eq!(steps(&c), 0);
+}
+
+/// docs/specs/COMMANDS.md §6 `edit.history_jump`, UI.md §18.6.
+#[test]
+fn history_jump_moves_along_the_history_and_checks_the_range() {
+    let r = registry();
+    let mut c = Headless::new();
+    let a = node_of(
+        &r.run(&mut c, "object.create", json!({"type": "test.box"}))
+            .unwrap(),
+    );
+    for name in ["one", "two", "three"] {
+        r.run(&mut c, "object.rename", json!({"node": a.0, "name": name}))
+            .unwrap();
+    }
+    let name = |c: &Headless| c.doc.scene().node(a).unwrap().name.clone();
+    assert_eq!(steps(&c), 4);
+    // back to the state after the first rename
+    let out = r
+        .run(&mut c, "edit.history_jump", json!({"position": 2}))
+        .unwrap();
+    assert_eq!(out, json!({"position": 2, "undone": 2, "redone": 0}));
+    assert_eq!(name(&c), "one");
+    assert_eq!(c.doc.history().redo_labels().len(), 2);
+    // forward again, past the middle
+    let out = r
+        .run(&mut c, "edit.history_jump", json!({"position": 4}))
+        .unwrap();
+    assert_eq!(out, json!({"position": 4, "undone": 0, "redone": 2}));
+    assert_eq!(name(&c), "three");
+    // the original state: the node is gone and the selection follows
+    r.run(&mut c, "edit.history_jump", json!({"position": 0}))
+        .unwrap();
+    assert!(!c.doc.scene().contains(a));
+    assert!(!c.selection.nodes.contains(&a));
+    // the current position is a no-op, a position beyond the history is refused
+    let out = r
+        .run(&mut c, "edit.history_jump", json!({"position": 0}))
+        .unwrap();
+    assert_eq!(out["undone"], 0);
+    assert_eq!(out["redone"], 0);
+    let err = r
+        .run(&mut c, "edit.history_jump", json!({"position": 5}))
+        .unwrap_err();
+    assert!(matches!(err, CommandError::InvalidArgs(_)), "{err}");
+    assert_eq!(c.doc.history().redo_labels().len(), 4);
+    assert!(matches!(
+        r.run(&mut c, "edit.history_jump", json!({"position": -1})),
+        Err(CommandError::InvalidArgs(_))
+    ));
+}
+
+#[test]
+fn layout_and_workspace_commands_need_the_window() {
+    let r = registry();
+    let mut c = Headless::new();
+    for id in [
+        "ui.workspace",
+        "ui.layout_save",
+        "ui.layout_load",
+        "ui.layout_delete",
+    ] {
+        assert!(r.get(id).is_some(), "missing {id}");
+        assert!(!r.get(id).unwrap().undoable(), "{id} is view state");
+        match r.run(&mut c, id, json!({"name": "Modeling"})) {
+            Err(CommandError::Failed(m)) => assert_eq!(m, "needs the editor window", "{id}"),
+            other => panic!("{id}: {other:?}"),
+        }
+        for bad in [json!({}), json!({"name": "a", "x": 1}), json!({"name": 3})] {
+            assert!(
+                matches!(r.run(&mut c, id, bad), Err(CommandError::InvalidArgs(_))),
+                "{id}"
+            );
+        }
     }
     assert_eq!(steps(&c), 0);
 }

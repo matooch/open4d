@@ -75,6 +75,11 @@ args = { mode = "polys" }
 chord = "Mod+Shift+E"
 command = "mesh.make_editable"
 
+# Command palette (brief 159)
+[[bind]]
+chord = "Mod+Shift+P"
+command = "ui.command_palette"
+
 # View: shading
 [[bind]]
 chord = "1"
@@ -193,6 +198,15 @@ args = { mode = "scale" }
 [[bind]]
 chord = "Q"
 command = "view.gizmo_space"
+
+# Snapping and axis mode (brief 032)
+[[bind]]
+chord = "Shift+S"
+command = "snap.toggle"
+
+[[bind]]
+chord = "L"
+command = "edit.axis_mode"
 
 # Animation
 [[bind]]

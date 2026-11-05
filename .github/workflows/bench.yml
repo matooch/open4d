@@ -1,0 +1,38 @@
+name: bench
+
+# S10 performance budgets (brief 181, docs/specs/PERFORMANCE.md). Linux only: the budgets in
+# bench/budgets.toml are enforced on ubuntu-latest. Not part of ci.yml: the benchmarks build in
+# release mode and run for several minutes, so they run on pushes to main, daily and by hand.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "43 4 * * *"
+  workflow_dispatch:
+    inputs:
+      scale:
+        description: "Multiply every budget (slow runner experiments)"
+        default: "1"
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  budgets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Run benchmarks and check budgets
+        env:
+          FORGE_BENCH_SCALE: ${{ github.event.inputs.scale || '1' }}
+        run: cargo run --release -p forge-bench-check -- --markdown | tee bench-table.md
+      - name: Summary
+        if: always()
+        run: cat bench-table.md >> "$GITHUB_STEP_SUMMARY" || true

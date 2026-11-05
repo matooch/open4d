@@ -11,7 +11,8 @@ use forge_generators::{
 use forge_geometry::PolyMesh;
 use forge_geometry::selection::{IndexSet, Selection};
 use forge_modeling::{
-    Settings, ToolDesc, building_descs, cutting_descs, interactive_cut_descs, tool_descs, tool_fn,
+    Settings, ToolDesc, array_descs, building_descs, cutting_descs, interactive_cut_descs,
+    object_descs, tool_descs, tool_fn,
 };
 use serde_json::{Value as Json, json};
 
@@ -89,6 +90,61 @@ pub fn building_tools() -> Vec<Box<dyn Tool>> {
         .collect()
 }
 
+/// An object command tool (Duplicate, Arrange, Randomize, Transfer; MODELING.md §9): its
+/// settings are the command's numeric arguments, applied to the selected objects. No preview.
+pub struct ObjectTool {
+    pub desc: ToolDesc,
+}
+
+impl Tool for ObjectTool {
+    fn id(&self) -> &'static str {
+        self.desc.id
+    }
+
+    fn label(&self) -> &'static str {
+        self.desc.label
+    }
+
+    fn command_id(&self) -> &'static str {
+        self.desc.command
+    }
+
+    fn settings(&self) -> Vec<ParamDesc> {
+        self.desc.params.clone()
+    }
+
+    fn drag_param(&self) -> &'static str {
+        ""
+    }
+
+    fn preview(&self, _: &PolyMesh, _: &Selection, _: &Settings) -> Result<PolyMesh, String> {
+        Err("object command: no preview".into())
+    }
+}
+
+/// True for the tools whose command takes the settings as top-level arguments.
+pub fn is_object_tool(id: &str) -> bool {
+    object_descs().iter().any(|d| d.id == id)
+}
+
+/// The arrangement tools of brief 031 (docs/specs/MODELING.md §9): the Array command, then
+/// Duplicate, Arrange, Randomize and Transfer. Listed apart from the other tool lists.
+pub fn arrange_tools() -> Vec<Box<dyn Tool>> {
+    let mut all: Vec<Box<dyn Tool>> = array_descs()
+        .into_iter()
+        .filter_map(|desc| {
+            let apply = tool_fn(desc.id)?;
+            Some(Box::new(ModelingTool { desc, apply }) as Box<dyn Tool>)
+        })
+        .collect();
+    all.extend(
+        object_descs()
+            .into_iter()
+            .map(|desc| Box::new(ObjectTool { desc }) as Box<dyn Tool>),
+    );
+    all
+}
+
 /// Every tool, in menu order.
 pub fn tools() -> Vec<Box<dyn Tool>> {
     tool_descs()
@@ -143,6 +199,7 @@ pub fn activate_tool(state: &mut EditorState, id: &str) -> bool {
         .into_iter()
         .chain(cutting_tools())
         .chain(building_tools())
+        .chain(arrange_tools())
         .find(|t| t.id() == id)
     else {
         return false;
@@ -164,52 +221,108 @@ pub fn deactivate_tool(state: &mut EditorState) {
     state.tool = None;
 }
 
-/// What the tool works on: the active polygon object, its stored mesh and its stored
-/// selection (at least one of the three sets is non-empty).
-pub fn tool_target(state: &EditorState) -> Option<(NodeId, PolyMesh, Selection)> {
+/// What the tool works on: every selected polygon object (the active node must be one) that
+/// has a stored mesh and at least one non-empty stored set, in ascending id order, with its
+/// stored mesh and selection (EDITABLE.md §6.5).
+pub fn tool_targets(state: &EditorState) -> Vec<(NodeId, PolyMesh, Selection)> {
     let scene = state.doc.scene();
-    let id = state.selection.active?;
-    if scene.node(id)?.type_id != POLYGON {
-        return None;
+    let Some(active) = state.selection.active else {
+        return Vec::new();
+    };
+    if scene.node(active).is_none_or(|n| n.type_id != POLYGON) {
+        return Vec::new();
     }
-    let Some(Value::Mesh(m)) = scene.param(id, "mesh") else {
-        return None;
-    };
-    let stored = |key: &str| -> IndexSet {
-        match scene.param(id, key) {
-            Some(Value::IndexList(l)) => l.iter().copied().collect(),
-            _ => IndexSet::new(),
-        }
-    };
-    let sel = Selection {
-        polys: stored(SELECTION_POLYS),
-        points: stored(SELECTION_POINTS),
-        edges: stored(SELECTION_EDGES),
-    };
-    let any = !(sel.polys.is_empty() && sel.points.is_empty() && sel.edges.is_empty());
-    any.then(|| (id, to_poly_mesh(m), sel))
+    let mut ids: std::collections::BTreeSet<NodeId> = state
+        .selection
+        .nodes
+        .iter()
+        .copied()
+        .filter(|id| scene.node(*id).is_some_and(|n| n.type_id == POLYGON))
+        .collect();
+    ids.insert(active);
+    ids.into_iter()
+        .filter_map(|id| {
+            let Some(Value::Mesh(m)) = scene.param(id, "mesh") else {
+                return None;
+            };
+            let stored = |key: &str| -> IndexSet {
+                match scene.param(id, key) {
+                    Some(Value::IndexList(l)) => l.iter().copied().collect(),
+                    _ => IndexSet::new(),
+                }
+            };
+            let sel = Selection {
+                polys: stored(SELECTION_POLYS),
+                points: stored(SELECTION_POINTS),
+                edges: stored(SELECTION_EDGES),
+            };
+            let any = !(sel.polys.is_empty() && sel.points.is_empty() && sel.edges.is_empty());
+            any.then(|| (id, to_poly_mesh(m), sel))
+        })
+        .collect()
 }
 
-/// The tool's result on the current target, or `None` without an active tool, a target, or
-/// when the tool refuses the current values.
-pub fn tool_preview(state: &EditorState) -> Option<(NodeId, PolyMesh)> {
+/// The first of [`tool_targets`].
+pub fn tool_target(state: &EditorState) -> Option<(NodeId, PolyMesh, Selection)> {
+    tool_targets(state).into_iter().next()
+}
+
+/// The note shown when the active tool works on one object but several are selected
+/// (EDITABLE.md §6.5); `None` otherwise.
+pub fn scope_note(state: &EditorState) -> Option<String> {
     let ts = state.tool.as_ref()?;
+    let id = ts.tool.id();
+    if !(crate::cutting::is_cut_tool(id) || crate::building::is_build_tool(id)) {
+        return None;
+    }
+    let scene = state.doc.scene();
+    let polygons = state
+        .selection
+        .nodes
+        .iter()
+        .filter(|n| scene.node(**n).is_some_and(|x| x.type_id == POLYGON))
+        .count();
+    (polygons > 1).then(|| format!("{} works on the active object only", ts.tool.label()))
+}
+
+/// The tool's result on every target (one entry for the interactive cutting and building
+/// tools), or empty without an active tool or target, or when the tool refuses the values.
+pub fn tool_previews(state: &EditorState) -> Vec<(NodeId, PolyMesh)> {
+    let Some(ts) = state.tool.as_ref() else {
+        return Vec::new();
+    };
     if crate::cutting::is_cut_tool(ts.tool.id()) {
-        return crate::cutting::cut_preview(state);
+        return crate::cutting::cut_preview(state).into_iter().collect();
     }
     if crate::building::is_build_tool(ts.tool.id()) {
-        return crate::building::build_preview(state);
+        return crate::building::build_preview(state).into_iter().collect();
     }
-    let (id, mesh, sel) = tool_target(state)?;
-    let out = ts.tool.preview(&mesh, &sel, &ts.values).ok()?;
-    Some((id, out))
+    tool_targets(state)
+        .into_iter()
+        .filter_map(|(id, mesh, sel)| Some((id, ts.tool.preview(&mesh, &sel, &ts.values).ok()?)))
+        .collect()
 }
 
-/// The scene with the preview in place of the target's stored mesh (for drawing only).
+/// The tool's result on the first target, or `None` without an active tool, a target, or
+/// when the tool refuses the current values.
+pub fn tool_preview(state: &EditorState) -> Option<(NodeId, PolyMesh)> {
+    tool_previews(state).into_iter().next()
+}
+
+/// The scene with the previews in place of the targets' stored meshes (for drawing only).
 pub fn with_preview(state: &EditorState, scene: &Scene) -> Option<Arc<Scene>> {
-    let (id, mesh) = tool_preview(state)?;
-    let data = Value::Mesh(Arc::new(from_poly_mesh(&mesh)));
-    let (copy, skipped) = scene.with_params([(id, "mesh".to_string(), data)]);
+    let previews = tool_previews(state);
+    if previews.is_empty() {
+        return None;
+    }
+    let edits = previews.into_iter().map(|(id, mesh)| {
+        (
+            id,
+            "mesh".to_string(),
+            Value::Mesh(Arc::new(from_poly_mesh(&mesh))),
+        )
+    });
+    let (copy, skipped) = scene.with_params(edits);
     skipped.is_empty().then(|| Arc::new(copy))
 }
 
@@ -223,7 +336,26 @@ pub fn apply_tool(state: &mut EditorState) -> Result<Json, String> {
     if crate::building::is_build_tool(ts.tool.id()) {
         return crate::building::apply_build(state);
     }
-    let (command, args) = (ts.tool.command_id(), ts.command_args());
+    let (command, mut args) = (ts.tool.command_id(), ts.command_args());
+    if !is_object_tool(ts.tool.id()) {
+        // every selected polygon object with a selection, in one undo step (EDITABLE.md §6.5)
+        let ids: Vec<u64> = tool_targets(state).iter().map(|t| t.0.0).collect();
+        if !ids.is_empty() {
+            args["nodes"] = json!(ids);
+        }
+    }
+    if is_object_tool(ts.tool.id()) {
+        let tool = ts.tool.id();
+        // the object commands take the settings as top-level arguments
+        args = Json::Object(ts.values().to_json());
+        if tool == "transfer" && ts.values().int("target") < 0 {
+            // no id typed: the first selected object other than the active one
+            let active = state.selection.active;
+            if let Some(other) = state.selection.nodes.iter().find(|n| Some(**n) != active) {
+                args["target"] = json!(other.0);
+            }
+        }
+    }
     execute(state, command, args)
 }
 

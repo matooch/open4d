@@ -98,11 +98,17 @@ pub fn hover(state: &mut EditorState, x: f64, y: f64, w: f64, h: f64) {
         return;
     };
     if id == "polygon_pen" {
+        let hit = {
+            let scene = crate::snapping::collect_sources(state, &[], None);
+            crate::snapping::hit_at(state, &scene, x, y, w, h)
+        };
+        state.snap_hit = hit;
         if let Some(ts) = state.tool.as_mut() {
             ts.interaction.build.cursor = Some([x, y, w, h]);
         }
         return;
     }
+    state.snap_hit = None;
     let hit = cut_target(state).and_then(|(node, mesh)| {
         let picked = pick_mesh(state.doc.scene(), node)?;
         let hit = pick_edge_param(&picked, &state.camera, x, y, w, h, EDGE_RADIUS, true)?;
@@ -112,6 +118,36 @@ pub fn hover(state: &mut EditorState, x: f64, y: f64, w: f64, h: f64) {
         ts.interaction.hover = hit.filter(|(_, border)| *border).map(|(hit, _)| hit);
         ts.interaction.build.rejected = hit.is_some_and(|(_, border)| !border);
     }
+}
+
+/// The snap hit as a pen corner (MANIPULATE.md §6.7): a vertex of the target object is its
+/// `Point`, any other hit a `New` corner at the hit (object space). `None` when snapping is off
+/// or nothing is in reach.
+fn snapped_corner(
+    state: &EditorState,
+    node: NodeId,
+    [x, y, w, h]: [f64; 4],
+) -> Result<Option<PenCorner>, String> {
+    if !state.app.transform_settings.snap.enabled {
+        return Ok(None);
+    }
+    let scene = crate::snapping::collect_sources(state, &[], None);
+    let Some(hit) = crate::snapping::hit_at(state, &scene, x, y, w, h) else {
+        return Ok(None);
+    };
+    if hit.kind == forge_modeling::snap::SnapKind::Vertex
+        && scene.node_of(&hit) == Some(node)
+        && let Some(p) = hit.index
+    {
+        return Ok(Some(PenCorner::Point(p)));
+    }
+    let inv = state
+        .doc
+        .scene()
+        .world_matrix(node)
+        .ok_or("no transform")?
+        .inverse();
+    Ok(Some(PenCorner::New(inv.transform_point3(hit.position))))
 }
 
 /// The Polygon Pen corner under the cursor: an existing point within the pick radius, else a point
@@ -124,6 +160,9 @@ fn pen_corner(state: &EditorState) -> Result<PenCorner, String> {
         .cursor
         .ok_or("move the pointer over the view")?;
     let (node, _) = cut_target(state).ok_or("select a polygon object")?;
+    if let Some(corner) = snapped_corner(state, node, [x, y, w, h])? {
+        return Ok(corner);
+    }
     let picked = pick_mesh(state.doc.scene(), node).ok_or("no mesh")?;
     if let Some(p) = pick_point(&picked, &state.camera, x, y, w, h, POINT_RADIUS, false) {
         return Ok(PenCorner::Point(p));
@@ -237,6 +276,7 @@ fn finish_pen(state: &mut EditorState) -> Result<Json, String> {
     let result = execute(state, "mesh.pen", json!({"corners": corners}));
     if result.is_ok() {
         clear_picks(state);
+        state.snap_hit = None;
     }
     result
 }

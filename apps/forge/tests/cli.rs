@@ -14,7 +14,10 @@ fn dir(name: &str) -> PathBuf {
 }
 
 fn forge() -> Command {
-    Command::cargo_bin("forge").unwrap()
+    let mut cmd = Command::cargo_bin("forge").unwrap();
+    // never pick up plugins from the machine running the tests
+    cmd.env("FORGE_NO_PLUGINS", "1");
+    cmd
 }
 
 /// Runs `forge --json args`, returns (exit code, stdout JSON).
@@ -96,7 +99,9 @@ fn info_validate_and_commands() {
         .map(|c| c["id"].as_str().unwrap())
         .collect();
     let registry = forge_app::default_command_registry();
-    assert_eq!(ids.len(), registry.len());
+    // the host adds plugin.list to the built-in set
+    assert_eq!(ids.len(), registry.len() + 1);
+    assert!(ids.contains(&"plugin.list"));
     assert!(ids.contains(&"object.create") && ids.contains(&"param.set"));
     assert_eq!(out["commands"][0]["args_schema"]["type"], "object");
 
@@ -471,4 +476,136 @@ fn run_prints_output_before_a_failure_on_stderr() {
     let err = String::from_utf8(res.stderr).unwrap();
     assert!(err.starts_with("before\n"), "{err}");
     assert!(res.stdout.is_empty());
+}
+
+// ---- plugin host (docs/specs/PLUGINS.md section 9) -------------------------------------
+
+fn plugins_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/plugins")
+}
+
+/// `forge` with the user data dir pointed at a temp folder and no plugin env.
+fn forge_isolated(home: &Path) -> Command {
+    let mut cmd = Command::cargo_bin("forge").unwrap();
+    cmd.env_remove("FORGE_NO_PLUGINS")
+        .env_remove("FORGE_PLUGIN_PATH")
+        .env("HOME", home)
+        .env("XDG_DATA_HOME", home.join("data"))
+        .env("XDG_CONFIG_HOME", home.join("config"));
+    cmd
+}
+
+fn run_json(cmd: &mut Command, args: &[&str]) -> (i32, Value) {
+    let out = cmd.arg("--json").args(args).output().unwrap();
+    let text = String::from_utf8(out.stdout).unwrap();
+    let value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("{e}: {text:?}"));
+    (out.status.code().unwrap(), value)
+}
+
+#[test]
+fn plugins_flag_env_and_no_plugins_control_loading() {
+    let d = dir("plugin-host");
+    let scene = d.join("a.forge");
+    let (code, _) = run_json(&mut forge_isolated(&d), &["new", s(&scene)]);
+    assert_eq!(code, 0);
+    let root = plugins_dir();
+
+    // nothing in the (empty) data dir: no plugins, plugin.list still works
+    let (code, v) = run_json(&mut forge_isolated(&d), &["cmd", s(&scene), "plugin.list"]);
+    assert_eq!(code, 0, "{v}");
+    assert_eq!(v["result"]["plugins"], json!([]));
+
+    // --plugins <dir>
+    let (code, v) = run_json(
+        &mut forge_isolated(&d),
+        &["--plugins", s(&root), "cmd", s(&scene), "plugin.list"],
+    );
+    assert_eq!(code, 0, "{v}");
+    assert_eq!(v["result"]["plugins"][0]["name"], "ring_kit");
+    assert_eq!(
+        v["result"]["plugins"][0]["node_types"],
+        json!(["ring_kit.ring"])
+    );
+
+    // the plugin node type works from the CLI and evaluates
+    let (code, v) = run_json(
+        &mut forge_isolated(&d),
+        &[
+            "--plugins",
+            s(&root),
+            "cmd",
+            s(&scene),
+            "object.create",
+            "--args",
+            r#"{"type": "ring_kit.ring"}"#,
+            "--save",
+        ],
+    );
+    assert_eq!(code, 0, "{v}");
+    let obj = d.join("ring.obj");
+    let (code, v) = run_json(
+        &mut forge_isolated(&d),
+        &["--plugins", s(&root), "export", s(&scene), "--out", s(&obj)],
+    );
+    assert_eq!(code, 0, "{v}");
+    let text = std::fs::read_to_string(&obj).unwrap();
+    assert_eq!(text.lines().filter(|l| l.starts_with("v ")).count(), 24 * 8);
+
+    // FORGE_PLUGIN_PATH
+    let (code, v) = run_json(
+        forge_isolated(&d).env("FORGE_PLUGIN_PATH", &root),
+        &["cmd", s(&scene), "plugin.list"],
+    );
+    assert_eq!(code, 0, "{v}");
+    assert_eq!(v["result"]["plugins"][0]["name"], "ring_kit");
+
+    // --no-plugins and FORGE_NO_PLUGINS beat both
+    let (_, v) = run_json(
+        forge_isolated(&d).env("FORGE_PLUGIN_PATH", &root),
+        &[
+            "--no-plugins",
+            "--plugins",
+            s(&root),
+            "cmd",
+            s(&scene),
+            "plugin.list",
+        ],
+    );
+    assert_eq!(v["result"]["disabled"], true);
+    assert_eq!(v["result"]["plugins"], json!([]));
+    let (_, v) = run_json(
+        forge_isolated(&d).env("FORGE_NO_PLUGINS", "1"),
+        &["--plugins", s(&root), "cmd", s(&scene), "plugin.list"],
+    );
+    assert_eq!(v["result"]["plugins"], json!([]));
+    // a scene that uses a plugin type loads without the plugin only with a warning or error,
+    // never a crash
+    let out = forge_isolated(&d)
+        .env("FORGE_NO_PLUGINS", "1")
+        .args(["info", s(&scene)])
+        .output()
+        .unwrap();
+    assert!(out.status.code().is_some_and(|c| c != 3));
+    std::fs::remove_dir_all(&d).ok();
+}
+
+#[test]
+fn plugin_list_works_over_rpc() {
+    let host = forge_plugin::load_host(&forge_plugin::HostOptions {
+        extra_dirs: vec![plugins_dir()],
+        ..forge_plugin::HostOptions::default()
+    });
+    let mut app = host.new_app();
+    let list = forge_rpc::dispatch(&mut app, "command.list", json!({})).unwrap();
+    assert!(
+        list.to_string().contains("plugin.list"),
+        "command.list shows plugin.list"
+    );
+    let r = forge_rpc::dispatch(
+        &mut app,
+        "command.run",
+        json!({"id": "plugin.list", "args": {}}),
+    )
+    .unwrap();
+    assert_eq!(r["result"]["plugins"][0]["name"], "ring_kit");
 }

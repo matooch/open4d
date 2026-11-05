@@ -24,6 +24,51 @@ pub fn node_type(key: &str) -> &str {
     }
 }
 
+/// Our param id for a case-file key: the case files of the O20 batch spell the fillet
+/// segment count `fillet_subdivision`.
+pub fn param_key(key: &str) -> &str {
+    match key {
+        "fillet_subdivision" => "fillet_segments",
+        other => other,
+    }
+}
+
+/// A case table in our param ids: renamed keys (`param_key`), and a 3-array `size` / `scale`
+/// style key spelled for a type that stores `<key>_x`, `<key>_y`, `<key>_z` split up.
+pub fn normalize(ty: &forge_core::NodeType, table: &Table) -> Table {
+    let mut out = Table::new();
+    for (k, v) in table {
+        let k = param_key(k);
+        // The symmetry cases spell its weld tolerance `weld_tolerance`.
+        let k = if k == "weld_tolerance" && ty.find_param(k).is_none() {
+            "tolerance"
+        } else {
+            k
+        };
+        match v {
+            toml::Value::Array(a)
+                if a.len() == 3
+                    && ty.find_param(k).is_none()
+                    && ty.find_param(&format!("{k}_x")).is_some() =>
+            {
+                for (axis, x) in ["x", "y", "z"].iter().zip(a) {
+                    out.insert(format!("{k}_{axis}"), x.clone());
+                }
+            }
+            _ => {
+                out.insert(k.to_string(), v.clone());
+            }
+        }
+    }
+    out
+}
+
+/// Case keys that are editor display settings (isoparm lines drawn in the viewport); they
+/// do not change the exported mesh, so no node type stores them.
+pub fn is_display_only(key: &str) -> bool {
+    key.starts_with("isoparm_subdivision")
+}
+
 /// `overlay(version of the case, node type) ∪ table`; the table's keys win.
 pub fn with_defaults(case: &GoldenCase, manifest: &CaseManifest, ty: &str, table: &Table) -> Table {
     let version = app_version(&repo_root(), manifest)
@@ -73,7 +118,9 @@ fn angle(desc: &forge_core::ParamDesc, v: f64) -> f64 {
 /// A flat case table (scalars and enums) as validated values, keyed like our param ids.
 pub fn typed_params(reg: &Registry, type_id: &str, raw: &Table) -> BTreeMap<String, Value> {
     let ty = reg.get(type_id).unwrap();
-    raw.iter()
+    normalize(ty, raw)
+        .iter()
+        .filter(|(k, _)| !is_display_only(k))
         .map(|(k, v)| {
             let desc = ty
                 .find_param(k)
@@ -118,12 +165,15 @@ pub fn apply(
     table: &toml::map::Map<String, toml::Value>,
 ) {
     let ty = reg.get(type_id).unwrap();
-    for (k, v) in table {
+    for (k, v) in &normalize(ty, table) {
         if k == "type" || v.is_table() {
             continue;
         }
         if k == "pos" {
             tx.set_param(id, "transform.pos", vec3(v)).unwrap();
+            continue;
+        }
+        if is_display_only(k) {
             continue;
         }
         let desc = ty

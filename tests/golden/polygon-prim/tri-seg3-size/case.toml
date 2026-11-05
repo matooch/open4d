@@ -1,0 +1,15 @@
+feature = "polygon-prim"
+observation = "docs/parity/generators-3.md"
+description = "Polygon primitive with Triangle on and Segments 3, Width 200 and Height 50, R25 defaults"
+mesh = "mesh.obj"
+
+[params]
+width = 200.0
+height = 50.0
+segments = 3
+triangle = true
+orientation = "plus_y"
+
+[import]
+scale = 1.0
+flip_z = false

@@ -1,0 +1,18 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+mesh = "mesh.obj"
+description = "Two default cubes (not editable): cube a at (50, 0, 20) rotated P 20 deg, cube b at (200, 100, 0) rotated H 45 deg; the Transfer command linked to cube a (Transfer to) and run with cube b in the command list. Result transforms in mesh.obj (world-space). The Transfer-to link is the source: the command-list object receives the source's move, rotation and scale"
+
+[params]
+tool = "transfer"
+segments = []
+
+[params.settings]
+enable_move = true
+enable_move_xyz = true
+enable_rotation = true
+enable_scale = true
+
+[import]
+scale = 1.0
+flip_z = false

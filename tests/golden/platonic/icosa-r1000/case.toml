@@ -1,0 +1,13 @@
+feature = "platonic"
+observation = "docs/parity/generators-3.md"
+description = "Platonic Icosahedron with Radius 1000, other parameters at their R25 defaults"
+mesh = "mesh.obj"
+
+[params]
+radius = 1000.0
+segments = 1
+type = "icosa"
+
+[import]
+scale = 1.0
+flip_z = false

@@ -1,0 +1,1 @@
+{"id":3,"jsonrpc":"2.0","method":"command.run","params":{"args":{"type":"forge.cube"},"id":"object.create"}}

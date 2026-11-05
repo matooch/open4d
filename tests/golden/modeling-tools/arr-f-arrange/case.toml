@@ -1,0 +1,17 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+mesh = "mesh.obj"
+description = "Three default cubes (not editable) at the origin; the Arrange command run with each layout it offers: Linear (per-step move (200, 0, 0), scale (1, 1, 1), rotation (0, 0, 0)), Circle (Start 0, End 2pi, Radius 300, Align Tangential off), Along Spline (a four-corner polyline). Linear result in mesh.obj; Circle and Along Spline are no-ops through the scripting interface (unchanged objects), details in the observation form"
+
+[params]
+tool = "arrange"
+segments = []
+
+[params.settings]
+linear = { mode = "linear", per_step = true, move = [200.0, 0.0, 0.0], scale = [1.0, 1.0, 1.0], rotation = [0.0, 0.0, 0.0] }
+circle = { mode = "circle", start_rad = 0.0, end_rad = 6.283185307179586, radius = 300.0, align_tangential = false }
+along_spline = { mode = "along_spline" }
+
+[import]
+scale = 1.0
+flip_z = false

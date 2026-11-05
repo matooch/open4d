@@ -27,6 +27,7 @@ impl Mcp {
     fn spawn(args: &[&str], env: &[(&str, &str)]) -> Mcp {
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_forge-mcp"));
         cmd.args(args)
+            .env("FORGE_NO_PLUGINS", "1")
             .env_remove("FORGE_RPC_PORT")
             .env_remove("FORGE_RPC_TOKEN")
             .env("FORGE_SETTINGS", "/nonexistent/forge-settings.json")
@@ -296,6 +297,7 @@ fn headless_can_start_from_a_scene_file() {
     drop(mcp);
 
     let bad = Command::new(env!("CARGO_BIN_EXE_forge-mcp"))
+        .env("FORGE_NO_PLUGINS", "1")
         .args(["--headless", "/nonexistent/x.forge"])
         .output()
         .unwrap();

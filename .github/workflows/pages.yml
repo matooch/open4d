@@ -1,0 +1,55 @@
+name: pages
+
+# Builds the manual (docs/manual, mdBook) on every pull request and push, and deploys it to
+# GitHub Pages only from pushes to main (or a manual run on main). Brief 183.
+# The generated references are checked first: a stale reference fails the build.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  MDBOOK_VERSION: "0.4.52"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Generated references are current
+        run: cargo run --quiet -p forge-cli -- docs --check --out docs/manual/reference
+      - name: Manual structure test
+        run: cargo test -p forge-cli --test docs
+      - name: Install mdBook
+        run: cargo install mdbook --version "$MDBOOK_VERSION" --locked
+      - name: Build the book
+        run: mdbook build docs/manual
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/book
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

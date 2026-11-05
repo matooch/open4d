@@ -1,0 +1,20 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Default cube made editable and moved to x = 50 (8 points, 6 polygons, spans x -50 to 150); all polygons selected and the Mirror command run with Duplicate and Weld on across the plane x = 0 (plane point (0, 0, 0))"
+mesh = "mesh.obj"
+
+[params]
+tool = "mirror"
+segments = [1, 1, 1]
+select_polys = [0, 1, 2, 3, 4, 5]
+moved_to_x = 50.0
+
+[params.settings]
+plane_point = [0.0, 0.0, 0.0]
+plane_normal = [1.0, 0.0, 0.0]
+duplicate = true
+weld = true
+
+[import]
+scale = 1.0
+flip_z = false

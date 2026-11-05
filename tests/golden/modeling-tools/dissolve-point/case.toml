@@ -1,0 +1,13 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Cube made editable with 2 x 2 x 2 segments (26 points, 24 polygons); the top centre point (0, 100, 0) (index 24) selected and the Dissolve command run"
+mesh = "mesh.obj"
+
+[params]
+tool = "dissolve"
+segments = [2, 2, 2]
+select_points = [24]
+
+[import]
+scale = 1.0
+flip_z = false

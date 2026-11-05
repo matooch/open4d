@@ -20,6 +20,7 @@ pub const BLOCKED_COMMANDS: &[&str] = &[
     "file.save",
     "file.save_as",
     "file.import_obj",
+    "file.import",
 ];
 
 fn blocked(id: &str) -> bool {

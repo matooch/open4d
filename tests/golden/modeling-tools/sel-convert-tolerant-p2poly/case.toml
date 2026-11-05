@@ -1,0 +1,18 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Cube made editable with 2 x 2 x 2 segments; the 9 top points (y = 100) selected, as the start of the selection-ops convert-point-to-poly case, and Convert Selection run points-to-polygons with Tolerant on"
+mesh = "mesh.obj"
+
+[params]
+tool = "convert_selection"
+segments = [2, 2, 2]
+start_points = [2, 5, 8, 11, 14, 17, 20, 23, 24]
+
+[params.settings]
+from_points = true
+to_polygons = true
+tolerant = true
+
+[import]
+scale = 1.0
+flip_z = false

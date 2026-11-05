@@ -7,6 +7,7 @@ use crate::{NodeId, ParamDesc, Scene, Value};
 pub const EDITOR_VIS: &str = "object.editor_vis";
 pub const RENDER_VIS: &str = "object.render_vis";
 pub const ENABLED: &str = "object.enabled";
+pub use crate::layers::LAYER;
 /// Param ids with this prefix are reserved for the object state.
 pub const PREFIX: &str = "object.";
 
@@ -48,8 +49,8 @@ impl Vis {
     }
 }
 
-/// The three params every hierarchy type gets (after the transform params).
-pub(crate) fn params() -> [ParamDesc; 3] {
+/// The params every hierarchy type gets (after the transform params).
+pub(crate) fn params() -> [ParamDesc; 4] {
     let opts = [("default", "Default"), ("on", "On"), ("off", "Off")];
     [
         ParamDesc::enumeration(EDITOR_VIS, "Visible in Editor", "default", &opts)
@@ -61,6 +62,7 @@ pub(crate) fn params() -> [ParamDesc; 3] {
         ParamDesc::bool(ENABLED, "Active", true)
             .group(GROUP)
             .hidden(),
+        ParamDesc::link(LAYER, "Layer", &[]).group(GROUP).hidden(),
     ]
 }
 
@@ -102,13 +104,13 @@ fn resolve(scene: &Scene, id: NodeId, param: &str) -> bool {
             .is_none_or(|v| v == Vis::On)
 }
 
-/// Whether the viewport draws the node: enabled, and the nearest `on`/`off` setting up the
-/// hierarchy is `on` (or none is set).
+/// Whether the viewport draws the node: enabled, the nearest `on`/`off` setting up the
+/// hierarchy is `on` (or none is set), and its layer shows it (solo and view, CORE.md §7.3).
 pub fn editor_visible(scene: &Scene, id: NodeId) -> bool {
-    resolve(scene, id, EDITOR_VIS)
+    resolve(scene, id, EDITOR_VIS) && crate::layers::shown(scene, id)
 }
 
 /// Whether a render includes the node (same rule with the render setting).
 pub fn render_visible(scene: &Scene, id: NodeId) -> bool {
-    resolve(scene, id, RENDER_VIS)
+    resolve(scene, id, RENDER_VIS) && crate::layers::render_shown(scene, id)
 }

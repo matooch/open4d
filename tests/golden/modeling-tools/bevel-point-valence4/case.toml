@@ -1,0 +1,32 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "Default Pyramid made editable; the apex point 4 ((0.0, 100.0, 0.0)) beveled in point mode with offset 20 (a point ring of valence 4; other settings at their Reset Values defaults)"
+mesh = "mesh.obj"
+
+[params]
+tool = "bevel"
+segments = []
+select_points = [4]
+start_points = [[0, [-100.0, -100.0, -100.0]], [1, [100.0, -100.0, -100.0]], [2, [100.0, -100.0, 100.0]], [3, [-100.0, -100.0, 100.0]], [4, [0.0, 100.0, 0.0]]]
+
+[params.settings]
+bevel_mode = "chamfer"
+offset_mode = "fixed_distance"
+offset = 20.0
+subdivision = 0
+depth = 1.0
+limit = true
+shape = "round"
+tension = 1.0
+mitering = "default"
+ending = "default"
+partial_rounding = "none"
+corner_ngons = false
+rounding_ngons = false
+phong_break_rounding = false
+phong_break_miters = false
+realtime_update = true
+
+[import]
+scale = 1.0
+flip_z = false

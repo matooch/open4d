@@ -4,9 +4,11 @@
 //! and no GPU. The editor and every automation front end build on it.
 
 pub mod animate;
+pub mod coords;
 pub mod diagnostics;
 pub mod param_edit;
 pub mod query;
+pub mod schedule;
 pub mod select;
 
 use std::sync::Arc;
@@ -20,8 +22,7 @@ use forge_core::{Document, EvalCtx, NodeId, Registry, RegistryError, Scene, Scen
 use forge_fields::FieldToolset;
 use forge_generators::{Primitives, evaluate};
 use forge_geometry::PolyMesh;
-use forge_io::export_scene;
-use forge_io::obj::{WriteOptions, write};
+use forge_io::formats::{IoError, Options, export_text};
 use forge_modifiers::Deformers;
 use serde_json::Value;
 
@@ -44,6 +45,7 @@ pub fn default_command_registry() -> CommandRegistry {
     let mut commands = CommandRegistry::new();
     register_editor_commands(&mut commands).expect("built-in command ids are unique");
     param_edit::register(&mut commands).expect("param.edit is unique");
+    coords::register(&mut commands).expect("transform.edit is unique");
     forge_nodes::register_commands(&mut commands).expect("graph.* ids are unique");
     commands
 }
@@ -73,18 +75,26 @@ pub struct App {
     pub mode: EditMode,
     /// Soft selection and symmetry of component transforms (EDITABLE.md §5). Not saved.
     pub component_settings: forge_modeling::ComponentSettings,
+    /// Snapping and axis mode (MANIPULATE.md §6, §7.4). Not saved.
+    pub transform_settings: forge_modeling::snap::TransformSettings,
     /// Current frame and playback; fps and range are scene settings.
     pub timeline: Timeline,
     /// Autokey: edits of animatable parameters write keys (docs/specs/ANIM.md §2.4).
     pub autokey: bool,
     /// The scene at the current frame, cached.
     pub eval: Evaluated,
+    /// Dirty-only, parallel evaluation of the drawn nodes (docs/specs/CORE.md section 5b).
+    pub scheduler: schedule::Scheduler,
+    /// The same for the viewport: showable cloners come out as instances.
+    pub draw_scheduler: schedule::Scheduler,
     /// Last message for the status bar (errors from failed edits).
     pub status: String,
     /// The file the scene was last saved to or loaded from.
     pub file_path: Option<String>,
     /// Scene revision at the last save or load (the dirty marker).
     pub saved_revision: u64,
+    /// The preset library and the recent files (docs/specs/UI.md §26). Survives File > New.
+    pub browser: forge_command::browser::Browser,
 }
 
 impl App {
@@ -107,11 +117,15 @@ impl App {
             selection: NodeSelection::default(),
             mode: EditMode::default(),
             component_settings: Default::default(),
+            transform_settings: Default::default(),
             timeline: Timeline::default(),
             autokey: false,
             eval: Evaluated::default(),
+            scheduler: schedule::Scheduler::default(),
+            draw_scheduler: schedule::Scheduler::default().with_instancing(true),
             status: String::new(),
             file_path: None,
+            browser: Default::default(),
         }
     }
 
@@ -132,6 +146,17 @@ impl App {
     /// The scene at the current frame.
     pub fn evaluated(&self) -> Arc<Scene> {
         self.eval.get(self.doc.scene(), self.timeline.current)
+    }
+
+    /// The drawn nodes' outputs at `frame`, recomputing only what changed since the last
+    /// call (docs/specs/CORE.md section 5b). The timeline does not move.
+    pub fn scheduled(&mut self, frame: i64) -> Arc<schedule::Frame> {
+        self.scheduler.evaluate(self.doc.scene(), frame)
+    }
+
+    /// [`App::scheduled`] for drawing (the viewport and screenshots): cloners are instances.
+    pub fn scheduled_draw(&mut self, frame: i64) -> Arc<schedule::Frame> {
+        self.draw_scheduler.evaluate(self.doc.scene(), frame)
     }
 
     /// Keeps the current frame inside the project range (after undo, load, range edits).
@@ -199,23 +224,39 @@ impl App {
         roots: Option<&[NodeId]>,
         frame: i64,
     ) -> Result<usize, AppError> {
+        self.export_at(path, "obj", roots, frame, &Options::new())
+    }
+
+    /// Writes the scene evaluated at `frame` in the format (`forge_io::formats`) with the
+    /// export options; the timeline does not move. Returns the object count.
+    pub fn export_at(
+        &self,
+        path: &str,
+        format: &str,
+        roots: Option<&[NodeId]>,
+        frame: i64,
+        options: &Options,
+    ) -> Result<usize, AppError> {
         let scene = self.eval.get(self.doc.scene(), frame);
-        let objects = export_scene(&scene, roots);
-        if objects.is_empty() {
-            return Err(AppError::NothingToExport);
-        }
-        std::fs::write(path, write(&objects, &WriteOptions::default()))
-            .map_err(|e| AppError::Io(e.to_string()))?;
-        Ok(objects.len())
+        let (text, count) = export_text(format, &scene, roots, options).map_err(|e| match e {
+            IoError::NothingToExport => AppError::NothingToExport,
+            other => AppError::Io(other.to_string()),
+        })?;
+        std::fs::write(path, text).map_err(|e| AppError::Io(e.to_string()))?;
+        Ok(count)
     }
 
     /// Replaces the document. `full` also resets everything but the command set.
     pub fn reset(&mut self, doc: Document, path: Option<String>, full: bool) {
         if full {
+            let browser = std::mem::take(&mut self.browser);
             *self = App::with_commands(doc.scene().registry().clone(), self.commands.clone());
+            self.browser = browser;
         }
         self.doc = doc;
         self.eval.clear();
+        self.scheduler.clear();
+        self.draw_scheduler.clear();
         self.timeline = Timeline::default();
         self.sync_timeline();
         self.selection.clear();
@@ -268,6 +309,14 @@ impl CommandContext for App {
         &mut self.component_settings
     }
 
+    fn transform_settings(&self) -> &forge_modeling::snap::TransformSettings {
+        &self.transform_settings
+    }
+
+    fn transform_settings_mut(&mut self) -> &mut forge_modeling::snap::TransformSettings {
+        &mut self.transform_settings
+    }
+
     fn timeline(&self) -> &Timeline {
         &self.timeline
     }
@@ -292,12 +341,12 @@ impl CommandContext for App {
         self.status = text;
     }
 
-    fn select_components(&mut self, op: SelectOp) -> Result<(), String> {
-        run_select(self, op.into())
+    fn select_components(&mut self, op: SelectOp, nodes: Option<&[NodeId]>) -> Result<(), String> {
+        run_select(self, op.into(), nodes)
     }
 
-    fn select_extra(&mut self, cmd: SelectExtra) -> Result<(), String> {
-        run_select_extra(self, cmd)
+    fn select_extra(&mut self, cmd: SelectExtra, nodes: Option<&[NodeId]>) -> Result<(), String> {
+        run_select_extra(self, cmd, nodes)
     }
 
     fn record_keys(&mut self) -> Result<usize, String> {
@@ -333,5 +382,13 @@ impl CommandContext for App {
     fn mark_saved(&mut self, path: String) {
         self.file_path = Some(path);
         self.saved_revision = self.doc.scene().revision();
+    }
+
+    fn browser(&self) -> Option<&forge_command::browser::Browser> {
+        Some(&self.browser)
+    }
+
+    fn browser_mut(&mut self) -> Option<&mut forge_command::browser::Browser> {
+        Some(&mut self.browser)
     }
 }

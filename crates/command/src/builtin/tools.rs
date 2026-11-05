@@ -8,7 +8,7 @@ use forge_generators::{
 };
 use forge_geometry::selection::{IndexSet, Selection};
 use forge_geometry::{Edge, PolyMesh};
-use forge_modeling::{Settings, ToolDesc, cutting_descs, tool_descs, tool_fn};
+use forge_modeling::{Settings, ToolDesc, array_descs, cutting_descs, tool_descs, tool_fn};
 use serde_json::{Map, Value as Json, json};
 
 use crate::context::CommandContext;
@@ -23,7 +23,11 @@ struct ToolCommand {
 }
 
 pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
-    for desc in tool_descs().into_iter().chain(cutting_descs()) {
+    for desc in tool_descs()
+        .into_iter()
+        .chain(cutting_descs())
+        .chain(array_descs())
+    {
         let apply: forge_modeling::ToolFn = tool_fn(desc.id)
             .ok_or_else(|| CommandError::Failed(format!("tool {} has no function", desc.id)))?;
         r.register(Box::new(ToolCommand {
@@ -83,7 +87,7 @@ fn center_object(
     Ok(())
 }
 
-fn setting_schema(p: &forge_core::ParamDesc) -> Json {
+pub(super) fn setting_schema(p: &forge_core::ParamDesc) -> Json {
     match &p.default {
         Value::Bool(b) => json!({"type": "boolean", "default": b}),
         Value::Int(i) => json!({"type": "integer", "default": i}),
@@ -108,6 +112,76 @@ fn setting_schema(p: &forge_core::ParamDesc) -> Json {
     }
 }
 
+/// One object's result of a tool run, before anything is written.
+struct Outcome {
+    node: NodeId,
+    mesh: PolyMesh,
+    selection: Selection,
+    /// The copy `mesh.split` spawns as a new object.
+    split: Option<PolyMesh>,
+    /// The shift of the axis `mesh.center_axis` makes (object space).
+    moved: Option<glam::DVec3>,
+}
+
+fn chosen_is_empty(sel: &Selection) -> bool {
+    sel.polys.is_empty() && sel.points.is_empty() && sel.edges.is_empty()
+}
+
+/// The polygon objects a mesh command works on: `node`, `nodes`, or the selected polygon
+/// objects when the active node is one (EDITABLE.md §6.5). Each id is checked by the caller.
+pub(super) fn polygon_targets(
+    ctx: &dyn CommandContext,
+    id: &str,
+    label: &str,
+    obj: &Map<String, Json>,
+) -> Result<Vec<NodeId>, CommandError> {
+    let bad = || CommandError::InvalidArgs(format!("{id}: bad node id"));
+    let one = |v: &Json| v.as_u64().map(NodeId).ok_or_else(bad);
+    let given = |key: &str| obj.get(key).filter(|v| !v.is_null());
+    match (given("node"), given("nodes")) {
+        (Some(_), Some(_)) => Err(CommandError::InvalidArgs(format!(
+            "{id}: give node or nodes, not both"
+        ))),
+        (Some(n), None) => Ok(vec![one(n)?]),
+        (None, Some(Json::Array(list))) => {
+            let mut out: Vec<NodeId> = Vec::new();
+            for v in list {
+                let n = one(v)?;
+                if !out.contains(&n) {
+                    out.push(n);
+                }
+            }
+            if out.is_empty() {
+                return Err(CommandError::InvalidArgs(format!("{id}: nodes is empty")));
+            }
+            Ok(out)
+        }
+        (None, Some(_)) => Err(CommandError::InvalidArgs(format!(
+            "{id}: nodes must be a list of ids"
+        ))),
+        (None, None) => {
+            let active = ctx
+                .selection()
+                .active
+                .ok_or_else(|| CommandError::Failed(format!("{label}: select a polygon object")))?;
+            let scene = ctx.doc().scene();
+            let is_polygon = |n: NodeId| scene.node(n).is_some_and(|x| x.type_id == POLYGON);
+            if !is_polygon(active) {
+                return Ok(vec![active]);
+            }
+            let mut out: std::collections::BTreeSet<NodeId> = ctx
+                .selection()
+                .nodes
+                .iter()
+                .copied()
+                .filter(|n| is_polygon(*n))
+                .collect();
+            out.insert(active);
+            Ok(out.into_iter().collect())
+        }
+    }
+}
+
 impl CommandHandler for ToolCommand {
     fn id(&self) -> &str {
         self.command
@@ -128,6 +202,14 @@ impl CommandHandler for ToolCommand {
             "node": {
                 "description": "Polygon object; the active node when absent.",
                 "type": ["integer", "null"]
+            },
+            "nodes": {
+                "description": "Polygon objects, all edited in one undo step, each with its own \
+                                stored selection. Absent (and no node): every selected polygon \
+                                object. Not together with node; polys, edges and points need a \
+                                single object.",
+                "type": ["array", "null"],
+                "items": {"type": "integer", "minimum": 0}
             },
             "polys": {
                 "description": "Polygon indices; the stored polygon selection when absent.",
@@ -176,7 +258,7 @@ impl CommandHandler for ToolCommand {
         })?;
         for key in obj.keys() {
             let component = self.desc.components && ["edges", "points"].contains(&key.as_str());
-            if !(component || ["node", "polys", "settings"].contains(&key.as_str())) {
+            if !(component || ["node", "nodes", "polys", "settings"].contains(&key.as_str())) {
                 return Err(CommandError::InvalidArgs(format!(
                     "{id}: unknown key {key}"
                 )));
@@ -192,16 +274,8 @@ impl CommandHandler for ToolCommand {
                 )));
             }
         };
-        let node = match obj.get("node") {
-            Some(Json::Number(n)) => NodeId(
-                n.as_u64()
-                    .ok_or_else(|| CommandError::InvalidArgs(format!("{id}: bad node id")))?,
-            ),
-            None | Some(Json::Null) => ctx.selection().active.ok_or_else(|| {
-                CommandError::Failed(format!("{}: select a polygon object", self.desc.label))
-            })?,
-            Some(_) => return Err(CommandError::InvalidArgs(format!("{id}: bad node id"))),
-        };
+        let nodes = polygon_targets(ctx, id, self.desc.label, obj)?;
+        let multi = nodes.len() > 1;
         let index_list = |key: &str| -> Result<Option<IndexSet>, CommandError> {
             match obj.get(key) {
                 None | Some(Json::Null) => Ok(None),
@@ -224,103 +298,151 @@ impl CommandHandler for ToolCommand {
             Some(Json::Array(items)) => Some(items.clone()),
             Some(_) => return Err(CommandError::InvalidArgs(format!("{id}: bad edges"))),
         };
-        let fail = |msg: String| CommandError::Failed(format!("{}: {msg}", self.desc.label));
-        let scene = ctx.doc().scene();
-        let is_polygon = scene.node(node).is_some_and(|n| n.type_id == POLYGON);
-        let Some(Value::Mesh(stored)) = scene.param(node, "mesh").filter(|_| is_polygon) else {
-            return Err(fail(
-                "not a polygon object (use Make Editable first)".into(),
-            ));
-        };
-        let base = to_poly_mesh(stored);
-        let stored = |key: &str| -> IndexSet {
-            match scene.param(node, key) {
-                Some(Value::IndexList(l)) => l.iter().copied().collect(),
-                _ => IndexSet::new(),
-            }
-        };
         let any_given = given_polys.is_some() || given_points.is_some() || given_edges.is_some();
-        let chosen = if !self.desc.components {
-            Selection {
-                polys: given_polys.unwrap_or_else(|| stored(SELECTION_POLYS)),
-                ..Selection::default()
-            }
-        } else if any_given {
-            let edges = match given_edges {
-                Some(items) => edge_ids(&base, &items).map_err(fail)?,
-                None => IndexSet::new(),
-            };
-            Selection {
-                polys: given_polys.unwrap_or_default(),
-                points: given_points.unwrap_or_default(),
-                edges,
-            }
-        } else {
-            Selection {
-                polys: stored(SELECTION_POLYS),
-                points: stored(SELECTION_POINTS),
-                edges: stored(SELECTION_EDGES),
-            }
-        };
-        let (mesh, selection) =
-            (self.apply)(&base, &chosen, &settings).map_err(|e| fail(e.to_string()))?;
-        let selected: Vec<u32> = selection.polys.iter().collect();
-        let (points, polys) = (mesh.points.len(), mesh.polys.len());
-        let data = Arc::new(from_poly_mesh(&mesh));
-        let sel = selected.clone();
-        // the two commands that do more than replace the mesh (MODELING.md §4)
-        let split = match self.desc.id {
-            "split" => {
-                Some(forge_modeling::split_copy(&base, &chosen).map_err(|e| fail(e.to_string()))?)
-            }
-            _ => None,
-        };
-        let moved = match self.desc.id {
-            "center_axis" => Some(
-                forge_modeling::center_axis(&base, &settings)
-                    .map_err(|e| fail(e.to_string()))?
-                    .1,
-            ),
-            _ => None,
-        };
-        let keeps_selection = self.desc.id == "slide";
-        let kept_points: Vec<u32> = selection.points.iter().collect();
-        let kept_edges: Vec<u32> = selection.edges.iter().collect();
-        let mut created = None;
-        ctx.doc_mut().transact(self.desc.label, |tx| {
-            tx.set_param(node, "mesh", Value::Mesh(data))?;
-            tx.set_param(node, SELECTION_POLYS, Value::IndexList(sel))?;
-            // Slide moves points only: the stored edge and point selection stay valid
-            let (keep_points, keep_edges) = if keeps_selection {
-                (kept_points, kept_edges)
+        if multi && any_given {
+            return Err(CommandError::InvalidArgs(format!(
+                "{id}: polys, edges and points name the components of one object; \
+                 give a single node"
+            )));
+        }
+        let fail_for = |node: NodeId, msg: String| {
+            if multi {
+                CommandError::Failed(format!("{}: node {}: {msg}", self.desc.label, node.0))
             } else {
-                (Vec::new(), Vec::new())
-            };
-            tx.set_param(node, SELECTION_POINTS, Value::IndexList(keep_points))?;
-            tx.set_param(node, SELECTION_EDGES, Value::IndexList(keep_edges))?;
-            if let Some(copy) = &split {
-                created = Some(forge_generators::spawn_split(tx, node, copy).map_err(
-                    |e| match e {
-                        forge_generators::EditableError::Edit(e) => e,
-                        _ => forge_core::EditError::UnknownNode(node),
-                    },
-                )?);
+                CommandError::Failed(format!("{}: {msg}", self.desc.label))
             }
-            if let Some(c) = moved {
-                center_object(tx, node, c)?;
+        };
+        let mut done: Vec<Outcome> = Vec::new();
+        let mut skipped: Vec<(NodeId, CommandError)> = Vec::new();
+        for node in nodes {
+            let scene = ctx.doc().scene();
+            let is_polygon = scene.node(node).is_some_and(|n| n.type_id == POLYGON);
+            let Some(Value::Mesh(stored)) = scene.param(node, "mesh").filter(|_| is_polygon) else {
+                return Err(fail_for(
+                    node,
+                    "not a polygon object (use Make Editable first)".into(),
+                ));
+            };
+            let base = to_poly_mesh(stored);
+            let stored = |key: &str| -> IndexSet {
+                match scene.param(node, key) {
+                    Some(Value::IndexList(l)) => l.iter().copied().collect(),
+                    _ => IndexSet::new(),
+                }
+            };
+            let chosen = if !self.desc.components {
+                Selection {
+                    polys: given_polys
+                        .clone()
+                        .unwrap_or_else(|| stored(SELECTION_POLYS)),
+                    ..Selection::default()
+                }
+            } else if any_given {
+                let edges = match &given_edges {
+                    Some(items) => edge_ids(&base, items).map_err(|e| fail_for(node, e))?,
+                    None => IndexSet::new(),
+                };
+                Selection {
+                    polys: given_polys.clone().unwrap_or_default(),
+                    points: given_points.clone().unwrap_or_default(),
+                    edges,
+                }
+            } else {
+                Selection {
+                    polys: stored(SELECTION_POLYS),
+                    points: stored(SELECTION_POINTS),
+                    edges: stored(SELECTION_EDGES),
+                }
+            };
+            let applied = (self.apply)(&base, &chosen, &settings).and_then(|(mesh, selection)| {
+                // the two commands that do more than replace the mesh (MODELING.md §4)
+                let split = match self.desc.id {
+                    "split" => Some(forge_modeling::split_copy(&base, &chosen)?),
+                    _ => None,
+                };
+                let moved = match self.desc.id {
+                    "center_axis" => Some(forge_modeling::center_axis(&base, &settings)?.1),
+                    _ => None,
+                };
+                Ok((mesh, selection, split, moved))
+            });
+            match applied {
+                Ok((mesh, selection, split, moved)) => done.push(Outcome {
+                    node,
+                    mesh,
+                    selection,
+                    split,
+                    moved,
+                }),
+                // an object without a selection the tool cannot use is left out when
+                // other objects are edited (MODELING.md §0.1)
+                Err(e) if multi && chosen_is_empty(&chosen) => {
+                    skipped.push((node, fail_for(node, e.to_string())));
+                }
+                Err(e) => return Err(fail_for(node, e.to_string())),
+            }
+        }
+        if done.is_empty() {
+            return Err(skipped
+                .into_iter()
+                .next()
+                .map(|(_, e)| e)
+                .unwrap_or_else(|| {
+                    CommandError::Failed(format!("{}: select a polygon object", self.desc.label))
+                }));
+        }
+        let keeps_selection = self.desc.id == "slide";
+        let mut created: Vec<NodeId> = Vec::new();
+        ctx.doc_mut().transact(self.desc.label, |tx| {
+            for o in &done {
+                let node = o.node;
+                tx.set_param(node, "mesh", Value::Mesh(Arc::new(from_poly_mesh(&o.mesh))))?;
+                let polys: Vec<u32> = o.selection.polys.iter().collect();
+                tx.set_param(node, SELECTION_POLYS, Value::IndexList(polys))?;
+                // Slide moves points only: the stored edge and point selection stay valid
+                let (keep_points, keep_edges) = if keeps_selection {
+                    (
+                        o.selection.points.iter().collect(),
+                        o.selection.edges.iter().collect(),
+                    )
+                } else {
+                    (Vec::new(), Vec::new())
+                };
+                tx.set_param(node, SELECTION_POINTS, Value::IndexList(keep_points))?;
+                tx.set_param(node, SELECTION_EDGES, Value::IndexList(keep_edges))?;
+                if let Some(copy) = &o.split {
+                    created.push(forge_generators::spawn_split(tx, node, copy).map_err(
+                        |e| match e {
+                            forge_generators::EditableError::Edit(e) => e,
+                            _ => forge_core::EditError::UnknownNode(node),
+                        },
+                    )?);
+                }
+                if let Some(c) = o.moved {
+                    center_object(tx, node, c)?;
+                }
             }
             Ok(())
         })?;
-        if let Some(new) = created {
-            ctx.selection_mut().click(new);
+        if let Some((first, rest)) = created.split_first() {
+            let sel = ctx.selection_mut();
+            sel.click(*first);
+            for n in rest {
+                sel.toggle(*n);
+            }
             ctx.retain_selection();
         }
-        let mut result =
-            json!({"node": node.0, "points": points, "polys": polys, "selected": selected});
-        if let Some(new) = created {
+        let entry = |o: &Outcome| {
+            json!({"node": o.node.0, "points": o.mesh.points.len(), "polys": o.mesh.polys.len(),
+                   "selected": o.selection.polys.iter().collect::<Vec<u32>>()})
+        };
+        let mut result = entry(&done[0]);
+        result["nodes"] = Json::Array(done.iter().map(entry).collect());
+        result["skipped"] = json!(skipped.iter().map(|(n, _)| n.0).collect::<Vec<_>>());
+        if let Some(new) = created.first() {
             result["created"] = json!(new.0);
         }
-        if let Some(c) = moved {
+        if let Some(c) = done[0].moved {
             result["center"] = json!([c.x, c.y, c.z]);
         }
         Ok(result)
@@ -333,6 +455,8 @@ impl CommandHandler for ToolCommand {
     fn sample_args(&self) -> Json {
         if self.desc.id == "slide" {
             json!({"edges": [0], "settings": {"amount": 0.5}})
+        } else if self.desc.id == "array" {
+            json!({"settings": {"copies": 2, "offset": [200.0, 0.0, 0.0]}})
         } else if self.desc.params.iter().any(|p| p.id == "offset") {
             json!({"polys": [0], "settings": {"offset": 10.0}})
         } else {

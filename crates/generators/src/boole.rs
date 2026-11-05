@@ -66,12 +66,31 @@ pub fn inputs_of(scene: &Scene, id: NodeId) -> Vec<NodeId> {
 }
 
 /// Boolean of two meshes already in the generator's space, with the generator's
-/// param values (§2–5).
+/// param values (§2–5), as one welded mesh.
 pub fn boole(
     a: &PolyMesh,
     b: &PolyMesh,
     values: &BTreeMap<String, Value>,
 ) -> Result<PolyMesh, BuildError> {
+    Ok(run(a, b, values)?.mesh)
+}
+
+/// [`boole`] in the R25 export layout (docs/specs/BOOLE.md §5a): A's polygons with their
+/// own points, then B's polygons with their own copies of the points.
+pub fn boole_objects(
+    a: &PolyMesh,
+    b: &PolyMesh,
+    values: &BTreeMap<String, Value>,
+) -> Result<PolyMesh, BuildError> {
+    let r = run(a, b, values)?;
+    Ok(two_objects(&r.mesh, &r.from_b))
+}
+
+fn run(
+    a: &PolyMesh,
+    b: &PolyMesh,
+    values: &BTreeMap<String, Value>,
+) -> Result<forge_geometry::boolean::BoolResult, BuildError> {
     let ty = node_type();
     let p = Params { ty: &ty, values };
     if !p.bool("high_quality") {
@@ -87,7 +106,47 @@ pub fn boole(
         op,
         hide_new_edges: p.bool("hide_new_edges"),
     };
-    Ok(boolean(a, b, &opts).mesh)
+    Ok(boolean(a, b, &opts))
+}
+
+/// The R25 layout (docs/specs/BOOLE.md §5a): A's polygons with their own points, then B's
+/// polygons with their own copies of the points. Within each object the points keep the
+/// welded result's order (surviving input points first, then new points by first use).
+fn two_objects(welded: &PolyMesh, from_b: &[bool]) -> PolyMesh {
+    let mut out = PolyMesh::default();
+    for want_b in [false, true] {
+        let mut map = vec![u32::MAX; welded.points.len()];
+        let mut used: Vec<u32> = Vec::new();
+        for (poly, _) in welded
+            .polys
+            .iter()
+            .zip(from_b)
+            .filter(|(_, b)| **b == want_b)
+        {
+            for &v in poly {
+                if map[v as usize] == u32::MAX {
+                    map[v as usize] = 0;
+                    used.push(v);
+                }
+            }
+        }
+        used.sort_unstable();
+        let base = out.points.len() as u32;
+        for (i, &v) in used.iter().enumerate() {
+            map[v as usize] = base + i as u32;
+            out.points.push(welded.points[v as usize]);
+        }
+        for (poly, _) in welded
+            .polys
+            .iter()
+            .zip(from_b)
+            .filter(|(_, b)| **b == want_b)
+        {
+            out.polys
+                .push(poly.iter().map(|&v| map[v as usize]).collect());
+        }
+    }
+    out
 }
 
 pub(crate) fn evaluate_boole(

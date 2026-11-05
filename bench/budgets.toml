@@ -1,0 +1,170 @@
+# Benchmark budgets for the S10 scenario (docs/specs/PERFORMANCE.md, brief 181).
+# Checked by `cargo run --release -p forge-bench-check`; the rule below is enforced by that
+# crate's tests. Regenerate after a deliberate re-measurement with `-- --no-run --suggest`.
+
+[meta]
+headroom = 1.2
+ci_factor = 4.0
+floor_us = 100.0
+
+[[budget]]
+id = "s10_generate/plane_1M_polys"
+measured_us = 67905.302
+budget_us = 326000
+note = "1M-polygon generator (S10: open a scene with 1 M polygons)"
+
+[[budget]]
+id = "s10_generate/plane_1M_polys_bend"
+measured_us = 57955.981
+budget_us = 279000
+note = "1M-polygon generator plus a bend deformer"
+
+[[budget]]
+id = "s10_clones/fields_10k_serial"
+measured_us = 32981.401
+budget_us = 159000
+note = "10k clones, two effectors, spherical field, one thread"
+
+[[budget]]
+id = "s10_clones/fields_10k_parallel"
+measured_us = 29893.526
+budget_us = 144000
+note = "same on the rayon pool"
+
+[[budget]]
+id = "s10_file/save_1M_polys_chunked"
+measured_us = 105805.829
+budget_us = 508000
+note = "save a 1M-polygon editable object (binary chunks)"
+
+[[budget]]
+id = "s10_file/load_1M_polys_chunked"
+measured_us = 175885.198
+budget_us = 845000
+note = "load it back"
+
+[[budget]]
+id = "s10_export/obj_write_1M_polys"
+measured_us = 1571702.430
+budget_us = 7550000
+note = "OBJ text for 1M polygons"
+
+[[budget]]
+id = "s10_startup/empty_app_to_first_frame"
+measured_us = 569.473
+budget_us = 2740
+note = "App::new_default plus first draw data"
+
+[[budget]]
+id = "s10_startup/open_1M_polys_to_first_frame"
+measured_us = 252584.283
+budget_us = 1220000
+note = "open a 1M-polygon file plus first draw data"
+
+[[budget]]
+id = "animated_cube_plus_1000_static/full_serial_every_frame"
+measured_us = 20406.494
+budget_us = 98000
+note = "old playback path (reference)"
+
+[[budget]]
+id = "animated_cube_plus_1000_static/dirty_only_serial"
+measured_us = 164.129
+budget_us = 788
+note = "scheduler playback, one thread"
+
+[[budget]]
+id = "animated_cube_plus_1000_static/dirty_only_parallel"
+measured_us = 97.151
+budget_us = 467
+note = "scheduler playback, rayon pool"
+
+[[budget]]
+id = "animated_cube_plus_1000_static/full_scheduler_serial"
+measured_us = 33214.612
+budget_us = 160000
+note = "first full evaluation, one thread"
+
+[[budget]]
+id = "animated_cube_plus_1000_static/full_scheduler_parallel"
+measured_us = 11291.832
+budget_us = 54300
+note = "first full evaluation, rayon pool"
+
+[[budget]]
+id = "cloner_10k_clones/serial"
+measured_us = 7004.382
+budget_us = 33700
+note = "10k-clone cloner, one thread"
+
+[[budget]]
+id = "cloner_10k_clones/parallel"
+measured_us = 5109.006
+budget_us = 24600
+note = "10k-clone cloner, rayon pool"
+
+[[budget]]
+id = "instances/build_layout/10000"
+measured_us = 2622.755
+budget_us = 12600
+note = "instance layout, 10k clones"
+
+[[budget]]
+id = "instances/build_layout/100000"
+measured_us = 38784.065
+budget_us = 187000
+note = "instance layout, 100k clones"
+
+[[budget]]
+id = "instances/revision/10000"
+measured_us = 416.635
+budget_us = 2000
+note = "instance cache key, 10k clones"
+
+[[budget]]
+id = "instances/revision/100000"
+measured_us = 4089.155
+budget_us = 19700
+note = "instance cache key, 100k clones"
+
+[[budget]]
+id = "instances/draw_list_all/10000"
+measured_us = 0.100
+budget_us = 100
+note = "draw list, whole field in view"
+
+[[budget]]
+id = "instances/draw_list_all/100000"
+measured_us = 0.916
+budget_us = 100
+note = "draw list, whole field in view"
+
+[[budget]]
+id = "instances/draw_list_close/10000"
+measured_us = 0.088
+budget_us = 100
+note = "draw list, close-up"
+
+[[budget]]
+id = "instances/draw_list_close/100000"
+measured_us = 0.461
+budget_us = 100
+note = "draw list, close-up"
+
+[[budget]]
+id = "instances/pick/10000"
+measured_us = 687.038
+budget_us = 3300
+note = "ray pick over 10k clones"
+
+[[budget]]
+id = "instances/pick/100000"
+measured_us = 7179.612
+budget_us = 34500
+note = "ray pick over 100k clones"
+
+[[budget]]
+id = "mesh/revision_1M_tris"
+measured_us = 6618.525
+budget_us = 31800
+note = "content hash of a 1M-triangle mesh"

@@ -1,6 +1,6 @@
 # 183 · User manual and generated references (mdBook, GitHub Pages)
 
-Status: ready · Area: N · Depends on: 019 · Observations: – · Touches: docs
+Status: done · Area: N · Depends on: 019 · Observations: – · Touches: docs
 
 ## Goal
 Manual in docs/manual, command/CLI/RPC/MCP and Rhai references generated from the registry, published by CI.
@@ -12,8 +12,8 @@ Manual in docs/manual, command/CLI/RPC/MCP and Rhai references generated from th
 - Generation is a `forge docs` subcommand.
 
 ## Done when
-- [ ] Pages deploy from main.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Pages deploy from main.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -23,9 +23,9 @@ Manual in docs/manual, command/CLI/RPC/MCP and Rhai references generated from th
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: 4 tests added in `apps/forge/tests/docs.rs` (SUMMARY links resolve and cover the generated references; every manual page is listed and its local links resolve; book config; pages workflow deploys only from main, no secrets). No parity data involved.
+- Manual: 10 chapters (introduction, getting started, scenes, primitives, mesh editing, deformers and fields, cloner, animation, files and recovery, plugins) plus the existing automation chapter and the five generated references, written from docs/specs.
+- Deviations: mdBook is not required by the gate (not installed here); the workflow builds it with a pinned `cargo install mdbook`. `book.toml` sits in docs/manual with `src = "."` and builds into `target/book`. Workflow actions use major-version tags like the existing workflows.
+- Files changed: docs/manual/*.md, book.toml, SUMMARY.md, .github/workflows/pages.yml, apps/forge/tests/docs.rs, BACKLOG.md, this brief.
+- Open questions: Pages must be enabled in the repository settings (source: GitHub Actions) before the first deploy.
+- Gate: see the commit; `GATE: all passed`.

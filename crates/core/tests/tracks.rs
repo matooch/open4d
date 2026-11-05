@@ -184,7 +184,10 @@ fn v4_round_trip_is_lossless_and_deterministic() {
     let (doc, id) = animated_doc();
     let text = file::save(doc.scene());
     assert_eq!(text, file::save(animated_doc().0.scene()));
-    assert!(text.contains("version: 8"), "{text}");
+    assert!(
+        text.contains(&format!("version: {}", forge_core::file::VERSION)),
+        "{text}"
+    );
     assert!(text.contains("tracks"), "{text}");
     assert!(text.contains("Linear"), "{text}");
     let (scene, report) = file::load(common::registry(), &text).unwrap();
@@ -205,7 +208,7 @@ fn v3_files_still_load_without_tracks() {
     assert!(report.warnings.is_empty(), "{:?}", report.warnings);
     assert!(scene.node(NodeId(1)).unwrap().tracks.is_empty());
     assert_eq!(scene.param(NodeId(1), "size"), Some(&Value::Float(3.0)));
-    assert!(file::save(&scene).contains("version: 8"));
+    assert!(file::save(&scene).contains(&format!("version: {}", forge_core::file::VERSION)));
 }
 
 #[test]

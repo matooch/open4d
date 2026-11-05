@@ -31,13 +31,13 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O21 | Cloner III | [cloner-3.md](cloner-3.md) | `tests/golden/cloner/` samples + meshes | done |
 | O17 | Spline primitives II | [splines-2.md](splines-2.md) | `tests/golden/splines-2/` meshes | done |
 | O18 | Primitives III | [primitives-3.md](primitives-3.md) | `tests/golden/<object>/` meshes | done |
-| O58 | Modeling tools III (020/021 follow-ups) | [modeling-tools-3.md](modeling-tools-3.md) | `tests/golden/modeling-tools/` meshes | todo |
-| O20 | Generators III | [generators-3.md](generators-3.md) | `tests/golden/<generator>/` meshes | todo |
-| O19 | Deformers III | [deformers-3.md](deformers-3.md) | `tests/golden/<deformer>/` meshes | todo |
-| O45 | Deformers IV | [deformers-4.md](deformers-4.md) | `tests/golden/<deformer>/` meshes | todo |
-| O46 | Spline tools and editable splines | [spline-tools.md](spline-tools.md) | `tests/golden/spline-tools/` meshes | todo |
-| O56 | Caps and bevel tab | [caps-bevel.md](caps-bevel.md) | `tests/golden/caps-bevel/` meshes | todo |
-| O48 | Text spline | [text.md](text.md) | `tests/golden/text/` meshes | todo |
+| O58 | Modeling tools III (020/021 follow-ups) | [modeling-tools-3.md](modeling-tools-3.md) | `tests/golden/modeling-tools/` meshes | done |
+| O20 | Generators III | [generators-3.md](generators-3.md) | `tests/golden/<generator>/` meshes | todo (15 follow-up cases) |
+| O19 | Deformers III | [deformers-3.md](deformers-3.md) | `tests/golden/<deformer>/` meshes | done |
+| O45 | Deformers IV | [deformers-4.md](deformers-4.md) | `tests/golden/<deformer>/` meshes | done |
+| O46 | Spline tools and editable splines | [spline-tools.md](spline-tools.md) | `tests/golden/spline-tools/` meshes | todo (15 follow-up cases) |
+| O56 | Caps and bevel tab | [caps-bevel.md](caps-bevel.md) | `tests/golden/caps-bevel/` meshes | done |
+| O48 | Text spline | [text.md](text.md) | `tests/golden/text/` meshes | done |
 | O49 | Fields IV: modifier layers, vertex maps | [fields-4.md](fields-4.md) | `tests/golden/fields/` samples + meshes | todo |
 | O42 | Shaders on a UV grid | [shaders.md](shaders.md) | `tests/golden/shaders/` samples | todo |
 | O27 | Animation II (tracks, tags) | [animation-2.md](animation-2.md) | `tests/golden/animation-2/` samples | todo |

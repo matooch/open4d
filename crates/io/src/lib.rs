@@ -1,5 +1,6 @@
 //! forge-io: file formats. Spec: docs/specs/IO.md.
 
+pub mod formats;
 pub mod obj;
 mod scene;
 

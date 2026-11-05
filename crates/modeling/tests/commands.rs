@@ -170,8 +170,26 @@ fn subdivide_triangles_and_ngons_stay_valid() {
 }
 
 #[test]
-fn subdivide_partial_selection_is_unsupported() {
-    let r = run("subdivide", &cube(), &polys(&[0]), json!({}));
+fn subdivide_partial_selection() {
+    // one quad of a cube: its edge points reach the four neighbours, which become pentagons
+    let out = run("subdivide", &cube(), &polys(&[0]), json!({})).unwrap();
+    out.validate().unwrap();
+    assert_eq!(out.points.len(), 8 + 4 + 1);
+    assert_eq!(out.polys.len(), 6 + 3);
+    assert_eq!(out.polys.iter().filter(|p| p.len() == 5).count(), 4);
+    // two levels: three points per edge, nine inner points
+    let out = run(
+        "subdivide",
+        &cube(),
+        &polys(&[0]),
+        json!({"subdivisions": 2}),
+    )
+    .unwrap();
+    out.validate().unwrap();
+    assert_eq!(out.points.len(), 8 + 12 + 9);
+    assert_eq!(out.polys.len(), 6 + 15);
+    // no data for smoothing a part, or for n-gons among the chosen
+    let r = run("subdivide", &cube(), &polys(&[0]), json!({"hyper": true}));
     assert!(matches!(r, Err(ToolError::Unsupported(_))), "{r:?}");
     let r = run("subdivide", &cube(), &polys(&[9]), json!({}));
     assert_eq!(r, Err(ToolError::BadPolygon(9)));
@@ -377,7 +395,7 @@ fn weld_swap_removes_and_drops_degenerate_polygons() {
 }
 
 #[test]
-fn melt_removes_interior_points_and_refuses_holes() {
+fn melt_removes_interior_points_and_leaves_holes() {
     // the four polygons around the middle point of a 2 x 2 grid become one square
     let g = grid(2);
     let out = run("melt", &g, &polys(&[0, 1, 2, 3]), json!({})).unwrap();
@@ -388,29 +406,19 @@ fn melt_removes_interior_points_and_refuses_holes() {
     // the ring around the middle polygon of a 3 x 3 grid has a hole
     let g3 = grid(3);
     let ring = polys(&[0, 1, 2, 3, 5, 6, 7, 8]);
-    assert!(matches!(
-        run("melt", &g3, &ring, json!({})),
-        Err(ToolError::Unsupported(_))
-    ));
+    // and is left as it is (`melt-ring`)
+    assert_eq!(run("melt", &g3, &ring, json!({})).unwrap(), g3);
     // two separate pairs make two groups
     let g4 = grid(4);
     let out = run("melt", &g4, &polys(&[0, 1, 14, 15]), json!({})).unwrap();
     assert_eq!(out.polys.len(), 14);
-    // a lone polygon, or polygons that only touch at a corner, are refused
-    assert!(matches!(
-        run("melt", &g, &polys(&[0]), json!({})),
-        Err(ToolError::Invalid(_))
-    ));
-    assert!(matches!(
-        run("melt", &g, &polys(&[0, 3]), json!({})),
-        Err(ToolError::Invalid(_))
-    ));
-    // a closed surface has no boundary
+    // a lone polygon, or polygons that only touch at a corner, stay as they are
+    // (`melt-single`)
+    assert_eq!(run("melt", &g, &polys(&[0]), json!({})).unwrap(), g);
+    assert_eq!(run("melt", &g, &polys(&[0, 3]), json!({})).unwrap(), g);
+    // a closed surface has no boundary and stays as it is
     let all = polys(&[0, 1, 2, 3, 4, 5]);
-    assert!(matches!(
-        run("melt", &cube(), &all, json!({})),
-        Err(ToolError::Unsupported(_))
-    ));
+    assert_eq!(run("melt", &cube(), &all, json!({})).unwrap(), cube());
 }
 
 #[test]
@@ -489,9 +497,11 @@ fn disconnect_groups_and_unshared_points() {
     .unwrap();
     // points 3, 4, 5 are also used by the polygons below; the group copies them once
     assert_eq!(grouped.points.len(), 9 + 3);
-    // alone, each polygon copies the points it shares with any other polygon (1, 3, 4 / 1, 4, 5)
-    assert_eq!(single.points.len(), 9 + 6);
-    // every polygon selected: no point is shared with an outside polygon
+    // alone, each polygon copies the points it still shares with a polygon left on the
+    // originals: polygon 0 copies 1, 3, 4; polygon 1 then copies 4, 5 (point 1 is its own
+    // now; `disconnect-all`)
+    assert_eq!(single.points.len(), 9 + 5);
+    // every polygon selected as one group: no point is shared with an outside polygon
     let all = run(
         "disconnect",
         &cube(),

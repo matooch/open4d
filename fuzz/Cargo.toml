@@ -1,0 +1,67 @@
+# cargo-fuzz targets (brief 182, docs/specs/PLATFORM.md §9). A separate cargo workspace on
+# purpose: it is NOT a member of the root workspace, so `cargo build/test/clippy --workspace`
+# on the pinned stable toolchain never sees it and CI needs no nightly. Run from this folder:
+#   cargo +nightly fuzz run scene_file
+[package]
+name = "forge-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+forge-fuzz-harness = { path = "../crates/fuzz-harness" }
+
+[workspace]
+
+[[bin]]
+name = "scene_file"
+path = "fuzz_targets/scene_file.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "obj"
+path = "fuzz_targets/obj.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "image"
+path = "fuzz_targets/image.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "exr"
+path = "fuzz_targets/exr.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "command_args"
+path = "fuzz_targets/command_args.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rpc_line"
+path = "fuzz_targets/rpc_line.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "script"
+path = "fuzz_targets/script.rs"
+test = false
+doc = false
+bench = false

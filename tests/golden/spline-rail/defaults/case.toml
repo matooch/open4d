@@ -1,0 +1,66 @@
+feature = "spline-rail"
+observation = "docs/parity/deformers-4.md"
+description = "Two default Helix splines linked as Z Spline Left (at x -150) and Z Spline Right (at x 150)"
+mesh = "mesh.obj"
+
+[params]
+z_spline_left = "Helix"
+z_spline_right = "Helix.1"
+x_spline_top = ""
+x_spline_bottom = ""
+reference = ""
+mode = "Unlimited"
+size = [200.0, 200.0, 200.0]
+scale_before_start_percent = 100.0
+scale_after_end_percent = 100.0
+pos = [0.0, 0.0, 0.0]
+rot = [0.0, 0.0, 0.0]
+
+[params.left_helix]
+type = "helix"
+position = [-150.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+start_radius = 200.0
+start_angle_deg = 0.0
+end_radius = 200.0
+end_angle_deg = 720.0
+radial_bias_percent = 50.0
+height = 200.0
+height_bias_percent = 50.0
+subdivision = 100
+plane = "XY"
+reverse = false
+intermediate_points = "Uniform"
+number = 8
+angle_deg = 5.0
+maximum_length = 5.0
+
+[params.right_helix]
+type = "helix"
+position = [150.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+start_radius = 200.0
+start_angle_deg = 0.0
+end_radius = 200.0
+end_angle_deg = 720.0
+radial_bias_percent = 50.0
+height = 200.0
+height_bias_percent = 50.0
+subdivision = 100
+plane = "XY"
+reverse = false
+intermediate_points = "Uniform"
+number = 8
+angle_deg = 5.0
+maximum_length = 5.0
+
+[params.input]
+type = "cube"
+size_y = 400.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+
+[import]
+scale = 1.0
+flip_z = false

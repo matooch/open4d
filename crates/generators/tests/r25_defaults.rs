@@ -64,6 +64,13 @@ fn applied() -> Vec<(&'static str, &'static str, Value)> {
         ("subdivision", "subdivide_uvs", e("edge")),
         ("boole", "hide_new_edges", Value::Bool(true)),
         ("extrude", "movement", Value::Vec3([0.0, 0.0, 100.0])),
+        // brief 042: N-gon caps (O5 `rechecks/loft-defaults`, O20 `lathe/partial`,
+        // `loft/three-circles`, `sweep/scale-end`). The R20 meshes of loft (`loft/defaults`),
+        // lathe (`lathe/angle`) and sweep (`sweep/open*`) have triangle caps; only loft's
+        // is an O4 `!` row, the other two come from the meshes (GENERATORS2.md §0a).
+        ("loft", "cap_type", e("ngons")),
+        ("lathe", "cap_type", e("ngons")),
+        ("sweep", "cap_type", e("ngons")),
         ("lathe", "subdivision", i(32)),
         ("loft", "mesh_subdivision_u", i(16)),
         ("loft", "mesh_subdivision_v", i(4)),
@@ -75,8 +82,7 @@ fn applied() -> Vec<(&'static str, &'static str, Value)> {
 
 /// `!` rows not applied: (type, key, why).
 const NOT_APPLIED: &[(&str, &str)] = &[
-    ("loft", "cap_type"), // R25 N-gon: loft caps are always ear-clipped triangles
-                          // no param of ours: the isoparm subdivisions
+    // no param of ours: the isoparm subdivisions
 ];
 
 #[test]
@@ -90,13 +96,6 @@ fn descriptors_have_the_r25_defaults() {
             .unwrap_or_else(|| panic!("{ty}.{key}"));
         assert_eq!(desc.default, want, "{ty}.{key}");
     }
-    // kept R20 default
-    let desc = reg
-        .get("forge.loft")
-        .unwrap()
-        .find_param("cap_type")
-        .unwrap();
-    assert_eq!(desc.default, e("triangles"), "loft.cap_type");
 }
 
 #[test]
@@ -129,7 +128,7 @@ fn the_r20_overlay_is_the_old_value_of_every_row_and_never_the_new_one() {
         );
         rows += 1;
     }
-    assert_eq!(rows, 39);
+    assert_eq!(rows, 42);
     // the kept ones carry the R20 value too (a no-op while the descriptor keeps it)
     for (ty, key) in NOT_APPLIED {
         assert!(

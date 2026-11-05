@@ -1,0 +1,49 @@
+# Example plugin package (docs/specs/PLUGINS.md): one node type and one command.
+name = "ring_kit"
+version = "0.1.0"
+entry = "main.rhai"
+permissions = ["commands"]
+
+[[node_types]]
+id = "ring_kit.ring"
+label = "Ring"
+build = "build_ring"
+
+[[node_types.params]]
+id = "radius"
+label = "Radius"
+kind = "float"
+default = 100.0
+min = 0.0
+max = 1000000.0
+unit = "distance"
+
+[[node_types.params]]
+id = "tube"
+label = "Tube Radius"
+kind = "float"
+default = 20.0
+min = 0.0
+max = 1000000.0
+unit = "distance"
+
+[[node_types.params]]
+id = "segments"
+label = "Ring Segments"
+kind = "int"
+default = 24
+min = 3
+max = 512
+
+[[node_types.params]]
+id = "sides"
+label = "Tube Sides"
+kind = "int"
+default = 8
+min = 3
+max = 512
+
+[[commands]]
+id = "ring_kit.add_ring"
+label = "Add Ring"
+function = "add_ring"

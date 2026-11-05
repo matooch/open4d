@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use crate::layers::{self, Layer, Layers};
 use crate::{
     Category, MeshData, Node, NodeId, Registry, Scene, SceneSettings, TimeConfig, Track, Value,
     parse_target,
@@ -17,8 +18,9 @@ pub const FORMAT: &str = "forge3d-scene";
 /// tracks, version 5 the scene settings, version 6 declares link lists and the hidden
 /// `object.*` params and adds the chunk section and file reference params, version 7 the
 /// time configuration (markers, preview range, playback mode), version 8 the expression
-/// tag and its graph parameter (brief 108). Older files still load, through [`MIGRATIONS`].
-pub const VERSION: u32 = 8;
+/// tag and its graph parameter (brief 108), version 9 the layer table and the hidden
+/// `object.layer` param (brief 158). Version 10 (brief 189) marks the list-valued parameter kinds (`Vec3List`, CORE.md section 6.9). Older files still load, through [`MIGRATIONS`].
+pub const VERSION: u32 = 10;
 
 /// A value whose binary payload is at least this many bytes is written as a chunk by
 /// [`save_with`] (CORE.md §6.2): 42 mesh points or 256 indices.
@@ -38,6 +40,8 @@ pub struct SceneFile {
     settings: SceneSettings,
     #[serde(default)]
     time: TimeConfig,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    layers: Vec<Layer>,
     roots: Vec<NodeRecord>,
 }
 
@@ -54,6 +58,8 @@ pub const MIGRATIONS: &[Migration] = &[
     migrate_5_to_6,
     migrate_6_to_7,
     migrate_7_to_8,
+    migrate_8_to_9,
+    migrate_9_to_10,
 ];
 
 /// Version 2 added `Value::Mesh`: additive, nothing to rewrite.
@@ -93,6 +99,17 @@ fn migrate_7_to_8(_: &mut SceneFile) -> Vec<String> {
     Vec::new()
 }
 
+/// Version 9 added `layers` and the hidden `object.layer` link: a missing field is read as
+/// no layers by serde and a missing param takes its default on load.
+fn migrate_8_to_9(_: &mut SceneFile) -> Vec<String> {
+    Vec::new()
+}
+
+/// Version 10 marks list-valued parameters (`Vec3List`, brief 189): the encoding is unchanged.
+fn migrate_9_to_10(_: &mut SceneFile) -> Vec<String> {
+    Vec::new()
+}
+
 /// Runs the steps from `file.version` up to `target`; shared by `load_with` and the tests.
 fn migrate(file: &mut SceneFile, steps: &[Migration], target: u32) -> Vec<String> {
     let mut warnings = Vec::new();
@@ -119,6 +136,7 @@ enum StoredValue {
     LinkList(Vec<NodeId>),
     Mesh(Arc<MeshData>),
     IndexList(Vec<u32>),
+    Vec3List(Vec<[f64; 3]>),
     MeshChunk(u32),
     IndexListChunk(u32),
 }
@@ -137,6 +155,7 @@ impl From<Value> for StoredValue {
             Value::LinkList(x) => Self::LinkList(x),
             Value::Mesh(x) => Self::Mesh(x),
             Value::IndexList(x) => Self::IndexList(x),
+            Value::Vec3List(x) => Self::Vec3List(x),
         }
     }
 }
@@ -285,6 +304,7 @@ pub fn save_with(scene: &Scene, opts: &SaveOptions) -> Vec<u8> {
         version: VERSION,
         settings: scene.settings(),
         time: scene.time().clone(),
+        layers: scene.layers().as_slice().to_vec(),
         roots,
     };
     let text = ron::ser::to_string_pretty(
@@ -322,6 +342,25 @@ pub fn load_with(
     bytes: &[u8],
     opts: &LoadOptions,
 ) -> Result<(Scene, LoadReport), LoadError> {
+    load_inner(registry, bytes, opts, VERSION)
+}
+
+/// Loads as a reader whose newest known version is `reader_version` would: a newer file is
+/// refused with `UnsupportedVersion` (CORE.md section 6.9). For tests of the version check.
+pub fn load_as_reader(
+    registry: Arc<Registry>,
+    bytes: &[u8],
+    reader_version: u32,
+) -> Result<(Scene, LoadReport), LoadError> {
+    load_inner(registry, bytes, &LoadOptions::default(), reader_version)
+}
+
+fn load_inner(
+    registry: Arc<Registry>,
+    bytes: &[u8],
+    opts: &LoadOptions,
+    reader_version: u32,
+) -> Result<(Scene, LoadReport), LoadError> {
     let (text, section) = match bytes.windows(MARKER.len()).position(|w| w == MARKER) {
         Some(at) => (&bytes[..at], Some(&bytes[at + MARKER.len()..])),
         None => (bytes, None),
@@ -337,7 +376,7 @@ pub fn load_with(
                 version: u32,
             }
             return Err(match ron::from_str::<Header>(text) {
-                Ok(h) if h.format == FORMAT && h.version > VERSION => {
+                Ok(h) if h.format == FORMAT && h.version > reader_version => {
                     LoadError::UnsupportedVersion(h.version)
                 }
                 _ => LoadError::Parse(e.to_string()),
@@ -347,7 +386,7 @@ pub fn load_with(
     if file.format != FORMAT {
         return Err(LoadError::WrongFormat(file.format));
     }
-    if file.version == 0 || file.version > VERSION {
+    if file.version == 0 || file.version > reader_version {
         return Err(LoadError::UnsupportedVersion(file.version));
     }
     let chunks = match section {
@@ -387,8 +426,11 @@ pub fn load_with(
             .warnings
             .push(format!("scene time: {e}; reset to the defaults")),
     }
+    loader.layers(file.layers);
     let next = loader.seen.last().map_or(1, |id| id.0 + 1);
     loader.scene.set_next_id(next);
+    let top = loader.scene.layers().iter().map(|l| l.id.0 + 1).max();
+    loader.scene.set_next_id(top.unwrap_or(1));
     Ok((loader.scene, loader.report))
 }
 
@@ -696,6 +738,7 @@ impl Loader<'_> {
             StoredValue::LinkList(x) => Value::LinkList(x),
             StoredValue::Mesh(x) => Value::Mesh(x),
             StoredValue::IndexList(x) => Value::IndexList(x),
+            StoredValue::Vec3List(x) => Value::Vec3List(x),
             StoredValue::MeshChunk(at) => {
                 Value::Mesh(Arc::new(decode_mesh(self.chunk(at, KIND_MESH)?)?))
             }
@@ -718,6 +761,47 @@ impl Loader<'_> {
             self.warn(id, format!("external file {path:?} not found"));
         }
         Value::String(path)
+    }
+
+    /// Installs the layer table after the nodes: drops layers whose id repeats or is a node
+    /// id, and clears `object.layer` links to layers that do not exist (CORE.md §6.8).
+    fn layers(&mut self, list: Vec<Layer>) {
+        let mut ids = BTreeSet::new();
+        let mut kept = Vec::new();
+        for mut l in list {
+            if self.seen.contains(&l.id) || !ids.insert(l.id) {
+                let msg = format!("layer {} repeats an id; dropped", l.id);
+                self.report.warnings.push(msg);
+                continue;
+            }
+            l.name = l.name.trim().to_string();
+            if l.name.is_empty() {
+                l.name = format!("Layer {}", l.id);
+            }
+            l.color = l.color.map(|c| {
+                if c.is_finite() {
+                    c.clamp(0.0, 1.0)
+                } else {
+                    0.0
+                }
+            });
+            kept.push(l);
+        }
+        self.scene.init_layers(Layers::from_list(kept));
+        let nodes: Vec<NodeId> = self.seen.iter().copied().collect();
+        for id in nodes {
+            let dangling = matches!(
+                self.scene.param(id, layers::LAYER),
+                Some(Value::Link(Some(l))) if !self.scene.layers().contains(*l)
+            );
+            if dangling {
+                if let Some(n) = self.scene.node_mut(id) {
+                    n.params
+                        .insert(layers::LAYER.to_string(), Value::Link(None));
+                }
+                self.warn(id, "layer link to a missing layer cleared".into());
+            }
+        }
     }
 
     fn warn(&mut self, id: NodeId, msg: String) {
@@ -839,6 +923,7 @@ mod tests {
             version: 2,
             settings: SceneSettings::default(),
             time: TimeConfig::default(),
+            layers: Vec::new(),
             roots: Vec::new(),
         };
         let notes = migrate(&mut file, &steps, 4);

@@ -123,5 +123,11 @@ pub fn value_from_json(desc: &ParamDesc, v: &Value) -> Result<Param, CommandErro
                 desc.id
             )));
         }
+        ParamKind::Vec3List => {
+            return Err(CommandError::Failed(format!(
+                "{}: point lists are changed with the spline.* commands",
+                desc.id
+            )));
+        }
     })
 }

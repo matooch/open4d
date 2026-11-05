@@ -280,18 +280,18 @@ fn mesh_commands_apply_without_a_drag() {
     let rows = tool_rows(ts.tool().settings(), ts.values());
     let normal = rows.iter().find(|r| r.param == "plane_normal").unwrap();
     assert_eq!(normal.value, Value::Vec3([1.0, 0.0, 0.0]));
-    // Subdivide works on the whole mesh: a part of the polygons is refused, none is all
+    // Hyper Subdivide works on the whole mesh: a part of the polygons is refused, none is all
     assert!(activate_tool(&mut st, "subdivide"));
+    st.tool
+        .as_mut()
+        .unwrap()
+        .set("hyper", Value::Bool(true))
+        .unwrap();
     assert!(apply_tool(&mut st).is_err());
     st.doc
         .transact("sel", |tx| {
             tx.set_param(id, "selection.polys", Value::IndexList(vec![]))
         })
-        .unwrap();
-    st.tool
-        .as_mut()
-        .unwrap()
-        .set("hyper", Value::Bool(true))
         .unwrap();
     apply_tool(&mut st).unwrap();
     assert_eq!(counts(&st, id), (26, 24));

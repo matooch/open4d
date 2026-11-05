@@ -164,6 +164,26 @@ pub fn dirs() -> Option<Dirs> {
     ))
 }
 
+/// The folder of saved window layouts, `<config>/layouts` (docs/specs/PLATFORM.md §8).
+pub fn layouts_dir_with(dirs: &Dirs) -> PathBuf {
+    dirs.config.join("layouts")
+}
+
+/// The layouts folder of this process (`None` without a home folder).
+pub fn layouts_dir() -> Option<PathBuf> {
+    dirs().map(|d| layouts_dir_with(&d))
+}
+
+/// The folder of user presets, `<data>/presets` (docs/specs/UI.md §26.1).
+pub fn presets_dir_with(dirs: &Dirs) -> PathBuf {
+    dirs.data.join("presets")
+}
+
+/// The presets folder of this process (`None` without a home folder).
+pub fn presets_dir() -> Option<PathBuf> {
+    dirs().map(|d| presets_dir_with(&d))
+}
+
 /// The settings file of this process, migrating a pre-175 file on first use (silently).
 pub fn settings_path() -> Option<PathBuf> {
     let base = BaseFolders::from_system();

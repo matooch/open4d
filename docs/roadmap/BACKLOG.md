@@ -25,35 +25,35 @@ implementers can avoid collisions.
 | 025 | [Bridge, Stitch and Sew, Close Polygon Hole, Polygon Pen](../agents/tasks/025-bridge-stitch-close-pen.md) | B | 020 | done | modeling, ui |
 | 026 | [Soft selection and symmetry modeling](../agents/tasks/026-soft-selection-symmetry.md) | B | 023 | done (parity-pending: G3 item 6) | ui, modeling |
 | 027 | [Selection tags, vertex map tags, restriction tags](../agents/tasks/027-selection-vertexmap-restriction-tags.md) | B | 023 | waiting: O54 | core, generators, ui, modifiers |
-| 028 | [Editable spline object and point/tangent editing](../agents/tasks/028-editable-spline.md) | B | 003 | waiting: O46 | core, geometry, generators, ui |
-| 029 | [Spline tools and spline booleans](../agents/tasks/029-spline-tools.md) | B | 028 | waiting: O46 | geometry, modeling |
+| 028 | [Editable spline object and point/tangent editing](../agents/tasks/028-editable-spline.md) | B | 003 | done | core, geometry, generators, ui |
+| 029 | [Spline tools and spline booleans](../agents/tasks/029-spline-tools.md) | B | 028 | done | geometry, modeling |
 | 030 | [Make Editable follow-ups from O3](../agents/tasks/030-make-editable-followups.md) | B | 003, 028 | ready | generators, ui |
-| 031 | [Duplicate, Arrange, Randomize, Transfer, Array command](../agents/tasks/031-duplicate-arrange-array-command.md) | B | 011 | ready | ui, modeling |
-| 032 | [Snapping 2.0 and axis/pivot editing](../agents/tasks/032-snapping-pivot.md) | B | 006 | ready | viewport, ui |
+| 031 | [Duplicate, Arrange, Randomize, Transfer, Array command](../agents/tasks/031-duplicate-arrange-array-command.md) | B | 011 | done (parity-pending: no data; array-command probe, G3) | ui, modeling |
+| 032 | [Snapping 2.0 and axis/pivot editing](../agents/tasks/032-snapping-pivot.md) | B | 006 | done (parity-pending G2/G3) | viewport, ui, modeling, generators, command |
 | 033 | [N-gon handling: reference triangulation order and edge visibility](../agents/tasks/033-ngon-triangulation-order.md) | B | – | done | geometry, generators, viewport |
-| 034 | [Multi-object component editing; numeric component coordinates](../agents/tasks/034-multi-object-component-editing.md) | B | 006 | ready | ui |
+| 034 | [Multi-object component editing; numeric component coordinates](../agents/tasks/034-multi-object-component-editing.md) | B | 006 | done (parity-pending G3) | ui, app, command |
 | 035 | [Platonic, Oil Tank, Polygon and Figure primitives](../agents/tasks/035-platonic-oiltank-polygon-figure.md) | C | 033 | done | generators |
-| 036 | [Landscape primitive](../agents/tasks/036-landscape.md) | C | 063 | ready | generators, noise |
+| 036 | [Landscape primitive](../agents/tasks/036-landscape.md) | C | 063 | done | generators, noise |
 | 037 | [Spline primitives II](../agents/tasks/037-spline-primitives-2.md) | C | 038 | done | generators |
 | 038 | [Intermediate Points modes and R25 per-spline defaults](../agents/tasks/038-intermediate-points.md) | C | – | done | generators, geometry |
-| 039 | [Text spline (fonts)](../agents/tasks/039-text-spline.md) | C | 038 | waiting: O48 | generators, text (new) |
-| 040 | [Metaball generator](../agents/tasks/040-metaball.md) | C | 083 | waiting: O20 | generators, volume |
-| 041 | [Atom Array and Spline Mask](../agents/tasks/041-atom-array-spline-mask.md) | C | 029 | waiting: O20 | generators |
-| 042 | [Sweep rail/banking/scale, Loft linear/multi, Lathe partial/movement, cap fixes](../agents/tasks/042-sweep-loft-lathe-r25.md) | C | – | waiting: O20 | generators |
-| 043 | [Boole R25 modes and numbering, Subdivision types, Symmetry planes](../agents/tasks/043-boole-subdivision-symmetry-r25.md) | C | – | waiting: O20 | generators, geometry |
-| 044 | [Shared Caps/Bevel tabs and Extrude R25 options](../agents/tasks/044-caps-bevel-tab.md) | C | 042 | waiting: O56 | generators |
+| 039 | [Text spline (fonts)](../agents/tasks/039-text-spline.md) | C | 038 | ready | generators, text (new) |
+| 040 | [Metaball generator](../agents/tasks/040-metaball.md) | C | 083 | waiting: 083 | generators, volume |
+| 041 | [Atom Array and Spline Mask](../agents/tasks/041-atom-array-spline-mask.md) | C | 029 | ready | generators |
+| 042 | [Sweep rail/banking/scale, Loft linear/multi, Lathe partial/movement, cap fixes](../agents/tasks/042-sweep-loft-lathe-r25.md) | C | – | done (Lathe done; Loft/Sweep R25 cases parity-pending: R20/R25 conflict, helix route) | generators |
+| 043 | [Boole R25 modes and numbering, Subdivision types, Symmetry planes](../agents/tasks/043-boole-subdivision-symmetry-r25.md) | C | – | done (Boole R25 strict numbering parity-pending) | generators, geometry |
+| 044 | [Shared Caps/Bevel tabs and Extrude R25 options](../agents/tasks/044-caps-bevel-tab.md) | C | 042 | waiting: 042 | generators |
 | 045 | [Extrude R25 vertex order](../agents/tasks/045-extrude-r25-order.md) | C | 044 | ready | generators |
-| 046 | [Null display, Instance render modes, Connect weld options](../agents/tasks/046-null-instance-connect-options.md) | C | – | waiting: O20 | generators, viewport |
+| 046 | [Null display, Instance render modes, Connect weld options](../agents/tasks/046-null-instance-connect-options.md) | C | – | ready | generators, viewport |
 | 047 | [Camera, Light, Environment, Floor and Sky as scene objects](../agents/tasks/047-scene-objects-camera-light.md) | C | – | waiting: O29 | generators, core, viewport |
 | 048 | [Generators as clone and volume inputs (consumed-input rules)](../agents/tasks/048-generators-in-clone-volume-contexts.md) | C | 065, 081 | ready | generators |
 | 049 | [Create menu organisation](../agents/tasks/049-create-menu-organisation.md) | C | 148 | ready | ui, core |
 | 050 | [Bend 3-axis gating fix + EvalCtx through evaluation](../agents/tasks/050-bend-gating-evalctx.md) | D | – | done | modifiers, generators, core |
 | 051 | [Squash & Stretch and Wrap deformers](../agents/tasks/051-squash-stretch-wrap.md) | D | 050 | done (11/11 level A; Center, Aspect, Smooth, Movement, Scale Z, Tension parity-pending, see MODIFIERS.md §7) | modifiers |
-| 052 | [Expression library; FFD, Formula and Melt deformers](../agents/tasks/052-expr-ffd-formula-melt.md) | D | 050, 063 | waiting: O45 | expr (new), modifiers |
-| 053 | [Explosion, Shatter, Wind deformers](../agents/tasks/053-explosion-shatter-wind.md) | D | 050 | waiting: O19 | modifiers |
-| 054 | [Smoothing deformer, Displacer, Polygon Reduction, Bevel deformer](../agents/tasks/054-smoothing-displacer-reduction-bevel.md) | D | 050, 125 | waiting: O19 | modifiers, modeling |
-| 055 | [Spline Wrap, Spline and Spline Rail deformers](../agents/tasks/055-spline-deformers.md) | D | 050, 028 | waiting: O19, O45 | modifiers |
-| 056 | [Mesh (cage), Surface, Camera, Collision, Jiggle, Delta Mush, Correction deformers](../agents/tasks/056-mesh-surface-camera-collision-jiggle-deltamush-correction.md) | D | 050 | waiting: O45 | modifiers |
+| 052 | [Expression library; FFD, Formula and Melt deformers](../agents/tasks/052-expr-ffd-formula-melt.md) | D | 050, 063 | ready | expr (new), modifiers |
+| 053 | [Explosion, Shatter, Wind deformers](../agents/tasks/053-explosion-shatter-wind.md) | D | 050 | ready | modifiers |
+| 054 | [Smoothing deformer, Displacer, Polygon Reduction, Bevel deformer](../agents/tasks/054-smoothing-displacer-reduction-bevel.md) | D | 050, 125 | waiting: 125 | modifiers, modeling |
+| 055 | [Spline Wrap, Spline and Spline Rail deformers](../agents/tasks/055-spline-deformers.md) | D | 050, 028 | ready | modifiers |
+| 056 | [Mesh (cage), Surface, Camera, Collision, Jiggle, Delta Mush, Correction deformers](../agents/tasks/056-mesh-surface-camera-collision-jiggle-deltamush-correction.md) | D | 050 | ready | modifiers |
 | 057 | [Fields framework + Linear, Spherical, Box + Remapping](../agents/tasks/057-fields-framework.md) | D | 050 | done (27/27 samples; remap order and Step/Quadratic parity-pending, see FIELDS.md F5) | fields |
 | 058 | [Field types II: Cylinder, Cone, Torus, Capsule, Radial, Random](../agents/tasks/058-field-types-2.md) | D | 057, 063 | done | fields, noise |
 | 059 | [Field lists: layers, blend modes, groups, Formula and Shader fields](../agents/tasks/059-field-lists.md) | D | 057, 052 | ready | fields |
@@ -95,7 +95,7 @@ implementers can avoid collisions.
 | 095 | [Motion paths and onion skin](../agents/tasks/095-motion-paths-onion.md) | G | 010, 143 | ready | viewport |
 | 096 | [Rotation: Euler filter, quaternion interpolation option](../agents/tasks/096-rotation-euler-quat.md) | G | 089 | waiting: O27, O53 | anim |
 | 097 | [Keyframe indicators on every parameter; key context menu](../agents/tasks/097-keyframe-indicators.md) | G | 088, 150 | ready | ui |
-| 098 | [Animated evaluation performance (dependency-aware re-evaluation)](../agents/tasks/098-animated-eval-performance.md) | G | 180 | ready | core, anim |
+| 098 | [Animated evaluation performance (dependency-aware re-evaluation)](../agents/tasks/098-animated-eval-performance.md) | G | 180 | done | core, anim |
 | 099 | [S7 acceptance test and animation docs](../agents/tasks/099-s7-animation-acceptance.md) | G | 090–096 | ready | tests, docs |
 | 100 | [Joint object, bone display, joint tools (align, mirror, chain creation)](../agents/tasks/100-joints.md) | H | 011 | waiting: O34 | rig (new), plugin, viewport |
 | 101 | [Skin deformer + Weight tag + bind pose (LBS, DQS option)](../agents/tasks/101-skin-weights.md) | H | 100, 050 | waiting: O34 | rig, modifiers |
@@ -127,7 +127,7 @@ implementers can avoid collisions.
 | 127 | [Texture tag projections + Generate UVW](../agents/tasks/127-texture-projections.md) | J | 123, 128 | waiting: O28 | material, geometry |
 | 128 | [Corner UVs on PolyMesh; primitive UV parity](../agents/tasks/128-primitive-uvs.md) | J | – | waiting: O28 | geometry, generators, io |
 | 129 | [UV editor (view, transform, relax LSCM, pack, seams)](../agents/tasks/129-uv-editor.md) | J | 128, 150 | ready | ui, geometry |
-| 130 | [Image IO, texture cache, colour management](../agents/tasks/130-image-io-colour.md) | J | – | ready | image (new) |
+| 130 | [Image IO, texture cache, colour management](../agents/tasks/130-image-io-colour.md) | J | – | done | image (new) |
 | 131 | [Material manager UI with preview renders](../agents/tasks/131-material-manager.md) | J | 123, 136 | ready | ui |
 | 132 | [Viewport material display (PBR preview, textures)](../agents/tasks/132-viewport-materials.md) | J | 123, 143 | ready | viewport |
 | 133 | [Environment: sky, HDRI, background, floor](../agents/tasks/133-environment.md) | J | 130, 137 | waiting: O29 | render-api, generators |
@@ -145,20 +145,20 @@ implementers can avoid collisions.
 | 145 | [Render parity tests against O30/O43/O57](../agents/tasks/145-render-parity-tests.md) | K | 137, 138 | waiting: O30, O43, O57 | tests |
 | 146 | [S8 acceptance test and rendering docs](../agents/tasks/146-s8-rendering-acceptance.md) | K | 139, 145 | ready | tests, docs |
 | 147 | [Familiar default layout: command bar, tool palette, manager arrangement](../agents/tasks/147-default-layout.md) | L | 011 | done (parity-pending G1) | ui |
-| 148 | [Icon set and icon atlas](../agents/tasks/148-icon-set.md) | L | 147 | ready | ui |
+| 148 | [Icon set and icon atlas](../agents/tasks/148-icon-set.md) | L | 147 | done (parity-pending G1; icons not yet drawn in the layout buttons) | ui |
 | 149 | [Object manager parity: columns, dots, tags, drag/drop, search, context menus](../agents/tasks/149-object-manager.md) | L | 147 | done (parity-pending G1; follow-up: render bridge honours render visibility, layer colours) | ui |
 | 150 | [Attribute manager parity: tabs, widgets, multi-edit, keyframe dots, history](../agents/tasks/150-attribute-manager.md) | L | 147 | done (parity-pending G4; follow-up: lock/history, tool panel on shared widgets) | ui |
-| 151 | [Coordinates manager modes](../agents/tasks/151-coordinates-manager.md) | L | 150 | ready | ui |
+| 151 | [Coordinates manager modes](../agents/tasks/151-coordinates-manager.md) | L | 150 | done (parity-pending G1) | ui |
 | 152 | [Key map: defaults, customisation editor](../agents/tasks/152-key-map.md) | L | 011 | done (parity-pending G2) | ui |
 | 153 | [Viewport navigation parity (keys, mouse, frame commands, views)](../agents/tasks/153-viewport-navigation.md) | L | 152 | done (parity-pending G2) | viewport, ui |
-| 154 | [Content browser (own presets) and recent files](../agents/tasks/154-content-browser.md) | L | 163 | ready | ui |
+| 154 | [Content browser (own presets) and recent files](../agents/tasks/154-content-browser.md) | L | 163 | done (object presets only; materials kind waits for material nodes, area J) | ui |
 | 155 | [Preferences window and settings storage](../agents/tasks/155-preferences.md) | L | 175 | waiting: O29 | ui |
-| 156 | [Layout save/load and workspaces](../agents/tasks/156-layouts-workspaces.md) | L | 147 | ready | ui |
-| 157 | [HUD and viewport overlays](../agents/tasks/157-hud-overlays.md) | L | 143 | ready | viewport |
-| 158 | [Layer manager](../agents/tasks/158-layer-manager.md) | L | 149 | ready | ui, core |
-| 159 | [Command palette and undo history panel](../agents/tasks/159-command-palette-history.md) | L | 011 | ready | ui |
-| 160 | [Console panel (log + Rhai REPL)](../agents/tasks/160-console.md) | L | 016 | ready | ui |
-| 161 | [HiDPI, IME, themes, keyboard navigation](../agents/tasks/161-hidpi-ime-themes.md) | L | 147 | ready | ui |
+| 156 | [Layout save/load and workspaces](../agents/tasks/156-layouts-workspaces.md) | L | 147 | done (parity-pending G1) | ui |
+| 157 | [HUD and viewport overlays](../agents/tasks/157-hud-overlays.md) | L | 143 | done (parity-pending G1/G8; follow-up: a scene render size for the safe frames) | viewport |
+| 158 | [Layer manager](../agents/tasks/158-layer-manager.md) | L | 149 | done (parity-pending G1/G8; follow-up: render bridge honours the render flag) | ui, core |
+| 159 | [Command palette and undo history panel](../agents/tasks/159-command-palette-history.md) | L | 011 | done | ui |
+| 160 | [Console panel (log + Rhai REPL)](../agents/tasks/160-console.md) | L | 016 | done | ui |
+| 161 | [HiDPI, IME, themes, keyboard navigation](../agents/tasks/161-hidpi-ime-themes.md) | L | 147 | done | ui |
 | 162 | [S3 acceptance test and UI docs](../agents/tasks/162-s3-ui-acceptance.md) | L | 147–153 | ready | tests, docs |
 | 163 | [Native format: migrations, binary encoding, external references](../agents/tasks/163-native-format.md) | M | – | done (format version 6; follow-up: a file-path param on the first texture/cache node, compression wrapper) | core, io |
 | 164 | [glTF import/export (meshes, hierarchy, materials, animation, skins, morphs)](../agents/tasks/164-gltf.md) | M | 088, 101, 107 | waiting: O44 | io |
@@ -169,7 +169,7 @@ implementers can avoid collisions.
 | 169 | [STL and PLY](../agents/tasks/169-stl-ply.md) | M | – | waiting: O44 | io |
 | 170 | [Camera, light and material exchange across formats](../agents/tasks/170-camera-light-material-exchange.md) | M | 047, 134 | waiting: O44 | io |
 | 171 | [Exchange parity tests (S9)](../agents/tasks/171-s9-exchange-tests.md) | M | 164–169 | waiting: O44 | tests |
-| 172 | [Import/export dialogs and CLI batch export](../agents/tasks/172-io-dialogs-batch.md) | M | 013, 150 | ready | ui, io |
+| 172 | [Import/export dialogs and CLI batch export](../agents/tasks/172-io-dialogs-batch.md) | M | 013, 150 | done (OBJ only; dialog layout parity-pending) | ui, io |
 | 173 | [CI matrix: Linux, macOS, Windows; per-OS GPU policy](../agents/tasks/173-ci-matrix.md) | N | – | done | .github |
 | 174 | [Toolchain pin and cargo-deny](../agents/tasks/174-toolchain-cargo-deny.md) | N | – | done | root |
 | 175 | [Cross-platform settings, paths, fonts, file dialogs, modifiers](../agents/tasks/175-cross-platform-basics.md) | N | 173 | done | core, ui |
@@ -177,9 +177,14 @@ implementers can avoid collisions.
 | 177 | [Signing and notarization hooks](../agents/tasks/177-signing-hooks.md) | N | 176 | ready | .github |
 | 178 | [Crash handler and logging](../agents/tasks/178-crash-logging.md) | N | 175 | done | app |
 | 179 | [Autosave and recovery](../agents/tasks/179-autosave-recovery.md) | N | 175, 163 | done | app |
-| 180 | [Dependency-graph evaluation scheduler (parallel, dirty-only)](../agents/tasks/180-eval-scheduler.md) | N | 012 | ready | core |
-| 181 | [Benchmarks and S10 performance thresholds](../agents/tasks/181-benchmarks-s10.md) | N | 180, 144 | ready | benches |
-| 182 | [Fuzzing and UI soak test](../agents/tasks/182-fuzz-soak.md) | N | 014, 163 | ready | fuzz |
-| 183 | [User manual and generated references (mdBook, GitHub Pages)](../agents/tasks/183-manual.md) | N | 019 | ready | docs |
-| 184 | [Rhai plugin packages](../agents/tasks/184-rhai-plugins.md) | N | 016 | ready | plugin |
+| 180 | [Dependency-graph evaluation scheduler (parallel, dirty-only)](../agents/tasks/180-eval-scheduler.md) | N | 012 | done | core |
+| 181 | [Benchmarks and S10 performance thresholds](../agents/tasks/181-benchmarks-s10.md) | N | 180, 144 | done | benches |
+| 182 | [Fuzzing and UI soak test](../agents/tasks/182-fuzz-soak.md) | N | 014, 163 | done (nightly workflow pending first run) | fuzz |
+| 183 | [User manual and generated references (mdBook, GitHub Pages)](../agents/tasks/183-manual.md) | N | 019 | done | docs |
+| 184 | [Rhai plugin packages](../agents/tasks/184-rhai-plugins.md) | N | 016 | done | plugin |
+| 186 | [Plugin host integration: evaluation hook and plugin folders](../agents/tasks/186-plugin-host.md) | N | 184 | done | core, generators, plugin, app, cli |
+| 187 | [O58 object-command and selection parity](../agents/tasks/187-o58-object-selection-parity.md) | B | 031, 034 | ready | modeling, command, app |
+| 188 | [Adopt the R25 Loft ring and quad order (D18)](../agents/tasks/188-r25-loft-adoption.md) | C | 042 | done | generators, io |
+| 189 | [Native format v10 for list-valued parameters](../agents/tasks/189-format-v10.md) | M | 028, 163 | done | core, io |
+| 190 | [Viewport splines: drawing, points, handles and dragging](../agents/tasks/190-viewport-splines.md) | E | 028, 143 | ready | viewport, ui, command |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |

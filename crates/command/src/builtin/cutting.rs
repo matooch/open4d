@@ -52,6 +52,11 @@ pub(super) fn check_keys(
     allowed: &[&str],
 ) -> Result<(), CommandError> {
     match obj.keys().find(|k| !allowed.contains(&k.as_str())) {
+        Some(k) if k == "nodes" && allowed.contains(&"node") && id.starts_with("mesh.") => {
+            Err(CommandError::InvalidArgs(format!(
+                "{id} works on one object: give node, not nodes (EDITABLE.md section 6.5)"
+            )))
+        }
         Some(k) => Err(CommandError::InvalidArgs(format!("{id}: unknown key {k}"))),
         None => Ok(()),
     }

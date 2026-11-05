@@ -115,21 +115,38 @@ const UNIFORM_END_SHORTFALL: f64 = 1e-4;
 /// The spline's points as the generators consume them: each segment's start point and its
 /// interior samples, then the end point of an open spline (a closed one doesn't repeat
 /// its first point). Straight (`linear`) splines get no interior samples. Uniform spaces
-/// its points over the whole spline instead ([`uniform_points`]).
+/// its points over the whole spline instead ([`uniform_params`]).
 pub fn sample(curve: &Curve, s: &Sampling) -> Vec<DVec3> {
+    sample_params(curve, s)
+        .into_iter()
+        .map(|(_, p)| p)
+        .collect()
+}
+
+/// [`sample`] with each point's global parameter (`0..=segments`, see [`Curve::at`]); the
+/// spline tools (SPLINES.md section 8) map an intersection of two sampled outlines back
+/// onto the curve through it.
+pub fn sample_params(curve: &Curve, s: &Sampling) -> Vec<(f64, DVec3)> {
     if s.mode == Interpolation::Uniform && s.number > 0 && !curve.linear {
-        return uniform_points(curve, s.number);
+        return uniform_params(curve, s.number)
+            .into_iter()
+            .map(|t| (t, curve.at(t)))
+            .collect();
     }
     let mut out = Vec::new();
-    for seg in &curve.segments {
-        out.push(seg[0]);
+    for (i, seg) in curve.segments.iter().enumerate() {
+        out.push((i as f64, seg[0]));
         if !curve.linear && !is_straight(seg) {
-            out.extend(interior(seg, s).into_iter().map(|t| Curve::bezier(seg, t)));
+            out.extend(
+                interior(seg, s)
+                    .into_iter()
+                    .map(|t| (i as f64 + t, Curve::bezier(seg, t))),
+            );
         }
     }
     if !curve.closed {
         let last = curve.segments.last().expect("a spline has a segment");
-        out.push(last[3]);
+        out.push((curve.segments.len() as f64, last[3]));
     }
     out
 }
@@ -150,7 +167,10 @@ const LENGTH_PIECES: usize = 50;
 /// spline (a closed spline keeps all of them, an open one gets the end point too), whatever
 /// its segments' lengths. Lengths are measured on the polyline through every segment at
 /// `t = k/50` and the parameter is interpolated linearly inside a piece.
-fn uniform_points(curve: &Curve, number: usize) -> Vec<DVec3> {
+///
+/// These are the global parameters (`0..=segments`, see [`Curve::at`]) of the Uniform
+/// samples of [`sample`]; a sweep pairs its rail with its path through them (§10a).
+pub fn uniform_params(curve: &Curve, number: usize) -> Vec<f64> {
     let n_seg = curve.segments.len();
     let mut table = vec![0.0];
     for seg in &curve.segments {
@@ -183,11 +203,8 @@ fn uniform_points(curve: &Curve, number: usize) -> Vec<DVec3> {
                 0.0
             };
             let piece = hi - 1;
-            let (seg, local) = (piece / LENGTH_PIECES, piece % LENGTH_PIECES);
-            Curve::bezier(
-                &curve.segments[seg],
-                (local as f64 + f) / LENGTH_PIECES as f64,
-            )
+            (piece / LENGTH_PIECES) as f64
+                + ((piece % LENGTH_PIECES) as f64 + f) / LENGTH_PIECES as f64
         })
         .collect()
 }

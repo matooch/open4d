@@ -302,7 +302,10 @@ pub fn apply_deformer(
     let (Some(node), Some(ty)) = (scene.node(deformer), scene.node_type(deformer)) else {
         return;
     };
-    if ty.category != Category::Deformer || !is_enabled(ty, node) {
+    if ty.category != Category::Deformer
+        || !is_enabled(ty, node)
+        || !forge_core::layers::deformers_on(scene, deformer)
+    {
         return;
     }
     // Read the params before any point moves: an unknown type must not leave the mesh

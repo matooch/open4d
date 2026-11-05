@@ -58,8 +58,8 @@ Units are the commands' units: **degrees**, percent as shown, scene units for di
 `run`, `create` (two commands when it renames), `set_param`, `set_transform` and `frame(n)` count against `max_commands`, one per command run. Animation keys are written with `run("key.set", #{node, track, frame, value})` (COMMANDS.md §6).
 
 Commands that are not available in scripts (error, nothing runs): `edit.undo`,
-`edit.redo`, `file.new`, `file.open`, `file.save`, `file.save_as`, `file.import_obj`.
-`file.export_*` is allowed: the script names the path explicitly, which is the only
+`edit.redo`, `file.new`, `file.open`, `file.save`, `file.save_as`, `file.import_obj`, `file.import`.
+`file.export_*` and `file.export` are allowed: the script names the path explicitly, which is the only
 file-system access a script has (the host decides what else, see §5).
 
 ### Scene queries (read-only)
@@ -133,6 +133,8 @@ Output lines are capped at 10 000 (later lines are dropped silently).
 - **CLI** `forge run <script.rhai> [--scene in.forge] [--save out.forge]` (CLI.md §run).
 - **Editor**: the Script Manager panel (UI.md §10) runs on the editor's own context, so
   the run is one undo step in the editor's history.
+- **Editor REPL**: the Console panel (UI.md §19) runs one entry at a time in the same sandbox
+  (default limits, no state between entries); each entry is one undo step like a panel run.
 - RPC and MCP do not run scripts (A-automation: `script.run` only with
   `rpc.allow_scripts`, a later setting; not part of brief 016).
 
@@ -163,3 +165,11 @@ Output lines are capped at 10 000 (later lines are dropped silently).
 CLI tests (`apps/forge/tests/cli.rs`): `forge run` with and without `--scene`/`--save`,
 `--json` output, script errors and exit codes. UI test: the Script Manager panel runs a
 script and shows its output.
+
+## Plugin entry points
+
+`run_function(ctx, commands, source, function, arg, opts)` runs only the function
+definitions of `source` and calls `function(arg)` with the same undo, rollback and limits as
+`run_script`. `eval_function(source, function, arg, opts)` does the same with no context and
+no command bindings (maths and random numbers only). `script_functions(source)` lists the
+defined functions with their arity. Plugin packages use them (PLUGINS.md).

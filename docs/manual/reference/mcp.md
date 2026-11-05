@@ -71,12 +71,14 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `object_enable` | Enable. Undoable editing command. Runs command `object.enable`. |
 | `edit_undo` | Undo. Not an undoable edit. Runs command `edit.undo`. |
 | `edit_redo` | Redo. Not an undoable edit. Runs command `edit.redo`. |
+| `edit_history_jump` | Jump in History. Not an undoable edit. Runs command `edit.history_jump`. |
 | `view_shading` | Shading. Not an undoable edit. Runs command `view.shading`. |
 | `view_layout` | Viewport Layout. Not an undoable edit. Runs command `view.layout`. |
 | `view_maximize` | Maximize Pane. Not an undoable edit. Runs command `view.maximize`. |
 | `view_lighting` | Viewport Lighting. Not an undoable edit. Runs command `view.lighting`. |
 | `view_shadows` | Viewport Shadows. Not an undoable edit. Runs command `view.shadows`. |
 | `view_antialias` | Viewport Anti-aliasing. Not an undoable edit. Runs command `view.antialias`. |
+| `view_hud` | Viewport HUD. Not an undoable edit. Runs command `view.hud`. |
 | `view_gizmo_mode` | Gizmo Mode. Not an undoable edit. Runs command `view.gizmo_mode`. |
 | `view_gizmo_space` | Gizmo Space. Not an undoable edit. Runs command `view.gizmo_space`. |
 | `object_begin_rename` | Rename Active. Not an undoable edit. Runs command `object.begin_rename`. |
@@ -97,8 +99,25 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `select_loop` | Loop Selection. Undoable editing command. Runs command `select.loop`. |
 | `select_ring` | Ring Selection. Undoable editing command. Runs command `select.ring`. |
 | `transform_set` | Set Transform. Undoable editing command. Runs command `transform.set`. |
+| `layer_create` | New Layer. Undoable editing command. Runs command `layer.create`. |
+| `layer_delete` | Delete Layer. Undoable editing command. Runs command `layer.delete`. |
+| `layer_rename` | Rename Layer. Undoable editing command. Runs command `layer.rename`. |
+| `layer_set` | Set Layer. Undoable editing command. Runs command `layer.set`. |
+| `layer_assign` | Assign to Layer. Undoable editing command. Runs command `layer.assign`. |
+| `layer_merge` | Merge Layers. Undoable editing command. Runs command `layer.merge`. |
 | `mesh_make_editable` | Make Editable. Undoable editing command. Runs command `mesh.make_editable`. |
 | `mesh_current_state_to_object` | Current State to Object. Undoable editing command. Runs command `mesh.current_state_to_object`. |
+| `spline_create` | Create Spline. Undoable editing command. Runs command `spline.create`. |
+| `spline_edit_points` | Edit Spline Points. Undoable editing command. Runs command `spline.edit_points`. |
+| `spline_insert_point` | Insert Spline Point. Undoable editing command. Runs command `spline.insert_point`. |
+| `spline_delete_points` | Delete Spline Points. Undoable editing command. Runs command `spline.delete_points`. |
+| `spline_set_closed` | Close Spline. Undoable editing command. Runs command `spline.set_closed`. |
+| `spline_set_type` | Set Spline Type. Undoable editing command. Runs command `spline.set_type`. |
+| `spline_chamfer` | Chamfer Spline. Undoable editing command. Runs command `spline.chamfer`. |
+| `spline_outline` | Create Spline Outline. Undoable editing command. Runs command `spline.outline`. |
+| `spline_boolean` | Spline Boolean. Undoable editing command. Runs command `spline.boolean`. |
+| `spline_reverse` | Reverse Spline. Undoable editing command. Runs command `spline.reverse`. |
+| `spline_subdivide` | Subdivide Spline. Undoable editing command. Runs command `spline.subdivide`. |
 | `mesh_extrude` | Extrude. Undoable editing command. Runs command `mesh.extrude`. |
 | `mesh_extrude_inner` | Extrude Inner. Undoable editing command. Runs command `mesh.extrude_inner`. |
 | `mesh_bevel` | Bevel. Undoable editing command. Runs command `mesh.bevel`. |
@@ -116,6 +135,11 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `mesh_mirror` | Mirror. Undoable editing command. Runs command `mesh.mirror`. |
 | `mesh_center_axis` | Center Axis to. Undoable editing command. Runs command `mesh.center_axis`. |
 | `mesh_slide` | Slide. Undoable editing command. Runs command `mesh.slide`. |
+| `mesh_array_command` | Array. Undoable editing command. Runs command `mesh.array_command`. |
+| `object_duplicate` | Duplicate. Undoable editing command. Runs command `object.duplicate`. |
+| `object_arrange` | Arrange. Undoable editing command. Runs command `object.arrange`. |
+| `object_randomize` | Randomize. Undoable editing command. Runs command `object.randomize`. |
+| `object_transfer` | Transfer. Undoable editing command. Runs command `object.transfer`. |
 | `mesh_loop_cut` | Loop Cut. Undoable editing command. Runs command `mesh.loop_cut`. |
 | `mesh_knife` | Knife. Undoable editing command. Runs command `mesh.knife`. |
 | `mesh_bridge` | Bridge. Undoable editing command. Runs command `mesh.bridge`. |
@@ -125,6 +149,14 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `mesh_transform` | Transform Components. Undoable editing command. Runs command `mesh.transform`. |
 | `edit_soft_selection` | Soft Selection. Not an undoable edit. Runs command `edit.soft_selection`. |
 | `edit_symmetry` | Symmetry. Not an undoable edit. Runs command `edit.symmetry`. |
+| `object_set_axis` | Set Axis. Undoable editing command. Runs command `object.set_axis`. |
+| `object_center_axis` | Center Axis. Undoable editing command. Runs command `object.center_axis`. |
+| `object_align_axis` | Align Axis. Undoable editing command. Runs command `object.align_axis`. |
+| `edit_axis_mode` | Axis Mode. Not an undoable edit. Runs command `edit.axis_mode`. |
+| `snap_set` | Snap Settings. Not an undoable edit. Runs command `snap.set`. |
+| `snap_toggle` | Snapping. Not an undoable edit. Runs command `snap.toggle`. |
+| `snap_reset` | Reset Snapping. Not an undoable edit. Runs command `snap.reset`. |
+| `snap_query` | Snap Query. Not an undoable edit. Runs command `snap.query`. |
 | `param_set` | Set Parameter. Undoable editing command. Runs command `param.set`. |
 | `key_record` | Record. Undoable editing command. Runs command `key.record`. |
 | `key_delete_at_frame` | Delete Keys. Undoable editing command. Runs command `key.delete_at_frame`. |
@@ -159,9 +191,29 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `file_open_dialog` | Open.... Not an undoable edit. Runs command `file.open_dialog`. |
 | `file_save_dialog` | Save. Not an undoable edit. Runs command `file.save_dialog`. |
 | `file_save_as_dialog` | Save As.... Not an undoable edit. Runs command `file.save_as_dialog`. |
+| `ui_command_palette` | Command Palette.... Not an undoable edit. Runs command `ui.command_palette`. |
+| `ui_workspace` | Workspace. Not an undoable edit. Runs command `ui.workspace`. |
+| `ui_layout_save` | Save Layout. Not an undoable edit. Runs command `ui.layout_save`. |
+| `ui_layout_load` | Load Layout. Not an undoable edit. Runs command `ui.layout_load`. |
+| `ui_layout_delete` | Delete Layout. Not an undoable edit. Runs command `ui.layout_delete`. |
+| `ui_theme` | Theme. Not an undoable edit. Runs command `ui.theme`. |
+| `ui_scale` | UI Scale. Not an undoable edit. Runs command `ui.scale`. |
 | `file_import_obj` | Import OBJ. Undoable editing command. Runs command `file.import_obj`. |
 | `file_export_obj` | Export OBJ. Not an undoable edit. Runs command `file.export_obj`. |
+| `file_import` | Import. Undoable editing command. Runs command `file.import`. |
+| `file_export` | Export. Not an undoable edit. Runs command `file.export`. |
+| `io_formats` | Exchange Formats. Not an undoable edit. Runs command `io.formats`. |
+| `file_import_dialog` | Import.... Not an undoable edit. Runs command `file.import_dialog`. |
+| `file_export_dialog` | Export.... Not an undoable edit. Runs command `file.export_dialog`. |
+| `browser_list` | List Presets. Not an undoable edit. Runs command `browser.list`. |
+| `browser_load` | Load Preset. Undoable editing command. Runs command `browser.load`. |
+| `browser_save_preset` | Save Preset. Not an undoable edit. Runs command `browser.save_preset`. |
+| `browser_delete_preset` | Delete Preset. Not an undoable edit. Runs command `browser.delete_preset`. |
+| `browser_recent` | Recent Files. Not an undoable edit. Runs command `browser.recent`. |
+| `browser_open_recent` | Open Recent. Not an undoable edit. Runs command `browser.open_recent`. |
+| `browser_clear_recent` | Clear Recent Files. Not an undoable edit. Runs command `browser.clear_recent`. |
 | `param_edit` | Edit Parameter. Undoable editing command. Runs command `param.edit`. |
+| `transform_edit` | Set Coordinates. Undoable editing command. Runs command `transform.edit`. |
 | `graph_add_node` | Add Graph Node. Undoable editing command. Runs command `graph.add_node`. |
 | `graph_remove` | Remove Graph Node. Undoable editing command. Runs command `graph.remove`. |
 | `graph_connect` | Connect Graph Ports. Undoable editing command. Runs command `graph.connect`. |
@@ -171,3 +223,4 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `graph_get` | Get Graph. Not an undoable edit. Runs command `graph.get`. |
 | `graph_node_types` | List Graph Node Types. Not an undoable edit. Runs command `graph.node_types`. |
 | `graph_evaluate` | Evaluate Graph. Not an undoable edit. Runs command `graph.evaluate`. |
+| `plugin_list` | List Plugins. Not an undoable edit. Runs command `plugin.list`. |

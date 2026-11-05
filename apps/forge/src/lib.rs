@@ -4,6 +4,7 @@
 //! subcommand and returns the exit code (0 ok, 1 user error, 2 scene load error,
 //! 3 internal error). The editor forwards `--headless <args>` to the same function.
 
+mod convert;
 pub mod docs;
 
 use std::ffi::OsString;
@@ -34,6 +35,12 @@ struct Cli {
     /// Machine output: one JSON object on stdout, messages on stderr.
     #[arg(long, global = true)]
     json: bool,
+    /// Load the plugins in this folder too (repeatable; docs/specs/PLUGINS.md section 9).
+    #[arg(long = "plugins", value_name = "DIR", global = true)]
+    plugins: Vec<std::path::PathBuf>,
+    /// Load no plugins at all (also: FORGE_NO_PLUGINS=1).
+    #[arg(long, global = true)]
+    no_plugins: bool,
     #[command(subcommand)]
     command: Sub,
 }
@@ -73,6 +80,32 @@ enum Sub {
         selected: Option<Vec<u64>>,
         #[arg(long, default_value_t = 0, allow_negative_numbers = true)]
         frame: i64,
+        /// An export option `key=value` (repeatable; `forge commands` -> `io.formats`).
+        #[arg(long = "option", value_name = "KEY=VALUE")]
+        options: Vec<String>,
+    },
+    /// Convert a scene file, or every scene file of a folder, to another format.
+    Convert {
+        /// A file or a folder.
+        input: String,
+        /// Output folder (created).
+        #[arg(long)]
+        out: String,
+        /// Target format id (`obj`), or `forge` to import other formats into native scenes.
+        #[arg(long, default_value = "obj")]
+        format: String,
+        /// A format option `key=value` (repeatable).
+        #[arg(long = "option", value_name = "KEY=VALUE")]
+        options: Vec<String>,
+        /// Frame to evaluate when exporting.
+        #[arg(long, default_value_t = 0, allow_negative_numbers = true)]
+        frame: i64,
+        /// Descend into sub folders (the output mirrors them).
+        #[arg(long)]
+        recursive: bool,
+        /// Overwrite existing output files.
+        #[arg(long)]
+        force: bool,
     },
     /// Run one command on a scene file.
     Cmd {
@@ -127,6 +160,18 @@ enum Sub {
     Render,
 }
 
+thread_local! {
+    /// Plugin folders and switches of this run (set by [`run`]).
+    static HOST_OPTIONS: std::cell::RefCell<forge_plugin::HostOptions> =
+        std::cell::RefCell::new(forge_plugin::HostOptions::none());
+}
+
+/// An empty application with the plugins of this run installed.
+fn new_app() -> App {
+    let options = HOST_OPTIONS.with(|o| o.borrow().clone());
+    forge_plugin::load_host(&options).new_app()
+}
+
 /// A failed subcommand: exit code plus message.
 struct Fail {
     code: u8,
@@ -178,6 +223,9 @@ where
         }
     };
     let json = cli.json;
+    HOST_OPTIONS.with(|o| {
+        *o.borrow_mut() = forge_plugin::HostOptions::from_env(cli.plugins.clone(), cli.no_plugins);
+    });
     let outcome = catch_unwind(AssertUnwindSafe(|| execute(cli.command)));
     let outcome = outcome.unwrap_or_else(|_| {
         Err(Fail {
@@ -251,12 +299,25 @@ fn execute(command: Sub) -> Outcome {
             out,
             selected,
             frame,
-        } => {
-            if format != "obj" {
-                return Err(user(format!("unsupported format {format:?} (only obj)")));
-            }
-            export(&scene, &out, selected.as_deref(), frame)
-        }
+            options,
+        } => export(&scene, &out, &format, selected.as_deref(), frame, &options),
+        Sub::Convert {
+            input,
+            out,
+            format,
+            options,
+            frame,
+            recursive,
+            force,
+        } => convert::run(&convert::Job {
+            input: &input,
+            out: &out,
+            format: &format,
+            options: &options,
+            frame,
+            recursive,
+            force,
+        }),
         Sub::Cmd {
             scene,
             command,
@@ -309,7 +370,7 @@ fn rpc(method: &str, params: Option<&str>, port: Option<u16>, token: Option<Stri
 
 /// Loads a scene file; load warnings go to stderr.
 fn open(path: &str) -> Result<(App, Vec<String>), Fail> {
-    let mut app = App::new_default();
+    let mut app = new_app();
     let result = app.open(path).map_err(|e| load_fail(e.to_string()))?;
     let warnings: Vec<String> = result["warnings"]
         .as_array()
@@ -329,7 +390,7 @@ fn new(path: &str, force: bool) -> Outcome {
     if !force && std::path::Path::new(path).exists() {
         return Err(user(format!("{path} exists (use --force to overwrite)")));
     }
-    let mut app = App::new_default();
+    let mut app = new_app();
     app.save(path).map_err(|e| user(e.to_string()))?;
     Ok(Out {
         json: json!({"path": path}),
@@ -474,11 +535,19 @@ fn eval(path: &str, frame: i64, node: Option<u64>, export_to: Option<&str>) -> O
     Ok(Out { json: result, text })
 }
 
-fn export(path: &str, out: &str, selected: Option<&[u64]>, frame: i64) -> Outcome {
+fn export(
+    path: &str,
+    out: &str,
+    format: &str,
+    selected: Option<&[u64]>,
+    frame: i64,
+    options: &[String],
+) -> Outcome {
+    let options = convert::export_options_for(format, options)?;
     let (mut app, _) = open(path)?;
     app.frame(frame);
     let roots: Option<Vec<NodeId>> = selected.map(|s| s.iter().map(|n| NodeId(*n)).collect());
-    let objects = app.export_obj(out, roots.as_deref())?;
+    let objects = app.export_at(out, format, roots.as_deref(), frame, &options)?;
     Ok(Out {
         json: json!({"path": out, "objects": objects, "frame": app.timeline.current}),
         text: format!("exported {objects} object(s) to {out}"),
@@ -504,7 +573,7 @@ fn run_script_file(script: &str, scene: Option<&str>, save: Option<&str>) -> Out
         .map_err(|e| user(format!("cannot read script {script}: {e}")))?;
     let mut app = match scene {
         Some(path) => open(path)?.0,
-        None => App::new_default(),
+        None => new_app(),
     };
     let commands = app.commands.clone();
     let report = forge_script::run_script(
@@ -570,7 +639,7 @@ fn commands(markdown: bool) -> Outcome {
             text: page,
         });
     }
-    let app = App::new_default();
+    let app = new_app();
     let mut list = Vec::new();
     let mut text = String::new();
     for c in app.commands.iter() {

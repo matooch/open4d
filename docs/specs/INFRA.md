@@ -192,6 +192,17 @@ docs/specs/BOOLE.md), a case may opt in to comparing the *surface* instead of th
 order. `compare_meshes` is unchanged; `Tolerance::compare` (`Compare::Strict` default,
 `Compare::Geometric`) tells the feature's parity test which one to call.
 
+- **Git LFS pointers.** A CI checkout without LFS leaves a pointer file (first line
+  `version https://git-lfs.github.com/spec/v1`) where a large `mesh.obj` should be
+  (`landscape/segments-1000`, 184 MB). `is_lfs_pointer(src)` detects it and
+  `GoldenCase::data_not_fetched() -> Option<String>` names the case. Such a case is
+  **skipped with a printed note** (`... data not fetched ... skipped`): `validate_case`
+  returns no problem for it, `golden check` prints `note: ...`, and parity tests that walk
+  cases filter it out and print the same note. It is never a failure and never counted as a
+  pass. `expected_mesh` on a pointer is still an error (a test must not read it).
+  Test: `crates/parity-harness/tests/golden_cases.rs`
+  (`lfs_pointer_case_is_reported_as_not_fetched_not_invalid`).
+
 `compare_geometric(expected, actual, &Tolerance) -> GeometricReport`, with
 `t = position`:
 1. **Points**: the distinct positions used by faces (positions within `t` are one
