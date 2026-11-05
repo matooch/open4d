@@ -120,7 +120,7 @@ Every case below was exported and has `case.toml` + `mesh.obj` under
 
 Brief 043 matched every case above except the strict point and face numbering of the four
 `boole/r25-*` cases (BOOLE.md §5a, parity-pending), and Loop on non-quad input. These cases
-separate the hypotheses it could not; run them like the cases above, R25 defaults. The `sweep/` and `lathe/` rows come from brief 042 (helix route, banking frame, 2-Rail profile, Lathe scaling).
+separate the hypotheses it could not; run them like the cases above, R25 defaults. The `sweep/` and `lathe/` rows come from brief 042 (helix route, banking frame, 2-Rail profile, Lathe scaling); the `atom-array/` and `spline-mask/` rows from brief 041 (oblique edges, modes, axis, caps).
 
 | Case (folder) | Generator | Children | Changed from default |
 |---|---|---|---|
@@ -139,6 +139,16 @@ separate the hypotheses it could not; run them like the cases above, R25 default
 | sweep/r25-banking-off-rotated | Sweep | a Circle profile and a default Helix rotated 90° about X | Banking off |
 | sweep/r25-rail-rectangle | Sweep | a Rectangle profile (100 × 50), a default Helix and a second Helix with End Radius 400 | – (2-Rail on by default) |
 | lathe/r25-scaling-50 | Lathe | a default Arc spline | Scaling 50 % |
+| atom-array/pyramid | Atom Array | a default Pyramid | Subdivisions 5 |
+| atom-array/rotated-cube | Atom Array | a default cube rotated (30°, 45°, 0°) | – |
+| atom-array/single-elements | Atom Array | a default cube | Single Elements on |
+| spline-mask/and | Spline Mask | the two circles of `spline-mask/union` | Mode And |
+| spline-mask/or | Spline Mask | the same | Mode Or |
+| spline-mask/intersection | Spline Mask | the same | Mode Intersection |
+| spline-mask/b-minus-a | Spline Mask | the same | Mode B subtract A |
+| spline-mask/axis-zy | Spline Mask | the same circles rotated into the ZY plane | Axis ZY |
+| spline-mask/cap | Spline Mask | the two circles of `spline-mask/union` | Create Cap on |
+| spline-mask/rect-circle | Spline Mask | a default Rectangle and a default Circle at x 100 | Mode Union |
 
 ## Notes
 
