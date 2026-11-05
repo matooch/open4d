@@ -260,6 +260,35 @@ No Field list on Explosion FX.
 - correction/defaults: which corrected point to move is not specified by the row; corrected point 0
   moved by (50, 0, 0).
 
+## Follow-up cases (planner, after brief 056) — interactive export needed
+
+Brief 056 matched Correction and Delta Mush exactly; the Mesh, Surface, Camera, Collision and
+Jiggle cases above exported **undeformed** geometry because, as Findings says, the scripted path
+builds no solver cache. Re-record those, and record the new rows, **interactively**: open the
+scene in the app, press Initialize (Mesh, Delta Mush, Correction), play the timeline from frame 0
+to the case frame (Jiggle, Collision), confirm in the viewport that the cube deforms, then use
+File > Export with the usual export settings. Write `frame` and `fps` into every case.toml. If a
+case still exports undeformed, say so in its row and move on.
+
+| Case (folder) | Deformer | Setup / changes |
+|---|---|---|
+| mesh-deformer/cage-redo | Mesh | as `mesh-deformer/cage`, exported interactively |
+| mesh-deformer/cage-up | Mesh | the cage's top-front point moved by (0, 100, 0) |
+| mesh-deformer/cage-scale | Mesh | the whole cage scaled 150 % after Initialize |
+| surface/defaults-redo | Surface | as `surface/defaults`, exported interactively |
+| surface/tilted | Surface | the surface plane rotated P 30° after Initialize |
+| camera-deformer/grid-redo | Camera | as `camera-deformer/grid`; record the edited grid point's index as the app shows it |
+| camera-deformer/aimed | Camera | camera aimed at the cube from (0, 0, −1000); two grid points moved |
+| collision/sphere-redo | Collision | as `collision/sphere`, played to the case frame |
+| collision/cube-outside | Collision | a cube collider, Solver Outside, Strength 50 % |
+| jiggle/plane-frames | Jiggle | a 4 × 4 plane moving +x 300 over frames 0–10; export frames 1–8 |
+| jiggle/stiffness-100 | Jiggle | the same, Stiffness 100 %, frame 5 |
+| jiggle/drag | Jiggle | the same, Drag 0 % and 100 % (two cases), frame 5 |
+| jiggle/gravity | Jiggle | the same, Gravity (0, −981, 0), frame 5 |
+| delta-mush/iterations | Delta Mush | Iterations 0 and 1 (two cases), bent pose initialised before the bend |
+| correction/uv | Correction | Mapping UV |
+| correction/normals | Correction | Mapping Normals |
+
 ## Notes
 
 Folders: every family in this job keeps its folder named after the row's first component,
