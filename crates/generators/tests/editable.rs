@@ -296,22 +296,28 @@ fn consumed_children_are_removed_and_other_children_kept() {
 #[test]
 fn nodes_without_a_mesh_are_reported_and_edit_nothing() {
     let mut d = doc();
-    let (null, circle, bend) = d
+    // a spline primitive is not here: it becomes an editable spline (SPLINES.md section 3)
+    let (null, bend, spline) = d
         .transact("build", |tx| {
             Ok((
                 tx.create("forge.null", None, None)?,
-                tx.create("forge.circle_spline", None, None)?,
                 tx.create("forge.bend", None, None)?,
+                tx.create("forge.spline", None, None)?,
             ))
         })
         .unwrap();
     let before = file::save(d.scene());
-    for id in [null, circle, bend] {
+    for id in [null, bend] {
         let r = d.transact("x", |tx| Ok(make_editable(tx, id)));
         assert!(matches!(r, Ok(Err(EditableError::NoMesh(_)))), "{id}");
         let r = d.transact("x", |tx| Ok(current_state_to_object(tx, id)));
         assert!(matches!(r, Ok(Err(EditableError::NoMesh(_)))), "{id}");
     }
+    // an editable spline is already editable and has no mesh to copy
+    let r = d.transact("x", |tx| Ok(make_editable(tx, spline)));
+    assert!(matches!(r, Ok(Ok(id)) if id == spline));
+    let r = d.transact("x", |tx| Ok(current_state_to_object(tx, spline)));
+    assert!(matches!(r, Ok(Err(EditableError::NoMesh(_)))));
     assert_eq!(file::save(d.scene()), before);
     assert!(d.history().undo_labels().len() == 1, "nothing recorded");
 }

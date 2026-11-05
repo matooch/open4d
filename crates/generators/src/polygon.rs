@@ -9,7 +9,7 @@ use forge_core::{
 use forge_geometry::PolyMesh;
 use glam::DVec3;
 
-use crate::{BuildError, evaluate, evaluate_geometry, is_consumed};
+use crate::{BuildError, editable_spline, evaluate, evaluate_geometry, is_consumed};
 
 pub const TYPE: &str = "forge.polygon";
 
@@ -76,15 +76,31 @@ fn index_of(scene: &Scene, id: NodeId) -> Option<(Option<NodeId>, usize)> {
     Some((parent, list.iter().position(|c| *c == id)?))
 }
 
-/// Creates a polygon object at `parent[index]` named like `src`, with copies of its tags,
-/// the `transform.*` params and tracks of `xform_src` and the given mesh.
+/// What a new editable object is made of: its type and the params written after creation.
+struct Payload {
+    type_id: &'static str,
+    params: Vec<(String, Value)>,
+}
+
+fn mesh_payload(mesh: &PolyMesh) -> Payload {
+    Payload {
+        type_id: TYPE,
+        params: vec![(
+            "mesh".to_string(),
+            Value::Mesh(Arc::new(from_poly_mesh(mesh))),
+        )],
+    }
+}
+
+/// Creates an editable object at `parent[index]` named like `src`, with copies of its tags,
+/// the `transform.*` params and tracks of `xform_src` and the payload's params.
 fn spawn_like(
     tx: &mut Tx,
     src: NodeId,
     xform_src: NodeId,
     parent: Option<NodeId>,
     index: usize,
-    mesh: &PolyMesh,
+    payload: Payload,
 ) -> Result<NodeId, EditError> {
     let (name, params, tracks, tags) = {
         let n = tx.scene().node(src).ok_or(EditError::UnknownNode(src))?;
@@ -114,7 +130,7 @@ fn spawn_like(
             .collect();
         (n.name.clone(), params, tracks, tags)
     };
-    let id = tx.create(TYPE, parent, Some(index))?;
+    let id = tx.create(payload.type_id, parent, Some(index))?;
     tx.rename(id, &name)?;
     for (k, v) in params {
         tx.set_param(id, &k, v)?;
@@ -129,7 +145,9 @@ fn spawn_like(
             tx.set_param(t, &k, v)?;
         }
     }
-    tx.set_param(id, "mesh", Value::Mesh(Arc::new(from_poly_mesh(mesh))))?;
+    for (k, v) in payload.params {
+        tx.set_param(id, &k, v)?;
+    }
     Ok(id)
 }
 
@@ -159,6 +177,19 @@ fn redirect_links(tx: &mut Tx, old: NodeId, new: NodeId) -> Result<(), EditError
     Ok(())
 }
 
+/// The editable spline replacing a spline primitive (SPLINES.md §3).
+fn spline_payload(
+    type_id: &str,
+    values: &std::collections::BTreeMap<String, Value>,
+) -> Result<Option<Payload>, BuildError> {
+    Ok(
+        editable_spline::from_primitive(type_id, values)?.map(|params| Payload {
+            type_id: editable_spline::TYPE,
+            params,
+        }),
+    )
+}
+
 /// Make Editable (EDITABLE.md §1.2): replaces `id` by a polygon object holding its mesh
 /// without deformers; consumed children are deleted, other children move to the new
 /// object. Returns the new id (`id` itself if it already is a polygon object).
@@ -168,15 +199,20 @@ pub fn make_editable(tx: &mut Tx, id: NodeId) -> Result<NodeId, EditableError> {
         .node(id)
         .filter(|n| !n.is_tag())
         .ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?;
-    if node.type_id == TYPE {
+    if node.type_id == TYPE || node.type_id == editable_spline::TYPE {
         return Ok(id);
     }
-    let mesh = evaluate_geometry(scene, id, &EvalCtx::default())?
-        .ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?;
+    let payload = match spline_payload(&node.type_id, &node.params)? {
+        Some(p) => p,
+        None => mesh_payload(
+            &evaluate_geometry(scene, id, &EvalCtx::default())?
+                .ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?,
+        ),
+    };
     let (parent, index) = index_of(scene, id).ok_or(EditError::UnknownNode(id))?;
     let (consumed, kept): (Vec<NodeId>, Vec<NodeId>) =
         node.children.iter().partition(|c| is_consumed(scene, **c));
-    let new = spawn_like(tx, id, id, parent, index, &mesh)?;
+    let new = spawn_like(tx, id, id, parent, index, payload)?;
     redirect_links(tx, id, new)?;
     for c in kept {
         tx.move_node(c, Some(new), None)?;
@@ -204,7 +240,7 @@ pub fn spawn_split(tx: &mut Tx, id: NodeId, mesh: &PolyMesh) -> Result<NodeId, E
         .map(|n| format!("{base}.{n}"))
         .find(|candidate| !taken.contains(candidate))
         .unwrap_or_else(|| base.clone());
-    let new = spawn_like(tx, id, id, parent, index + 1, mesh)?;
+    let new = spawn_like(tx, id, id, parent, index + 1, mesh_payload(mesh))?;
     tx.rename(new, &name)?;
     Ok(new)
 }
@@ -216,9 +252,15 @@ pub fn current_state_to_object(tx: &mut Tx, id: NodeId) -> Result<NodeId, Editab
     if scene.node(id).is_none_or(|n| n.is_tag()) {
         return Err(EditableError::NoMesh(name_of(scene, id)));
     }
+    let (parent, index) = index_of(scene, id).ok_or(EditError::UnknownNode(id))?;
+    // a spline primitive gives an editable spline next to it (deformers do not act on splines)
+    if let Some(node) = scene.node(id)
+        && let Some(payload) = spline_payload(&node.type_id, &node.params)?
+    {
+        return Ok(spawn_like(tx, id, id, parent, index + 1, payload)?);
+    }
     let mut mesh = evaluate(scene, id, &EvalCtx::default())?
         .ok_or_else(|| EditableError::NoMesh(name_of(scene, id)))?;
-    let (parent, index) = index_of(scene, id).ok_or(EditError::UnknownNode(id))?;
     // Deformers inherited from a geometry-less parent would deform the copy again under
     // that parent: put it after the parent instead, in the parent's space (§1.3).
     if let Some(p) = crate::sibling_deformer_parent(scene, id) {
@@ -230,7 +272,14 @@ pub fn current_state_to_object(tx: &mut Tx, id: NodeId) -> Result<NodeId, Editab
             *pt = m.transform_point3(*pt);
         }
         let (gp, pi) = index_of(scene, p).ok_or(EditError::UnknownNode(p))?;
-        return Ok(spawn_like(tx, id, p, gp, pi + 1, &mesh)?);
+        return Ok(spawn_like(tx, id, p, gp, pi + 1, mesh_payload(&mesh))?);
     }
-    Ok(spawn_like(tx, id, id, parent, index + 1, &mesh)?)
+    Ok(spawn_like(
+        tx,
+        id,
+        id,
+        parent,
+        index + 1,
+        mesh_payload(&mesh),
+    )?)
 }

@@ -28,6 +28,7 @@ evaluation of real node types (Phases 5+).
 | `Link` | `Option<NodeId>` | reference to another node |
 | `Mesh` | `Arc<MeshData>` | an editable polygon mesh (see below) |
 | `IndexList` | `Vec<u32>` | a sorted set of element indices (component selections) |
+| `Vec3List` | `Vec<[f64; 3]>` | every component finite; ordered; hidden, not animatable (editable spline points and handles, SPLINES.md; brief 028) |
 | `LinkList` | `Vec<NodeId>` | an ordered list of node references (a cloner's effector list, an effector's field list); order is meaningful |
 
 `ParamDesc { id, label, kind, default, ui, animatable }`:
@@ -36,7 +37,7 @@ evaluation of real node types (Phases 5+).
 - `kind: ParamKind`: `Bool`, `Int { min, max }`, `Float { min, max }`,
   `Vec3 { min, max }` (per component), `Color`, `Enum { options }` (each option
   `{ id, label }`, ids unique, at least one), `String`, `Link { accepts }` (list of
-  categories; empty = any), `LinkList { accepts }` (the same for each entry), `Mesh`, `IndexList`.
+  categories; empty = any), `LinkList { accepts }` (the same for each entry), `Mesh`, `IndexList`, `Vec3List`.
 - `ui: UiHint { group, unit, soft_min, soft_max, step, hidden }`. `unit` ∈
   `None | Distance | Angle | Percent | Time`. UI-only; never affects validation.
 - `animatable`: defaults to true for `Int/Float/Vec3/Color/Bool`, false otherwise.
@@ -519,6 +520,11 @@ equals a node id drops that layer, a `object.layer` link that names no layer is 
 a warning. The id counter starts above every node and layer id. Older builds reject a version 9
 file with `UnsupportedVersion`. The fixtures `scene-v9*.forge` pin the current bytes (they hold a
 layer and a member); `scene-v8*.forge` stay as the old build wrote them.
+
+`Value::Vec3List` (brief 028, SPLINES.md) is also additive under version 9: it is written inline
+as `Vec3List([(x, y, z), ...])` (never as a chunk), and no migration step exists. A build older
+than brief 028 rejects such a file with a parse error instead of `UnsupportedVersion`; the next
+format change should bump the version and cover it (planner follow-up).
 
 ## 7. Layers (`layers`; brief 158)
 

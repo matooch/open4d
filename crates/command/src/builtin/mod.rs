@@ -19,6 +19,7 @@ mod mesh;
 mod object;
 mod param;
 mod snap;
+mod spline;
 pub use param::{stored as display_to_stored, value_from_json as param_value_from_json};
 mod timeline;
 pub use timeline::timeline_state;
@@ -29,6 +30,7 @@ pub fn register_editor_commands(r: &mut CommandRegistry) -> Result<(), CommandEr
     object::register(r)?;
     layer::register(r)?;
     mesh::register(r)?;
+    spline::register(r)?;
     tools::register(r)?;
     arrange::register(r)?;
     cutting::register(r)?;

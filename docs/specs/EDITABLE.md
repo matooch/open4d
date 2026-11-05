@@ -33,7 +33,7 @@ For a node for which `evaluate_geometry` builds a mesh:
 - A `forge.polygon` is already editable: nothing changes, its own id is returned.
 - A node without a mesh (Null, spline, deformer, a generator with no usable input) gives
   `EditableError::NoMesh(name)` before anything is edited. A tag gives `NoMesh` too.
-  Editable splines are out of scope.
+  A spline primitive becomes an editable spline (`forge.spline`, SPLINES.md §3) instead.
 - A generator whose build returns `BuildError::Unsupported` gives `EditableError::Build`.
 - Every `Link` param of any other node (tags included, e.g. an Instance's `reference`)
   that points to the replaced node is set to the new polygon object in the same step

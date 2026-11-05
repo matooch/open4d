@@ -2,7 +2,7 @@
 
 # Command reference
 
-154 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+160 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -54,6 +54,12 @@
 | [`layer.merge`](#layermerge) | Merge Layers | yes | `layer_merge` |
 | [`mesh.make_editable`](#meshmake_editable) | Make Editable | yes | `mesh_make_editable` |
 | [`mesh.current_state_to_object`](#meshcurrent_state_to_object) | Current State to Object | yes | `mesh_current_state_to_object` |
+| [`spline.create`](#splinecreate) | Create Spline | yes | `spline_create` |
+| [`spline.edit_points`](#splineedit_points) | Edit Spline Points | yes | `spline_edit_points` |
+| [`spline.insert_point`](#splineinsert_point) | Insert Spline Point | yes | `spline_insert_point` |
+| [`spline.delete_points`](#splinedelete_points) | Delete Spline Points | yes | `spline_delete_points` |
+| [`spline.set_closed`](#splineset_closed) | Close Spline | yes | `spline_set_closed` |
+| [`spline.set_type`](#splineset_type) | Set Spline Type | yes | `spline_set_type` |
 | [`mesh.extrude`](#meshextrude) | Extrude | yes | `mesh_extrude` |
 | [`mesh.extrude_inner`](#meshextrude_inner) | Extrude Inner | yes | `mesh_extrude_inner` |
 | [`mesh.bevel`](#meshbevel) | Bevel | yes | `mesh_bevel` |
@@ -1193,6 +1199,83 @@ Transform Components. One undo step.
 | `symmetry` | boolean \| object | no | As soft, for the symmetry plane. |
 
 Example: `forge cmd scene.forge mesh.transform --args '{"move":[0.0,10.0,0.0],"points":[0],"soft":{"falloff":"bell","radius":100.0},"symmetry":{"axis":"x"}}'`
+
+
+## `spline`
+
+### `spline.create`
+
+Create Spline. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `points` | array of array of number (length 3) | yes | The points `[x, y, z]`, at least two. |
+| `closed` | boolean or null | no | Join the last point to the first (default false). |
+| `name` | string or null | no | Object name (default "Spline"). |
+| `parent` | integer or null | no | Parent node; the top level when absent. |
+| `type` | `"linear"` \| `"cubic"` \| `"akima"` \| `"bspline"` \| `"bezier"` \| null | no | Interpolation type (default `bezier`; all handles start at zero). |
+
+Example: `forge cmd scene.forge spline.create --args '{"closed":false,"points":[[0,0,0],[100,0,0],[100,100,0]]}'`
+
+### `spline.edit_points`
+
+Edit Spline Points. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline. |
+| `edits` | array of object | yes | At least one edit; each sets at least one of position, left, right. |
+| `gesture` | integer or null | no | Edits with the same gesture number on the same spline merge into one undo step. |
+
+Example: `forge cmd scene.forge spline.edit_points --args '{"edits":[{"index":0,"position":[10,0,0]}],"node":1}'`
+
+### `spline.insert_point`
+
+Insert Spline Point. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline. |
+| `index` | integer | yes | Where the point ends up in the list, 0 ..= the number of points. |
+| `position` | array of number (length 3) | yes |  |
+| `left` | array of number (length 3) or null | no | Left handle (default zero). |
+| `right` | array of number (length 3) or null | no | Right handle (default zero). |
+
+Example: `forge cmd scene.forge spline.insert_point --args '{"index":1,"node":1,"position":[50,0,0]}'`
+
+### `spline.delete_points`
+
+Delete Spline Points. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline. |
+| `indices` | array of integer | yes | Point indices to remove; a segment keeps at least two points. |
+
+Example: `forge cmd scene.forge spline.delete_points --args '{"indices":[1],"node":1}'`
+
+### `spline.set_closed`
+
+Close Spline. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | The editable spline. |
+| `closed` | boolean | yes |  |
+| `segment` | integer or null | no | Segment index (default 0). |
+
+Example: `forge cmd scene.forge spline.set_closed --args '{"closed":true,"node":1}'`
+
+### `spline.set_type`
+
+Set Spline Type. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `type` | `"linear"` \| `"cubic"` \| `"akima"` \| `"bspline"` \| `"bezier"` | yes | The interpolation types (SPLINES.md §1.1). |
+| `nodes` | array of integer or null | no | Editable splines; the current selection when absent. |
+
+Example: `forge cmd scene.forge spline.set_type --args '{"nodes":[1],"type":"akima"}'`
 
 
 ## `snap`

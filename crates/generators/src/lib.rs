@@ -5,6 +5,7 @@ pub mod axis;
 mod boole;
 mod cloner;
 mod cube;
+pub mod editable_spline;
 mod figure;
 mod landscape;
 mod lathe;
@@ -92,6 +93,7 @@ impl Plugin for Primitives {
         r.register(splines::circle_type())?;
         r.register(splines::rectangle_type())?;
         r.register(splines::helix_type())?;
+        r.register(editable_spline::node_type())?;
         for id in spline_prims::TYPES {
             r.register(spline_prims::node_type(id).expect("listed spline type"))?;
         }

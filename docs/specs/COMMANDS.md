@@ -44,7 +44,7 @@ the message only, so the editor can put it in the status bar.
 ## 2. Ids
 
 Lowercase ASCII `a-z 0-9 _`, segments joined by `.`, at least two segments
-(`domain.verb[_noun]`). Domains: `object edit view mesh select file key timeline transform
+(`domain.verb[_noun]`). Domains: `object edit view mesh spline select file key timeline transform
 param`. Ids are stable: renaming one is a breaking change.
 
 ## 3. Context
@@ -138,6 +138,12 @@ touch history.
 | `object.begin_rename` | - | null | no |
 | `view.toggle_expanded` | `node` | null | no |
 | `mesh.make_editable` | `nodes?` | `{made, skipped}` | yes |
+| `spline.create` | `points` (at least 2), `closed?`, `type?`, `name?`, `parent?` (SPLINES.md §5) | `{node}` | yes |
+| `spline.edit_points` | `node`, `edits: [{index, position?, left?, right?}]`, `gesture?` | `{changed}` | yes (a gesture merges) |
+| `spline.insert_point` | `node`, `index`, `position`, `left?`, `right?` | `{index}` | yes |
+| `spline.delete_points` | `node`, `indices` | `{deleted}` | yes |
+| `spline.set_closed` | `node`, `segment?`, `closed` | null | yes |
+| `spline.set_type` | `nodes?`, `type` linear, cubic, akima, bspline, bezier | `{changed}` | yes |
 | `mesh.current_state_to_object` | `nodes?` | `{made, skipped}` | yes |
 | `mesh.extrude` `mesh.extrude_inner` `mesh.bevel` | `node?`, `polys?`, `settings?`; bevel also `edges?`, `points?` (MODELING.md §0.1, §3) | `{node, points, polys, selected}` | yes |
 | `mesh.subdivide` `mesh.triangulate` `mesh.untriangulate` `mesh.reverse_normals` `mesh.optimize` `mesh.weld` `mesh.melt` `mesh.dissolve` `mesh.split` `mesh.disconnect` `mesh.connect_points` `mesh.mirror` `mesh.center_axis` | `node?`, `polys?`, `settings?`; weld, dissolve and connect_points also `edges?`, `points?` (MODELING.md §0.1, §4) | `{node, points, polys, selected}`; split adds `created`, center_axis adds `center` | yes |
@@ -263,6 +269,8 @@ Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and A
 - `ui.workspace`, `ui.layout_save`, `ui.layout_load`, `ui.layout_delete` (brief 156, UI.md §21):
   window actions too (headless: `needs the editor window`, unknown keys `InvalidArgs`); view state,
   not undoable, the document is untouched. Errors of the window go to the status bar.
+- `spline.*` (brief 028, SPLINES.md §5): editable splines; `node` must be a `forge.spline`, else
+  `Failed` ("make it editable first"). `param.set` refuses the point-list params.
 - `mesh.*`: EDITABLE.md §1; skipped nodes (no mesh) are listed in `skipped` and in the
   status text. Empty selection is `Failed`.
 - `select.*`: EDITABLE.md §2.5 (model mode selects objects).

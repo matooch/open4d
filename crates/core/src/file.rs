@@ -19,7 +19,7 @@ pub const FORMAT: &str = "forge3d-scene";
 /// `object.*` params and adds the chunk section and file reference params, version 7 the
 /// time configuration (markers, preview range, playback mode), version 8 the expression
 /// tag and its graph parameter (brief 108), version 9 the layer table and the hidden
-/// `object.layer` param (brief 158). Older files still load, through [`MIGRATIONS`].
+/// `object.layer` param (brief 158). `Value::Vec3List` (brief 028) is additive under version 9 (CORE.md section 6.8). Older files still load, through [`MIGRATIONS`].
 pub const VERSION: u32 = 9;
 
 /// A value whose binary payload is at least this many bytes is written as a chunk by
@@ -130,6 +130,7 @@ enum StoredValue {
     LinkList(Vec<NodeId>),
     Mesh(Arc<MeshData>),
     IndexList(Vec<u32>),
+    Vec3List(Vec<[f64; 3]>),
     MeshChunk(u32),
     IndexListChunk(u32),
 }
@@ -148,6 +149,7 @@ impl From<Value> for StoredValue {
             Value::LinkList(x) => Self::LinkList(x),
             Value::Mesh(x) => Self::Mesh(x),
             Value::IndexList(x) => Self::IndexList(x),
+            Value::Vec3List(x) => Self::Vec3List(x),
         }
     }
 }
@@ -711,6 +713,7 @@ impl Loader<'_> {
             StoredValue::LinkList(x) => Value::LinkList(x),
             StoredValue::Mesh(x) => Value::Mesh(x),
             StoredValue::IndexList(x) => Value::IndexList(x),
+            StoredValue::Vec3List(x) => Value::Vec3List(x),
             StoredValue::MeshChunk(at) => {
                 Value::Mesh(Arc::new(decode_mesh(self.chunk(at, KIND_MESH)?)?))
             }

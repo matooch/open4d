@@ -107,6 +107,12 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `layer_merge` | Merge Layers. Undoable editing command. Runs command `layer.merge`. |
 | `mesh_make_editable` | Make Editable. Undoable editing command. Runs command `mesh.make_editable`. |
 | `mesh_current_state_to_object` | Current State to Object. Undoable editing command. Runs command `mesh.current_state_to_object`. |
+| `spline_create` | Create Spline. Undoable editing command. Runs command `spline.create`. |
+| `spline_edit_points` | Edit Spline Points. Undoable editing command. Runs command `spline.edit_points`. |
+| `spline_insert_point` | Insert Spline Point. Undoable editing command. Runs command `spline.insert_point`. |
+| `spline_delete_points` | Delete Spline Points. Undoable editing command. Runs command `spline.delete_points`. |
+| `spline_set_closed` | Close Spline. Undoable editing command. Runs command `spline.set_closed`. |
+| `spline_set_type` | Set Spline Type. Undoable editing command. Runs command `spline.set_type`. |
 | `mesh_extrude` | Extrude. Undoable editing command. Runs command `mesh.extrude`. |
 | `mesh_extrude_inner` | Extrude Inner. Undoable editing command. Runs command `mesh.extrude_inner`. |
 | `mesh_bevel` | Bevel. Undoable editing command. Runs command `mesh.bevel`. |
