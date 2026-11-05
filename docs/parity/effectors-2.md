@@ -129,6 +129,33 @@ All cases: Linear cloner, Count 5, P per step (0, 50, 0); undisturbed clones sit
 | two-effectors | Plain P (0, 100, 0), then Plain Scale 2 | – | The cloner's effector list reads Plain, Plain.1 (the second effector is named "Plain.1"). Clones y 100…300, scale 3 |
 | two-effectors-swapped | Plain Scale 2, then Plain P (0, 100, 0) | – | List Plain, Plain.1 again, but now the first (named "Plain") is the scale one. **Samples are identical to two-effectors** (largest difference 0.0): the order does not matter for position and scale here |
 
+## Follow-up cases (planner, after brief 070)
+
+Brief 070 matched every case above (clone data); these pin the rules it had to guess. Same
+cloner as the cases above; write `frame` and `fps` into every case.toml; Delay needs the
+timeline played from frame 0 to the case frame before export.
+
+| Case | Effector | Changed from default | Notes |
+|---|---|---|---|
+| step-count-9 | Step | cloner count 9, Position on, P (0, 100, 0) | pins the step curve |
+| step-spline | Step | Position on, P (0, 100, 0), spline curve changed to an ease-in | record the curve's points |
+| step-gap-1 | Step | Step Gap 1, Position on | |
+| step-gap-2 | Step | Step Gap 2, Position on | |
+| formula-project-time-2 | Formula | t - Project Time 2, frame 10 | multiplied or added? |
+| formula-frequency-2 | Formula | Frequency 2, frame 10 | |
+| formula-px-falloff | Formula | formula `px*falloff`, a Spherical field (size 200) | |
+| time-frame-15 | Time | Position on, P (0, 100, 0), frame 15 | per second vs per frame |
+| time-frame-60 | Time | the same, frame 60 | |
+| target-reverse | Target | as `target-defaults`, Reverse Heading on | |
+| target-no-pitch | Target | Use Pitch off | |
+| target-up-y | Target | Up Vector Y+ | one case each for X+ |
+| target-next-node | Target | Next Node | |
+| target-strength-50 | Target | Strength 50 % | |
+| target-offaxis | Target | Null at (200, 100, 300) | |
+| delay-blend-f5 | Delay | after a Time effector (Position on, P (0, 100, 0)); Mode Blend; frame 5 | one case each at frames 0, 1, 2, 10 |
+| delay-even-f5 | Delay | the same, Mode Even, frame 5 | |
+| delay-spring-f5 | Delay | the same, Mode Spring, frame 5 | |
+
 ## Notes
 - Each effector adds a field to the cloner named after it, as in O8; the second Plain makes a second one (`plain_1_percent` next to `plain_percent`).
 - Hidden parameters (P, R, S, the Custom Color swatch, Scale value, Absolute Scale) are not written to `case.toml` unless the on-off switch is on, because the app hides them; the defaults are in the tables above.
