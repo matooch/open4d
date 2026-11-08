@@ -318,6 +318,80 @@ Everything the panel does goes through them.
 `> current`, the previous the one with the largest frame `< current`, among markers inside
 the project range; none: the frame stays. Several markers on one frame count once.
 
+## 2b. Motion paths and onion skin (brief 095, own design, **parity-pending G5**)
+
+Sources: the area design G-animation.md ("Display: motion paths, onion skin"). No
+observation exists: every rule here is our own design. A reference-app display rule (frame
+ticks, colours, per-object flags, how the ghost count is set) is unanswered; **GUI session
+G5** (docs/parity/GUI-SESSIONS.md, timeline and animation display) is the one that could
+settle it, with a new item "motion trajectory and ghosting display". Nothing here is a parity
+claim.
+
+### 2b.1 Sampling (`forge-anim::motion`, pure)
+- `PathRange { start, end, step }` (frames, `start <= end`, `step >= 1`). `PathRange::new`
+  raises the step until at most `MAX_PATH_SAMPLES = 2000` frames result. `frames()` is
+  `start, start + step, ...` up to `end`, and `end` itself is appended when the walk does not
+  land on it (so a path always ends at the range end).
+- `sample_paths(scene, nodes, range, eval) -> Vec<MotionPath>`: `eval(time_seconds)` returns
+  the scene animated to that time (`scene_at`, or the scheduler's `animate` with expression
+  tags). It is called **once per frame** for all nodes. A sample is
+  `world_matrix(node) * (0, 0, 0)` in the evaluated scene, frame time `frame / fps`.
+  At most `MAX_PATH_NODES = 16` nodes (the first ones in the given order); tags and unknown
+  nodes are skipped.
+- `MotionPath { node, samples: Vec<(frame, pos)>, keys: Vec<(frame_f64, pos)> }`. Keys are
+  the key times (times `fps`) of every `transform.*` track of the node and of its ancestors
+  that lie in `[start, end]` (tolerance `1e-6`), sorted, de-duplicated within `1e-6`; the
+  position of a key is evaluated at the key's exact time (it may lie between frames).
+- A path whose samples all coincide (largest distance from the first sample below `1e-9`) is
+  dropped: an object that does not move has no path, whatever drives it.
+- Deterministic: the result depends only on the scene, nodes and range.
+
+### 2b.2 Onion frames (`forge-anim::motion::onion_frames`)
+`onion_frames(current, before, after, step, lo, hi) -> Vec<OnionFrame { frame, rank, forward }>`:
+`before` frames at `current - k * step` and `after` at `current + k * step` for
+`k = 1..=count`, keeping those inside `[lo, hi]` (the project range). `rank` is `k`. The list
+is in ascending frame order. `step >= 1`; `before`/`after` at most `MAX_ONION = 10`.
+
+### 2b.3 Evaluation, cache, background job (`forge-app::motion`)
+- `compute_paths(scene, nodes, range)` samples with the scheduler's `animate` (tracks, then
+  expression tags), so a path follows what the viewport shows. `compute_ghosts(scene, nodes,
+  frames)` animates the scene to each ghost frame, evaluates each node's mesh in world space
+  (`schedule::node_output`) and stores its wire (`GhostDraw`, VIEWPORT.md section 12).
+- `AsyncCache<K, T>` holds the latest finished result and its key. `get(key, job)` returns
+  `(Option<Arc<T>>, pending)`: the result for `key` when ready; otherwise the previous result
+  (stale, so the display does not flicker) and `pending = true` while the job for `key` runs on
+  one worker thread. A newer request replaces a queued one (at most one running, one queued).
+  `synchronous = true` runs the job inline (tests, screenshots, headless).
+- The key is **pure data**: `(scene revision, node count, nodes, range/frames, fps)`; paths do
+  not depend on the current frame, onion frames do (current frame is part of their key). The
+  revision rises on every edit, undo and redo, so an edited track, an undo or a scrub never
+  shows a result computed for other content once the new one is ready; no state outside the
+  key influences the result.
+- Nodes: the selected objects, in id order (at most 16 get a path).
+
+### 2b.4 Display settings and commands
+`MotionDisplay` (view state, like `view.clone_display`: **not saved, not part of the
+document, not undoable**; the documented toggles never edit the scene):
+| Field | Default | Meaning |
+|---|---|---|
+| `paths` | false | draw motion paths of the selected objects |
+| `range` | none (= project range) | custom `(start, end)` frames |
+| `step` | 1 | path sample step, 1 to 1000 |
+| `onion` | false | draw ghosts of the selected objects |
+| `before`, `after` | 2, 2 | ghost counts, 0 to 10 |
+| `onion_step` | 1 | frames between ghosts, 1 to 100 |
+Commands (COMMANDS.md): `view.motion_paths {enabled?, start?, end?, reset_range?, step?}` and
+`view.onion_skin {enabled?, before?, after?, step?}`. Absent `enabled` with no other field
+toggles. `start` and `end` come together and need `start <= end`; `reset_range` returns to the
+project range. Out-of-range numbers are an `InvalidArgs` error and change nothing. The View menu
+has "Motion Paths" and "Onion Skin" toggles that run the commands.
+
+### 2b.5 Tests
+crates/anim/tests/motion.rs (range, frames, sampling against `scene_at`, keys, static object has no path, ancestors,
+onion frames), crates/app/tests/motion.rs (cache semantics, undo/scrub invalidation, job result equals
+synchronous result, ghosts), crates/viewport/tests/motion.rs (draw lists) and display.rs (GPU baseline),
+crates/ui/tests/motion_view.rs (commands, screenshot).
+
 ## 3. Parity status
 
 17/17 cases (19 sample files) match within 1·10⁻⁴; the largest error is 2.7·10⁻¹⁰

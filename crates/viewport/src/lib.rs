@@ -10,6 +10,7 @@ pub mod grid;
 pub mod instancing;
 pub mod lights;
 pub mod lod;
+pub mod motion;
 pub mod nav;
 pub mod panes;
 pub mod picking;

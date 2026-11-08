@@ -165,6 +165,34 @@ struct CloneDisplayArgs {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+struct MotionPathsArgs {
+    /// Show or hide the paths; absent with no other field toggles.
+    enabled: Option<bool>,
+    /// First frame of a custom range (needs `end`).
+    start: Option<i64>,
+    /// Last frame of a custom range (needs `start`).
+    end: Option<i64>,
+    /// Back to the project range.
+    reset_range: Option<bool>,
+    /// Frames between samples, 1 to 1000.
+    step: Option<i64>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct OnionSkinArgs {
+    /// Show or hide the ghosts; absent with no other field toggles.
+    enabled: Option<bool>,
+    /// Ghosts before the current frame, 0 to 10.
+    before: Option<u32>,
+    /// Ghosts after the current frame, 0 to 10.
+    after: Option<u32>,
+    /// Frames between ghosts, 1 to 100.
+    step: Option<i64>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct EnabledArgs {
     enabled: bool,
 }
@@ -441,6 +469,47 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
         ),
         |c, a: EnabledArgs| {
             c.set_antialias(a.enabled);
+            Ok(Value::Null)
+        },
+    )?;
+    r.register_fn(
+        spec(
+            "view.motion_paths",
+            "Motion Paths",
+            false,
+            || json!({"enabled": true, "step": 1}),
+        ),
+        |c, a: MotionPathsArgs| {
+            let range = match (a.start, a.end) {
+                (Some(s), Some(e)) => Some((s, e)),
+                (None, None) => None,
+                _ => {
+                    return Err(CommandError::InvalidArgs(
+                        "`start` and `end` come together".into(),
+                    ));
+                }
+            };
+            let next = c
+                .motion_display()
+                .with_paths(a.enabled, range, a.reset_range.unwrap_or(false), a.step)
+                .map_err(CommandError::InvalidArgs)?;
+            c.set_motion_display(next);
+            Ok(Value::Null)
+        },
+    )?;
+    r.register_fn(
+        spec(
+            "view.onion_skin",
+            "Onion Skin",
+            false,
+            || json!({"enabled": true, "before": 2, "after": 2}),
+        ),
+        |c, a: OnionSkinArgs| {
+            let next = c
+                .motion_display()
+                .with_onion(a.enabled, a.before, a.after, a.step)
+                .map_err(CommandError::InvalidArgs)?;
+            c.set_motion_display(next);
             Ok(Value::Null)
         },
     )?;

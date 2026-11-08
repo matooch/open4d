@@ -266,6 +266,14 @@ impl CommandContext for EditorState {
         }
     }
 
+    fn motion_display(&self) -> forge_command::MotionDisplay {
+        self.views.motion.clone()
+    }
+
+    fn set_motion_display(&mut self, display: forge_command::MotionDisplay) {
+        self.views.motion = display;
+    }
+
     fn set_camera(&mut self, set: CameraSet) {
         self.apply_camera_set(set);
     }

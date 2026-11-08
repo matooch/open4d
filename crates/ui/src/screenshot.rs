@@ -45,6 +45,17 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
     let lights = scene_lights(&scene);
     let views = state.views.clone();
     let splines = editor_draws(&scene, state);
+    // inline evaluation: a screenshot never shows a stale or missing overlay
+    let (motion, _) = {
+        let mut m = crate::motion_view::MotionState::synchronous();
+        m.draw(
+            state.app.doc.scene(),
+            &scene,
+            &state.app.selection.nodes,
+            &state.views.motion,
+            current,
+        )
+    };
     let panes: Vec<(PaneRect, Camera, Settings)> = arrange(
         views.layout,
         views.active,
@@ -86,9 +97,15 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
         let grid = grid_lines(camera, f64::from(height));
         let curves = LineSet::new(
             &gpu.device,
-            &pane_lines(
-                &splines,
-                settings.shading,
+            &with_motion(
+                pane_lines(
+                    &splines,
+                    settings.shading,
+                    &palette,
+                    camera,
+                    [f64::from(width), f64::from(height)],
+                ),
+                &motion,
                 &palette,
                 camera,
                 [f64::from(width), f64::from(height)],
@@ -111,9 +128,15 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
             let grid = grid_lines(camera, f64::from(h));
             let curves = LineSet::new(
                 &gpu.device,
-                &pane_lines(
-                    &splines,
-                    settings.shading,
+                &with_motion(
+                    pane_lines(
+                        &splines,
+                        settings.shading,
+                        &palette,
+                        camera,
+                        [f64::from(w), f64::from(h)],
+                    ),
+                    &motion,
                     &palette,
                     camera,
                     [f64::from(w), f64::from(h)],
@@ -146,4 +169,18 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
         .and_then(|mut w| w.write_image_data(&rgba))
         .map_err(|e| format!("PNG encoding failed: {e}"))?;
     Ok(png_bytes)
+}
+
+/// `lines` plus the motion path and ghost lines for one pane.
+fn with_motion(
+    mut lines: Vec<forge_viewport::curves::DrawLine>,
+    motion: &forge_viewport::motion::MotionDraw,
+    palette: &Palette,
+    camera: &Camera,
+    size: [f64; 2],
+) -> Vec<forge_viewport::curves::DrawLine> {
+    lines.extend(forge_viewport::motion::overlay_lines(
+        motion, palette, camera, size,
+    ));
+    lines
 }

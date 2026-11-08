@@ -1299,6 +1299,21 @@ impl Editor {
             "Clone Axes",
             ("view.clone_display", json!({"axes": !v.clone_axes})),
         );
+        ui.separator();
+        item(
+            ui,
+            self,
+            v.motion.paths,
+            "Motion Paths",
+            ("view.motion_paths", json!({"enabled": !v.motion.paths})),
+        );
+        item(
+            ui,
+            self,
+            v.motion.onion,
+            "Onion Skin",
+            ("view.onion_skin", json!({"enabled": !v.motion.onion})),
+        );
         for c in runs {
             self.run(c);
         }
@@ -1439,6 +1454,16 @@ impl Editor {
         let previewed = crate::tools::with_preview(&self.state, &scheduled.scene);
         let shown = previewed.clone().unwrap_or_else(|| scheduled.scene.clone());
         let lights = crate::panes::scene_lights(&shown);
+        let (motion, motion_pending) = self.state.motion.draw(
+            self.state.app.doc.scene(),
+            &shown,
+            &self.state.app.selection.nodes,
+            &self.state.views.motion,
+            current,
+        );
+        if motion_pending {
+            ui.ctx().request_repaint();
+        }
         let tex = self.viewport.render(
             rs,
             pane,
@@ -1456,6 +1481,7 @@ impl Editor {
                 ),
                 frame: previewed.is_none().then_some(&*scheduled),
                 splines: &crate::spline_edit::editor_draws(&shown, &self.state),
+                motion: &motion,
             },
         );
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));

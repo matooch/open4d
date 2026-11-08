@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::browser::Browser;
 use crate::state::{
     CameraSet, GizmoModeArg, GizmoSpaceArg, HudItemArg, LayoutArg, LightingArg, ModeArg,
-    NodeSelection, PaneArg, SelectExtra, SelectOp, ShadingMode, UiRequest, ViewArg,
+    MotionDisplay, NodeSelection, PaneArg, SelectExtra, SelectOp, ShadingMode, UiRequest, ViewArg,
 };
 use crate::timeline::Timeline;
 
@@ -104,6 +104,12 @@ pub trait CommandContext {
     }
     /// Switches the clone index and axes overlay (`None` keeps a setting).
     fn set_clone_display(&mut self, _indices: Option<bool>, _axes: Option<bool>) {}
+    /// The motion path and onion skin display (default for headless contexts).
+    fn motion_display(&self) -> MotionDisplay {
+        MotionDisplay::default()
+    }
+    /// Stores an already validated motion display.
+    fn set_motion_display(&mut self, _display: MotionDisplay) {}
     /// Applies validated camera fields.
     fn set_camera(&mut self, _set: CameraSet) {}
     /// The camera as JSON (`view.get_camera`); null without a viewport.

@@ -92,7 +92,7 @@ implementers can avoid collisions.
 | 092 | [Speed graph mode and speed editing](../agents/tasks/092-speed-graph.md) | G | 091 | ready | ui, anim |
 | 093 | [Track before/after behaviours, key reduction, bake](../agents/tasks/093-track-behaviours-bake.md) | G | 089 | waiting: O27, O38 | anim |
 | 094 | [Time: markers, preview range, playback modes, fps conversion, time display](../agents/tasks/094-time-markers-playback.md) | G | 010 | done (parity-pending G5) | core, ui |
-| 095 | [Motion paths and onion skin](../agents/tasks/095-motion-paths-onion.md) | G | 010, 143 | ready | viewport |
+| 095 | [Motion paths and onion skin](../agents/tasks/095-motion-paths-onion.md) | G | 010, 143 | done | viewport |
 | 096 | [Rotation: Euler filter, quaternion interpolation option](../agents/tasks/096-rotation-euler-quat.md) | G | 089 | waiting: O27, O53 | anim |
 | 097 | [Keyframe indicators on every parameter; key context menu](../agents/tasks/097-keyframe-indicators.md) | G | 088, 150 | ready | ui |
 | 098 | [Animated evaluation performance (dependency-aware re-evaluation)](../agents/tasks/098-animated-eval-performance.md) | G | 180 | done | core, anim |

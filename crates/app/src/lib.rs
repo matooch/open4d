@@ -6,6 +6,7 @@
 pub mod animate;
 pub mod coords;
 pub mod diagnostics;
+pub mod motion;
 pub mod param_edit;
 pub mod query;
 pub mod schedule;

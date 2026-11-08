@@ -81,6 +81,8 @@ pub struct EditorState {
     pub snap_hit: Option<forge_modeling::snap::SnapHit>,
     /// The selected control points of the edited spline (VIEWPORT.md section 11.2). Not saved.
     pub spline_sel: crate::spline_edit::SplineSelection,
+    /// Caches of the motion path and onion skin overlays (ANIM.md section 2b). Not saved.
+    pub motion: crate::motion_view::MotionState,
 }
 
 impl Deref for EditorState {
@@ -143,6 +145,7 @@ impl EditorState {
             hud_last: Vec::new(),
             snap_hit: None,
             spline_sel: Default::default(),
+            motion: Default::default(),
         }
     }
 }

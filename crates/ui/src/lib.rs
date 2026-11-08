@@ -26,6 +26,7 @@ pub mod keymap_editor;
 pub mod layer_manager;
 pub mod layout;
 pub mod manipulate;
+pub mod motion_view;
 pub mod navigation;
 pub mod node_canvas;
 pub mod node_editor;

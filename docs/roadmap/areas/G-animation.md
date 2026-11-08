@@ -39,7 +39,7 @@
 - [x] **Time (brief 094, parity-pending G5):** preview range, playback modes (realtime with frame drops, every frame),
   fps conversion, time display (frames, SMPTE, seconds), markers.
 - [ ] **Rotation:** Euler filter (unwrap), and a quaternion interpolation option per track.
-- [ ] **Display:** motion paths (trajectories), onion skin (ghosting) in the viewport.
+- [x] **Display (brief 095, parity-pending G5):** motion paths (trajectories), onion skin (ghosting) in the viewport.
 - [ ] **v2:** motion layers, motion clips (non-linear animation), sound tracks.
 
 ## Observation jobs
