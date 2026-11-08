@@ -40,9 +40,7 @@ const KNOWN_MISMATCH: &[&str] = &[
     "loft/defaults", // superseded by R25 (D18): loft/three-circles
     "loft/three",    // superseded by R25 (D18): loft/three-circles
     "loft/caps-off", // superseded by R25 (D18): loft/three-circles
-    // brief 042: the uniform helix route is off by up to 3.5e-4; scale-end also the
-    // Banking-on frame
-    "sweep/banking",
+    // brief 042: the rail helix (end radius 400) is off; scale-end also the Banking-on frame
     "sweep/rail",
     "sweep/scale-end",
 ];
@@ -262,7 +260,7 @@ fn golden_scenes_through_the_writer_match_the_reference() {
         set(KNOWN_MISMATCH),
         "known-mismatch set changed"
     );
-    assert_eq!(matched.len(), 75 + 33 + 2, "{matched:?}");
+    assert_eq!(matched.len(), 75 + 34 + 2, "{matched:?}");
 }
 
 #[test]

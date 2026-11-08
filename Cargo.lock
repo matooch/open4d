@@ -1499,6 +1499,7 @@ name = "forge-clone-engine"
 version = "0.1.0"
 dependencies = [
  "forge-core",
+ "forge-expr",
  "forge-fields",
  "forge-noise",
  "glam",
@@ -1536,10 +1537,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-expr"
+version = "0.1.0"
+
+[[package]]
 name = "forge-fields"
 version = "0.1.0"
 dependencies = [
  "forge-core",
+ "forge-expr",
  "forge-noise",
  "forge-parity-harness",
  "glam",
@@ -1573,6 +1579,7 @@ dependencies = [
  "forge-modifiers",
  "forge-noise",
  "forge-parity-harness",
+ "forge-text",
  "glam",
  "rayon",
  "thiserror 2.0.21",
@@ -1642,10 +1649,13 @@ dependencies = [
 name = "forge-modifiers"
 version = "0.1.0"
 dependencies = [
+ "forge-anim",
  "forge-core",
+ "forge-expr",
  "forge-fields",
  "forge-generators",
  "forge-geometry",
+ "forge-noise",
  "forge-parity-harness",
  "glam",
  "toml",
@@ -1767,6 +1777,13 @@ dependencies = [
  "forge-rpc",
  "forge-ui",
  "tracing",
+]
+
+[[package]]
+name = "forge-text"
+version = "0.1.0"
+dependencies = [
+ "skrifa",
 ]
 
 [[package]]

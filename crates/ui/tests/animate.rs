@@ -767,7 +767,14 @@ fn make_editable_and_current_state_copy_transform_tracks_only() {
         assert!(before.contains_key("transform.pos.x"));
         st.selection.click(src);
         execute(&mut st, command, json!({})).unwrap();
-        let new = st.selection.active.unwrap();
+        // Current State to Object leaves the original selected: the copy is its next sibling
+        let new = if command == "mesh.make_editable" {
+            st.selection.active.unwrap()
+        } else {
+            assert_eq!(st.selection.active, Some(src));
+            let roots = st.doc.scene().roots();
+            roots[roots.iter().position(|r| *r == src).unwrap() + 1]
+        };
         let node = st.doc.scene().node(new).unwrap();
         assert_eq!(node.type_id, "forge.polygon");
         let mut got: Vec<&String> = node.tracks.keys().collect();

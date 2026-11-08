@@ -12,6 +12,7 @@ forge-core = { path = "../core" }
 forge-geometry = { path = "../geometry" }
 forge-modifiers = { path = "../modifiers" }
 forge-noise = { path = "../noise" }
+forge-text = { path = "../text" }
 glam = "0.34"
 thiserror = "2"
 

@@ -133,5 +133,10 @@ You can also do a sitting **with an observer session's help**:
 3. Picture viewer: the history list, A/B compare, channels.
 4. Safe frames and the HUD: what they show by default.
 
+- **Null display** (brief 046): for each Null Display shape, the drawn shape at Radius 100 and
+  Aspect Ratio 1, then one shape at Radius 50 / Aspect 2, and each Orientation option
+  (screenshot plus what the shape looks like in words).
+
+
 ## Answers
 (The owner fills this in, per session, with the date.)

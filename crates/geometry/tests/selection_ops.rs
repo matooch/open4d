@@ -87,8 +87,9 @@ fn tolerant_convert_takes_any_part() {
 }
 
 #[test]
-fn connected_spreads_over_shared_points() {
-    // Two quads sharing only the corner point 2, and a third quad apart.
+fn connected_spreads_over_shared_edges() {
+    // Two quads sharing only the corner point 2 (not connected, O58 sel-connected-point-only),
+    // and a third quad apart.
     let m = mesh(
         &[
             [0., 0., 0.],
@@ -105,13 +106,19 @@ fn connected_spreads_over_shared_points() {
         ],
         &[&[0, 1, 2, 3], &[2, 4, 5, 6], &[7, 8, 9, 10]],
     );
-    assert_eq!(ids(&connected(&m, Kind::Polys, &set(&[0]))), [0, 1]);
+    assert_eq!(ids(&connected(&m, Kind::Polys, &set(&[0]))), [0]);
     assert_eq!(ids(&connected(&m, Kind::Polys, &set(&[2]))), [2]);
-    assert_eq!(ids(&connected(&m, Kind::Polys, &set(&[0, 2]))), [0, 1, 2]);
+    assert_eq!(ids(&connected(&m, Kind::Polys, &set(&[0, 2]))), [0, 2]);
     assert_eq!(ids(&connected(&m, Kind::Points, &set(&[8]))), [7, 8, 9, 10]);
     let e = edges(&m, &[(2, 4)]);
     let got = connected(&m, Kind::Edges, &e);
-    assert_eq!(got.len(), 8);
+    assert_eq!(got.len(), 4);
+    // a closed cube is one piece; a quad strip spreads over its shared edges
+    let c = common::cube();
+    assert_eq!(connected(&c, Kind::Polys, &set(&[3])).len(), 6);
+    let g = common::grid();
+    assert_eq!(connected(&g, Kind::Polys, &set(&[0])).len(), 4);
+    assert_eq!(connected(&g, Kind::Points, &set(&[0])).len(), 9);
     assert!(connected(&m, Kind::Polys, &IndexSet::new()).is_empty());
     assert!(connected(&m, Kind::Polys, &set(&[99])).is_empty());
 }

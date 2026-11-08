@@ -25,7 +25,11 @@ pub const NOISE_FEATURE: f64 = 300.0;
 pub fn random_type() -> NodeType {
     let defaults = CommonDefaults {
         minimum: -1.0,
+        position: true,
         p: [50.0; 3],
+        rotation: false,
+        r: [0.0; 3],
+        scale: false,
         color_mode: "off",
         uniform_scale: true,
         scale_value: 1.0,
@@ -268,11 +272,18 @@ impl Effector for Random {
     }
 }
 
-/// True if the effector node `id` changes with time: a Random effector in a noise or
-/// turbulence mode with a non-zero animation speed (CORE.md section 5b).
+/// True if the effector node `id` changes with time: a Time, Formula or Delay effector, or a
+/// Random effector in a noise or turbulence mode with a non-zero animation speed (CORE.md
+/// section 5b).
 pub fn effector_reads_time(scene: &Scene, id: NodeId) -> bool {
-    scene.node(id).is_some_and(|n| n.type_id == RANDOM)
-        && from_node(scene, id).is_some_and(|r| {
+    let Some(node) = scene.node(id) else {
+        return false;
+    };
+    match node.type_id.as_str() {
+        crate::time::TIME | crate::formula::FORMULA | crate::delay::DELAY => true,
+        RANDOM => from_node(scene, id).is_some_and(|r| {
             matches!(r.mode, RandomMode::Noise | RandomMode::Turbulence) && r.animation_speed != 0.0
-        })
+        }),
+        _ => false,
+    }
 }

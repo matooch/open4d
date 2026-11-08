@@ -27,7 +27,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $pkg "bin") | Out-Null
 foreach ($b in $bins) {
     $exe = Join-Path $BinDir "$b.exe"
     if (-not (Test-Path $exe)) { throw "missing binary $exe" }
-    # HOOK(177): sign each exe here; skipped when secrets are absent.
+    # Signing hook (brief 177): skipped unless the workflow prepared a certificate.
     & (Join-Path $PSScriptRoot "sign-hooks.ps1") -Path $exe
     Copy-Item $exe (Join-Path $pkg "bin")
 }

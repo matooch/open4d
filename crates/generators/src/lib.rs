@@ -1,6 +1,7 @@
 //! forge-generators: parametric primitives. Spec: docs/specs/PRIMITIVES.md
 //! (vertex and face orders come from docs/parity/{plane,cube,sphere}.md).
 
+pub mod atom_array;
 pub mod axis;
 mod boole;
 mod cloner;
@@ -20,11 +21,13 @@ mod round;
 mod solids;
 mod sphere;
 mod spline_gens;
+pub mod spline_mask;
 mod spline_prims;
 pub mod spline_sampling;
 pub mod spline_tools;
 pub mod splines;
 mod subdivision;
+pub mod text_spline;
 
 pub use boole::{boole, boole_objects, inputs_of as boole_inputs_of};
 pub use cloner::{
@@ -33,8 +36,9 @@ pub use cloner::{
 };
 pub use modeling::{array, connect, inputs_of as modeling_inputs_of, symmetry};
 pub use polygon::{
-    EditableError, SELECTION_EDGES, SELECTION_POINTS, SELECTION_POLYS, TYPE as POLYGON,
-    current_state_to_object, from_poly_mesh, make_editable, spawn_split, to_poly_mesh,
+    EditableError, POLYGON_SELECTION, SELECTION_EDGES, SELECTION_POINTS, SELECTION_POLYS,
+    TYPE as POLYGON, current_state_to_object, from_poly_mesh, make_editable, spawn_split,
+    to_poly_mesh,
 };
 pub use spline_gens::{extrude, lathe, loft, spline_inputs_of, sweep};
 pub use subdivision::{input_of, subdivide, subdivide_with_creases};
@@ -95,6 +99,7 @@ impl Plugin for Primitives {
         r.register(splines::rectangle_type())?;
         r.register(splines::helix_type())?;
         r.register(editable_spline::node_type())?;
+        r.register(text_spline::node_type())?;
         for id in spline_prims::TYPES {
             r.register(spline_prims::node_type(id).expect("listed spline type"))?;
         }
@@ -102,7 +107,10 @@ impl Plugin for Primitives {
         r.register(spline_gens::lathe_type())?;
         r.register(spline_gens::loft_type())?;
         r.register(spline_gens::sweep_type())?;
+        r.register(atom_array::node_type())?;
+        r.register(spline_mask::node_type())?;
         r.register(boole::node_type())?;
+        r.register(polygon::selection_tag_type())?;
         r.register(polygon::node_type())
     }
 }
@@ -147,6 +155,13 @@ impl Params<'_> {
         match self.get(id) {
             Value::Link(l) => l,
             other => unreachable!("{id} is not a link: {other:?}"),
+        }
+    }
+
+    pub(crate) fn string(&self, id: &str) -> String {
+        match self.get(id) {
+            Value::String(s) => s,
+            other => unreachable!("{id} is not a string: {other:?}"),
         }
     }
 
@@ -196,11 +211,33 @@ pub fn build(type_id: &str, values: &BTreeMap<String, Value>) -> Result<PolyMesh
 pub fn evaluate(scene: &Scene, id: NodeId, ctx: &EvalCtx) -> Result<Option<PolyMesh>, BuildError> {
     let mut mesh = evaluate_geometry(scene, id, ctx)?;
     if let Some(mesh) = mesh.as_mut() {
+        let resolve = |helper: NodeId| resolve_helper(scene, helper, ctx);
         for d in deformer_children(scene, id) {
-            forge_modifiers::apply_deformer(scene, d, id, &mut mesh.points, ctx);
+            forge_modifiers::apply_deformer_resolved(scene, d, id, mesh, ctx, &resolve);
         }
     }
     Ok(mesh)
+}
+
+thread_local! {
+    /// Nesting depth of helper evaluations (a deformer whose helper is deformed by itself).
+    static HELPER_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// The mesh of a helper object a deformer links (cage, surface, collider), deformers
+/// included; `None` past a nesting depth of 4 (a helper that depends on its own deformer).
+fn resolve_helper(scene: &Scene, helper: NodeId, ctx: &EvalCtx) -> Option<PolyMesh> {
+    let depth = HELPER_DEPTH.with(|d| d.get());
+    if depth >= 4 {
+        return None;
+    }
+    HELPER_DEPTH.with(|d| d.set(depth + 1));
+    let mesh = match splines::polyline_mesh(scene, helper) {
+        Some(line) => Some(line),
+        None => evaluate(scene, helper, ctx).ok().flatten(),
+    };
+    HELPER_DEPTH.with(|d| d.set(depth));
+    mesh
 }
 
 /// [`evaluate`] without the deformers: used where only the presence of geometry
@@ -358,6 +395,7 @@ pub fn is_consumed(scene: &Scene, id: NodeId) -> bool {
         boole::TYPE => boole::inputs_of(scene, p.id).contains(&id),
         cloner::TYPE => cloner::prototypes_of(scene, p.id).contains(&id),
         t if modeling::input_count(t).is_some() => modeling::inputs_of(scene, p.id).contains(&id),
+        spline_mask::TYPE => spline_mask::inputs_of(scene, p.id).contains(&id),
         t if spline_gens::spline_input_count(t).is_some() => {
             spline_gens::spline_inputs_of(scene, p.id).contains(&id)
         }

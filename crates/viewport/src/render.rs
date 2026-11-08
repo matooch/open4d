@@ -812,11 +812,31 @@ pub struct FrameStats {
     pub lod_draws: u32,
 }
 
+/// Coloured line segments on the GPU: the splines of one pane (docs/specs/VIEWPORT.md section 11).
+pub struct LineSet(Vertices);
+
+impl LineSet {
+    pub fn new(device: &wgpu::Device, lines: &[crate::curves::DrawLine]) -> LineSet {
+        let data: Vec<ColorVertex> = lines
+            .iter()
+            .flat_map(|l| {
+                [l.a, l.b].map(|p| ColorVertex {
+                    pos: f3(p),
+                    color: l.color,
+                })
+            })
+            .collect();
+        LineSet(Vertices::new(device, "curve lines", &data))
+    }
+}
+
 pub struct Frame<'a> {
     pub meshes: &'a [DrawMesh<'a>],
     /// Cloners drawn with GPU instancing, after the plain meshes (§10.1).
     pub instanced: &'a [DrawInstanced<'a>],
     pub grid: Option<&'a Grid>,
+    /// Line sets drawn after the meshes and the grid (splines, section 11).
+    pub lines: &'a [&'a LineSet],
     pub gizmo: Option<&'a Gizmo>,
     pub settings: Settings,
 }
@@ -1615,6 +1635,12 @@ impl Renderer {
         if let Some(grid) = &grid {
             pass.set_pipeline(&self.grid);
             grid.draw(&mut pass);
+        }
+        if !frame.lines.is_empty() {
+            pass.set_pipeline(&self.grid);
+            for set in frame.lines {
+                set.0.draw(&mut pass);
+            }
         }
         if let Some(gizmo) = &gizmo {
             pass.set_pipeline(&self.gizmo);

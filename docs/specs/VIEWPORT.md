@@ -583,3 +583,85 @@ The 1 M-triangle upload (1 s) happens once per content change, not per frame. **
 instance layout + upload ≤ 10 ms per 10 000 clones, draw-list ≤ 0.1 ms, content hash ≤ 10 ms per 1 M triangles,
 on this container's CPU; regressions of more than 2 × fail. Real-GPU frame times are unmeasured (no GPU here).
 
+
+## 11. Splines in the viewport (brief 190)
+
+Sources: own design (docs/agents/tasks/190-viewport-splines.md); SPLINES.md section 5 (the
+`spline.*` commands), GENERATORS2.md section 6.2 (Intermediate Points sampling), MANIPULATE.md
+section 6 (snapping). GUI session G3 item 9 (docs/parity/GUI-SESSIONS.md) is unanswered:
+**the handle-link rule while dragging (mirrored, Shift breaks the link), the sizes and colours
+below are parity-pending G3.** Nothing here is a parity claim.
+
+### 11.1 Draw list (`curves`, pure, no GPU)
+
+`SplineDraw { loops, selected, controls }` is one spline object in world space:
+- `loops: Vec<Loop { points, closed }>`: the sampled polylines, the same points the generators use
+  (`forge_generators::splines::sampled_loops`: Intermediate Points of the object, in the object's
+  space, then placed by the world matrix). A closed loop also joins its last point to its first.
+- `selected`: the object is selected.
+- `controls: Option<Controls { points, left, right, selected, handles }>`: present only while the
+  object is edited in Points mode. `points` are world positions, `left`/`right` the world
+  positions of the handle ends (`point + offset`), `selected` one flag per point, `handles` whether
+  handles exist (only the `bezier` type has them).
+
+`draw_list(&SplineDraw, shading, &Palette, cam, size) -> Vec<DrawLine { a, b, color }>`:
+
+| Display mode | Curve |
+|---|---|
+| every mode except Bounding Box | the polyline segments, in the object colour; a selected spline in the selection colour |
+| `BoundingBox` | the 12 edges of the box of the sampled points instead of the polyline (the rule of section 8.3) |
+
+Splines have no faces, so Smooth, Flat, Constant, Quick, Hidden Line and the wire modes show the same
+lines; lighting and shadows do not touch them. With `controls` (any mode, Bounding Box included):
+- each control point is a square of `POINT_PX = 7` pixels (a 4-line outline in the camera plane, size
+  from the world size of a pixel at the point's depth); selected points use the selection colour,
+  the others a light grey;
+- with `handles`, each handle that is not zero length is a line from its point to the handle end
+  (`HANDLE_COLOR`) and a small square of `HANDLE_PX = 4` pixels at the end; a zero handle draws
+  nothing;
+- points behind the camera draw nothing.
+Order: curve lines, handle lines, handle squares, point squares.
+
+`pick(&SplineDraw, cam, cursor, size, radius) -> Option<ControlHit>`, `ControlHit = Point(i) |
+Left(i) | Right(i)`: among the control points and (with `handles`, non-zero) handle ends whose
+projection is within `radius` pixels of the cursor, the smallest screen distance; ties prefer
+Point, then Right, then Left, then the lower index. `None` without `controls`.
+
+`LineSet::new(device, &[DrawLine])` uploads a draw list; `Frame.lines` draws sets after the
+meshes with the grid's depth-tested line pipeline (no depth write, 1 px lines). The editor builds
+one draw list per pane (the squares depend on the pane's camera and size).
+
+### 11.2 Editing (`forge_ui::spline_edit`)
+
+The editor edits the active object when it is a `forge.spline` and the component mode is Points
+(`App.mode`). Primitives show their curve but are edited after Make Editable (SPLINES.md section 3).
+- Selection: the set of point indices of the active spline (`SplineSelection`, not saved). A plain
+  click on a point selects only it, Shift adds, Ctrl/Cmd toggles; a click on nothing clears (Shift
+  or Ctrl keeps it). Handles are not selectable.
+- Drag: pressing on a control point (selecting it first if it is not selected) starts a point drag
+  of all selected points; pressing on a handle end starts a handle drag. The element moves on the
+  plane through its start position facing the camera: `delta = ray ∩ plane − start hit`, so the
+  element does not jump. Every pointer step issues `spline.edit_points` with the **absolute** new
+  values (start value plus the delta, in object space: `delta_local = W⁻¹ · delta_world` on
+  vectors) and one `gesture` id per drag, so the whole drag is **one undo step**; a press without
+  motion issues no command.
+- Point drag edits `position` only: the handles are offsets, so they travel with the point.
+- Handle drag (**parity-pending G3**): the dragged handle takes `start + delta_local`; by default
+  the opposite handle mirrors it (`opposite = −dragged`); with Shift held at the press the link is
+  broken and only the dragged handle changes.
+- Snapping (brief 032): a point drag with snapping on resolves the cursor with `snap_cursor` over the
+  other meshes in view; a hit moves the grabbed point onto the target (`delta = hit − start`).
+  Without a hit, quantizing (the setting xor Ctrl/Cmd, MANIPULATE.md section 6) rounds each world
+  component of the delta to the move step (`snap_scalar`). Handle drags are not snapped.
+
+### 11.3 Tests
+
+crates/viewport/tests/curves.rs (pure): draw-list line counts and colours per display mode (Smooth,
+Wire, Hidden Line and Constant give the same curve lines; Bounding Box gives 12 box lines),
+selected colour, closed loops close, point squares and handle lines/squares only with controls, no
+handles for non-bezier, zero handles draw nothing, picking priority and radius, behind-camera
+skipped. crates/viewport/tests/display.rs (GPU): the curve is visible in the rendered image and
+a baseline image `spline_points.png` (160x120, the lavapipe tolerance rule of section 8.5).
+crates/ui/tests/spline_viewport.rs: draw lists of a scene (primitive circle, editable spline),
+Points-mode controls, click selection, a scripted drag giving exactly one undo step and restoring
+on undo, mirrored and broken handles, snapping to a mesh point, screenshot contains the curve.

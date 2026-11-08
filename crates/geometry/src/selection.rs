@@ -1,7 +1,7 @@
 //! Point/edge/polygon selections and conversions (docs/specs/GEOMETRY.md §4).
 //! Edge ids are those of [`PolyMesh::edges`]. Out-of-range input indices are ignored.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use crate::PolyMesh;
 use crate::mesh::poly_edges;
@@ -137,16 +137,19 @@ fn point_neighbors(mesh: &PolyMesh) -> Vec<BTreeSet<u32>> {
     n
 }
 
-/// Polygons sharing an edge with each polygon.
+/// Polygons sharing a point with each polygon (O58 `sel-grow-poly`: the 3x3 patch around the
+/// start quad, diagonal neighbours included).
 fn poly_neighbors(mesh: &PolyMesh) -> Vec<BTreeSet<u32>> {
-    let mut by_edge: BTreeMap<crate::Edge, Vec<u32>> = BTreeMap::new();
+    let mut at_point: Vec<Vec<u32>> = vec![Vec::new(); mesh.points.len()];
     for (f, p) in mesh.polys.iter().enumerate() {
-        for e in poly_edges(p) {
-            by_edge.entry(e).or_default().push(f as u32);
+        for &v in p {
+            if let Some(list) = at_point.get_mut(v as usize) {
+                list.push(f as u32);
+            }
         }
     }
     let mut n = vec![BTreeSet::new(); mesh.polys.len()];
-    for fs in by_edge.values() {
+    for fs in &at_point {
         for &a in fs {
             for &b in fs {
                 if a != b {

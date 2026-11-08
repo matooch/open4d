@@ -4,7 +4,10 @@
 - Each: parameter list, defaults, math, golden mesh comparison.
 
 Bend, Twist, Taper, Bulge, Shear, Spherify, Squash & Stretch and Wrap are specified below
-(§0–7, §9); falloff is §10. Sources:
+(§0–7, §9); falloff is §10; Explosion, Shatter and Wind are §11–12 (brief 053, source
+docs/parity/deformers-3.md O19); Mesh (cage), Surface, Camera, Collision, Jiggle, Delta Mush
+and Correction are §14–15 (brief 056, source docs/parity/deformers-4.md O45); Spline Wrap, Spline and
+Spline Rail are §20–21 (brief 055, sources O19 and O45). Sources:
 docs/parity/{bend,twist,deformer-common,taper,bulge,shear,spherify,deformers-2,followups-1}.md and their golden
 cases. Everything else is still a checklist item.
 
@@ -527,7 +530,7 @@ Test: `crates/modifiers/tests/deformers_parity.rs` — features `deformer-fallof
 - Feature `deformer-falloff` (9 cases, §10) is built as: the cube, a deformer child with
   the case's parameters (for the 051 features `squash-stretch` and `wrap` the same key translation applies: `*_percent`, `*_deg` suffixes dropped, option labels lower-cased, type `forge.squash_stretch`); (`strength_deg` is `strength` in degrees, `keep_length` is
   `keep_y_axis_length`, `alignment` is the fixed Y axis), the `[params.field]` field node
-  linked into `fields` (its `layer_strength_percent` is the node's `layer_strength`).
+  linked into `fields` (its `layer_strength_percent` is the strength of the list row).
 - Evaluation order and placement rules are §0; the modifier maths are §1–§6.
 - Parity-pending (implemented, seen in one configuration only): sibling deformers below
   the object (§0), `fillet` together with
@@ -545,12 +548,12 @@ Source: O24 [deformer-falloff.md](../parity/deformer-falloff.md), golden `tests/
 ### Parameter
 
 Every deformer (Bend, Twist, Taper, Bulge, Shear, Spherify, Squash & Stretch, Wrap) has a `fields` param:
-`ParamKind::LinkList` accepting `Category::Field` nodes, **top to bottom**, default empty
+`ParamKind::LinkRows` accepting `Category::Field` nodes (FIELDS.md F7), **top to bottom**, default empty
 (label "Fields", group "Falloff"). The O24 deformer's list parameter is labelled "Field"
 on its Fields tab. The list row's *layer strength* (O24 `layer_strength_percent`) is the
-field node's `layer_strength` param (percent, default 100 %, see FIELDS.md F1): one field
-node is one row, which is all the data covers; real list rows (a field in several lists)
-come with brief 059.
+strength of the row in the deformer's `fields` list (percent, default 100 %, FIELDS.md F7): a
+field used by two deformers has one strength per list. Brief 061 stored it on the field node; the
+version 11 file migration moved it into the rows (CORE.md section 6.10).
 
 ### Rule
 
@@ -599,3 +602,635 @@ own list).
 - A negative or >1 weight (Strength 200 % on the field) extrapolating vs. clamping: a Bend
   with Strength 200 % and Clamp Max off.
 - Spherify's `p/|p|` with falloff at the origin (no data).
+
+## 11. Explosion (`forge.explosion`) and Shatter (`forge.shatter`)
+
+Source: O19 [deformers-3.md](../parity/deformers-3.md); golden `tests/golden/{explosion,shatter}`
+(`defaults`, `strength-50` each). `explosion-fx/frame-10` belongs to O45 / another brief and
+is not covered here. Neither deformer has a Falloff group in the reference, so neither has
+a `fields` param; both carry `enabled` (§0).
+
+| Key | Label | Type | Default | Range | On |
+|---|---|---|---|---|---|
+| `strength` | Strength | percent | 0 | 0…100 | both |
+| `speed` | Speed | float | 100 | any | Explosion |
+| `angle_speed` | Angle Speed | angle | 100° | any | both |
+| `end_size` | End Size | percent | 0 | 0…1000 | both |
+| `randomness` | Randomness | percent | 100 | 0…100 | both |
+
+Case files use `strength_percent`, `angle_speed_deg`, `end_size`, `randomness_percent`.
+
+### Topology (derived)
+Both deformers **split the mesh into its polygons**: the result has the same polygon list
+(same order, same corner order) but every polygon owns its own points, polygon `i` using
+points `n·i … n·i + n − 1` (`explosion/strength-50`, `shatter/strength-50`: 640 points,
+160 faces, face `i` = `4i+1…4i+4`). The points of an island are moved rigidly. This needs the
+whole mesh, so the two deformers use `apply_deformer_mesh` (the points-only
+`apply_deformer` ignores them). With `strength = 0` the mesh is returned **unchanged and
+not split** (`explosion/defaults`, `shatter/defaults`: the export of the cube is identical
+to the undeformed cube).
+
+### Rigid motion per polygon (derived, proven by both strength-50 cases)
+Each polygon `P` with centre `c` (mean of its points) goes to
+`c' + k · Rot · (p − c)` for every point `p`, with a rotation `Rot`, a uniform scale `k` and
+a new centre `c'`. A Kabsch fit of all 160 polygons of each case gives residual 0 (≤ 1e-6)
+with `k = 0.5` exactly. With `s = strength/100`:
+
+- `k = 1 + (end_size/100 − 1)·s` (`strength-50`, `end_size 0`: `1 − s = 0.5`).
+  **Parity-pending:** linear in `s` and the unit of `end_size`: one strength only.
+- `Rot = Ry(ey) · Rx(ex) · Rz(ez)` with the three angles independent and uniform in
+  `±h`, `h = 0.75 · angle_speed · s` (37.5° at 100°, 50 %). Proven by the Euler fit of the
+  320 rotations: of the six axis orders only `Y X Z` gives a symmetric spread, max
+  |angle| 36.6–37.5° on each of the three axes (both deformers), std ≈ 21.5 ≈ 37.5/√3.
+  **Parity-pending:** the factor 0.75 and the linearity in `s` and `angle_speed`.
+
+### Centre `c'`
+- **Explosion:** `c' = c + d`, `|d|` uniform in `[0, 15 · speed · s]` (max measured 749.06
+  of 750 = 15·100·0.5; the 160 lengths fill 8 histogram bins evenly), direction a unit
+  vector with a **radial bias**: `normalize(normalize(c) + 1.5·R·v)` with `v` a uniform unit
+  vector and `R = randomness/100`. Measured mean of `dir·normalize(c)` is 0.405 (a pure random
+  direction would give 0; the blend factor 1.5 gives 0.44, 1.65 gives 0.40).
+  **Parity-pending:** all of it (one strength, one speed, one randomness); the 15, the bias
+  law and the role of `R`.
+- **Shatter:** `y' = y · (1 − min(1, 2s))` (all 160 centres land exactly on y = 0 at
+  `s = 0.5`; the law between 0 and 0.5 is a guess), and `x' = x + dx`, `z' = z + dz` with
+  `dx, dz = 100 · s · R · (u1 + u2 − 1)` (a triangular spread: measured std 20.8 and 19.1,
+  max 46.7 of 50, lengths peaked around 25). **Parity-pending:** all of it.
+
+`R < 1`: every uniform draw `u` is replaced by `(1 − R)/2 + R·u`, so `R = 0` gives no
+rotation and no random offset. **Parity-pending** (never observed below 100 %).
+
+### Random stream (not matchable; compared statistically)
+The reference draws from one seeded stream polygon by polygon: Shatter polygon `7m + 6` has
+the same rotation as Explosion polygon `6m + 5` for every block `m` (22 pairs, equal to
+1e-4°), i.e. Shatter consumes 6 values and Explosion 7 per polygon from the same seed.
+The generator itself is not known, so values cannot be reproduced. Ours is SplitMix64
+seeded with `ctx.seed` (deterministic, each polygon draws in order). The strength-50 cases
+therefore **cannot match point by point**; `KNOWN_MISMATCH` pins the exact comparison and the
+parity test applies the same *statistical* checks to the golden and to our mesh (§9):
+topology, `k`, rigidity, Euler range / spread, Shatter `y = 0` and offset bounds, Explosion
+`|d|` bound and radial bias.
+Follow-up case suggestions: strength 25 % and 100 %, End Size 100 %, Randomness 0 %, Speed
+and Angle Speed 0 and 200 on a 1-polygon plane (a single polygon pins each law
+in one read), and the same on a 2-polygon plane to see the stream order.
+
+## 12. Wind (`forge.wind`)
+
+Source: O19; golden `tests/golden/wind/frame-10` (cube 4/8/4, defaults, frame 10 at 30 fps).
+
+| Key | Label | Type | Default | Range |
+|---|---|---|---|---|
+| `amplitude` | Amplitude | float | 50 | ≥ 0 |
+| `size` | Size | float | 100 | ≥ 0 |
+| `frequency` | Frequency | float | 1 | ≥ 0 |
+| `turbulence` | Turbulence | percent | 50 | 0…100 |
+| `fx`, `fy` | fx, fy | float | 1, 1 | ≥ 0 |
+| `flag` | Flag | bool | on | – |
+| `fields`, `enabled` | | | | §10, §0 |
+
+The cube keeps its topology. Time comes from `EvalCtx.time` (frame 10 at 30 fps = 1/3 s).
+
+### Derived (all 162 points of `wind/frame-10`)
+- Only **z** moves; x and y are exact, the face list is unchanged.
+- The offset `dz` is a function of `(x, y)` only (equal for every z).
+- `dz = 0` exactly at `x = 0`; `dz` has the sign of `x`; `|dz|` is at most 72.44, below
+  `1.5 · amplitude = 75`. Along y it is smooth, peaking near y = −50 for x = 100 (61.4)
+  and falling to 27–42 at y = ±200.
+
+### Model (ours, parity-pending)
+In the deformer's local space with `q = (x·fx/size, y·fy/size, t·frequency)`, `t` seconds,
+`turb = turbulence/100`:
+`n = 1 + 0.5 · (perlin(q) + turb · perlin(2q + offset)) / (1 + turb)` (a gust in
+`0.5…1.5`, never reversing: the golden `dz` has the sign of `x` at all 162 points), and
+`dz = amplitude · n · g(x)` with `g(x) = sign(x) · sqrt(min(1, |x|/size))` when `flag` is on
+(pinned along x = 0), else 1. `size = 0` or `amplitude = 0` leaves the points alone.
+The reference noise function is not known, so the exact values cannot be matched; the
+test checks the invariants above on both meshes plus `max|dz| ≤ 1.5·amplitude`.
+**Parity-pending:** noise type and range, the weight `g` (measured mean `|dz|/amplitude` is
+about 0.81 at |x| = 50 and 0.94 at |x| = 100, between a square-root and a linear weight),
+`fx`/`fy` as sampling factors, `flag` off, the role of `frequency` and `turbulence`.
+The case file has no `frame` / `fps` keys although its description and the form (O19) say
+frame 10 at 30 fps; the test uses 10 / 30 when they are absent.
+Follow-up case suggestions: frame 0 and frame 20 (does it move over time), `flag` off,
+`size` 50 / 200, a plane with 1 row of points along x (to read `g` and the noise).
+
+## 13. Parity of §11–12
+
+Test: `crates/modifiers/tests/destructive_parity.rs`, features `explosion` (2), `shatter`
+(2), `wind` (1). Exact (`export_weld`, `compare_meshes`): `explosion/defaults`,
+`shatter/defaults`. `KNOWN_MISMATCH` (statistical checks pass instead): `explosion/strength-50`,
+`shatter/strength-50` (random stream), `wind/frame-10` (noise function).
+
+## 14. Cage, Surface, Camera, Collision, Jiggle, Delta Mush, Correction deformers (brief 056)
+
+Source: O45 [deformers-4.md](../parity/deformers-4.md); golden `tests/golden/{mesh-deformer,
+surface,camera-deformer,collision,jiggle,delta-mush,correction}` (8 cases, observation level
+A for `correction/defaults` and `delta-mush/defaults`, otherwise see below).
+
+**What the data shows.** The observer's scripted export did not run the helper-driven
+deformers (O45 Findings): `mesh-deformer/cage`, `surface/defaults`, `camera-deformer/grid`,
+`collision/sphere`, `jiggle/frame-10`, `jiggle/frame-20` all export the **undeformed** (or
+rigidly moved) cube, so the reference maths of those six cannot be read from them. The
+algorithms below are therefore **ours** (planner design decisions of brief 056 plus
+public literature), everything about them is **parity-pending**, and the cases are pinned
+in `KNOWN_MISMATCH` with invariants (§15), except `camera-deformer/grid`, which matches
+only because the recorded camera pose (rotated 45°) keeps the cube outside our grid (it does not
+exercise the grid; §15). The two substantive exact cases are the ones whose
+reference result is fully determined without a solver: `correction/defaults` (Bend, then
+the stored offset of point 0) and `delta-mush/defaults` (initialised on the deformed pose,
+so the output is the input).
+
+Common: all seven carry `fields` (§10) and `enabled` (§0). They run in the points-and-mesh
+path `apply_deformer_resolved` (`apply_deformer_mesh` is the same without linked meshes).
+The generator layer hands the deformer a **resolver** `NodeId -> Option<PolyMesh>` that
+evaluates a linked helper object (with its own deformers, cycle-guarded); the deformer takes
+the mesh to world space with the helper's world matrix. Every deformer works in world space:
+`P = world(target) · p`, result `world(target)⁻¹ · P'`. A linked object that is missing, has
+no mesh, or a stored `bind` of the wrong length, leaves the points alone. Falloff:
+`p' = p + w·(deform(p) − p)` as in §10. Percent params store the number the app shows.
+Strength: `p' = p + s·(deform(p) − p)`, `s = strength/100`.
+
+*Data params* (hidden, non-animatable `Vec3List`, written by the Initialize / Update actions of
+the reference, here by the caller): `bind` (Mesh, Surface, Delta Mush), `offsets` (Camera),
+`reference` and `offsets` (Correction). An empty list means "not initialised"; the bind
+state is then the current state, i.e. the identity deformation.
+
+### 14.1 Mesh (`forge.mesh_deformer`), cage with mean value coordinates
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `cages` | Cages | link list (objects) | empty |
+| `strength` | Strength | percent | 100 |
+| `bind` | (Initialize data) | Vec3List | empty |
+
+Reference table (O45): Auto Init, Memory, Accuracy, External are **not implemented**
+(Accuracy has no analogue: the weights are exact). `bind` = the cage's world points at
+Initialize. For each point `p` (world) and each cage, the weights `w_i(p)` of the **bind**
+cage (triangulated with `triangulate_poly`) are the mean value coordinates of Ju, Schaefer,
+Warren 2005 (per triangle `θ_m = 2 asin(l_m/2)` of the unit-sphere edge lengths,
+`c_m`, `s_m`, `w_m = (θ_m − c_{m+1}θ_{m+2} − c_{m+2}θ_{m+1}) / (d_m sin θ_{m+1} s_{m+2})`),
+**normalised to sum 1** (which also fixes an inside-out cage). A point on a cage vertex takes that
+vertex, a point in a triangle's plane takes the 2-D barycentric weights. Then
+`p' = Σ w_i · c_i` with `c_i` the **current** cage points. With several cages they apply in order.
+Proof properties (unit tests): the identity when the cage is unmoved; a cage translation
+translates every point; a uniform cage scale scales it (linear precision of MVC).
+Case `mesh-deformer/cage`: cage 300×500×300 (1/1/1), cage point 0 moved by (−100, 0, 0) after
+Initialize. The reference export is the undeformed cube, ours moves the points near cage point 0.
+
+### 14.2 Surface (`forge.surface_deformer`), projection
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `surface` | Surface | link (object) | none |
+| `strength` | Strength | percent | 100 |
+| `proportional` | Proportional | bool | off |
+| `bind` | (Initialize data) | Vec3List | empty |
+
+Type `Projection` only; `Mapping (U,V)` / `(V,U)` are **not implemented** (no UVs in the
+mesh; `type` is not a param). `bind` = the surface's world points at Initialize. Each point is
+bound to the nearest point `q` of the bind surface's triangles: triangle `t`, barycentric
+`b`, and the offset `p − q` in the triangle frame `(e1, n×e1, n)` with `e1 = normalize(B − A)`,
+`n` the triangle normal. The result is `Σ b_i · C_i + frame_now · offset`, with `C_i` the current
+surface points. `proportional` scales the offset by `sqrt(area_now / area_bind)` of the triangle.
+Case `surface/defaults`: plane 400×400 (10×10) at y 250 with a Bend 90° child, Initialize on the flat
+plane. The golden plane is exported bent (matched by our Plane + Bend); the cube is exported
+undeformed.
+
+### 14.3 Camera (`forge.camera_deformer`), screen-space grid
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `camera` | Camera | link (object) | none |
+| `strength` | Strength | percent | 100 |
+| `grid_x`, `grid_y` | Grid X, Y | int | 32 (1…256) |
+| `offsets` | (grid point offsets) | Vec3List | empty (all zero) |
+
+The camera is any linked object: its world matrix is the camera frame, looking along +z
+(there is no camera object type yet, so no field of view is needed). A point in camera space
+`c` with `c_z > 0` has screen coordinates `u = c_x/c_z`, `v = c_y/c_z`. The grid covers
+`u, v ∈ [−0.75, 0.75]` with `(grid_x+1)·(grid_y+1)` points, row-major (`index = j·(grid_x+1)+i`,
+`i` along u from −0.75). The grid point offsets are screen units **at distance 1000**; a point at depth `c_z`
+moves in camera space by `bilinear(offsets)(u, v) · c_z/1000` along x and y (z unchanged). Outside the grid
+nothing moves. **Fitted from `camera-deformer/grid`**: `grid_points = 1089 = 33²`, and the
+before position of the edited point `[−46.875, −46.875, 1000]` is a multiple of `1500/32 = 46.875`:
+a square grid of half-extent `0.75 · 1000` at distance 1000 (index 15 on both axes — the form calls it
+point (1, 1) / index 34, which does not fit 33 points per row: **open question**, the test uses the
+grid point nearest to the recorded position). `safe_frame`, `draw_grid` are display only. The
+reference export is the undeformed cube; ours equals it, **vacuously**: with the recorded camera
+(at (0, 0, −800), rotated H 45° / P −19.45°) the cube lies outside the grid. The test therefore also
+runs the same grid point with the camera unrotated and asserts a move in (1, 50] cm.
+
+### 14.4 Collision (`forge.collision`), push out of collider volumes
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `colliders` | Objects | link list (objects) | empty |
+| `offset` | Offset | distance | 0 |
+| `strength` | Strength | percent | 100 |
+
+Reference Solver options (Inside, Inside (Stretch), Outside, Outside (Volume), Intersect), Falloff,
+Stretch/Relax and the cache group are **not implemented**; the single behaviour is the planner's
+"push points out of collider volumes". A collider is a closed mesh (orientation fixed by the sign
+of its signed volume). A world point is *inside* when a ray along the fixed direction
+`(1, 0.0123, 0.0071)` crosses an odd number of triangles. Let `q` be the closest surface point, `n`
+the outward normal (the triangle normal; `(p − q)/|p − q|` when `p` is outside and `|p − q| > 1e-9`).
+If `p` is inside, or outside closer than `offset`: `p' = q + n·offset`. Several colliders apply in order.
+Case `collision/sphere`: a sphere r 100 at (150, 0, 0) cuts the cube's +x side (x > 50 inside it);
+the reference export keeps the cube undeformed (O45: no solver cache). Invariant on ours: no point
+is strictly inside the sphere, untouched points are unchanged.
+
+### 14.5 Jiggle (`forge.jiggle`), spring simulation with a deterministic per-frame cache
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `strength` | Strength | percent | 100 |
+| `stiffness` | Stiffness | percent | 40 |
+| `structural` | Structural | percent | 100 |
+| `drag` | Drag | percent | 10 |
+| `motion_scale` | Motion Scale | percent | 100 |
+| `springs` | Springs | int | 4 |
+| `iterations` | Iterations | int | 4 (1…1000) |
+| `gravity` | Gravity | float | 0 |
+| `local` | Local | bool | off |
+| `cache` | Cache | int | 20 (1…1000) |
+
+`On Stopped`, the vertex-map links, Restrict, Forces and the cache buttons are **not implemented**.
+Level C: the reference exports of `jiggle/frame-10` and `frame-20` are the rigidly moved cube (the
+solver cache was not built), so the model is ours. **The simulation is a pure function of
+(scene, frame)**, so it is reproducible without hidden state; the "cache" is the window of frames it
+replays: with `f = round(time·fps)` and `s = max(0, f − cache)` the state at frame `s` is at rest
+(`x = T`, `v = 0`) and frames `s+1 … f` are stepped, the target world matrix of an earlier frame
+`k` being read from `forge_anim::scene_at(scene, k/fps)` (the same document, tracks evaluated at `k`).
+Per frame: target `T_i = P0_i + m·(W_k r_i − P0_i)`, `m = motion_scale/100`, `r_i` the input point (target space),
+`W_k` the target's world matrix, `P0_i = W_s r_i`. `iterations` substeps of `h = 1/(fps·iterations)`:
+`a = ω²(T − x) + g·(0, −1, 0)`, `ω² = 2000·stiffness/100`, `v += a·h`, `v *= (1 − drag/100)^(1/iterations)`,
+`x += v·h`; after each substep `springs` Jacobi passes on the displacement `d = x − T`:
+`d_i += 0.5·(structural/100)·(mean_{j ∈ N(i)} d_j − d_i)`, `N(i)` the edge neighbours.
+Output `T + strength/100·(x − T)` taken back by `W_f⁻¹`. `local` simulates in the target's space
+with a constant target `r` (the object's motion is ignored; only gravity moves the points).
+Invariants (unit tests and `jiggle/*`): frame 0 and a static object give the input; with a constant
+velocity the points lag behind the rigid motion; the result is identical on every call; strength 0 is rigid.
+
+### 14.6 Delta Mush (`forge.delta_mush`)
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `strength` | Strength | percent | 100 |
+| `iterations` | Iterations | int | 10 (≥ 0) |
+| `pin_border_points` | Pin Border Points | bool | off |
+| `bind` | (Initialize data) | Vec3List | empty |
+
+`Smooth View`, `Tangent Mode` (only Edge is implemented), `Smooth Type`, `Mode`/`Tags` are **not
+implemented**. `S(x)`: `iterations` Jacobi steps `x_i ← ½x_i + ½·mean_{j∈N(i)} x_j` (border points
+fixed when `pin_border_points`; a border point is on an edge that has one polygon). Per point the
+frame `F(x) = (t, b, n)`: `n` the normalised sum of the Newell normals of its polygons on the smoothed mesh, `t` the unit
+projection of the edge to the lowest-index neighbour on the plane ⟂ `n`, `b = n × t`. At Initialize
+(the bind pose) `δ_i = F_i(S(bind))ᵀ (bind_i − S(bind)_i)` is stored in the frame; now
+`p'_i = S(p)_i + F_i(S(p)) δ_i`. At the bind pose `p' = p` exactly (the frame cancels), which is
+`delta-mush/defaults`: the cube was edited (point 0 moved by (80, 80, 80)) *then* Delta Mush was
+added and initialised, so the golden is the edited cube: matched. A pose change smooths out
+differences and keeps the detail.
+
+### 14.7 Correction (`forge.correction`)
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `mapping` | Mapping | enum `uv`, `nearest`, `normals` | `nearest` |
+| `strength` | Strength | percent | 100 |
+| `reference` | (state at Update) | Vec3List | empty |
+| `offsets` | (corrected point offsets) | Vec3List | empty |
+
+`Lock`, `Scale` are **not implemented**. At Update the deformed points of the deformers above are
+stored as `reference` (target space) and the corrections edited through the point list are
+`offsets` (one per reference point, zero by default). Evaluation (after the deformers above it, tree
+order, §0): `p'_i = p_i + s·offsets[k(i)]`, with `k(i)` the reference point matched by the mapping:
+`nearest` and `normals` the nearest reference point to `p_i` (lowest index on a tie),
+`uv` the same index (`k(i) = i`, the topology is unchanged). `normals` as a distinct rule is
+parity-pending. Case `correction/defaults`: under Bend 90° the corrected point 0 (at (−100, −200, −100),
+below the Bend box, so unmoved by it) edited by (+50, 0, 0) gives point 0 at (−50, −200, −100) and every other
+point as the plain Bend: all 162 points matched.
+
+## 15. Parity of §14
+
+Test: `crates/modifiers/tests/helper_parity.rs`, features `mesh-deformer`, `surface`,
+`camera-deformer`, `collision`, `jiggle` (2), `delta-mush`, `correction` (8 cases; 3 exact, 5 pinned). Cases are compared
+the way the reference exports a scene: helper objects first (they leak into the OBJ, O45 Findings), then the
+cube (`export_weld`).
+
+- Exact: `correction/defaults`, `delta-mush/defaults`, and (vacuously, see §14.3) `camera-deformer/grid`.
+- `KNOWN_MISMATCH` (the reference scripted export did not deform, so ours — which does — differs; the exact
+  comparison must still fail and the invariants below hold on ours and on the golden): `mesh-deformer/cage`,
+  `surface/defaults`, `collision/sphere`, `jiggle/frame-10`, `jiggle/frame-20`.
+  - helper part: the leaked cage, the bent plane and the collider sphere equal the golden (ours, exactly);
+  - the golden cube equals the undeformed cube (resp. the rigidly moved cube for Jiggle);
+  - ours: topology preserved, points finite, plus the per-deformer invariant of §14.
+- `UNSUPPORTED`: none (unobserved options are not parameters).
+- Follow-up case suggestions, to be recorded interactively with the solver caches built: Mesh with the cage
+  point moved by (0, 100, 0) and by uniform scale, and with Accuracy 1; Surface with the plane tilted 30° and with
+  Proportional on; Camera grid point (16, 16) moved and two points moved, camera rotated; Collision with Solver
+  Outside and Inside on a cube collider and Distance 0 / 50, Strength 50 %; Jiggle on a plane keyed over 0–5 frames with
+  Stiffness 100 %, Drag 0 and 100 %, Gravity −980, one export per frame 1…8 (the lag curve); Delta Mush with Iterations 0 and 1
+  and a bent pose (Bend 90 above, Initialize before the bend); Correction with Mapping UV and Normals, Strength 50 %.
+
+## 16. FFD (`forge.ffd`) (brief 052)
+
+Source: O9 [deformers-2.md](../parity/deformers-2.md) (`ffd/defaults`, `ffd/point-moved`) and O45
+[deformers-4.md](../parity/deformers-4.md) (`ffd/ffd-grid-5`); golden `tests/golden/ffd` (3 cases).
+(The brief names its sections §9–11; those numbers are taken, so FFD, Formula and Melt are
+§16–18 and their parity is §19.)
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `grid_size` | Grid Size | vec3 | (300, 300, 300) |
+| `grid_points_x`, `grid_points_y`, `grid_points_z` | Grid Points X / Y / Z | int, 2…200 | 3 |
+| `grid` | (hidden) lattice points | `Vec3List` | empty |
+| `fields`, `enabled` | §10, §0 | | |
+
+`grid` holds the position of every lattice point in the deformer's space, **x fastest, then y,
+then z** (point `i + nx·(j + ny·k)`; O9 note: point 0 is (−150, −150, −150), point 8 of the
+3×3×3 grid is (150, 150, −150), point 26 is (150, 150, 150)). Empty, or a length other than
+`nx·ny·nz`, means the regular lattice `P⁰_ijk = (i/(nx−1) − ½, j/(ny−1) − ½, k/(nz−1) − ½) ⊙ size`.
+There is no mode and no box param: the lattice is the box.
+
+### Math (derived)
+`t = p ⊘ size + ½` per axis. A point with any `t` outside `[0, 1]` is **not moved**
+(`ffd/point-moved`: the cube is taller than the 300 grid and its 18 points at y = ±200 keep
+their place, while the neighbouring ones at y = ±150 move). Otherwise
+`p' = p + Σ B_i^{nx−1}(tx) · B_j^{ny−1}(ty) · B_k^{nz−1}(tz) · (P_ijk − P⁰_ijk)`
+with the Bernstein basis `B_i^n(t) = C(n, i) tᶦ (1−t)ⁿ⁻ᶦ` (a Bézier volume; the regular lattice
+reproduces `p` exactly, which `ffd/defaults` shows). Axes with `size = 0` leave the point alone.
+Proof: `ffd/point-moved` (degree 2, point 8 up by 100: all 162 points within 5e-7 of the export,
+which prints 6 decimals) and `ffd/ffd-grid-5` (degree 4, centre point 62 up by 100: 80 points
+move, up to 1.63, all within 4e-7). The degree is the point count minus one on each axis.
+
+Parity-pending: the cut-off at the lattice boundary (a point just outside might fade instead of
+stop: no case has a point between the box and a distance away); non-uniform lattices other than
+one moved point; a negative `size`.
+
+## 17. Formula (`forge.formula`) (brief 052)
+
+Source: O9 (`formula/defaults`, `formula/frame-10`); text language [EXPR.md](EXPR.md).
+
+| Key | Label | Type | Default |
+|---|---|---|---|
+| `size` | Size | vec3 ≥ 0 | (400, 400, 400) |
+| `effect` | Effect | enum `manual`, `spherical`, `cylindrical`, `x_radial`, `y_radial`, `z_radial` | `y_radial` |
+| `formula_d` | d(u,v,x,y,z,t) | string | `Sin((u+t)*2.0*PI)*0.2` |
+| `formula_x`, `formula_y`, `formula_z` | X(x,y,z,t), Y, Z | string | `x`, `y`, `z` |
+| `fields`, `enabled` | §10, §0 | | |
+
+Variables: `d` sees `u v x y z t`, `X`/`Y`/`Z` see `x y z t`. `x y z` are the point's
+coordinates in the deformer's space (cm), `t` is `ctx.time` in seconds (`formula/frame-10`: frame 10 at
+30 fps is `t = 1/3`). With `h = size/2`, the point becomes
+`p' = (X, Y, Z) + dir · d · amp`.
+
+### Derived (`formula/defaults`, `formula/frame-10`, all 324 points)
+Effect `y_radial`: `u = sqrt((x/hx)² + (z/hz)²)`, `dir = +y`, `amp = hy`; X, Y, Z are the identity.
+Evidence: the offset along y is the same for every point of an (x, z) column and nothing moves in
+x or z; at the axis points (x or z = 0, r = 100 so `u = ½`) `d = 0` at t = 0 and
+`−0.2·sin(2π/3)·200 = −34.641` at t = 1/3; the corner column (r = 141.42, `u = 0.7071`) moves by
+`0.2·sin(2π·0.7071)·200 = −38.556`; the (50, 100) column (`u = 0.559`) by −14.495; the point
+(50, 0) (`u = ¼`) by +40 (bbox y max 240). Frame 10 agrees at all 81 columns.
+
+### Own design (parity-pending, no observation)
+- The other effects, by the same rules with the axes exchanged or the plane rule changed:
+  `x_radial` (`u` from y, z; `dir = +x`; `amp = hx`), `z_radial` (`u` from x, y; `dir = +z`;
+  `amp = hz`), `cylindrical` (`u` = angle about y over 2π in [0,1), `dir` = outward in xz,
+  `amp = hx`), `spherical` (`u` = longitude/2π, `v` = latitude/π + ½, `dir` = outward from the origin,
+  `amp = hx`), `manual` (`u = x/sx + ½`, `v = z/sz + ½`, `dir = +y`, `amp = hy`).
+- `v` for the radial effects is the position along the axis, `0…1` over `size`.
+- No box: the formula applies to every point, also outside `size`.
+- A formula that does not parse acts as the identity for X, Y, Z and as 0 for `d`; a non-finite
+  value of one component keeps that component of the original point (for `d`: 0).
+
+## 18. Melt (`forge.melt`) (brief 052)
+
+Source: O9 (`melt/defaults`, `melt/strength`), parameter table of deformers-2.md.
+
+| Key | Label | Default |
+|---|---|---|
+| `strength` | Strength | 25 % (0…100) |
+| `radius` | Radius | 100 |
+| `vertical_randomness` | Vertical Randomness | 100 % |
+| `radial_randomness` | Radial Randomness | 100 % |
+| `melted_size` | Melted Size | 400 % (100…1000) |
+| `noise_scale` | Noise Scale | 10 % |
+| `fields`, `enabled` | §10, §0 | |
+
+### What the data shows (both cases, 162 points, same topology as the cube)
+1. Each point keeps its direction in xz; only the distance from the y axis changes, by a factor
+   `k` that is the **same for every point of a ray from the axis** (`(−100,−100)` and `(−50,−50)`
+   both 2.2385 at strength 25 %), so `k` is a function of the angle (the radial noise), and
+   opposite directions differ.
+2. `k − 1` scales with strength by the **same factor for all 24 rays**: `(k₅₀ − 1)/(k₂₅ − 1) = 1.6905`
+   (to 4 digits). So `k = 1 + g(s)·N(θ)`, `g(0.5)/g(0.25) = 1.6905` (not 2: g is not linear in
+   the strength, and `1 − (1−s)²` gives 1.714, so that is not it either). `k₂₅` runs 2.135…2.508
+   (mean 2.33), `k₅₀` 2.919…3.549.
+3. y: every point with `y ≤ 0` ends at exactly 0 (bbox y from 0). Every point with `y > 0` ends
+   at `0 < y' < y`, **also on the inner rays and the top cap** (checked point by point). On the
+   cap (`y = 200`) `y' = y·exp(−8 s²·F)` with `s` the strength fraction and `F` **independent
+   of the strength**: `ln(200/y')/(8 s²)` is the same at 25 % and at 50 % for the 14 of the 25 cap
+   points whose `y'` at 50 % is above 0.2 (the export has 6 decimals; agreement to 2e-3). `F = 1` exactly at the axis point (0, 200, 0)
+   (`200·e^−0.5 = 121.306`, `200·e^−2 = 27.067`: both cases). Away from the axis `F` grows with
+   the distance and scatters with the noise: about 2.5…2.7 at r = 50, 3.0…3.2 at 70.7, 3.1…3.8 at 100,
+   3.0…4.3 at 111.8, 4.1…4.8 at 141.4. Along a column `F` falls slowly with y (4.9, 4.5, 4.3, 4.15
+   for y = 50…200 on the ray (−100, −100)); the law in y is not derived.
+
+### Our model (own design, parity-pending; the random stream is not matchable)
+With `s = strength/100`, `m = melted_size/100`, `rr`, `vr` the randomness fractions and `n1, n2 ∈ [0,1]`
+two noises of the angle `θ = atan2(z, x)` (Perlin on the unit circle, seeded by `ctx.seed`, lattice
+scale `10·noise_scale`):
+- `g(s) = (1 − e^(−1.4803 s)) / (1 − e^(−1.4803))` (fitted so that `g(½)/g(¼) = 1.6905`; `g(1) = 1`),
+  `k = 1 + (m − 1)·g·(1.1 + 0.15·rr·(2 n1 − 1))` scales x and z (so `k` = 2.2…2.5 at 25 %);
+- `y' = 0` for `y ≤ 0`, else `y' = y·exp(−8 s²·F)`, `F = (1 + 1.7·(r/(radius/2))^0.65)·(1 + 0.12·vr·(2 n2 − 1))`
+  (the fit of the cap points). `y` itself does not enter `F`.
+The structure (facts 1 to 3) holds; the values do **not** reproduce the reference. `radius` only
+rescales `F` in our model: the cases never changed it (the reference's use of Radius is unobserved).
+
+## 19. Parity of §16–18
+
+Test: `crates/modifiers/tests/ffd_formula_melt_parity.rs`; features `ffd` (3), `formula` (2),
+`melt` (2); compared like the other deformers (`export_weld`, `compare_meshes`).
+
+- Exact: `ffd/defaults`, `ffd/point-moved`, `ffd/ffd-grid-5` (3/3); `formula/defaults`,
+  `formula/frame-10` (2/2).
+- `KNOWN_MISMATCH` (must still fail the exact comparison): `melt/defaults`, `melt/strength`. The
+  reference noise is not reproduced (only the structure above is derived). Instead the test asserts,
+  on the golden and on ours alike: same topology as the cube, xz direction preserved and farther from
+  the axis, `y' = 0` for `y ≤ 0`, `0 < y' < y` above, the axis point at `200·e^(−8 s²)`, and `F`
+  independent of the strength on the cap; on the golden, the `k − 1` ratio 1.6905 across all rays.
+- Follow-up cases (planner): Melt with Radial Randomness 0 and Vertical Randomness 0 (removes the
+  noise: gives `g(s)` and the vertical law directly), at Strength 0, 10, 50, 100; Melt with
+  Melted Size 100 and 200; Melt with Radius 50 and 200; Melt with Noise Scale 50 (what the noise frequency is);
+  Formula with `d = 0.1`, with `d = u` and `d = v` (gives `u`, `v` of each effect), each other effect
+  (Spherical, Cylindrical, X Radial, Z Radial, Manual), a non-uniform `size`, and `X(x,y,z,t) = x*2`;
+  FFD with a point moved on the x and z axes (confirms the axis orientation), 2 points per axis,
+  `grid_size` 150 (more cube points outside), and a lattice with the cube fully inside.
+
+## 20. Spline Wrap, Spline and Spline Rail (`forge.spline_wrap`, `forge.spline_deformer`, `forge.spline_rail`) (brief 055)
+
+Sources: O19 [deformers-3.md](../parity/deformers-3.md) (Spline Wrap parameter table, cases
+`spline-wrap/defaults`, `spline-wrap/arc`) and O45 [deformers-4.md](../parity/deformers-4.md) (Spline and Spline
+Rail tables, cases `spline-deformer/defaults`, `spline-rail/defaults`). Golden folders
+`tests/golden/{spline-wrap,spline-deformer,spline-rail}` (4 cases). `tests/golden/{wrap,wrap-f}` belong to the
+plain Wrap deformer (§7.2), not to this section. All three keep the cube's topology and carry `fields` (§10) and
+`enabled` (§0). They run in `apply_deformer_resolved`: the resolver hands them every linked spline.
+
+### 20.0 Linked splines and the polyline model
+
+The resolver returns a linked **spline** node as a polyline helper mesh: `points` are the spline's own sampled
+points (its Intermediate Points setting, SPLINES.md; Uniform 8 for the default Arc and Helix), `polys` the
+2-point edges `[k, k+1]`, plus `[n−1, 0]` when the spline is closed (closed iff `polys.len() == points.len()`).
+The deformer takes the points to its own local space with `inverse(deformer_world) · spline_world`
+(the cases keep deformer, cube and splines at the origin).
+
+Every rule below works on that polyline `V_0 … V_{n−1}` and not on the Bezier curve. Proof: the chord
+direction at the start and end of the sampled default Arc, `(−0.0183835, 0.999831)` and `(−0.999830, 0.0184499)`, and of the
+sampled default Helix, `(−0.0069667, 0.996813, −0.0794711)`, are exactly the directions in which `spline-wrap/arc` and
+`spline-wrap/defaults` extend (`rows z = −100 … 100`, see 20.1), and the length 314.2771 of the sampled Arc
+(true arc 314.1593) is the rate at which they extend (`s = 314.277 · z`). Let `ℓ_k` be the cumulative chord
+length, `L = ℓ_{n−1}`, `c_k` the unit chord from `V_k` to `V_{k+1}`.
+
+`C(s)` is the point at arc length `s`: linear inside `[0, L]`; for an open spline and **Extend**, outside it continues along `c_0`
+(`s < 0`) and `c_{n−2}` (`s > L`); a closed spline wraps `s` modulo `L`.
+
+**Frame.** Tangent at a vertex: `c_0` at the start, `c_{n−2}` at the end, else `normalize(c_{k−1} + c_k)`.
+Initial normal `N_0 = normalize(Z × T_0 projected ⟂ T_0)` (any perpendicular if `T_0 ∥ Z`); `N_k` is parallel
+transported with the shortest rotation `T_{k−1} → T_k`; `B_k = T_k × N_k` so that `N × B = T`.
+The frame at arc length `s` inside a chord uses that chord as `T`, `N` interpolated between its vertices and
+re-orthogonalised, `B = T × N`; outside `[0, L]` it is the frame of the end chord (constant).
+Same rule as the Sweep frame (GENERATORS2 §10) except for the initial normal, which for Sweep is the bend
+direction. `spline-wrap/arc` fixes `N_0 = Z × T_0 = (−cos α, −sin α, 0)` with `α = 0.018384` (the planar case cannot tell the bend rule apart, the
+helix says neither reproduces its start, see 20.1).
+
+### 20.1 Spline Wrap (`forge.spline_wrap`)
+
+| Key | Label | Type | Default | Range / options |
+|---|---|---|---|---|
+| `spline` | Spline | link | none | spline |
+| `rail` | Rail | link | none | spline (accepted, **not applied**, parity-pending) |
+| `axis` | Axis | enum | `pos_x` | `pos_x`, `neg_x`, `pos_y`, `neg_y`, `pos_z`, `neg_z` |
+| `strength` | Strength | percent | 100 | ≥ 0 |
+| `offset` | Offset | percent | 0 | any |
+| `from` | From | percent | 0 | any |
+| `to` | To | percent | 100 | any |
+| `mode` | Mode | enum | `fit_spline` | `fit_spline`, `keep_length` |
+| `end_mode` | End Mode | enum | `extend` | `clamp`, `extend` |
+| `scale_from_rail` | Scale from Rail | bool | off | not applied, parity-pending |
+| `size_strength`, `spline_size_strength` | Size Strength, Spline Size Strength | percent | 100 | not applied, parity-pending |
+| `rotation_from_rail` | Rotation from Rail | bool | on | – |
+| `up_vector` | Up Vector | vec3 | (0, 0, 0) | not applied, parity-pending |
+| `banking` | Banking | angle | 0 | not applied, parity-pending |
+| `rotation_strength`, `spline_rotation_strength` | Rotation Strength, Spline Rotation Strength | percent | 100 | not applied, parity-pending |
+| `fix_bounding_box` | Fix Bounding Box | bool | off | – |
+| `bounding_box_center`, `bounding_box_size` | Bounding Box Center, Size | vec3 | (0,0,0), (200,200,200) | – |
+
+**What the data shows (both cases, all 162 points, derived).** With the defaults (Axis +X, Fit Spline, Extend,
+Rotation from Rail on, spline at the origin) every output point is
+`out = C(s) + x · N(s) + y · B(s)` with `s = L · z` (`spline-wrap/arc`: `z = −100 … 100` in steps of 50
+gives `s/z = 314.277` on every row, the rows are collinear with `C(0) = (200, 0, 0)` = the Arc's start; `N` is
+`(−0.999831, −0.018383, 0)` for `z ≤ 0` and `(−0.018450, −0.999830, 0)` for `z > 0`, `B = (0, 0, 1)` on every row).
+So, for Axis **+X**, the object's **z** coordinate runs along the spline, **x** is the offset along the
+normal and **y** the offset along the binormal (a cyclic shift `(x, y, z) → (N, B, T)`; the same shift in
+`spline-wrap/defaults`). Other axes follow the same cyclic rule `(along, N, B)` = `(z, x, y)` for X, `(x, y, z)` for Y,
+`(y, z, x)` for Z, a negative axis reading `−along`; **parity-pending** (only +X was observed).
+
+**The parameter `t = s/L`.** `t = from + offset + u · (to − from)` with `u = (a − min) / size`, `a` the along
+coordinate and `[min, min + size]` the box: the fixed box when `fix_bounding_box` (`center − size/2`, `size` of the
+along axis), else the object's extent along that axis. The recorded cases show `t = z` exactly (s = L·z), i.e.
+`min = 0`, `size = 1`: the reference had **no bounding box** when the scripted export evaluated the deformer (the same class of
+caveat as the solver caches in O45 Findings: the scripted evaluation lacks the parent's cache). A real box would give
+`t = (z + 100) / 200` and the cube spread over the spline; `spline-wrap/*` therefore cannot pin the box rule.
+Rule used: the object's own extent (parity-pending, from the manual's description only). The test reproduces the recorded
+situation by giving the deformer the fixed box `center (0, 0, ½)`, `size (200, 200, 1)`.
+
+`keep_length` (own design, parity-pending): `s = (from + offset) · L + (a − min)`, the object keeps its length.
+`end_mode = clamp` clamps `s` to `[0, L]` (closed splines wrap in both modes). `rotation_from_rail` off keeps the frame
+of the first vertex everywhere. `strength`: `p' = p + (strength/100) · (out − p)`.
+
+**Known mismatch (helix frame).** `spline-wrap/defaults` fixes the start and end frames of the 2-turn helix:
+`N_0 = (−0.999950, −0.007527, −0.006573)`, `B_0 = (−0.00715, 0.07942, 0.99682)` and
+`N_end = (−0.57403, 0.06944, 0.81590)`, `B_end = (0.8188, 0.03941, 0.57272)`. The chords of the extension
+(20.0) match; the frame roll does not. Three hypotheses were measured: (1) `N_0 = Z × T_0` then parallel transport
+over the polyline's averaged tangents: start roll off by −0.0066 rad (0.38°); (2) the bend direction `c_1 − c_0`
+(Sweep's rule, GENERATORS2 §10): off by −0.0138 rad; (3) transport over the raw chords from the observed start:
+the end frame is still 0.029 rad (1.7°) away from the observed end (both transports agree to 1e-4, so sampling is not
+the cause). The roll has to come from a rule not visible in the planar Arc; the case is `KNOWN_MISMATCH` and the
+extension direction `T`, the offsets' unit length and `B ⟂ N ⟂ T` are asserted instead (21).
+
+### 20.2 Spline (`forge.spline_deformer`)
+
+| Key | Label | Type | Default | Range |
+|---|---|---|---|---|
+| `original_spline` | Original Spline | link | none | spline |
+| `modifying_spline` | Modifying Spline | link | none | spline |
+| `b_spline_approximation` | B-Spline Approximation | int | 10 | 1 … 100 (accepted, not applied) |
+| `radius` | Radius | distance | 30 | ≥ 0 |
+| `use_length` | Use Length | bool | off | not applied, parity-pending |
+| `full_polygons` | Full Polygons | bool | off | not applied, parity-pending |
+
+**Derived from `spline-deformer/defaults` (162 points, Arc 0°–90° radius 200 as original, the same Arc turned 90° about Y as modifier):**
+exactly 4 points move, and they are exactly the points whose distance to the original spline is below `radius`
+(30): `(0, 200, 0)` (distance 0), `(50, 200, 0)` (6.16), `(100, 150, 0)` (19.72), `(100, 200, 0)` (23.61); the
+nearest other points are at 41 and 50. Each of them moves by `d · (0, −1, −1)` with `d` = 200, 155.526, 55.929, 38.534
+(the end point lands on the modifier's start `(0, 0, −200)`), so `d/200 = 1, 0.7776, 0.2796, 0.1927`, falling with the distance.
+These are the only facts.
+
+Own design, **parity-pending** (mismatch: the shared direction `(0, −1, −1)` and the weights are not reproduced):
+`p' = p + w · (M(f) − O(f))`, with `O(f)`, `M(f)` the original and the modifying polylines at the same arc-length fraction `f`
+(both in the deformer's space) and `f` the position of `p`'s nearest point on the original; `w = 1 − dist/radius`
+(linear through the first three points of the weights above within 0.004, the fourth is 0.05 off); points
+at or beyond `radius` do not move. Three hypotheses for the direction were tried and failed: same-fraction pairing
+(the end point would not move), reversed-fraction pairing (the end point matches, the others get an x part), and a rigid
+frame transfer (x changes). Open: what pairs the spline points.
+
+### 20.3 Spline Rail (`forge.spline_rail`)
+
+| Key | Label | Type | Default | Options |
+|---|---|---|---|---|
+| `z_spline_left`, `z_spline_right` | Z Spline Left / Right | link | none | spline |
+| `x_spline_top`, `x_spline_bottom` | X Spline Top / Bottom | link | none | accepted, not applied |
+| `reference` | Reference | link | none | accepted, not applied |
+| `mode` | Mode | enum | `unlimited` | `limited`, `within_box`, `unlimited` |
+| `size` | Size | vec3 | (200, 200, 200) | ≥ 0 |
+| `scale_before_start`, `scale_after_end` | Scale Before Start / After End | percent | 100 | – |
+
+**Derived from `spline-rail/defaults` (two Helix splines at x = −150 and x = +150, mode Unlimited, all 162 points):**
+with `u = x / size_x + ½`, `t = z / size_z + ½` and `L(t)`, `R(t)` the left and right spline at the arc-length fraction `t`,
+
+```
+p' = L(t) + u · (R(t) − L(t)) + (0, y, 0)
+```
+
+(rows `z = −100, −50, 0, 50, 100` give `t = 0 … 1` and the helix angles 0°, 180°, 360°, 540°, 720°; `x = ±100`
+land on the two splines, `x = 0` halfway; `y` is carried in the world Y direction, e.g. `Y = y − 0.2514` at `t = 1`, the Helix's end `y`).
+Unlimited continues beyond the ends as in 20.0 (`t` outside `[0, 1]`, each spline along its own end chord). The fraction runs over the vertex index (`t = k/(n−1)` is vertex `k`): the arc-length fraction of the polyline is off by 0.06 at
+`t = ¼` (the Uniform sampler ends 1e-4 short), the index fraction by under 2e-4. Outside `[0, 1]` each spline continues along its end chord by `t` (resp. `t − 1`) times its length.
+**Own design, parity-pending:** `limited` clamps `t` to `[0, 1]` and carries the rest of `z` rigidly along the mean end chord; `within_box`
+leaves points outside `|x| ≤ size_x/2, |y| ≤ size_y/2, |z| ≤ size_z/2` unchanged (all of them inside here); `scale_before_start` /
+`scale_after_end` scale the width `R − L` around its middle for `t < 0` / `t > 1`; with one Z spline only, `p' = S(t) + (x, y, 0)`; the X splines and `reference` are not applied.
+
+## 21. Parity of §20
+
+Test: `crates/modifiers/tests/spline_parity.rs`; features `spline-wrap` (2), `spline-deformer` (1), `spline-rail` (1);
+the cube is built, each linked spline from its `[params.*]` table (the splines are not in the OBJ).
+Result: **1/4 exact under the 1e-4 tolerance** (`spline-rail/defaults`, since brief 191), **three pinned in `KNOWN_MISMATCH`** (the exact comparison must still fail):
+
+- `spline-rail/defaults`: rule derived (20.3), **exact** since brief 191 fixed the sampled Helix (handles of GENERATORS2 §6.1, open-spline offsets of §6.2); it was 1.9e-4 off before.
+- `spline-wrap/arc`: rule derived (20.1), compared under the recorded degenerate box (`fix_bounding_box`, centre `(0, 0, ½)`,
+  size `(200, 200, 1)`). Rows behind the start match to 6e-5; rows beyond the end are 2.2e-3 off because the golden extends 99 spline
+  lengths and the sampler's end point differs from the reference by 6e-7 (golden `L = 314.27710692`, ours `314.27710754`; end chord
+  tilt 0.01844994 against 0.01844986). With the object's own box the case does not match (asserted): the recorded export had no box.
+- `spline-wrap/defaults`: helix frame roll (20.1, three hypotheses). Asserted instead: unit orthogonal offsets, the start extension along
+  the first sampled chord (golden and ours), start/end normals within 0.05/0.1 rad.
+- `spline-deformer/defaults`: moved set derived (exactly the points within `radius`; golden and ours equal); direction and weights
+  not (20.2). Asserted: golden moves by `d(0, −1, −1)` with `d` falling with the distance, ours the same points with falling weights.
+- `UNSUPPORTED`: none (unobserved options are accepted parameters that are not applied, listed in the tables).
+
+Follow-up cases (planner, **interactive export** so the deformer has its box and caches):
+`spline-wrap/box` (the same Arc and Helix, exported interactively: gives `t = (z+100)/200` and the real frame inside the spline),
+`spline-wrap/axis-y`, `axis-z`, `axis-neg-x` (axis mapping), `spline-wrap/keep-length`, `clamp`, `strength-50`, `offset-25`,
+`from-25-to-75`, `rotation-off`, `banking-45`, `up-vector` and a Rail link (each on the Arc with a 3-segment cube along z);
+`spline-wrap/closed` (a Circle); `spline-deformer/modifier-moved` (modifying Arc translated by (0, 50, 0), a straight original line and a
+straight modifying line so pairing is unambiguous, radius 100), `spline-deformer/radius-60`, `use-length`; `spline-rail/limited`, `within-box`,
+`scale-before-50`, `x-splines`, one-spline, and Z splines of different lengths; a plane with 10 × 10 segments for all of them.

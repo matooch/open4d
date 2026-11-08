@@ -79,6 +79,8 @@ pub struct EditorState {
     /// The snap target under the pointer during a drag or tool hover, for the marker
     /// (MANIPULATE.md §6.7). Not saved.
     pub snap_hit: Option<forge_modeling::snap::SnapHit>,
+    /// The selected control points of the edited spline (VIEWPORT.md section 11.2). Not saved.
+    pub spline_sel: crate::spline_edit::SplineSelection,
 }
 
 impl Deref for EditorState {
@@ -140,6 +142,7 @@ impl EditorState {
             hud_timer: FrameTimer::default(),
             hud_last: Vec::new(),
             snap_hit: None,
+            spline_sel: Default::default(),
         }
     }
 }

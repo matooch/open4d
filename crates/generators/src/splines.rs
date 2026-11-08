@@ -177,12 +177,19 @@ pub(crate) fn helix_type() -> NodeType {
 }
 
 pub(crate) fn is_spline(type_id: &str) -> bool {
-    matches!(type_id, CIRCLE | RECTANGLE | HELIX | editable_spline::TYPE)
-        || spline_prims::node_type(type_id).is_some()
+    matches!(
+        type_id,
+        CIRCLE
+            | RECTANGLE
+            | HELIX
+            | editable_spline::TYPE
+            | crate::spline_mask::TYPE
+            | crate::text_spline::TYPE
+    ) || spline_prims::node_type(type_id).is_some()
 }
 
 /// Maps the spline's XY frame to its plane (§6.1).
-fn on_plane(plane: &str, p: DVec3) -> DVec3 {
+pub(crate) fn on_plane(plane: &str, p: DVec3) -> DVec3 {
     match plane {
         "xz" => DVec3::new(p.x, -p.z, p.y),
         "zy" => DVec3::new(-p.z, p.y, p.x),
@@ -259,6 +266,7 @@ fn node_type_of(type_id: &str) -> Option<NodeType> {
         RECTANGLE => Some(rectangle_type()),
         HELIX => Some(helix_type()),
         editable_spline::TYPE => Some(editable_spline::node_type()),
+        crate::text_spline::TYPE => Some(crate::text_spline::node_type()),
         other => spline_prims::node_type(other),
     }
 }
@@ -267,6 +275,14 @@ fn node_type_of(type_id: &str) -> Option<NodeType> {
 pub fn build_curve(type_id: &str, values: &BTreeMap<String, Value>) -> Result<Curve, BuildError> {
     if type_id == editable_spline::TYPE {
         return editable_spline::build_curve(values);
+    }
+    if type_id == crate::text_spline::TYPE {
+        return crate::text_spline::build_curve(values);
+    }
+    if type_id == crate::spline_mask::TYPE {
+        return Err(BuildError::Failed(
+            "a spline mask is built from its children".into(),
+        ));
     }
     let ty = node_type_of(type_id).ok_or_else(|| BuildError::UnknownType(type_id.to_string()))?;
     let p = Params { ty: &ty, values };
@@ -415,26 +431,6 @@ impl HelixShape {
         DVec3::new(r * a.cos(), r * a.sin(), -self.height * s)
     }
 
-    /// Speed `|f'(s)|`.
-    fn speed(&self, s: f64) -> f64 {
-        let da = self.end_angle - self.start_angle;
-        let r = self.start_radius + (self.end_radius - self.start_radius) * s;
-        let dr = self.end_radius - self.start_radius;
-        (dr * dr + r * r * da * da + self.height * self.height).sqrt()
-    }
-
-    /// Length of the piece `[s0, s1]` (Simpson, exact for a constant radius).
-    fn length(&self, s0: f64, s1: f64) -> f64 {
-        const N: usize = 16;
-        let h = (s1 - s0) / N as f64;
-        let mut sum = self.speed(s0) + self.speed(s1);
-        for k in 1..N {
-            let w = if k % 2 == 1 { 4.0 } else { 2.0 };
-            sum += w * self.speed(s0 + h * k as f64);
-        }
-        sum * h / 3.0
-    }
-
     /// R20 form (`sweep/helix`, Adaptive): lines through `subdivision` points per turn, the
     /// points next to both ends skipped.
     fn adaptive_polyline(&self, subdivision: f64, sampling: Sampling) -> Curve {
@@ -458,20 +454,20 @@ impl HelixShape {
         )
     }
 
-    /// R25 form (`splines-2/helix-uniform`): `n + 1` points at `s = i/n` with tangent handles
-    /// along `f(s + 1/n) - f(s - 1/n)`, each a third of its piece's length long.
+    /// R25 form (`splines-2/helix-uniform`): `n + 1` points at `s = i/n`. The handles at a
+    /// point lie along `f(s + 1/n) - f(s - 1/n)` and are a third of the chord of the piece
+    /// they belong to long (GENERATORS2.md §6.1).
     fn bezier(&self, n: usize, sampling: Sampling) -> Curve {
         let d = 1.0 / n as f64;
-        let handle = |s: f64, piece: f64| {
-            let dir = (self.at(s + d) - self.at(s - d)).normalize_or_zero();
-            dir * (piece / 3.0)
+        let handle = |s: f64, chord: f64| {
+            (self.at(s + d) - self.at(s - d)).normalize_or_zero() * (chord / 3.0)
         };
         let segments = (0..n)
             .map(|i| {
                 let (s0, s1) = (i as f64 * d, (i + 1) as f64 * d);
-                let len = self.length(s0, s1);
                 let (p0, p1) = (self.at(s0), self.at(s1));
-                [p0, p0 + handle(s0, len), p1 - handle(s1, len), p1]
+                let chord = (p1 - p0).length();
+                [p0, p0 + handle(s0, chord), p1 - handle(s1, chord), p1]
             })
             .collect();
         Curve::new(segments, false, false, sampling)
@@ -486,7 +482,60 @@ pub(crate) fn placed_curve(scene: &Scene, id: NodeId) -> Result<Option<Curve>, B
     if !is_spline(&node.type_id) {
         return Ok(None);
     }
-    let curve = build_curve(&node.type_id, &node.params)?;
+    let curve = if node.type_id == crate::spline_mask::TYPE {
+        match crate::spline_mask::curve_of(scene, id)? {
+            Some(c) => c,
+            None => return Ok(None),
+        }
+    } else {
+        build_curve(&node.type_id, &node.params)?
+    };
     let m = scene.local_transform(id).expect("node exists").matrix();
     Ok(Some(curve.transformed(&m)))
+}
+
+/// The sampled loops of a spline node in its own space, each with whether it is closed: what the
+/// viewport draws (VIEWPORT.md section 11). `None` if `id` is no spline or has no curve; loops of
+/// fewer than two points are left out.
+pub fn sampled_loops(scene: &Scene, id: NodeId) -> Option<Vec<(Vec<DVec3>, bool)>> {
+    let node = scene.node(id)?;
+    if !is_spline(&node.type_id) {
+        return None;
+    }
+    let curve = if node.type_id == crate::spline_mask::TYPE {
+        crate::spline_mask::curve_of(scene, id).ok()??
+    } else {
+        build_curve(&node.type_id, &node.params).ok()?
+    };
+    let loops: Vec<(Vec<DVec3>, bool)> = std::iter::once(&curve)
+        .chain(curve.extra.iter())
+        .map(|c| (c.points(), c.closed))
+        .filter(|(p, _)| p.len() >= 2)
+        .collect();
+    (!loops.is_empty()).then_some(loops)
+}
+
+/// A spline node as a polyline helper mesh for the spline-driven deformers (MODIFIERS.md
+/// §20.0): its sampled points in its own space, one 2-point edge per chord (plus the closing
+/// edge of a closed spline). `None` if `id` is no spline or has no curve.
+pub fn polyline_mesh(scene: &Scene, id: NodeId) -> Option<forge_geometry::PolyMesh> {
+    let node = scene.node(id)?;
+    if !is_spline(&node.type_id) {
+        return None;
+    }
+    let curve = if node.type_id == crate::spline_mask::TYPE {
+        crate::spline_mask::curve_of(scene, id).ok()??
+    } else {
+        build_curve(&node.type_id, &node.params).ok()?
+    };
+    let points = curve.points();
+    let n = points.len();
+    if n < 2 {
+        return None;
+    }
+    let spans = if curve.closed && n > 2 { n } else { n - 1 };
+    let polys = (0..spans)
+        .map(|k| vec![k as u32, ((k + 1) % n) as u32])
+        .collect();
+    Some(forge_geometry::PolyMesh { points, polys })
 }

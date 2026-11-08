@@ -73,6 +73,25 @@ fn triple(v: &Value) -> Result<[f64; 3], CommandError> {
     }
 }
 
+/// A list row: a bare node id (default row) or `{target, blend?, strength? (percent), enabled?}`.
+fn row_from_json(v: &Value, default_blend: &str) -> Option<forge_core::LinkRow> {
+    if let Some(id) = v.as_u64() {
+        return Some(forge_core::LinkRow::new(NodeId(id), default_blend));
+    }
+    let o = v.as_object()?;
+    let mut row = forge_core::LinkRow::new(NodeId(o.get("target")?.as_u64()?), default_blend);
+    if let Some(b) = o.get("blend") {
+        row.blend = b.as_str()?.to_string();
+    }
+    if let Some(s) = o.get("strength") {
+        row.strength = s.as_f64().filter(|f| f.is_finite())? / 100.0;
+    }
+    if let Some(e) = o.get("enabled") {
+        row.enabled = e.as_bool()?;
+    }
+    Some(row)
+}
+
 /// Converts JSON by the parameter kind (docs/specs/COMMANDS.md §6, `param.set`).
 pub fn value_from_json(desc: &ParamDesc, v: &Value) -> Result<Param, CommandError> {
     let unit = desc.ui.unit;
@@ -101,6 +120,20 @@ pub fn value_from_json(desc: &ParamDesc, v: &Value) -> Result<Param, CommandErro
                             .map(NodeId)
                             .ok_or_else(|| wrong("an array of node ids"))
                     })
+                    .collect::<Result<_, _>>()?,
+            )
+        }
+        ParamKind::LinkRows { blends, .. } => {
+            let items = v
+                .as_array()
+                .ok_or_else(|| wrong("an array of node ids or row objects"))?;
+            let default_blend = blends.first().map(|b| b.id.as_str()).unwrap_or_default();
+            Param::LinkRows(
+                items
+                    .iter()
+                    .map(|i| row_from_json(i, default_blend).ok_or_else(|| {
+                        wrong("an array of node ids or {target, blend, strength (percent), enabled}")
+                    }))
                     .collect::<Result<_, _>>()?,
             )
         }

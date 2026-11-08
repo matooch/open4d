@@ -421,7 +421,7 @@ fn array_command_copies_the_mesh() {
     let out = app
         .run(
             "mesh.array_command",
-            json!({"settings": {"copies": 3, "offset": [300.0, 0.0, 0.0]}}),
+            json!({"settings": {"count_x": 4, "offset": [900.0, 0.0, 0.0]}}),
         )
         .unwrap();
     assert_eq!(steps(&app), before + 1);
@@ -440,7 +440,7 @@ fn array_command_copies_the_mesh() {
     create(&mut app, "forge.cube");
     assert!(failed(app.run("mesh.array_command", json!({}))));
     assert!(matches!(
-        app.run("mesh.array_command", json!({"settings": {"copies": "x"}})),
+        app.run("mesh.array_command", json!({"settings": {"count_x": "x"}})),
         Err(CommandError::InvalidArgs(_))
     ));
 }

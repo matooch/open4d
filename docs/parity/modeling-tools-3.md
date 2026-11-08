@@ -73,6 +73,27 @@ Dissolve, Disconnect, Mirror and Triangulate dialogs.
 GUI-only: the drag scale (how many units the Extrude offset changes per screen pixel at the
 default camera). Add it to [GUI-SESSIONS.md](GUI-SESSIONS.md) G3 when someone sits at the app.
 
+## Follow-up cases (planner, after brief 187)
+
+Brief 187 matched all 12 `arr-f-*` / `sel-*` cases; these separate the rules it could not.
+Same export procedure as the cases above.
+
+| Case (folder) | Input | Command and settings |
+|---|---|---|
+| arr-f-array-4 | default cube made editable, all polygons selected | Array, count 4 along X, offset 300 |
+| arr-f-array-2x2-rot-scale | the same | Array, counts 2 × 2 × 1, offsets (200, 200, 0), rotation (0°, 0°, 45°), scale 50 % |
+| arr-f-array-nothing-selected | default cube made editable, no polygon selected | Array, count 3 along X, offset 300 |
+| sel-connected-corner | two editable cubes merged into one object, touching at one corner point only; one polygon of the first selected | Select Connected |
+| sel-connected-t-junction | three quads sharing one edge (a T), one quad selected | Select Connected |
+| sel-connected-points-mode | the two cubes of `sel-connected-point-only`, one point selected | Select Connected in Points mode |
+| sel-grow-use-edge | default 3 × 3 × 3 cube, one polygon selected | Grow Selection with Use Edge on |
+| arr-f-randomize-30 | 30 default cubes in a row (x 0, 300, …) | Randomize, position ±100, seed 1; record every object's transform |
+| arr-f-transfer-hpb | a cube rotated (H 10°, P 20°, B 30°) as source and a default cube as target | Transfer, all components |
+| arr-f-duplicate-total | a default cube | Duplicate, 3 copies, Mode Total, offset (600, 0, 0) |
+
+Arrange along a circle and along a spline did nothing through scripting: run them by hand in GUI
+session G3 and record the result.
+
 ## Notes
 - `bevel-proportional-rect` crashed the app in the run of 2026-11-03/04 (leftover
   CURRENT_CASE said so at the start of the next run). Skipped for good, per the queue

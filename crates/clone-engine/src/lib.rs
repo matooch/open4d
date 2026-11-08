@@ -5,7 +5,9 @@
 //! crate evaluates the prototypes and expands the clones to geometry.
 
 mod data;
+mod delay;
 mod effector;
+mod formula;
 mod grid;
 mod honeycomb;
 mod linear;
@@ -15,9 +17,14 @@ mod radial;
 mod random;
 mod rng;
 mod settings;
+mod step;
+mod target;
+mod time;
 
 pub use data::{CloneData, CloneItem};
+pub use delay::{DELAY, Delay, DelayMode, WINDOW as DELAY_WINDOW, delay_type};
 pub use effector::{Effector, EffectorCtx, apply_effectors, effector_from_node};
+pub use formula::{DEFAULT_FORMULA, FORMULA, Formula, formula_type};
 pub use node::{CLONER, CloneToolset, cloner_type, settings_from_params};
 pub use plain::{ColorMode, PLAIN, Plain, Space, TransformMode, plain_type};
 pub use random::{
@@ -25,6 +32,9 @@ pub use random::{
 };
 pub use rng::SplitMix64;
 pub use settings::*;
+pub use step::{STEP, Step, StepCurve, step_type};
+pub use target::{TARGET, Target, TargetMode, target_type};
+pub use time::{TIME, Time, time_type};
 
 use forge_core::EvalCtx;
 use forge_core::transform::Transform;

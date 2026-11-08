@@ -37,9 +37,47 @@ Windows scripts must run on those systems. `dist/` is git-ignored.
 `packaging/icons/forge3d.svg` is original placeholder art. `scripts/release/gen-icons.py`
 (Pillow) regenerates the committed PNG/ICO/ICNS files from the same geometry.
 
-## Signing (brief 177)
-`sign-hooks.sh` / `sign-hooks.ps1` are called at the right points and skip when secrets
-(`MACOS_CERT_P12`, `WINDOWS_CERT_PFX`) are absent. Brief 177 implements them.
+## Signing and notarization (brief 177)
+Sources: public platform documentation for `codesign`, `notarytool`, `stapler`, `signtool` and
+GnuPG. Every signing step runs only when its secrets exist. Without them the job logs
+`signing skipped: <reason>` and uploads the unsigned artifacts; a missing secret never fails a
+release. Secrets are read through step `env:` only (never interpolated into scripts, never
+echoed). Temporary keychains, key files and GnuPG homes live in `$RUNNER_TEMP` and are deleted
+by an `if: always()` step.
+
+Each gate is a step output computed from `secrets.X != ''` (the `secrets` context cannot be used
+in every `if:`): `steps.mac_gate.outputs.sign` / `.notarize`, `steps.win_gate.outputs.sign`,
+`steps.gpg_gate.outputs.sign`.
+
+| Secret | Used by | How to create it |
+|---|---|---|
+| `MACOS_CERT_P12` | macOS codesign | Export a "Developer ID Application" certificate with its private key from Keychain Access as `.p12`; `base64 -i cert.p12 | pbcopy`. |
+| `MACOS_CERT_PASSWORD` | macOS codesign | The password chosen at export. |
+| `MACOS_SIGN_IDENTITY` | optional | Identity name (`Developer ID Application: Name (TEAMID)`). If unset, the first Developer ID identity in the imported keychain is used. |
+| `MACOS_NOTARY_KEY_P8` | notarization | App Store Connect, Users and Access, Integrations, create an API key; download `AuthKey_XXXX.p8`; `base64 -i AuthKey_XXXX.p8`. |
+| `MACOS_NOTARY_KEY_ID` | notarization | The key id shown next to that API key. |
+| `MACOS_NOTARY_ISSUER_ID` | notarization | The issuer id shown at the top of the keys page. |
+| `WINDOWS_CERT_PFX` | Windows signtool | A code-signing certificate with private key as `.pfx`; `base64 -w0 cert.pfx`. |
+| `WINDOWS_CERT_PASSWORD` | Windows signtool | The `.pfx` password. |
+| `LINUX_GPG_PRIVATE_KEY` | AppImage / tar.gz signature | `gpg --export-secret-keys --armor KEYID | base64 -w0`. |
+| `LINUX_GPG_PASSPHRASE` | optional | Key passphrase, if the key has one. |
+
+What is covered:
+- macOS: `scripts/release/sign-hooks.sh macos` signs every binary in `Forge3D.app` and the app
+  itself (`codesign --force --timestamp --options runtime`, hardened runtime) before the dmg is
+  built. The workflow then signs the `.dmg`, runs `xcrun notarytool submit --wait` with the API
+  key and `xcrun stapler staple` on it. Without the notary secrets the dmg is signed only.
+- Windows: `scripts/release/sign-hooks.ps1` runs `signtool sign /fd sha256 /tr <url> /td sha256`
+  on each exe before the zip is made (timestamp server `WINDOWS_TIMESTAMP_URL`, default
+  `http://timestamp.digicert.com`). The zip itself cannot be signed.
+- Linux: a detached armored signature `NAME.asc` for the AppImage and the tar.gz, published next
+  to them and listed in `SHA256SUMS`. Verify with `gpg --verify NAME.asc NAME`.
+- Not covered: the CLI tarballs on macOS are not notarized (plain tar.gz); the MSI is not built.
+
+The structure is checked by `apps/forge/tests/release_signing.rs` (gating, no echoed secrets,
+`if: always()` cleanup, unsigned upload path). The real tools only run on tagged or dispatched
+runs with secrets, so verify the first signed release by hand: `codesign -dv --verbose=4`,
+`spctl -a -t open --context context:primary-signature -v X.dmg`, `xcrun stapler validate X.dmg`.
 
 ## Follow-ups
 - Windows MSI (WiX v4 or cargo-wix) is not built yet; only the zip ships. Needs a `.wxs` with

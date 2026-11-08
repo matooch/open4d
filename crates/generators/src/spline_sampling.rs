@@ -112,6 +112,19 @@ pub fn add_params(t: NodeType, default: Interpolation) -> NodeType {
 /// short of its end, in arc length (observed, `arc-defaults`, `arc-angles` and `helix-uniform`).
 const UNIFORM_END_SHORTFALL: f64 = 1e-4;
 
+/// Extra absolute shortfall of an open spline's last Uniform point, per segment squared: the
+/// 100-segment `helix-uniform` ends 1.26e-4 earlier than `1e-4` of its length, while the 3-4
+/// segment arcs (`arc-defaults`, `arc-angles`, and `spline-wrap/arc` through its 99-length
+/// extension) allow at most 1e-6. The squared law is the simplest that fits those two ends; the
+/// real cause is not known. **Parity-pending.**
+const UNIFORM_END_EXTRA: f64 = 1.26e-8;
+
+/// Relative lag of the Uniform points of an open spline before the last one: sample `k` lies
+/// at `(1 - 1e-7)` of its arc length (`helix-uniform`: 1.00e-7 over 2521 long; `arc-defaults`
+/// 3.2e-5 -> 1.9e-6 and `arc-angles` 9e-5 -> 5e-6 improve with it). Closed splines show none
+/// (`circle-uniform`). The cause is not known. **Parity-pending.**
+const UNIFORM_OPEN_LAG: f64 = 1e-7;
+
 /// The spline's points as the generators consume them: each segment's start point and its
 /// interior samples, then the end point of an open spline (a closed one doesn't repeat
 /// its first point). Straight (`linear`) splines get no interior samples. Uniform spaces
@@ -187,11 +200,14 @@ pub fn uniform_params(curve: &Curve, number: usize) -> Vec<f64> {
     let count = if curve.closed { steps } else { steps + 1 };
     (0..count)
         .map(|k| {
-            // the open end falls a ten-thousandth of the length short
+            // the open end falls a ten-thousandth of the length short (and a little more
+            // for many segments); the steps before it lag by 1e-7 of their length
             let target = if k == steps {
-                total * (1.0 - UNIFORM_END_SHORTFALL)
-            } else {
+                total * (1.0 - UNIFORM_END_SHORTFALL) - UNIFORM_END_EXTRA * (n_seg * n_seg) as f64
+            } else if curve.closed {
                 total * k as f64 / steps as f64
+            } else {
+                total * k as f64 / steps as f64 * (1.0 - UNIFORM_OPEN_LAG)
             };
             let hi = table
                 .partition_point(|l| *l < target)

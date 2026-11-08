@@ -1,9 +1,10 @@
 # Editable polygon objects (`crates/generators/src/polygon.rs`)
 
-Sources: own design (brief docs/agents/tasks/03-polygon-object-make-editable.md). The
-observation docs/parity/make-editable.md has no data yet, so **every rule below that says
-what the commands do is parity-pending**; the geometry itself is checked against the
-primitive golden cases (§1.5). Mesh values: CORE.md §1; file format: CORE.md §6.
+Sources: own design (brief docs/agents/tasks/03-polygon-object-make-editable.md), then
+the observation docs/parity/make-editable.md (O3, cases in `tests/golden/make-editable/`)
+with brief 030. Rules that an O3 case shows cite the case; the rest of §1.2 to §1.4 stays
+**parity-pending** (own design). The geometry itself is checked against the primitive golden
+cases (§1.5) and the O3 cases (§1.6). Mesh values: CORE.md §1; file format: CORE.md §6.
 
 ## 1. Polygon object, Make Editable, Current State to Object
 
@@ -20,16 +21,34 @@ primitive golden cases (§1.5). Mesh values: CORE.md §1; file format: CORE.md �
 - `forge_generators::{to_poly_mesh, from_poly_mesh}` convert between `MeshData` and
   `PolyMesh`; both keep order and values exactly.
 
-### 1.2 Make Editable (`make_editable(tx, id) -> Result<NodeId, EditableError>`) — parity-pending
+### 1.2 Make Editable (`make_editable(tx, id) -> Result<NodeId, EditableError>`)
 For a node for which `evaluate_geometry` builds a mesh:
 1. A new `forge.polygon` is created at the source's place (same parent, same index). It
    gets the source's name, the `transform.*` params, and a copy of every tag in order
-   (type, name and params; the smoothing tag included).
-2. Its `mesh` is `evaluate_geometry`'s result: **deformers are not applied**.
-3. Children of the source: those the generator consumed (`is_consumed`) are deleted;
-   every other child (deformers, other objects) is moved under the new polygon object,
-   keeping their order and local params.
-4. The source is deleted. The function returns the new id.
+   (type, name and params; the smoothing tag included). Name and tags: `cube`; position
+   and rotation stay on the object, nothing is baked: `sphere-moved`. (The UVW tag and the
+   two data tags of the observed tree are not modelled: meshes have no UVs yet, the data
+   tags are storage; **parity-pending** until UVs exist.)
+2. Its `mesh` is `evaluate_geometry`'s result: **deformers are not applied**
+   (`cube-deformed`: the stored points are the unbent box, the Bend stays and bends live).
+3. Children of the source: those the generator consumed (`is_consumed`) are deleted
+   (`subdivision`, `extrude`: the input is gone); every other child (deformers, other
+   objects) is moved under the new polygon object, keeping their order and local params
+   (`cube-deformed`: Bend child kept, strength unchanged).
+4. The source is deleted. The function returns the new id. A generator with consumed
+   inputs gives **one** object named after the generator (`subdivision`).
+5. **Caps** (`extrude`). A generator with `cap_start` / `cap_end` params (extrude, lathe,
+   loft, sweep) whose build has cap polygons gives its **side walls** as the object (the
+   mesh built with both caps off: same points, the polygons before the caps), plus one child
+   polygon object per cap, placed before the other kept children: `Cap 1` for the start
+   cap, `Cap 2` for the end cap. A cap object has the identity transform, only the points
+   its cap polygons use (ascending index of the generator's mesh) with the polygons
+   renumbered, a copy of the source's tags, and a polygon selection tag (`forge.polygon_selection`,
+   param `indices`) named `C1` / `C2` holding all its polygons. The observed 8-point,
+   4-polygon sides and the two 4-point, 1-polygon caps: `extrude`. A cap off gives no child;
+   the tag order of the observed cap (UVW, selection, Phong), the corner each cap polygon
+   starts at (R25 start cap `[3, 2, 1, 0]`, GENERATORS2.md §11.1) and lathe/loft/sweep caps
+   are **parity-pending** (the test compares `extrude` geometrically, as its form does).
 - A `forge.polygon` is already editable: nothing changes, its own id is returned.
 - A node without a mesh (Null, spline, deformer, a generator with no usable input) gives
   `EditableError::NoMesh(name)` before anything is edited. A tag gives `NoMesh` too.
@@ -40,11 +59,15 @@ For a node for which `evaluate_geometry` builds a mesh:
   (**parity-pending**). A link whose `accepts` list excludes the `Object` category makes
   the whole step fail and revert.
 
-### 1.3 Current State to Object (`current_state_to_object(tx, id) -> Result<NodeId, EditableError>`) — parity-pending
+### 1.3 Current State to Object (`current_state_to_object(tx, id) -> Result<NodeId, EditableError>`)
 - A new `forge.polygon` is inserted directly after the source (same parent, index + 1),
-  named like the source, with the source's `transform.*` params and copies of its tags.
-- Its `mesh` is `evaluate`'s result: the source's deformers **are applied**. The source
-  and its children are untouched; the new object has no children.
+  named like the source (**no suffix**), with the source's `transform.*` params and copies
+  of its tags: `cube-deformed-csto`, `subdivision-csto`.
+- Its `mesh` is `evaluate`'s result: the source's deformers **are applied**
+  (`cube-deformed-csto`: bbox -100…359.15 × -200…259.15). The source and its children are
+  untouched (`subdivision-csto`: the generator keeps its input and is still drawn
+  subdivided); the new object has no children. Unlike Make Editable, a cap-making
+  generator gives one object with the caps in its mesh (**parity-pending**: no case).
 - The mesh generators produce exactly one mesh each, so there is nothing to merge; if a
   generator with several outputs appears, the outputs must be merged into one mesh.
 - Same errors as §1.2.
@@ -64,8 +87,11 @@ ascending id order, inside one transaction (one undo step, labels "Make Editable
 "Current State to Object"). A node that no longer exists (it was a consumed child of an
 earlier selected node) is skipped silently. A `NoMesh` node is skipped and its message
 `"<command>: <name> has no mesh"` goes to `EditorState.status`; any other error aborts and
-reverts the whole step. Afterwards the selection is the new objects (for Make Editable on
-a `forge.polygon`, the polygon itself).
+reverts the whole step. Afterwards (O3 "Selection after", all nine cases) the object the command ran on stays the
+only selected one: for Make Editable that is the converted object (for a `forge.polygon`,
+itself; the caps are not selected), for Current State to Object the **original**, not the
+copy. With several nodes selected the same holds per node (**parity-pending**: the form did
+not read it). Each command is one undo step (O3 "Undo").
 
 ### 1.5 Checks
 - Every primitive golden case that matches `tests/golden/<feature>/` in
@@ -74,6 +100,24 @@ a `forge.polygon`, the polygon itself).
 - Deformer child kept and still applied; Current State to Object bakes the deformer and
   leaves the source; one undo restores the original; consumed children removed.
 - Save and load keep the mesh (CORE.md §6).
+
+### 1.6 Observed cases (`tests/golden/make-editable/`, `crates/generators/tests/make_editable_parity.rs`)
+The test rebuilds each case's scene from `[params.input]` (child table = first child), runs
+the command, and compares the whole scene as the exporter writes it: every non-consumed
+object that has a mesh, in tree order, each taken to world space with the deformers of its
+children applied, concatenated (a generator with a consumed input shows its output once).
+The tolerance is the case's (`cube`, `cube-deformed`, `sphere-moved`, `subdivision`: strict
+faces and 1e-4; the others `geometric`). It also asserts the observed tree (names, types,
+tags without the UVW and data tags, children) and, for the spline, the editable spline.
+
+| Case | Rule it proves |
+|---|---|
+| `cube`, `sphere-moved`, `subdivision` | §1.2 steps 1, 2, 4 |
+| `cube-deformed` | §1.2 steps 2 and 3 (bent only live) |
+| `cube-deformed-csto`, `subdivision-csto` | §1.3 |
+| `extrude` | §1.2 step 5 |
+| `spline` | the primitive becomes `forge.spline` with 4 closed points (SPLINES.md §3); tree only |
+| `array` | mesh only: the eight cubes at the Array's offsets. The form's tree column is empty and the export names eight objects `Cube.8` … `Cube.1` ("this command does not make them polygon objects"), so our single merged polygon object matches the surface but **not the tree**: **parity-pending**, see the follow-up cases in the brief report |
 
 ## 2. Component modes and selection (`crates/ui/src/components.rs`)
 
@@ -214,10 +258,12 @@ nothing changes). Edge ids are those of `PolyMesh::edges()`.
 | `select.loop` | `across?` 0 or 1 (polys only, default 0) | edges or polys | edge loops / polygon loops of the selected elements |
 | `select.ring` | `across?` | edges or polys | edge rings / the orthogonal polygon strips |
 
-Neighbours: points are neighbours along an edge; edges share a point; polygons share an
-**edge** (`grow-poly` and `grow-point` were not observed, the dialog "Grow Selection…" crashed
-the observer: **parity-pending**). Grow and shrink are exact inverses on the observed shrink
-case only.
+Neighbours: points are neighbours along an edge; edges share a point; polygons share a
+**point** (O58, brief 187: `sel-grow-point` grows the start point of a 4x4x4 cube to its four
+edge neighbours, `sel-grow-edge` the start edge to the 7 edges at its end points, `sel-grow-poly` the
+start quad to the 3x3 patch, diagonals included; Use Edge off, its dialog default is a G3 read).
+Shrink uses the same neighbours (`shrink-poly`, O26, gives the same 5, 6, 9, 10 with either
+polygon neighbourhood).
 
 **Convert** (`convert(mesh, sel, from, to, mode)`). Same kind is a no-op. Strict needs all
 parts of the target element selected, tolerant any part:
@@ -226,17 +272,22 @@ parts of the target element selected, tolerant any part:
 |---|---|---|
 | polys → points, edges | every point / edge of the selected polys (no tolerance) | same |
 | points → edges | both end points selected | either |
-| points → polys | all corners selected (`convert-point-to-poly`: 9 top points give polys 16-19; side polys with 2 selected points are not chosen) | any corner (not observed) |
+| points → polys | all corners selected (`convert-point-to-poly`: 9 top points give polys 16-19; side polys with 2 selected points are not chosen) | any corner (`sel-convert-tolerant-p2poly`, O58: the same 9 points give the 12 polygons 2, 3, 6, 7, 10, 11, 14-19: the top four and every side polygon touching the top) |
 | edges → points | end points of the selected edges | same |
-| edges → polys | all edges of the polygon selected (`convert-edge-to-poly`: the 8 border edges of the top give no polygon) | any edge (not observed) |
+| edges → polys | all edges of the polygon selected (`convert-edge-to-poly`: the 8 border edges of the top give no polygon) | any edge (`sel-convert-tolerant-e2poly`, O58: the 8 border edges give the same 12 polygons) |
 
 `convert-poly-to-point`: the 4 top polys give the 9 top points, polys stay selected.
 
-**Connected** uses shared **points**: two polygons are in one piece if they share a point
-(union-find over polygon corners). Points mode: pieces of points; edges mode: edges of the
-pieces. `select-connected` (after Disconnect every top polygon owns its points): poly 16 stays
-alone. Spreading through shared points, versus through shared edges only, was not observed:
-**parity-pending** (the case cannot tell, see report).
+**Connected** uses shared **edges**: two polygons are in one piece if they share an edge that
+exactly two polygons use (union-find over polygons). Points mode: all points of the pieces
+holding a selected point; edges mode: all edges of the pieces holding a selected edge. A point or
+edge on two pieces belongs to both. `select-connected` (O26; after Disconnect every top polygon owns its
+points): poly 16 stays alone. `sel-connected-point-only` (O58): two cubes welded along a shared point
+pair (an edge used by four polygons) are **not** connected, so selecting one polygon gives the six
+polygons of its cube. Sharing a corner point alone does not connect polygons either (the
+earlier point-based rule selected both cubes). **Parity-pending**: points mode and edges mode, and
+whether an edge shared by three polygons connects; follow-up case: two cubes sharing one
+corner point only (a true corner touch), and a T-junction of three polygons on one edge.
 
 **Loop and ring** (own design, parity-pending; `loop-edge`, `loop-poly`, `ring-edge` need
 the GUI, O26).
@@ -261,7 +312,9 @@ Checks: `crates/geometry/tests/selection_ops_parity.rs` rebuilds each O26 case f
 `mesh.obj` and `case.toml` start sets and compares with `selection.json` exactly; unit tests
 for loop, ring, connected, tolerant convert and edge grow/shrink (`selection.rs`); command
 tests in `crates/app/tests/select_commands.rs` (headless run, one undo step, no step when
-nothing changes).
+nothing changes). `crates/app/tests/o58_selection_parity.rs` (brief 187) runs the six O58
+`sel-*` cases (discovered by `tool`: `grow`, `convert_selection`, `select_connected`) through
+the registry against `selection.json`: 6/6 exact.
 
 ## 3. Moving, rotating and scaling components (`crates/ui/src/component_edit.rs`)
 

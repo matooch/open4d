@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use forge_core::{Category, NodeType, ParamDesc, Plugin, Registry, RegistryError, Unit, Value};
 use glam::{DMat4, DVec3};
 
+use crate::BLEND_OPTIONS;
 use crate::remap::{Contour, Remap};
 use crate::shape::{Direction, Shape};
 use crate::{
@@ -21,11 +22,15 @@ pub(crate) const BIG: f64 = 1e20;
 const STEPS_MAX: i64 = 2_147_483_647;
 pub(crate) const FIELD: &str = "Field";
 const REMAP: &str = "Remapping";
-const LIST: &str = "List Row";
 
-/// Id of the list-row parameter: the strength of this field's layer in a field list
-/// (FIELDS.md F1; O24 `layer_strength_percent`).
-pub const LAYER_STRENGTH: &str = "layer_strength";
+/// Id of the field-list parameter of a deformer, an effector or a Group field (FIELDS.md F7).
+pub const FIELD_LIST: &str = "fields";
+
+/// A field-list parameter: ordered rows of a field, a blend mode, a strength and an enable box
+/// (FIELDS.md F7; stored as `Value::LinkRows`, CORE.md section 6.10).
+pub fn field_list_param(id: &str, label: &str) -> ParamDesc {
+    ParamDesc::link_rows(id, label, &[Category::Field], &BLEND_OPTIONS)
+}
 
 /// The Remapping tab parameters; `inner` and `mirror` are the per-type defaults.
 fn remap_params(inner: f64, mirror: bool) -> Vec<ParamDesc> {
@@ -119,12 +124,6 @@ pub(crate) fn field_type(
     for p in remap_params(inner, mirror) {
         ty = ty.param(p);
     }
-    ty = ty.param(
-        ParamDesc::float(LAYER_STRENGTH, "Layer Strength", 1.0)
-            .range(-BIG, BIG)
-            .unit(Unit::Percent)
-            .group(LIST),
-    );
     ty
 }
 
@@ -207,7 +206,10 @@ impl Plugin for FieldToolset {
         r.register(torus_type())?;
         r.register(capsule_type())?;
         r.register(radial_type())?;
-        r.register(random_type())
+        r.register(random_type())?;
+        r.register(crate::group_type())?;
+        r.register(crate::formula_type())?;
+        r.register(crate::shader_type())
     }
 }
 
@@ -305,9 +307,18 @@ pub(crate) fn build_field(
         capsule::CAPSULE => capsule_type(),
         radial::RADIAL => radial_type(),
         random::RANDOM => random_type(),
+        crate::FORMULA => crate::formula_type(),
+        crate::SHADER => crate::shader_type(),
         _ => return None,
     };
     let p = Params { ty: &ty, values };
+    match type_id {
+        crate::FORMULA => {
+            return Some(crate::formula::field(&p, world).map(|f| Box::new(f) as Box<dyn Field>));
+        }
+        crate::SHADER => return Some(crate::shader::field()),
+        _ => {}
+    }
     let shape = match type_id {
         LINEAR => {
             let dir = p.option("direction");

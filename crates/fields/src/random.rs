@@ -282,17 +282,43 @@ pub(crate) fn field(p: &Params, remap: Remap, world: DMat4) -> Result<RandomFiel
     })
 }
 
-/// True if the Random field node `id` changes with time: a noise mode with a non-zero
-/// animation speed (CORE.md section 5b).
+/// True if the field node `id` changes with time: a Random field in a noise mode with a non-zero
+/// animation speed, a Formula field that names `t`, or a Group holding one (CORE.md section 5b).
 pub fn reads_time(scene: &Scene, id: NodeId) -> bool {
-    let Some(node) = scene.node(id).filter(|n| n.type_id == RANDOM) else {
+    reads_time_at(scene, id, 0)
+}
+
+fn reads_time_at(scene: &Scene, id: NodeId, depth: usize) -> bool {
+    let Some(node) = scene.node(id) else {
         return false;
     };
-    let ty = random_type();
-    let p = Params {
-        ty: &ty,
-        values: &node.params,
-    };
-    !matches!(p.option("random_mode").as_str(), "random" | "sorted")
-        && p.float("animation_speed") != 0.0
+    match node.type_id.as_str() {
+        RANDOM => {
+            let ty = random_type();
+            let p = Params {
+                ty: &ty,
+                values: &node.params,
+            };
+            !matches!(p.option("random_mode").as_str(), "random" | "sorted")
+                && p.float("animation_speed") != 0.0
+        }
+        crate::FORMULA => {
+            let ty = crate::formula_type();
+            let p = Params {
+                ty: &ty,
+                values: &node.params,
+            };
+            let Value::String(text) = p.get("formula") else {
+                return false;
+            };
+            p.float("time_delta") != 0.0 && crate::formula::mentions_time(&text)
+        }
+        crate::GROUP => match node.params.get(crate::FIELD_LIST) {
+            Some(Value::LinkRows(rows)) if depth < 16 => rows
+                .iter()
+                .any(|r| r.enabled && reads_time_at(scene, r.target, depth + 1)),
+            _ => false,
+        },
+        _ => false,
+    }
 }

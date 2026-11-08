@@ -1,6 +1,6 @@
 # 055 · Spline Wrap, Spline and Spline Rail deformers
 
-Status: waiting: O19, O45 · Area: D · Depends on: 050, 028 · Observations: O19, O45 · Touches: modifiers
+Status: done · Area: D · Depends on: 050, 028 · Observations: O19, O45 · Touches: modifiers
 
 ## Goal
 The spline-driven deformers match O19 and O45.
@@ -27,9 +27,10 @@ The spline-driven deformers match O19 and O45.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
+- Result: `crates/modifiers/tests/spline_parity.rs`; parity 0/4 exact, 4 `KNOWN_MISMATCH` (Spline Wrap 0/2: arc 2e-3 from sampler digits x99 extension, helix frame roll; Spline 0/1: pairing/weights; Spline Rail 0/1: 1.9e-4 from the sampled Helix). `tests/golden/{wrap,wrap-f}` belong to plain Wrap, not this brief.
+- Rules derived: sampled polyline model (`spline-wrap/*` end chords); Wrap mapping and `t = z` degenerate box (`spline-wrap/arc`); Rail formula and index fraction (`spline-rail/defaults`); Spline moved set (`spline-deformer/defaults`). Parity-pending: see MODIFIERS.md §20-21.
 - Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
+- Deviations: the frame's initial normal is `Z x T` not Sweep's bend rule (the helix says neither matches); +X reads the object's z axis (observed).
+- Files changed: crates/modifiers/src/{spline.rs,lib.rs}, crates/modifiers/tests/spline_parity.rs, crates/generators/src/{splines.rs,lib.rs} (spline polyline helper), crates/ui icons + icon_table.rs, docs/specs/MODIFIERS.md, docs/parity/STATUS.md, BACKLOG.md.
+- Open questions: see the follow-up case list in MODIFIERS.md §21 (interactive exports).
 - The last lines of the gate output.

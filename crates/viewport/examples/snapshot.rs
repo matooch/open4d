@@ -74,6 +74,7 @@ fn main() {
         instanced: &[],
         meshes: &meshes,
         grid: Some(&grid),
+        lines: &[],
         gizmo: Some(&gizmo),
         settings: Settings {
             shading: Shading::SmoothWire,

@@ -443,6 +443,11 @@ fn build_with_effectors(
         for e in effectors {
             let ty = match e.get("type").and_then(|t| t.as_str()) {
                 Some("random") => "forge.effector.random",
+                Some("step") => "forge.effector.step",
+                Some("formula") => "forge.effector.formula",
+                Some("time") => "forge.effector.time",
+                Some("target") => "forge.effector.target",
+                Some("delay") => "forge.effector.delay",
                 _ => "forge.effector.plain",
             };
             let normalised = normalise_random(e);
@@ -451,7 +456,23 @@ fn build_with_effectors(
             } else {
                 *e
             };
-            let eff = create_node(tx, reg, ty, e, &["type", "use_alpha_strength_1071"], &[]);
+            let eff = create_node(
+                tx,
+                reg,
+                ty,
+                e,
+                &["type", "use_alpha_strength_1071", "target_object"],
+                &[],
+            );
+            // The case files record the Target Object by name only; the observation
+            // (effectors-2.md, `target-defaults`) puts the Null at (0, 0, 300).
+            if e.contains_key("target_object") {
+                let null = tx.create("forge.null", None, None).unwrap();
+                tx.set_param(null, transform::POS, Value::Vec3([0.0, 0.0, 300.0]))
+                    .unwrap();
+                tx.set_param(eff, "target_object", Value::Link(Some(null)))
+                    .unwrap();
+            }
             if let Some(toml::Value::Table(f)) = e.get("field") {
                 let field = create_node(
                     tx,
@@ -972,4 +993,113 @@ fn random_effector_cases_match_the_reference() {
     // Indexed: range only (checked above); the reference is not a uniform (known mismatch).
     assert!(uniform_band(&drawn_ref["random-indexed"].position).is_err());
     assert_eq!(RANDOM_KNOWN_MISMATCH, ["random-indexed"]);
+}
+
+// ---------------------------------------------------------------------------------------
+// Step, Formula, Time and Target effectors (spec E18-E24)
+
+/// Cases whose clone data (level B) match but whose expanded mesh (level A) misses the 1e-4
+/// tolerance, with the reason (spec E19, E24): `step-position`'s reference curve is not an
+/// exact straight line (the weights are off by up to 9.2e-7), which the mesh sums to 1.01e-4.
+const STFT_MESH_MISMATCH: &[&str] = &["step-position"];
+
+#[test]
+fn step_formula_time_target_cases_match_the_reference() {
+    let reg = registry();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
+    let types = ["step", "formula", "time", "target"];
+    let mut matched = Vec::new();
+    let mut mismatched = BTreeSet::new();
+    for case in discover_cases(&root).unwrap() {
+        if case.feature != "cloner" {
+            continue;
+        }
+        let m = case.manifest().unwrap();
+        let effectors = effector_tables(&m.params);
+        let ours_type = |e: &&Table| {
+            e.get("type")
+                .and_then(|t| t.as_str())
+                .is_some_and(|t| types.contains(&t))
+        };
+        if effectors.is_empty() || !effectors.iter().all(ours_type) {
+            continue;
+        }
+        let frame = m.params["document_frame"].as_integer().unwrap();
+        let ctx = EvalCtx::at_frame(frame, 30.0);
+        let mode = m.params["mode"].as_str().unwrap().to_string();
+        // The cloner's own keys: the effector adds a "<name>_percent" key (its field).
+        let own: BTreeSet<String> = effectors
+            .iter()
+            .map(|e| format!("{}_percent", e["type"].as_str().unwrap()))
+            .collect();
+        let table: Table = m
+            .params
+            .iter()
+            .filter(|(k, v)| !v.is_table() && !own.contains(*k) && k.as_str() != "document_frame")
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        let mut doc = Document::new(reg.clone());
+        let cloner = build_with_effectors(&mut doc, &reg, &mode, &table, &effectors);
+
+        let data = clone_data(doc.scene(), cloner, &ctx).unwrap().unwrap();
+        assert!(data.is_consistent(), "{}", case.name);
+        let ours = Samples::Clones {
+            tolerance: 1e-4,
+            clones: (0..data.len()).map(|i| sample_of(&data, i)).collect(),
+        };
+        let (_, expected) = case.samples().unwrap().remove(0);
+        let samples = compare_samples(&expected, &ours);
+
+        let mesh = evaluate(doc.scene(), cloner, &ctx)
+            .unwrap()
+            .expect("geometry");
+        let ours = export_weld(&Mesh {
+            positions: mesh.points.iter().map(|p| p.to_array()).collect(),
+            faces: mesh.polys.clone(),
+        });
+        let want = export_weld(&case.expected_mesh().unwrap().unwrap());
+        let geo = compare_meshes(&want, &ours, &m.tolerance);
+        assert!(
+            samples.passed(),
+            "{}: samples {:?} (max error {})",
+            case.name,
+            samples.failures,
+            samples.max_error
+        );
+        if STFT_MESH_MISMATCH.contains(&case.name.as_str()) {
+            assert!(
+                !geo.passed(),
+                "{} matches now: remove it from STFT_MESH_MISMATCH",
+                case.name
+            );
+            mismatched.insert(case.name.clone());
+            matched.push(case.name.clone());
+            continue;
+        }
+        assert!(
+            geo.passed(),
+            "{}: mesh {:?} (max error {:?})",
+            case.name,
+            geo.failures,
+            geo.max_position_error
+        );
+        matched.push(case.name.clone());
+    }
+    println!("matched: {}", matched.join(", "));
+    assert_eq!(
+        mismatched,
+        STFT_MESH_MISMATCH.iter().map(|s| s.to_string()).collect()
+    );
+    matched.sort();
+    assert_eq!(
+        matched,
+        [
+            "formula-defaults",
+            "formula-frame-10",
+            "step-defaults",
+            "step-position",
+            "target-defaults",
+            "time-frame-30"
+        ]
+    );
 }

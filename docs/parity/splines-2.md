@@ -251,6 +251,21 @@ Ring and of the Cogwheel); "points" is the spline's own control point count.
 `helix-uniform` and `circle-uniform` are the Helix and Circle at their R25 defaults: that
 default is already Uniform with Number 8, so nothing was changed to make them.
 
+## Follow-up cases (planner, after brief 191)
+
+Brief 191 matched `helix-uniform` but needed two fitted sampler constants for open splines with
+Intermediate Points Uniform (a 1e-7 step lag and an end shortfall growing with the segment
+count). These separate them. Extrude each as `helix-uniform` was.
+
+| Case | Spline | Changed from default | Read back | Result |
+|---|---|---|---|---|
+| helix-uniform-sub10 | Helix | Subdivision 10, Intermediate Points Uniform 8 | point count | |
+| helix-uniform-sub50 | Helix | Subdivision 50, Intermediate Points Uniform 8 | point count | |
+| helix-uniform-sub200 | Helix | Subdivision 200, Intermediate Points Uniform 8 | point count | |
+| arc-uniform-n50 | Arc | Intermediate Points Uniform 50 | point count | |
+| arc-uniform-n200 | Arc | Intermediate Points Uniform 200 | point count | |
+| linear-open-uniform | a 3-point Linear spline (0,0,0), (100,0,0), (100,100,0) | Intermediate Points Uniform 8 | point count | |
+
 ## Notes
 - All 22 cases ran without an error and every export succeeded. No dialog, no crash.
 - **Intermediate Points default**: Uniform for Arc, Circle and Helix; Adaptive for all the

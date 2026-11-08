@@ -22,6 +22,16 @@ pub fn display_value(value: &Value, unit: Unit) -> Json {
         Value::Enum(s) | Value::String(s) => json!(s),
         Value::Link(l) => json!(l.map(|n| n.0)),
         Value::LinkList(l) => json!(l.iter().map(|n| n.0).collect::<Vec<_>>()),
+        Value::LinkRows(rows) => json!(
+            rows.iter()
+                .map(|r| json!({
+                    "target": r.target.0,
+                    "blend": r.blend,
+                    "strength": r.strength * 100.0,
+                    "enabled": r.enabled,
+                }))
+                .collect::<Vec<_>>()
+        ),
         Value::Mesh(m) => json!({"points": m.points.len(), "polys": m.polys.len()}),
         Value::IndexList(i) => json!(i),
         Value::Vec3List(l) => json!(l),

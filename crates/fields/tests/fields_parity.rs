@@ -1,13 +1,14 @@
 //! Parity: docs/specs/FIELDS.md against tests/golden/fields (level B, 729 samples per case)
 //! for the Linear, Spherical, Box, Cylinder, Cone, Torus, Capsule and Radial fields and the
-//! Remapping tab (exact), and the Random field (statistical, NOISE.md N7).
+//! Remapping tab (exact), the field lists with blend modes, the Group and Formula fields (exact,
+//! brief 059, FIELDS.md F7) and the Random field (statistical, NOISE.md N7).
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::Arc;
 
-use forge_core::{Document, EvalCtx, ParamKind, Registry, Tx, Value, transform};
-use forge_fields::{FieldList, FieldToolset};
+use forge_core::{Document, EvalCtx, LinkRow, NodeId, ParamKind, Registry, Tx, Value, transform};
+use forge_fields::{FieldError, FieldList, FieldToolset};
 use forge_parity_harness::{Samples, compare_samples, discover_cases};
 use glam::DVec3;
 
@@ -29,7 +30,21 @@ fn in_scope(name: &str) -> bool {
     .iter()
     .any(|p| name.starts_with(p))
         || name == "layer-opacity-50"
+        || layered(name)
+        || name == "group-field"
+        || name.starts_with("formula-")
 }
+
+/// Cases of two or three Spherical layers in a field list (FIELDS.md F7).
+fn layered(name: &str) -> bool {
+    name.starts_with("blend-") || name.starts_with("two-layers-") || name == "three-layers"
+}
+
+/// Cases whose options are not derived: building them must fail with `Unsupported`.
+const UNSUPPORTED: &[(&str, &str)] = &[(
+    "shader-noise",
+    "the Shader field needs the shaders of brief 125",
+)];
 
 /// Cases built but differing from the observation (pinned so a fix shows up).
 const KNOWN_MISMATCH: &[&str] = &[];
@@ -67,6 +82,20 @@ fn type_id(name: &str) -> String {
 fn param(reg: &Registry, ty_id: &str, key: &str, raw: &toml::Value) -> Option<(String, Value)> {
     let (id, scale) = match key {
         "type" | "layer_strength_percent" | "layer_blend_mode" => return None,
+        // The Group field's inner list and its layers (built by `build_group`).
+        "inner_layers_top_to_bottom"
+        | "inner_layer_blend_modes"
+        | "inner_layer_strength_percent"
+        | "A_position"
+        | "B_position"
+        | "size"
+            if ty_id == forge_fields::GROUP =>
+        {
+            return None;
+        }
+        // The Formula field's variables t and f (O23 key names).
+        "t_d_time_delta_time_percent" => ("time_delta".to_string(), 0.01),
+        "f_frequency" => ("frequency".to_string(), 1.0),
         // Editor preview settings, not parameters (FIELDS.md F6).
         "viewplane_preview"
         | "show_x"
@@ -112,6 +141,7 @@ fn param(reg: &Registry, ty_id: &str, key: &str, raw: &toml::Value) -> Option<(S
                 .unwrap_or_else(|| panic!("{id}: no option labelled {s:?}"));
             Value::Enum(o.id.clone())
         }
+        (ParamKind::String, toml::Value::String(s)) => Value::String(s.clone()),
         other => panic!("{id}: unexpected value {other:?}"),
     };
     Some((id.clone(), desc.validate(value).expect("valid case value")))
@@ -124,28 +154,138 @@ struct Built {
     ours: Vec<f64>,
 }
 
-fn build(reg: &Arc<Registry>, case: &forge_parity_harness::GoldenCase) -> Built {
-    let ctx = EvalCtx::default();
+/// A Spherical layer named `name` at `<name>_position` with radius `size`.
+fn layer_node(tx: &mut Tx, p: &BTreeMap<String, toml::Value>, name: &str, size: f64) -> NodeId {
+    let n = tx.create(forge_fields::SPHERICAL, None, None).unwrap();
+    tx.set_param(n, "radius", Value::Float(size)).unwrap();
+    let pos = floats(&p[&format!("{name}_position")]);
+    tx.set_param(n, transform::POS, Value::Vec3([pos[0], pos[1], pos[2]]))
+        .unwrap();
+    n
+}
+
+/// Rows for the layers `names` (top to bottom) with `modes` and `strengths` in percent.
+fn rows_of(
+    tx: &mut Tx,
+    p: &BTreeMap<String, toml::Value>,
+    names: &[&str],
+    modes: &[String],
+    strengths: &[f64],
+    size: f64,
+) -> Vec<LinkRow> {
+    names
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            let node = layer_node(tx, p, name, size);
+            LinkRow {
+                strength: strengths[i] / 100.0,
+                ..LinkRow::new(node, &modes[i].to_lowercase())
+            }
+        })
+        .collect()
+}
+
+fn strings(v: &toml::Value) -> Vec<&str> {
+    v.as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x.as_str().unwrap())
+        .collect()
+}
+
+/// The layers of a `layered` case or of a Group field's inner list: names, blend modes and
+/// strengths (percent), top to bottom, from the three case keys. The two-layers cases (O13) set
+/// only the top blend mode.
+fn layer_spec(
+    p: &BTreeMap<String, toml::Value>,
+    keys: [&str; 3],
+) -> (Vec<String>, Vec<String>, Vec<f64>) {
+    let names: Vec<String> = strings(&p[keys[0]]).iter().map(|s| s.to_string()).collect();
+    let modes = match p.get(keys[1]) {
+        Some(v) => strings(v).iter().map(|s| s.to_string()).collect(),
+        None => (0..names.len())
+            .map(|i| match (i, p.get("top_layer_blend_mode")) {
+                (0, Some(m)) => m.as_str().unwrap().to_string(),
+                _ => "Normal".to_string(),
+            })
+            .collect(),
+    };
+    let strengths = p.get(keys[2]).map_or(vec![100.0; names.len()], floats);
+    (names, modes, strengths)
+}
+
+/// A case built through the registry: the field list, or the error building it gave.
+fn build_list(
+    reg: &Arc<Registry>,
+    case: &forge_parity_harness::GoldenCase,
+) -> (Document, Result<FieldList, FieldError>) {
     let m = case.manifest().unwrap();
     let name = m.params["type"].as_str().unwrap().to_string();
     let ty = type_id(&name);
     let mut doc = Document::new(reg.clone());
-    let node = doc
+    let list_owner = doc
         .transact("case", |tx: &mut Tx| {
+            if layered(&case.name) {
+                // The list lives in the rows of a holder node (any node with a field-list param).
+                let holder = tx.create(forge_fields::GROUP, None, None)?;
+                let (names, modes, strengths) = layer_spec(
+                    &m.params,
+                    [
+                        "layers_top_to_bottom",
+                        "layer_blend_modes_top_to_bottom",
+                        "layer_strength_percent_top_to_bottom",
+                    ],
+                );
+                let names: Vec<&str> = names.iter().map(String::as_str).collect();
+                let size = m.params.get("size").or(m.params.get("radius")).unwrap();
+                let size = size.as_float().unwrap();
+                let rows = rows_of(tx, &m.params, &names, &modes, &strengths, size);
+                tx.set_param(holder, forge_fields::FIELD_LIST, Value::LinkRows(rows))?;
+                return Ok((holder, true));
+            }
             let node = tx.create(&ty, None, None)?;
-            for (key, raw) in &m.params {
+            // The Shader field's shader parameters (`noise_*`) belong to brief 125: only the
+            // node is made, building it must be Unsupported.
+            for (key, raw) in m.params.iter().filter(|_| name != "shader") {
                 if let Some((id, v)) = param(reg, &ty, key, raw) {
                     tx.set_param(node, &id, v)?;
                 }
             }
-            Ok(node)
+            if name == "group" {
+                let (names, modes, strengths) = layer_spec(
+                    &m.params,
+                    [
+                        "inner_layers_top_to_bottom",
+                        "inner_layer_blend_modes",
+                        "inner_layer_strength_percent",
+                    ],
+                );
+                let names: Vec<&str> = names.iter().map(String::as_str).collect();
+                let size = m.params["size"].as_float().unwrap();
+                let rows = rows_of(tx, &m.params, &names, &modes, &strengths, size);
+                tx.set_param(node, forge_fields::FIELD_LIST, Value::LinkRows(rows))?;
+            }
+            Ok((node, false))
         })
         .unwrap();
-    let mut list = FieldList::from_nodes(doc.scene(), &[node]).unwrap();
-    if let Some(pct) = m.params.get("layer_strength_percent") {
+    let (node, holder) = list_owner;
+    let mut list = if holder {
+        FieldList::from_param(doc.scene(), node, forge_fields::FIELD_LIST)
+    } else {
+        FieldList::from_nodes(doc.scene(), &[node])
+    };
+    if let (Ok(l), Some(pct)) = (list.as_mut(), m.params.get("layer_strength_percent")) {
         assert_eq!(m.params["layer_blend_mode"].as_str(), Some("Normal"));
-        list = list.with_strength(0, pct.as_float().unwrap() / 100.0);
+        l.layers[0].strength = pct.as_float().unwrap() / 100.0;
     }
+    (doc, list)
+}
+
+fn build(reg: &Arc<Registry>, case: &forge_parity_harness::GoldenCase) -> Built {
+    let ctx = EvalCtx::default();
+    let (_doc, list) = build_list(reg, case);
+    let list = list.unwrap_or_else(|e| panic!("{}: {e}", case.name));
     let (_, expected) = case.samples().unwrap().remove(0);
     let Samples::Field { samples, .. } = &expected else {
         panic!("{}: not a field file", case.name)
@@ -169,9 +309,20 @@ fn exact_field_types_match_the_reference() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
     let mut matched = BTreeSet::new();
     let mut skipped = 0;
+    let mut unsupported = BTreeSet::new();
     let mut mismatched = BTreeSet::new();
     for case in discover_cases(&root).unwrap() {
         if case.feature != "fields" {
+            continue;
+        }
+        if let Some((_, reason)) = UNSUPPORTED.iter().find(|(n, _)| *n == case.name) {
+            let (_doc, list) = build_list(&reg, &case);
+            assert!(
+                matches!(list, Err(FieldError::Unsupported(_))),
+                "{}: expected Unsupported ({reason})",
+                case.name
+            );
+            unsupported.insert(case.name.clone());
             continue;
         }
         if !in_scope(&case.name) {
@@ -210,10 +361,15 @@ fn exact_field_types_match_the_reference() {
         );
         matched.insert(case.name.clone());
     }
-    // 27 (brief 057) + cylinder 2, cone 1, torus 1, capsule 1, radial 4 (brief 058).
-    assert_eq!(matched.len(), 36, "{matched:?}");
-    // 4 Random cases (statistical, below) + 17 blend / layer / group / formula / shader (059).
-    assert_eq!(skipped, 21);
+    // 27 (brief 057) + cylinder 2, cone 1, torus 1, capsule 1, radial 4 (brief 058) + 9 blend
+    // modes, blend-normal-50, three-layers, 2 two-layers, group-field, 2 formula (brief 059).
+    assert_eq!(matched.len(), 52, "{matched:?}");
+    // The 4 Random cases are statistical (below); shader-noise is Unsupported.
+    assert_eq!(skipped, 4);
+    assert_eq!(
+        unsupported,
+        UNSUPPORTED.iter().map(|(n, _)| n.to_string()).collect()
+    );
     assert_eq!(
         mismatched,
         KNOWN_MISMATCH.iter().map(|s| s.to_string()).collect()

@@ -1,0 +1,12 @@
+[package]
+name = "forge-text"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Font outlines for the Text spline (docs/specs/TEXT.md)."
+
+[dependencies]
+skrifa = { version = "0.44", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

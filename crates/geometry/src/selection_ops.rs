@@ -101,9 +101,12 @@ pub fn convert(mesh: &PolyMesh, sel: &IndexSet, from: Kind, to: Kind, mode: Mode
     }
 }
 
-/// Piece id of each point: points are in one piece when a polygon joins them.
-fn point_pieces(mesh: &PolyMesh) -> Vec<usize> {
-    let mut parent: Vec<usize> = (0..mesh.points.len()).collect();
+/// Piece id of each polygon: two polygons are in one piece when they share an edge that
+/// no other polygon uses (O58 `sel-connected-point-only`: cubes that share a point pair, so
+/// an edge used by four polygons, stay separate; O26 `select-connected`: polygons that were
+/// disconnected from their neighbours stay alone).
+fn poly_pieces(mesh: &PolyMesh) -> Vec<usize> {
+    let mut parent: Vec<usize> = (0..mesh.polys.len()).collect();
     fn find(parent: &mut [usize], mut x: usize) -> usize {
         while parent[x] != x {
             parent[x] = parent[parent[x]];
@@ -111,55 +114,88 @@ fn point_pieces(mesh: &PolyMesh) -> Vec<usize> {
         }
         x
     }
-    for poly in &mesh.polys {
-        let Some(&first) = poly.first() else { continue };
-        for &v in &poly[1..] {
-            let (a, b) = (
-                find(&mut parent, first as usize),
-                find(&mut parent, v as usize),
-            );
-            if a != b {
-                parent[a.max(b)] = a.min(b);
-            }
+    let mut by_edge: BTreeMap<Edge, Vec<usize>> = BTreeMap::new();
+    for (f, poly) in mesh.polys.iter().enumerate() {
+        for e in poly_edges(poly) {
+            by_edge.entry(e).or_default().push(f);
+        }
+    }
+    for fs in by_edge.values().filter(|fs| fs.len() == 2) {
+        let (a, b) = (find(&mut parent, fs[0]), find(&mut parent, fs[1]));
+        if a != b {
+            parent[a.max(b)] = a.min(b);
         }
     }
     (0..parent.len()).map(|i| find(&mut parent, i)).collect()
 }
 
-/// Every element of the pieces (points joined through polygons) that hold a selected
-/// element of kind `kind`.
+/// Every element of the pieces (polygons joined through edges used by exactly two polygons)
+/// that hold a selected element of kind `kind`. A point or edge belongs to the pieces of all
+/// its polygons; a point that no polygon uses is a piece of its own.
 pub fn connected(mesh: &PolyMesh, kind: Kind, sel: &IndexSet) -> IndexSet {
-    let piece = point_pieces(mesh);
-    let of_point = |p: u32| piece.get(p as usize).copied();
-    let wanted: BTreeSet<usize> = match kind {
-        Kind::Points => sel.iter().filter_map(of_point).collect(),
-        Kind::Edges => selected_edges(mesh, sel)
-            .iter()
-            .filter_map(|e| of_point(e.0))
-            .collect(),
-        Kind::Polys => sel
-            .iter()
-            .filter_map(|f| mesh.polys.get(f as usize)?.first().copied())
-            .filter_map(of_point)
-            .collect(),
-    };
+    let piece = poly_pieces(mesh);
+    let mut at_point: Vec<Vec<usize>> = vec![Vec::new(); mesh.points.len()];
+    for (f, poly) in mesh.polys.iter().enumerate() {
+        for &v in poly {
+            if let Some(list) = at_point.get_mut(v as usize) {
+                list.push(f);
+            }
+        }
+    }
+    let polys_of_point = |p: u32| at_point.get(p as usize).into_iter().flatten().copied();
+    let in_wanted = |f: usize, wanted: &BTreeSet<usize>| wanted.contains(&piece[f]);
     match kind {
-        Kind::Points => (0..mesh.points.len() as u32)
-            .filter(|p| of_point(*p).is_some_and(|c| wanted.contains(&c)))
-            .collect(),
-        Kind::Edges => (0u32..)
-            .zip(mesh.edges())
-            .filter(|(_, e)| of_point(e.0).is_some_and(|c| wanted.contains(&c)))
-            .map(|(i, _)| i)
-            .collect(),
-        Kind::Polys => (0..mesh.polys.len() as u32)
-            .filter(|f| {
-                mesh.polys[*f as usize]
-                    .first()
-                    .and_then(|p| of_point(*p))
-                    .is_some_and(|c| wanted.contains(&c))
-            })
-            .collect(),
+        Kind::Points => {
+            let wanted: BTreeSet<usize> = sel
+                .iter()
+                .flat_map(|p| polys_of_point(p).map(|f| piece[f]))
+                .collect();
+            let mut out: IndexSet = mesh
+                .polys
+                .iter()
+                .enumerate()
+                .filter(|(f, _)| in_wanted(*f, &wanted))
+                .flat_map(|(_, poly)| poly.iter().copied())
+                .collect();
+            for p in sel.iter() {
+                if (p as usize) < mesh.points.len() && polys_of_point(p).next().is_none() {
+                    out.insert(p);
+                }
+            }
+            out
+        }
+        Kind::Edges => {
+            let chosen: BTreeSet<Edge> = selected_edges(mesh, sel).into_iter().collect();
+            let wanted: BTreeSet<usize> = mesh
+                .polys
+                .iter()
+                .enumerate()
+                .filter(|(_, poly)| poly_edges(poly).any(|e| chosen.contains(&e)))
+                .map(|(f, _)| piece[f])
+                .collect();
+            let edges: BTreeSet<Edge> = mesh
+                .polys
+                .iter()
+                .enumerate()
+                .filter(|(f, _)| in_wanted(*f, &wanted))
+                .flat_map(|(_, poly)| poly_edges(poly))
+                .collect();
+            (0u32..)
+                .zip(mesh.edges())
+                .filter(|(_, e)| edges.contains(e))
+                .map(|(i, _)| i)
+                .collect()
+        }
+        Kind::Polys => {
+            let wanted: BTreeSet<usize> = sel
+                .iter()
+                .filter(|f| (*f as usize) < mesh.polys.len())
+                .map(|f| piece[f as usize])
+                .collect();
+            (0..mesh.polys.len() as u32)
+                .filter(|f| in_wanted(*f as usize, &wanted))
+                .collect()
+        }
     }
 }
 
