@@ -775,14 +775,21 @@ impl Editor {
                     }
                 });
                 ui.separator();
+                // a long category (Generator) is taller than a small window: scroll it
+                let max_height = (ui.ctx().content_rect().height() - 48.0).max(120.0);
                 for (cat, items) in create_menu(self.state.doc.scene().registry()) {
                     ui.menu_button(category_label(cat), |ui| {
-                        for (type_id, label) in items {
-                            if ui.button(label).clicked() {
-                                self.run(("object.create", json!({"type": type_id})));
-                                ui.close();
-                            }
-                        }
+                        egui::ScrollArea::vertical()
+                            .id_salt(("create_menu", category_label(cat)))
+                            .max_height(max_height)
+                            .show(ui, |ui| {
+                                for (type_id, label) in items {
+                                    if ui.button(label).clicked() {
+                                        self.run(("object.create", json!({"type": type_id})));
+                                        ui.close();
+                                    }
+                                }
+                            });
                     });
                 }
             });

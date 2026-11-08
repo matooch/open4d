@@ -665,7 +665,8 @@ optional `target` (`param`, `node`) for the latter. One undo step per click.
 The Create menu starts with a **Clone toolset** submenu (`clone_toolset_menu`, pure): the
 cloner, **Cloner from Selection**, every registered effector type, every registered field
 type, in that order, taken from the registry (so a new effector or field type appears with
-no UI change). The usual per-category submenus stay.
+no UI change). The usual per-category submenus stay. Each per-category submenu scrolls when it is taller than the window (its height is capped
+at the window height minus 48 px), so every entry stays reachable by pointer (S3, `s3_chair`).
 
 `Cloner from Selection` runs `object.create_cloner` (COMMANDS.md §6): the selected objects
 become children of a new cloner placed where the first selected object was, and the cloner

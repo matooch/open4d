@@ -314,21 +314,22 @@ fn model_a_chair_save_reopen_and_export() {
     //    the chain once the objects are nested (seat < Symmetry < Subdivision).
     key(&mut h, Modifiers::ALT, Key::Num1); // back to object mode
     // Symmetry and Subdivision are at the bottom of the long Generator list, below the
-    // bottom edge of an 800 px window (open question, see the brief's report), so they are
-    // created with the same command the menu runs.
-    let create = |h: &mut Win, ty: &str| {
+    // bottom edge of an 800 px window: the submenu scrolls, so scroll to the item and click.
+    let create = |h: &mut Win, label: &str, ty: &str| {
         menu(h, &["Edit", "Deselect All"]);
-        execute(
-            &mut h.state_mut().state,
-            "object.create",
-            json!({"type": ty}),
-        )
-        .unwrap();
+        menu(h, &["Create", "Generator"]);
+        h.query_all_by_label(label)
+            .last()
+            .unwrap_or_else(|| panic!("no menu item {label}"))
+            .scroll_to_me();
         h.run();
-        st(h).selection.active.unwrap()
+        click_label(h, label);
+        let active = st(h).selection.active.unwrap();
+        assert_eq!(st(h).doc.scene().node(active).unwrap().type_id, ty);
+        active
     };
-    let sym = create(&mut h, "forge.symmetry");
-    let sds = create(&mut h, "forge.subdivision");
+    let sym = create(&mut h, "Symmetry", "forge.symmetry");
+    let sds = create(&mut h, "Subdivision", "forge.subdivision");
     execute(
         &mut h.state_mut().state,
         "object.move",

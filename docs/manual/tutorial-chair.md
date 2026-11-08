@@ -60,10 +60,8 @@ Create a **Subdivision** object and drag the Symmetry object onto it. The result
 smoothed chair; *Viewport level* and *Render level* in the Attribute manager set how often the
 surface is subdivided.
 
-Note: in a small window the *Create > Generator* list can be longer than the window. If you
-cannot reach Symmetry or Subdivision with the pointer, use the command palette
-(Ctrl/Cmd+Shift+P) and run `object.create` with the type `forge.symmetry` or
-`forge.subdivision`.
+Note: in a small window the *Create > Generator* list is longer than the window; scroll it
+with the mouse wheel to reach Symmetry and Subdivision at the bottom.
 
 ## 8. Save, reopen, export
 
