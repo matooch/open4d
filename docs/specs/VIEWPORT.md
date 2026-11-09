@@ -665,3 +665,34 @@ a baseline image `spline_points.png` (160x120, the lavapipe tolerance rule of se
 crates/ui/tests/spline_viewport.rs: draw lists of a scene (primitive circle, editable spline),
 Points-mode controls, click selection, a scripted drag giving exactly one undo step and restoring
 on undo, mirrored and broken handles, snapping to a mesh point, screenshot contains the curve.
+
+## 12. Motion paths and onion skin in the viewport (brief 095)
+
+Sources: own design (ANIM.md section 2b). Colours, marker sizes and the fade are **parity-pending
+G5** (no observation). Pure: no GPU, no UI (`forge_viewport::motion`).
+
+### 12.1 Draw lists
+`PathDraw { samples: Vec<(f64 frame, DVec3)>, keys: Vec<DVec3>, current: Option<(f64, DVec3)> }`
+is one object's path in world space; `GhostDraw { forward, rank, of, geometry }` one ghost
+(`rank` 1 is the nearest to the current frame, `of` the number of ghosts on its side).
+`overlay_lines(&MotionDraw { paths, ghosts }, &Palette, cam, size) -> Vec<DrawLine>`, order:
+ghosts, then per path: segments, key squares, current-frame square.
+- **Segments**: one line per consecutive sample pair; a segment ending at a frame `<=` the current
+  frame is `PATH_PAST`, the others `PATH_FUTURE`. Without a `current` all are future.
+- **Key squares**: `KEY_PX = 7` pixels in the camera plane (as the spline control squares),
+  `KEY_COLOR`; behind the camera nothing. **Current square**: `CURRENT_PX = 9`, selection colour,
+  only when `current` is set (the current frame lies in the path range).
+- **Ghost geometry** (`ghost_geometry(&PolyMesh)`): the unique edges of the polygons; a mesh with
+  more than `MAX_GHOST_POLYS = 5000` polygons is drawn as the 12 edges of its bounding box
+  (like the Bounding Box display mode); an empty mesh draws nothing.
+- **Ghost colour**: `GHOST_BEFORE` / `GHOST_AFTER` mixed with the background colour by the
+  strength `s = 0.8 - 0.5 * (rank - 1) / (of - 1)` (`0.8` when `of = 1`): the nearest ghost is
+  strongest. The line pipeline has no alpha, so the fade is a colour mix.
+`LineSet`s are depth tested like the grid; the editor appends these lines to the pane's spline
+lines.
+
+### 12.2 Tests
+crates/viewport/tests/motion.rs (pure): segment colours around the current frame, key and current
+squares, behind-camera skipped, ghost edge counts, bounding-box fallback, fade monotone, order.
+crates/viewport/tests/display.rs (GPU): the path is visible; baseline `motion_path.png` (160x120,
+the lavapipe tolerance rule of section 8.5, unchanged).

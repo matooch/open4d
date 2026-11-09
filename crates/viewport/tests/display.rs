@@ -13,6 +13,10 @@ use forge_geometry::selection::Selection;
 use forge_viewport::camera::Camera;
 use forge_viewport::curves::{Controls, Loop, SplineDraw, draw_list};
 use forge_viewport::lights::{Light, Lighting, SceneLights};
+use forge_viewport::motion::{
+    GhostDraw, MotionDraw, PATH_FUTURE, PATH_PAST, PathDraw, ghost_color, ghost_geometry,
+    overlay_lines,
+};
 use forge_viewport::render::{
     DrawMesh, Frame, Gpu, LineSet, MeshBuffers, Msaa, Palette, Settings, Shading, render_to_rgba,
 };
@@ -761,4 +765,83 @@ fn baseline_image_spline_points() {
     };
     let img = render_splines(gpu, &c, &arc_draw(), Shading::Smooth);
     check_baseline(gpu, "spline_points", &img);
+}
+
+// ---- motion paths and ghosts (VIEWPORT.md section 12) -------------------------------------
+
+fn render_motion(gpu: &Gpu, c: &Camera, d: &MotionDraw) -> Image {
+    let list = overlay_lines(d, &Palette::default(), c, [W as f64, H as f64]);
+    let set = LineSet::new(&gpu.device, &list);
+    let frame = Frame {
+        instanced: &[],
+        meshes: &[],
+        grid: None,
+        lines: &[&set],
+        gizmo: None,
+        settings: settings(Shading::Smooth),
+    };
+    Image(render_to_rgba(gpu, W, H, c, &frame))
+}
+
+fn motion_draw() -> MotionDraw {
+    let samples: Vec<(f64, DVec3)> = (0..=8)
+        .map(|i| {
+            let x = -3.0 + 0.75 * i as f64;
+            (i as f64 * 5.0, DVec3::new(x, 1.5 * (x * 0.5).sin(), 0.0))
+        })
+        .collect();
+    let key = samples[4].1;
+    let ghost = |forward, rank, dx: f64| GhostDraw {
+        forward,
+        rank,
+        of: 1,
+        lines: ghost_geometry(&boxed(
+            DVec3::new(dx - 0.4, -1.8, -0.4),
+            DVec3::new(dx + 0.4, -1.0, 0.4),
+        )),
+    };
+    MotionDraw {
+        paths: vec![PathDraw {
+            current: Some((20.0, key)),
+            keys: vec![samples[0].1, key, samples[8].1],
+            samples,
+        }],
+        ghosts: vec![ghost(false, 1, -1.5), ghost(true, 1, 1.5)],
+    }
+}
+
+#[test]
+fn motion_path_and_ghosts_are_visible() {
+    let Some((_lock, gpu)) = gpu() else { return };
+    let c = Camera {
+        distance: 12.0,
+        ..Camera::default()
+    };
+    let d = motion_draw();
+    let img = render_motion(gpu, &c, &d);
+    let pal = Palette::default();
+    // the middle of the first (past) segment and of the last (future) one
+    let mid = |i: usize| (d.paths[0].samples[i].1 + d.paths[0].samples[i + 1].1) * 0.5;
+    assert!(img.near(&c, mid(1), u8c(PATH_PAST, 1.0)));
+    assert!(img.near(&c, mid(6), u8c(PATH_FUTURE, 1.0)));
+    // the current square's right edge, 4.5 px from the key point
+    let key = d.paths[0].keys[1];
+    let edge = key + DVec3::new(4.5 * c.world_per_pixel(H as f64), 0.0, 0.0);
+    assert!(img.near(&c, edge, u8c(pal.selection, 1.0)));
+    // a ghost edge of each side
+    let gb = ghost_color(false, 1, 1, &pal);
+    let ga = ghost_color(true, 1, 1, &pal);
+    assert!(img.near(&c, DVec3::new(-1.5, -1.8, 0.4), u8c(gb, 1.0)));
+    assert!(img.near(&c, DVec3::new(1.5, -1.8, 0.4), u8c(ga, 1.0)));
+}
+
+#[test]
+fn baseline_image_motion_path() {
+    let Some((_lock, gpu)) = gpu() else { return };
+    let c = Camera {
+        distance: 12.0,
+        ..Camera::default()
+    };
+    let img = render_motion(gpu, &c, &motion_draw());
+    check_baseline(gpu, "motion_path", &img);
 }

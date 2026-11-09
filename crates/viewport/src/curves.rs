@@ -84,7 +84,7 @@ fn pixel_world(cam: &Camera, p: DVec3, h: f64) -> Option<f64> {
 }
 
 /// A square of `px` pixels centred on `c`, in the camera plane (four lines).
-fn square(
+pub(crate) fn square(
     out: &mut Vec<DrawLine>,
     cam: &Camera,
     size: [f64; 2],

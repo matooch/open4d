@@ -2,7 +2,7 @@
 
 # Command reference
 
-165 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+167 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -25,6 +25,8 @@
 | [`view.lighting`](#viewlighting) | Viewport Lighting | no | `view_lighting` |
 | [`view.shadows`](#viewshadows) | Viewport Shadows | no | `view_shadows` |
 | [`view.antialias`](#viewantialias) | Viewport Anti-aliasing | no | `view_antialias` |
+| [`view.motion_paths`](#viewmotion_paths) | Motion Paths | no | `view_motion_paths` |
+| [`view.onion_skin`](#viewonion_skin) | Onion Skin | no | `view_onion_skin` |
 | [`view.hud`](#viewhud) | Viewport HUD | no | `view_hud` |
 | [`view.gizmo_mode`](#viewgizmo_mode) | Gizmo Mode | no | `view_gizmo_mode` |
 | [`view.gizmo_space`](#viewgizmo_space) | Gizmo Space | no | `view_gizmo_space` |
@@ -453,6 +455,33 @@ Viewport Anti-aliasing. Not an undoable edit.
 | `enabled` | boolean | yes |  |
 
 Example: `forge cmd scene.forge view.antialias --args '{"enabled":true}'`
+
+### `view.motion_paths`
+
+Motion Paths. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean or null | no | Show or hide the paths; absent with no other field toggles. |
+| `end` | integer or null | no | Last frame of a custom range (needs `start`). |
+| `reset_range` | boolean or null | no | Back to the project range. |
+| `start` | integer or null | no | First frame of a custom range (needs `end`). |
+| `step` | integer or null | no | Frames between samples, 1 to 1000. |
+
+Example: `forge cmd scene.forge view.motion_paths --args '{"enabled":true,"step":1}'`
+
+### `view.onion_skin`
+
+Onion Skin. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `after` | integer or null | no | Ghosts after the current frame, 0 to 10. |
+| `before` | integer or null | no | Ghosts before the current frame, 0 to 10. |
+| `enabled` | boolean or null | no | Show or hide the ghosts; absent with no other field toggles. |
+| `step` | integer or null | no | Frames between ghosts, 1 to 100. |
+
+Example: `forge cmd scene.forge view.onion_skin --args '{"after":2,"before":2,"enabled":true}'`
 
 ### `view.hud`
 

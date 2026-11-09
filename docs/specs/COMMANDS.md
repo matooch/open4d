@@ -130,6 +130,8 @@ touch history.
 | `view.shadows` | `enabled` | null | no |
 | `view.antialias` | `enabled` | null | no |
 | `view.clone_display` | `indices?`, `axes?` (at least one) | null | no |
+| `view.motion_paths` | `enabled?` (absent with no other field toggles), `start?` + `end?` (frames, together, `start <= end`), `reset_range?` (project range), `step?` 1..1000 | null | no |
+| `view.onion_skin` | `enabled?` (absent with no other field toggles), `before?` 0..10, `after?` 0..10, `step?` 1..100 | null | no |
 | `view.hud` | `item` fps, counts, tool, frame, camera, safe_frames; `pane?` perspective, top, front, right (default: the active pane); `all_panes?` (true: every pane, `pane` ignored); `enabled?` (absent toggles) | null | no |
 | `view.set_camera` | `target?` [x,y,z] world, `distance?`, `yaw?`, `pitch?` (degrees), `projection?` perspective, orthographic, `fov?` (degrees), `height?` (orthographic) | null | no |
 | `view.get_camera` | - | `{target, eye, distance, yaw, pitch, projection, fov?, height?}` | no |

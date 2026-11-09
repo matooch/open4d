@@ -40,6 +40,8 @@ pub struct Views {
     /// Clone index and axes overlay of the selected cloners (UI.md §16.3).
     pub clone_indices: bool,
     pub clone_axes: bool,
+    /// Motion paths and onion skin of the selected objects (ANIM.md section 2b).
+    pub motion: forge_command::MotionDisplay,
     saved: [PaneState; 4],
     /// Panes whose camera was never changed: they follow the perspective pane when the
     /// four-view layout opens.
@@ -57,6 +59,7 @@ impl Views {
             antialias: true,
             clone_indices: false,
             clone_axes: false,
+            motion: forge_command::MotionDisplay::default(),
             saved: Pane::ALL.map(|p| PaneState {
                 camera: pane_camera(p, base),
                 shading: if p == Pane::Perspective {

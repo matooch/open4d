@@ -775,14 +775,21 @@ impl Editor {
                     }
                 });
                 ui.separator();
+                // a long category (Generator) is taller than a small window: scroll it
+                let max_height = (ui.ctx().content_rect().height() - 48.0).max(120.0);
                 for (cat, items) in create_menu(self.state.doc.scene().registry()) {
                     ui.menu_button(category_label(cat), |ui| {
-                        for (type_id, label) in items {
-                            if ui.button(label).clicked() {
-                                self.run(("object.create", json!({"type": type_id})));
-                                ui.close();
-                            }
-                        }
+                        egui::ScrollArea::vertical()
+                            .id_salt(("create_menu", category_label(cat)))
+                            .max_height(max_height)
+                            .show(ui, |ui| {
+                                for (type_id, label) in items {
+                                    if ui.button(label).clicked() {
+                                        self.run(("object.create", json!({"type": type_id})));
+                                        ui.close();
+                                    }
+                                }
+                            });
                     });
                 }
             });
@@ -1299,6 +1306,21 @@ impl Editor {
             "Clone Axes",
             ("view.clone_display", json!({"axes": !v.clone_axes})),
         );
+        ui.separator();
+        item(
+            ui,
+            self,
+            v.motion.paths,
+            "Motion Paths",
+            ("view.motion_paths", json!({"enabled": !v.motion.paths})),
+        );
+        item(
+            ui,
+            self,
+            v.motion.onion,
+            "Onion Skin",
+            ("view.onion_skin", json!({"enabled": !v.motion.onion})),
+        );
         for c in runs {
             self.run(c);
         }
@@ -1439,6 +1461,16 @@ impl Editor {
         let previewed = crate::tools::with_preview(&self.state, &scheduled.scene);
         let shown = previewed.clone().unwrap_or_else(|| scheduled.scene.clone());
         let lights = crate::panes::scene_lights(&shown);
+        let (motion, motion_pending) = self.state.motion.draw(
+            self.state.app.doc.scene(),
+            &shown,
+            &self.state.app.selection.nodes,
+            &self.state.views.motion,
+            current,
+        );
+        if motion_pending {
+            ui.ctx().request_repaint();
+        }
         let tex = self.viewport.render(
             rs,
             pane,
@@ -1456,6 +1488,7 @@ impl Editor {
                 ),
                 frame: previewed.is_none().then_some(&*scheduled),
                 splines: &crate::spline_edit::editor_draws(&shown, &self.state),
+                motion: &motion,
             },
         );
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));

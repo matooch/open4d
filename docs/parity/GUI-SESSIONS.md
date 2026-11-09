@@ -113,6 +113,11 @@ You can also do a sitting **with an observer session's help**:
    - the speed/velocity curve view, if present, and how it is edited.
 4. Preview range, markers and playback modes: where each is set.
 
+- **Motion path and onion skin** (brief 095, parity-pending): with an object animated along
+  x over frames 0–30, turn on its motion path and ghosting. Record the path colours (past and
+  future), key marker shape and size, default frame range and ghost count, ghost spacing and
+  fade, and whether unselected animated objects show paths too.
+
 ## G6 · Rigging tools
 1. Joint tool: click-to-create a chain; how the tool aligns joints.
 2. Weight painting: brush modes, strength, falloff; how the weights are shown in the

@@ -252,3 +252,104 @@ pub enum UiRequest {
     /// Sets the UI scale factor.
     Scale(f64),
 }
+
+/// Viewport display of motion paths and onion skin (docs/specs/ANIM.md section 2b.4). View
+/// state: not saved with the document, not undoable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MotionDisplay {
+    pub paths: bool,
+    /// Custom path range; the project range when `None`.
+    pub range: Option<(i64, i64)>,
+    pub step: i64,
+    pub onion: bool,
+    pub before: u32,
+    pub after: u32,
+    pub onion_step: i64,
+}
+
+impl Default for MotionDisplay {
+    fn default() -> Self {
+        MotionDisplay {
+            paths: false,
+            range: None,
+            step: 1,
+            onion: false,
+            before: 2,
+            after: 2,
+            onion_step: 1,
+        }
+    }
+}
+
+impl MotionDisplay {
+    pub const MAX_STEP: i64 = 1000;
+    pub const MAX_ONION: u32 = 10;
+    pub const MAX_ONION_STEP: i64 = 100;
+
+    /// The display after `view.motion_paths`. With no field at all `paths` is toggled.
+    pub fn with_paths(
+        &self,
+        enabled: Option<bool>,
+        range: Option<(i64, i64)>,
+        reset_range: bool,
+        step: Option<i64>,
+    ) -> Result<MotionDisplay, String> {
+        let mut out = self.clone();
+        if let Some((a, b)) = range {
+            if reset_range {
+                return Err("`start`/`end` and `reset_range` exclude each other".into());
+            }
+            if a > b {
+                return Err("`start` must not be after `end`".into());
+            }
+            out.range = Some((a, b));
+        }
+        if reset_range {
+            out.range = None;
+        }
+        if let Some(s) = step {
+            if !(1..=Self::MAX_STEP).contains(&s) {
+                return Err(format!("`step` must be 1 to {}", Self::MAX_STEP));
+            }
+            out.step = s;
+        }
+        let nothing = enabled.is_none() && range.is_none() && !reset_range && step.is_none();
+        out.paths = match enabled {
+            Some(e) => e,
+            None if nothing => !self.paths,
+            None => self.paths,
+        };
+        Ok(out)
+    }
+
+    /// The display after `view.onion_skin`. With no field at all `onion` is toggled.
+    pub fn with_onion(
+        &self,
+        enabled: Option<bool>,
+        before: Option<u32>,
+        after: Option<u32>,
+        step: Option<i64>,
+    ) -> Result<MotionDisplay, String> {
+        let mut out = self.clone();
+        for (name, v) in [("before", before), ("after", after)] {
+            if v.is_some_and(|v| v > Self::MAX_ONION) {
+                return Err(format!("`{name}` must be 0 to {}", Self::MAX_ONION));
+            }
+        }
+        if let Some(s) = step
+            && !(1..=Self::MAX_ONION_STEP).contains(&s)
+        {
+            return Err(format!("`step` must be 1 to {}", Self::MAX_ONION_STEP));
+        }
+        out.before = before.unwrap_or(self.before);
+        out.after = after.unwrap_or(self.after);
+        out.onion_step = step.unwrap_or(self.onion_step);
+        let nothing = enabled.is_none() && before.is_none() && after.is_none() && step.is_none();
+        out.onion = match enabled {
+            Some(e) => e,
+            None if nothing => !self.onion,
+            None => self.onion,
+        };
+        Ok(out)
+    }
+}

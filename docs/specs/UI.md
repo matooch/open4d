@@ -665,7 +665,8 @@ optional `target` (`param`, `node`) for the latter. One undo step per click.
 The Create menu starts with a **Clone toolset** submenu (`clone_toolset_menu`, pure): the
 cloner, **Cloner from Selection**, every registered effector type, every registered field
 type, in that order, taken from the registry (so a new effector or field type appears with
-no UI change). The usual per-category submenus stay.
+no UI change). The usual per-category submenus stay. Each per-category submenu scrolls when it is taller than the window (its height is capped
+at the window height minus 48 px), so every entry stays reachable by pointer (S3, `s3_chair`).
 
 `Cloner from Selection` runs `object.create_cloner` (COMMANDS.md §6): the selected objects
 become children of a new cloner placed where the first selected object was, and the cloner
@@ -1502,3 +1503,51 @@ title, the order of the controls and the button names are parity-pending**.
   descriptors' controls (kittest); toggling "Write normals" and confirming writes a file without
   `vn`/`//`; Flip Z on import mirrors z; Cancel and a cancelled chooser change nothing; the request
   commands open the window; headless run of `file.import_dialog` is refused.
+
+## 28. S3 acceptance: model a chair (`crates/ui/tests/s3_chair.rs`; brief 162)
+
+Sources: scenario S3 of docs/roadmap/README.md; every control used is specified in §5, §11–14,
+§20, §27 and in MODELING.md, EDITABLE.md, GENERATORS2.md (Symmetry), SUBDIVISION.md and IO.md.
+This section adds no behaviour. Nothing here relies on a reference-app UI rule that has no
+observation except those the earlier sections already mark parity-pending: the Create and
+Mesh menu arrangement and the tool palette (G1), the key chords (G2), the attribute manager
+look (G4). A reference session that answers G1/G2/G4 may rename menu entries or move keys; the
+test then changes its labels and chords, not its assertions.
+
+The test drives one `Editor` in an `egui_kittest` window (1280 x 800, no GPU) the way a person
+would: menus and buttons are clicked by label, shortcuts are key presses, the file chooser is
+an injected `Dialogs`. Picking in the viewport needs the GPU, so a selection is set on the
+object (`selection.polys`, `selection.edges`) as in the other UI tests. All files go to a temp
+directory. The scenario draws no picture, so there is no image comparison and no tolerance.
+
+Steps and what is asserted after each:
+
+1. Create > Generator > Cube; size 200 x 40 x 200 (`param.set`) and position x = 100
+   (`transform.set`): half a seat whose inner side lies on the plane x = 0. The title shows `*`.
+2. Edit > Make Editable: the active object is a `forge.polygon` with 8 points and 6 polygons.
+3. Leg: select the bottom polygon; Mesh > Extrude Inner, offset 60, Apply (12/10); Mesh >
+   Extrude, offset 180, Apply (16/14). Each Apply is one undo step; the lowest point is at
+   y = -200; Done closes the tool.
+4. Bevel: Alt+3 (edge mode), select the outer top edge of the seat, Mesh > Bevel, offset 8,
+   Apply: the point and polygon counts grow.
+5. Loop cut: Mesh > Loop/Path Cut, hover an edge, click: counts grow, one undo step.
+6. Ctrl+Z removes the cut, Ctrl+Shift+Z brings it back.
+7. Symmetry (mirror plane ZY, default) is created and the polygon object moved under it;
+   Subdivision is created and Symmetry moved under it (object manager hierarchy: Subdivision >
+   Symmetry > polygon object). The evaluated Symmetry mesh is symmetric about x = 0 (bounds sum
+   to 0) and spans both halves; the evaluated Subdivision mesh has more than four times the
+   polygons, is still symmetric and lies inside the bounds of the cage.
+8. Ctrl+S (injected path) writes `chair.forge`, the title becomes `chair.forge - Forge3D` and the
+   dirty mark clears. A second window opens it with Ctrl+O: the saved bytes equal the first
+   window's, the Subdivision mesh evaluates equal, the history is empty.
+9. File > Export OBJ...: the options window appears and nothing is written until its Export
+   button is pressed. The file holds one object with as many faces as the evaluated Subdivision
+   mesh and no more points than it. File > Import OBJ (`import_obj_path`) in an empty scene
+   gives one polygon object with that face count.
+10. Ctrl+Z until the history is empty leaves an empty scene (dirty) and the directory holds
+    exactly `chair.forge` and `chair.obj`.
+
+Known gap found while writing the test: the Create > Generator list is longer than an 800 px
+window and the menu does not scroll, so Symmetry and Subdivision (alphabetically late) cannot
+be reached with the pointer. The test creates them with `object.create`, the command the menu
+item runs. Making the menu scrollable (or grouping the list) is a follow-up to briefs 049/147.

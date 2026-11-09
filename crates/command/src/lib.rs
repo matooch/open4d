@@ -20,7 +20,7 @@ pub use registry::{
 };
 pub use state::{
     CameraSet, ConvertMode, GizmoModeArg, GizmoSpaceArg, HudItemArg, LayoutArg, LightingArg,
-    ModeArg, NodeSelection, PaneArg, ProjectionArg, SelectExtra, SelectOp, ShadingMode, UiRequest,
-    ViewArg,
+    ModeArg, MotionDisplay, NodeSelection, PaneArg, ProjectionArg, SelectExtra, SelectOp,
+    ShadingMode, UiRequest, ViewArg,
 };
 pub use timeline::{Playback, Timeline};

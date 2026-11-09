@@ -1,6 +1,7 @@
 //! forge-anim: evaluates keyframe tracks and animated scenes (docs/specs/ANIM.md).
 
 mod interp;
+pub mod motion;
 mod scene_at;
 
 pub use interp::{TICKS_PER_SECOND, quantize_time, value_at};

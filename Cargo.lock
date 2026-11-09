@@ -1427,6 +1427,7 @@ dependencies = [
  "forge-core",
  "forge-generators",
  "forge-parity-harness",
+ "glam",
  "toml",
 ]
 
