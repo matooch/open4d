@@ -178,3 +178,6 @@ the planner, so the forbidden tools in §0 can't be called at all.
 queue and new forms land there), work on the `observations` branch, and push
 `origin observations`. A lead merges `observations` into `main` through a PR
 ([PIPELINE.md](PIPELINE.md) §1). The old `batch-09` branch is retired once merged.
+
+For a long unattended run by a local agent (no human, small context), follow
+[HERMES-OBSERVER.md](HERMES-OBSERVER.md) on top of this file.
