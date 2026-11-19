@@ -1,0 +1,179 @@
+feature = "spline-tools"
+observation = "docs/parity/spline-tools.md"
+description = "outline-arc-open; measured fresh menu-created follow-up"
+mesh = "mesh.obj"
+
+[params]
+command = "Create Outline"
+selection = "All points"
+
+[params.input]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.input.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+type = "Arc"
+radius = 200.0
+inner_radius = 100.0
+start_angle_degrees = 0.0
+end_angle_degrees = 90.0
+plane = "XY"
+reverse = 0
+intermediate_points = "Uniform"
+number = 8
+angle_degrees = 5.0
+maximum_length = 5.0
+
+[params.editable_before]
+point_count = 5
+closed = false
+segments = []
+points = [[200.0, 0.0, 0.0], [184.77590650225736, 76.53668647301795, 0.0], [141.4213562373095, 141.42135623730948, 0.0], [76.53668647301797, 184.77590650225736, 0.0], [1.2246467991473532e-14, 200.0, 0.0]]
+
+[params.editable_before.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+type = "Bezier"
+close_spline = 0
+intermediate_points = "Uniform"
+number = 8
+angle_degrees = 5.0
+maximum_length = 5.0
+
+[params.editable_before.tangents_1]
+left = [0.0, 0.0, 0.0]
+right = [-0.0, 20.750000000000004, 0.0]
+
+[params.editable_before.tangents_2]
+left = [7.940681221575614, -19.170500299609202, 0.0]
+right = [-7.940681221575614, 19.170500299609202, 0.0]
+
+[params.editable_before.tangents_3]
+left = [14.672465709620862, -14.672465709620864, 0.0]
+right = [-14.672465709620862, 14.672465709620864, 0.0]
+
+[params.editable_before.tangents_4]
+left = [19.170500299609202, -7.940681221575615, 0.0]
+right = [-19.170500299609202, 7.940681221575615, 0.0]
+
+[params.editable_before.tangents_5]
+left = [20.750000000000004, -1.2705710541153791e-15, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.settings]
+distance = 20.0
+
+[params.result_spline]
+point_count = 10
+closed = true
+segments = []
+points = [[200.0, 0.0, 0.0], [184.77590650225736, 76.53668647301795, 0.0], [141.4213562373095, 141.42135623730948, 0.0], [76.53668647301797, 184.77590650225736, 0.0], [1.2246467991473532e-14, 200.0, 0.0], [0.06733915001931129, 219.99988663565057, 0.0], [84.19039850322402, 203.2536018880789, 0.0], [155.56357202219505, 155.56357202219502, 0.0], [203.2536018880789, 84.190398503224, 0.0], [219.99988663565057, 0.06733915001929937, 0.0]]
+
+[params.result_spline.parameters]
+icon_file_id = ""
+icon_color = "None"
+color = [1.0, 0.9, 0.4]
+type = "Bezier"
+close_spline = 1
+intermediate_points = "Uniform"
+number = 8
+angle_degrees = 5.0
+maximum_length = 5.0
+
+[params.result_spline.tangents_1]
+left = [0.0, 0.0, 0.0]
+right = [-0.0, 20.750000000000004, 0.0]
+
+[params.result_spline.tangents_2]
+left = [7.940681221575614, -19.170500299609202, 0.0]
+right = [-7.940681221575614, 19.170500299609202, 0.0]
+
+[params.result_spline.tangents_3]
+left = [14.672465709620862, -14.672465709620864, 0.0]
+right = [-14.672465709620862, 14.672465709620864, 0.0]
+
+[params.result_spline.tangents_4]
+left = [19.170500299609202, -7.940681221575615, 0.0]
+right = [-19.170500299609202, 7.940681221575615, 0.0]
+
+[params.result_spline.tangents_5]
+left = [20.750000000000004, -1.2705710541153791e-15, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_6]
+left = [0.0, 0.0, 0.0]
+right = [22.80743866371329, -1.3965528378133035e-15, 0.0]
+
+[params.result_spline.tangents_7]
+left = [-21.07132577041128, 8.72802891128606, 0.0]
+right = [21.08756119588818, -8.734753844709491, 0.0]
+
+[params.result_spline.tangents_8]
+left = [-16.139720597302734, 16.139720597302734, 0.0]
+right = [16.139720597302738, -16.139720597302738, 0.0]
+
+[params.result_spline.tangents_9]
+left = [-8.734753844709491, 21.08756119588819, 0.0]
+right = [8.72802891128606, -21.07132577041128, 0.0]
+
+[params.result_spline.tangents_10]
+left = [-0.0, 22.80743866371329, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.extrude]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.extrude.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+direction = "Auto"
+offset = 20.0
+subdivision = 1
+isoparm_subdivision = 10
+flip_normals = 0
+hierarchical = 0
+start_cap = 0
+end_cap = 0
+separate_bevel_controls = 0
+bevel_shape = "Round"
+size = 0.0
+extended_shape = 0
+height = 0.0
+shape_depth_percent = 100.0
+segments = 3
+bevel_shape_secondary = "Round"
+size_secondary = 0.0
+extended_shape_secondary = 0
+height_secondary = 0.0
+shape_depth_secondary_percent = 100.0
+extended_shape_3 = 0
+use_absolute_value = 0
+max_shape_height = 5.0
+segments_secondary = 3
+bevel_outside = 0
+avoid_self_intersections = 1
+caps_type = "N-gon"
+break_phong_rounding = 1
+shell = 0
+start_cap_secondary = 0
+end_cap_secondary = 0
+start_bevel = 0
+end_bevel = 0
+start_shell = 0
+end_shell = 0
+start_cap_3 = 0
+end_cap_3 = 0
+start_step = 0
+end_step = 0
+
+[import]
+scale = 1.0
+flip_z = false
