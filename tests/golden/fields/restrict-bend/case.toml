@@ -1,0 +1,32 @@
+feature = "fields"
+observation = "docs/parity/fields-4.md"
+description = "The vmap-from-field cube (4/8/4 segments, size_y 400, Vertex Map tag with a Linear field Y+ length 200) plus a Bend deformer of strength 90 restricted by a Restriction tag naming the Vertex Map tag"
+mesh = "mesh.obj"
+
+[params]
+object_type = "cube"
+size_x = 200.0
+size_y = 400.0
+size_z = 200.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+vertex_map_tag = true
+tag_use_fields = false
+tag_invert = false
+tag_use_deformed_points = false
+bend_strength = 90.0
+restriction_name_1 = "Vertex Map"
+restriction_strength_1 = 1.0
+
+[params.field]
+type = "linear"
+length = 200.0
+direction = "Y+"
+clip_to_shape = false
+enable_remapping = true
+mirror_graph = false
+
+[import]
+scale = 1.0
+flip_z = false

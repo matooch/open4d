@@ -1,6 +1,6 @@
 # Fields IV: modifier layers and vertex maps — observation (O49)
 
-Status: not observed · App version: TODO · OS: TODO · Observer: TODO · Date: TODO
+Status: observed · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-19
 Method: as [fields.md](fields.md) (O7): 729-point grid, value channel, samples in
 `tests/golden/fields/<case>/samples.json`, with `observation = "docs/parity/fields-4.md"`.
 The vertex-map cases export meshes instead (see below).
@@ -24,7 +24,7 @@ The base for the modifier cases is one Spherical field of size 200, with a modif
 | decay-frame20 | Decay layer, same moving sphere | frame 20 | |
 | delay-frame20 | Delay layer, same moving sphere | frame 20 | |
 | vmap-from-field | a cube (segments 4/8/4, size_y 400) with a Vertex Map tag whose fields list holds a Linear field (direction Y+, length 200) | – | Export `mesh.obj`, and the vertex map weights per point as `samples.json` kind `track` with param `weight` and frame = point index (a reuse; note it) |
-| restrict-bend | the same cube and vertex map, plus a Bend (strength 90) restricted by a Restriction tag naming the vertex map | – | `mesh.obj` |
+| restrict-bend | the same cube and vertex map, plus a Bend (strength 90) restricted by a Restriction tag naming the vertex map | – | Export `mesh.obj` (Bend strength 90, Angle 90, Restriction tag naming the vertex map at strength 1.0). Weights sampled from the tag's own Linear field through the app field engine (`FieldList.SampleListSimple`, 0.0-1.0 along Y+) and baked into the tag: a fields-driven Vertex Map tag keeps no data buffer in R25, and with Use Fields left on the Bend produced no deform cache at all (0 of 162 points moved).|
 | remap-order-invert | Spherical (one layer) | follow-up from brief 057: Inner Offset 0 %, Invert on, Strength 50 % | settles the order of invert and strength |
 | remap-order-min | Spherical | Inner Offset 0 %, Min 20 %, Strength 50 % | order of min/max and strength |
 | remap-vs-clamp | Spherical | Inner Offset 0 %, Min 20 %, Max 80 % | remap (0.25 → 0.35) or clamp (stays 0.25) |
