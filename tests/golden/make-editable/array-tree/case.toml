@@ -1,0 +1,72 @@
+feature = "make-editable"
+observation = "docs/parity/make-editable.md"
+description = "Default Array over a default cube, Make Editable; resulting tree and local transforms documented in observation form"
+mesh = "mesh.obj"
+
+[params]
+command = "make_editable"
+frame = 0
+fps = 30
+
+[params.input]
+type = "array"
+icon_file_id = ""
+icon_color = 0
+color_1 = [1.0, 0.9, 0.4]
+name = "Array"
+visible_in_editor = "Default"
+visible_in_renderer = "Default"
+enabled = 1
+display_color = "Material"
+color_2 = [1.0, 1.0, 1.0]
+x_ray = 0
+position = [0.0, 0.0, 0.0]
+rotation = [0.0, 0.0, 0.0]
+rotation_order = "HPB"
+scale = [1.0, 1.0, 1.0]
+quaternion_rotation = 0
+frozen_position = [0.0, 0.0, 0.0]
+frozen_rotation = [0.0, 0.0, 0.0]
+frozen_scale = [1.0, 1.0, 1.0]
+radius = 250.0
+copies = 7
+amplitude = 0.0
+frequency = 0.0
+array_frequency = 10.0
+render_instance = 0
+
+[params.input.child]
+type = "cube"
+icon_file_id = ""
+icon_color = 0
+color_1 = [1.0, 0.9, 0.4]
+name = "Cube"
+visible_in_editor = "Default"
+visible_in_renderer = "Default"
+enabled = 1
+display_color = "Material"
+color_2 = [1.0, 1.0, 1.0]
+x_ray = 0
+position = [0.0, 0.0, 0.0]
+rotation = [0.0, 0.0, 0.0]
+rotation_order = "HPB"
+scale = [1.0, 1.0, 1.0]
+quaternion_rotation = 0
+frozen_position = [0.0, 0.0, 0.0]
+frozen_rotation = [0.0, 0.0, 0.0]
+frozen_scale = [1.0, 1.0, 1.0]
+size = [200.0, 200.0, 200.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = 0
+fillet = 0
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[import]
+scale = 1.0
+flip_z = false
+
+[tolerance]
+compare = "geometric"
