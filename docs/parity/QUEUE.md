@@ -46,7 +46,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O31 | Clone-toolset generators II | [clone-generators-2.md](clone-generators-2.md) | meshes + samples | todo |
 | O50 | Clone toolset III | [clone-toolset-3.md](clone-toolset-3.md) | cloner/, clone-spline/, tracer/ | todo |
 | O32 | Volume builder and mesher | [volumes.md](volumes.md) | `tests/golden/volumes/` meshes | observed (10 of 12 cases; subtract/intersect not scriptable) |
-| O33 | Volumes II: filters, sources, VDB | [volumes-2.md](volumes-2.md) | `tests/golden/volumes/` meshes + .vdb | todo |
+| O33 | Volumes II: filters, sources, VDB | [volumes-2.md](volumes-2.md) | `tests/golden/volumes/` meshes + .vdb | observed (11 of 13 cases; points-source and vdb-export not scriptable) |
 | O34 | Rigging I: joints and skinning | [rigging.md](rigging.md) | `tests/golden/rigging/` meshes | done |
 | O35 | Rigging II: IK | [ik.md](ik.md) | `tests/golden/ik/` samples + meshes | todo |
 | O36 | Constraints | [constraints.md](constraints.md) | `tests/golden/constraints/` samples + meshes | todo |
