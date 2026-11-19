@@ -1,0 +1,50 @@
+feature = "selection-ops"
+observation = "docs/parity/selection-ops.md"
+description = "convert-point-to-poly-tolerant-on; explicit missing variant from form Notes"
+mesh = "mesh.obj"
+
+[params]
+segments_x = 2
+segments_y = 2
+segments_z = 2
+frame = 0
+fps = 30
+command = "Convert Selection"
+from = "points"
+to = "polygons"
+tolerant = true
+start_points = [2, 5, 8, 11, 14, 17, 20, 23, 24]
+start_edges = []
+start_polys = []
+
+[params.input]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+name = "Cube"
+visible_in_editor = "Default"
+visible_in_renderer = "Default"
+enabled = 1
+display_color = "Material"
+color_2 = [1.0, 1.0, 1.0]
+x_ray = 0
+position = [0.0, 0.0, 0.0]
+rotation = [0.0, 0.0, 0.0]
+rotation_order = "HPB"
+scale = [1.0, 1.0, 1.0]
+quaternion_rotation = 0
+frozen_position = [0.0, 0.0, 0.0]
+frozen_rotation = [0.0, 0.0, 0.0]
+frozen_scale = [1.0, 1.0, 1.0]
+size = [200.0, 200.0, 200.0]
+segments_x = 2
+segments_y = 2
+segments_z = 2
+separate_surfaces = 0
+fillet = 0
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[import]
+scale = 1.0
+flip_z = false
