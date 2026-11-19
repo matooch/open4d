@@ -82,6 +82,32 @@ normals: 6
 uvs: 4
 ```
 
+### skinned-arm — batch04
+Scene: an editable 106-point arm mesh (40 x 300 x 40, y -150..+150) bound to a three-joint chain J1 > J2 > J3 through a skin deformer and a weight tag with explicit linear weights (the rule, per-point samples and the sha256 of the weight triples are in the case manifest). J2 is keyed on its bank channel, 0 deg at frame 0 and 90 deg at frame 30. `mesh.obj` is the frame-0 (bind) pose; the deformed poses were exported and measured separately, and their bounding boxes and joint angles are recorded in the manifest under `posed_samples`. Measured scene values and all scalar public object settings are recorded in the case manifest. Exported OBJ plus FBX, binary glTF, Alembic and STL with read-back options; OBJ uses calibrated settings. PLY/USD not observed: no public format constant/export command match found; no exporter installed. The golden validator validates OBJ, not exchange semantic equivalence.
+
+```text
+vertices: 106 (unused 0)
+faces: 112 (3-gons 16, 4-gons 96)
+bbox min: (-20, -150, -20)
+bbox max: (20, 150, 20)
+size: (40, 300, 40)
+centre: (0, 0, 0)
+normals: 14
+uvs: 121
+posed bbox f15: (-43.587976, -150, -20) .. (120.208359, 120.207946, 20)
+posed bbox f30: (-47.500420, -150, -20) .. (150, 20, 20)
+```
+
+Cross-format skin semantics (read back from the exported bytes, not from the app):
+
+- glTF (GLB 2, 16,224 B; the declared length equals the file size; nodes J1, J2, J3 and Arm Mesh; one mesh, one primitive, attributes POSITION/NORMAL/TEXCOORD_0/JOINTS_0/WEIGHTS_0; one skin over 3 joints): the skin and weights survive, but the skin has no name, so the deformer name is dropped, and there is no animation because the export bakes no animation by default.
+- FBX (43,344 B, `Kaydara FBX Binary`): the joint names J1, J2, J3 and the deformer name Skin each appear once, with 3 `Cluster`, 9 `Deformer` and 12 `AnimationCurve` records, so joints, weights and both keyframes are carried; the mesh object name Arm Mesh does not appear as plain text.
+- Alembic (216,611 B, Ogawa archive `ff 00 01`): geometry only; joint, skin and weight data are absent.
+- STL (10,484 B = 84-byte header + 208 triangles x 50 B): the 96 quads are triangulated (96 x 2 + 16 = 208) and every skinning channel is lost.
+
+### morph — batch04
+not observed: setting the pose-morph strength track failed (the script aborts silently in the track code; details in /Users/bigman/forge-observer/notes.md)
+
 ### camera-light — batch04
 Measured scene values and all scalar public object settings are recorded in the case manifest. Exported OBJ plus FBX, binary glTF, Alembic and STL with read-back options; OBJ uses calibrated settings. PLY/USD not observed: no public format constant/export command match found; no exporter installed. Export file bytes/signatures checked separately; the golden validator validates OBJ, not exchange semantic equivalence.
 
