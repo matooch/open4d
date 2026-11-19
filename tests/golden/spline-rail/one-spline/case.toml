@@ -1,0 +1,95 @@
+feature = "spline-rail"
+observation = "docs/parity/deformers-4.md"
+description = "spline-rail/one-spline; measured fresh menu-created follow-up"
+mesh = "mesh.obj"
+
+[params]
+frame = 0
+fps = 30
+
+[params.input]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.input.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+size = [200.0, 400.0, 200.0]
+segments_x = 4
+segments_y = 8
+segments_z = 4
+separate_surfaces = 0
+fillet = 0
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[params.deformer]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.deformer.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+z_spline_left = "Helix"
+mode = "Unlimited"
+size = [200.0, 200.0, 200.0]
+scale_before_start_percent = 100.0
+scale_after_end_percent = 100.0
+
+[params.helpers]
+
+[params.helpers.1]
+position = [-150.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.helpers.1.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+start_radius = 200.0
+start_angle_degrees = 0.0
+end_radius = 200.0
+end_angle_degrees = 720.0
+radial_bias_percent = 50.0
+height = 200.0
+height_bias_percent = 50.0
+subdivision = 100
+plane = "XY"
+reverse = 0
+intermediate_points = "Uniform"
+number = 8
+angle_degrees = 5.0
+maximum_length = 5.0
+
+[params.helpers.2]
+position = [150.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.helpers.2.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+start_radius = 200.0
+start_angle_degrees = 0.0
+end_radius = 200.0
+end_angle_degrees = 720.0
+radial_bias_percent = 50.0
+height = 200.0
+height_bias_percent = 50.0
+subdivision = 100
+plane = "XY"
+reverse = 0
+intermediate_points = "Uniform"
+number = 8
+angle_degrees = 5.0
+maximum_length = 5.0
+
+[import]
+scale = 1.0
+flip_z = false
