@@ -74,3 +74,19 @@ Only the settings the cases set are listed; defaults of the rest of each command
 - **array-command: dropped.** The Array command ran (24 points, 18 polygons) but its copies came out scaled and rotated (e.g. the second copy's x range 51–249, y ±91), and the third's bounding box reached x = 385, not 500. The settings the probe set are not the ones the form needs, and the container's fields were not matched to the dialog labels, so the case cannot be written down faithfully. **TODO**: map the Array command's fields (copies, offset, scale, rotation) from the GUI, then re-run.
 - Mirror needs a plane point and normal in its settings to move anything; with the plane-number setting alone the points did not move.
 - `case.toml` files hold only the settings the probe set for the commands without a readable container; Extrude, Extrude Inner and Bevel cases hold their full settings after Reset Values, as in O6.
+
+## Safe-scope review (2026-11-17)
+
+No new O25 golden case was created. The remaining rows were reviewed literally against the Notes and golden inventory, without invoking interactive tools or repeating failed scripted paths. Bridge ping and arithmetic health probes passed. The Cases table contains 24 rows and 9 rows marked Not done (including the separately dropped Array command); the older header count is not used as a completion claim. O25 remains partial.
+
+- `loopcut-mid`: not observed: needs the GUI: interactive Loop/Path Cut is prohibited.
+- `loopcut-quarter`: not observed: needs the GUI: interactive Loop/Path Cut is prohibited.
+- `knife-line`: not observed: needs the GUI: requires a viewport line.
+- `bridge-two`: not observed: needs the GUI: prior scripted Bridge returned false; no safe noninteractive path established.
+- `stitch`: not observed: needs the GUI: form explicitly requires GUI run.
+- `dissolve-edge`: not observed: pre-existing golden directory; preserved without retry or modification; prior form attempt was a no-op.
+- `close-hole`: not observed: needs the GUI: prior scripted Close Polygon Hole returned false; no safe noninteractive path established.
+- `smooth`: not observed: needs the GUI: Smooth is an interactive sculpt brush.
+- `array-command`: not observed: needs the GUI: form requires dialog-label mapping before faithful scripted replay.
+
+These outstanding cases are not complete. No existing fixture was changed. Full golden check exit 1: unrelated pre-existing fields/restrict-bend duplicate table at line 7. Cleanroom exit 0. End-job commit/push blocked by required full validation.
