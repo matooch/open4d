@@ -38,7 +38,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O46 | Spline tools and editable splines | [spline-tools.md](spline-tools.md) | `tests/golden/spline-tools/` meshes | partial |
 | O56 | Caps and bevel tab | [caps-bevel.md](caps-bevel.md) | `tests/golden/caps-bevel/` meshes | done |
 | O48 | Text spline | [text.md](text.md) | `tests/golden/text/` meshes | partial |
-| O49 | Fields IV: modifier layers, vertex maps | [fields-4.md](fields-4.md) | `tests/golden/fields/` samples + meshes | todo |
+| O49 | Fields IV: modifier layers, vertex maps | [fields-4.md](fields-4.md) | `tests/golden/fields/` samples + meshes | done |
 | O42 | Shaders on a UV grid | [shaders.md](shaders.md) | `tests/golden/shaders/` samples | todo |
 | O27 | Animation II (tracks, tags) | [animation-2.md](animation-2.md) | `tests/golden/animation-2/` samples | todo |
 | O38 | F-curves: tangents and behaviours | [fcurves.md](fcurves.md) | `tests/golden/keyframes/` samples | todo |
@@ -47,7 +47,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O50 | Clone toolset III | [clone-toolset-3.md](clone-toolset-3.md) | cloner/, clone-spline/, tracer/ | todo |
 | O32 | Volume builder and mesher | [volumes.md](volumes.md) | `tests/golden/volumes/` meshes | todo |
 | O33 | Volumes II: filters, sources, VDB | [volumes-2.md](volumes-2.md) | `tests/golden/volumes/` meshes + .vdb | todo |
-| O34 | Rigging I: joints and skinning | [rigging.md](rigging.md) | `tests/golden/rigging/` meshes | todo |
+| O34 | Rigging I: joints and skinning | [rigging.md](rigging.md) | `tests/golden/rigging/` meshes | done |
 | O35 | Rigging II: IK | [ik.md](ik.md) | `tests/golden/ik/` samples + meshes | todo |
 | O36 | Constraints | [constraints.md](constraints.md) | `tests/golden/constraints/` samples + meshes | todo |
 | O37 | Pose Morph | [pose-morph.md](pose-morph.md) | `tests/golden/pose-morph/` meshes | todo |
@@ -57,7 +57,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O30 | Render references | [render-reference.md](render-reference.md) | `tests/golden/render/` PNG + meshes | todo |
 | O43 | Material renders | [material-renders.md](material-renders.md) | `tests/golden/render/` PNG + meshes | todo |
 | O57 | Camera projection | [camera.md](camera.md) | `tests/golden/camera/` PNG + meshes | todo |
-| O44 | Exchange references (FBX, glTF, Alembic, STL, PLY) | [exchange.md](exchange.md) | `tests/golden/exchange/` | in-progress |
+| O44 | Exchange references (FBX, glTF, Alembic, STL, PLY) | [exchange.md](exchange.md) | `tests/golden/exchange/` | done (morph not observed) |
 | O39 | Dynamics: rigid bodies | [dynamics.md](dynamics.md) | `tests/golden/dynamics/` samples + meshes | todo |
 | O40 | Particles and forces | [particles.md](particles.md) | `tests/golden/particles/` samples + meshes | todo |
 | O41 | Soft bodies and connectors | [soft-bodies.md](soft-bodies.md) | `tests/golden/soft-bodies/` samples + meshes | todo |
