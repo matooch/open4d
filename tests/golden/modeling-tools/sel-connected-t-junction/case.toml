@@ -1,0 +1,35 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "sel-connected-t-junction; measured follow-up, menu-created fresh document"
+mesh = "mesh.obj"
+
+[params]
+selection_mode = "Polygons"
+selected_polygons = [0]
+input_points = [[0.0, -100.0, 0.0], [0.0, 100.0, 0.0], [-100.0, -100.0, 0.0], [-100.0, 100.0, 0.0], [100.0, -100.0, 0.0], [100.0, 100.0, 0.0], [0.0, -100.0, 100.0], [0.0, 100.0, 100.0]]
+input_polygons = [[2, 0, 1, 3], [0, 4, 5, 1], [0, 1, 7, 6]]
+points_before = 8
+polygons_before = 3
+tool = "Select Connected"
+
+[params.source]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+width = 400.0
+height = 400.0
+width_segments = 10
+height_segments = 10
+orientation = "+Y"
+
+[params.settings]
+
+[params.result_objects_1]
+name = "Plane"
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[import]
+scale = 1.0
+flip_z = false

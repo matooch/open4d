@@ -1,0 +1,391 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "arr-f-randomize-30; measured follow-up, menu-created fresh document"
+mesh = "mesh.obj"
+
+[params]
+tool = "Randomize"
+
+[params.objects_1]
+name = "Cube-29"
+position = [8700.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_2]
+name = "Cube-28"
+position = [8400.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_3]
+name = "Cube-27"
+position = [8100.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_4]
+name = "Cube-26"
+position = [7800.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_5]
+name = "Cube-25"
+position = [7500.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_6]
+name = "Cube-24"
+position = [7200.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_7]
+name = "Cube-23"
+position = [6900.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_8]
+name = "Cube-22"
+position = [6600.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_9]
+name = "Cube-21"
+position = [6300.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_10]
+name = "Cube-20"
+position = [6000.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_11]
+name = "Cube-19"
+position = [5700.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_12]
+name = "Cube-18"
+position = [5400.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_13]
+name = "Cube-17"
+position = [5100.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_14]
+name = "Cube-16"
+position = [4800.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_15]
+name = "Cube-15"
+position = [4500.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_16]
+name = "Cube-14"
+position = [4200.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_17]
+name = "Cube-13"
+position = [3900.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_18]
+name = "Cube-12"
+position = [3600.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_19]
+name = "Cube-11"
+position = [3300.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_20]
+name = "Cube-10"
+position = [3000.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_21]
+name = "Cube-9"
+position = [2700.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_22]
+name = "Cube-8"
+position = [2400.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_23]
+name = "Cube-7"
+position = [2100.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_24]
+name = "Cube-6"
+position = [1800.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_25]
+name = "Cube-5"
+position = [1500.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_26]
+name = "Cube-4"
+position = [1200.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_27]
+name = "Cube-3"
+position = [900.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_28]
+name = "Cube-2"
+position = [600.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_29]
+name = "Cube-1"
+position = [300.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.objects_30]
+name = "Cube-0"
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.cube]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+size = [200.0, 200.0, 200.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = 0
+fillet = 0
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[params.settings]
+move = [100.0, 100.0, 100.0]
+scale_percent = [0.0, 0.0, 0.0]
+rotate_degrees = [0.0, 0.0, 0.0]
+seed = 1
+realtime_update = 1
+
+[params.result_objects_1]
+name = "Cube-29"
+position = [8600.012865103776, -11.413714424048681, 66.1677270353922]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [2.5806195581784652, 2.5806195581784652, 2.5806195581784652]
+
+[params.result_objects_2]
+name = "Cube-28"
+position = [8325.949635437713, 15.377314521289742, 95.74681427527834]
+rotation_degrees = [-0.0, 0.0, 8.537736462515939e-07]
+scale = [2.722725219865, 2.722725219865, 2.722725219865]
+
+[params.result_objects_3]
+name = "Cube-27"
+position = [8091.945074828367, 54.38271018006713, -40.57917504544408]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [0.630328701515529, 0.630328701515529, 0.630328701515529]
+
+[params.result_objects_4]
+name = "Cube-26"
+position = [7867.300763182668, -3.575922966200895, 14.586181233364082]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [0.4703827488839707, 0.4703827488839707, 0.4703827488839707]
+
+[params.result_objects_5]
+name = "Cube-25"
+position = [7435.029870069106, -21.89663773314252, 21.137354094005502]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [2.7839451820776366, 2.7839451820776366, 2.7839451820776366]
+
+[params.result_objects_6]
+name = "Cube-24"
+position = [7146.83683633486, 73.45675128816778, -15.633266179061833]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [0.7405257566177632, 0.7405257566177632, 0.7405257566177632]
+
+[params.result_objects_7]
+name = "Cube-23"
+position = [6830.37891312019, -58.84229198152093, 21.742884571783772]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.6862031102113806, 1.6862031102113806, 1.6862031102113806]
+
+[params.result_objects_8]
+name = "Cube-22"
+position = [6524.669770791815, 16.40604579988585, -50.812471215234844]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [0.6656635055944027, 0.6656635055944027, 0.6656635055944027]
+
+[params.result_objects_9]
+name = "Cube-21"
+position = [6222.572246369639, -57.508336865572105, -43.311169024877636]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [2.446490570561147, 2.446490570561147, 2.446490570561147]
+
+[params.result_objects_10]
+name = "Cube-20"
+position = [5953.579920598501, 11.543973669622098, -69.27259277120578]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [0.8870269363340797, 0.8870269363340797, 0.8870269363340797]
+
+[params.result_objects_11]
+name = "Cube-19"
+position = [5603.8796361517725, 62.595924007428835, 37.88693112419595]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [0.8754331558591533, 0.8754331558591533, 0.8754331558591533]
+
+[params.result_objects_12]
+name = "Cube-18"
+position = [5494.4831492405, 56.64757967151348, -8.308197507491244]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.6362397877401929, 1.6362397877401929, 1.6362397877401929]
+
+[params.result_objects_13]
+name = "Cube-17"
+position = [5142.3039381660965, 90.71620349273262, 77.4716059782209]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [0.13634549820034514, 0.13634549820034514, 0.13634549820034514]
+
+[params.result_objects_14]
+name = "Cube-16"
+position = [4829.718946325724, 57.91437599905098, 88.047389877938]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [2.2131747660019037, 2.2131747660019037, 2.2131747660019037]
+
+[params.result_objects_15]
+name = "Cube-15"
+position = [4436.034375412373, -41.71705127613756, 44.99371547950724]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [0.29054450043917424, 0.29054450043917424, 0.29054450043917424]
+
+[params.result_objects_16]
+name = "Cube-14"
+position = [4213.66154164371, -10.970122408601402, -95.37534369371117]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [4.903643323527006, 4.903643323527006, 4.903643323527006]
+
+[params.result_objects_17]
+name = "Cube-13"
+position = [3974.6319928324633, -42.87500542454654, 66.25860176689056]
+rotation_degrees = [-0.0, 0.0, 8.537736462515939e-07]
+scale = [0.8462278280191926, 0.8462278280191926, 0.8462278280191926]
+
+[params.result_objects_18]
+name = "Cube-12"
+position = [3526.3278462801463, -61.977997253659176, 41.7153423923462]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [0.6300531259597963, 0.6300531259597963, 0.6300531259597963]
+
+[params.result_objects_19]
+name = "Cube-11"
+position = [3305.628931845711, -15.296518748953702, 84.75568528065658]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.1057173673384004, 1.1057173673384004, 1.1057173673384004]
+
+[params.result_objects_20]
+name = "Cube-10"
+position = [3024.952922237593, 73.39647963019252, 21.46358717164789]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [0.3148730237433346, 0.3148730237433346, 0.3148730237433346]
+
+[params.result_objects_21]
+name = "Cube-9"
+position = [2639.207537267726, -74.60076186126064, -0.01374599523201736]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [0.49412496364949043, 0.49412496364949043, 0.49412496364949043]
+
+[params.result_objects_22]
+name = "Cube-8"
+position = [2495.925560222973, 82.53177451783242, -12.853524595101584]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [0.8008102370422285, 0.8008102370422285, 0.8008102370422285]
+
+[params.result_objects_23]
+name = "Cube-7"
+position = [2048.2346899582844, 21.808712593368853, -94.01953835318818]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.55009659892993, 1.55009659892993, 1.55009659892993]
+
+[params.result_objects_24]
+name = "Cube-6"
+position = [1870.0234173005338, 47.42143147279441, -49.13843155413008]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [0.4232094388347074, 0.4232094388347074, 0.4232094388347074]
+
+[params.result_objects_25]
+name = "Cube-5"
+position = [1411.1611293576839, -11.949602648639301, 52.903925556268575]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [0.7875440377800054, 0.7875440377800054, 0.7875440377800054]
+
+[params.result_objects_26]
+name = "Cube-4"
+position = [1252.5590434891362, 0.5860903763277081, 80.68587017213653]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [0.07620836883959892, 0.07620836883959892, 0.07620836883959892]
+
+[params.result_objects_27]
+name = "Cube-3"
+position = [976.1549065931911, -56.74441673013175, -80.11130970897557]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0874673601212796, 1.0874673601212796, 1.0874673601212796]
+
+[params.result_objects_28]
+name = "Cube-2"
+position = [611.8450003155298, -77.66317688968816, 82.04255700947598]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0268798641063464, 1.0268798641063464, 1.0268798641063464]
+
+[params.result_objects_29]
+name = "Cube-1"
+position = [271.3224848400231, 72.71414195526664, 93.08269573697694]
+rotation_degrees = [-0.0, 0.0, 8.537736462515939e-07]
+scale = [3.4813486900362465, 3.4813486900362465, 3.4813486900362465]
+
+[params.result_objects_30]
+name = "Cube-0"
+position = [-60.69185093013019, 74.5558035678436, 94.80867404732449]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [2.4801296493459173, 2.4801296493459173, 2.4801296493459173]
+
+[import]
+scale = 1.0
+flip_z = false

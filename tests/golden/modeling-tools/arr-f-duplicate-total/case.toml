@@ -1,0 +1,85 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "arr-f-duplicate-total; measured follow-up, menu-created fresh document"
+mesh = "mesh.obj"
+
+[params]
+tool = "Duplicate"
+
+[params.objects_1]
+name = "Cube"
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.cube]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+size = [200.0, 200.0, 200.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = 0
+fillet = 0
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[params.settings]
+copies = 3
+clone_mode = "Copies"
+mode = "Linear"
+per_step = 0
+per_step_secondary = 0
+per_step_3 = 1
+enable_move = 1
+enable_move_secondary = 1
+enable_move_3 = 1
+enable_move_x = 1
+enable_move_x_secondary = 1
+enable_move_x_3 = 1
+enable_move_y = 1
+enable_move_y_secondary = 1
+enable_move_y_3 = 1
+enable_move_z = 1
+enable_move_z_secondary = 1
+enable_move_z_3 = 1
+start_pos_percent = 0.0
+end_pos_percent = 100.0
+radius = 500.0
+start_degrees = 0.0
+end_degrees = 360.0
+move = [600.0, 0.0, 0.0]
+move_secondary = [0.0, 0.0, 0.0]
+enable_scale = 0
+enable_scale_secondary = 0
+enable_scale_3 = 0
+scale_percent = [100.0, 100.0, 100.0]
+scale_secondary_percent = [100.0, 100.0, 100.0]
+scale_3_percent = [100.0, 100.0, 100.0]
+enable_rotation = 0
+enable_rotation_secondary = 1
+enable_rotation_3 = 0
+align_tangential = 1
+align_tangential_secondary = "+Y"
+bank_degrees = 0.0
+rotate_degrees = [0.0, 0.0, 0.0]
+rotate_secondary_degrees = [0.0, 0.0, 0.0]
+rotate_3_degrees = [0.0, 0.0, 0.0]
+realtime_update = 1
+
+[params.result_objects_1]
+name = "Cube"
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.result_objects_2]
+name = "Cube_copies"
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[import]
+scale = 1.0
+flip_z = false

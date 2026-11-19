@@ -1,0 +1,46 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "arr-f-array-2x2-rot-scale; measured follow-up, menu-created fresh document"
+mesh = "mesh.obj"
+
+[params]
+selection_mode = "Polygons"
+selected_polygons = [0, 1, 2, 3, 4, 5]
+points_before = 8
+polygons_before = 6
+tool = "Array"
+
+[params.source]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+size = [200.0, 200.0, 200.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = 0
+fillet = 0
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[params.settings]
+clones_x = 2
+y = 2
+z = 1
+offset = [200.0, 200.0, 0.0]
+holes_percent = 0.0
+move_var = [0.0, 0.0, 0.0]
+scale_var_percent = [50.0, 50.0, 50.0]
+rot_var_degrees = [0.0, 0.0, 45.0]
+uniform_scale = 1
+realtime_update = 1
+
+[params.result_objects_1]
+name = "Cube"
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[import]
+scale = 1.0
+flip_z = false
