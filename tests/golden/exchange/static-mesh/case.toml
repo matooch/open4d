@@ -1,0 +1,128 @@
+feature = "exchange"
+observation = "docs/parity/exchange.md"
+description = "static-mesh"
+mesh = "mesh.obj"
+
+[params]
+"frame" = 0
+"fps" = 30
+
+[params."cube"]
+"type" = "Cube"
+"position" = [0.0, 0.0, 0.0]
+"rotation_degrees" = [0.0, 0.0, 0.0]
+"scale" = [1.0, 1.0, 1.0]
+
+[params."cube"."parameters"]
+"icon_file_id" = ""
+"icon_color" = 0
+"color" = [1.0, 0.9, 0.4]
+"size" = [200.0, 200.0, 200.0]
+"segments_x" = 2
+"segments_y" = 2
+"segments_z" = 2
+"separate_surfaces" = 0
+"fillet" = 0
+"fillet_radius" = 3.0
+"fillet_subdivision" = 3
+
+[params."sphere"]
+"type" = "Sphere"
+"position" = [300.0, 0.0, 0.0]
+"rotation_degrees" = [0.0, 0.0, 0.0]
+"scale" = [1.0, 1.0, 1.0]
+
+[params."sphere"."parameters"]
+"icon_file_id" = ""
+"icon_color" = 0
+"color" = [1.0, 0.9, 0.4]
+"radius" = 100.0
+"segments" = 16
+"type" = "Standard"
+"render_perfect" = 1
+
+[params."export_fbx"]
+"file_format" = "Version 7.7 (2019)"
+"as_text_file" = 0
+"cameras" = 1
+"lights" = 1
+"splines" = 1
+"instances" = 1
+"selection_only" = 0
+"global_coordinates" = 0
+"subdivision_surface" = 0
+"baked_subdivision_surface" = 0
+"triangulate" = 0
+"normals" = 1
+"vertex_colors" = 0
+"vertex_maps_to_vertex_colors" = 0
+"up_axis" = "Y Axis (Default)"
+"flip_z_axis" = 0
+"tracks" = 1
+"bake_all_frames" = 0
+"pla_to_vertex_cache" = 0
+"bound_joints_only" = 0
+"takes" = "Takes Manager"
+"material" = "Phong / Lambert"
+"embed_textures" = 1
+"substances" = 1
+"bake_materials" = 1
+"width" = 1024
+"height" = 1024
+"format" = "PNG"
+"depth" = "8 Bit/Channel"
+"lod_name_suffix" = 0
+
+[params."export_gltf"]
+"file_format" = "GLB (Binary)"
+"current_frame" = 1
+"custom_frame" = 0
+"transform" = 1
+"morph" = "Pose Morph"
+"skin" = 0
+"bake_animation" = 0
+"textures" = 1
+"double_sided" = 0
+"cameras" = 1
+"normals" = 1
+"uvs" = 1
+"flip_z" = 1
+
+[params."export_abc"]
+"selection_only" = 0
+"global_coordinates" = 0
+"cameras" = 1
+"xrefs" = 0
+"subdivision_surface" = 1
+"subdivision_surface_weights" = 0
+"splines_curves" = 0
+"hair_curves" = 0
+"particles" = 0
+"particles_geometry" = 0
+"start_frame" = 0
+"end_frame" = 90
+"frame_step" = 1
+"subframes" = 1
+"visibility" = 0
+"polygon_selections" = 1
+"normals" = 1
+"uvs" = 1
+"vertex_colors" = 0
+"display_colors_to_vertex_colors" = 0
+"vertex_maps" = 0
+"points_only_geometry" = 0
+"merge_generated" = 0
+
+[params."export_abc"."scale"]
+"scale" = 1.0
+"unit" = "centimeters"
+
+[params."export_stl"]
+
+[params."export_stl"."scale"]
+"scale" = 1.0
+"unit" = "centimeters"
+
+[import]
+scale = 1.0
+flip_z = false
