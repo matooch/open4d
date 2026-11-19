@@ -88,9 +88,14 @@ Do one case at a time and finish it before reading the next row.
    commit `.gitattributes` with it). Prefer smaller settings if the form allows a choice.
 9. **Save state** (§6) and go to the next row.
 
-A case that fails three times (tool error, crash, timeout) is marked
-`not observed: <the error text>` in its row, and you go on. Do not retry it later in the
-same run.
+**Debugging budget.** A case gets at most **3 attempts and 15 tool calls of debugging**.
+After that, mark it `not observed: <the last error text, and what you tried>` in its row and
+move on, even if you think you are close. Put the details of what you learned in
+`~/forge-observer/notes.md` so a later run (or the owner) can pick it up. One stuck case must
+never cost the rest of the queue. Do not retry it later in the same run.
+
+**Commit what is finished before you debug anything.** If a case is observed and passes
+`golden check`, commit it at once, before starting on a case that is giving trouble.
 
 ## 5. Commit, push, hand back
 
@@ -105,6 +110,10 @@ same run.
 
 ## 6. Staying on track with a small context
 
+- **Runs end.** Your run has a step limit. Assume it can end at any moment: keep state.json
+  current, commit finished cases early, and never hold finished work only in memory or in
+  uncommitted files. The owner restarts you; you resume from state.json.
+
 - Keep `~/forge-observer/state.json` up to date after every case:
   `{"job": "O29", "form": "docs/parity/scene-defaults.md", "next_case": "camera-defaults", "done": [...], "skipped": {...}}`.
   After a restart or a context reset, read it first and resume there.
@@ -114,7 +123,21 @@ same run.
 - When a row is unclear, do the most literal reading, write the reading you chose in the
   Notes column, and move on. Never ask and wait.
 
-## 7. Things a human must do
+## 7. Probe pitfalls found in earlier runs
+
+Keep the probe code itself in `~/forge-observer/`; these are the lessons, in plain words:
+- The bridge's script runner keeps imported probe modules between calls. When you edit a
+  probe module, force it to reload (drop it from the module cache before importing), or the
+  old code keeps running and tracebacks point at stale lines.
+- To animate a value, set the document time and evaluate the scene first, then set the value,
+  then record the key with the app's own record-key command (the one the Animate menu runs),
+  with the object active and **no scene evaluation between setting and recording**.
+  Building animation tracks and keys by hand in the script failed silently.
+- A script that returns nothing at all ("Function returned None") usually means the app
+  aborted inside a call. Isolate the last few calls in a tiny separate probe rather than
+  editing the big one.
+
+## 8. Things a human must do
 
 Skip these in unattended runs. Leave them for the owner and say so in the form:
 - jobs marked `gui-only`, and anything a form says belongs to a GUI session (G1–G8);
