@@ -1,0 +1,44 @@
+feature = "instance"
+observation = "docs/parity/generators-3.md"
+description = "instance/render-instance; measured fresh menu-created follow-up"
+mesh = "mesh.obj"
+
+[params]
+frame = 0
+fps = 30
+
+[params.generator]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.generator.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+reference_object = "Cube"
+instance_mode = "Render Instance"
+
+[params.input]
+
+[params.reference]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.reference.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+size = [200.0, 200.0, 200.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = 0
+fillet = 0
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[import]
+scale = 1.0
+flip_z = false

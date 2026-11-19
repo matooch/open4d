@@ -1,0 +1,159 @@
+feature = "sweep"
+observation = "docs/parity/generators-3.md"
+description = "sweep/r25-helix-sub8; measured fresh menu-created follow-up"
+mesh = "mesh.obj"
+
+[params]
+frame = 0
+fps = 30
+
+[params.generator]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.generator.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+isoparm_subdivision = 10
+end_scale_percent = 100.0
+end_rotation_degrees = 0.0
+start_growth_percent = 0.0
+end_growth_percent = 100.0
+parallel_movement = 0
+constant_cross_section = 1
+banking = 1
+keep_segments = 0
+use_rail_direction = 1
+2_rail = 1
+use_rail_scale = 1
+flip_normals = 0
+stick_uvs = 0
+rotation_from_degrees = -180.0
+rotation_to_degrees = 180.0
+start_cap = 1
+end_cap = 1
+separate_bevel_controls = 0
+bevel_shape = "Round"
+size = 0.0
+extended_shape = 0
+height = 0.0
+shape_depth_percent = 100.0
+segments = 3
+bevel_shape_secondary = "Round"
+size_secondary = 0.0
+extended_shape_secondary = 0
+height_secondary = 0.0
+shape_depth_secondary_percent = 100.0
+extended_shape_3 = 0
+use_absolute_value = 0
+max_shape_height = 5.0
+segments_secondary = 3
+bevel_outside = 0
+avoid_self_intersections = 1
+caps_type = "N-gon"
+break_phong_rounding = 1
+shell = 0
+start_cap_secondary = 0
+end_cap_secondary = 0
+start_bevel = 0
+end_bevel = 0
+start_shell = 0
+end_shell = 0
+start_cap_3 = 0
+end_cap_3 = 0
+start_step = 0
+end_step = 0
+
+[params.input]
+
+[params.input.1]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.input.1.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+ellipse = 0
+ring = 0
+radius = 20.0
+radius_y = 200.0
+inner_radius = 100.0
+plane = "XY"
+reverse = 0
+intermediate_points = "Uniform"
+number = 8
+angle_degrees = 5.0
+maximum_length = 5.0
+
+[params.input.2]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.input.2.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+start_radius = 200.0
+start_angle_degrees = 0.0
+end_radius = 200.0
+end_angle_degrees = 720.0
+radial_bias_percent = 50.0
+height = 200.0
+height_bias_percent = 50.0
+subdivision = 8
+plane = "XY"
+reverse = 0
+intermediate_points = "Uniform"
+number = 8
+angle_degrees = 5.0
+maximum_length = 5.0
+
+[params.evaluated_path]
+points = [[200.0, 0.0, 0.0], [1.2246467991473532e-14, 200.0, -25.0], [-200.0, 2.4492935982947064e-14, -50.0], [-3.6739403974420595e-14, -200.0, -75.0], [200.0, -4.898587196589413e-14, -100.0], [6.123233995736766e-14, 200.0, -125.0], [-200.0, 7.347880794884119e-14, -150.0], [-8.572527594031472e-14, -200.0, -175.0], [200.0, -9.797174393178826e-14, -200.0]]
+closed = false
+spline_type = "Spline"
+
+[params.evaluated_path.tangents_1]
+left = [-0.0, -70.43818894277778, 8.804773617847223]
+right = [0.0, 70.43818894277778, -8.804773617847223]
+
+[params.evaluated_path.tangents_2]
+left = [70.43818894277778, -4.313095131325465e-15, 8.804773617847223]
+right = [-70.43818894277778, 4.313095131325465e-15, -8.804773617847223]
+
+[params.evaluated_path.tangents_3]
+left = [8.62619026265093e-15, 70.43818894277778, 8.804773617847223]
+right = [-8.62619026265093e-15, -70.43818894277778, -8.804773617847223]
+
+[params.evaluated_path.tangents_4]
+left = [-70.43818894277778, 1.2939285393976394e-14, 8.804773617847223]
+right = [70.43818894277778, -1.2939285393976394e-14, -8.804773617847223]
+
+[params.evaluated_path.tangents_5]
+left = [-1.725238052530186e-14, -70.43818894277778, 8.804773617847223]
+right = [1.725238052530186e-14, 70.43818894277778, -8.804773617847223]
+
+[params.evaluated_path.tangents_6]
+left = [70.43818894277778, -2.1565475656627326e-14, 8.804773617847223]
+right = [-70.43818894277778, 2.1565475656627326e-14, -8.804773617847223]
+
+[params.evaluated_path.tangents_7]
+left = [2.587857078795279e-14, 70.43818894277778, 8.804773617847223]
+right = [-2.587857078795279e-14, -70.43818894277778, -8.804773617847223]
+
+[params.evaluated_path.tangents_8]
+left = [-70.43818894277778, 3.0191665919278254e-14, 8.804773617847223]
+right = [70.43818894277778, -3.0191665919278254e-14, -8.804773617847223]
+
+[params.evaluated_path.tangents_9]
+left = [-3.450476105060371e-14, -70.43818894277778, 8.804773617847223]
+right = [3.450476105060371e-14, 70.43818894277778, -8.804773617847223]
+
+[import]
+scale = 1.0
+flip_z = false
