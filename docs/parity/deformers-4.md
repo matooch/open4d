@@ -55,9 +55,9 @@ Record each deformer's parameter table once.
 
 ## Parameters (filled once per deformer)
 
-Recorded as in [deformers-2.md](deformers-2.md): label, our key (as written in `case.toml` — `read_obj`-generated snake-case names), default, declared min/max. Vector params are shown as [x, y, z]. Cycle params show defaults as the raw stored id plus the option list in the description's order, because the automatic cycle-label mapping (cycle container lookup) gave a mismatched label on Collision (see Notes), so treat the raw id as authoritative here.
+Recorded as in [deformers-2.md](deformers-2.md): label, our key (as written in `case.toml` — `read_obj`-generated snake-case names), default, declared min/max. Vector params are shown as [x, y, z]. Cycle params show defaults as the raw stored id plus the option list in the description's order, because the automatic cycle-label mapping (option-list lookup) gave a mismatched label on Collision (see Notes), so treat the raw id as authoritative here.
 
-### Spline (id 1008982)
+### Spline
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Original Spline | `original_spline` | unset link | – | – |
@@ -66,9 +66,9 @@ Recorded as in [deformers-2.md](deformers-2.md): label, our key (as written in `
 | Radius | `radius` | 30 | 0 | 1e20 (kept 999999999) |
 | Use Length | `use_length` | off | 0 | 1 |
 | Full Polygons | `full_polygons` | off | 0 | 1 |
-| Shape | `shape` (a shape spline, SplineData) | default spline | – | our case writes it as a linked helper spline |
+| Shape | `shape` (a shape spline) | default spline | – | our case writes it as a linked helper spline |
 
-### Spline Rail (id 1008796)
+### Spline Rail
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Z Spline Left | `z_spline_left` | unset link | – | – |
@@ -81,19 +81,19 @@ Recorded as in [deformers-2.md](deformers-2.md): label, our key (as written in `
 | Scale Before Start | `scale_before_start` | 1.0 | ±1e18 (kept ±999999999) | |
 | Scale After End | `scale_after_end` | 1.0 | ±1e18 (kept ±999999999) | |
 
-### Mesh (cage) deformer (id 1024543)
+### Mesh (cage) deformer
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Auto Init | `auto_init` | off | 0 | 1 |
 | Memory | `memory` (read-only text) | "0 B" | – | – |
 | Strength | `strength` | 1.0 | ±1e18 (kept ±999999999) | |
-| Cages | `cages` (InExcludeData list) | empty | – | – |
+| Cages | `cages` (object list) | empty | – | – |
 | Accuracy | `accuracy` | 0.1 | 0 | 1 |
 | External | `external` | Ignore | – | options: Ignore, Surface, Surface (Area) |
 
-Buttons: Initialize (1001), Restore (1002). Has a Field list (440000245).
+Buttons: Initialize, Restore. Has a Field list.
 
-### Surface deformer (id 1024552)
+### Surface deformer
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Type | `type` | Projection | – | options: Projection, Mapping (U,V), Mapping (V,U) |
@@ -102,9 +102,9 @@ Buttons: Initialize (1001), Restore (1002). Has a Field list (440000245).
 | Proportional | `proportional` | off | 0 | 1 |
 | Surface | `surface` | unset link | – | – |
 
-Buttons: Initialize (1001), Restore (1002). Has a Field list.
+Buttons: Initialize, Restore. Has a Field list.
 
-### Camera deformer (id 1024476)
+### Camera deformer
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Camera | `camera` | unset link | – | – |
@@ -114,9 +114,9 @@ Buttons: Initialize (1001), Restore (1002). Has a Field list.
 | Safe Frame | `safe_frame` | on | 0 | 1 |
 | Draw Grid | `draw_grid` | Active* | – | options: Always, Active, Hierarchy |
 
-\* stored default raw value was 1 while the option list is ['Always', 'Active', 'Hierarchy']; the direct write test was not run on it, so the label mapping was not confirmed (same cycle caveat as Notes). Reset button (2005). Has a Field list.
+\* stored default raw value was 1 while the option list is ['Always', 'Active', 'Hierarchy']; the direct write test was not run on it, so the label mapping was not confirmed (same cycle caveat as Notes). Reset button. Has a Field list.
 
-### Collision deformer (id 1024544)
+### Collision deformer
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Falloff | `falloff` | 3 (raw) | – | options (description order): None, UV, Distance, Surface, Collider |
@@ -125,16 +125,16 @@ Buttons: Initialize (1001), Restore (1002). Has a Field list.
 | Restore Shape | `restore_shape_percent` | 100 % | 0 | 100 % |
 | Curve | `curve` (a spline) | default curve | – | not recorded |
 | Solver | `solver` | 0 (raw) | – | options (description order): Inside, Inside (Stretch), Outside, Outside (Volume), Intersect |
-| Objects (solver list) | not written by read_obj (InExcludeData) | empty | – | – |
-| Objects (second, 1017) | `…` | empty | – | – |
+| Objects (solver list) | not written by read_obj (object list) | empty | – | – |
+| Objects (second) | `…` | empty | – | – |
 | Stretch/Relax group | size 1.0, steps 1, stretch 8, relax 4, stiffness 75 %, struct 100 %, flex 100 % | | | keys `size`, `steps`, `stretch`, `relax`, `stiffness_percent`, `struct_percent`, `flex_percent` |
-| Collision group | falloff 1004 `falloff_1004`, invert 1005 `invert` | invert off | 0 | 1 |
-| Falloff group | falloff 1018 `falloff_1018`, invert 1006 `invert_1006` | invert off | 0 | 1 |
-| Cache section | Enable off (`enable`), Compress off (`compress`), Auto Time on (`auto_time`), Cache 20 (`cache`, min 1 max 1000), Scale 100 % (`scale_percent`) | | | Start/Stop/Offset are BaseTime, not sampled |
+| Collision group | falloff `falloff_1004`, invert `invert` | invert off | 0 | 1 |
+| Falloff group | falloff `falloff_1018`, invert `invert_1006` | invert off | 0 | 1 |
+| Cache section | Enable off (`enable`), Compress off (`compress`), Auto Time on (`auto_time`), Cache 20 (`cache`, min 1 max 1000), Scale 100 % (`scale_percent`) | | | Start/Stop/Offset are time values, not sampled |
 
-Buttons: Calculate (2001), Update (2010), Empty Cache (2003), Load… (2006), Save… (2007). Has a Field list.
+Buttons: Calculate, Update, Empty Cache, Load…, Save…. Has a Field list.
 
-### Jiggle (id 1021284)
+### Jiggle
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | On Stopped | `on_stopped` | off | 0 | 1 |
@@ -146,15 +146,15 @@ Buttons: Calculate (2001), Update (2010), Empty Cache (2003), Load… (2006), Sa
 | Motion Scale | `motion_scale` | 1.0 | 0 | 1e20 (kept 999999999) |
 | Springs | `springs` | 4 | 0 | 100 |
 | Iterations | `iterations` | 4 | 1 | 1000 |
-| Restrict | (InExcludeData) | empty | – | – |
+| Restrict | (object list) | empty | – | – |
 | Gravity | `gravity` | 0 | ±1e20 | |
-| Forces | (InExcludeData) | empty | – | – |
+| Forces | (object list) | empty | – | – |
 | Cache section | Enable off, Compress off, Auto Time on, Cache 20, Scale 100 % | | | as Collision above |
 | several "Map" link fields | not recorded (unset vertex maps) | | | |
 
-Buttons: Calculate (2014), Update (2026), Empty Cache (2016), Load… (2019), Save… (2020). Has a Field list.
+Buttons: Calculate, Update, Empty Cache, Load…, Save…. Has a Field list.
 
-### Delta Mush (id 1035447)
+### Delta Mush
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Strength | `strength` | 1.0 | ±1e18 (kept ±999999999) | |
@@ -164,11 +164,11 @@ Buttons: Calculate (2014), Update (2026), Empty Cache (2016), Load… (2019), Sa
 | Smooth Type | `smooth_type` | 1 | – | options (description order): Fixed, Proportional |
 | Pin Border Points | `pin_border_points` | off | 0 | 1 |
 | Mode | `mode` | 1 | – | options (description order): Exclude, Include |
-| Tags | `tags` (InExcludeData) | empty | – | – |
+| Tags | `tags` (object list) | empty | – | – |
 
-Buttons: Initialize (1005), Release (1006). Has a Field list.
+Buttons: Initialize, Release. Has a Field list.
 
-### Correction (id 1024542)
+### Correction
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Lock | `lock` | off | 0 | 1 |
@@ -176,9 +176,9 @@ Buttons: Initialize (1005), Release (1006). Has a Field list.
 | Mapping | `mapping` | 1 | – | options (description order): UV, Nearest, Normals |
 | Strength | `strength` | 1.0 | ±1e18 (kept ±999999999) | |
 
-Buttons: Update (1003), Freeze (1004), Reset (1005). Has a Field list. The corrected points are not in the Attribute description; they are edited through the object's own point list (the case moved corrected point 0 by (50, 0, 0)).
+Buttons: Update, Freeze, Reset. Has a Field list. The corrected points are not in the Attribute description; they are edited through the object's own point list (the case moved corrected point 0 by (50, 0, 0)).
 
-### Explosion FX (id 1002603)
+### Explosion FX
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Time | `time_percent` | 10 % | 0 | 100 % |
@@ -228,9 +228,10 @@ No Field list on Explosion FX.
 
 - **Mesh deformer and Camera deformer produced no deformation in the exported meshes** under
   scripted/background evaluation on this build, for every workaround tried (Initialize/Restore
-  buttons, Auto Init on, SetDirty, moving the grid point, linking a camera into the view's
-  BASEDRAW_DATA_CAMERA). GetDeformCache() returns nothing for any deformer under ExecutePasses here
-  (even a plain Bend), while SaveDocument's own evaluation does deform Bend etc., so the two cases
+  buttons, Auto Init on, marking the object dirty, moving the grid point, linking a camera into the
+  viewport's camera setting). The scripted read of an object's deformed result returns nothing for any
+  deformer when the scene is evaluated by script here (even a plain Bend), while the app's own
+  save-time evaluation does deform Bend etc., so the two cases
   are recorded as observed (camera-deformer/grid exported the undeformed cube; mesh-deformer/cage
   exported the cube undeformed plus the edited cage object as `Cube.1`). These meshes should be
   regenerated interactively if deformation is required for parity.
@@ -238,7 +239,7 @@ No Field list on Explosion FX.
   cage in mesh-deformer/cage (object `Cube.1`), the surface in surface/defaults (`Plane`), and the
   collider in collision/sphere (`Sphere`). The Spline/Rail/Helix helper splines are not polygons and
   do not appear. The FFD and Camera deformer gizmos are not exported as polygons.
-- The automatic cycle-label mapping (resolving enum ids through the DESC_CYCLE container) gave a
+- The automatic cycle-label mapping (resolving option indices through the option-list lookup) gave a
   label mismatch on Collision: the raw stored Solver value read directly is 0, whose description
   order suggests `Inside`, while the cycle-container lookup resolved it to `Intersect`, and the
   Falloff value 3 resolved to `None` (order suggests `Surface`). Raw ids and option lists are

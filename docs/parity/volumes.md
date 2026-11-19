@@ -23,18 +23,18 @@ distance below voxel size / 2).
 - `[params.input]`, `[params.input2]` …: the input objects with all their parameters and
   positions.
 
-What the script did (observed): the Volume Mesher menu command creates object id 1039861 and
-the Volume Builder menu command creates id 1039859; the builder was inserted under the mesher
-with `InsertUnder`, inputs were inserted under the builder the same way, and the mesher's cache
-was resolved to a polygon object with `MCOMMAND_CURRENTSTATETOOBJECT` because
-`GetCache()/GetDeformCache()` on the mesher return no `PolygonObject`. No separate "add to
+What the script did (observed): the Volume Mesher menu command creates the mesher object and
+the Volume Builder menu command creates the builder; the builder was inserted under the mesher
+by script, inputs were inserted under the builder the same way, and the mesher's cache
+was resolved to a polygon object with the app's Current State to Object command because
+the mesher's cache and deformed cache return no polygon object. No separate "add to
 list" call is needed: the builder picks up its direct children (a Null with two cube children
 was traversed, see the hierarchy case).
 
 ## Parameters (fill once)
 
 Defaults are the values read from a freshly created object: these parameters publish no
-`DESC_DEFAULT`, so the "Default" column is the observed starting value, not a declared one.
+declared default, so the "Default" column is the observed starting value, not a declared one.
 Min/Max come from the description.
 
 ### Volume Builder
@@ -47,12 +47,12 @@ Min/Max come from the description.
 | Particle Voxel Range | particle_voxel_range | 2 | 1 | 2147483647 |
 | Volume Type | volume_type | Signed Distance Field (0) | options: Signed Distance Field (0), Fog (1), Vector (2) | – |
 | Auto Update Settings | auto_update_settings | 1 | 0 | 1 |
-| Objects | objects (id 6016) | empty | – | – |
-| Update | update (id 6023) | button | – | – |
-| Override Grid Matrix | override_grid_matrix (id 6026) | off | – | – |
+| Objects | objects | empty | – | – |
+| Update | update | button | – | – |
+| Override Grid Matrix | override_grid_matrix | off | – | – |
 
-Hidden rows that exist in the container but carry no label in the description: 6019 (string
-status readout, e.g. "Voxel Amount: 7.254   Size: ~311 kb "), 6020 (int, 1), 6021 (int, 0).
+Three hidden rows exist in the container but carry no label in the description: a string
+status readout (e.g. "Voxel Amount: 7.254   Size: ~311 kb "), an int reading 1 and an int reading 0.
 
 Per-object settings in the list (mode, input type, …):
 | Label | Our key | Default | Options |
@@ -90,7 +90,7 @@ Surface Threshold is a plain float with no unit in the description (range −1e+
 | sphere-defaults | a default sphere | – | 1832 points, 1830 faces, all quads; bbox x ±97.996, y ±98.301, z ±97.996; OBJ 281179 bytes |
 | sphere-voxel-5 | a default sphere | voxel size 5 | 7328 points, 7326 faces, all quads; bbox x ±98.998, y ±99.151, z ±98.998; OBJ 1161715 bytes |
 | union-two | sphere at (−60, 0, 0) and sphere at (60, 0, 0), both Union | – | 2952 points, 2950 faces, all quads; bbox x ±157.996 (the two spheres merged into one surface, the overlap is gone); OBJ 457253 bytes |
-| subtract | cube, then sphere at (100, 100, 0) set to Subtract | – | not observed: the per-object operation mode is not exposed in the builder's description and the Objects list (id 6016) cannot be read from Python ("Parameter value not accessible (object unknown in Python)"), so the sphere could not be switched to Subtract |
+| subtract | cube, then sphere at (100, 100, 0) set to Subtract | – | not observed: the per-object operation mode is not exposed in the builder's description and the Objects list cannot be read from Python ("Parameter value not accessible (object unknown in Python)"), so the sphere could not be switched to Subtract |
 | intersect | cube, then sphere at (50, 0, 0) set to Intersect | – | not observed: same reason as subtract — no scriptable way to set a list entry's mode to Intersect |
 | mesher-threshold | a default sphere | mesher threshold (iso value) changed to the second step the field allows, e.g. 0.5 or 5 | 1832 points, 1830 faces, all quads; the OBJ is byte-identical to sphere-defaults (md5 769066acf9ecf2397d7e4a0120f896f4), so Surface Threshold 0.5 changed nothing at voxel size 10. Unit: plain float, range −1e+20 … 1e+20, step 0.01 |
 | mesher-adaptive | a default sphere | mesher adaptive on / adaptivity 50 % (or the closest settings) | Adaptive set to 0.5 (the range is 0.0 … 1.0): 53 points, 72 faces, 30 quads and 42 triangles — the only case with triangles, and it drops detail (bbox shrinks to x ±88.071, y ±88.435); OBJ 7634 bytes |
@@ -107,7 +107,7 @@ Record the vertex and face counts and whether the faces are quads or triangles.
   2168 at 10, 9128 at 5. The mesh is re-tessellated, not decimated.
 - Surface Threshold has no visible effect at voxel size 10 between 0.01 and 0.5: the exported
   meshes are byte-identical (md5 769066acf9ecf2397d7e4a0120f896f4 for both).
-- The builder's status readout (hidden parameter 6019) reported "Voxel Amount: 7.254   Size:
+- The builder's status readout (a hidden status row) reported "Voxel Amount: 7.254   Size:
   ~311 kb " for the default cube scene, i.e. the builder reports its own grid cost.
 - Export used the usual OBJ settings through the mesher; `case.toml` files also carry the
   generic object rows (position, rotation, scale, colour) of each input object, exported from

@@ -256,7 +256,7 @@ separate the hypotheses it could not; run them like the cases above, R25 default
 | landscape/segments-1000 | 1002001 / 1000000 | (600.000028, 72.612511, 600.000028); mesh.obj is 184 MB |
 
 Method notes: every case started from a new empty document; generator objects were made
-through the app's own Create menu commands (`CallCommand` with the object's command id),
+through the app's own Create menu commands,
 children placed in the order the table gives. Every generator parameter the scene holds
 was read back after the case and written to `case.toml` (percent and degrees shown as
 the Attribute Manager shows them). The Spline Mask cases add `[params]` rows

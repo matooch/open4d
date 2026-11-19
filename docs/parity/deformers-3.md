@@ -14,9 +14,9 @@ Unblocks: P1, the remaining deformers.
 ## How the deformers were made
 
 Each deformer was created through its menu command and then moved under the cube as a
-child. The menu command ids found this run (Explosion 5145, Shatter 5148, Wind 5149,
-Smoothing 1024529, Displacer 1018685, Spline Wrap 1019221, Polygon Reduction 1001253,
-Bevel deformer icon command 431000028) stay in the observer probes and are not committed.
+child. The menu commands for Explosion, Shatter, Wind, Smoothing, Displacer, Spline Wrap,
+Polygon Reduction and the Bevel deformer icon command were found by name search; their
+command numbers stay in the observer probes and are not committed.
 The **Polygon Reduction** menu command creates an object whose type name reads
 "Legacy Polygon Reduction" — it is the only Polygon Reduction object the menu creates, so
 it is the one observed. The Bevel deformer is not in the normal command registry; its
@@ -31,7 +31,7 @@ value without a unit suffix), as with the other deformers in deformers-2.
 
 Min and Max are the limits the field declares; in brackets, what a ±999999999 assignment
 kept where it differs. Vector fields were not assignment-tested. Every deformer here has
-an empty Field list on its Falloff tab by default (group id 5100); it is not recorded.
+an empty Field list on its Falloff tab by default (the Falloff group); it is not recorded.
 The two exceptions found: Explosion, Shatter, Spline Wrap, Polygon Reduction and
 Bevel deformer showed **no** Falloff group in their description at all; Smoothing,
 Displacer and Wind have the Fields group (empty by default).

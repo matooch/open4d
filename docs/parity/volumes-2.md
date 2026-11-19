@@ -18,10 +18,10 @@ Unblocks: F/081, 082, 085, 086.
 | erode | a default cube | the same filter with a negative offset (−10) | observed: 2168 points at Type 1, Offset −10.0; the offset sign flips the result. |
 | spline-source | a default Helix spline | the spline in the list; record its radius setting | observed: 3398 points; default helix (start/end radius 200, height 200, end angle 4π, 100 subdivisions). |
 | spline-radius | a default Helix spline | spline radius 20 | observed: 516 points; start and end radius 20. |
-| points-source | a Matrix object (Linear, count 5, step 50) in the list, or a cloner of points | – | not observed: no scriptable point source. `Omatrix` resolves only to the `c4d.Matrix` math class, no cloner or Matrix object symbol exists in this app build, and the builder description exposes no point-input port. |
+| points-source | a Matrix object (Linear, count 5, step 50) in the list, or a cloner of points | – | not observed: no scriptable point source. the scripting layer exposes only the Matrix math class, and no cloner or Matrix object type is available in this app build, and the builder description exposes no point-input port. |
 | fog-input | a default sphere | input type Fog instead of SDF | observed: 1664 points; Volume Type 1 (Fog) on the builder, mesher left at its default Surface Threshold 0.01. |
 | field-layer | a default cube plus a Spherical field (size 200) as a layer | the field layer's mode at default | observed: 2168 points; Spherical field layer as the only field above the cube, Size 200, mode default. |
-| vdb-export | a default sphere | **also** save the builder's volume as `.vdb` through the app's VDB export (the Volume Saver object or the export command) to `tests/golden/volumes/vdb-export/volume.vdb` | not observed: no scriptable VDB export. `c4d.documents.SaveDocument` exists, but calling it with `c4d.FORMAT_VDB_EXPORT` blocked the app main thread (the exporter is the `FVDBEXPORT` dialog plugin, which needs a human); the file was never written and the app stopped answering the bridge afterwards. Voxel size was 10.0 at the time of the attempt. |
+| vdb-export | a default sphere | **also** save the builder's volume as `.vdb` through the app's VDB export (the Volume Saver object or the export command) to `tests/golden/volumes/vdb-export/volume.vdb` | not observed: no scriptable VDB export. saving through the app's VDB export blocked the app's main thread (its export dialog needs a human); the file was never written and the app stopped answering the bridge afterwards. Voxel size was 10.0 at the time of the attempt. |
 
 The `.vdb` file is binary, which is fine: it is the app's output for our test scene, not an
 asset. Keep it under 2 MB. If it is larger, use voxel size 20.
@@ -31,9 +31,9 @@ asset. Keep it under 2 MB. If it is larger, use voxel size 20.
 - Filter read-back on a freshly created Volume Filter: Type 2, Operator 0, Offset 5.0,
   Iterations 1, Strength 1.0. The description exposes no cycle labels to Python, so the case
   files record the raw indices; the case names follow the UI names in the table above.
-- The filter description contains three parameters labelled "Type": 1003 (the live one: 2 for
-  the Smooth group, 1 for the Reshape/dilate-erode group), 1005 and 1026 (both read 0 and
-  never changed). The case files record id 1003.
+- The filter description contains three parameters labelled "Type"; only one of them changes
+  the result (it reads 2 for the Smooth group, 1 for the Reshape/dilate-erode group); the other
+  two always read 0. The case files record the live one.
 - Setting the filter Strength to 5.0 reads back 1.0 and changes nothing (byte-identical export),
   so Smooth strength is effectively clamped; Iterations is the live knob (3 changed the mesh).
 - Offset behaves differently per Type: Type 2 with Offset 10.0 is byte-identical to the fresh
@@ -41,10 +41,10 @@ asset. Keep it under 2 MB. If it is larger, use voxel size 20.
   and Type 1 with ±10.0 gives the dilate/erode pair.
 - A Helix at radius 20 and one at the default 200 both mesh; the spline radius feeds the builder's
   Spline Voxel Range, so the point count drops from 3398 to 516.
-- The builder's Volume Type (6005) and its voxel thresholds live in the builder's own
-  BaseContainer (ids 6000–6025); the per-object mode list the UI shows above the Objects list has
-  no scriptable counterpart in this build (parameter 6016 raises "Parameter value not accessible").
+- The builder's Volume Type and its voxel thresholds live in the builder's own
+  settings container; the per-object mode list the UI shows above the Objects list has
+  no scriptable counterpart in this build (reading the Objects list raises "Parameter value not accessible").
 - The mesher caches: after changing a builder parameter the previous cache can still be returned,
   so each case re-built the scene from scratch and pumped the document before meshing.
-- The VDB path is blocked on a human: `SaveDocument(..., FORMAT_VDB_EXPORT)` wedges the main
-  thread without writing a file, and no `Ovolumesaver`/`Tvolumebuilder` symbol exists in this build.
+- The VDB path is blocked on a human: saving through the app's VDB export wedges the main
+  thread without writing a file, and the scripting layer exposes no Volume Saver or Volume Builder object type in this build.
