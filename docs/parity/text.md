@@ -96,3 +96,74 @@ cases above. If the picker cannot reshape the text either, say so in the Notes a
   z -20 (the Extrude grows toward -Z here, unlike the splines-2 convention where the
   offset appeared at +20). The export settings pipeline and case flags
   (`flip_z = false`) are the same as splines-2 ([export-settings.md](export-settings.md)).
+
+- Batch-03 `dv-a`: not observed: needs the GUI: planner explicitly requires DejaVu Sans chosen and visually confirmed in font picker; unattended font selection prohibited..
+
+- Batch-03 `dv-o`: not observed: needs the GUI: planner explicitly requires DejaVu Sans chosen and visually confirmed in font picker; unattended font selection prohibited..
+
+- Batch-03 `dv-word`: not observed: needs the GUI: planner explicitly requires DejaVu Sans chosen and visually confirmed in font picker; unattended font selection prohibited..
+
+- Batch-03 `dv-two-lines`: not observed: needs the GUI: planner explicitly requires DejaVu Sans chosen and visually confirmed in font picker; unattended font selection prohibited..
+
+- Batch-03 `align-right`: Observed; vertices: 300 (unused 0); faces: 150 (4-gons 150); bbox min: (-255.859375, 0, -20); bbox max: (0, 143.457031, 0); size: (255.859375, 143.457031, 20); centre: (-127.9296875, 71.7285155, -10); normals: 148; uvs: 294; complete measured parameters in case.toml.
+
+- Batch-03 `vspacing`: Observed; vertices: 44 (unused 0); faces: 22 (4-gons 22); bbox min: (2.929688, -295.996094, -20); bbox max: (130.957031, 143.457031, 0); size: (128.027343, 439.453125, 20); centre: (66.9433595, -76.26953150000001, -10); normals: 12; uvs: 22; complete measured parameters in case.toml.
+
+- Batch-03 `kerning`: Observed; vertices: 36 (unused 0); faces: 18 (4-gons 18); bbox min: (2.929688, 0, -20); bbox max: (263.671875, 143.457031, 0); size: (260.742187, 143.457031, 20); centre: (133.3007815, 71.7285155, -10); normals: 15; uvs: 34; complete measured parameters in case.toml.
+
+- Batch-03 `height-negative`: Observed; vertices: 22 (unused 0); faces: 11 (4-gons 11); bbox min: (-130.957031, -143.457031, -20); bbox max: (-2.929688, 0, 0); size: (128.027343, 143.457031, 20); centre: (-66.9433595, -71.7285155, -10); normals: 11; uvs: 22; complete measured parameters in case.toml.
+
+- Batch-03 `separate-letters`: Observed; vertices: 300 (unused 0); faces: 150 (4-gons 150); bbox min: (2.929688, 0, -20); bbox max: (258.789062, 143.457031, 0); size: (255.859374, 143.457031, 20); centre: (130.859375, 71.7285155, -10); normals: 148; uvs: 294; complete measured parameters in case.toml.
+
+## Batch-03 checkpoint (2026-11-18)
+
+Hermes; public scripted bridge, version 25010. New mesh cases: 5; form-only observed rows: 0; not observed rows: 4. Full golden check blocked by unrelated restrict-bend duplicate params table; no commit or push. Queue remains partial, collection and publication tracked separately. Original observations and fixtures preserved.
+
+### Batch-03 Separate Letters readback
+
+Source hierarchy and evaluated Text cache hierarchy, with Separate Letters on:
+
+```json
+{
+  "object_tree": [
+    {
+      "name": "Extrude",
+      "type": "Extrude",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "children": [
+        {
+          "name": "Text Spline",
+          "type": "Text Spline",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "children": []
+        }
+      ]
+    }
+  ],
+  "evaluated_text_tree": [
+    {
+      "name": "Text Spline",
+      "type": "",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "children": [],
+      "point_count": 150
+    }
+  ]
+}
+```
+
+The source remains a Text spline child of Extrude; its evaluated text cache was one point object, 150 points, no children. No per-letter child objects were observed. All five new scriptable cases leave the font at the menu default; resolved family/style/file remain not observed. Height −200 reads back unchanged and mirrors both glyph axes in its mesh. The four `dv-*` rows remain genuine GUI-only skips, not a claim that the picker was tried.
+
+Two initial Align Right preparations failed before export: the visible string label is Text Spline, not Text, and the font picker requires its typed parameter access rather than a scalar-key access. Both were discarded; the third fresh preparation exported successfully without changing the font.
