@@ -14,7 +14,7 @@ The base for the modifier cases is one Spherical field of size 200, with a modif
 
 | Case | Layers (top to bottom) | Changes | Notes |
 |---|---|---|---|
-| mod-remap | Remap layer over Spherical | remap min 20 %, max 80 % | |
+| mod-remap | Remap layer over Spherical | remap min 20 %, max 80 % | Export `samples.json` (the form's 729-point grid, value channel); the base Spherical (Size 200) keeps its own remapping at the defaults (Min 0 %, Max 100 %) so only the layer is measured. The Remap layer's table carries `Min` 1005004 = 20 % and `Max` 1005005 = 80 % and the samples run 0.2 at the field's outer edge to 0.8 at the centre, following 0.2 + 0.6 v: a Remap modifier layer rescales the value of the layer below it into [Min, Max] and holds it there outside that band. |
 | mod-curve | Curve layer over Spherical | its default curve | |
 | mod-step | Step layer over Spherical | 4 steps (if offered) | |
 | mod-colorize | Colorize over Spherical | defaults: the value channel only | |
