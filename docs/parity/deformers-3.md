@@ -1,6 +1,6 @@
 # Deformers III — observation (O19)
 
-Status: observed · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-04
+Status: partial (batch-02 follow-ups collected; full validation blocked) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-04
 Method: exactly as [deformers-2.md](deformers-2.md) (O9). The input is a cube made with
 its menu command, size_y 400, segments 4/8/4. The deformer is made through its menu
 command and moved under the cube as its child.
@@ -228,3 +228,42 @@ inputs. Use a plane made editable as the child; frame 0 unless stated; **write `
   Bevel deformer in Solid mode or with a selection, Spline Wrap with a Rail or Keep Length,
   Wind limits assignment check, any Field in the Falloff list of the three deformers that
   have one.
+- Batch-02 `explosion/one-poly-25`: Observed; vertices: 4 (unused 0); faces: 1 (4-gons 1); bbox min: (-318.240957, -93.353512, 7.758026); bbox max: (-3.701076, 6.79727, 312.402175); size: (314.539881, 100.15078199999999, 304.644149); centre: (-160.9710165, -43.278121, 160.0801005); normals: 1; uvs: 4; complete measured parameters in case.toml.
+
+- Batch-02 `explosion/one-poly-100`: Observed; vertices: 4 (unused 0); faces: 1 (4-gons 1); bbox min: (-1030.214507, -276.979975, 1024.512644); bbox max: (-1030.214507, -276.979975, 1024.512644); size: (0, 0, 0); centre: (-1030.214507, -276.979975, 1024.512644); normals: 1; uvs: 4; complete measured parameters in case.toml.
+
+- Batch-02 `explosion/two-poly-50`: Observed; vertices: 8 (unused 0); faces: 2 (4-gons 2); bbox min: (-624.775429, -465.931092, -414.245561); bbox max: (579.784076, -20.671044, 383.740307); size: (1204.5595050000002, 445.260048, 797.985868); centre: (-22.495676500000002, -243.301068, -15.252627000000018); normals: 2; uvs: 6; complete measured parameters in case.toml.
+
+- Batch-02 `explosion/rand-0`: Observed; vertices: 8 (unused 0); faces: 2 (4-gons 2); bbox min: (-535.579149, -76.377907, -90.674489); bbox max: (534.470978, 76.377907, 90.674489); size: (1070.050127, 152.755814, 181.348978); centre: (-0.554085500000042, 0, 0); normals: 2; uvs: 6; complete measured parameters in case.toml.
+
+- Batch-02 `explosion/end-size-100`: Observed; vertices: 8 (unused 0); faces: 2 (4-gons 2); bbox min: (-6682.690354, -8103.721816, -8865.057549); bbox max: (6526.881912, 7324.615446, 9451.189186); size: (13209.572266, 15428.337262000001, 18316.246735); centre: (-77.90422100000023, -389.5531850000002, 293.0658185000002); normals: 2; uvs: 6; complete measured parameters in case.toml.
+
+- Batch-02 `explosion/speed-0`: Observed; vertices: 8 (unused 0); faces: 2 (4-gons 2); bbox min: (-160.579149, -76.377907, -90.674489); bbox max: (159.470978, 76.377907, 90.674489); size: (320.050127, 152.755814, 181.348978); centre: (-0.5540854999999993, 0, 0); normals: 2; uvs: 6; complete measured parameters in case.toml.
+
+- Batch-02 `explosion/angle-speed-200`: Observed; vertices: 8 (unused 0); faces: 2 (4-gons 2); bbox min: (-625.667583, -496.287156, -381.840204); bbox max: (571.544696, 19.056397, 369.912221); size: (1197.212279, 515.3435529999999, 751.752425); centre: (-27.061443499999996, -238.6153795, -5.96399150000002); normals: 2; uvs: 6; complete measured parameters in case.toml.
+
+- Batch-02 `shatter/one-poly-25`: Observed; vertices: 4 (unused 0); faces: 1 (4-gons 1); bbox min: (-174.540594, -35.967759, -160.456351); bbox max: (156.734392, 35.967759, 178.164002); size: (331.274986, 71.935518, 338.620353); centre: (-8.903100999999992, 0, 8.8538255); normals: 1; uvs: 4; complete measured parameters in case.toml.
+
+- Batch-02 `shatter/two-poly-50`: Observed; vertices: 8 (unused 0); faces: 2 (4-gons 2); bbox min: (-208.405577, -54.818511, -125.139804); bbox max: (172.670577, 54.818511, 146.450015); size: (381.076154, 109.637022, 271.58981900000003); centre: (-17.867499999999993, 0, 10.655105500000005); normals: 2; uvs: 6; complete measured parameters in case.toml.
+
+- Batch-02 `shatter/rand-0`: Observed; vertices: 8 (unused 0); faces: 2 (4-gons 2); bbox min: (-172.793173, -54.818511, -111.034713); bbox max: (189.318616, 54.818511, 111.034713); size: (362.111789, 109.637022, 222.069426); centre: (8.262721499999998, 0, 0); normals: 2; uvs: 6; complete measured parameters in case.toml.
+
+- Batch-02 `wind/frame-0`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-100, -200, -181.534132); bbox max: (100, 200, 148.691769); size: (200, 400, 330.225901); centre: (0, 0, -16.421181500000003); normals: 94; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `wind/frame-20`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-100, -200, -162.816634); bbox max: (100, 200, 173.060788); size: (200, 400, 335.877422); centre: (0, 0, 5.122077000000004); normals: 94; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `wind/flag-off`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-100, -200, -84.506338); bbox max: (100, 200, 226.747415); size: (200, 400, 311.25375299999996); centre: (0, 0, 71.1205385); normals: 94; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `wind/size-50`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-100, -200, -202.077141); bbox max: (100, 200, 160.21515); size: (200, 400, 362.292291); centre: (0, 0, -20.93099550000001); normals: 106; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `wind/size-200`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-100, -200, -147.952278); bbox max: (100, 200, 146.053162); size: (200, 400, 294.00544); centre: (0, 0, -0.9495580000000103); normals: 95; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `wind/row-x`: Observed; vertices: 22 (unused 0); faces: 10 (4-gons 10); bbox min: (-200, 0, -271.871678); bbox max: (200.000006, 0, 259.391378); size: (400.000006, 0, 531.263056); centre: (0.000003000000006636583, 0, -6.24015); normals: 2; uvs: 22; complete measured parameters in case.toml.
+
+### Batch-02 follow-up checkpoint
+
+All 16 follow-up rows produced measured meshes. Frame and fps are explicit in every new manifest, with sequential frame stepping. Tiny planes use their menu defaults, Width Segments along x and Height Segments 1, followed by Make Editable. The end-size-100 row says 100 percent, but the public End Size field declares a plain numeric unit; the literal display value 100 was assigned and read back, not the fractional value 1. Angle Speed 200 was read in degrees. The input cube dimensions were (200,400,200), with segments (4,8,4).
+
+Follow-up accounting: 16 new golden folders; 0 rows withheld or requiring a human; no unprocessed rows. Full working-tree validation still fails on the unrelated restrict-bend duplicate table, so these observations remain uncommitted. Isolated validation of the complete batch returned `ok: 73 cases`; clean-room and whitespace checks passed.
+
+Batch-02 follow-up timestamp (UTC): 2026-11-18T06:54:17.701036+00:00. The header date above records the earlier baseline, not this follow-up collection.
