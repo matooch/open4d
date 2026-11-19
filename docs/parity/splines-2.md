@@ -259,12 +259,12 @@ count). These separate them. Extrude each as `helix-uniform` was.
 
 | Case | Spline | Changed from default | Read back | Result |
 |---|---|---|---|---|
-| helix-uniform-sub10 | Helix | Subdivision 10, Intermediate Points Uniform 8 | point count | |
-| helix-uniform-sub50 | Helix | Subdivision 50, Intermediate Points Uniform 8 | point count | |
-| helix-uniform-sub200 | Helix | Subdivision 200, Intermediate Points Uniform 8 | point count | |
-| arc-uniform-n50 | Arc | Intermediate Points Uniform 50 | point count | |
-| arc-uniform-n200 | Arc | Intermediate Points Uniform 200 | point count | |
-| linear-open-uniform | a 3-point Linear spline (0,0,0), (100,0,0), (100,100,0) | Intermediate Points Uniform 8 | point count | |
+| helix-uniform-sub10 | Helix | Subdivision 10, Intermediate Points Uniform 8 | 11 control points; 0 segments; complete values in case.toml | Observed; vertices: 182 (unused 0); faces: 90 (4-gons 90); bbox min: (-195.890929, -201.290703, -199.973957); bbox max: (200, 198.075029, 19.739793); size: (395.890929, 399.365732, 219.71375); centre: (2.0545355, -1.6078370000000035, -90.11708200000001); normals: 91; uvs: 182; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
+| helix-uniform-sub50 | Helix | Subdivision 50, Intermediate Points Uniform 8 | 51 control points; 0 segments; complete values in case.toml | Observed; vertices: 902 (unused 0); faces: 450 (4-gons 450); bbox min: (-199.976339, -203.136148, -199.97979); bbox max: (200, 199.992112, 19.75133); size: (399.976339, 403.12825999999995, 219.73112); centre: (0.011830500000002075, -1.572018, -90.11423); normals: 450; uvs: 902; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
+| helix-uniform-sub200 | Helix | Subdivision 200, Intermediate Points Uniform 8 | 201 control points; 0 segments; complete values in case.toml | Observed; vertices: 3602 (unused 0); faces: 1800 (4-gons 1800); bbox min: (-200.001977, -203.143559, -199.979968); bbox max: (200, 200, 19.751406); size: (400.001977, 403.143559, 219.73137400000002); centre: (-0.0009885000000053878, -1.5717795000000052, -90.114281); normals: 1801; uvs: 3602; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
+| arc-uniform-n50 | Arc | Intermediate Points Uniform 50 | 5 control points; 0 segments; complete values in case.toml | Observed; vertices: 410 (unused 0); faces: 204 (4-gons 204); bbox min: (0.03153, 0, 0); bbox max: (200, 199.999998, 20); size: (199.96847, 199.999998, 20); centre: (100.015765, 99.999999, 10); normals: 205; uvs: 410; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
+| arc-uniform-n200 | Arc | Intermediate Points Uniform 200 | 5 control points; 0 segments; complete values in case.toml | Observed; vertices: 1610 (unused 0); faces: 804 (4-gons 804); bbox min: (0.03153, 0, 0); bbox max: (200, 199.999998, 20); size: (199.96847, 199.999998, 20); centre: (100.015765, 99.999999, 10); normals: 805; uvs: 1610; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
+| linear-open-uniform | a 3-point Linear spline (0,0,0), (100,0,0), (100,100,0) | Intermediate Points Uniform 8 | 3 control points; 0 segments; complete values in case.toml | Observed; vertices: 38 (unused 0); faces: 18 (4-gons 18); bbox min: (0, 0, 0); bbox max: (100, 99.98, 20); size: (100, 99.98, 20); centre: (50, 49.99, 10); normals: 4; uvs: 38; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
 
 ## Notes
 - All 22 cases ran without an error and every export succeeded. No dialog, no crash.
@@ -290,3 +290,9 @@ count). These separate them. Extrude each as `helix-uniform` was.
 - Not covered by a case, per the form: Arc types Segment and Ring, 4-Side Parallelogram and
   Trapezium, Profile types other than H, Cissoid types Lemniscate and Strophoid, Cycloid
   Hypocycloid, Cubic Interpolation on the Formula, Plane XZ/ZY and Reverse on any of them.
+
+### Authorized full-run follow-up checkpoint (2026-11-17)
+
+- Observer: Hermes, scripted public bridge; app version 25010; original observation metadata above preserved. Licence permission is owner-confirmed in observer state, not an independent licence review.
+- New measured cases: 6. Safe-scope follow-ups exhausted; full validation/publication remain blocked by the unrelated existing restrict-bend duplicate parameter table. No commit or push.
+- Every new case records measured visible parameters and exact input readbacks. Scratch probes and raw descriptions remain outside the repository.
