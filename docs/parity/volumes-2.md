@@ -31,6 +31,9 @@ asset. Keep it under 2 MB. If it is larger, use voxel size 20.
 - Filter read-back on a freshly created Volume Filter: Type 2, Operator 0, Offset 5.0,
   Iterations 1, Strength 1.0. The description exposes no cycle labels to Python, so the case
   files record the raw indices; the case names follow the UI names in the table above.
+- The filter description contains three parameters labelled "Type": 1003 (the live one: 2 for
+  the Smooth group, 1 for the Reshape/dilate-erode group), 1005 and 1026 (both read 0 and
+  never changed). The case files record id 1003.
 - Setting the filter Strength to 5.0 reads back 1.0 and changes nothing (byte-identical export),
   so Smooth strength is effectively clamped; Iterations is the live knob (3 changed the mesh).
 - Offset behaves differently per Type: Type 2 with Offset 10.0 is byte-identical to the fresh
