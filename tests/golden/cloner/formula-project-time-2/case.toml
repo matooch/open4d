@@ -1,0 +1,91 @@
+feature = "cloner"
+observation = "docs/parity/effectors-2.md"
+description = "formula-project-time-2; measured follow-up, menu-created fresh document"
+mesh = "mesh.obj"
+
+[params]
+frame = 10
+fps = 30
+
+[params.cloner]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+mode = "Linear"
+clones = "Iterate"
+reset_coordinates = 1
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = 5
+offset = 0
+mode_secondary = "Per Step"
+amount_percent = 100.0
+p = [0.0, 50.0, 0.0]
+s = [1.0, 1.0, 1.0]
+r_degrees = [0.0, 0.0, 0.0]
+step_mode = "Single Value"
+step_size_percent = 100.0
+step_rotation_degrees = [0.0, 0.0, 0.0]
+display = "None"
+p_secondary = [0.0, 0.0, 0.0]
+r_secondary_degrees = [0.0, 0.0, 0.0]
+s_secondary = [1.0, 1.0, 1.0]
+color_secondary = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+animation_mode = "Play"
+formula_percent = 100.0
+
+[params.child]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+size = [20.0, 20.0, 20.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = 0
+fillet = 0
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[params.effectors_1]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+strength_percent = 100.0
+selection = ""
+maximum_percent = 100.0
+minimum_percent = 0.0
+formula = "sin(((id / count) + t) * f * 360.0)"
+px_py_pz_position = ""
+rx_ry_rz_rotation = ""
+sx_sy_sz_scale = ""
+u_v_w_uvw = ""
+id_object_index = ""
+count_object_count = ""
+falloff_falloff_weight = ""
+t_project_time = 2.0
+f_frequency = 1.0
+transform_mode = "Relative"
+transform_space = "Node"
+position = 1
+p = [50.0, 0.0, 0.0]
+rotation = 0
+scale = 1
+uniform_scale = 1
+absolute_scale = 0
+scale_secondary = 1.0
+color_mode = "Off"
+use_alpha_strength = 0
+use_alpha_strength_secondary = 1
+weight_transform_percent = 0.0
+u_transform_percent = 0.0
+v_transform_percent = 0.0
+modify_clone_percent = 0.0
+visibility = 0
+deformation = "Off"
+
+[import]
+scale = 1.0
+flip_z = false
