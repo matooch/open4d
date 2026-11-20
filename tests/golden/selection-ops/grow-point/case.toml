@@ -1,0 +1,16 @@
+feature = "selection-ops"
+observation = "docs/parity/selection-ops.md"
+description = "Cube made editable with 4 x 4 x 4 segments; the point nearest the middle of the front face (index 12) selected in point mode, then the Grow Selection modeling command run once with Use Edge on"
+mesh = "mesh.obj"
+
+[params]
+segments = [4, 4, 4]
+command = "Grow Selection"
+use_edge = true
+start_points = [12]
+start_edges = []
+start_polys = []
+
+[import]
+scale = 1.0
+flip_z = false
