@@ -228,10 +228,13 @@ fn all_repo_samples_files_parse() {
             }
         }
     }
-    // Tracks: 11 files from O2 (keyframes.md) + 8 from O12 (keyframes-2.md) + 7 from O16.
-    // Fields: 16 from O7 + 8 from O11 + 11 from O13 + 22 from O23 (fields-3.md).
-    // Clones: 12 from O8 + 4 from O11 + 12 from O14 + 17 from O22 + 21 from O21.
-    assert_eq!((tracks, fields, clones), (26, 57, 66));
+    // Tracks: 11 files from O2 (keyframes.md) + 8 from O12 (keyframes-2.md) + 7 from O16
+    // + 1 from O49 (fields-4.md: `fields/vmap-from-field`, vertex map weights per point).
+    // Fields: 16 from O7 + 8 from O11 + 11 from O13 + 22 from O23 (fields-3.md) + 10 from O49
+    // (fields-4.md: six modifier layers, Decay, Delay, Mirror Graph, Random Space None).
+    // Clones: 12 from O8 + 4 from O11 + 12 from O14 + 17 from O22 + 21 from O21
+    // + 19 more cloner files (O14 follow-ups) that landed after the last pin.
+    assert_eq!((tracks, fields, clones), (27, 67, 85));
 }
 
 #[test]
