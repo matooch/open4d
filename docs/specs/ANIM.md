@@ -126,6 +126,61 @@ fps might differ.
 match with it once ties follow the handles (the 2.7·10⁻⁴ misses of brief 09 were all
 tie samples, not time-rounding errors; `dense-quarter`, `fps-24`).
 
+### 1.5a User tangents and exact-time sampling (O38, `docs/parity/fcurves.md`, 12 cases)
+Source: the twelve `keyframes` cases whose `observation` is `fcurves.md`.
+
+**Sampling.** These samples are taken at the exact frame time: `two-keys`-style 0 → 100
+reads 0.32593453 at frame 1 and 1.2740717 at frame 2 (exact `t = 1/30`, `2/30` s), where the
+earlier O2 files read 0.3195 and 1.2866 (the 0.990 and 2.010 frame times of §1.4.1). The
+spline, bisection and tie rules of §1.5 are unchanged. `forge_anim::value_at_exact(track,
+user, t)` evaluates without the millisecond rounding; `value_at` (document time) keeps it.
+
+**User tangents.** `tangents.json` rows are `[frame, value, left_dt, left_dv, right_dt,
+right_dv]` (frames, handle end relative to the key; left `dt` is negative). A user tangent
+replaces the automatic handle of that side: the Bézier control point is `(key.t + dt/fps,
+key.v + dv)`. Handle length and value offset are both used as stored (`user-tangent-steep`:
+left (−5, −60); `weighted-long` (−20, −50); `weighted-short` (−2, −5); `user-tangent-flat`)
+whether or not the weighted flag is set: the curve depends only on the stored handle end.
+A read-back side is **not** a user tangent (it stays automatic, with the exact thirds of §1.5)
+when it is (a) equal to the automatic handle (within 2 grid steps in time, 1e-6 relative in
+value; `user-tangent-flat` key 0), (b) the display tangent the reference reads back on keys
+it did not edit: a third of the span from the previous key and a third of that chord,
+mirrored on the two sides (`after-*`, `clamp-off`: (9.999996 frames, ±33.33) at key 30,
+exactly the spec §1.5 "display value"), or (c) of zero length (`after-*` key 0 reads all
+zeros but evaluates as the automatic ease). Anything else replaces that side.
+**Tie handles and the grid** (parity-pending, `weighted-long`, `weighted-short`): in a
+segment that has an edited handle, the remaining automatic handle of the segment sits on
+the handle grid (key 0 right = 9.999996 frames) for the curve itself, not just for ties; with
+exact thirds `weighted-long` frame 9 misses by 1.8e-4 (a flipped bisection step). Ties use the
+stored read-back lengths where the file has them (`user-tangent-flat` frame 15). These
+cases match to the 1e-4 tolerance: `user-tangent-steep`, `user-tangent-flat`,
+`weighted-long`, `weighted-short`.
+
+**Other cases.**
+- `clamp-off`: keys 0 → 100 → 0 behave exactly like `three-keys` (clamp is off by default and
+  a local extreme has slope 0 anyway). Matches.
+- `after-continue`: the last key's automatic tangent is flat, so Continue equals the constant
+  extension of §1.4.3. Matches.
+- **UNSUPPORTED** `after-repeat`, `after-offset`, `after-oscillate`, `before-repeat`: the track
+  after/before behaviour is not in the data model (`Track` has keys only) and the `case.toml`
+  holds no structured behaviour field. Observed (parity-pending): Repeat repeats every 30
+  frames (value at 45 and 75 = 50.0001); Offset adds 100 per cycle (150.0001 at 45, 200 at
+  60); Oscillate mirrors each cycle (0 at 60, 100 at 90); before-Repeat runs backwards
+  (50.0001 at 15); at an exact cycle boundary the value is the end of the cycle (frame 90 =
+  100, frame 0 of before-repeat = 100).
+- **UNSUPPORTED** `linear-to-spline`: the `case.toml` has no `interpolation_by_key`; the
+  Linear first key is stated only in the description, so the test cannot build the track. Observation
+  needs redoing: add `interpolation_by_key = ["linear", "spline", "spline"]`.
+- **KNOWN_MISMATCH** `broken`: the read-back right tangent of key 30 is (10, 40) but the
+  samples after frame 30 (99.674 at 31, 50.0001 at 45) are those of the automatic flat right
+  tangent, while the left side (−10, −20) is evaluated as read back (42.5001 at 15). With the
+  right tangent as read the curve overshoots (103.4 at 31). Hypotheses tried: (1) both
+  read-back tangents as stored (overshoot, fails); (2) right side automatic, left as read
+  (matches every sample to tie noise, but no rule in the data selects it: the read-back right
+  tangent (10, 40) is not a display tangent, and the case holds no break or auto flags); (3) value clamp on the right segment (needs the clamp flag, which the
+  data does not carry). The read-back is not a trustworthy description of the evaluated key,
+  so this case needs the flags observed too.
+
 ### 1.6 Animated scenes (`forge-anim::scene_at`)
 `scene_at(&Scene, time) -> Scene` copies the scene and sets every tracked parameter to
 `value_at(track, time)`. Float tracks set a Float, component tracks set one component of
@@ -394,8 +449,8 @@ crates/ui/tests/motion_view.rs (commands, screenshot).
 
 ## 3. Parity status
 
-17/17 cases (19 sample files) match within 1·10⁻⁴; the largest error is 2.7·10⁻¹⁰
-(float noise of the recorded values). No `UNSUPPORTED`, no `KNOWN_MISMATCH`.
+30 of 36 cases (38 sample files) match within 1·10⁻⁴ (§1.5a adds the O38 cases); `UNSUPPORTED`: 5
+(four track behaviours, `linear-to-spline`), `KNOWN_MISMATCH`: 1 (`broken`).
 
 **Parity-pending / not observed**: stored tangents and tangent modes (the reference
 reads them back, `tangents.json`, but their labels and the clamp option were not read; the

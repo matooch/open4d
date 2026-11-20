@@ -2,15 +2,48 @@
 
 use std::path::Path;
 
-use forge_anim::value_at;
+use forge_anim::{UserTangent, value_at, value_at_exact};
 use forge_core::{Interp, Key, Track};
 use forge_parity_harness::{GoldenCase, Samples, compare_samples, discover_cases};
 
 /// Observed cases whose options are not derived.
-const UNSUPPORTED: &[&str] = &[];
+/// Track before/after behaviours are not in the data model and `linear-to-spline` has no
+/// machine-readable per-key interpolation (docs/specs/ANIM.md §1.5a).
+const UNSUPPORTED: &[&str] = &[
+    "keyframes/after-offset",
+    "keyframes/after-oscillate",
+    "keyframes/after-repeat",
+    "keyframes/before-repeat",
+    "keyframes/linear-to-spline",
+];
 
 /// Cases we evaluate but that differ, pinned so a fix shows up.
-const KNOWN_MISMATCH: &[&str] = &[];
+/// `broken`: the read-back right tangent is not what is evaluated (ANIM.md §1.5a).
+const KNOWN_MISMATCH: &[&str] = &["keyframes/broken"];
+
+/// Observation whose samples are taken at the exact frame time (ANIM.md §1.5a).
+const EXACT_TIME_OBSERVATION: &str = "docs/parity/fcurves.md";
+
+/// The user tangents of a case from `tangents.json` rows
+/// `[frame, value, left_dt, left_dv, right_dt, right_dv]`, matched to keys by frame.
+fn user_tangents(case: &GoldenCase, fps: f64, track: &Track) -> Vec<Option<UserTangent>> {
+    let Ok(src) = std::fs::read_to_string(case.dir.join("tangents.json")) else {
+        return Vec::new();
+    };
+    let rows: Vec<Vec<f64>> = serde_json::from_str(&src).expect("tangents.json");
+    track
+        .keys
+        .iter()
+        .map(|k| {
+            rows.iter()
+                .find(|r| (r[0] / fps - k.time).abs() < 1e-9)
+                .map(|r| UserTangent {
+                    left: (r[2] / fps, r[3]),
+                    right: (r[4] / fps, r[5]),
+                })
+        })
+        .collect()
+}
 
 fn number(v: &toml::Value) -> f64 {
     v.as_float()
@@ -70,6 +103,12 @@ fn evaluate(case: &GoldenCase, expected: &Samples) -> Samples {
     };
     let angle = param.starts_with("rot_");
     let track = track_of(case, *fps, angle);
+    let exact = case.manifest().unwrap().observation == EXACT_TIME_OBSERVATION;
+    let user = if exact && !angle {
+        user_tangents(case, *fps, &track)
+    } else {
+        Vec::new()
+    };
     Samples::Track {
         param: param.clone(),
         fps: *fps,
@@ -77,7 +116,12 @@ fn evaluate(case: &GoldenCase, expected: &Samples) -> Samples {
         samples: samples
             .iter()
             .map(|(frame, _)| {
-                let v = value_at(&track, frame / fps);
+                let t = frame / fps;
+                let v = if exact {
+                    value_at_exact(&track, &user, t)
+                } else {
+                    value_at(&track, t)
+                };
                 (*frame, if angle { v.to_degrees() } else { v })
             })
             .collect(),
@@ -127,6 +171,7 @@ fn keyframes_match_the_reference() {
     assert_eq!(mismatched, expected_mismatch, "mismatching cases");
     let expected_unsupported: Vec<String> = UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, expected_unsupported);
-    assert_eq!(matched.len() + mismatched.len() + unsupported.len(), 24);
-    assert_eq!(files, 26);
+    assert_eq!(matched.len() + mismatched.len() + unsupported.len(), 36);
+    // 38 sample files in all; the five UNSUPPORTED cases are not evaluated.
+    assert_eq!(files, 33);
 }

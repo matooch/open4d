@@ -50,7 +50,10 @@ pub(crate) fn generate(s: &Grid) -> Result<Vec<CloneItem>, CloneError> {
                     GridForm::Sphere => Some((ux * ux + uy * uy + uz * uz).sqrt()),
                     GridForm::Cylinder => Some((ux * ux + uz * uz).sqrt()),
                 };
-                let visible = r.is_none_or(|r| r <= 1.0 + EPS && r >= 1.0 - s.fill - EPS);
+                // The cylinder's end layers stay filled (C6, `grid-cyl-fill`).
+                let end_layer = s.form == GridForm::Cylinder && uy.abs() >= 1.0 - EPS;
+                let visible =
+                    r.is_none_or(|r| r <= 1.0 + EPS && (end_layer || r >= 1.0 - s.fill - EPS));
                 let mut item = CloneItem::at(
                     DMat4::from_translation(DVec3::new(x, y, z)),
                     DVec3::new(frac(0, ix), frac(1, iy), frac(2, iz)),

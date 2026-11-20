@@ -1,0 +1,28 @@
+feature = "shaders"
+observation = "docs/parity/shaders.md"
+description = "Colorizer shader at its defaults with a default Noise shader in its Texture slot"
+mesh = "mesh.obj"
+
+[params]
+width = 400.0
+height = 400.0
+width_segments = 10
+height_segments = 10
+orientation = "+Y"
+grid = 32
+sample_time_s = 0.0
+
+[params.material]
+name = "Mat"
+
+[params.shader]
+type = "colorizer"
+blur_offset_percent = 0.0
+blur_scale_percent = 0.0
+input = "Luminance"
+cycle = false
+texture = "Noise"
+
+[import]
+scale = 1.0
+flip_z = false

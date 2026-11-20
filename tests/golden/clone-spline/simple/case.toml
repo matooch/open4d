@@ -1,0 +1,11 @@
+feature = "clone-spline"
+observation = "docs/parity/clone-toolset-3.md"
+description = "MoSpline in Simple mode with all defaults, extruded"
+mesh = "mesh.obj"
+
+[params]
+mode = "MoSpline"
+spline_mode = 0
+spline_mode_label = "Simple"
+generator_defaults = true
+extrude_plugin_id = 5116

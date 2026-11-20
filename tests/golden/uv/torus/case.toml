@@ -1,0 +1,20 @@
+feature = "uv"
+observation = "docs/parity/uv-projection.md"
+description = "Torus with its default settings"
+mesh = "mesh.obj"
+
+[params]
+ring_radius = 100.0
+ring_segments = 32
+pipe_radius = 50.0
+pipe_segments = 16
+orientation = "+Y"
+slice = false
+from_deg = 0.0
+to_deg = 180.0
+regular_grid = false
+width = 10.0
+
+[import]
+scale = 1.0
+flip_z = false

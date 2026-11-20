@@ -1,0 +1,63 @@
+feature = "random-f"
+observation = "docs/parity/clone-toolset-3.md"
+description = "Linear cloner Count 20 P step (0,0,10) of 20 cm cubes; Random effector in Noise mode with Animation Speed 0 %, read at frame 30"
+
+[params]
+clones = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = 20
+offset = 0
+mode = "Per Step"
+amount_percent = 100.0
+p = [0.0, 0.0, 10.0]
+s_percent = [1.0, 1.0, 1.0]
+r_deg = [0.0, 0.0, 0.0]
+step_mode = "Single Value"
+step_size_percent = 100.0
+step_rotation_deg = [0.0, 0.0, 0.0]
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+animation_mode = "Play"
+random_percent = 100.0
+frame = 30
+effector_count = 1
+
+[params.effector]
+type = "random"
+name = "Random"
+strength_percent = 100.0
+selection = ""
+maximum_percent = 100.0
+minimum_percent = -100.0
+random_mode = "Noise"
+synchronized = false
+indexed = false
+space = "Global"
+animation_speed = 0.0
+random_scale = 100.0
+transform_mode = "Relative"
+transform_space = "Node"
+position = true
+p = [50.0, 50.0, 50.0]
+rotation = false
+scale = false
+color_mode = "Off"
+use_alpha_strength = false
+use_alpha_strength_weight = true
+weight_transform_percent = 0.0
+u_transform_percent = 0.0
+v_transform_percent = 0.0
+modify_clone_percent = 0.0
+visibility = false
+deformation = "Off"
+
+[import]
+scale = 1.0
+flip_z = false

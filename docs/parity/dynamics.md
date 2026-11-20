@@ -36,4 +36,30 @@ scale, …) and the rigid body tag's parameters.
 | gravity-half | drop-cube, scene gravity at half the default | cube | |
 
 ## Notes
-TODO
+
+Started, not finished (unattended window, 2026-11-20). What is now known from the probes:
+
+- The two rigid-body commands exist and run from a script: one puts a "Dynamics Body" tag on the
+  selected object (used for the moving body), the other puts a tag of the same type on the
+  selected object for the static geometry — the probe applied the second to the plane and the
+  first to the cube, and both objects then carry a tag whose attribute manager reads
+  "Dynamics Body".
+- Stepping the document frame by frame does run the simulation: with a 50 cm cube at y 300 over a
+  default 400 x 400 plane and document 30 fps, the cube's global y read 300.000, 299.334,
+  297.559, 294.677, 290.690, 285.600, 279.409, 272.118, 263.729, 254.245, 243.668, 231.998,
+  219.238, 205.391, 190.456, 174.438 at frames 0 to 15. Every value is a global position read
+  with the document set to that frame; no value here is interpolated.
+- The rigid body tag's table, at its defaults, reads: Enabled on; Dynamic (Off / On / Ghost) On;
+  Trigger (Immediately / At Velocity Peak / On Collision / By XPresso) Immediately with Trigger
+  Velocity Threshold 10; Custom Initial Velocity off with Initial Linear Velocity (0, 0, 0) and
+  Initial Angular Velocity (0, 0, 0); Set Initial State and Clear Initial State buttons; Show in
+  Visualization on; plus the collision, mass, friction, bounce and force blocks further down
+  the table.
+- The scene-level dynamics settings (gravity, steps per frame, scale) were **not** located from
+  the script: the document exposes no dynamics accessor, and no scene object of a dynamics type
+  appeared in the object manager, so the Settings table at the top of this form is still empty.
+  The fall in the probe above is therefore the new document's defaults, not a set of recorded
+  values, and none of the nine cases is claimed.
+- No case rows are filled and no golden data was written for this form: without the scene
+  settings table, every case would record a simulation whose gravity and step count are unknown,
+  which would be worse than leaving the rows empty.

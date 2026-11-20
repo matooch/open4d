@@ -1,0 +1,48 @@
+feature = "shaders"
+observation = "docs/parity/shaders.md"
+description = "Noise shader, type Cell Noise, other values default"
+mesh = "mesh.obj"
+
+[params]
+width = 400.0
+height = 400.0
+width_segments = 10
+height_segments = 10
+orientation = "+Y"
+grid = 32
+sample_time_s = 0.0
+
+[params.material]
+name = "Mat"
+
+[params.shader]
+type = "noise"
+blur_offset_percent = 0.0
+blur_scale_percent = 0.0
+color_1 = [0.0, 0.0, 0.0]
+color_2 = [1.0, 1.0, 1.0]
+seed = 665
+noise = "Cell Noise"
+octaves = 5.0
+space = "Texture"
+global_scale_percent = 100.0
+relative_scale_percent = [1.0, 1.0, 1.0]
+animation_speed = 0.0
+loop_period = 0.0
+detail_attenuation_percent = 100.0
+delta_percent = 100.0
+movement = [0.0, 0.0, 0.0]
+speed_percent = 0.0
+absolute = false
+cycles = 0.0
+low_clip_percent = 0.0
+high_clip_percent = 100.0
+brightness_percent = 0.0
+contrast_percent = 0.0
+use_as_environment = false
+project_environment = false
+compatibility = false
+
+[import]
+scale = 1.0
+flip_z = false

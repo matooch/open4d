@@ -1,0 +1,12 @@
+feature = "animation-2"
+observation = "docs/parity/animation-2.md"
+description = "Cube size Y keyed on the parameter itself (f0 200, f30 400), mesh exported at frame 15 (size Y = 300)"
+mesh = "mesh.obj"
+
+[params]
+param = "size_y"
+keys = [[0, 200.0], [30, 400.0]]
+object = "Cube"
+document_fps = 30
+sample_frames = ["0..90 every frame", "plus 0.5, 14.5, 29.5"]
+mesh_frame = 15

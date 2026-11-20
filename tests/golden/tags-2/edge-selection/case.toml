@@ -1,0 +1,16 @@
+feature = "tags-2"
+observation = "docs/parity/tags-2.md"
+description = "The same cube; edge (0, 1) selected and stored with Set Selection"
+mesh = "mesh.obj"
+
+[params]
+
+[params.object]
+type = "polygon"
+name = "Cube"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false

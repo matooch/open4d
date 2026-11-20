@@ -1,0 +1,25 @@
+feature = "matrix"
+observation = "docs/parity/clone-generators-2.md"
+description = "Matrix generator with one 20 cm cube as its child and every parameter left at its default value (mode Default, count 1600). Samples carry the clone matrices; the mesh is a separate 20 cm cube at the origin."
+mesh = "mesh.obj"
+
+[params]
+generator = "matrix"
+mode = "Grid"
+generate = "Matrices Only"
+count = [40.0, 1.0, 40.0]
+count_mode = "Per-Step"
+size = [10.5, 10.5, 10.5]
+form = "Cubic"
+fill_percent = 100.0
+display = "None"
+p = [0.0, 0.0, 0.0]
+r_deg = [0.0, 0.0, 0.0]
+s = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+w_uv_orientation = "Y-"
+weight_percent = 0.0
+
+[import]
+scale = 1.0
+flip_z = false

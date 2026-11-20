@@ -1,0 +1,18 @@
+feature = "uv"
+observation = "docs/parity/uv-projection.md"
+description = "Cube with its default settings"
+mesh = "mesh.obj"
+
+[params]
+size = [200.0, 200.0, 200.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = false
+fillet = false
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[import]
+scale = 1.0
+flip_z = false

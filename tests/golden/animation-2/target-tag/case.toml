@@ -1,0 +1,14 @@
+feature = "animation-2"
+observation = "docs/parity/animation-2.md"
+description = "Cube at (0, 0, 0) with a Target tag aimed at a Null keyed from (300, 0, 0) at f0 to (0, 300, 0) at f30; cube rotation sampled"
+
+[params]
+param = ["rot_h", "rot_p", "rot_b"]
+tag = "Target"
+tag_plugin_id = 5676
+target_object = "Target Null"
+target_row = 1001
+target_keys_pos = [[0, [300.0, 0.0, 0.0]], [30, [0.0, 300.0, 0.0]]]
+cube_pos = [0.0, 0.0, 0.0]
+document_fps = 30
+sample_frames = ["0..90 every frame", "plus 0.5, 14.5, 29.5"]

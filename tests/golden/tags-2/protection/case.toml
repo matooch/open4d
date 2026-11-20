@@ -1,0 +1,21 @@
+feature = "tags-2"
+observation = "docs/parity/tags-2.md"
+description = "A cube with a Protection tag; a scripted attempt to move it to (100, 0, 0)"
+mesh = "mesh.obj"
+
+[params]
+
+[params.object]
+type = "polygon"
+name = "Cube"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+
+[params.protection]
+position_before = [0.0, 0.0, 0.0]
+position_after = [0.0, 0.0, 0.0]
+set_error = "none: the call returned without an error"
+
+[import]
+scale = 1.0
+flip_z = false

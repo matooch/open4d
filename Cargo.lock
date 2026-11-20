@@ -1428,6 +1428,7 @@ dependencies = [
  "forge-generators",
  "forge-parity-harness",
  "glam",
+ "serde_json",
  "toml",
 ]
 

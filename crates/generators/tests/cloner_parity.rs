@@ -26,10 +26,32 @@ const OUT_OF_SCOPE_OBJECT: &[&str] = &[
     "object-volume",
 ];
 /// Several children (Clones modes) and nesting: brief 067.
-const OUT_OF_SCOPE_ORDER: &[&str] = &["order-iterate", "order-random", "order-sort", "nested"];
+const OUT_OF_SCOPE_ORDER: &[&str] = &[
+    "order-iterate",
+    "order-random",
+    "order-sort",
+    "nested",
+    "blend-order",
+];
 
 /// Observed cases we build but that differ, pinned so a fix shows up.
-const KNOWN_MISMATCH: &[&str] = &[];
+/// `linear-rstep`: per-step R (0, 20, 0) with Step Rotation (0, 10, 0). The samples turn every clone
+/// by 20 degrees about X (R alone; our R + Step Rotation rule gives 30) while the clone positions
+/// follow a chain whose step vector turns by 10 degrees per clone (50 * (cos 10k, -sin 10k) added
+/// for k = 1..i). The description calls the step rotation "H" but the file stores it in the
+/// second (P) slot: needs a re-observation (clone-toolset spec C4).
+///
+/// `honey-var`: the structure is derived (one shift per interior line, ends fixed, C9) but the
+/// reference's random sequence is not reproducible, so the shifts differ.
+const KNOWN_MISMATCH: &[&str] = &["honey-var", "linear-rstep"];
+
+/// Cases that cannot be rebuilt from their `case.toml`, with the reason (C10).
+const UNSUPPORTED: &[(&str, &str)] = &[(
+    "reset-coords-off",
+    "observation needs redoing: the child cube's position (0, 50, 0) and rotation are only in \
+     the description, not in case.toml, and the rotation axis is unclear (y range 36.34..63.66 \
+     needs a turn about X or Z, not H)",
+)];
 
 type Table = toml::map::Map<String, toml::Value>;
 type Params = std::collections::BTreeMap<String, toml::Value>;
@@ -39,6 +61,15 @@ const EFFECTOR_KINDS: &[&str] = &[
     "plain", "step", "formula", "time", "target", "delay", "spline", "random",
 ];
 
+/// The cloner mode id of a mode as the files spell it: the id (`grid`) or the label the app
+/// shows (`Grid Array`, `Push Apart`).
+fn mode_id(label: &str) -> String {
+    match label.to_lowercase().as_str() {
+        "grid array" => "grid".to_string(),
+        other => other.replace(' ', "_"),
+    }
+}
+
 /// The case's params in the flat spelling the older files use. The menu-created files nest the
 /// cloner's own values under `[params.cloner]` (its labels: `p`, `s`, `r_degrees`, `clones`,
 /// the secondary tab's `p_secondary` ...), the effectors under `[params.effectors_N]` without a
@@ -47,7 +78,11 @@ const EFFECTOR_KINDS: &[&str] = &[
 /// `[params.spline_curve]`.
 fn params_of(m: &forge_parity_harness::CaseManifest) -> Params {
     let Some(toml::Value::Table(cloner)) = m.params.get("cloner") else {
-        return m.params.clone();
+        let mut out = m.params.clone();
+        if let Some(label) = m.params.get("mode").and_then(|v| v.as_str()) {
+            out.insert("mode".into(), toml::Value::String(mode_id(label)));
+        }
+        return out;
     };
     let mut out = Params::new();
     for (k, v) in cloner {
@@ -55,7 +90,7 @@ fn params_of(m: &forge_parity_harness::CaseManifest) -> Params {
             "icon_file_id" | "icon_color" | "color" => continue,
             "mode" => (
                 "mode".to_string(),
-                toml::Value::String(v.as_str().unwrap().to_lowercase().replace(' ', "_")),
+                toml::Value::String(mode_id(v.as_str().unwrap())),
             ),
             "clones" => ("clones_mode".into(), v.clone()),
             "mode_secondary" => ("linear_mode".into(), v.clone()),
@@ -297,6 +332,7 @@ fn cloner_modes_match_the_reference() {
     let mut matched = Vec::new();
     let mut effects = BTreeSet::new();
     let mut skipped = BTreeSet::new();
+    let mut unsupported = BTreeSet::new();
     let mut mismatched = BTreeSet::new();
     let ctx = EvalCtx::default();
     for case in discover_cases(&root).unwrap() {
@@ -308,6 +344,10 @@ fn cloner_modes_match_the_reference() {
         let mode = params["mode"].as_str().unwrap().to_string();
         if has_effector(&params) {
             effects.insert(case.name.clone());
+            continue;
+        }
+        if UNSUPPORTED.iter().any(|(n, _)| *n == case.name) {
+            unsupported.insert(case.name.clone());
             continue;
         }
         if mode == "object"
@@ -378,9 +418,10 @@ fn cloner_modes_match_the_reference() {
         mismatched,
         KNOWN_MISMATCH.iter().map(|s| s.to_string()).collect()
     );
-    assert_eq!(matched.len(), 19, "{matched:?}");
+    assert_eq!(matched.len(), 31, "{matched:?}");
+    assert_eq!(unsupported.len(), UNSUPPORTED.len());
     assert_eq!(effects.len(), 54, "{effects:?}");
-    assert_eq!(skipped.len(), 12, "{skipped:?}");
+    assert_eq!(skipped.len(), 13, "{skipped:?}");
 }
 
 /// Nesting needs no extra code (the inner cloner is a prototype with geometry): the

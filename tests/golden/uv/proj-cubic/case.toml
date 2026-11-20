@@ -1,0 +1,39 @@
+feature = "uv"
+observation = "docs/parity/uv-projection.md"
+description = "Sphere (defaults) made editable, default material applied as a texture tag, Projection Cubic, then Generate UVW Coordinates"
+mesh = "mesh.obj"
+
+[params]
+source_object = "Sphere (defaults), made editable"
+
+[params.texture_tag]
+type = "texture"
+material = "Mat"
+projection_set = "Cubic"
+projection_after_generate = "UVW Mapping"
+camera_name = "Camera"
+camera_position = [600.0, 300.0, -600.0]
+camera_rotation_deg = [45.0, -19.45, 0.0]
+material_link = "Mat"
+selection = ""
+projection_display = "Simple"
+side = "Both"
+add_material = false
+tile = true
+seamless = false
+use_uvw_for_bump = true
+offset_u_percent = 0.0
+offset_v_percent = 0.0
+length_u_percent = 100.0
+length_v_percent = 100.0
+tiles_u = 1.0
+tiles_v = 1.0
+repetitions_u = 0.0
+repetitions_v = 0.0
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+size = [100.0, 100.0, 100.0]
+
+[import]
+scale = 1.0
+flip_z = false

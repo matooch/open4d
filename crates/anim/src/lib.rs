@@ -4,5 +4,5 @@ mod interp;
 pub mod motion;
 mod scene_at;
 
-pub use interp::{TICKS_PER_SECOND, quantize_time, value_at};
+pub use interp::{TICKS_PER_SECOND, UserTangent, quantize_time, value_at, value_at_exact};
 pub use scene_at::{overrides, scene_at, track_nodes};

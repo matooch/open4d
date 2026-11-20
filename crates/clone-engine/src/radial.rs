@@ -48,7 +48,13 @@ pub(crate) fn generate(s: &Radial) -> Result<Vec<CloneItem>, CloneError> {
     let mut rng = SplitMix64::new(s.offset_seed);
     let mut out = Vec::with_capacity(n);
     for i in 0..n {
-        let jitter = s.offset_variation * step * rng.next_signed() / 2.0;
+        // Variation scales the Offset, and clone 0 takes none (C5, `radial-var-1`).
+        let draw = rng.next_signed();
+        let jitter = if i == 0 {
+            0.0
+        } else {
+            s.offset_variation * s.offset * draw / 2.0
+        };
         let a = s.start_angle + s.offset + i as f64 * step + jitter;
         out.push(CloneItem::at(
             frame(s.plane, s.radius, s.align, a),

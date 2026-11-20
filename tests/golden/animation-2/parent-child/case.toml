@@ -1,0 +1,11 @@
+feature = "animation-2"
+observation = "docs/parity/animation-2.md"
+description = "Null keyed rotation H 0 to 90 deg over f0..f30, with a Cube child at (100, 0, 0); the cube's global position is sampled"
+
+[params]
+param = ["pos_x", "pos_y", "pos_z"]
+parent_keys_rotation_deg_h = [[0, 0.0], [30, 90.0]]
+child_local_pos = [100.0, 0.0, 0.0]
+sampled_space = "global"
+document_fps = 30
+sample_frames = ["0..90 every frame", "plus 0.5, 14.5, 29.5"]

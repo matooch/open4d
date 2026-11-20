@@ -1,0 +1,23 @@
+feature = "constraints"
+observation = "docs/parity/constraints.md"
+description = "Constraint tag Aim at driver, default axis Z+; driver Null keyed f0 (0,0,0) H0 deg to f30 (200,100,0) H90 deg; Cube at (0, 0, -200)"
+mesh = "mesh.obj"
+
+[params]
+mode = "Aim at driver, default axis Z+"
+enabled_modes = [1001]
+tag_plugin_id = 1019364
+target_row = 20001
+driver_frame_0_pos = [0.0, 0.0, 0.0]
+driver_frame_0_rotation_deg = [0.0, 0.0, 0.0]
+driver_frame_30_pos = [200.0, 100.0, 0.0]
+driver_frame_30_rotation_deg = [90.0, 0.0, 0.0]
+object_start_pos = [0, 0, -200]
+document_fps = 30
+sample_frames = [0, 30]
+mesh_frame = 15
+aim_axis = "Z+"
+
+[import]
+scale = 1.0
+flip_z = false

@@ -1,0 +1,10 @@
+feature = "animation-2"
+observation = "docs/parity/animation-2.md"
+description = "Cube size Y keyed on the parameter itself (no record command): f0 200, f30 400"
+
+[params]
+param = "size_y"
+keys = [[0, 200.0], [30, 400.0]]
+object = "Cube"
+document_fps = 30
+sample_frames = ["0..90 every frame", "plus 0.5, 14.5, 29.5"]

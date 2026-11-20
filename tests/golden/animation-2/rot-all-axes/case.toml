@@ -1,0 +1,9 @@
+feature = "animation-2"
+observation = "docs/parity/animation-2.md"
+description = "Cube rotation keyed with the record command: f0 (0, 0, 0) deg, f30 (H 90, P 45, B 30) deg"
+
+[params]
+param = ["rot_h", "rot_p", "rot_b"]
+keys_rotation_deg = [[0, [0.0, 0.0, 0.0]], [30, [90.0, 45.0, 30.0]]]
+document_fps = 30
+sample_frames = ["0..90 every frame", "plus 0.5, 14.5, 29.5"]
