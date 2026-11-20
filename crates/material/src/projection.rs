@@ -66,7 +66,7 @@ impl Default for TagSpace {
 }
 
 impl TagSpace {
-    fn to_tag(&self, p: DVec3) -> DVec3 {
+    fn to_tag(self, p: DVec3) -> DVec3 {
         let [h, pi, b] = self.rotation;
         let r = DMat3::from_euler(EulerRot::YXZ, h, pi, b);
         r.transpose() * (p - self.position)
