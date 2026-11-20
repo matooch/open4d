@@ -8,10 +8,11 @@ use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::Arc;
 
+#[path = "../../generators/tests/common/mod.rs"]
 mod common;
 
-use common::{normalize, resolved_params};
-use forge_core::{Document, NodeId, ParamKind, Registry, Value};
+use common::{apply, resolved_params};
+use forge_core::{Document, NodeId, Registry, Value};
 use forge_generators::{BuildError, Primitives, evaluate};
 use forge_io::obj::{ReadOptions, WriteOptions, read, write};
 use forge_io::{export_scene, import_into};
@@ -29,7 +30,11 @@ const GENERATORS: &[&str] = &[
 ];
 
 /// Cases whose options are observed but not built (none today; asserted exactly).
-const UNSUPPORTED: &[&str] = &[];
+const UNSUPPORTED: &[&str] = &[
+    // pending: the case records no points for its "straight 2-point Linear spline of length 400"
+    // (generators_parity.rs)
+    "sweep/r25-scale-end-only",
+];
 
 /// Built but differing from the reference, pinned like in `generators_parity.rs`
 /// (GENERATORS2.md §9–10, §9a, §10a). Through the writer they still differ.
@@ -43,6 +48,11 @@ const KNOWN_MISMATCH: &[&str] = &[
     // brief 042: the rail helix (end radius 400) is off; scale-end also the Banking-on frame
     "sweep/rail",
     "sweep/scale-end",
+    // follow-up cases pinned in generators_parity.rs (the helix routes of the sweep)
+    "sweep/r25-helix-radius",
+    "sweep/r25-helix-sub4",
+    "sweep/r25-helix-sub8",
+    "sweep/r25-rail-rectangle",
 ];
 
 /// Exact except for trailing cut / cap triangles whose cocircular Delaunay ties the
@@ -65,60 +75,7 @@ fn registry() -> Arc<Registry> {
     Arc::new(r)
 }
 
-fn vec3(v: &toml::Value) -> Value {
-    let a = v.as_array().expect("pos is an array");
-    let f = |i: usize| {
-        a[i].as_float()
-            .or(a[i].as_integer().map(|x| x as f64))
-            .unwrap()
-    };
-    Value::Vec3([f(0), f(1), f(2)])
-}
-
-/// Case files hold angles as typed in the app (degrees); angle params store radians.
-fn angle(desc: &forge_core::ParamDesc, v: f64) -> f64 {
-    if desc.ui.unit == forge_core::Unit::Angle {
-        v.to_radians()
-    } else {
-        v
-    }
-}
-
 type Table = toml::map::Map<String, toml::Value>;
-
-/// Sets a node's params from a case table (same rules as `generators_parity.rs`).
-fn apply(tx: &mut forge_core::Tx, reg: &Registry, id: NodeId, type_id: &str, table: &Table) {
-    let ty = reg.get(type_id).unwrap();
-    for (k, v) in &normalize(ty, table) {
-        if common::is_display_only(k) {
-            continue;
-        }
-        // `type` names an input's node type, unless the node has a `type` param itself
-        if (k == "type" && ty.find_param("type").is_none()) || v.is_table() {
-            continue;
-        }
-        if k == "pos" {
-            tx.set_param(id, "transform.pos", vec3(v)).unwrap();
-            continue;
-        }
-        let desc = ty
-            .find_param(k)
-            .unwrap_or_else(|| panic!("{type_id}: {k:?} is not a param"));
-        let value = match (&desc.kind, v) {
-            (ParamKind::Bool, toml::Value::Boolean(b)) => Value::Bool(*b),
-            (ParamKind::Int { .. }, toml::Value::Integer(i)) => Value::Int(*i),
-            (ParamKind::Float { .. }, toml::Value::Integer(i)) => {
-                Value::Float(angle(desc, *i as f64))
-            }
-            (ParamKind::Float { .. }, toml::Value::Float(f)) => Value::Float(angle(desc, *f)),
-            (ParamKind::Vec3 { .. }, v @ toml::Value::Array(_)) => vec3(v),
-            (ParamKind::Enum { .. }, toml::Value::String(s)) => Value::Enum(s.clone()),
-            (ParamKind::String, toml::Value::String(s)) => Value::String(s.clone()),
-            other => panic!("{type_id}.{k}: unexpected value {other:?}"),
-        };
-        tx.set_param(id, k, value).unwrap();
-    }
-}
 
 /// Builds the case's scene; returns the document and the node under test.
 fn build_scene(reg: &Arc<Registry>, feature: &str, params: &Table) -> (Document, NodeId) {
@@ -151,9 +108,15 @@ fn build_scene(reg: &Arc<Registry>, feature: &str, params: &Table) -> (Document,
 
 /// The harness mesh our writer produces for the scene (or the selected node).
 fn exported(doc: &Document, node: Option<NodeId>) -> Mesh {
+    exported_n(doc, node, 1)
+}
+
+/// As [`exported`], with `n` objects expected (the scripted instance cases export the whole
+/// scene: the visible reference first, then the instance).
+fn exported_n(doc: &Document, node: Option<NodeId>, n: usize) -> Mesh {
     let roots = node.map(|n| vec![n]);
     let objects = export_scene(doc.scene(), roots.as_deref());
-    assert_eq!(objects.len(), 1, "exactly one exported object");
+    assert_eq!(objects.len(), n, "exported objects");
     let text = write(&objects, &WriteOptions::default());
     parse_obj(&text).expect("our own file parses")
 }
@@ -195,6 +158,7 @@ fn golden_scenes_through_the_writer_match_the_reference() {
     let mut matched = Vec::new();
     let mut unsupported = BTreeSet::new();
     let mut mismatched = BTreeSet::new();
+    let mut failed: Vec<String> = Vec::new();
     for case in discover_cases(&root).unwrap() {
         let feature = case.feature.as_str();
         let is_gen = GENERATORS.contains(&feature);
@@ -202,6 +166,11 @@ fn golden_scenes_through_the_writer_match_the_reference() {
             continue;
         }
         let key = format!("{}/{}", case.feature, case.name);
+        if UNSUPPORTED.contains(&key.as_str()) {
+            println!("{key}: unsupported (input data not recorded)");
+            unsupported.insert(key);
+            continue;
+        }
         let m = case.manifest().unwrap();
         let params: Table = resolved_params(&case, &m);
         let (doc, id) = build_scene(&reg, feature, &params);
@@ -217,7 +186,12 @@ fn golden_scenes_through_the_writer_match_the_reference() {
         }
         // generators export the selected node (the instance reference stays out of it),
         // primitives export the whole scene
-        let ours = exported(&doc, is_gen.then_some(id));
+        let scripted_instance = feature == "instance" && m.params.contains_key("generator");
+        let ours = if scripted_instance {
+            exported_n(&doc, None, 2)
+        } else {
+            exported(&doc, is_gen.then_some(id))
+        };
         let expected = case.expected_mesh().unwrap().unwrap();
         let (expected, ours) = if weld_both_sides(feature) {
             (export_weld(&expected), export_weld(&ours))
@@ -240,14 +214,17 @@ fn golden_scenes_through_the_writer_match_the_reference() {
             continue;
         }
         let r = compare_meshes(&expected, &ours, &m.tolerance);
-        assert!(
-            r.passed(),
-            "{key}: {:?} (max error {:?})",
-            r.failures,
-            r.max_position_error
-        );
+        if !r.passed() {
+            println!(
+                "UNLISTED {key}: {:?} (max error {:?})",
+                r.failures, r.max_position_error
+            );
+            failed.push(key);
+            continue;
+        }
         matched.push(key);
     }
+    assert!(failed.is_empty(), "unlisted mismatches: {failed:?}");
     println!(
         "through the writer: {} cases: {}",
         matched.len(),
@@ -260,7 +237,8 @@ fn golden_scenes_through_the_writer_match_the_reference() {
         set(KNOWN_MISMATCH),
         "known-mismatch set changed"
     );
-    assert_eq!(matched.len(), 75 + 34 + 2, "{matched:?}");
+    // plus connect/tolerance-in, instance/render-instance, lathe/r25-scaling-50, sweep/r25-banking-off-rotated, sweep/r25-banking-planar
+    assert_eq!(matched.len(), 75 + 34 + 2 + 5, "{matched:?}");
 }
 
 #[test]

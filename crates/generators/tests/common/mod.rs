@@ -438,7 +438,17 @@ pub fn apply(
 ) {
     let ty = reg.get(type_id).unwrap();
     for (k, v) in &normalize(ty, table) {
-        if k == "type" || v.is_table() {
+        // `type` names an input's node type, unless the node has a `type` param of its own and
+        // the value is one of its options (the Sphere's Type)
+        let names_a_param = k == "type"
+            && ty.find_param("type").is_some_and(|d| match (&d.kind, v.as_str()) {
+                (ParamKind::Enum { .. }, Some(s)) => {
+                    let id = enum_id(d, s);
+                    matches!(&d.kind, ParamKind::Enum { options } if options.iter().any(|o| o.id == id))
+                }
+                _ => false,
+            });
+        if (k == "type" && !names_a_param) || v.is_table() {
             continue;
         }
         if k == "pos" {
