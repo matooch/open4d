@@ -39,7 +39,7 @@ const OUT_OF_SCOPE_ORDER: &[&str] = &[
 /// by 20 degrees about X (R alone; our R + Step Rotation rule gives 30) while the clone positions
 /// follow a chain whose step vector turns by 10 degrees per clone (50 * (cos 10k, -sin 10k) added
 /// for k = 1..i). The description calls the step rotation "H" but the file stores it in the
-/// second (P) slot: needs a re-observation (docs/specs/MOGRAPH.md C4).
+/// second (P) slot: needs a re-observation (clone-toolset spec C4).
 ///
 /// `honey-var`: the structure is derived (one shift per interior line, ends fixed, C9) but the
 /// reference's random sequence is not reproducible, so the shifts differ.
