@@ -87,6 +87,30 @@ Unblocks: E/067, 076, 077, 078.
 | `tracer/vertices` | trace spline 240 points = 8 chains × 30 samples, one per frame stepped (frames 1–30, none at 0); the first chain runs (-90, -100, -100) → (200, -100, -100), i.e. the cube centre from 0 to 290 with the corner offset −100, +10 in x per frame; extruded mesh 480 points / 232 polygons |
 | `tracer/interval` | Sample Step 5 → trace spline 56 points = 8 chains × 7 samples at frames 1, 5, 10, 15, 20, 25, 30; first chain x = -90, -50, 0, 50, 100, 150, 200 at y = z = -100; extruded mesh 112 points / 48 polygons |
 | `instance-time/defaults` | exactly 1 clone; MoData holds it at (0, 0, 0) with identity axes and colour (1, 1, 1), visible, and no MODATA_WEIGHT array is present (has_weight false), so no per-clone weight is recorded; the reference cube's keyed motion (x 0 → 300) does not shift the instance even at frame 30; baked mesh = the reference cube at (300, 0, 0) plus the instance at the origin, 16 points / 12 polygons in 2 objects |
+| `effector-f/space-node` | 3 clones; positions (50, 0, 0) (50, 100, 0) (50, 100, -100); clone axes x (1, 0, 0) on all three, then y (0, 1, 0) / z (0, 0, 1), y (0, 0, -1) / z (0, 1, 0), y (0, -1, 0) / z (0, 0, -1); colour (1, 1, 1), weight 0 |
+| `effector-f/space-object` | identical to `effector-f/space-node` clone for clone (same positions, axes, colour and weight) |
+| `effector-f/space-effector` | identical to `effector-f/space-node` clone for clone: with the cloner and the effector both at the origin the three Transform Space modes give the same result |
+| `effector-f/absolute-rs` | 5 clones at y = 0, 50, 100, 150, 200, every clone with axes x (1.4142, 0, 1.4142), y (0, 2, 0), z (-1.4142, 0, 1.4142), colour (1, 1, 1), weight 0 — Absolute mode replaces the clone transform with S 2 and the 45 deg Heading |
+| `effector-f/abs-scale` | 5 clones at y = 0, 50, 100, 150, 200, every clone x (3, 0, 0) / y (0, 3, 0) / z (0, 0, 3) with Uniform Scale 2 and Absolute Scale on |
+| `effector-f/abs-scale-off` | identical to `effector-f/abs-scale` (clone scale 3, not 2): the Absolute Scale toggle makes no observable difference at Uniform Scale 2 in this build |
+| `effector-f/color-alpha` | 3 clones, colour (0.25, 0.375, 0) each: Custom Color (1, 0, 0) at Strength 50 % with Use Alpha/Strength on, over the cloner colour (0, 0.5, 0) |
+| `effector-f/color-alpha-off` | 3 clones, colour (1, 0, 0) each: the same effector with Use Alpha/Strength off — the Strength percent is ignored without that toggle |
+| `effector-f/blend-add` | 3 clones, colour (0.5, 0.5, 0) each: Blending Mode Add sums the Custom Color (0.5, 0, 0) and the cloner colour (0, 0.5, 0) channel by channel |
+| `effector-f/blend-multiply` | 3 clones, colour (0, 0, 0) each: Blending Mode Multiply is the channel-wise product of (0.5, 0, 0) and (0, 0.5, 0) |
+| `effector-f/order` | 3 clones at (0, 0, 100) (0, 50, 100) (0, 100, 100), every clone with axes x (0, 0, 1), y (0, 1, 0), z (-1, 0, 0): with A (Rotation, R (90, 0, 0)) created before B (P (100, 0, 0)) the rotation reaches every clone and B's 100 unit translation lands on z instead of x |
+| `effector-f/remap-minmax` | not observed: a field cannot be linked from a script — `c4d.FieldList` has no `InsertObject` (marker `remap` in /Users/bigman/forge-observer/probes/o50_b83.json) — and the app stopped answering before a fallback was tried. See /Users/bigman/forge-observer/log.md |
+| `effector-f/visibility` | not observed: the reference app stopped answering the MCP bridge (execute_python timed out after 120 s, then three health checks one minute apart failed to get an answer; see /Users/bigman/forge-observer/log.md) |
+| `effector-f/order-swapped` | not observed: same app stop; only the A-then-B order was exported as `effector-f/order` |
+| `effector-f/per-effector-50` | not observed: same app stop, hit while the per-effector strength container was being probed |
+| `effector-f/linear-plain-field` | not observed: same app stop; the existing `cloner/linear-plain-field` case was left untouched (rule: never edit existing golden cases) |
+| `random-f/count50-s12345` | not observed: the app stopped answering the bridge before the `random-f` family was started |
+| `random-f/indexed-50` | not observed: the app stopped answering the bridge before the `random-f` family was started |
+| `random-f/gaussian-50` | not observed: the app stopped answering the bridge before the `random-f` family was started |
+| `random-f/noise-steps` | not observed: the app stopped answering the bridge before the `random-f` family was started |
+| `random-f/turbulence` | not observed: the app stopped answering the bridge before the `random-f` family was started |
+| `random-f/synchronized` | not observed: the app stopped answering the bridge before the `random-f` family was started |
+| `random-f/sorted` | not observed: the app stopped answering the bridge before the `random-f` family was started |
+| `random-f/rot-h` | not observed: the app stopped answering the bridge before the `random-f` family was started |
 
 ## Notes
 - Blend order: 5 clones of a cube (size 20) and a sphere (r 10) in Linear mode at the default (0, 50, 0) step bake to a 358-point / 396-polygon mesh; clone weights read 0 because no weight tag is present, as in the O8 cloner cases.
@@ -100,3 +124,13 @@ Unblocks: E/067, 076, 077, 078.
 - Tracer tracing-mode parameter `1110` does not read back through the Python API (`GetParameter` returns None for it), so the mode is left at its default and the case records `trace_mode = "default"` rather than naming a mode.
 - MoInstance (plugin 1018957) reports `GetName()` = "MoInstance": in Object mode with a Cube linked it produces exactly one clone, and that clone's matrix stays identity (no time offset) no matter where the referenced object is on its keyframe track.
 - Extrude results (5116 + `MCOMMAND_CURRENTSTATETOOBJECT`) can carry child objects of their own; exporting the result without stripping them writes extra objects into `mesh.obj` (it produced 144 position lines / 3 objects instead of 72 / 1 for `clone-spline/spline-mode`). All meshes recorded here were exported after removing the children.
+
+### Effector field (O50 follow-up, plain effector 1021337)
+
+- Description read at depth 1: Strength `1000`, Selection link `1021`, P `1010`, S `1011`, R `1012` (each vector with its own unit id — 1718445428, 1718773089, 1717856114 — so R is an angle unit, not a distance), Position toggle `1060`, Rotation toggle `1062`, Weight Transform `1064`, Minimum `1001`, Maximum `1002`.
+- Cycles as stored (id = index): Transform Mode Relative 0 / Absolute 1 / Remap 2; Transform Space Node 0 / Effector 1 / Object 2; Color Mode Off 0 / Custom Color 1 / Effector Color 3 / Fields Color 5; Blending Mode Default 0 / Add 1 / Subtract 2 / Multiply 3 / Divide 4.
+- The R vector is stored in radians, and its three components act as Heading / Pitch / Bank, not as X / Y / Z. Writing `Vector(0, 90, 0)` into `1012` turns the clones by 90 *radians*: after the 2 pi wrap the axes read y (0, -0.4481, -0.8940), z (0, 0.8940, -0.4481), i.e. 2.0354 rad. Writing `Vector(0, 1.5708, 0)` gives a clean 90 deg (y (0, 1, 0), z (-1, 0, 0)). A value in the *first* component turns the clones about Y: `effector-f/absolute-rs` writes 45 deg there and the clone axes come out x (1.4142, 0, 1.4142), y (0, 2, 0), z (-1.4142, 0, 1.4142).
+- Absolute Scale has no observable effect here: `effector-f/abs-scale` (toggle on) and `abs-scale-off` (toggle off) both scale every clone by 3, i.e. 1 + Uniform Scale 2, not to 2.
+- Colour reaches the clones through the Color Mode cycle plus the blending cycle: Custom Color (1, 0, 0) at Strength 50 % with Use Alpha/Strength on gives (0.25, 0.375, 0) against a cloner colour of (0, 0.5, 0), while the same effector with the toggle off gives exactly (1, 0, 0). Add sums effector and clone colour (0.5, 0, 0) + (0, 0.5, 0) = (0.5, 0.5, 0); Multiply gives (0, 0, 0).
+- With two effectors the creation order is what applies: A (Rotation) before B (P (100, 0, 0)) turns every clone and sends B's translation to z, giving (0, 0, 100) (0, 50, 100) (0, 100, 100).
+- A directory of cases under `tests/golden/cloner/effector-f/` makes `golden -- check` fail with `cloner/effector-f: missing case.toml` — the harness reads that path as a case, not as a parent. The effector cases therefore live at `tests/golden/effector-f/<case>/` with `feature = "effector-f"`.
