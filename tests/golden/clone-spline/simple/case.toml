@@ -5,7 +5,6 @@ mesh = "mesh.obj"
 
 [params]
 mode = "MoSpline"
-mospline_plugin_id = 440000054
 spline_mode = 0
 spline_mode_label = "Simple"
 generator_defaults = true

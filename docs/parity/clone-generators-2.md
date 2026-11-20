@@ -64,7 +64,7 @@ Matrix per mode (defaults only; the app shows no usable Min/Max for these):
 | `mode` | Linear |
 | `generate` | Matrices Only |
 | `count` | (40, 1, 40) |
-| `mode_1204` | Per-Step |
+| `count_mode` | Per-Step |
 | `size` | (10.5, 10.5, 10.5) |
 | `form` | Cubic |
 | `fill_percent` | 100 |
@@ -84,7 +84,7 @@ Matrix per mode (defaults only; the app shows no usable Min/Max for these):
 | `generate` | Matrices Only |
 | `count` | 3 |
 | `offset` | 0 |
-| `mode_1271` | Per Step |
+| `per_step_mode` | Per Step |
 | `amount_percent` | 100 |
 | `p` | (0, 50, 0) |
 | `s_percent` | (100, 100, 100) |
@@ -93,8 +93,8 @@ Matrix per mode (defaults only; the app shows no usable Min/Max for these):
 | `step_size_percent` | 100 |
 | `step_rotation_deg` | (0, 0, 0) |
 | `display` | None |
-| `p_5501` | (0, 0, 0) |
-| `r_deg_5503` | (0, 0, 0) |
+| `effects_p` | (0, 0, 0) |
+| `effects_r_deg` | (0, 0, 0) |
 | `s` | (1, 1, 1) |
 | `color` | (1, 1, 1) |
 | `weight_percent` | 0 |
@@ -121,7 +121,7 @@ Matrix per mode (defaults only; the app shows no usable Min/Max for these):
 | `mode` | Honeycomb |
 | `generate` | Matrices Only |
 | `count` | (40, 1, 40) |
-| `mode_1204` | Per-Step |
+| `count_mode` | Per-Step |
 | `size` | (10.5, 10.5, 10.5) |
 | `form` | Cubic |
 | `fill_percent` | 100 |
@@ -233,32 +233,32 @@ Matrix per mode (defaults only; the app shows no usable Min/Max for these):
 | Bevel Shape | `bevel_shape` | 0 (options: Round, Curve, Solid, Step) | – | – |
 | Size | `size` | 0 | – | – |
 | Extended Shape | `extended_shape` | 0 | 0 | 1 |
-| Height | `height_3019` | 0 | – | – |
+| Height | `bevel_height` | 0 | – | – |
 | Shape Depth | `shape_depth` | 1 | – | – |
 | Segments | `segments` | 3 | 1 | 100 |
-| Bevel Shape | `bevel_shape_3031` | 0 (options: Round, Curve, Solid, Step) | – | – |
-| Size | `size_3035` | 0 | – | – |
-| Extended Shape | `extended_shape_3030` | 0 | 0 | 1 |
-| Height | `height_3033` | 0 | – | – |
+| Bevel Shape | `end_bevel_shape` | 0 (options: Round, Curve, Solid, Step) | – | – |
+| Size | `end_bevel_size` | 0 | – | – |
+| Extended Shape | `end_bevel_extended_shape` | 0 | 0 | 1 |
+| Height | `end_bevel_height` | 0 | – | – |
 | Curve | `curve` | <SplineData> | – | – |
-| Shape Depth | `shape_depth_3032` | 1 | – | – |
-| Extended Shape | `extended_shape_3037` | 0 | 0 | 1 |
+| Shape Depth | `end_bevel_shape_depth_percent` | 1 | – | – |
+| Extended Shape | `end_bevel_extended_shape_absolute` | 0 | 0 | 1 |
 | Use Absolute Value | `use_absolute_value` | 0 | 0 | 1 |
 | Max Shape Height | `max_shape_height` | 5 | – | – |
-| Segments | `segments_3036` | 3 | 1 | 100 |
+| Segments | `end_bevel_segments` | 3 | 1 | 100 |
 | Bevel Outside | `bevel_outside` | 0 | 0 | 1 |
 | Avoid Self Intersections | `avoid_self_intersections` | 1 | 0 | 1 |
 | Caps Type | `caps_type` | 2 (options: Triangles, Quadrangles, N-gon, Delaunay, Regular Grid) | – | – |
 | Break Phong Rounding | `break_phong_rounding` | 1 | 0 | 1 |
 | Shell | `shell` | 0 | 0 | 1 |
-| Start Cap | `start_cap_4002` | 0 | 0 | 1 |
-| End Cap | `end_cap_4003` | 0 | 0 | 1 |
+| Start Cap | `polygon_selection_start_cap_enabled` | 0 | 0 | 1 |
+| End Cap | `polygon_selection_end_cap_enabled` | 0 | 0 | 1 |
 | Start Bevel | `start_bevel` | 0 | 0 | 1 |
 | End Bevel | `end_bevel` | 0 | 0 | 1 |
 | Start Shell | `start_shell` | 0 | 0 | 1 |
 | End Shell | `end_shell` | 0 | 0 | 1 |
-| Start Cap | `start_cap_4013` | 0 | 0 | 1 |
-| End Cap | `end_cap_4014` | 0 | 0 | 1 |
+| Start Cap | `edge_selection_start_cap_enabled` | 0 | 0 | 1 |
+| End Cap | `edge_selection_end_cap_enabled` | 0 | 0 | 1 |
 | Start Step | `start_step` | 0 | 0 | 1 |
 | End Step | `end_step` | 0 | 0 | 1 |
 | Effects | `effects` | <InExcludeData> | – | – |
@@ -267,31 +267,31 @@ Matrix per mode (defaults only; the app shows no usable Min/Max for these):
 | R | `r_deg` | (0, 0, 0) | – | – |
 | S | `s` | (1, 1, 1) | – | – |
 | Color | `color` | (1, 1, 1) | (0, 0, 0) | (1, 1, 1) |
-| Effects | `effects_5132` | <InExcludeData> | – | – |
-| Axis | `axis_5161` | (0.5, 0.5, 0.5) | (0, 0, 0) | (1, 1, 1) |
+| Effects | `group2_effects` | <InExcludeData> | – | – |
+| Axis | `group2_axis_percent` | (0.5, 0.5, 0.5) | (0, 0, 0) | (1, 1, 1) |
 | Align Height | `align_height` | 1 | 0 | 1 |
-| P | `p_5221` | (0, 0, 0) | – | – |
-| R | `r_deg_5223` | (0, 0, 0) | – | – |
-| S | `s_5222` | (1, 1, 1) | – | – |
-| Color | `color_5224` | (1, 1, 1) | (0, 0, 0) | (1, 1, 1) |
-| Effects | `effects_5143` | <InExcludeData> | – | – |
-| Axis | `axis_5162` | (0.5, 0.5, 0.5) | (0, 0, 0) | (1, 1, 1) |
-| Align Height | `align_height_5182` | 1 | 0 | 1 |
-| P | `p_5241` | (0, 0, 0) | – | – |
-| R | `r_deg_5243` | (0, 0, 0) | – | – |
-| S | `s_5242` | (1, 1, 1) | – | – |
-| Color | `color_5244` | (1, 1, 1) | (0, 0, 0) | (1, 1, 1) |
-| Effects | `effects_5154` | <InExcludeData> | – | – |
-| Axis | `axis_5163` | (0.5, 0.5, 0.5) | (0, 0, 0) | (1, 1, 1) |
-| Align Height | `align_height_5183` | 1 | 0 | 1 |
-| P | `p_5261` | (0, 0, 0) | – | – |
-| R | `r_deg_5263` | (0, 0, 0) | – | – |
-| S | `s_5262` | (1, 1, 1) | – | – |
-| Color | `color_5264` | (1, 1, 1) | (0, 0, 0) | (1, 1, 1) |
+| P | `group2_p` | (0, 0, 0) | – | – |
+| R | `group2_r_deg` | (0, 0, 0) | – | – |
+| S | `group2_s` | (1, 1, 1) | – | – |
+| Color | `group2_color` | (1, 1, 1) | (0, 0, 0) | (1, 1, 1) |
+| Effects | `group3_effects` | <InExcludeData> | – | – |
+| Axis | `group3_axis_percent` | (0.5, 0.5, 0.5) | (0, 0, 0) | (1, 1, 1) |
+| Align Height | `group3_align_height` | 1 | 0 | 1 |
+| P | `group3_p` | (0, 0, 0) | – | – |
+| R | `group3_r_deg` | (0, 0, 0) | – | – |
+| S | `group3_s` | (1, 1, 1) | – | – |
+| Color | `group3_color` | (1, 1, 1) | (0, 0, 0) | (1, 1, 1) |
+| Effects | `group4_effects` | <InExcludeData> | – | – |
+| Axis | `group4_axis_percent` | (0.5, 0.5, 0.5) | (0, 0, 0) | (1, 1, 1) |
+| Align Height | `group4_align_height` | 1 | 0 | 1 |
+| P | `group4_p` | (0, 0, 0) | – | – |
+| R | `group4_r_deg` | (0, 0, 0) | – | – |
+| S | `group4_s` | (1, 1, 1) | – | – |
+| Color | `group4_color` | (1, 1, 1) | (0, 0, 0) | (1, 1, 1) |
 | Weight | `weight` | 0 | 0 | – |
-| Weight | `weight_5225` | 0 | 0 | – |
-| Weight | `weight_5245` | 0 | 0 | – |
-| Weight | `weight_5265` | 0 | 0 | – |
+| Weight | `group2_weight_percent` | 0 | 0 | – |
+| Weight | `group3_weight_percent` | 0 | 0 | – |
+| Weight | `group4_weight_percent` | 0 | 0 | – |
 
 ### Tracer (`tracer`)
 | Label | Our key | Default | Min | Max |
@@ -346,8 +346,8 @@ Matrix per mode (defaults only; the app shows no usable Min/Max for these):
 ## Notes
 - Probes are in /Users/bigman/forge-observer/probes (o31_b33.py, o31_b34.py, o31_b38.py,
   o31_b40.py, o31_desc.json, o31_tables.md). Clones are counted with
-  `mg.GeGetMoData(obj).GetCount()` after `doc.ExecutePasses(...)`, and geometry is baked with
-  `c4d.utils.SendModelingCommand(MCOMMAND_CURRENTSTATETOOBJECT, list=[gen], MODELINGCOMMANDMODE_ALL, doc=doc)`.
+  reading the clone count from the generator's clone data after the document has been evaluated, and geometry is baked with
+  running the Current State to Object command on the generator.
 - Matrix parameter list is mode dependent. The table under "Parameters" is the description dump
   taken with the generator's default Mode (Grid), so it lists the Grid/Honeycomb parameters plus
   the shared object tab. Per-mode defaults for all five modes are under "Matrix per mode". Count
@@ -373,18 +373,17 @@ Matrix per mode (defaults only; the app shows no usable Min/Max for these):
   dropped per the debugging budget. Source parameters seen on the object (Object tab):
   point source count 10, seed 1, "Create N-gon Surfaces" and "Colorize Fragments" off by default.
   The three voronoi-fracture cases stay unobserved for that reason.
-- The Text generator's Font field is a `c4d.FontData` that exposes only `GetFont`/`SetFont` (a
-  `BaseContainer`), so the font *name* shown in the UI could not be read through the bridge.
+- The Text generator's Font field is a font-data field that exposes only get and set of the font description, so the font *name* shown in the UI could not be read through the bridge.
   clone-text/defaults and clone-text/depth were made with the default font the generator is
   created with (Cinema 4D's standard font), and no font was substituted.
 - Tracer: not observed. With two keyed Nulls, Trace Active on, both Nulls in the Trace Link list
-  (parameter 1100, an InExcludeData) and the document set to frame 30, Current State to Object on
-  the Extrude above the Tracer produced 0 points and 0 polygons; setting parameter 1110 to 1 and
+  (an include/exclude list field) and the document set to frame 30, Current State to Object on
+  the Extrude above the Tracer produced 0 points and 0 polygons; switching on the Tracer's second option and
   leaving the two Nulls as ordinary children gave the same empty result. The scripted keyframe
   path works (keys are created and read back), so the missing piece is the Tracer's input binding,
   not the animation. 3 attempts, then dropped per the debugging budget.
 - Our keys: snake_case of the visible label; where a generator has two labels with the same name
-  the second one keeps the id (`mode_1204` is Matrix's Count Mode, `mode_1271` its per-step mode);
+  the second one gets a descriptive suffix (`count_mode` is Matrix's Count Mode, `per_step_mode` its per-step mode);
   R is exported in degrees as `r_deg`; percentages keep the app's 0-100 range. The per-mode table
   uses the key names the probe read back, which are the same scheme.
-- App version: c4d.GetC4DVersion() = 25010, API_VERSION = 25004.
+- App version number read back through the scripting interface: 25010 (interface version 25004).

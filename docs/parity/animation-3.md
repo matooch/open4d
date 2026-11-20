@@ -31,9 +31,9 @@ has a `case.toml` (`feature = "animation-3"`, `observation = "docs/parity/animat
 
 - **int-track** (`segments_x`, keys 1 @ 0 → 10 @ 30): the parameter holds and then steps —
   1 at frames 0–3, 2 at 4–6, 3 at 7–9, 4 at 10–13, 5 at 14–16, 6 at 17–19, 7 at 20–23,
-  8 at 24–26, 9 at 27–29, 10 from 30 on to 60. The track is an ordinary `CTrack` on the
-  parameter itself (`DescID(DescLevel(PRIM_CUBE_SUBX, DTYPE_LONG, 0))`), keys written with
-  `CKey` + `InsertKey`; the app evaluates it and the parameter follows.
+  8 at 24–26, 9 at 27–29, 10 from 30 on to 60. The track is an ordinary track on the
+  parameter itself (the cube's Subdivision X parameter), keys written with
+  keys inserted into that track; the app evaluates it and the parameter follows.
 - **color-track** (`color_r/g/b`, material colour (1, 0, 0) @ 0 → (0, 0, 1) @ 30): linear.
   r 1.0 @ 0, 0.5 @ 15, 0.0 @ 30, stays 0 to 60; g 0.0 at every frame; b 0.0 @ 0,
   0.500001 @ 15, 1.0 @ 30, stays 1 to 60. Read from the material's colour parameter.
@@ -67,12 +67,12 @@ has a `case.toml` (`feature = "animation-3"`, `observation = "docs/parity/animat
   The sphere never switches type, so the frame-29 and frame-30 meshes would have been
   identical and none was written.
 - **link-track — not observed:** the only link-typed rows exposed to scripting are the "layer"
-  rows (parameter 898, dtype 133) on the Bend and on the cube, and no value can be written to
-  a key on them (`SetValue` raises "must be real number, not c4d.BaseObject"). No link field
+  rows (the "layer" link field) on the Bend and on the cube, and no value can be written to
+  a key on them (`SetValue` raises "must be real number, not an object"). No link field
   in this build takes a scripted key, so the row's "skip if none" applies.
 - **pla — not observed:** point-level animation could not be created. Making the cube editable
   and moving point 0 to (−100, 100, −100) at frame 30 while the record command was on moved
   the point in the base mesh (it reads (−100, 0, −100) at every frame) instead of keying it;
   the only tracks the record command created were the object's position/scale/rotation tracks
-  with zero keys. No PLA track can be reached from the bridge (`c4d.PLAData` exists but no
-  point-animation parameter id is exposed), so no frame-15 mesh was written.
+  with zero keys. No PLA track can be reached from the bridge (a point-animation data type exists in the interface but no
+  point-animation parameter is exposed), so no frame-15 mesh was written.

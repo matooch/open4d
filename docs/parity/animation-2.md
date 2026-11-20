@@ -35,9 +35,9 @@ All eleven cases were observed in one scripted session; every case has one
 `samples-<param>.json` per sampled value (94 samples: frames 0-90 every frame plus the half
 frames 0.5, 14.5, 29.5, in frame order) and a `case.toml`. Golden check: ok (926 cases).
 
-- **The record command does not work on tags:** `c4d.CallCommand(12410)` returns False for a tag
+- **The record command does not work on tags:** the record-key command returns False for a tag
   (no keys appear). Tag parameters here were keyed through the tag's own track
-  (`CTrack(tag, descid)` + `AddKey`), which the app evaluates the same way. Object keys use the
+  (a track created on the tag's parameter, then keys added to it), which the app evaluates the same way. Object keys use the
   record command as the form asks.
 - **Target tag** (plugin 5676, target link row `1001` "Target Object"): with the target Null at
   (300, 0, 0) the cube reports rot_h 270 deg, rot_p 0; at frame 15 (target at (150, 150, 0))
