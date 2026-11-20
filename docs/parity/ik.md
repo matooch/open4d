@@ -98,7 +98,7 @@ Use `feature = "ik"`.
   every reachable tip lands within 0.004 of its goal (worst: reach-side, 0.0032 in x;
   the others are below 1e-4).
 - **Joints are not parented automatically.** The joint command leaves three separate roots
-  (probe: `n_roots` 3, J2/J3 parent `None`). The chain here was parented with `InsertUnder`;
+  (probe: `n_roots` 3, J2/J3 parent `None`). The chain here was parented through the object parent field;
   without that the tag sees three independent joints.
 - **Out of reach does not stretch:** reach-far (goal 400 on a 300 chain) leaves the chain
   straight at full length with the tip at (0, 200, 0) - squash/stretch default to 0, so the
