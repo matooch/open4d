@@ -1033,3 +1033,48 @@ Test `crates/generators/tests/tracer_parity.rs`: Extrude (defaults) over the reb
 The two Tracer cases differ from our values by the reference's animation solver noise: the same frame-1 position reads
 10.001106 in `interval` and 10.000106 in `vertices`, so no rule is within 1e-4 of both. The test also asserts
 `topology_match` and a position error below 2e-3 for them, so a regression in the structure still fails.
+
+---
+
+# Clone toolset: Fracture and Voronoi Fracture (brief 074)
+
+Sources: O31 [clone-generators-2.md](../parity/clone-generators-2.md) (parameter tables, cases `fracture/explode-segments`,
+`fracture/plain`; the three `voronoi-fracture/*` cases were not observed). Golden data: `tests/golden/fracture/`.
+
+## F1. Fracture (`forge.fracture`)
+
+Parameters: `mode` (Straight, Explode Segments, Explode Segments & Connect; default Straight, the observed option list and
+default 0), the cloner's Transform tab (`display`, `clone_position`, `clone_rotation`, `clone_scale`, `clone_color`,
+`clone_weight`) and the `effectors` list. The children are the inputs and are consumed.
+
+Rules:
+- Explode Segments (`fracture/explode-segments`): every input mesh is split into its polygon islands (polygons that share a
+  point are one island; islands are ordered by their first polygon). A cube whose 6 quads share no point gives 6 fragments, and
+  the output is the input: the fragments keep the input's points (24) and quads (6), no point is added.
+- A fragment keeps its points in ascending input index and its polygons' corner order, so the output order is fragment by
+  fragment, equal to the input when the islands are in polygon order.
+- Each fragment is a clone whose pivot is its bounding box centre (**parity-pending**: the observation only has identity
+  clones). Its matrix is `T(P) · T(pivot) · Rot(R) · Scale(S)` (the Transform tab as on a cloner, C3.1); effectors in the
+  `effectors` list apply to the fragments in list order (E1), so a Plain effector with P (0, 100, 0) raises every fragment by
+  100.
+- A Plain effector as a child of the Fracture does nothing (`fracture/plain`: identical to `fracture/explode-segments`): only the
+  `effectors` list feeds it.
+- Straight: one fragment per input object, so a single input is unchanged (parity-pending, not observed).
+- The input's own transform is baked into its points.
+
+`BuildError::Unsupported`: Explode Segments & Connect (the connector geometry was not observed).
+
+## F2. Voronoi Fracture
+
+**Blocked, not implemented.** The observer could not bake it (the cache stayed empty after three attempts), so the
+observation has the parameter table and no meshes. The node is not registered. The design stays as in the area plan: cells from
+clipping the input by the bisector planes of seed points (point count, seed), inner faces capped, parity by cell count and
+total volume. Data that would settle it: any baked result (Current State to Object of a Voronoi Fracture with a point count
+of 10 and a seed of 1 on a cube).
+
+## F3. Parity
+
+Test `crates/generators/tests/fracture.rs`: both cases rebuild the 24-point, 6-quad cube as a polygon object (the reference
+output equals it, so the input is the golden mesh itself: this checks the pipeline, not an independent derivation) and compare
+with `mesh.obj` strictly. Result **2 of 2** exact (`explode-segments`, `plain`). Unit test: two islands, effector list moves
+them, Connect is `Unsupported`.

@@ -8,6 +8,7 @@ mod data;
 mod delay;
 mod effector;
 mod formula;
+mod fracture;
 mod grid;
 mod honeycomb;
 mod linear;
@@ -26,6 +27,9 @@ pub use data::{CloneData, CloneItem};
 pub use delay::{DELAY, Delay, DelayMode, WINDOW as DELAY_WINDOW, delay_type};
 pub use effector::{Effector, EffectorCtx, apply_effectors, effector_from_node};
 pub use formula::{DEFAULT_FORMULA, FORMULA, Formula, formula_type};
+pub use fracture::{
+    FRACTURE, FractureMode, fracture_settings, fracture_type, fragment_clones, polygon_islands,
+};
 pub use matrix::{MATRIX, matrix_settings, matrix_type};
 pub use node::{CLONER, CloneToolset, cloner_type, settings_from_params};
 pub use plain::{ColorMode, PLAIN, Plain, Space, TransformMode, plain_type};

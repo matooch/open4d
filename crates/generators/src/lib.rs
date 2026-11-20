@@ -9,6 +9,7 @@ mod cloner;
 mod cube;
 pub mod editable_spline;
 mod figure;
+mod fracture;
 mod landscape;
 mod lathe;
 mod modeling;
@@ -30,6 +31,7 @@ pub mod splines;
 mod subdivision;
 pub mod text_spline;
 pub mod tracer;
+pub mod uv;
 
 pub use boole::{boole, boole_objects, inputs_of as boole_inputs_of};
 pub use cloner::{
@@ -278,6 +280,9 @@ pub(crate) fn evaluate_geometry(
     if node.type_id == cloner::TYPE {
         return cloner::evaluate_cloner(scene, id, &node.params, ctx);
     }
+    if node.type_id == fracture::TYPE {
+        return fracture::evaluate_fracture(scene, id, &node.params, ctx);
+    }
     if node.type_id == forge_clone_engine::MATRIX {
         // A Matrix makes matrices only (spec M1); an unsupported option is still an error.
         cloner::matrix_data(scene, id, ctx)?;
@@ -367,6 +372,7 @@ fn produces_geometry(scene: &Scene, type_id: &str) -> bool {
         || type_id == subdivision::TYPE
         || type_id == boole::TYPE
         || type_id == cloner::TYPE
+        || type_id == fracture::TYPE
         || type_id == polygon::TYPE
         || type_id == modeling::INSTANCE
         || modeling::input_count(type_id).is_some()
