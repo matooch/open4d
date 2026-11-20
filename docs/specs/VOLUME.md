@@ -360,3 +360,63 @@ distance of 1.0 (a plain `f` gave 8 and pushed the corner samples inside). `K = 
 10 is the fitted scale (nearest-vertex distance 0.54 at 6.2 to 6.25); that it is proportional to
 the voxel size, the threshold 0.5 and the modes subtract and multiply are **parity-pending**
 (one case, default mode). Layers act on the band only.
+
+## 10. VDB files (`vdb.rs`)
+
+Sources: the published OpenVDB file format (file layout: magic, version, header, grid
+descriptors with offsets, the 5-4-3 tree as topology then buffers, node masks, per-node value
+compression with a metadata byte). **There is no reference `.vdb` to check against**: the O33
+`vdb-export` case could not be exported (the reference's VDB export needs a human, volumes-2.md),
+so the layout below is written from the public description and tested by round trips and by
+hand-built streams only. Every layout detail is **parity-pending** until a reference file exists.
+
+### 10.1 Layout (version 224)
+
+All integers little endian. Strings are `u32 length` and the bytes.
+
+1. `i64 0x56444220` magic, `u32 file version` (we write 224, read 222 to 228), `u32 library major,
+   minor`, `u8 has grid offsets` (we write 1), 36 bytes of uuid text.
+2. File metadata: `u32 count`, then per entry name, type name, `u32 byte count`, the bytes. Read and
+   ignored; we write none.
+3. `u32 grid count`; per grid a descriptor then its data, the grids in order: grid name, grid type
+   (`Tree_float_5_4_3`), instance parent name (empty), `i64` start of the grid data, `i64` start of
+   the buffers, `i64` end of the grid data.
+4. Grid data: `u32 compression flags` (1 zip, 2 active mask compression, 4 blosc; we write 2 and read
+   1 and 2, blosc is `Unsupported`), grid metadata (as the file metadata: we write `class` (string
+   `level set` or `fog volume`), `name`, `file_voxel_count` (int64), `file_bbox_min`, `file_bbox_max`
+   (vec3i)), the transform (type string `AffineMap` then 16 f64 of a row-vector 4x4: `voxel size` on
+   the diagonal, the origin in the last row; read also `UniformScaleMap`, `ScaleMap`,
+   `UniformScaleTranslateMap`, `ScaleTranslateMap`), the tree topology (`u32` buffer count 1, then
+   the root), then the buffers.
+5. Root topology: `f32` background, `u32` tile count, `u32` child count; each tile `3 x i32` origin,
+   `f32` value, `u8` active; each child `3 x i32` origin (multiples of 4096) and the node. Internal
+   nodes (level 2 with 32^3 slots, level 1 with 16^3): child mask, value mask (`u64` words, bit `i` of
+   word `i / 64`), the tile values as compressed values (§10.2), then the children in slot order.
+   Leaves (8^3): the value mask. Slot and voxel offsets are x-major (`x * n^2 + y * n + z`); our
+   grid blocks are x fastest and are converted.
+6. Buffers, in the same order: per leaf the value mask and its compressed values.
+
+### 10.2 Compressed values
+
+For a node's values (a leaf's 512, an internal node's tile slots) a metadata byte: `0` inactive
+values all the background, `1` all minus the background, `2` all one value (stored), `3`, `4`, `5`
+as `0`, `2` and two values with a selection mask (a mask of 512 / slots bits follows the values,
+selected inactive slots take the second value), `6` every value stored. Modes 0 to 5 store only the
+active values; a mode 3 to 5 selection mask is read after the inactive values. With the zip flag
+each value block is `i64 byte count` then a zlib stream (the reader inflates stored, fixed and
+dynamic Huffman blocks; a count of zero or below means that many raw bytes follow; a block of no bytes, such as the
+active values of a node without active values, is not written at all). We write modes
+0, 1, 2, 5 or 6 (6 only when a node has more than two distinct inactive values) without zip.
+
+### 10.3 Reading rules and limits
+
+- A float grid (`Tree_float_5_4_3`) becomes a `SparseGrid<f32>`; its voxel size is the transform's
+  x scale and its origin the translation. Other grid types are skipped through the end offset (and
+  counted); without offsets they are an error.
+- **Tiles**: an inactive tile keeps no voxels (it reads as the background, which loses a
+  reference file's inactive interior tiles of value `-background`: the grid reads as the
+  background deep inside; counted in `skipped_tiles`); an **active** tile is `Unsupported`.
+- Every length is checked against the data left; counts above 65536 tiles or children are an
+  error. The reader never panics on any input (brief 182 fuzzes it).
+- Round trip of a grid we wrote is exact: values, active flags, background, voxel size and origin.
+

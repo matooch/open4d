@@ -181,6 +181,26 @@ impl<T: Copy> SparseGrid<T> {
         out
     }
 
+    /// Every block with a stored voxel: key, the 512 values (x fastest) and the active bit words,
+    /// ascending by key.
+    pub fn blocks(&self) -> Vec<(IVec3, Vec<T>, [u64; 8])> {
+        self.sorted_keys()
+            .into_iter()
+            .map(|k| {
+                let b = &self.blocks[&k];
+                (k, b.values.to_vec(), b.active)
+            })
+            .collect()
+    }
+
+    /// Stores a whole block (`values.len()` must be 512, x fastest).
+    pub fn set_block(&mut self, key: IVec3, values: &[T], active: [u64; 8]) {
+        assert_eq!(values.len(), BLOCK_VOXELS);
+        let b = self.block_mut(key);
+        b.values.copy_from_slice(values);
+        b.active = active;
+    }
+
     /// Index box `(min, max)` (inclusive) of the active voxels.
     pub fn bounds(&self) -> Option<(IVec3, IVec3)> {
         let mut it = self.active_voxels().into_iter().map(|(i, _)| i);

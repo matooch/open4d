@@ -8,6 +8,7 @@ pub mod grid;
 pub mod mesher;
 pub mod node;
 pub mod sdf;
+pub mod vdb;
 
 pub use csg::{CsgOp, combine, negate, smooth_min};
 pub use grid::{BLOCK, SparseGrid};
@@ -20,6 +21,9 @@ pub use node::{
     mesh_volume_node, sdf_to_fog,
 };
 pub use sdf::{PointUnion, SdfParams, mesh_to_sdf, points_to_sdf, spline_to_sdf};
+pub use vdb::{
+    GridClass, VdbError, VdbFile, VdbGrid, WriteOptions, read_vdb, write_vdb, write_vdb_with,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum VolumeError {

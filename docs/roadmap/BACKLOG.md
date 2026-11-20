@@ -83,7 +83,7 @@ implementers can avoid collisions.
 | 083 | [Volume Mesher (dual contouring, adaptivity, threshold, normals)](../agents/tasks/083-volume-mesher.md) | F | 081 | done (parity-pending: adaptive tolerance factor, absolute iso; the mesher is a cell mesher with octree block merge, not dual contouring: see VOLUME.md 7) | volume, geometry |
 | 084 | [Volume viewport display (preview iso-surface, slices)](../agents/tasks/084-volume-viewport.md) | F | 083, 143 | ready | viewport |
 | 085 | [Field layers inside the volume builder](../agents/tasks/085-volume-field-layers.md) | F | 081, 059 | done (parity-pending: scale K, threshold 0.5, subtract / multiply modes: one case) volume, fields |
-| 086 | [VDB file read/write](../agents/tasks/086-vdb-io.md) | F | 080 | ready (vdb-export case needs a human; read/write tested against our own files and the observed .vdb if present) | volume, io |
+| 086 | [VDB file read/write](../agents/tasks/086-vdb-io.md) | F | 080 | done (parity-pending: layout from the public description, no reference file; vdb-export case needs a human; read/write tested against our own files and the observed .vdb if present) | volume, io |
 | 087 | [Keyframe rework: O16 rules (millisecond rounding at other fps; tangent at uneven monotone keys)](../agents/tasks/087-keyframe-rework-o16-rules-millisecond-rounding-at-other-fps.md) | G | – | done | anim |
 | 088 | [Tracks for all value types + point-level animation](../agents/tasks/088-tracks-all-value-types.md) | G | 087 | waiting: O53 | core, anim |
 | 089 | [Tangent model: user, broken, weighted, zero angle/length, ease presets, overshoot](../agents/tasks/089-tangent-model.md) | G | 087 | waiting: O38 | core, anim |
