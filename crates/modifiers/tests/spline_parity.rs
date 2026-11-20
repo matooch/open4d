@@ -6,10 +6,13 @@
 //! (the exact comparison must still fail) with the invariants the data supports.
 //! `tests/golden/{wrap,wrap-f}` are the plain Wrap deformer's and are not discovered here.
 
+mod common;
+
 use std::path::Path;
 use std::sync::Arc;
 
 use forge_core::{Document, EvalCtx, NodeId, ParamKind, Registry, Tx, Value};
+use forge_generators::editable_spline::SplineData;
 use forge_generators::{Primitives, evaluate};
 use forge_modifiers::Deformers;
 use forge_parity_harness::{GoldenCase, Mesh, compare_meshes, discover_cases, export_weld};
@@ -26,23 +29,22 @@ const KNOWN_MISMATCH: &[&str] = &[
     "spline-wrap/arc",
     // which spline points pair up (20.2)
     "spline-deformer/defaults",
+    // the weights between 0 and Radius (the same pairing is exact, only the weights are 0.005 off)
+    "spline-deformer/modifier-moved",
+    // the role of Radius: points 50 away stay put at Radius 60 (20.2)
+    "spline-deformer/radius-60",
+    // with one Z spline linked the reference uses the unlinked helper of the scene (20.3)
+    "spline-rail/one-spline",
+    // the rule of the X splines (20.3)
+    "spline-rail/x-splines",
+    // the rule holds; the reference's linear spline ends 1e-4 short of its end (20.3)
+    "spline-rail/uneven",
 ];
 
 /// Observed options we do not build.
 const UNSUPPORTED: &[&str] = &[];
 
-type Table = toml::map::Map<String, toml::Value>;
-
-fn num(v: &toml::Value) -> f64 {
-    v.as_float()
-        .or(v.as_integer().map(|i| i as f64))
-        .expect("number")
-}
-
-fn vec3(v: &toml::Value) -> [f64; 3] {
-    let a = v.as_array().expect("vec3");
-    [num(&a[0]), num(&a[1]), num(&a[2])]
-}
+use common::{Table, normalize, num, vec3};
 
 fn enum_id(s: &str) -> String {
     let s = s.replace('\u{2212}', "-");
@@ -105,6 +107,7 @@ fn set_params(tx: &mut Tx, reg: &Registry, id: NodeId, ty_id: &str, table: &Tabl
                 Value::Float(num(v) * factor)
             }
             (ParamKind::Bool, toml::Value::Boolean(b)) => Value::Bool(*b),
+            (ParamKind::Bool, toml::Value::Integer(i)) => Value::Bool(*i != 0),
             (ParamKind::Enum { .. }, toml::Value::String(s)) => Value::Enum(enum_id(s)),
             (ParamKind::Vec3 { .. }, v) if v.is_array() => Value::Vec3(vec3(v)),
             _ => continue,
@@ -128,7 +131,30 @@ fn spline_type_id(t: &Table) -> &'static str {
     }
 }
 
+/// A hand-made (editable) Linear spline from `points` / `closed`, placed by `position` /
+/// `rotation_deg`.
+fn editable_spline(tx: &mut Tx, t: &Table) -> NodeId {
+    let id = tx.create("forge.spline", None, None).unwrap();
+    let points = t["points"].as_array().unwrap().iter().map(|p| DVec3::from_array(vec3(p)));
+    let data = SplineData::from_points(points.collect(), t["closed"].as_bool().unwrap());
+    for (k, v) in data.to_values() {
+        tx.set_param(id, &k, v).unwrap();
+    }
+    tx.set_param(id, "type", Value::Enum("linear".into())).unwrap();
+    if let Some(v) = t.get("position") {
+        tx.set_param(id, "transform.pos", Value::Vec3(vec3(v))).unwrap();
+    }
+    if let Some(v) = t.get("rotation_deg") {
+        tx.set_param(id, "transform.rot", Value::Vec3(vec3(v).map(f64::to_radians)))
+            .unwrap();
+    }
+    id
+}
+
 fn spline(tx: &mut Tx, reg: &Registry, t: &Table) -> NodeId {
+    if t["type"].as_str() == Some("editable") {
+        return editable_spline(tx, t);
+    }
     let ty = spline_type_id(t);
     let id = tx.create(ty, None, None).unwrap();
     set_params(tx, reg, id, ty, t);
@@ -190,10 +216,17 @@ fn build(reg: &Arc<Registry>, case: &GoldenCase, params: &Table, bx: BoxMode) ->
                     link(tx, "modifying_spline", b);
                 }
                 _ => {
-                    let l = spline(tx, reg, params["left_helix"].as_table().unwrap());
-                    let r = spline(tx, reg, params["right_helix"].as_table().unwrap());
-                    link(tx, "z_spline_left", l);
-                    link(tx, "z_spline_right", r);
+                    for (table, key) in [
+                        ("left_helix", "z_spline_left"),
+                        ("right_helix", "z_spline_right"),
+                        ("x_top", "x_spline_top"),
+                        ("x_bottom", "x_spline_bottom"),
+                    ] {
+                        if let Some(t) = params.get(table).and_then(|t| t.as_table()) {
+                            let id = spline(tx, reg, t);
+                            link(tx, key, id);
+                        }
+                    }
                 }
             }
             Ok((cube, d))
@@ -220,6 +253,29 @@ fn cube_mesh(b: &mut Built, enabled: bool) -> Mesh {
         positions: m.points.iter().map(|p| p.to_array()).collect(),
         faces: m.polys,
     }
+}
+
+/// Drops the vertices no face uses (the staged cases with editable helper splines export the
+/// splines' own points, 4 unused vertices) and renumbers the faces, keeping the order.
+fn compact(m: Mesh) -> Mesh {
+    let mut used = vec![false; m.positions.len()];
+    for &i in m.faces.iter().flatten() {
+        used[i as usize] = true;
+    }
+    let mut map = vec![0u32; used.len()];
+    let mut positions = Vec::new();
+    for (i, p) in m.positions.iter().enumerate() {
+        if used[i] {
+            map[i] = positions.len() as u32;
+            positions.push(*p);
+        }
+    }
+    let faces = m
+        .faces
+        .iter()
+        .map(|f| f.iter().map(|&i| map[i as usize]).collect())
+        .collect();
+    Mesh { positions, faces }
 }
 
 fn registry() -> Arc<Registry> {
@@ -258,8 +314,8 @@ fn spline_deformers_match_the_reference() {
         let key = format!("{}/{}", case.feature, case.name);
         assert!(!UNSUPPORTED.contains(&key.as_str()));
         let m = case.manifest().unwrap();
-        let params: Table = m.params.clone().into_iter().collect();
-        let expected = case.expected_mesh().unwrap().unwrap();
+        let params = normalize(&m.params.clone().into_iter().collect());
+        let expected = compact(case.expected_mesh().unwrap().unwrap());
 
         let mut b = build(&reg, &case, &params, BoxMode::Plain);
         let ours = cube_mesh(&mut b, true);
@@ -306,8 +362,18 @@ fn spline_deformers_match_the_reference() {
         exact.push(key);
     }
     println!("exact: {exact:?}; pinned: {pinned:?}");
-    assert_eq!(exact, ["spline-rail/defaults"]);
-    assert_eq!(pinned.len(), 3, "{pinned:?}");
+    assert_eq!(
+        exact,
+        [
+            "spline-deformer/lines",
+            "spline-deformer/use-length",
+            "spline-rail/defaults",
+            "spline-rail/limited",
+            "spline-rail/scale-before-50",
+            "spline-rail/within-box",
+        ]
+    );
+    assert_eq!(pinned.len(), 8, "{pinned:?}");
 }
 
 /// What the golden data supports for the pinned cases, asserted on the golden and on ours.
@@ -414,6 +480,90 @@ fn check_invariants(key: &str, orig: &Mesh, ours: &Mesh, gold: &Mesh) {
                 .collect();
             ours_by.sort_by(|a, b| a.0.total_cmp(&b.0));
             assert!(ours_by.windows(2).all(|w| w[0].1 >= w[1].1), "{ours_by:?}");
+        }
+        "spline-deformer/modifier-moved" => {
+            // The original Arc is the one of `defaults`; the modifier is the same Arc moved up by 50:
+            // the same four points move (within the radius 30), only along +y, by at most 50 and
+            // by less the farther they are from the spline, in the golden and in ours.
+            let near = |i: usize| {
+                let p = v(orig, i);
+                let ang = p.y.atan2(p.x);
+                if (0.0..=std::f64::consts::FRAC_PI_2).contains(&ang) {
+                    (((p.x * p.x + p.y * p.y).sqrt() - 200.0).powi(2) + p.z * p.z).sqrt()
+                } else {
+                    f64::INFINITY
+                }
+            };
+            for (who, m) in [("golden", gold), ("ours", ours)] {
+                let mut by: Vec<(f64, f64)> = Vec::new();
+                for i in 0..orig.positions.len() {
+                    let d = v(m, i) - v(orig, i);
+                    if d.length() > 1e-9 {
+                        assert!(near(i) < 30.0, "{key} {who}: moved point {i} at {}", near(i));
+                        assert!(d.x.abs() < 1e-9 && d.z.abs() < 1e-9, "{key} {who}: {d:?}");
+                        assert!(d.y > 0.0 && d.y <= 50.0 + 1e-9, "{key} {who}: {d:?}");
+                        by.push((near(i), d.y));
+                    }
+                }
+                assert_eq!(by.len(), 4, "{key} {who}: moved points");
+                by.sort_by(|a, b| a.0.total_cmp(&b.0));
+                assert!(by.windows(2).all(|w| w[0].1 >= w[1].1), "{key} {who}: {by:?}");
+                assert!((by[0].1 - 50.0).abs() < 0.1, "{key} {who}: nearest {by:?}");
+            }
+        }
+        "spline-deformer/radius-60" => {
+            // The golden moves only the one point on the original line, by the full 100; the
+            // points 50 away do not move although 50 < Radius 60 (pending: the role of Radius).
+            // Ours moves that point the same way, and more.
+            let moved = |m: &Mesh| -> Vec<usize> {
+                (0..orig.positions.len())
+                    .filter(|i| (v(m, *i) - v(orig, *i)).length() > 1e-9)
+                    .collect()
+            };
+            let gm = moved(gold);
+            assert_eq!(gm.len(), 1, "{key}: golden moved {gm:?}");
+            let d = v(gold, gm[0]) - v(orig, gm[0]);
+            assert!((d - DVec3::new(0.0, 100.0, 0.0)).length() < 1e-4, "{key}: {d:?}");
+            let d = v(ours, gm[0]) - v(orig, gm[0]);
+            assert!((d - DVec3::new(0.0, 100.0, 0.0)).length() < 1e-4, "{key}: ours {d:?}");
+        }
+        "spline-rail/one-spline" | "spline-rail/x-splines" | "spline-rail/uneven" => {
+            // y is carried in the world y direction by every case of the rail (20.3): the
+            // offset `y' - y` is the same for every y of one (x, z) column, golden and ours
+            // (the helices' own y is 0 or the end rise of -0.25).
+            for (who, m) in [("golden", gold), ("ours", ours)] {
+                for i in 0..orig.positions.len() {
+                    let (o, p) = (v(orig, i), v(m, i));
+                    let j = (0..orig.positions.len())
+                        .find(|j| {
+                            let q = v(orig, *j);
+                            q.x == o.x && q.z == o.z && q.y == -200.0
+                        })
+                        .unwrap();
+                    let base = v(m, j).y + 200.0;
+                    assert!((p.y - (base + o.y)).abs() < 1e-3, "{key} {who}: y at {o:?}");
+                }
+            }
+            match key {
+                // X Spline Top and Bottom (straight lines along x at z = 0) make every point's
+                // z come out 0 (pending: the rule of the X splines).
+                "spline-rail/x-splines" => {
+                    assert!(gold.positions.iter().all(|p| p[2].abs() < 1e-6), "{key}");
+                }
+                // The rule of 20.3 holds except at t = 1: the reference's linear spline ends
+                // 1e-4 of its length short (399.96 for 400), ours reaches the end.
+                "spline-rail/uneven" => {
+                    for i in 0..orig.positions.len() {
+                        let e = (v(gold, i) - v(ours, i)).length();
+                        if v(orig, i).z == 100.0 {
+                            assert!(e < 0.05, "{key}: end row {e}");
+                        } else {
+                            assert!(e < 1e-4, "{key}: point {i} {e}");
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
         other => panic!("no invariants for {other}"),
     }

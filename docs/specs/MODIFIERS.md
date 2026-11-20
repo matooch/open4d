@@ -1262,7 +1262,17 @@ exactly 4 points move, and they are exactly the points whose distance to the ori
 (30): `(0, 200, 0)` (distance 0), `(50, 200, 0)` (6.16), `(100, 150, 0)` (19.72), `(100, 200, 0)` (23.61); the
 nearest other points are at 41 and 50. Each of them moves by `d · (0, −1, −1)` with `d` = 200, 155.526, 55.929, 38.534
 (the end point lands on the modifier's start `(0, 0, −200)`), so `d/200 = 1, 0.7776, 0.2796, 0.1927`, falling with the distance.
-These are the only facts.
+These are the only facts of `defaults`.
+
+**Follow-up cases (deformers-4.md).** With straight 2-point Linear splines (original along x from (0,0,0) to (400,0,0), the modifier the
+same 100 higher; only `(100, 0, 0)` of the cube's surface lies on the line), `spline-deformer/lines` and `use-length` match exactly:
+the point moves by `(0, 100, 0)` (weight 1) and nothing else moves; Use Length changes nothing here (parity-pending for curved splines).
+`modifier-moved` (the same Arc and a modifier translated by (0, 50, 0)) moves the same four points as `defaults`, now only in +y,
+by `50·w` with `w = 1, 0.8008, 0.3357, 0.2154` at distances `0, 6.155, 19.722, 23.607` (against `1 − d/30 = 1, 0.7948, 0.3426, 0.2131`):
+a weight that is near but not linear in the distance, and that is **not the same function in `defaults`** (`d/200 = 1, 0.7776, 0.2796, 0.1927` there),
+so the displacement is not `w(distance) · (M − O)` with one weight function: pinned (our weights are the linear ones). `radius-60`:
+only the on-line point moves, the points 50 away stay put although 50 < 60, so Radius does not simply bound the distance
+(pinned `pending: role of Radius`; `lines` at Radius 30 gives the same golden mesh).
 
 Own design, **parity-pending** (mismatch: the shared direction `(0, −1, −1)` and the weights are not reproduced):
 `p' = p + w · (M(f) − O(f))`, with `O(f)`, `M(f)` the original and the modifying polylines at the same arc-length fraction `f`
@@ -1294,15 +1304,37 @@ p' = L(t) + u · (R(t) − L(t)) + (0, y, 0)
 land on the two splines, `x = 0` halfway; `y` is carried in the world Y direction, e.g. `Y = y − 0.2514` at `t = 1`, the Helix's end `y`).
 Unlimited continues beyond the ends as in 20.0 (`t` outside `[0, 1]`, each spline along its own end chord). The fraction runs over the vertex index (`t = k/(n−1)` is vertex `k`): the arc-length fraction of the polyline is off by 0.06 at
 `t = ¼` (the Uniform sampler ends 1e-4 short), the index fraction by under 2e-4. Outside `[0, 1]` each spline continues along its end chord by `t` (resp. `t − 1`) times its length.
+**Follow-up cases (deformers-4.md, menu-created form; the staged cases with hand-made helper splines export the
+splines' own 4 points as unused OBJ vertices, which the test drops):**
+- `limited`, `scale-before-50` and `within-box` equal `spline-rail/defaults` to 5e-7: all three modes and the width scale give
+  the same result here because every cube point has `t ∈ [0, 1]` and `|x| ≤ size_x/2`, `|z| ≤ size_z/2`. The cube is taller
+  than the box (`|y|` up to 200 against 100), and **`within_box` still moves those points**, so the box limits x and z only
+  (hypotheses: the full box, refuted by 300 units at the top and bottom rows; x and z only; no limit at all: the last two
+  agree with the data, the second is used).
+- `uneven` (Z splines `(−150, 0, 0)→(−150, 0, 200)` and `(150, 0, 0)→(150, 0, 400)`): the rule above holds at every
+  point except the `t = 1` row, where the reference ends 1e-4 of the spline's length short (`z = 199.98` and `399.96`
+  instead of 200 and 400; the Uniform sampler of the linear editable spline, the same effect as the Helix's "1e-4
+  short", is in the generators crate): pinned.
+- `x-splines` (both X splines straight along x at z = 0, linked top and bottom beside the two Helix Z splines): x and y are those of
+  `defaults` but **every point's z is 0**. The X splines are therefore applied; which of their coordinates replaces z is not
+  derivable from a straight line at z = 0: pinned.
+- `one-spline` (only Z Spline Left linked, the right Helix at x = +150 unlinked): `p' = L(t) + (1 − u)·(300, 0, 0) + (0, y, 0)`
+  with `u = x/size_x + ½`: the edge `x = +100` lands on the linked spline and `x = −100` on a copy 300 further in +x, where the
+  unlinked helper stands. The reference evidently reads the other helper; pinned (`y` is carried as in every case).
+
 **Own design, parity-pending:** `limited` clamps `t` to `[0, 1]` and carries the rest of `z` rigidly along the mean end chord; `within_box`
-leaves points outside `|x| ≤ size_x/2, |y| ≤ size_y/2, |z| ≤ size_z/2` unchanged (all of them inside here); `scale_before_start` /
-`scale_after_end` scale the width `R − L` around its middle for `t < 0` / `t > 1`; with one Z spline only, `p' = S(t) + (x, y, 0)`; the X splines and `reference` are not applied.
+leaves points outside `|x| ≤ size_x/2, |z| ≤ size_z/2` unchanged (the data only shows that `y` is not limited); `scale_before_start` /
+`scale_after_end` scale the width `R − L` around its middle for `t < 0` / `t > 1` (no case has a point there); with one Z spline only, `p' = S(t) + (x, y, 0)`
+(**refuted by `one-spline`**, pinned); `reference` is not applied.
 
 ## 21. Parity of §20
 
-Test: `crates/modifiers/tests/spline_parity.rs`; features `spline-wrap` (2), `spline-deformer` (1), `spline-rail` (1);
-the cube is built, each linked spline from its `[params.*]` table (the splines are not in the OBJ).
-Result: **1/4 exact under the 1e-4 tolerance** (`spline-rail/defaults`, since brief 191), **three pinned in `KNOWN_MISMATCH`** (the exact comparison must still fail):
+Test: `crates/modifiers/tests/spline_parity.rs`; features `spline-wrap` (2), `spline-deformer` (5), `spline-rail` (7);
+the cube is built, each linked spline from its `[params.*]` table (the splines are not in the OBJ); the menu-created
+form (`[params.helpers.N]`, `[params.editable_helpers.N]`, links by helper name) is read through `tests/common/mod.rs`.
+Result: **6/14 exact under the 1e-4 tolerance** (`spline-rail/defaults`, since brief 191; and `spline-deformer/lines`, `use-length`,
+`spline-rail/limited`, `scale-before-50`, `within-box` from the follow-ups), **eight pinned in `KNOWN_MISMATCH`** (the exact comparison must still fail):
+the three below plus `spline-deformer/modifier-moved`, `radius-60`, `spline-rail/one-spline`, `x-splines`, `uneven` (reasons in 20.2 / 20.3). The Spline Wrap follow-ups (`box`, `axis-*`, `keep-length`, `clamp`, `strength-50`, `offset-25`, `from-25-to-75`, `banking-45`, `up-vector`, `closed`) have no data (the form marks them as needing an interactive export), so the Wrap options stay parity-pending.
 
 - `spline-rail/defaults`: rule derived (20.3), **exact** since brief 191 fixed the sampled Helix (handles of GENERATORS2 §6.1, open-spline offsets of §6.2); it was 1.9e-4 off before.
 - `spline-wrap/arc`: rule derived (20.1), compared under the recorded degenerate box (`fix_bounding_box`, centre `(0, 0, ½)`,

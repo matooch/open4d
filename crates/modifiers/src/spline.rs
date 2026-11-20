@@ -313,7 +313,9 @@ pub fn spline_rail(
     }
     let half = p.size / 2.0;
     for q in points.iter_mut() {
-        let inside = q.abs().cmple(half).all();
+        // The box limits x and z only: `spline-rail/within-box` moves the points above and below
+        // the box (|y| > size_y/2) like Unlimited (MODIFIERS.md §20.3).
+        let inside = q.x.abs() <= half.x && q.z.abs() <= half.z;
         if p.mode == RailMode::WithinBox && !inside {
             continue;
         }
