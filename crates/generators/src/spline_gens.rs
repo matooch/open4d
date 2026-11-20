@@ -41,6 +41,10 @@ pub fn spline_inputs_of(scene: &Scene, id: NodeId) -> Vec<NodeId> {
 }
 
 fn caps(t: NodeType, cap_type: &str) -> NodeType {
+    let bevels: Vec<ParamDesc> = bevel_params("")
+        .into_iter()
+        .chain(bevel_params("end_"))
+        .collect();
     let cap = |id: &str, label: &str| {
         ParamDesc::enumeration(
             id,
@@ -54,7 +58,8 @@ fn caps(t: NodeType, cap_type: &str) -> NodeType {
             ],
         )
     };
-    t.param(cap("cap_start", "Start"))
+    let t = t
+        .param(cap("cap_start", "Start"))
         .param(cap("cap_end", "End"))
         .param(ParamDesc::enumeration(
             "cap_type",
@@ -64,16 +69,88 @@ fn caps(t: NodeType, cap_type: &str) -> NodeType {
                 ("triangles", "Triangles"),
                 ("quadrangles", "Quadrangles"),
                 ("ngons", "N-gons"),
+                ("delaunay", "Delaunay"),
+                ("regular_grid", "Regular Grid"),
             ],
         ))
         .param(ParamDesc::bool("flip_normals", "Flip normals", false))
+        .param(
+            ParamDesc::float("caps_grid_size", "Size", 10.0)
+                .range(0.0, f64::MAX)
+                .unit(Unit::Distance),
+        )
+        .param(ParamDesc::float("caps_density", "Density", 0.2).range(0.0, f64::MAX))
+        .param(ParamDesc::bool("quad_dominant", "Quad dominant", false))
+        .param(ParamDesc::bool(
+            "separate_bevel_controls",
+            "Separate bevel controls",
+            false,
+        ))
+        .param(ParamDesc::bool("bevel_outside", "Bevel outside", false))
+        .param(ParamDesc::bool(
+            "break_phong_rounding",
+            "Break Phong rounding",
+            true,
+        ))
+        .param(ParamDesc::bool(
+            "avoid_self_intersections",
+            "Avoid self intersections",
+            true,
+        ));
+    bevels.into_iter().fold(t, NodeType::param)
+}
+
+/// One Bevel section (`end_` is the copy of Separate Bevel Controls): stored, and refused
+/// when the size is not 0 (GENERATORS2.md §7a).
+fn bevel_params(prefix: &str) -> Vec<ParamDesc> {
+    let id = |name: &str| format!("{prefix}bevel_{name}");
+    vec![
+        ParamDesc::enumeration(
+            &id("shape"),
+            "Bevel shape",
+            "round",
+            &[
+                ("round", "Round"),
+                ("solid", "Solid"),
+                ("curve", "Curve"),
+                ("step", "Step"),
+            ],
+        ),
+        ParamDesc::float(&id("size"), "Bevel size", 0.0)
+            .range(0.0, f64::MAX)
+            .unit(Unit::Distance),
+        ParamDesc::int(&id("segments"), "Bevel segments", 3).range(1, 100),
+        ParamDesc::bool(&id("extended_shape"), "Extended shape", false),
+        ParamDesc::float(&id("height"), "Bevel height", 0.0)
+            .range(0.0, f64::MAX)
+            .unit(Unit::Distance),
+        ParamDesc::float(&id("shape_depth"), "Shape depth", 1.0),
+    ]
 }
 
 pub(crate) fn extrude_type() -> NodeType {
     caps(
         NodeType::new(EXTRUDE, "Extrude", Category::Generator)
+            .param(ParamDesc::enumeration(
+                "direction",
+                "Direction",
+                "auto",
+                &[
+                    ("auto", "Auto"),
+                    ("x", "X"),
+                    ("y", "Y"),
+                    ("z", "Z"),
+                    ("custom", "Custom"),
+                    ("absolute", "Absolute"),
+                ],
+            ))
+            .param(ParamDesc::float("offset", "Offset", 100.0).unit(Unit::Distance))
             .param(ParamDesc::vec3("movement", "Movement", [0.0, 0.0, 100.0]).unit(Unit::Distance))
-            .param(ParamDesc::int("subdivision", "Subdivision", 1).range(1, 4000)),
+            .param(ParamDesc::int("subdivision", "Subdivision", 1).range(1, 4000))
+            .param(ParamDesc::bool("hierarchical", "Hierarchical", false))
+            // The R20 form (Movement is the displacement, R20 cap order): set by the R20 defaults
+            // overlay of the parity tests, never by a user (GENERATORS2.md §7).
+            .param(ParamDesc::bool("r20_form", "R20 form", false).hidden()),
         "ngons",
     )
 }
@@ -161,15 +238,40 @@ pub(crate) fn sweep_type() -> NodeType {
     )
 }
 
-/// A cap polygon `q` as observed (§7): n-gons as is; Triangles splits a 4-point cap
-/// `[q3, q2, q0], [q2, q1, q0]` at the start (reversed outline) and
-/// `[q0, q1, q3], [q1, q2, q3]` at the end; larger outlines are ear-clipped.
+/// A cap polygon `q` as observed (§7, §7a). `r25` selects the R25 order of Extrude caps: the start
+/// cap is the reversed outline from the last point, the end cap the outline from the first, and
+/// 4-point triangle caps fan from the first point of that outline. The R20 order (`r25` off,
+/// the `extrude/*` cases): n-gons start at the vertex their triangulation fans around.
 fn cap_faces(
     points: &[DVec3],
     q: &[u32],
     start: bool,
     cap_type: &str,
+    r25: Option<bool>,
 ) -> Result<Vec<Vec<u32>>, BuildError> {
+    if matches!(cap_type, "delaunay" | "regular_grid") {
+        return Err(BuildError::Unsupported("Delaunay and Regular Grid caps"));
+    }
+    if let Some(reversed) = r25 {
+        let outline: Vec<u32> = if reversed {
+            q.iter().rev().copied().collect()
+        } else {
+            q.to_vec()
+        };
+        return match cap_type {
+            "ngons" => Ok(vec![outline]),
+            "quadrangles" if q.len() <= 4 => Ok(vec![outline]),
+            "quadrangles" => Err(BuildError::Unsupported("quadrangle caps over 4 points")),
+            _ if q.len() == 4 => Ok(vec![
+                vec![outline[0], outline[1], outline[2]],
+                vec![outline[0], outline[2], outline[3]],
+            ]),
+            _ => Ok(triangulate_poly(points, &outline)
+                .into_iter()
+                .map(|t| t.to_vec())
+                .collect()),
+        };
+    }
     // The n-gon starts at the vertex its triangulation fans around: q0 at the start;
     // at the end q3 for 4-point outlines (`extrude/rectangle`), q0 for the circle.
     let outline: Vec<u32> = if start {
@@ -205,6 +307,12 @@ fn no_fillets(p: &Params) -> Result<(), BuildError> {
     }
     if p.bool("flip_normals") {
         return Err(BuildError::Unsupported("flipped normals"));
+    }
+    // Bevel rings are not derived (§7a); with Size 0 the Bevel section does nothing.
+    for id in ["bevel_size", "end_bevel_size"] {
+        if p.float(id) != 0.0 {
+            return Err(BuildError::Unsupported("bevels"));
+        }
     }
     Ok(())
 }
@@ -288,6 +396,53 @@ fn outer_loops(loops: &[Vec<DVec3>], movement: DVec3, closed: bool) -> Vec<bool>
         .collect()
 }
 
+/// The Newell normal of the loops, as the direction Auto extrudes along (§7): all loops
+/// together, the first loop when they cancel, +Z for an open or degenerate spline.
+fn auto_normal(loops: &[Vec<DVec3>], closed: bool) -> DVec3 {
+    if !closed {
+        return DVec3::Z;
+    }
+    let total: DVec3 = loops.iter().map(|lp| newell(lp)).sum();
+    let scale: f64 = loops.iter().map(|lp| newell(lp).length()).sum();
+    let n = if total.length() < 1e-9 * scale.max(1e-300) {
+        loops.first().map_or(DVec3::ZERO, |lp| newell(lp))
+    } else {
+        total
+    };
+    n.try_normalize().unwrap_or(DVec3::Z)
+}
+
+fn newell(lp: &[DVec3]) -> DVec3 {
+    (0..lp.len())
+        .map(|i| lp[i].cross(lp[(i + 1) % lp.len()]))
+        .sum()
+}
+
+/// The vector the last row is offset from the first (§7).
+fn displacement(
+    p: &Params,
+    loops: &[Vec<DVec3>],
+    closed: bool,
+    r20: bool,
+) -> Result<DVec3, BuildError> {
+    let movement = match p.get("movement") {
+        Value::Vec3(v) => DVec3::from_array(v),
+        _ => unreachable!(),
+    };
+    if r20 {
+        return Ok(movement);
+    }
+    let offset = p.float("offset");
+    Ok(match p.enumeration("direction").as_str() {
+        "x" => DVec3::X * offset,
+        "y" => DVec3::Y * offset,
+        "z" => DVec3::Z * offset,
+        "custom" => movement.normalize_or_zero() * offset,
+        "auto" => auto_normal(loops, closed) * offset,
+        _ => return Err(BuildError::Unsupported("Absolute direction")),
+    })
+}
+
 /// Extrude (§7).
 pub fn extrude(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMesh, BuildError> {
     let ty = extrude_type();
@@ -303,10 +458,8 @@ pub fn extrude(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMe
     let ring: Vec<DVec3> = loops.iter().flatten().copied().collect();
     let n = ring.len();
     let sub = p.int("subdivision");
-    let mv = match p.get("movement") {
-        Value::Vec3(v) => DVec3::from_array(v),
-        _ => unreachable!(),
-    };
+    let r20 = p.bool("r20_form");
+    let mv = displacement(&p, &loops, curve.closed, r20)?;
     let outer = outer_loops(&loops, mv, curve.closed);
     let mut points = Vec::with_capacity(n * (sub + 1));
     for j in 0..=sub {
@@ -334,13 +487,23 @@ pub fn extrude(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMe
     }
     if curve.closed {
         let cap_type = p.enumeration("cap_type");
+        // R25: the caps are wound outward along the displacement (§7a); the R20 form keeps its own order.
+        let normal: DVec3 = loops.iter().map(|lp| newell(lp)).sum();
+        let facing = |mv: DVec3, end: bool| {
+            if r20 {
+                return None;
+            }
+            let dot = normal.dot(mv);
+            let eps = 1e-9 * normal.length() * mv.length();
+            Some(if end { dot < -eps } else { dot > eps })
+        };
         if p.enumeration("cap_start") == "cap" {
             let q: Vec<u32> = (0..n).map(|i| r(0, i)).collect();
-            polys.extend(cap_faces(&points, &q, true, &cap_type)?);
+            polys.extend(cap_faces(&points, &q, true, &cap_type, facing(mv, false))?);
         }
         if p.enumeration("cap_end") == "cap" {
             let q: Vec<u32> = (0..n).map(|i| r(sub, i)).collect();
-            polys.extend(cap_faces(&points, &q, false, &cap_type)?);
+            polys.extend(cap_faces(&points, &q, false, &cap_type, facing(mv, true))?);
         }
     }
     Ok(PolyMesh { points, polys })
@@ -389,7 +552,7 @@ pub fn lathe(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMesh
                 // R25 lathe n-gon: the reversed outline from the last point (`lathe/partial`)
                 polys.push(q.iter().rev().copied().collect());
             } else {
-                polys.extend(cap_faces(&points, &q, true, &cap_type)?);
+                polys.extend(cap_faces(&points, &q, true, &cap_type, None)?);
             }
         }
         if p.enumeration("cap_end") == "cap" {
@@ -397,7 +560,7 @@ pub fn lathe(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMesh
             if ngon {
                 polys.push(q);
             } else {
-                polys.extend(cap_faces(&points, &q, false, &cap_type)?);
+                polys.extend(cap_faces(&points, &q, false, &cap_type, None)?);
             }
         }
     }
@@ -506,6 +669,18 @@ fn triangle_caps(
         }
         "quadrangles" => return Err(BuildError::Unsupported("quadrangle caps of rings")),
         _ => {}
+    }
+    if start.len() == 4 {
+        // R25 (`caps-bevel/tri-sweep-open`): a 4-point ring is the fan of each cap's outline.
+        let fan = |o: &[u32]| vec![vec![o[0], o[1], o[2]], vec![o[0], o[2], o[3]]];
+        if p.enumeration("cap_start") == "cap" {
+            out.extend(fan(start));
+        }
+        if p.enumeration("cap_end") == "cap" {
+            let rev: Vec<u32> = end.iter().rev().copied().collect();
+            out.extend(fan(&rev));
+        }
+        return Ok(out);
     }
     if p.enumeration("cap_start") == "cap" {
         out.extend(

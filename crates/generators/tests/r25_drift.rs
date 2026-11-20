@@ -25,9 +25,9 @@ const GENERATORS: &[&str] = &["extrude", "lathe", "loft", "sweep"];
 /// Observed options we do not build (asserted exactly; reasons in the spec).
 const UNSUPPORTED: &[&str] = &[];
 
-/// Built but differing, pinned so a fix shows up (reasons in PRIMITIVES2.md §6 and
-/// GENERATORS2.md §7).
-const KNOWN_MISMATCH: &[&str] = &["r25-drift/extrude-rectangle-caps-quadrangles"];
+/// Built but differing, pinned so a fix shows up (reasons in PRIMITIVES2.md §6). The R25
+/// extrude cap order (GENERATORS2.md §7a, brief 045) un-pinned `extrude-rectangle-caps-quadrangles`.
+const KNOWN_MISMATCH: &[&str] = &[];
 
 /// Compared like `parity.rs`'s `CUT_GEOMETRIC`: exact up to the trailing cut triangles, then
 /// geometric.

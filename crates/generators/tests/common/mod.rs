@@ -78,9 +78,11 @@ pub fn is_time_key(key: &str) -> bool {
 /// The Caps / Bevel group of the scripted form of Extrude, Lathe, Loft and Sweep: bevels are
 /// off in every observed case (`size` 0), so no node type stores their values.
 pub fn is_bevel_key(key: &str) -> bool {
-    matches!(
-        key,
-        "separate_bevel_controls"
+    key.starts_with("polygon_selection_")
+        || key.starts_with("edge_selection_")
+        || matches!(
+            key,
+            "separate_bevel_controls"
             | "bevel_shape"
             | "size"
             | "extended_shape"
@@ -113,7 +115,7 @@ pub fn is_bevel_key(key: &str) -> bool {
             // Sweep's Rotation range (-180 to 180, the default in every observed case)
             | "rotation_from_degrees"
             | "rotation_to_degrees"
-    )
+        )
 }
 
 /// Scripted-form display settings no node type stores (icon, display color).
@@ -400,6 +402,9 @@ pub fn typed_params(reg: &Registry, type_id: &str, raw: &Table) -> BTreeMap<Stri
                 (ParamKind::Bool, toml::Value::Boolean(b)) => Value::Bool(*b),
                 (ParamKind::Bool, toml::Value::Integer(i)) => Value::Bool(*i != 0),
                 (ParamKind::Int { .. }, toml::Value::Integer(i)) => Value::Int(*i),
+                (ParamKind::Int { .. }, toml::Value::Float(f)) if f.fract() == 0.0 => {
+                    Value::Int(*f as i64)
+                }
                 (ParamKind::Float { .. }, toml::Value::Integer(i)) => {
                     Value::Float(angle(desc, *i as f64))
                 }
@@ -478,6 +483,9 @@ pub fn apply(
             (ParamKind::Bool, toml::Value::Boolean(b)) => Value::Bool(*b),
             (ParamKind::Bool, toml::Value::Integer(i)) => Value::Bool(*i != 0),
             (ParamKind::Int { .. }, toml::Value::Integer(i)) => Value::Int(*i),
+            (ParamKind::Int { .. }, toml::Value::Float(f)) if f.fract() == 0.0 => {
+                Value::Int(*f as i64)
+            }
             (ParamKind::Float { .. }, toml::Value::Integer(i)) => {
                 Value::Float(angle(desc, *i as f64))
             }
