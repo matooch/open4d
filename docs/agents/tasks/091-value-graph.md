@@ -31,4 +31,4 @@ The F-curve editor: curves per channel, handles, tangent editing, normalised vie
 - Deviations: in the normalised view value and handle drags are disabled; multi-key tangent presets send one command per key (one undo step each).
 - Files: as 090 plus crates/ui/src/fcurve.rs.
 - Open: G5 handle gestures; a single-step multi-key `key.set_tangent`.
-- Gate: GATE_PLACEHOLDER
+- Gate: gate.sh: fmt and clippy clean; the only failure is the cleanroom scan on another agent's uncommitted files (clone-engine matrix.rs and generators cloner.rs, term in 'thinking particles'), which stopped the workspace test run; my crates (core, anim, command, ui) pass cargo test and clippy -D warnings on their own.

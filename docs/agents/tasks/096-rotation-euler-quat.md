@@ -32,4 +32,4 @@ Match the reference on rotation crossing ±180° and add the quaternion interpol
 - Deviations: the 'euler-cross / quaternion pass' goal is not met for rot_h at the 1e-4 tolerance (not loosened).
 - Files: crates/anim/src/{rotation,scene_at,lib}.rs, crates/anim/tests/{model,animation3_parity}.rs.
 - Open: the solver residual; an observation of a rotation crossing with real quaternion interpolation.
-- Gate: GATE_PLACEHOLDER
+- Gate: gate.sh: fmt and clippy clean; the only failure is the cleanroom scan on another agent's uncommitted files (clone-engine matrix.rs and generators cloner.rs, term in 'thinking particles'), which stopped the workspace test run; my crates (core, anim, command, ui) pass cargo test and clippy -D warnings on their own.
