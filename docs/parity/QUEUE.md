@@ -39,7 +39,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O56 | Caps and bevel tab | [caps-bevel.md](caps-bevel.md) | `tests/golden/caps-bevel/` meshes | done |
 | O48 | Text spline | [text.md](text.md) | `tests/golden/text/` meshes | partial |
 | O49 | Fields IV: modifier layers, vertex maps | [fields-4.md](fields-4.md) | `tests/golden/fields/` samples + meshes | done |
-| O42 | Shaders on a UV grid | [shaders.md](shaders.md) | `tests/golden/shaders/` samples | todo |
+| O42 | Shaders on a UV grid | [shaders.md](shaders.md) | `tests/golden/shaders/` samples | partial (17 of 19 cases; noise-perlin needs a Perlin type this build does not offer, layer-multiply needs a GUI-built layer stack — see the form) |
 | O27 | Animation II (tracks, tags) | [animation-2.md](animation-2.md) | `tests/golden/animation-2/` samples | done |
 | O38 | F-curves: tangents and behaviours | [fcurves.md](fcurves.md) | `tests/golden/keyframes/` samples | partial |
 | O53 | Animation III: more track types | [animation-3.md](animation-3.md) | `tests/golden/animation-3/` samples + meshes | partial |

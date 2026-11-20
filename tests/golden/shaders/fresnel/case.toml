@@ -1,0 +1,31 @@
+feature = "shaders"
+observation = "docs/parity/shaders.md"
+description = "Fresnel shader at its default settings, sampled on the same 32 x 32 UV grid (the grid shows only its flat fallback; the renders test it properly)"
+mesh = "mesh.obj"
+
+[params]
+width = 400.0
+height = 400.0
+width_segments = 10
+height_segments = 10
+orientation = "+Y"
+grid = 32
+sample_time_s = 0.0
+
+[params.material]
+name = "Mat"
+
+[params.shader]
+type = "fresnel"
+blur_offset_percent = 0.0
+blur_scale_percent = 0.0
+use_bump = true
+render = "Front and Back"
+physical = false
+ior = 1.33283
+preset = "Water (20\u00b0C)"
+invert = false
+
+[import]
+scale = 1.0
+flip_z = false
