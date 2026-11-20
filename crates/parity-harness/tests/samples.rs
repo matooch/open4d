@@ -234,7 +234,10 @@ fn all_repo_samples_files_parse() {
     // (fields-4.md: six modifier layers, Decay, Delay, Mirror Graph, Random Space None).
     // Clones: 12 from O8 + 4 from O11 + 12 from O14 + 17 from O22 + 21 from O21
     // + 19 more cloner files (O14 follow-ups) that landed after the last pin.
-    assert_eq!((tracks, fields, clones), (27, 67, 85));
+    // Observer batch merged later (shaders, render, cloner, effector-f, constraints, uv, random-f,
+    // keyframes, ik, tags-2, camera, animation-2/3, matrix, clone-text, clone-spline, tracer):
+    // every file parses and validates; the pin was re-counted to (120, 118, 148).
+    assert_eq!((tracks, fields, clones), (120, 118, 148));
 }
 
 #[test]
