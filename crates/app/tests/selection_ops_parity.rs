@@ -18,8 +18,8 @@ use serde_json::json;
 const UNSUPPORTED: &[(&str, &str)] = &[];
 /// Cases that run but differ. Empty.
 const KNOWN_MISMATCH: &[(&str, &str)] = &[];
-/// The observed cases (the other five O26 rows have no output).
-const OBSERVED: usize = 6;
+/// The observed cases (the other O26 rows have no output).
+const OBSERVED: usize = 8;
 
 fn cases() -> Vec<GoldenCase> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
@@ -44,6 +44,18 @@ fn u32s(v: &toml::Value) -> Vec<u32> {
         .unwrap()
         .iter()
         .map(|x| x.as_integer().unwrap() as u32)
+        .collect()
+}
+
+/// The cube segments of a case: an array `segments`, or the scalar keys
+/// `segments_x/y/z` (cases written from the full input readback).
+fn segments_of(p: &std::collections::BTreeMap<String, toml::Value>) -> Vec<u32> {
+    if let Some(v) = p.get("segments") {
+        return u32s(v);
+    }
+    ["segments_x", "segments_y", "segments_z"]
+        .iter()
+        .map(|k| p[*k].as_integer().unwrap() as u32)
         .collect()
 }
 
@@ -189,10 +201,10 @@ fn selection_ops_match_the_reference() {
 #[test]
 fn editable_cube_numbering_matches_the_golden_meshes() {
     for case in cases() {
-        if case.name == "select-connected" {
+        if case.name.starts_with("select-connected") {
             continue; // the golden mesh was changed by Disconnect
         }
-        let seg = u32s(&case.manifest().unwrap().params["segments"]);
+        let seg = segments_of(&case.manifest().unwrap().params);
         let mut app = App::new_default();
         app.run("object.create", json!({"type": "forge.cube"}))
             .unwrap();

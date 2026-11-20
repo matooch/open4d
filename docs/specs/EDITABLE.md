@@ -272,7 +272,7 @@ parts of the target element selected, tolerant any part:
 |---|---|---|
 | polys → points, edges | every point / edge of the selected polys (no tolerance) | same |
 | points → edges | both end points selected | either |
-| points → polys | all corners selected (`convert-point-to-poly`: 9 top points give polys 16-19; side polys with 2 selected points are not chosen) | any corner (`sel-convert-tolerant-p2poly`, O58: the same 9 points give the 12 polygons 2, 3, 6, 7, 10, 11, 14-19: the top four and every side polygon touching the top) |
+| points → polys | all corners selected (`convert-point-to-poly`: 9 top points give polys 16-19; side polys with 2 selected points are not chosen) | any corner (`convert-point-to-poly-tolerant-on`, O26, and `sel-convert-tolerant-p2poly`, O58: the same 9 points give the 12 polygons 2, 3, 6, 7, 10, 11, 14-19: the top four and every side polygon touching the top) |
 | edges → points | end points of the selected edges | same |
 | edges → polys | all edges of the polygon selected (`convert-edge-to-poly`: the 8 border edges of the top give no polygon) | any edge (`sel-convert-tolerant-e2poly`, O58: the 8 border edges give the same 12 polygons) |
 
@@ -282,7 +282,7 @@ parts of the target element selected, tolerant any part:
 exactly two polygons use (union-find over polygons). Points mode: all points of the pieces
 holding a selected point; edges mode: all edges of the pieces holding a selected edge. A point or
 edge on two pieces belongs to both. `select-connected` (O26; after Disconnect every top polygon owns its
-points): poly 16 stays alone. `sel-connected-point-only` (O58): two cubes welded along a shared point
+points): poly 16 stays alone. `select-connected-preserve-groups` (O26; Disconnect with Preserve Groups keeps the four top polygons joined): poly 16 selects 16-19, which the shared-edge rule gives. `sel-connected-point-only` (O58): two cubes welded along a shared point
 pair (an edge used by four polygons) are **not** connected, so selecting one polygon gives the six
 polygons of its cube. Sharing a corner point alone does not connect polygons either (the
 earlier point-based rule selected both cubes). **Parity-pending**: points mode and edges mode, and
