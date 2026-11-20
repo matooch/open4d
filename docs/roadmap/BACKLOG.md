@@ -190,4 +190,5 @@ implementers can avoid collisions.
 | 191 | [R25 Helix Bézier construction (sampling parity)](../agents/tasks/191-helix-sampling.md) | B | 028, 042 | done | generators |
 | 192 | [Volume and rig nodes in the editor: evaluation hook, commands, display](../agents/tasks/192-volume-rig-integration.md) | F, H | 081, 083, 100, 101, 112, 084 | done | generators, app, command, ui, viewport, volume, rig |
 | 193 | [Parity tests use Extrude's Auto direction](../agents/tasks/193-extrude-tests-use-auto.md) | C | 044, 045 | ready | generators (tests) |
+| 194 | [Materials and shaders in the document: hosting, links, Generate UVW command](../agents/tasks/194-material-hosting.md) | J | 123, 125, 127 | ready | core, material, shaders, app, command, ui, io |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |
