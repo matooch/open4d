@@ -268,6 +268,9 @@ pub(crate) fn evaluate_geometry(
     if node.type_id == boole::TYPE {
         return boole::evaluate_boole(scene, id, ctx);
     }
+    if node.type_id == spline_mask::TYPE {
+        return spline_mask::cap_mesh(scene, id);
+    }
     if node.type_id == cloner::TYPE {
         return cloner::evaluate_cloner(scene, id, &node.params, ctx);
     }

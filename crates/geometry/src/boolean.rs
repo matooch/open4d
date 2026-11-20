@@ -456,6 +456,7 @@ type Group = (DVec3, bool, Vec<Vec<u32>>);
 struct Region {
     operand: u8,
     src: usize,
+    same: bool,
     n: DVec3,
     outer: Vec<u32>,
     holes: Vec<Vec<u32>>,
@@ -782,12 +783,16 @@ pub fn boolean(a: &PolyMesh, b: &PolyMesh, opts: &BoolOptions) -> BoolResult {
     use Class::*;
     let keep_a = |c: Class| match opts.op {
         Union => matches!(c, Outside | Same),
-        Subtract | Without => matches!(c, Outside | Opposite),
+        // A subtract B keeps A's coplanar-same fragments too (`boole/r25-a_minus_b-shift-x`)
+        Subtract => matches!(c, Outside | Opposite | Same),
+        Without => matches!(c, Outside | Opposite),
         Intersect => matches!(c, Inside | Same),
     };
     // Some(flip) if kept
     let keep_b = |c: Class| match (opts.op, c) {
-        (Union, Outside) => Some(false),
+        // both solids keep their coplanar-same fragments in a union: the overlap is
+        // doubled and the result is not closed (`boole/r25-union-shift-x`)
+        (Union, Outside | Same) => Some(false),
         (Subtract, Inside) => Some(true),
         (Intersect, Inside) => Some(false),
         _ => None,
@@ -808,8 +813,10 @@ pub fn boolean(a: &PolyMesh, b: &PolyMesh, opts: &BoolOptions) -> BoolResult {
                 .collect()
         })
         .collect();
-    let mut groups: BTreeMap<(u8, usize), Group> = BTreeMap::new();
-    let mut add = |w: &mut Welder, op: u8, f: &Piece, flip: bool| {
+    let mut groups: BTreeMap<(u8, usize, bool), Group> = BTreeMap::new();
+    // Fragments of one source polygon merge back into one polygon only within a class: the
+    // part that lies on the other solid's face stays a polygon of its own (`boole/r25-union-shift-x`).
+    let mut add = |w: &mut Welder, op: u8, f: &Piece, flip: bool, same: bool| {
         let mut lp: Vec<u32> = f.pts.iter().map(|p| w.id(*p, None)).collect();
         lp.dedup();
         while lp.len() > 1 && lp.first() == lp.last() {
@@ -823,31 +830,39 @@ pub fn boolean(a: &PolyMesh, b: &PolyMesh, opts: &BoolOptions) -> BoolResult {
         }
         let n = if flip { -f.plane.n } else { f.plane.n };
         groups
-            .entry((op, f.src))
+            .entry((op, f.src, same))
             .or_insert_with(|| (n, flip, Vec::new()))
             .2
             .push(lp);
     };
+    // B wholly inside A leaves no cavity: A stays as it is and B contributes nothing
+    // (`boole/r25-a_minus_b-inside`, BOOLE.md §5a).
+    let nested_subtract = opts.op == Subtract
+        && fa.iter().all(|f| classify(f, &pb, eps) == Outside)
+        && fb.iter().all(|f| classify(f, &pa, eps) == Inside);
     for f in &fa {
-        if keep_a(classify(f, &pb, eps)) {
-            add(&mut w, 0, f, false);
+        let class = classify(f, &pb, eps);
+        if keep_a(class) {
+            add(&mut w, 0, f, false, class == Same);
         }
     }
-    if opts.op != Without {
+    if opts.op != Without && !nested_subtract {
         for f in &fb {
-            if let Some(flip) = keep_b(classify(f, &pa, eps)) {
-                add(&mut w, 1, f, flip);
+            let class = classify(f, &pa, eps);
+            if let Some(flip) = keep_b(class) {
+                add(&mut w, 1, f, flip, class == Same);
             }
         }
     }
 
     let pts = w.pts.clone();
     let mut regions: Vec<Region> = Vec::new();
-    for (&(operand, src), (n, _, frags)) in &groups {
+    for (&(operand, src, same), (n, _, frags)) in &groups {
         for (outer, holes) in merge_group(&pts, frags, *n, eps) {
             regions.push(Region {
                 operand,
                 src,
+                same,
                 n: *n,
                 outer,
                 holes,
@@ -899,7 +914,7 @@ pub fn boolean(a: &PolyMesh, b: &PolyMesh, opts: &BoolOptions) -> BoolResult {
     for r in &regions {
         let source = || -> Vec<u32> {
             let m = if r.operand == 0 { a } else { b };
-            let flip = groups[&(r.operand, r.src)].1;
+            let flip = groups[&(r.operand, r.src, r.same)].1;
             let mut s: Vec<u32> = m.polys[r.src]
                 .iter()
                 .map(|&i| input_ids[r.operand as usize][i as usize])
@@ -914,7 +929,15 @@ pub fn boolean(a: &PolyMesh, b: &PolyMesh, opts: &BoolOptions) -> BoolResult {
                 || poly_is_convex(&pts, &r.outer, r.n, eps)
                 || same_cycle(&r.outer, &source()));
         if whole {
-            polys.push((r.outer.clone(), r.operand == 1));
+            // an untouched polygon keeps the start corner of its source
+            // (`boole/r25-a_minus_b-inside`: the -X face of a cube is `[6, 7, 1, 0]`)
+            let src = source();
+            let outer = if same_cycle(&r.outer, &src) {
+                src
+            } else {
+                r.outer.clone()
+            };
+            polys.push((outer, r.operand == 1));
         } else {
             for p in convex_pieces(&pts, &r.outer, &r.holes, r.n, eps) {
                 polys.push((p, r.operand == 1));

@@ -40,10 +40,14 @@ fn edges(mesh: &PolyMesh) -> Vec<(u32, u32)> {
 
 /// The ring offsets of a cylinder along `d` (§1 rule 4).
 fn ring(d: DVec3, r: f64, n: usize) -> Vec<DVec3> {
-    let reference = if d.x.abs() > 1.0 - 1e-9 {
+    // the axis `d` is least aligned with (the first of equal ones: X, Y, Z)
+    let a = d.abs();
+    let reference = if a.x <= a.y + 1e-9 && a.x <= a.z + 1e-9 {
+        DVec3::X
+    } else if a.y <= a.z + 1e-9 {
         DVec3::Y
     } else {
-        DVec3::X
+        DVec3::Z
     };
     let u = reference.cross(d).normalize();
     let w = u.cross(d);
@@ -62,9 +66,6 @@ pub fn atom_array(
 ) -> Result<PolyMesh, BuildError> {
     let ty = node_type();
     let p = Params { ty: &ty, values };
-    if p.bool("single_elements") {
-        return Err(BuildError::Unsupported("atom array single elements"));
-    }
     let n = p.int("subdivisions");
     let sphere_ty = sphere::node_type();
     let sphere_values = BTreeMap::from([
@@ -142,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    fn non_axis_edges_and_single_elements() {
+    fn oblique_edges_and_single_elements() {
         let mesh = PolyMesh {
             points: vec![DVec3::ZERO, DVec3::new(1.0, 2.0, 3.0)],
             polys: vec![vec![0, 1]],
@@ -155,10 +156,8 @@ mod tests {
             let radial = (*q - d * along).length();
             assert!((radial - 2.0).abs() < 1e-9, "{radial}");
         }
+        // Single Elements does not change the mesh (`atom-array/single-elements`)
         let on = BTreeMap::from([("single_elements".to_string(), Value::Bool(true))]);
-        assert!(matches!(
-            atom_array(&mesh, &on),
-            Err(BuildError::Unsupported(_))
-        ));
+        assert_eq!(atom_array(&mesh, &on).unwrap(), out);
     }
 }

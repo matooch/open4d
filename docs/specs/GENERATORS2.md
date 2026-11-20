@@ -68,7 +68,9 @@ Params: `weld` true, `tolerance` 0.1 (cm), `phong_mode` enum `manual, average, l
 highest, as_breaks (default)`, `textures` true, `center_axis` false (the link list
 `objects` is not modelled; the children are the inputs).
 Result: the inputs concatenated in child order. With `weld`: points within `tolerance`
-merge into the first occurrence (later points renumbered in order), and a face whose
+merge into the first occurrence (later points renumbered in order) **and sit where the later
+point was** (`connect/tolerance-in`: two cubes 0.5 apart, Tolerance 1, the first cube's x = 100
+points end up at the second cube's x = 100.5; 12 points, 11 faces), and a face whose
 corner set equals that of a **later** face is dropped (`connect/defaults`: A's face at
 x = 100 goes, B's stays). `center_axis = true` → `Unsupported` (not observed).
 
@@ -79,7 +81,10 @@ render_instance, multi_instance`. The local mesh is the reference's local mesh (
 point and face order); the instance's own transform places it. A missing or meshless
 reference gives no geometry, and so does a cycle of instances (an instance of an
 instance follows the chain to its first non-instance). The reference is not consumed
-(it stays visible).
+(it stays visible). **Render Instance** has the same mesh as Instance (`instance/render-instance`:
+the scene export holds the reference cube and the instance cube, 16 points, 12 faces, 8 after
+the weld); the scripted cases export the whole scene, so the test adds the reference's mesh before
+the instance's. Multi-Instance was not observed.
 
 ## 5. Spline inputs
 
@@ -330,8 +335,10 @@ column k, profile index j inner: `[c(k,j), c(k,j+1), c(k+1,j+1), c(k+1,j)]`.
 - **Movement** (brief 042, `lathe/movement`: rectangle at x 300, movement 200): column k is
   lifted by `movement·k/subdivision` along Y (the turn then spans y −200 to 400, size
   600). A moved turn does not close: 33 columns, and the first and last column get caps.
-- **Scaling** (**parity-pending**, no case): x and z are scaled by
-  `1 + (scaling/100 − 1)·k/subdivision` before the rotation; a scaled full turn is open like a
+- **Scaling** (`lathe/r25-scaling-50`, matches exactly): the profile point is scaled
+  **uniformly**, x, y and z, by `1 + (scaling/100 − 1)·k/subdivision` before the rotation (the
+  height scales with the radius: y at column 1 is 0.984375 of the unscaled y for 50 %), and
+  `movement` is added after the scaling; a scaled full turn is open like a
   moved one.
 - **Caps** of an open lathe (partial angle or movement or scaling) of a closed profile come
   from the first and last columns. Triangles: as Extrude's (start from column 0, end from
@@ -400,6 +407,14 @@ rail (§10a); all placed by their transforms; the profile is read in its XY coor
 - **Scale and twist:** with f = length along the path / total length (closed paths
   include the closing chord), the profile is scaled by `1 + (end_scale − 1)·f` and
   rotated by `−end_rotation·f` before the mitre (`sweep/end-scale`, `end-rotation`).
+- **First normal** (`sweep/r25-banking-planar`, a Flower in XY, matches exactly): with Banking on
+  the first ring's normal is `t0 × Z`, normalised (the XY plane's normal; +x at the Flower's inner
+  point and radially outward on the helix). Hypotheses: (1) away from the bend (the former rule: -x
+  on the Flower, rejected), (2) `t0 × Z` (adopted; a tangent along Z falls back to rule 1),
+  (3) `Y × t0` for a tangent tilted towards Z: `sweep/r25-helix-sub4` (Helix Subdivision 4) has a
+  first ring normal `(-0.84, 0, 0.54)` = `Y × t0` for `t0 = (-0.54, 0, -0.84)`, which `t0 × Z`
+  misses (**parity-pending**: the switch between the two, and the sign, are not derived, so
+  `r25-helix-sub4` and `-sub8` stay in `KNOWN_MISMATCH`).
 - **Banking off** (brief 042, `sweep/banking`): the normal is not transported but
   `Y × tangent`, normalised (world up; the profile's x axis stays horizontal), with the same
   bisector tangent; where the tangent is parallel to Y the previous normal is kept
@@ -459,6 +474,13 @@ a 3-array `size` on a cube is `size_x/y/z`; Symmetry's `weld_tolerance` is `tole
   Not derived: Frenet, bend at point 1, parallel transport (four discretisations), coarse
   transport, and projection are rejected. `sweep/helix` (R20) shows the same lag.
   The end scale/rotation rule (§10) is otherwise unchanged.
+- **Follow-up cases (brief 042 rows of generators-3.md).** Matching exactly: `sweep/r25-banking-off-rotated`
+  (a Helix rotated 90° about X with Banking off: the `Y × tangent` rule holds in world space, not
+  the path's own frame), `sweep/r25-banking-planar` (first normal `t0 × Z`, above),
+  `lathe/r25-scaling-50` (§8), `connect/tolerance-in`, `instance/render-instance`. Pinned
+  (`KNOWN_MISMATCH`, reasons in `generators_parity.rs`): `sweep/r25-helix-sub4`, `-sub8`,
+  `-helix-radius`, `-rail-rectangle`. Not buildable: `sweep/r25-scale-end-only` (its 2-point Linear
+  path of length 400 has no recorded points; `UNSUPPORTED`).
 
 ## 11. Parity tests
 

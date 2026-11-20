@@ -450,6 +450,22 @@ fn intersections(pa: &[(f64, DVec3)], end_a: f64, pb: &[(f64, DVec3)], end_b: f6
             let t = cross2(b0 - a0, s) / denom;
             let u = cross2(b0 - a0, r) / denom;
             if (0.0..1.0).contains(&t) && (0.0..1.0).contains(&u) {
+                // A hit on a vertex where the polygon only touches the other outline
+                // and stays on its side is a tangency, not a crossing (SPLINES.md §8.3).
+                let side = |line: DVec3, from: DVec3, q: DVec3| cross2(line, q - from);
+                let touches = |pts: &[(f64, DVec3)], j: usize, line: DVec3, from: DVec3, at_end| {
+                    let n = pts.len();
+                    let v = if at_end { (j + 1) % n } else { j };
+                    let (before, after) = (pts[(v + n - 1) % n].1, pts[(v + 1) % n].1);
+                    let (sb, sa) = (side(line, from, before), side(line, from, after));
+                    sb * sa > 0.0
+                };
+                const EPS: f64 = 1e-9;
+                let tangent = (u < EPS || u > 1.0 - EPS) && touches(pb, j, r, a0, u > 1.0 - EPS)
+                    || (t < EPS || t > 1.0 - EPS) && touches(pa, i, s, b0, t > 1.0 - EPS);
+                if tangent {
+                    continue;
+                }
                 let p = a0 + r * t;
                 if hits.iter().all(|h| (h.p - p).length() > 1e-9) {
                     hits.push(Hit {

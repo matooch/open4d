@@ -454,20 +454,22 @@ impl HelixShape {
         )
     }
 
-    /// R25 form (`splines-2/helix-uniform`): `n + 1` points at `s = i/n`. The handles at a
-    /// point lie along `f(s + 1/n) - f(s - 1/n)` and are a third of the chord of the piece
-    /// they belong to long (GENERATORS2.md §6.1).
+    /// R25 form (`splines-2/helix-uniform`): `n + 1` points at `s = i/n`. Both handles of a
+    /// point lie along `f(s + 1/n) - f(s - 1/n)` and are a third of the chord *before* the
+    /// point long, `|f(s) - f(s - 1/n)|` (the analytic curve extended past the start;
+    /// `sweep/r25-helix-radius`, whose radius changes along the helix, settles that it is the
+    /// previous chord, not the next one; GENERATORS2.md §6.1).
     fn bezier(&self, n: usize, sampling: Sampling) -> Curve {
         let d = 1.0 / n as f64;
-        let handle = |s: f64, chord: f64| {
+        let handle = |s: f64| {
+            let chord = (self.at(s) - self.at(s - d)).length();
             (self.at(s + d) - self.at(s - d)).normalize_or_zero() * (chord / 3.0)
         };
         let segments = (0..n)
             .map(|i| {
                 let (s0, s1) = (i as f64 * d, (i + 1) as f64 * d);
                 let (p0, p1) = (self.at(s0), self.at(s1));
-                let chord = (p1 - p0).length();
-                [p0, p0 + handle(s0, chord), p1 - handle(s1, chord), p1]
+                [p0, p0 + handle(s0), p1 - handle(s1), p1]
             })
             .collect();
         Curve::new(segments, false, false, sampling)

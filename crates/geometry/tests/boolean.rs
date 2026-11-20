@@ -162,31 +162,33 @@ fn touching_cubes_keep_a_whole_when_subtracting() {
 
 #[test]
 fn coplanar_same_side_faces() {
-    // A = [0,2]³, B = [1,3]×[0,2]×[0,2]: four faces of each are coplanar.
+    // A = [0,2]³, B = [1,3]×[0,2]×[0,2]: four faces of each are coplanar. As observed in R25
+    // (`boole/r25-union-shift-x`, `-a_minus_b-shift-x`) the coplanar-same fragments are kept
+    // by both solids in a union (the overlap is doubled, the result is open) and by A in a
+    // subtraction.
     let (a, b) = (
         boxm([0.0; 3], [2.0; 3]),
         boxm([1.0, 0.0, 0.0], [3.0, 2.0, 2.0]),
     );
     let u = run(&a, &b, BoolOp::Union, true);
-    assert!(closed(&u.mesh));
-    close(volume(&u.mesh), 12.0);
+    assert!(!closed(&u.mesh));
+    assert_eq!(u.mesh.polys.len(), 18, "9 faces of each solid");
+    let s = run(&a, &b, BoolOp::Subtract, true);
+    assert_eq!(s.mesh.polys.len(), 10, "A's 9 faces and B's cut face");
+    assert_eq!(s.from_b.iter().filter(|b| **b).count(), 1);
     same_solid(
         &run(&a, &b, BoolOp::Intersect, true).mesh,
         &boxm([1.0, 0.0, 0.0], [2.0; 3]),
     );
-    same_solid(
-        &run(&a, &b, BoolOp::Subtract, true).mesh,
-        &boxm([0.0; 3], [1.0, 2.0, 2.0]),
-    );
 }
 
 #[test]
-fn nested_cube_leaves_a_cavity() {
+fn nested_cube_leaves_no_cavity() {
+    // observed in R25 (`boole/r25-a_minus_b-inside`): A subtract B with B wholly inside A is A
     let (a, b) = (cube(A, 100.0), cube([10.0, 0.0, 0.0], 20.0));
     let s = run(&a, &b, BoolOp::Subtract, true);
-    assert_eq!((s.mesh.points.len(), s.mesh.polys.len()), (16, 12));
-    assert!(closed(&s.mesh));
-    close(volume(&s.mesh), 200f64.powi(3) - 40f64.powi(3));
+    same_solid(&s.mesh, &a);
+    assert!(s.from_b.iter().all(|b| !b));
     same_solid(&run(&a, &b, BoolOp::Union, true).mesh, &a);
     same_solid(&run(&a, &b, BoolOp::Intersect, true).mesh, &b);
 }
