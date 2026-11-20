@@ -10,9 +10,11 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 pub mod samples;
+pub mod volume;
 pub use samples::{
     Samples, SamplesReport, compare_samples, parse_samples, samples_info, validate_samples,
 };
+pub use volume::{VolumeMeshReport, compare_volume_mesh};
 
 // ---------------------------------------------------------------------------
 // Mesh + OBJ
