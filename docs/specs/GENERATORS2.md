@@ -165,7 +165,8 @@ for the rest). The helix biases and `reverse` → `Unsupported`. The circle's `e
 ### 6.2 Intermediate Points (`spline_sampling.rs`)
 
 A spline is a list of cubic Bezier segments `[p0, c0, c1, p1]` (`linear` splines are
-straight pieces and get **no** intermediate points in any mode), closed or open, plus a
+straight pieces and get **no** intermediate points in any mode but Uniform, whose steps run over
+the whole spline: `splines-2/linear-open-uniform`), closed or open, plus a
 `Sampling { mode, number, angle, max_length }` read from its params. `sample(curve)` gives
 the ordered point list the generators consume: for every segment its start point, then the
 segment's interior samples (parameters `t` in `(0, 1)`), and for an open spline the end
@@ -176,7 +177,7 @@ Uniform, Angle by Adaptive and Subdivided, Maximum Length by Subdivided.
 | Mode | Interior samples of one curved segment | Evidence |
 |---|---|---|
 | None | none: only the spline's own points | – (**parity-pending**) |
-| Uniform | `segments · (number + 1)` equal steps of arc length over the **whole** spline (a closed spline keeps all of them, an open one gets the end point too); the spline's own points are not kept unless a step lands on one. Lengths are the polylines through every segment at `t = k/50`; the sample's `t` is interpolated linearly inside its piece | `splines-2/circle-uniform` (36 points of 4 quarters; 5e-7 with 50 pieces, 3e-3 with an exact length, 2e-3 with 40, 3e-3 with 64), `helix-uniform` (900 steps, 6e-7 with the open-spline offsets below), `arc-defaults` (37 points of 4 segments), `arc-sector` (45 points for 5 pieces: arc and chord are stepped as one outline, 5e-7) |
+| Uniform | `segments · (number + 1)` equal steps of arc length over the **whole** spline (a closed spline keeps all of them, an open one gets the end point too); the spline's own points are not kept unless a step lands on one. Lengths are the polylines through every segment at `t = k/50`; the sample's `t` is interpolated linearly inside its piece | `splines-2/circle-uniform` (36 points of 4 quarters; 5e-7 with 50 pieces, 3e-3 with an exact length, 2e-3 with 40, 3e-3 with 64), `helix-uniform` (900 steps, 6e-7 with the open-spline offsets below), `helix-uniform-sub10/-sub50/-sub200`, `arc-uniform-n50/-n200`, `linear-open-uniform` (a two-segment polyline, 1e-4 short at its end), `arc-defaults` (37 points of 4 segments), `arc-sector` (45 points for 5 pieces: arc and chord are stepped as one outline, 5e-7) |
 | Natural | `number` samples at `t = k/(number + 1)` (equal steps of the segment's own parameter) | **parity-pending**: no case. Equal-`t` was the first reading of Uniform and is 1.4 off `circle-uniform`, so it is not Uniform; Natural takes it as the only other even spacing |
 | Adaptive | walk `t` in steps of 1/50 and emit a sample once the tangent differs from the tangent at the previous sample by `angle` (the angle between the two tangents, not the accumulated turn: the flower petal, whose tangent turns back, needs this). If the turn still to come to the segment's end is smaller than the piece just closed, the sample goes to the middle of the previous sample and the end instead (on the 1/50 grid, rounded down), and later samples are measured from the candidate's tangent. For the circle: `t = 0.06·k` (k = 1..15) and 0.94, i.e. 17 points per quarter, 68 in all, for any radius. A piece that turns less than `angle` gets nothing | `extrude/defaults`, `lathe/circle`, `splines-2/{cycloid-defaults, cycloid-epi, flower-defaults, rectangle-rounding, nside-rounding}` (the lone sample at the middle of the cycloid pieces, grid points 18/34 of the epicycloid pieces, the S-shaped flower piece); 5° only, other angles **parity-pending** |
 | Subdivided | the smallest `m` such that each of `m` equal-`t` pieces turns by at most `angle` and has a chord of at most `max_length`; samples at `t = k/m` | **parity-pending**: no case |
@@ -188,11 +189,13 @@ Uniform, Angle by Adaptive and Subdivided, Maximum Length by Subdivided.
   of an open spline lie at `total·k/steps·(1 − 1e-7)` (`UNIFORM_OPEN_LAG`; `helix-uniform`
   lags 1.00e-7 of its arc length from the first step to the last but one; `arc-defaults`
   3.2e-5 → 1.9e-6 and `arc-angles` 9e-5 → 5e-6 with it; closed splines show none:
-  `circle-uniform`). The last point sits at `total·(1 − 1e-4) − 1.26e-8·segments²`
-  (`UNIFORM_END_EXTRA`): `helix-uniform` (100 segments) ends 1.26e-4 before the `1e-4` rule,
-  the 3–4 segment arcs allow 1e-6 at most (`spline-wrap/arc`, which extends its end chord 99
-  lengths, would show more). The square is only the simplest law through those two ends; the
-  cause is unknown (float rounding of the reference's length table was tried: it moves the arc
+  `circle-uniform`). The last point sits at `total·(1 − 1e-4) − 1.26e-6·segments`
+  (`UNIFORM_END_EXTRA`): `helix-uniform` (100 segments) ends 1.26e-4 before the `1e-4` rule and
+  `helix-uniform-sub200` 2.5e-4; the 10- and 50-segment helices and the 4-segment arcs fit within
+  1e-4 with it (`spline-wrap/arc`, which extends its end chord 99 lengths, would show more).
+  The previous squared law (1.26e-8·segments²) failed `-sub200` by 2.5e-4; a fine-length-table
+  end (true arc length) was tried and broke the arcs by 7e-4. Linear is only the simplest law
+  through those ends; the cause is unknown (float rounding of the reference's length table was tried: it moves the arc
   cases by 1.3e-4 and was rejected).
   The R20 Adaptive helix ends exactly on its end point (z −200), so the shortfall is taken as
   part of Uniform (**parity-pending** for None/Natural/Subdivided, which keep the exact end).

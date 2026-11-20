@@ -472,3 +472,65 @@ pub fn apply(
         tx.set_param(id, k, value).unwrap();
     }
 }
+
+/// Creates the spline a flat or scripted `input` table describes under `parent` and sets its
+/// params: a spline primitive by its `type` (`circle_spline`, or the label `Arc`), or an editable
+/// spline from `points` (+ `close_spline`, `type` = the interpolation label).
+pub fn create_spline(
+    tx: &mut forge_core::Tx,
+    reg: &Registry,
+    parent: Option<NodeId>,
+    input: &Table,
+) -> NodeId {
+    use forge_generators::editable_spline::{self, SplineData};
+    let label = input.get("type").and_then(|v| v.as_str()).unwrap_or("");
+    if let Some(points) = input.get("points").and_then(|v| v.as_array()) {
+        let pts: Vec<glam::DVec3> = points
+            .iter()
+            .map(|p| match vec3(p) {
+                Value::Vec3(v) => glam::DVec3::from_array(v),
+                _ => unreachable!(),
+            })
+            .collect();
+        let closed = input
+            .get("close_spline")
+            .is_some_and(|v| v.as_integer() == Some(1) || v.as_bool() == Some(true));
+        let id = tx.create(editable_spline::TYPE, parent, None).unwrap();
+        for (k, v) in SplineData::from_points(pts, closed).to_values() {
+            tx.set_param(id, &k, v).unwrap();
+        }
+        let ty = reg.get(editable_spline::TYPE).unwrap();
+        let own: Table = input
+            .iter()
+            .filter(|(k, _)| !matches!(k.as_str(), "points" | "close_spline" | "type" | "pos"))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        tx.set_param(
+            id,
+            "type",
+            Value::Enum(enum_id(ty.find_param("type").unwrap(), label)),
+        )
+        .unwrap();
+        apply(tx, reg, id, editable_spline::TYPE, &own);
+        if let Some(p) = input.get("pos") {
+            tx.set_param(id, "transform.pos", vec3(p)).unwrap();
+        }
+        return id;
+    }
+    let mut table = input.clone();
+    let type_id = if label.ends_with("_spline") {
+        label.to_string()
+    } else {
+        // the label is the Arc's own Type (Arc, Sector, ...): the node type is read off the labels
+        let node = scripted_child_type(&table);
+        if node == "arc_spline" {
+            table.insert("arc_type".into(), toml::Value::String(label.to_string()));
+        }
+        table.remove("type");
+        node.to_string()
+    };
+    let ty = format!("forge.{type_id}");
+    let id = tx.create(&ty, parent, None).unwrap();
+    apply(tx, reg, id, &ty, &table);
+    id
+}
