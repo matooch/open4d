@@ -498,6 +498,17 @@ have value 1 (moved up by 100: y 150, 200, 250), the clones at 0 and 200 value 0
 (`linear-plain`: every clone moves by the full 100). The Linear field default direction in the app is X+, so a clone
 column at x = 0 has value 0.5 (`linear-plain-field`: y + 50).
 
+### Field lists of any shape (brief 072)
+Every effector type reads the same `fields` row list through `FieldList::from_param` (no second copy of the layer logic):
+Plain, Random, Step, Formula, Time, Target and Delay all take `falloff = list.sample(world position of the clone)`, so
+everything F7 and F8 define applies unchanged to an effector: blend modes and strengths of the rows, Group fields,
+modifier layers (Remap, Invert, Clamp, Colorize, identity Curve), field transforms (a moved or scaled field acts in
+world space) and switched-off or disabled rows (left out). A modifier layer is evaluated over the rows below it
+(F8), so Invert over a Spherical gives `1 - v`. A field type or modifier without rules (`Unsupported` in the fields crate,
+e.g. Step layer, Shader field) makes the effector report `CloneError::Unsupported`. Rules here are **parity-pending**
+beyond the single-layer cases of E8: no observation holds more than one layer on an effector.
+Test: `crates/app/tests/cloner.rs::effector_falloff_takes_a_whole_field_list`.
+
 The field's colour channel is its `Color` parameter (a constant colour, white by default; F2 adds
 the `color` parameter). Colour of a multi-layer list and the colour-mode variants of the fields are 072.
 

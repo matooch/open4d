@@ -128,10 +128,12 @@ fn build(case: &GoldenCase) -> Result<Mesh, BuildError> {
         doc.transact("extrude", |tx| {
             // the plane normal is u x v: +z for XY, -x for ZY
             let movement = if zy {
-                [-sign * offset, 0.0, 0.0]
+                [-sign, 0.0, 0.0]
             } else {
-                [0.0, 0.0, sign * offset]
+                [0.0, 0.0, sign]
             };
+            tx.set_param(root, "direction", Value::Enum("custom".into()))?;
+            tx.set_param(root, "offset", Value::Float(offset))?;
             tx.set_param(root, "movement", Value::Vec3(movement))?;
             if !caps {
                 for cap in ["cap_start", "cap_end"] {

@@ -438,9 +438,9 @@ fn import_file(
         ))
     })?;
     let options = formats::resolve_options(&descs, options).map_err(bad_option)?;
-    let objects = std::fs::read_to_string(path)
+    let objects = std::fs::read(path)
         .map_err(|e| e.to_string())
-        .and_then(|text| formats::read_text(id, &text, &options).map_err(|e| e.to_string()))
+        .and_then(|bytes| formats::read_bytes(id, &bytes, &options).map_err(|e| e.to_string()))
         .map_err(|e| CommandError::Failed(format!("Import failed: {e}")))?;
     let label = format!("Import {}", short_label(info));
     let ids = ctx
@@ -481,12 +481,14 @@ fn export_file(
     let options = formats::resolve_options(&descs, options).map_err(bad_option)?;
     let roots: Vec<NodeId> = ctx.selection().nodes.iter().copied().collect();
     let scene = ctx.evaluated_scene();
-    let (text, count) = formats::export_text(id, &scene, selected.then_some(&roots[..]), &options)
-        .map_err(|e| match e {
-            IoError::NothingToExport => CommandError::failed("Nothing to export"),
-            other => CommandError::Failed(format!("Export failed: {other}")),
-        })?;
-    std::fs::write(path, text).map_err(|e| CommandError::Failed(format!("Export failed: {e}")))?;
+    let (bytes, count) =
+        formats::export_bytes(id, &scene, selected.then_some(&roots[..]), &options).map_err(
+            |e| match e {
+                IoError::NothingToExport => CommandError::failed("Nothing to export"),
+                other => CommandError::Failed(format!("Export failed: {other}")),
+            },
+        )?;
+    std::fs::write(path, bytes).map_err(|e| CommandError::Failed(format!("Export failed: {e}")))?;
     ctx.set_status(String::new());
     Ok(json!({"objects": count, "format": id}))
 }

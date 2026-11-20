@@ -116,7 +116,7 @@ fn a_cancelled_chooser_and_nothing_to_export_open_no_window() {
     script.borrow_mut().open.push_back(None);
     e.begin_import("obj");
     assert!(e.io_dialog().is_none());
-    e.begin_import("stl");
+    e.begin_import("dxf");
     assert!(e.state.status.contains("unknown format"));
 }
 

@@ -7,6 +7,7 @@ use serde_json::Map;
 
 use crate::export_scene;
 use crate::obj::{self, ObjObject, ReadOptions, WriteOptions};
+use crate::{ply, stl};
 
 /// One exchange format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,13 +20,29 @@ pub struct FormatInfo {
     pub export: bool,
 }
 
-const FORMATS: &[FormatInfo] = &[FormatInfo {
-    id: "obj",
-    label: "Wavefront OBJ",
-    extensions: &["obj"],
-    import: true,
-    export: true,
-}];
+const FORMATS: &[FormatInfo] = &[
+    FormatInfo {
+        id: "obj",
+        label: "Wavefront OBJ",
+        extensions: &["obj"],
+        import: true,
+        export: true,
+    },
+    FormatInfo {
+        id: "stl",
+        label: "STL",
+        extensions: &["stl"],
+        import: true,
+        export: true,
+    },
+    FormatInfo {
+        id: "ply",
+        label: "PLY",
+        extensions: &["ply"],
+        import: true,
+        export: true,
+    },
+];
 
 /// Option values by descriptor id.
 pub type Options = BTreeMap<String, Value>;
@@ -68,6 +85,7 @@ pub fn format_for_path(path: &str) -> Option<&'static FormatInfo> {
 pub fn import_options(id: &str) -> Option<Vec<ParamDesc>> {
     match id {
         "obj" => Some(vec![ParamDesc::bool("flip_z", "Flip Z", false)]),
+        "stl" | "ply" => Some(vec![scale_option()]),
         _ => None,
     }
 }
@@ -79,8 +97,17 @@ pub fn export_options(id: &str) -> Option<Vec<ParamDesc>> {
             ParamDesc::bool("normals", "Write normals", true),
             ParamDesc::bool("weld", "Merge equal points", true),
         ]),
+        "stl" | "ply" => Some(vec![
+            ParamDesc::bool("binary", "Binary", true),
+            scale_option(),
+        ]),
         _ => None,
     }
+}
+
+/// The multiplier of every coordinate of STL and PLY (IO.md §4).
+fn scale_option() -> ParamDesc {
+    ParamDesc::float("scale", "Scale", 1.0).range(1e-9, 1e9)
 }
 
 /// The defaults of a descriptor list.
@@ -146,14 +173,62 @@ pub fn obj_write_options(options: &Options) -> WriteOptions {
     }
 }
 
+fn float(options: &Options, id: &str, default: f64) -> f64 {
+    match options.get(id) {
+        Some(Value::Float(f)) => *f,
+        _ => default,
+    }
+}
+
+pub fn stl_write_options(options: &Options) -> stl::WriteOptions {
+    stl::WriteOptions {
+        binary: flag(options, "binary", true),
+        scale: float(options, "scale", 1.0),
+    }
+}
+
+pub fn stl_read_options(options: &Options) -> stl::ReadOptions {
+    stl::ReadOptions {
+        scale: float(options, "scale", 1.0),
+    }
+}
+
+pub fn ply_write_options(options: &Options) -> ply::WriteOptions {
+    ply::WriteOptions {
+        binary: flag(options, "binary", true),
+        scale: float(options, "scale", 1.0),
+    }
+}
+
+pub fn ply_read_options(options: &Options) -> ply::ReadOptions {
+    ply::ReadOptions {
+        scale: float(options, "scale", 1.0),
+    }
+}
+
 /// The scene (or the listed nodes with their descendants) as the format's text, plus the
-/// number of objects written.
+/// number of objects written. A format whose output is not text (binary STL and PLY) is
+/// `Unsupported(id, "text export")`: use [`export_bytes`].
 pub fn export_text(
     id: &str,
     scene: &Scene,
     roots: Option<&[NodeId]>,
     options: &Options,
 ) -> Result<(String, usize), IoError> {
+    let (bytes, count) = export_bytes(id, scene, roots, options)?;
+    let text = String::from_utf8(bytes)
+        .map_err(|_| IoError::Unsupported(id.to_string(), "text export"))?;
+    Ok((text, count))
+}
+
+/// The scene (or the listed nodes with their descendants) as the format's file content,
+/// plus the number of objects written (IO.md §4).
+pub fn export_bytes(
+    id: &str,
+    scene: &Scene,
+    roots: Option<&[NodeId]>,
+    options: &Options,
+) -> Result<(Vec<u8>, usize), IoError> {
     let info = format_by_id(id).ok_or_else(|| IoError::UnknownFormat(id.to_string()))?;
     if !info.export {
         return Err(IoError::Unsupported(id.to_string(), "export"));
@@ -162,25 +237,34 @@ pub fn export_text(
     if objects.is_empty() {
         return Err(IoError::NothingToExport);
     }
-    match id {
-        "obj" => Ok((
-            obj::write(&objects, &obj_write_options(options)),
-            objects.len(),
-        )),
-        _ => Err(IoError::Unsupported(id.to_string(), "export")),
-    }
+    let bytes = match id {
+        "obj" => obj::write(&objects, &obj_write_options(options)).into_bytes(),
+        "stl" => stl::write(&objects, &stl_write_options(options)),
+        "ply" => ply::write(&objects, &ply_write_options(options)),
+        _ => return Err(IoError::Unsupported(id.to_string(), "export")),
+    };
+    Ok((bytes, objects.len()))
 }
 
 /// Parses `text` in the format into objects.
 pub fn read_text(id: &str, text: &str, options: &Options) -> Result<Vec<ObjObject>, IoError> {
+    read_bytes(id, text.as_bytes(), options)
+}
+
+/// Parses a file's content in the format into objects.
+pub fn read_bytes(id: &str, bytes: &[u8], options: &Options) -> Result<Vec<ObjObject>, IoError> {
     let info = format_by_id(id).ok_or_else(|| IoError::UnknownFormat(id.to_string()))?;
     if !info.import {
         return Err(IoError::Unsupported(id.to_string(), "import"));
     }
+    let parse = |e: &dyn std::fmt::Display| IoError::Parse(e.to_string());
     match id {
         "obj" => {
-            obj::read(text, &obj_read_options(options)).map_err(|e| IoError::Parse(e.to_string()))
+            let text = std::str::from_utf8(bytes).map_err(|e| parse(&e))?;
+            obj::read(text, &obj_read_options(options)).map_err(|e| parse(&e))
         }
+        "stl" => stl::read(bytes, &stl_read_options(options)).map_err(|e| parse(&e)),
+        "ply" => ply::read(bytes, &ply_read_options(options)).map_err(|e| parse(&e)),
         _ => Err(IoError::Unsupported(id.to_string(), "import")),
     }
 }

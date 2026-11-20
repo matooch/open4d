@@ -41,6 +41,10 @@ pub struct Edit {
     /// An edit of another object's parameter than the row's (a list entry's enable box or
     /// strength, UI.md §16.1): the node and the parameter id.
     pub target: Option<(NodeId, String)>,
+    /// A `LinkRows` list edit that also needs a new object: the type id to create. The editor
+    /// creates it and appends a row for it to the list in `value` (UI.md §16.6, the field
+    /// list's folder button).
+    pub create: Option<String>,
 }
 
 impl Edit {
@@ -50,6 +54,7 @@ impl Edit {
             component: None,
             phase: Phase::Commit,
             target: None,
+            create: None,
         }
     }
 

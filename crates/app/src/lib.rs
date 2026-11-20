@@ -9,6 +9,7 @@ pub mod diagnostics;
 pub mod motion;
 pub mod param_edit;
 pub mod query;
+pub mod rig_commands;
 pub mod schedule;
 pub mod select;
 
@@ -23,7 +24,7 @@ use forge_core::{Document, EvalCtx, NodeId, Registry, RegistryError, Scene, Scen
 use forge_fields::FieldToolset;
 use forge_generators::{Primitives, evaluate};
 use forge_geometry::PolyMesh;
-use forge_io::formats::{IoError, Options, export_text};
+use forge_io::formats::{IoError, Options, export_bytes};
 use forge_modifiers::Deformers;
 use serde_json::Value;
 
@@ -38,6 +39,8 @@ pub fn default_registry() -> Result<Registry, RegistryError> {
     registry.install(&CloneToolset)?;
     registry.install(&FieldToolset)?;
     registry.install(&forge_nodes::NodesToolset)?;
+    registry.install(&forge_rig::Rig)?;
+    registry.install(&forge_volume::VolumePlugin)?;
     Ok(registry)
 }
 
@@ -48,6 +51,7 @@ pub fn default_command_registry() -> CommandRegistry {
     param_edit::register(&mut commands).expect("param.edit is unique");
     coords::register(&mut commands).expect("transform.edit is unique");
     forge_nodes::register_commands(&mut commands).expect("graph.* ids are unique");
+    rig_commands::register(&mut commands).expect("joint.* ids are unique");
     commands
 }
 
@@ -239,11 +243,11 @@ impl App {
         options: &Options,
     ) -> Result<usize, AppError> {
         let scene = self.eval.get(self.doc.scene(), frame);
-        let (text, count) = export_text(format, &scene, roots, options).map_err(|e| match e {
+        let (bytes, count) = export_bytes(format, &scene, roots, options).map_err(|e| match e {
             IoError::NothingToExport => AppError::NothingToExport,
             other => AppError::Io(other.to_string()),
         })?;
-        std::fs::write(path, text).map_err(|e| AppError::Io(e.to_string()))?;
+        std::fs::write(path, bytes).map_err(|e| AppError::Io(e.to_string()))?;
         Ok(count)
     }
 

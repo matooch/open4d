@@ -1,6 +1,6 @@
 # 044 · Shared Caps/Bevel tabs and Extrude R25 options
 
-Status: waiting: O56 · Area: C · Depends on: 042 · Observations: O56 · Touches: generators
+Status: done · Area: C · Depends on: 042 · Observations: O56 · Touches: generators
 
 ## Goal
 One caps and bevel module serves Extrude, Lathe, Loft and Sweep, matching O56. Extrude gains R25 Direction/Offset.
@@ -16,9 +16,9 @@ One caps and bevel module serves Extrude, Lathe, Loft and Sweep, matching O56. E
 - Extrude Direction: Auto (O17 note: Auto can go to −z: derive the rule), X/Y/Z/Custom.
 
 ## Done when
-- [ ] GENERATORS2.md §caps.
-- [ ] All O56 cases match, or are pinned.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] GENERATORS2.md §caps.
+- [x] All O56 cases match, or are pinned.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -34,3 +34,7 @@ One caps and bevel module serves Extrude, Lathe, Loft and Sweep, matching O56. E
 - Files changed.
 - Open questions or data that would settle them (the reviewer turns these into follow-up forms).
 - The last lines of the gate output.
+- Result: new test caps_bevel_parity.rs: 9/22 exact, 1 known mismatch, 12 unsupported (see GENERATORS2.md §7a and STATUS.md). Added R25 Extrude Direction/Offset (Auto = Newell normal of the spline, X/Y/Z, Custom = unit(movement) x offset; Absolute unsupported), the shared Caps/Bevel params on Extrude, Lathe, Loft and Sweep, 4-point Loft/Sweep triangle caps as a fan (tri-sweep-open).
+- Pinned: Delaunay and Regular Grid caps and every bevel (Size > 0) are Unsupported: ring and fill order not derived; tri-loft-rotated / tri-ellipse-loft lack section data; tri-slice/dodeca are Make Editable cases.
+- Deviation: no spade/Delaunay dependency and no bevel code (the cap types and bevels that need derivation stay refused); the extrude R20 form is a hidden `r20_form` param set by the R20 overlay.
+- Files: crates/generators/src/spline_gens.rs, tests/{caps_bevel_parity,common/mod,r25_drift,generators3_parity,make_editable_parity,spline_sampling,spline_tools_parity,text_parity}.rs, tests/defaults/r20.toml, docs.

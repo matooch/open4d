@@ -1,6 +1,6 @@
 # 085 · Field layers inside the volume builder
 
-Status: waiting: O33 · Area: F · Depends on: 081, 059 · Observations: O33 · Touches: volume, fields
+Status: done · Area: F · Depends on: 081, 059 · Observations: O33 · Touches: volume, fields
 
 ## Goal
 Fields as builder entries (adding density/distance from a field).
@@ -14,8 +14,8 @@ Fields as builder entries (adding density/distance from a field).
 - Sample the field at voxel centres within the active band; mode per entry (add/subtract/multiply).
 
 ## Done when
-- [ ] O33 field cases pass.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] O33 field cases pass.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -25,9 +25,8 @@ Fields as builder entries (adding density/distance from a field).
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: field nodes as builder children act as layers (VOLUME.md section 9); `field-layer` matches geometrically (2648 points as the reference, Hausdorff 1.0; nearest-vertex distance 0.54); 2 builder tests. Whole volumes golden set: 20 of 21 geometric, `smooth-strength` pinned.
+- Rules derived: sampled at the active voxels' world positions, `t = max(0, (f - 0.5) / 0.5)`, add: `value - K t` with `K = 0.625 voxel` (fit 6.2 to 6.25 at voxel 10); subtract and multiply are own design (rows: subtract, intersect). All parity-pending (one case, default mode).
+- Data note: the O33 table says the field-layer mesh has 2168 points; the golden mesh has 2648.
+- Files: crates/volume/src/{filters,node}.rs, tests/builder.rs, tests/volumes_parity.rs, Cargo.toml (forge-fields), docs/specs/VOLUME.md section 9.
+- Open questions: field layers on fog volumes; the per-entry mode names of the reference; other fields.

@@ -1,6 +1,6 @@
 # 045 · Extrude R25 vertex order
 
-Status: ready · Area: C · Depends on: 044 · Observations: O1 · Touches: generators
+Status: done · Area: C · Depends on: 044 · Observations: O1 · Touches: generators
 
 ## Goal
 The R25 extrude cap start corner (brief 07's KNOWN_MISMATCH `r25-drift/extrude-rectangle-caps-quadrangles`) matches without breaking the R20 cases.
@@ -15,8 +15,8 @@ The R25 extrude cap start corner (brief 07's KNOWN_MISMATCH `r25-drift/extrude-r
 - The cap corner order differs between R20 and R25. Our generators target R25 (DECISIONS D12), so switch to the R25 order. The R20 extrude cases then need an app-version-aware expectation: either a cap-rotation-insensitive comparison for R20 cases, or a documented `KNOWN_MISMATCH "R20 order"` list. Choose the one that keeps the most exact checks.
 
 ## Done when
-- [ ] GENERATORS2.md §11.1 resolved; drift test 7/7.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] GENERATORS2.md §11.1 resolved; drift test 7/7.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -32,3 +32,5 @@ The R25 extrude cap start corner (brief 07's KNOWN_MISMATCH `r25-drift/extrude-r
 - Files changed.
 - Open questions or data that would settle them (the reviewer turns these into follow-up forms).
 - The last lines of the gate output.
+- Result: R25 extrude cap order adopted (hypothesis 1, GENERATORS2.md §7a, §11.1); r25_drift 7/7; R20 extrude cases stay exact through the hidden `r20_form` param set by tests/defaults/r20.toml. caps-bevel defaults, caps-triangles, caps-quads, start-only, direction-x agree.
+- Parity-pending: outlines larger than 4 points (the hexagon `tri-extrude-ngon` is a cocircular tie, pinned), cap winding for a displacement against the normal.

@@ -1449,6 +1449,8 @@ dependencies = [
  "forge-nodes",
  "forge-parity-harness",
  "forge-platform",
+ "forge-rig",
+ "forge-volume",
  "glam",
  "rayon",
  "schemars",
@@ -1658,6 +1660,7 @@ dependencies = [
  "forge-geometry",
  "forge-noise",
  "forge-parity-harness",
+ "forge-rig",
  "glam",
  "toml",
 ]
@@ -1744,6 +1747,20 @@ name = "forge-render-gpu"
 version = "0.1.0"
 
 [[package]]
+name = "forge-rig"
+version = "0.1.0"
+dependencies = [
+ "forge-anim",
+ "forge-core",
+ "forge-generators",
+ "forge-geometry",
+ "forge-modifiers",
+ "forge-parity-harness",
+ "glam",
+ "toml",
+]
+
+[[package]]
 name = "forge-rpc"
 version = "0.1.0"
 dependencies = [
@@ -1807,9 +1824,11 @@ dependencies = [
  "forge-modifiers",
  "forge-nodes",
  "forge-platform",
+ "forge-rig",
  "forge-rpc",
  "forge-script",
  "forge-viewport",
+ "forge-volume",
  "glam",
  "png",
  "resvg",
@@ -1834,6 +1853,20 @@ dependencies = [
  "png",
  "pollster 1.0.1",
  "wgpu",
+]
+
+[[package]]
+name = "forge-volume"
+version = "0.1.0"
+dependencies = [
+ "forge-core",
+ "forge-fields",
+ "forge-generators",
+ "forge-geometry",
+ "forge-parity-harness",
+ "glam",
+ "thiserror 2.0.21",
+ "toml",
 ]
 
 [[package]]

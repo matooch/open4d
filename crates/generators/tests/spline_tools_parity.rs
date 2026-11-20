@@ -191,7 +191,8 @@ fn extrude_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
     let (ex, child) = doc
         .transact("case", |tx| {
             let ex = tx.create("forge.extrude", None, None)?;
-            tx.set_param(ex, "movement", Value::Vec3([0.0, 0.0, offset]))?;
+            tx.set_param(ex, "direction", Value::Enum("custom".into()))?;
+            tx.set_param(ex, "offset", Value::Float(offset))?;
             for cap in ["cap_start", "cap_end"] {
                 tx.set_param(ex, cap, Value::Enum("none".into()))?;
             }
@@ -394,7 +395,9 @@ fn tool_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
         .unwrap();
     let sign = auto_sign(&doc, result);
     doc.transact("direction", |tx| {
-        tx.set_param(ex, "movement", Value::Vec3([0.0, 0.0, sign * offset]))
+        tx.set_param(ex, "direction", Value::Enum("custom".into()))?;
+        tx.set_param(ex, "offset", Value::Float(offset))?;
+        tx.set_param(ex, "movement", Value::Vec3([0.0, 0.0, sign]))
     })
     .unwrap();
     let mesh = evaluate(doc.scene(), ex, &EvalCtx::default())?.expect("geometry");

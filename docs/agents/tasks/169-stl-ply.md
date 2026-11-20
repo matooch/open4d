@@ -1,6 +1,6 @@
 # 169 · STL and PLY
 
-Status: waiting: O44 · Area: M · Depends on: – · Observations: O44 · Touches: io
+Status: done · Area: M · Depends on: – · Observations: O44 · Touches: io
 
 ## Goal
 STL (ascii/binary) and PLY import/export.
@@ -13,8 +13,8 @@ STL (ascii/binary) and PLY import/export.
 - Small own readers/writers.
 
 ## Done when
-- [ ] Round trips; O44 cases.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Round trips; O44 cases.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -30,3 +30,6 @@ STL (ascii/binary) and PLY import/export.
 - Files changed.
 - Open questions or data that would settle them (the reviewer turns these into follow-up forms).
 - The last lines of the gate output.
+- Result: crates/io/src/{stl,ply}.rs, byte entry points `export_bytes` / `read_bytes` (app, command and CLI use them), formats `stl` and `ply`. Parity: the 6 golden binary STL files match (6/6); round trips of STL binary/ASCII and PLY binary/ASCII.
+- Rules (IO.md §4): STL point (x, y, z) -> (x, z, y), winding reversed, quad `[a,b,c,d]` -> `[a,c,b],[a,d,c]`, normal = unit (v1-v0)x(v2-v0); all 6 files, 1 468 triangles. Parity-pending: n-gon triangulation, units, ASCII STL, all of PLY (not observed).
+- Tests touched because STL is no longer an unknown format: app io_commands, ui io_dialog, io formats (`dxf` is the unknown one now). `forge convert --format forge` filters import options per source format.

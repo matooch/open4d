@@ -56,6 +56,13 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
             current,
         )
     };
+    let overlay = crate::scene_overlay::VolumeViews::synchronous()
+        .overlay(
+            &scene,
+            &selected,
+            &forge_core::EvalCtx::at_frame(current, f64::from(scene.settings().fps)),
+        )
+        .0;
     let panes: Vec<(PaneRect, Camera, Settings)> = arrange(
         views.layout,
         views.active,
@@ -109,7 +116,10 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
                 &palette,
                 camera,
                 [f64::from(width), f64::from(height)],
-            ),
+            )
+            .into_iter()
+            .chain(overlay.lines(&palette, camera, [f64::from(width), f64::from(height)]))
+            .collect::<Vec<_>>(),
         );
         let frame = Frame {
             instanced: &draw_instanced,
@@ -140,7 +150,10 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
                     &palette,
                     camera,
                     [f64::from(w), f64::from(h)],
-                ),
+                )
+                .into_iter()
+                .chain(overlay.lines(&palette, camera, [f64::from(w), f64::from(h)]))
+                .collect::<Vec<_>>(),
             );
             let frame = Frame {
                 instanced: &draw_instanced,

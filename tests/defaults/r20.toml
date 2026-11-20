@@ -69,6 +69,7 @@ hide_new_edges = false
 
 [extrude]
 movement = [0.0, 0.0, 20.0]  # O4 row `movement_z`; R25 has one Offset number instead
+r20_form = true  # Movement is the displacement and the R20 cap order applies (GENERATORS2.md §7)
 
 [lathe]
 subdivision = 24

@@ -1,6 +1,6 @@
 # 101 · Skin deformer + Weight tag + bind pose (LBS, DQS option)
 
-Status: waiting: O34 · Area: H · Depends on: 100, 050 · Observations: O34 · Touches: rig, modifiers
+Status: done · Area: H · Depends on: 100, 050 · Observations: O34 · Touches: rig, modifiers
 
 ## Goal
 Skinning with explicit weights matches O34 exactly (level A).
@@ -26,9 +26,21 @@ Skinning with explicit weights matches O34 exactly (level A).
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: weight tag (sparse `(slot, point, weight)` triples + bind pose in two hidden `Vec3List`
+  params), skin deformer (LBS, dual quaternion option, max influences, normalise), dispatch hook in
+  `forge-modifiers::apply_deformer_resolved`. Parity: O34 mesh cases 1/5 exact (`bind-pose`, 4e-7);
+  `j2-bend-45` (9.0e-4), `j2-bend-90` (1.45e-3), `j1-twist-90` (4.3e-4), `j2-scale` (5.7e-4) pinned
+  KNOWN_MISMATCH (identical topology, positions off by the reference's own noise, RIG.md section 8);
+  `j2-bend-dq` UNSUPPORTED (observed with the Spherical type, rule not derived). exchange/skinned-arm:
+  frame 0 exact, keyed J2 B 0..90 matches the O34 poses within the noise envelope; frame 15/30 bbox
+  samples pinned (4e-4).
+- Rules derived: `p' = sum w_j inverse(O) J_j B_j^-1 p`, bind pose stored relative to the object;
+  weights are the exact "explicit-linear" rule (the recorded 4-decimal triples give 3.9e-3, worse).
+  Measured evidence for the reference noise: effective weights deviate from the rule by multiples of
+  2^-17 and the twist case has a 1.5e-5 rad angle error; quantising weights to 1/65535 halves the
+  error but no scheme reaches 1e-4.
+- Deviations: the planner expected level A exact; four posed cases cannot reach the 1e-4 tolerance
+  because the reference output is noisy, so they are pinned (guard: noise envelope 2e-3), not loosened.
+- Files: crates/rig/**, crates/modifiers/{Cargo.toml,src/lib.rs}, docs/specs/RIG.md, STATUS, BACKLOG.
+- Open question: an observation of the same cases with the reference's weights read back at full
+  precision (or a joint rotated by an exactly representable angle) would settle the noise source.

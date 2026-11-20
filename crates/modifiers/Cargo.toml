@@ -14,6 +14,7 @@ forge-expr = { path = "../expr" }
 forge-fields = { path = "../fields" }
 forge-geometry = { path = "../geometry" }
 forge-noise = { path = "../noise" }
+forge-rig = { path = "../rig" }
 glam = "0.34"
 
 [dev-dependencies]
