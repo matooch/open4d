@@ -41,5 +41,14 @@ Unblocks: U6 (CPU renderer); compared by PSNR, level C.
 Record the render time and anything that might vary between runs: noise, sampling, seed.
 If the renderer is not deterministic, render twice and say whether the two images match.
 
+## Follow-up cases (planner): black light renders
+
+`spot` and `infinite` came out black. Before rendering them again, read back each light's
+position, rotation and the direction it points (the light's +Z axis in world space), and its
+intensity, and write them in the row. Spot: it must point from (0, 500, 0) towards the origin.
+Infinite: its direction must have a downward (−Y) part. If the light reads back correctly and the
+render is still black, mark the case `not observed: render black with the light pointing <direction>`
+instead of committing the image. Never commit an all-black render.
+
 ## Notes
 TODO
