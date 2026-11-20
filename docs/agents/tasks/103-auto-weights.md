@@ -1,6 +1,6 @@
 # 103 · Auto weights (bone heat)
 
-Status: waiting: O34 · Area: H · Depends on: 101 · Observations: O34 · Touches: rig
+Status: done · Area: H · Depends on: 101 · Observations: O34 · Touches: rig
 
 ## Goal
 Automatic weights by heat diffusion.
@@ -25,9 +25,12 @@ Automatic weights by heat diffusion.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: `auto_weights` (bone heat: cotangent Laplacian, vertex areas, nearest visible bone heat,
+  Jacobi-CG solve per bone), `bones_for_joints`, `auto_bind`. Tests `crates/rig/tests/auto_weights.rs`
+  and unit tests in the module. The O34 auto-weights case was not observed (dialog, no scripting
+  call), so no reference data exists: UNSUPPORTED as a parity case. Level C check on our own partner
+  (nearest bone): 89/89 dominant joints agree (threshold 90 %).
+- Rules: heat `H` is shared by all bones (each vertex heated by its nearest visible bone), the
+  indicator differs per bone; a first version with per-bone `H` returned the constant solution 1.
+- Deviations: own conjugate-gradient solver instead of nalgebra-sparse (not in the workspace).
+- Files: crates/rig/src/auto_weights.rs, crates/rig/tests/auto_weights.rs, docs/specs/RIG.md section 4.

@@ -312,20 +312,47 @@ only the XY plane).
 
 ## 7. Extrude (`forge.extrude`)
 
-Params: `movement` (0, 0, **100**; R20: 20; O4 calls the R25 field Offset, one number plus a
-Direction list, out of scope); `subdivision` 1; caps `cap_start`, `cap_end` enum `none,
-cap (default), fillet, fillet_cap`; `cap_type` enum `triangles, quadrangles, ngons
-(default)`; `flip_normals` false. Fillets and flipped normals → `Unsupported`.
-The input is the first spline child, placed by its transform. Rows j = 0..sub of the
-spline points offset by `movement·j/sub`; faces per row, j outer, i inner:
-`[r(j,i), r(j,i+1), r(j+1,i+1), r(j+1,i)]` (closing back to i = 0 for closed splines).
-Closed splines get caps from the first and last row (they share the rows' points):
-- n-gons: start `[q0, q(n−1), …, q1]`; end `[q0, …, q(n−1)]`, except that a 4-point end
-  cap starts at q3 (`[q3, q0, q1, q2]`, `extrude/rectangle`): the n-gon starts at the
-  vertex its triangulation fans around (**parity-pending** for other outlines).
-- triangles, 4 points: start `[q3, q2, q0], [q2, q1, q0]`, end `[q0, q1, q3], [q1, q2,
-  q3]`; larger outlines ear-clipped (**parity-pending**).
-- quadrangles, ≤ 4 points: as n-gons; more → `Unsupported`.
+Sources: [extrude.md](../parity/extrude.md) (R20, `tests/golden/extrude`), [caps-bevel.md](../parity/caps-bevel.md) (O56, R25,
+`tests/golden/caps-bevel`), [r25-drift.md](../parity/r25-drift.md). **R25 is the default** (D12); the R20 form is kept behind
+the hidden param `r20_form` (default off), which the R20 defaults overlay (`tests/defaults/r20.toml`, INFRA.md §3.1) turns on.
+
+Params: `direction` enum `auto` (default), `x`, `y`, `z`, `custom`, `absolute`; `offset` distance, **100** (R25); `movement`
+(0, 0, 100): the Custom direction's vector (R20: the displacement itself, 20); `subdivision` 1; caps (§7a); `flip_normals` false;
+`hierarchical` false (stored); `isoparm_subdivision` 10 (display only). Flipped normals, fillets and `absolute` → `Unsupported`.
+The input is the first spline child, placed by its transform. Rows j = 0..sub of the spline points offset by
+`d·j/sub`, with the displacement `d`:
+- `x`, `y`, `z`: `offset` along that axis (`caps-bevel/direction-x`: X −200..300). Not observed for `y`/`z`, **parity-pending**.
+- `custom`: `offset · unit(movement)`: the vector is only a direction, the offset its length (`caps-bevel/direction-custom`:
+  bbox delta (0, 44.72, 89.44) for movement (0, 50, 100)). A zero vector gives no displacement.
+- `auto`: `offset` along the normal of the spline (the Newell normal of all its loops, the first loop when they cancel; +Z for
+  an open or degenerate spline), so a counter-clockwise outline in XY goes to +Z (`caps-bevel/defaults`) and a clockwise one to −Z.
+  The sign rule is the one the O17/O48 spline cases already relied on (`splines-2`, `spline-tools`, `text`: the offset negated when the signed area
+  is negative, §11); the plane normal for other planes is **parity-pending** (only XY splines are observed in R25).
+- R20 form (`r20_form`): `d = movement`, the vector as is (`extrude/movement`).
+Faces per row, j outer, i inner: `[r(j,i), r(j,i+1), r(j+1,i+1), r(j+1,i)]` (closing back to i = 0 for closed splines).
+
+### 7a. Caps tab (R25, shared by Extrude, Lathe, Loft, Sweep; briefs 044, 045)
+R25 has one Caps tab with two checkboxes `start_cap`, `end_cap` (our `cap_start`, `cap_end`: `cap` / `none`; the R20 Start/End enum with fillets
+is gone), `caps_type` (our `cap_type`) with the options Triangles, Quadrangles, N-gon (default), **Delaunay**, **Regular Grid**
+(`caps_grid_size` 10, `caps_density` 0.2, `quad_dominant` off belong to those two), and one Bevel section (`bevel_shape` Round / Solid / Curve /
+Step, `bevel_size` 0, `bevel_segments` 3, `bevel_extended_shape`, `bevel_height`, `bevel_shape_depth` 1.0, the `end_bevel_*` copy with
+`separate_bevel_controls`, `bevel_outside`, `break_phong_rounding` on, `avoid_self_intersections` on). All of these are stored on the four generators.
+
+Extrude caps (closed splines; the cap points are the first and last row):
+- **R25 order (brief 045, `caps-bevel/defaults`, `r25-drift/extrude-rectangle-caps-quadrangles`):** the start cap is the *reversed outline from the last
+  point*, `o = [q(n−1), …, q1, q0]` (`[3,2,1,0]`), the end cap the outline from the first, `o = [q0, …, q(n−1)]` (`[4,5,6,7]`). This is
+  hypothesis (1) of §11.1: it resolves the drift case; the two other hypotheses agree on a 4-point outline and are not told apart
+  (**parity-pending** for larger outlines: the circle is observed only in R20, and the R25 Lathe n-gon already follows the same rule, §8).
+- N-gon: `o`. Quadrangles, ≤ 4 points: as n-gon; more points → `Unsupported`.
+- Triangles, 4 points: the fan of `o` from its first point, `[o0, o1, o2], [o0, o2, o3]` (`caps-bevel/caps-triangles`: start `[3,2,1], [3,1,0]`,
+  end `[4,5,6], [4,6,7]`). Larger outlines: ear clipping of `o` (`triangulate_poly`), **parity-pending**: `caps-bevel/tri-extrude-ngon` checks it for 6 points.
+- **R20 order** (`r20_form`, the cases of `tests/golden/extrude`): start `[q0, q(n−1), …, q1]`, end `[q0, …, q(n−1)]` with a 4-point end
+  cap starting at q3 (`extrude/rectangle`); triangles 4 points: start `[q3, q2, q0], [q2, q1, q0]`, end `[q0, q1, q3], [q1, q2, q3]`.
+  The order depends on the app version, so the R20 cases keep exact checks through the switch instead of a loose comparison.
+- Delaunay (a centre point added per cap; `caps-bevel/caps-delaunay`: 10 points, 4 triangles per cap, the centre points appended after the 8 ring
+  points), Regular Grid (`caps-grid`: 730 points, 1452 faces) and **every bevel** with `bevel_size` > 0 (`bevel-*`, `sweep-caps-bevel`) are `Unsupported`:
+  the point and face order of the reference's bevel rings and of its Delaunay and grid fills is not derived. Pinned in the test with the
+  case list below. With Size 0 the bevel params do nothing (every other case).
 
 ## 8. Lathe (`forge.lathe`)
 
@@ -495,6 +522,14 @@ compares `export_weld` of ours and of the export strictly (topology, 1e-4); its
 `CAP_GEOMETRIC` the loft case (`loft/three`) whose caps are compared geometrically (all
 points and every face before the caps exactly).
 
+`crates/generators/tests/caps_bevel_parity.rs` (briefs 044, 045) rebuilds the 22 O56 cases (`tests/golden/caps-bevel`, §7a):
+**9 exact** (`defaults`, `direction-x`, `direction-custom`, `caps-ngon`, `caps-quads`, `caps-triangles`, `start-only`, `lathe-caps`,
+`tri-sweep-open`), 1 known mismatch (`tri-extrude-ngon`, a regular hexagon: cocircular tie, GEOMETRY.md §6.1 R1) and 12 `UNSUPPORTED`:
+`caps-delaunay`, `caps-grid`, the five `bevel-*` cases and `sweep-caps-bevel` (bevel rings, Delaunay and grid fills not derived), `tri-ellipse-loft`
+and `tri-loft-rotated` (the section positions and rotation are not in the case file), `tri-slice-orient-x` and `tri-dodeca-seg2` (Make Editable
+triangulation of primitives, not the Caps tab). `lathe-caps` takes the input position (x 300) from the case description and the observation row.
+Four-point Loft/Sweep triangle caps follow the same fan as Extrude (`tri-sweep-open`).
+
 `crates/generators/tests/sweep_loft_r25.rs` (brief 042) measures the R25 rules the helix route error
 and the R20/R25 conflict hide from the golden cases: banking off and the 2-Rail mapping along the
 reference's own ring centres (exact), the R25 loft rule (points exact, faces up to rotation
@@ -512,21 +547,13 @@ are `Unsupported` (§6.3). `tests/spline_prims.rs` covers defaults, options and 
 `crates/generators/tests/r25_drift.rs` rebuilds `tests/golden/r25-drift/<feature>-<case>`
 (INFRA.md §3.1: R25 defaults, no overlay) with the feature's builder and compares like the
 feature's own test (strict, strict after `export_weld` for generators, geometric for boole,
-exact-up-to-cut-triangles for the torus slice). 6 of 7 match.
-- **Known mismatch `r25-drift/extrude-rectangle-caps-quadrangles` ("R25 vertex order")**:
-  the 8 points, the 4 side faces and the face set are those of `extrude/rectangle-caps-quadrangles`
-  (geometric comparison passes; with Offset 100 the depth is 100), but the two 4-point caps
-  start at another corner: R25 start cap `[3, 2, 1, 0]` (R20 `[0, 3, 2, 1]`), end cap
-  `[4, 5, 6, 7]` (R20 `[7, 4, 5, 6]`). Hypotheses: (1) R25 writes the start cap as the
-  reversed outline from the last point and the end cap as the outline from the first, with
-  no start-corner rule; (2) both R20 lists rotated left by one position (`[0,3,2,1]` →
-  `[3,2,1,0]`, `[7,4,5,6]` → `[4,5,6,7]`); (3) the R20 fan-vertex corner rule (above) kept
-  but moved by one corner. (1) and (2) give the same lists for a 4-point cap and fit both
-  caps; (3) cannot be told from them on this outline. All rest on this one case
-  (**parity-pending**), and larger outlines (the circle) are not observed in R25. The order
-  depends on the app version and our generators have no version switch, so adopting it would
-  change the R20 order that the R20 cases pin. Left as is, **to be decided with a
-  version-aware cap order or after observing a larger outline in R25**.
+exact-up-to-cut-triangles for the torus slice). **7 of 7 match** since brief 045.
+- **Resolved (brief 045) `r25-drift/extrude-rectangle-caps-quadrangles`:** the 8 points, the 4 side faces and the face set are those of
+  `extrude/rectangle-caps-quadrangles`, but the two 4-point caps start at another corner: R25 start cap `[3, 2, 1, 0]` (R20 `[0, 3, 2, 1]`),
+  end cap `[4, 5, 6, 7]` (R20 `[7, 4, 5, 6]`). Adopted hypothesis (1): the start cap is the reversed outline from the last point, the end cap the
+  outline from the first (§7a); `caps-bevel/defaults` (N-gon), `caps-triangles`, `caps-quads`, `start-only` and `direction-x` agree, and
+  the other two hypotheses are not told apart. The order depends on the app version, so the R20 form keeps the R20 order behind the hidden
+  `r20_form` param that the R20 defaults overlay sets: every R20 `extrude/*` case stays an exact match.
 - `r25-drift/torus-slice` matches with the same comparison as `torus/slice`; the vertex
   order O1 mentions was not seen (our points equal the golden ones in order).
 - `r25-drift/boole-*` (both): geometric match with R25 defaults (the six extra duplicate

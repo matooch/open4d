@@ -15,4 +15,6 @@ pub mod nav;
 pub mod panes;
 pub mod picking;
 pub mod render;
+pub mod rig;
 pub mod snap;
+pub mod volume;

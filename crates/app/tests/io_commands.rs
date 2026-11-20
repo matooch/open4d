@@ -87,7 +87,7 @@ fn errors_keep_their_wording() {
     assert!(msg(e).contains("Nothing to export"));
     cube(&mut app);
     let e = app
-        .run("file.export", json!({"path": p(&d, "x.stl")}))
+        .run("file.export", json!({"path": p(&d, "x.dxf")}))
         .unwrap_err();
     let text = msg(e);
     assert!(text.contains("Export failed: unknown format"), "{text}");
@@ -153,7 +153,7 @@ fn dialog_commands_need_the_window() {
         );
     }
     let e = app
-        .run("file.import_dialog", json!({"format": "stl"}))
+        .run("file.import_dialog", json!({"format": "dxf"}))
         .unwrap_err();
     assert!(matches!(e, CommandError::InvalidArgs(_)));
 }

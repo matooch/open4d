@@ -99,9 +99,21 @@ pub fn run(job: &Job) -> Outcome {
         export_options_for(job.format, job.options)?
     };
     if native {
-        for f in formats::formats().iter().filter(|f| f.import) {
-            let descs = formats::import_options(f.id).unwrap_or_default();
-            formats::resolve_options(&descs, &pairs).map_err(|e| user(e.to_string()))?;
+        // Each option must belong to at least one importable format, with the right type there;
+        // a file is imported with the options its own format knows (IO.md §3.6).
+        for (key, value) in &pairs {
+            let mut known = false;
+            for f in formats::formats().iter().filter(|f| f.import) {
+                let descs = formats::import_options(f.id).unwrap_or_default();
+                if descs.iter().any(|d| &d.id == key) {
+                    let one = Map::from_iter([(key.clone(), value.clone())]);
+                    formats::resolve_options(&descs, &one).map_err(|e| user(e.to_string()))?;
+                    known = true;
+                }
+            }
+            if !known {
+                return Err(user(format!("unknown option \"{key}\"")));
+            }
         }
     }
 
@@ -204,7 +216,12 @@ fn convert_one(
     let mut entry = json!({"input": input_s, "output": output_s});
     if let Some(format) = source_format.filter(|_| job.format == "forge") {
         let mut app = new_app();
-        let args = json!({"path": input_s, "format": format, "options": pairs});
+        let known: Map<String, Json> = formats::import_options(format)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|d| pairs.get(&d.id).map(|v| (d.id.clone(), v.clone())))
+            .collect();
+        let args = json!({"path": input_s, "format": format, "options": known});
         let result = app.run("file.import", args).map_err(|e| e.to_string())?;
         app.save(&output_s).map_err(|e| e.to_string())?;
         entry["nodes"] = result["nodes"].as_array().map_or(0, Vec::len).into();

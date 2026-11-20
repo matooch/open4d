@@ -1,6 +1,6 @@
 # 082 · Volume filters (smooth types, dilate/erode, reshape, curve)
 
-Status: waiting: O33 · Area: F · Depends on: 081 · Observations: O33 · Touches: volume
+Status: done · Area: F · Depends on: 081 · Observations: O33 · Touches: volume
 
 ## Goal
 Filter layers in the builder list: Gaussian, mean, median, Laplacian flow smoothing; dilate/erode; reshape; curve remap.
@@ -14,8 +14,8 @@ Filter layers in the builder list: Gaussian, mean, median, Laplacian flow smooth
 - Separable Gaussian over the active band; mean/median windows; Laplacian flow iterated; dilate/erode as SDF offset then re-distance (fast marching).
 
 ## Done when
-- [ ] O33 filter cases pass compare_volume_mesh.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] O33 filter cases pass compare_volume_mesh.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -25,9 +25,8 @@ Filter layers in the builder list: Gaussian, mean, median, Laplacian flow smooth
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: `forge.volume_filter` (offset, reshape, smooth: gaussian, mean, median, laplacian), `filters.rs` (re-distance by fast sweeping, reshape as closing / opening), 7 tests in `tests/filters.rs` plus 2 builder tests; golden: 6 of 7 filter cases match geometrically (gaussian, mean, median, laplacian, dilate, erode; Hausdorff 0.4 to 3.6, areas within 2 %), the point counts of gaussian, mean, median, laplacian, dilate and erode equal the reference's. `smooth-strength` (3 Gaussian iterations) is a `KNOWN_MISMATCH` (Hausdorff 7.5, area +6.5 %).
+- Rules derived: Type 1 is a morphological open/close by a ball (dilate / erode), not a surface offset (the face centres stay put); median and mean use half width `voxel_distance` (2), the Gaussian is a sequence of box means of half widths 4 .. 1 with one re-distance per iteration; Laplacian flow is invisible on a cube; the list is evaluated bottom to top (the filter above the cube filters it).
+- Data note: the `[params.filter]` tables of the mean, median and Laplacian cases read `operator = 0`; the descriptions and O33 notes give 1, 2, 4 (and the meshes differ), so the test reads the operator from the description.
+- Deviations: filters re-distance after every step (needed for the Gaussian to match); strength is a blend factor (own design).
+- Open questions: the reference's behaviour at several Gaussian iterations; Type 0 and the unlisted types; operator 3.

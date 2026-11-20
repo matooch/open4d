@@ -90,6 +90,14 @@ categories can be registered but not yet placed in a scene (`NotPlaceable`).
 `NodeType::new(id, label, category).param(desc)…`. `NodeType.in_create_menu` (default
 true; `.not_in_create_menu()` clears it) says whether the UI's Create menu offers the type;
 it has no other effect (such nodes can still be created by code and loaded from files).
+`NodeType.consumes_children` (default false; `.consuming_children()` sets it, brief 048) marks a
+generator type of a plugin crate whose children are its inputs: `forge_generators::is_consumed`
+is true for every child of such a node (and for the children of a `forge.null` that is itself
+consumed, since a geometry-less Null passes its children on), unless the node is bypassed by a
+layer with generators off (CORE.md §7.4). Consumed nodes are not drawn and not exported; their
+own deformers still apply when the consumer evaluates them. The built-in generators keep their
+explicit rules (subdivision, boole, cloner, modeling and spline generators); the volume
+builder and mesher set the flag (VOLUME.md §6.5). The flag is not saved in files.
 - Type id: `namespace.name`, at least one `.`, chars `[a-z0-9_.-]`, no empty
   segments. Built-ins use namespace `forge`.
 

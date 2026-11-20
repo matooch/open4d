@@ -2,7 +2,7 @@
 
 # Command reference
 
-167 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+175 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -172,6 +172,14 @@
 | [`graph.get`](#graphget) | Get Graph | no | `graph_get` |
 | [`graph.node_types`](#graphnode_types) | List Graph Node Types | no | `graph_node_types` |
 | [`graph.evaluate`](#graphevaluate) | Evaluate Graph | no | `graph_evaluate` |
+| [`joint.create_chain`](#jointcreate_chain) | Create Joint Chain | yes | `joint_create_chain` |
+| [`joint.align`](#jointalign) | Align Joints | yes | `joint_align` |
+| [`joint.mirror`](#jointmirror) | Mirror Joints | yes | `joint_mirror` |
+| [`weights.paint`](#weightspaint) | Paint Weights | yes | `weights_paint` |
+| [`weights.normalise`](#weightsnormalise) | Normalise Weights | yes | `weights_normalise` |
+| [`weights.prune`](#weightsprune) | Prune Weights | yes | `weights_prune` |
+| [`weights.smooth`](#weightssmooth) | Smooth Weights | yes | `weights_smooth` |
+| [`weights.mirror`](#weightsmirror) | Mirror Weights | yes | `weights_mirror` |
 | [`plugin.list`](#pluginlist) | List Plugins | no | `plugin_list` |
 
 ## `object`
@@ -2108,6 +2116,110 @@ Evaluate Graph. Not an undoable edit.
 | `tag` | integer | yes |  |
 
 Example: `forge cmd scene.forge graph.evaluate --args '{"tag":1}'`
+
+
+## `joint`
+
+### `joint.create_chain`
+
+Create Joint Chain. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `points` | array of array of number (length 3) | yes | Joint positions `[x, y, z]` in the parent's space; at least one. |
+| `align` | `"x"` \| `"y"` \| `"z"` \| null | no | Turn this local axis of every joint but the last to its child. |
+| `parent` | integer or null | no | Parent of the first joint (the scene root when absent). |
+| `prefix` | string or null | no | Name prefix; the joints are `prefix1`, `prefix2`, ... (default `Joint`). |
+
+Example: `forge cmd scene.forge joint.create_chain --args '{"align":"y","points":[[0.0,0.0,0.0],[0.0,100.0,0.0]]}'`
+
+### `joint.align`
+
+Align Joints. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `axis` | `"x"` \| `"y"` \| `"z"` \| null | no | The local axis that points at the child joint (default `z`). |
+| `nodes` | array of integer or null | no | Joints; the current selection when absent. |
+
+Example: `forge cmd scene.forge joint.align --args '{"axis":"z"}'`
+
+### `joint.mirror`
+
+Mirror Joints. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer or null | no | Root joints of the chains to mirror; the current selection when absent. |
+| `plane` | string \| string \| string \| null | no | Mirror plane through the world origin (default `yz`). |
+| `suffix` | string or null | no | Append this suffix to the names instead of swapping left and right. |
+
+Example: `forge cmd scene.forge joint.mirror --args '{"plane":"yz"}'`
+
+
+## `weights`
+
+### `weights.paint`
+
+Paint Weights. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `joint` | integer | yes | A joint of the weight tag's list. |
+| `center` | array of number (length 3) | yes | Stroke centre in object space. |
+| `radius` | number | yes |  |
+| `falloff` | `"constant"` \| `"linear"` \| `"smooth"` \| null | no |  |
+| `mode` | `"add"` \| `"subtract"` \| `"set"` \| `"smooth"` \| null | no |  |
+| `object` | integer or null | no | The skinned object (default: the active node). |
+| `strength` | number or null | no | 0 to 1 (default 1). |
+| `target` | number or null | no | Value `set` moves towards, 0 to 1 (default 1). |
+
+Example: `forge cmd scene.forge weights.paint --args '{"center":[0.0,0.0,0.0],"joint":1,"radius":50.0}'`
+
+### `weights.normalise`
+
+Normalise Weights. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `object` | integer or null | no | The skinned object (default: the active node). |
+
+Example: `forge cmd scene.forge weights.normalise --args '{}'`
+
+### `weights.prune`
+
+Prune Weights. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `object` | integer or null | no |  |
+| `threshold` | number or null | no | Weights below this are dropped (default 0.01). |
+
+Example: `forge cmd scene.forge weights.prune --args '{"threshold":0.01}'`
+
+### `weights.smooth`
+
+Smooth Weights. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `factor` | number or null | no | 0 to 1 (default 0.5). |
+| `iterations` | integer or null | no | Default 1. |
+| `object` | integer or null | no |  |
+
+Example: `forge cmd scene.forge weights.smooth --args '{"factor":0.5,"iterations":1}'`
+
+### `weights.mirror`
+
+Mirror Weights. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `from` | `"positive"` \| `"negative"` \| null | no |  |
+| `object` | integer or null | no |  |
+| `plane` | `"yz"` \| `"xz"` \| `"xy"` \| null | no |  |
+
+Example: `forge cmd scene.forge weights.mirror --args '{"from":"positive","plane":"yz"}'`
 
 
 ## `plugin`

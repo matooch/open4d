@@ -1,6 +1,6 @@
 # 064 · Field list widget and field display
 
-Status: ready · Area: D · Depends on: 059, 150 · Observations: G4 · Touches: ui, viewport
+Status: done · Area: D · Depends on: 059, 150 · Observations: G4 · Touches: ui, viewport
 
 ## Goal
 Field lists can be edited in the Attribute panel, and fields are visible in the viewport.
@@ -14,8 +14,8 @@ Field lists can be edited in the Attribute panel, and fields are visible in the 
 - The widget is a table of layers (enable, name, blend, strength), with drag reorder, add, remove and folder. The viewport draws field gizmos plus an optional colour preview on the affected mesh points.
 
 ## Done when
-- [ ] UI.md §field list; UI tests.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] UI.md §field list; UI tests.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -31,3 +31,7 @@ Field lists can be edited in the Attribute panel, and fields are visible in the 
 - Files changed.
 - Open questions or data that would settle them (the reviewer turns these into follow-up forms).
 - The last lines of the gate output.
+- Result: the table of layers (enable, name, blend, strength, reorder, remove, add, drop) already existed from 059/079. Added the Folder button (creates a Group field and its row), field gizmos for the selected fields and the fields of selected lists, and View > Field Preview (value dots on mesh points). 6 headless tests in crates/ui/tests/field_display.rs. No parity cases (own design).
+- Parity-pending G4: columns, folder wording, gizmo and preview looks. Drag reorder by dragging rows is not done (up/down buttons only); painted pixels are not tested.
+- Deviations: folder = Group field created with object.create then a list edit (two undo steps); Field Preview is a view flag, not a command.
+- Files: crates/ui/src/{field_overlay,app,panes,lib}.rs, widgets/*, docs/specs/UI.md section 16.6, tests/field_display.rs.

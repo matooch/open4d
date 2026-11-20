@@ -142,6 +142,13 @@ Keep the probe code itself in `~/forge-observer/`; these are the lessons, in pla
 - A script that returns nothing at all ("Function returned None") usually means the app
   aborted inside a call. Isolate the last few calls in a tiny separate probe rather than
   editing the big one.
+- The bridge's script runner reports "executed successfully / Function returned None" whenever
+  the script's last line is not a value. Do not rely on the reply: have every probe write its
+  results to a file in `~/forge-observer/` and read that file back.
+- Keying a Link parameter (an object slot) through a script fails with a type error. Mark such
+  cases `not observed: link keys cannot be set by script` and do not retry them.
+- Keep each probe short and bounded (no unbounded loops, at most a few hundred frames). If the
+  app stops answering and its process sits near 100 % CPU, stop the run: only a human can restart it.
 - Never trigger an export or command that opens a dialog (for example the VDB export). A
   dialog needs a human and freezes the app's script runner until someone closes it. If a
   case needs such an export, mark it "needs a human: export opens a dialog" in the form's

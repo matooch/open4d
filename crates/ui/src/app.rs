@@ -17,7 +17,9 @@ use serde_json::{Value as Json, json};
 use crate::animate::{AnimEdit, KeyState, key_frames, key_states};
 use crate::attributes::{Gesture, Widget, attribute_rows_multi};
 use crate::clone_overlay::{OverlayOptions, selected_cloner_marks};
-use crate::commands::{category_label, clone_toolset_menu, create_menu, execute};
+use crate::commands::{
+    CHARACTER_TYPES, category_label, character_menu, clone_toolset_menu, create_menu, execute,
+};
 use crate::component_edit::{
     ComponentDrag, component_coords, component_transform_args, pivot_world,
 };
@@ -774,6 +776,14 @@ impl Editor {
                         }
                     }
                 });
+                ui.menu_button("Character", |ui| {
+                    for entry in character_menu(self.state.doc.scene().registry()) {
+                        if ui.button(&entry.label).clicked() {
+                            self.run((entry.command, entry.args));
+                            ui.close();
+                        }
+                    }
+                });
                 ui.separator();
                 // a long category (Generator) is taller than a small window: scroll it
                 let max_height = (ui.ctx().content_rect().height() - 48.0).max(120.0);
@@ -784,6 +794,9 @@ impl Editor {
                             .max_height(max_height)
                             .show(ui, |ui| {
                                 for (type_id, label) in items {
+                                    if CHARACTER_TYPES.contains(&type_id.as_str()) {
+                                        continue;
+                                    }
                                     if ui.button(label).clicked() {
                                         self.run(("object.create", json!({"type": type_id})));
                                         ui.close();
@@ -1035,6 +1048,11 @@ impl Editor {
             Panel::Console => crate::console::console_ui(ui, &mut self.state),
             Panel::Layers => {
                 for c in crate::layer_manager::layer_panel_ui(ui, &mut self.state) {
+                    self.run(c);
+                }
+            }
+            Panel::WeightManager => {
+                for c in crate::weight_manager::weight_manager_ui(ui, &mut self.state) {
                     self.run(c);
                 }
             }
@@ -1292,6 +1310,10 @@ impl Editor {
             ("view.antialias", json!({"enabled": !v.antialias})),
         );
         ui.separator();
+        let mut preview = v.field_preview;
+        if ui.checkbox(&mut preview, "Field Preview").changed() {
+            self.state.views.field_preview = preview;
+        }
         item(
             ui,
             self,
@@ -1471,6 +1493,16 @@ impl Editor {
         if motion_pending {
             ui.ctx().request_repaint();
         }
+        let eval_ctx = forge_core::EvalCtx::at_frame(
+            self.state.timeline.current,
+            f64::from(shown.settings().fps),
+        );
+        let selected_now = self.state.selection.nodes.clone();
+        let (overlay, volumes_pending) =
+            self.state.volumes.overlay(&shown, &selected_now, &eval_ctx);
+        if volumes_pending {
+            ui.ctx().request_repaint();
+        }
         let tex = self.viewport.render(
             rs,
             pane,
@@ -1489,6 +1521,7 @@ impl Editor {
                 frame: previewed.is_none().then_some(&*scheduled),
                 splines: &crate::spline_edit::editor_draws(&shown, &self.state),
                 motion: &motion,
+                overlay: &overlay,
             },
         );
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
@@ -1508,6 +1541,7 @@ impl Editor {
             );
         }
         self.paint_clone_overlay(ui, &shown, pane, rect);
+        self.paint_field_overlay(ui, &shown, pane, rect);
         if pane == self.state.views.active {
             self.paint_snap_marker(ui, rect, ppp, size);
         }
@@ -1693,6 +1727,55 @@ impl Editor {
                     Theme::current(ui.ctx()).weak_text,
                 );
             }
+        }
+    }
+
+    /// Gizmos of the selected fields, and with View > Field Preview the field value on the
+    /// points of the selected meshes (UI.md §16.6).
+    fn paint_field_overlay(
+        &self,
+        ui: &Ui,
+        scene: &forge_core::Scene,
+        pane: Pane,
+        rect: egui::Rect,
+    ) {
+        use crate::field_overlay as fo;
+        let selected = &self.state.selection.nodes;
+        let fields = fo::shown_fields(scene, selected);
+        let preview = self.state.views.field_preview;
+        if fields.is_empty() && !preview {
+            return;
+        }
+        let camera = self.state.pane_camera(pane);
+        let size = [f64::from(rect.width()), f64::from(rect.height())];
+        let painter = ui.painter().with_clip_rect(rect);
+        let at = |p: [f32; 2]| rect.min + egui::vec2(p[0], p[1]);
+        let colour = Theme::current(ui.ctx()).component_selection;
+        for id in fields {
+            for strip in fo::field_gizmo(scene, id) {
+                for run in fo::project_strip(&strip, &camera, size) {
+                    let pts: Vec<egui::Pos2> = run.into_iter().map(at).collect();
+                    painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, colour)));
+                }
+            }
+        }
+        if !preview {
+            return;
+        }
+        let frame = self.state.timeline.current;
+        let ctx = forge_core::EvalCtx::at_frame(frame, f64::from(scene.settings().fps));
+        let mut points = Vec::new();
+        let mut meshes: Vec<NodeId> = selected.iter().copied().collect();
+        meshes.extend(selected.iter().filter_map(|id| scene.node(*id)?.parent));
+        meshes.dedup();
+        for id in meshes {
+            if let Ok(m) = self.state.app.eval_mesh(id, frame) {
+                points.extend(m.points);
+            }
+        }
+        for dot in fo::selected_preview(scene, selected, &points, &ctx, &camera, size) {
+            let [r, g, b] = fo::value_colour(dot.value);
+            painter.circle_filled(at(dot.at), 2.5, egui::Color32::from_rgb(r, g, b));
         }
     }
 
@@ -2035,6 +2118,19 @@ impl Editor {
             {
                 (r[2], r[3]) = (x, y);
             }
+        }
+        if self.state.weight_panel.painting
+            && crate::weight_manager::paint_target(&self.state).is_some()
+        {
+            if (response.clicked() || response.dragged_by(egui::PointerButton::Primary))
+                && let Err(e) = crate::weight_manager::paint_dab(&mut self.state, [x, y], [w, h])
+            {
+                self.state.status = e;
+            }
+            if response.drag_stopped() || response.clicked() {
+                crate::weight_manager::end_stroke(&mut self.state);
+            }
+            return;
         }
         if response.clicked()
             && let Err(e) = viewport_click(&mut self.state, [x, y], [w, h], mods)
@@ -2488,6 +2584,25 @@ impl Editor {
             let mut nodes: Vec<NodeId> = self.state.selection.nodes.iter().copied().collect();
             if !nodes.contains(&id) {
                 nodes.insert(0, id);
+            }
+            let mut edit = edit;
+            if let Some(type_id) = edit.create.take() {
+                // The field list's folder button (UI.md §16.6): create the group, put it
+                // back as the active object, then add its row to the list.
+                let blend = match &row.widget {
+                    Widget::LinkRows { blends, .. } => {
+                        blends.first().map(|b| b.id.clone()).unwrap_or_default()
+                    }
+                    _ => String::new(),
+                };
+                if self.run(("object.create", json!({"type": type_id})))
+                    && let Some(new) = self.state.selection.active
+                {
+                    edit.value = widgets::link_list::with_new_row(&edit.value, new, &blend);
+                    self.state.selection.click(id);
+                } else {
+                    return;
+                }
             }
             self.run(("param.edit", edit.args(&row.param, &nodes, gesture)));
         }

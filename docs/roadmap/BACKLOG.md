@@ -41,11 +41,11 @@ implementers can avoid collisions.
 | 041 | [Atom Array and Spline Mask](../agents/tasks/041-atom-array-spline-mask.md) | C | 029 | done (4/4 O20 cases; other mask modes, axes, oblique atom edges parity-pending) | generators |
 | 042 | [Sweep rail/banking/scale, Loft linear/multi, Lathe partial/movement, cap fixes](../agents/tasks/042-sweep-loft-lathe-r25.md) | C | – | done (Lathe done; Loft/Sweep R25 cases parity-pending: R20/R25 conflict, helix route) | generators |
 | 043 | [Boole R25 modes and numbering, Subdivision types, Symmetry planes](../agents/tasks/043-boole-subdivision-symmetry-r25.md) | C | – | done (Boole R25 strict numbering parity-pending) | generators, geometry |
-| 044 | [Shared Caps/Bevel tabs and Extrude R25 options](../agents/tasks/044-caps-bevel-tab.md) | C | 042 | waiting: 042 | generators |
-| 045 | [Extrude R25 vertex order](../agents/tasks/045-extrude-r25-order.md) | C | 044 | ready | generators |
+| 044 | [Shared Caps/Bevel tabs and Extrude R25 options](../agents/tasks/044-caps-bevel-tab.md) | C | 042 | done (parity-pending: Delaunay/Regular Grid caps, bevels pinned) | generators |
+| 045 | [Extrude R25 vertex order](../agents/tasks/045-extrude-r25-order.md) | C | 044 | done (parity-pending: larger outlines) | generators |
 | 046 | [Null display, Instance render modes, Connect weld options](../agents/tasks/046-null-instance-connect-options.md) | C | – | waiting: O20 (follow-up cases), G8 | generators, viewport |
 | 047 | [Camera, Light, Environment, Floor and Sky as scene objects](../agents/tasks/047-scene-objects-camera-light.md) | C | – | waiting: O29 | generators, core, viewport |
-| 048 | [Generators as clone and volume inputs (consumed-input rules)](../agents/tasks/048-generators-in-clone-volume-contexts.md) | C | 065, 081 | ready | generators |
+| 048 | [Generators as clone and volume inputs (consumed-input rules)](../agents/tasks/048-generators-in-clone-volume-contexts.md) | C | 065, 081 | done | generators |
 | 049 | [Create menu organisation](../agents/tasks/049-create-menu-organisation.md) | C | 148 | ready | ui, core |
 | 050 | [Bend 3-axis gating fix + EvalCtx through evaluation](../agents/tasks/050-bend-gating-evalctx.md) | D | – | done | modifiers, generators, core |
 | 051 | [Squash & Stretch and Wrap deformers](../agents/tasks/051-squash-stretch-wrap.md) | D | 050 | done (11/11 level A; Center, Aspect, Smooth, Movement, Scale Z, Tension parity-pending, see MODIFIERS.md §7) | modifiers |
@@ -57,11 +57,11 @@ implementers can avoid collisions.
 | 057 | [Fields framework + Linear, Spherical, Box + Remapping](../agents/tasks/057-fields-framework.md) | D | 050 | done (27/27 samples; remap order and Step/Quadratic parity-pending, see FIELDS.md F5) | fields |
 | 058 | [Field types II: Cylinder, Cone, Torus, Capsule, Radial, Random](../agents/tasks/058-field-types-2.md) | D | 057, 063 | done | fields, noise |
 | 059 | [Field lists: layers, blend modes, groups, Formula and Shader fields](../agents/tasks/059-field-lists.md) | D | 057, 052 | done (16/17 exact; Shader field Unsupported until 125; native format 11, see FIELDS.md F7) | fields |
-| 060 | [Field modifier layers: Freeze, Decay, Delay, Remap, Curve, Colorize, Step](../agents/tasks/060-field-modifier-layers.md) | D | 059 | waiting: O49 | fields |
+| 060 | [Field modifier layers: Freeze, Decay, Delay, Remap, Curve, Colorize, Step](../agents/tasks/060-field-modifier-layers.md) | D | 059 | done (parity-pending: Step, Decay, Delay, Freeze pinned, FIELDS.md F8) | fields |
 | 061 | [Deformer falloff through field lists (all deformers)](../agents/tasks/061-deformer-falloff.md) | D | 057 | done (9/9 O24 cases at level A; object off the origin and weights outside 0..1 parity-pending, see MODIFIERS.md §10) | modifiers, fields |
 | 062 | [Vertex maps from fields; restriction](../agents/tasks/062-vertex-maps-from-fields.md) | D | 027, 059 | waiting: O49 | fields, modifiers |
 | 063 | [Noise library `forge-noise`](../agents/tasks/063-noise-library.md) | D | – | done (parity-pending O42) | noise (new) |
-| 064 | [Field list widget and field display](../agents/tasks/064-field-list-widget.md) | D | 059, 150 | ready | ui, viewport |
+| 064 | [Field list widget and field display](../agents/tasks/064-field-list-widget.md) | D | 059, 150 | done (parity-pending G4: looks, columns) | ui, viewport |
 | 065 | [Clone data, cloner node, Linear / Radial / Grid / Honeycomb modes, instance modes](../agents/tasks/065-cloner-core-modes.md) | E | 050 | done (19/19 samples and meshes; rules parity-pending, see MOGRAPH.md C11) | clone-engine, plugin |
 | 066 | [Object-mode distributions with seeds and selections](../agents/tasks/066-cloner-object-mode.md) | E | 065, 027 | ready | clone-engine |
 | 067 | [Clone order (iterate, random, blend, sort), multiple children, nesting](../agents/tasks/067-clone-order-nesting.md) | E | 065 | waiting: O50 | clone-engine |
@@ -69,7 +69,7 @@ implementers can avoid collisions.
 | 069 | [Random effector (all modes)](../agents/tasks/069-random-effector.md) | E | 068, 063 | done (exact: counts/visibility/untouched channels 8/8; random values statistical, reference sequence not reproduced) | clone-engine, noise |
 | 070 | [Step, Formula, Time, Delay and Target effectors](../agents/tasks/070-step-formula-time-delay-target.md) | E | 068, 052 | done (level B 6/6, level A 5/6: `step-position` known mismatch; Delay has no golden case, all its rules parity-pending, see MOGRAPH.md E18-E25) | clone-engine |
 | 071 | [Shader, Spline, Push Apart, Inheritance, Volume and Group effectors](../agents/tasks/071-shader-spline-pushapart-etc.md) | E | 068, 125 | ready | clone-engine |
-| 072 | [Effector falloff via field lists](../agents/tasks/072-effector-field-falloff.md) | E | 068, 059 | ready | clone-engine, fields |
+| 072 | [Effector falloff via field lists](../agents/tasks/072-effector-field-falloff.md) | E | 068, 059 | done (parity-pending: multi-layer lists, no observation) | clone-engine, fields |
 | 073 | [Matrix object](../agents/tasks/073-matrix-object.md) | E | 065 | waiting: O31 | clone-engine |
 | 074 | [Fracture and Voronoi Fracture](../agents/tasks/074-fracture-voronoi.md) | E | 065, 033 | waiting: O31 | clone-engine, geometry |
 | 075 | [Clone-toolset Text](../agents/tasks/075-clone-text.md) | E | 039, 065 | waiting: O31, O48 | clone-engine, generators |
@@ -77,13 +77,13 @@ implementers can avoid collisions.
 | 077 | [Instance-over-time generator](../agents/tasks/077-instance-over-time.md) | E | 065, 088 | waiting: O50 | clone-engine, anim |
 | 078 | [Clone selection and weight tags, clone cache](../agents/tasks/078-clone-tags-cache.md) | E | 065, 027 | waiting: O50 | clone-engine |
 | 079 | [Clone UI: effector lists, clone display, GPU instancing hookup](../agents/tasks/079-clone-ui.md) | E | 065, 144 | done (parity-pending G4) | ui, viewport |
-| 080 | [forge-volume: sparse grid, mesh/spline/points to SDF, CSG; harness compare_volume_mesh](../agents/tasks/080-forge-volume-grid-sdf.md) | F | – | waiting: O32 | volume (new), parity-harness |
-| 081 | [Volume Builder node (object list, modes, SDF/fog, voxel size, hierarchy)](../agents/tasks/081-volume-builder.md) | F | 080 | waiting: O32, O33 | volume, plugin |
-| 082 | [Volume filters (smooth types, dilate/erode, reshape, curve)](../agents/tasks/082-volume-filters.md) | F | 081 | waiting: O33 | volume |
-| 083 | [Volume Mesher (dual contouring, adaptivity, threshold, normals)](../agents/tasks/083-volume-mesher.md) | F | 081 | waiting: O32 | volume, geometry |
-| 084 | [Volume viewport display (preview iso-surface, slices)](../agents/tasks/084-volume-viewport.md) | F | 083, 143 | ready | viewport |
-| 085 | [Field layers inside the volume builder](../agents/tasks/085-volume-field-layers.md) | F | 081, 059 | waiting: O33 | volume, fields |
-| 086 | [VDB file read/write](../agents/tasks/086-vdb-io.md) | F | 080 | waiting: O33 | volume, io |
+| 080 | [forge-volume: sparse grid, mesh/spline/points to SDF, CSG; harness compare_volume_mesh](../agents/tasks/080-forge-volume-grid-sdf.md) | F | – | done | volume (new), parity-harness |
+| 081 | [Volume Builder node (object list, modes, SDF/fog, voxel size, hierarchy)](../agents/tasks/081-volume-builder.md) | F | 080 | done (parity-pending: spline radius factor, fog density, subtract/intersect not observed) | volume, plugin |
+| 082 | [Volume filters (smooth types, dilate/erode, reshape, curve)](../agents/tasks/082-volume-filters.md) | F | 081 | done (parity-pending: 3-iteration Gaussian is a known mismatch; Laplacian flow, offset type and curve remap not observed) volume |
+| 083 | [Volume Mesher (dual contouring, adaptivity, threshold, normals)](../agents/tasks/083-volume-mesher.md) | F | 081 | done (parity-pending: adaptive tolerance factor, absolute iso; the mesher is a cell mesher with octree block merge, not dual contouring: see VOLUME.md 7) | volume, geometry |
+| 084 | [Volume viewport display (preview iso-surface, slices)](../agents/tasks/084-volume-viewport.md) | F | 083, 143 | done for the logic (preview worker, coarse build, draw lists; parity-pending G4); the editor panel does not call it yet viewport |
+| 085 | [Field layers inside the volume builder](../agents/tasks/085-volume-field-layers.md) | F | 081, 059 | done (parity-pending: scale K, threshold 0.5, subtract / multiply modes: one case) volume, fields |
+| 086 | [VDB file read/write](../agents/tasks/086-vdb-io.md) | F | 080 | done (parity-pending: layout from the public description, no reference file; vdb-export case needs a human; read/write tested against our own files and the observed .vdb if present) | volume, io |
 | 087 | [Keyframe rework: O16 rules (millisecond rounding at other fps; tangent at uneven monotone keys)](../agents/tasks/087-keyframe-rework-o16-rules-millisecond-rounding-at-other-fps.md) | G | – | done | anim |
 | 088 | [Tracks for all value types + point-level animation](../agents/tasks/088-tracks-all-value-types.md) | G | 087 | waiting: O53 | core, anim |
 | 089 | [Tangent model: user, broken, weighted, zero angle/length, ease presets, overshoot](../agents/tasks/089-tangent-model.md) | G | 087 | waiting: O38 | core, anim |
@@ -97,10 +97,10 @@ implementers can avoid collisions.
 | 097 | [Keyframe indicators on every parameter; key context menu](../agents/tasks/097-keyframe-indicators.md) | G | 088, 150 | ready | ui |
 | 098 | [Animated evaluation performance (dependency-aware re-evaluation)](../agents/tasks/098-animated-eval-performance.md) | G | 180 | done | core, anim |
 | 099 | [S7 acceptance test and animation docs](../agents/tasks/099-s7-animation-acceptance.md) | G | 090–096 | ready | tests, docs |
-| 100 | [Joint object, bone display, joint tools (align, mirror, chain creation)](../agents/tasks/100-joints.md) | H | 011 | waiting: O34 | rig (new), plugin, viewport |
-| 101 | [Skin deformer + Weight tag + bind pose (LBS, DQS option)](../agents/tasks/101-skin-weights.md) | H | 100, 050 | waiting: O34 | rig, modifiers |
-| 102 | [Weight tools: paint brush, weight manager, normalise/mirror/smooth/prune](../agents/tasks/102-weight-tools.md) | H | 101, 150 | ready | rig, ui, viewport |
-| 103 | [Auto weights (bone heat)](../agents/tasks/103-auto-weights.md) | H | 101 | waiting: O34 | rig |
+| 100 | [Joint object, bone display, joint tools (align, mirror, chain creation)](../agents/tasks/100-joints.md) | H | 011 | done (O34 mesh cases: bind-pose exact, deformed cases pinned to the reference's 1e-3 noise, RIG.md §8; command wrappers not registered, see RIG.md §1.3) | rig (new), plugin, viewport |
+| 101 | [Skin deformer + Weight tag + bind pose (LBS, DQS option)](../agents/tasks/101-skin-weights.md) | H | 100, 050 | done (parity-pending: 4 of 5 posed O34 cases differ from the reference by its own noise, RIG.md §8) | rig, modifiers |
+| 102 | [Weight tools: paint brush, weight manager, normalise/mirror/smooth/prune](../agents/tasks/102-weight-tools.md) | H | 101, 150 | done (parity-pending G6) | rig, ui, viewport |
+| 103 | [Auto weights (bone heat)](../agents/tasks/103-auto-weights.md) | H | 101 | done (parity-pending: no reference auto-weight data, O34 case not observed; level C checked against the nearest bone, RIG.md §4) | rig |
 | 104 | [IK tag: 2-bone, chain, pole, twist, IK/FK blend](../agents/tasks/104-ik.md) | H | 100 | waiting: O35 | rig |
 | 105 | [Constraint tag: PSR, Aim, Parent, Clamp](../agents/tasks/105-constraints.md) | H | 100 | waiting: O36 | rig |
 | 106 | [Tags: Target, Align to Spline, Vibrate, Look at Camera, Protection, Display, Compositing](../agents/tasks/106-expression-tags.md) | H | 088 | waiting: O27, O54 | core, rig |
@@ -109,8 +109,8 @@ implementers can avoid collisions.
 | 109 | [Node expression editor UI](../agents/tasks/109-node-editor-ui.md) | H | 108, 150 | done (parity-pending G6; follow-up: node materials reuse the canvas, brief 124) | ui, nodes |
 | 110 | [User data on any node](../agents/tasks/110-user-data.md) | H | 011, 150 | waiting: O54 | core, ui |
 | 111 | [Evaluation order: tag priorities, expressions before generators](../agents/tasks/111-evaluation-order.md) | H | 104, 105, 108 | waiting: O36 | core |
-| 112 | [Weight and joint display modes in the viewport](../agents/tasks/112-rig-display.md) | H | 101, 143 | ready | viewport |
-| 113 | [Rig mirroring (joints and weights, left/right naming)](../agents/tasks/113-rig-mirroring.md) | H | 101 | ready | rig |
+| 112 | [Weight and joint display modes in the viewport](../agents/tasks/112-rig-display.md) | H | 101, 143 | done (parity-pending: own design; draw lists and ramp as pure code, weight overlay as markers; VIEWPORT.md §13) | viewport |
+| 113 | [Rig mirroring (joints and weights, left/right naming)](../agents/tasks/113-rig-mirroring.md) | H | 101 | done (own design: no observation; symmetric-deformation unit test, RIG.md §5) | rig |
 | 114 | [S6 acceptance test and rigging docs](../agents/tasks/114-s6-rigging-acceptance.md) | H | 100–113 | ready | tests, docs |
 | 115 | [rapier integration: rigid body tag, shapes, scene settings, per-frame cache, scrubbing; compare_trajectory](../agents/tasks/115-rigid-bodies.md) | I | 050, 010 | waiting: O39 | dynamics (new), parity-harness |
 | 116 | [Dynamics on clones](../agents/tasks/116-dynamics-on-clones.md) | I | 115, 065 | waiting: O39 | dynamics, clone-engine |
@@ -161,14 +161,14 @@ implementers can avoid collisions.
 | 161 | [HiDPI, IME, themes, keyboard navigation](../agents/tasks/161-hidpi-ime-themes.md) | L | 147 | done | ui |
 | 162 | [S3 acceptance test and UI docs](../agents/tasks/162-s3-ui-acceptance.md) | L | 147–153 | done (parity-pending G1/G2/G4) | tests, docs |
 | 163 | [Native format: migrations, binary encoding, external references](../agents/tasks/163-native-format.md) | M | – | done (format version 6; follow-up: a file-path param on the first texture/cache node, compression wrapper) | core, io |
-| 164 | [glTF import/export (meshes, hierarchy, materials, animation, skins, morphs)](../agents/tasks/164-gltf.md) | M | 088, 101, 107 | waiting: O44 | io |
-| 165 | [FBX import (ufbx)](../agents/tasks/165-fbx-import.md) | M | 088, 101 | waiting: O44 | io |
-| 166 | [FBX export (ASCII 7.4)](../agents/tasks/166-fbx-export.md) | M | 165 | waiting: O44 | io |
-| 167 | [Alembic (Ogawa) import/export](../agents/tasks/167-alembic.md) | M | 088 | waiting: O44 | io |
-| 168 | [USD .usda import/export](../agents/tasks/168-usd.md) | M | 123 | waiting: O44 | io |
-| 169 | [STL and PLY](../agents/tasks/169-stl-ply.md) | M | – | waiting: O44 | io |
-| 170 | [Camera, light and material exchange across formats](../agents/tasks/170-camera-light-material-exchange.md) | M | 047, 134 | waiting: O44 | io |
-| 171 | [Exchange parity tests (S9)](../agents/tasks/171-s9-exchange-tests.md) | M | 164–169 | waiting: O44 | tests |
+| 164 | [glTF import/export (meshes, hierarchy, materials, animation, skins, morphs)](../agents/tasks/164-gltf.md) | M | 088, 101, 107 | ready | io |
+| 165 | [FBX import (ufbx)](../agents/tasks/165-fbx-import.md) | M | 088, 101 | ready | io |
+| 166 | [FBX export (ASCII 7.4)](../agents/tasks/166-fbx-export.md) | M | 165 | ready | io |
+| 167 | [Alembic (Ogawa) import/export](../agents/tasks/167-alembic.md) | M | 088 | ready | io |
+| 168 | [USD .usda import/export](../agents/tasks/168-usd.md) | M | 123 | ready | io |
+| 169 | [STL and PLY](../agents/tasks/169-stl-ply.md) | M | – | done (parity-pending: PLY not observed) | io |
+| 170 | [Camera, light and material exchange across formats](../agents/tasks/170-camera-light-material-exchange.md) | M | 047, 134 | ready | io |
+| 171 | [Exchange parity tests (S9)](../agents/tasks/171-s9-exchange-tests.md) | M | 164–169 | ready | tests |
 | 172 | [Import/export dialogs and CLI batch export](../agents/tasks/172-io-dialogs-batch.md) | M | 013, 150 | done (OBJ only; dialog layout parity-pending) | ui, io |
 | 173 | [CI matrix: Linux, macOS, Windows; per-OS GPU policy](../agents/tasks/173-ci-matrix.md) | N | – | done | .github |
 | 174 | [Toolchain pin and cargo-deny](../agents/tasks/174-toolchain-cargo-deny.md) | N | – | done | root |
@@ -188,4 +188,5 @@ implementers can avoid collisions.
 | 189 | [Native format v10 for list-valued parameters](../agents/tasks/189-format-v10.md) | M | 028, 163 | done | core, io |
 | 190 | [Viewport splines: drawing, points, handles and dragging](../agents/tasks/190-viewport-splines.md) | E | 028, 143 | done | viewport, ui, command |
 | 191 | [R25 Helix Bézier construction (sampling parity)](../agents/tasks/191-helix-sampling.md) | B | 028, 042 | done | generators |
+| 192 | [Volume and rig nodes in the editor: evaluation hook, commands, display](../agents/tasks/192-volume-rig-integration.md) | F, H | 081, 083, 100, 101, 112, 084 | done | generators, app, command, ui, viewport, volume, rig |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |

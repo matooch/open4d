@@ -191,3 +191,70 @@ fn a_random_effector_is_created_and_seeded_by_commands() {
     set(&mut app, random, "random_mode", json!("sorted"));
     assert!(app.eval_mesh(cloner, 0).is_err());
 }
+
+/// Brief 072: an effector's falloff is a whole field list (spec E8): rows of any layer type, here a
+/// Spherical under an Invert modifier, a disabled row and a transformed field, read the same way
+/// for Plain and Random effectors.
+#[test]
+fn effector_falloff_takes_a_whole_field_list() {
+    use forge_core::EvalCtx;
+    use forge_fields::FieldList;
+    use glam::DVec3;
+
+    let mut app = App::new_default();
+    let (cloner, _) = scene(&mut app);
+    let plain = create(&mut app, "forge.effector.plain");
+    set(&mut app, cloner, "effectors", json!([plain.0]));
+    let base = {
+        set(&mut app, plain, "strength", json!(0.0));
+        app.eval_mesh(cloner, 0).unwrap()
+    };
+    set(&mut app, plain, "strength", json!(100.0));
+    let per = base.points.len() / 5;
+    let centre = |m: &forge_geometry::PolyMesh, k: usize| {
+        m.points[k * per..(k + 1) * per]
+            .iter()
+            .fold(DVec3::ZERO, |a, p| a + *p)
+            / per as f64
+    };
+    let sphere = create(&mut app, "forge.field.spherical");
+    let invert = create(&mut app, "forge.field.invert_layer");
+    set(&mut app, sphere, "transform.pos", json!([0.0, 0.0, 0.0]));
+    let check = |app: &App, ids: &[forge_core::NodeId]| {
+        let list = FieldList::from_nodes(app.doc.scene(), ids).unwrap();
+        let moved = app.eval_mesh(cloner, 0).unwrap();
+        let mut seen = std::collections::BTreeSet::new();
+        for k in 0..5 {
+            let v = list.sample(centre(&base, k), &EvalCtx::default()).value;
+            let dy = centre(&moved, k).y - centre(&base, k).y;
+            assert!((dy - 100.0 * v).abs() < 1e-6, "clone {k}: {dy} vs {v}");
+            seen.insert((v * 1e6) as i64);
+        }
+        seen.len()
+    };
+    // One Spherical, then the same under an Invert layer: the clones' falloff flips.
+    set(&mut app, plain, "fields", json!([sphere.0]));
+    let a = check(&app, &[sphere]);
+    set(&mut app, plain, "fields", json!([invert.0, sphere.0]));
+    let b = check(&app, &[invert, sphere]);
+    assert!(a > 1 && b > 1, "the field must vary over the clones");
+    // A row switched off is left out, like an empty list: every clone moves by the full 100.
+    set(
+        &mut app,
+        plain,
+        "fields",
+        json!([{"target": sphere.0, "enabled": false}]),
+    );
+    let moved = app.eval_mesh(cloner, 0).unwrap();
+    for k in 0..5 {
+        assert!((centre(&moved, k).y - centre(&base, k).y - 100.0).abs() < 1e-6);
+    }
+    // The same list on a Random effector: a clone with falloff 0 does not move.
+    let random = create(&mut app, "forge.effector.random");
+    set(&mut app, cloner, "effectors", json!([random.0]));
+    set(&mut app, random, "fields", json!([invert.0, sphere.0]));
+    let with = app.eval_mesh(cloner, 0).unwrap();
+    set(&mut app, random, "fields", json!([]));
+    let without = app.eval_mesh(cloner, 0).unwrap();
+    assert_ne!(with, without);
+}

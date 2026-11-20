@@ -1,6 +1,6 @@
 # 113 · Rig mirroring (joints and weights, left/right naming)
 
-Status: ready · Area: H · Depends on: 101 · Observations: – · Touches: rig
+Status: done · Area: H · Depends on: 101 · Observations: – · Touches: rig
 
 ## Goal
 Mirror a half rig with its weights.
@@ -23,9 +23,10 @@ Mirror a half rig with its weights.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: `mirror_name`, `joint_mirror_map`, `mirror_weights`, `mirror_tag_weights`, `add_joints_to_tag`
+  (joint mirroring `mirror_chain` came with brief 100). Tests `crates/rig/tests/mirroring.rs` (4) and
+  name tests in `rig_units.rs`: a mirrored rig deforms symmetrically to 1e-9. No parity data (own design).
+- Rules: name rules and nearest-point weight transfer as in RIG.md section 5.
+- Deviations: nearest-point search is brute force (O(n^2)); fine for rig-sized meshes, a grid would be
+  the follow-up for 100k-point meshes.
+- Files: crates/rig/src/mirror.rs, crates/rig/tests/mirroring.rs, docs/specs/RIG.md section 5.

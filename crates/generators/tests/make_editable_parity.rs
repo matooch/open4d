@@ -227,15 +227,6 @@ fn flat_object(reg: &Registry, obj: &Table) -> Table {
             | "frozen_scale" => continue,
             _ if k.starts_with("color") => continue,
             "direction" | "hierarchical" if node.find_param(k).is_none() => continue,
-            "offset" if key == "extrude" => {
-                // Direction Auto goes along +Z here (the sign is the export tests' business)
-                let f = v.as_float().or(v.as_integer().map(|i| i as f64)).unwrap();
-                out.insert(
-                    "movement".into(),
-                    toml::Value::Array(vec![0.0.into(), 0.0.into(), f.into()]),
-                );
-                continue;
-            }
             "caps_type" => {
                 out.insert("cap_type".into(), v.clone());
                 continue;

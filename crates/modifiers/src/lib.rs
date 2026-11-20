@@ -920,6 +920,16 @@ pub fn apply_deformer_resolved(
     {
         return apply_helper(scene, deformer, target, mesh, ctx, resolve);
     }
+    if scene
+        .node(deformer)
+        .is_some_and(|n| n.type_id == forge_rig::SKIN)
+    {
+        // The skin reads its joints and the object's weight tag (docs/specs/RIG.md §3).
+        if forge_core::layers::deformers_on(scene, deformer) {
+            forge_rig::apply_skin(scene, deformer, target, &mut mesh.points);
+        }
+        return;
+    }
     let kind = match scene.node(deformer).map(|n| n.type_id.as_str()) {
         Some(EXPLOSION) => Kind::Explosion,
         Some(SHATTER) => Kind::Shatter,

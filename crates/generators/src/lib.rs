@@ -389,6 +389,18 @@ pub fn is_consumed(scene: &Scene, id: NodeId) -> bool {
     else {
         return false;
     };
+    // children of a consuming plugin generator, also through geometry-less Nulls
+    if scene
+        .registry()
+        .get(&p.type_id)
+        .is_some_and(|t| t.consumes_children)
+        && forge_core::layers::generators_on(scene, p.id)
+    {
+        return true;
+    }
+    if p.type_id == "forge.null" && is_consumed(scene, p.id) {
+        return true;
+    }
     // the inputs of a bypassed generator are drawn as themselves
     if !forge_core::layers::generators_on(scene, p.id) {
         return false;

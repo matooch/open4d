@@ -1,6 +1,6 @@
 # 080 · forge-volume: sparse grid, mesh/spline/points to SDF, CSG; harness compare_volume_mesh
 
-Status: waiting: O32 · Area: F · Depends on: – · Observations: O32 · Touches: volume (new), parity-harness
+Status: done · Area: F · Depends on: – · Observations: O32 · Touches: volume (new), parity-harness
 
 ## Goal
 A new `forge-volume` crate with a sparse grid, conversions to signed distance fields, and CSG; plus a geometric mesh comparison in the harness.
@@ -19,10 +19,10 @@ A new `forge-volume` crate with a sparse grid, conversions to signed distance fi
 - Harness: `compare_volume_mesh(expected, actual, voxel)` → Hausdorff (≤ voxel/2), area and volume within 2 %, equal Euler characteristic. Unit-test it on spheres.
 
 ## Done when
-- [ ] VOLUME.md spec citing O32.
-- [ ] Unit tests: sphere SDF error < 0.1 voxel; cube CSG.
-- [ ] compare_volume_mesh tested.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] VOLUME.md spec citing O32.
+- [x] Unit tests: sphere SDF error < 0.1 voxel; cube CSG.
+- [x] compare_volume_mesh tested.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Out of scope
 The builder node (081) and the mesher (083).
@@ -35,9 +35,8 @@ The builder node (081) and the mesher (083).
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: 9 grid / SDF / CSG tests in `crates/volume/tests` (sphere SDF error below 0.1 voxel at voxel 10 and 5, band and interior fill, surface samples exactly `+0.0`, cube CSG incl. unstored interior, spline capsules, point spheres, smooth union), 6 `compare_volume_mesh` tests in `crates/parity-harness/tests/volume_compare.rs`. No golden parity cases belong to this brief (they are 083).
+- Rules derived (from O32 cube-defaults, checked vertex by vertex in brief 083): samples at multiples of the voxel size; a sample exactly on the surface reads `+0.0` and is outside; band 2 voxels each side.
+- Deviations: BVH with winding-number dipoles for the sign, per-voxel exact distance instead of per-triangle splat plus fast sweep (the band is exact, so no sweep is needed); interior fill by x-row spans instead of a fast sweep (VOLUME.md section 2.5).
+- Files: crates/volume (new), crates/parity-harness/src/volume.rs, src/lib.rs, tests/volume_compare.rs, docs/specs/VOLUME.md, BACKLOG row, this brief.
+- Open questions: none for 080.

@@ -113,7 +113,9 @@ fn extrude_of(case: &forge_parity_harness::GoldenCase) -> Result<Mesh, BuildErro
         1.0
     };
     doc.transact("direction", |tx| {
-        tx.set_param(ex, "movement", Value::Vec3([0.0, 0.0, sign * offset]))
+        tx.set_param(ex, "direction", Value::Enum("custom".into()))?;
+        tx.set_param(ex, "offset", Value::Float(offset))?;
+        tx.set_param(ex, "movement", Value::Vec3([0.0, 0.0, sign]))
     })
     .unwrap();
     let mesh = evaluate(doc.scene(), ex, &EvalCtx::default())?.expect("geometry");

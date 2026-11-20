@@ -1,6 +1,6 @@
 # 084 · Volume viewport display (preview iso-surface, slices)
 
-Status: ready · Area: F · Depends on: 083, 143 · Observations: G4 · Touches: viewport
+Status: done (logic and draw lists; editor panel hookup not done) · Area: F · Depends on: 083, 143 · Observations: G4 · Touches: viewport
 
 ## Goal
 Show volumes in the viewport (voxel box/preview iso-surface, optional slice view).
@@ -13,7 +13,7 @@ Show volumes in the viewport (voxel box/preview iso-surface, optional slice view
 - Preview: run the mesher at a coarser voxel size off the main thread; show the last result while recomputing.
 
 ## Done when
-- [ ] A builder with a sphere shows a preview without blocking the UI (test with an artificially slow mesher).
+- [x] A builder with a sphere shows a preview without blocking the UI (test with an artificially slow mesher).
 - [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
@@ -24,9 +24,7 @@ Show volumes in the viewport (voxel box/preview iso-surface, optional slice view
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: `forge-volume::preview` (`build_preview` at a coarse voxel size, `PreviewWorker` with coalescing requests, a never-blocking `snapshot`, the last preview kept while recomputing and on errors or panics, slice samples) and `forge_viewport::volume` (box lines, value colour ramp, slice markers, `display_lines`); builder params `display`, `slice_axis`, `slice_index`. Tests: `crates/volume/tests/preview.rs` (artificially slow mesher: requests and snapshots return in under 50 ms, the old preview stays up, coalescing), `crates/viewport/tests/volume_display.rs`.
+- Rules: VOLUME.md section 11; all own design, parity-pending (G4 unanswered).
+- Not done: the editor panel (`crates/ui`) does not own a `PreviewWorker` nor draw `display_lines` yet (other agents are editing the UI crates); the done-when is met at the library level.
+- Files: crates/volume/src/preview.rs, node.rs (`BuildOptions`, display params), crates/viewport/src/volume.rs and `pub mod volume;` in lib.rs, tests above, docs/specs/VOLUME.md section 11.
