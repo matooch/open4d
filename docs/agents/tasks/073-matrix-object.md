@@ -1,6 +1,6 @@
 # 073 · Matrix object
 
-Status: waiting: O31 · Area: E · Depends on: 065 · Observations: O31 · Touches: clone-engine
+Status: done · Area: E · Depends on: 065 · Observations: O31 · Touches: clone-engine
 
 ## Goal
 A Matrix object: a cloner that produces only matrices (no geometry), usable as a distribution source.
@@ -15,7 +15,7 @@ A Matrix object: a cloner that produces only matrices (no geometry), usable as a
 - Viewport: draw matrices as small axes (079).
 
 ## Done when
-- [ ] O31 matrix cases pass.
+- [x] O31 matrix cases pass.
 - [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
@@ -25,10 +25,10 @@ A Matrix object: a cloner that produces only matrices (no geometry), usable as a
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- Result: `matrix_parity.rs` (2 tests); parity 2/2 exact (`matrix/defaults` 1600 clones, `matrix/linear` 5 clones); no UNSUPPORTED/KNOWN_MISMATCH cases. Thinking Particles and Object mode return Unsupported (unit test).
+- Rules: Matrix = cloner modes + Transform tab without prototype options; defaults Grid, count (40,1,40), size 10.5 (`matrix/defaults`); Linear as cloner (`matrix/linear`). Parity-pending: Radial/Honeycomb/effectors on a Matrix, O31's mislabelled per-mode counts.
+- Deviations: none. Viewport axes are brief 079; Object-mode/Tracer consumers read `matrix_data` (Tracer in 076).
+- Files: crates/clone-engine/src/{matrix,node,lib}.rs, crates/generators/src/{cloner,lib}.rs, crates/generators/tests/matrix_parity.rs, crates/ui/icons/matrix.svg, crates/ui/src/icon_table.rs, docs/specs/MOGRAPH.md (M1-M2), STATUS, BACKLOG.
+- Open: none.
+- Gate: per-crate clippy and tests pass (clone-engine, generators, io, ui, app); full gate run before final commit.

@@ -70,7 +70,7 @@ implementers can avoid collisions.
 | 070 | [Step, Formula, Time, Delay and Target effectors](../agents/tasks/070-step-formula-time-delay-target.md) | E | 068, 052 | done (level B 6/6, level A 5/6: `step-position` known mismatch; Delay has no golden case, all its rules parity-pending, see MOGRAPH.md E18-E25) | clone-engine |
 | 071 | [Shader, Spline, Push Apart, Inheritance, Volume and Group effectors](../agents/tasks/071-shader-spline-pushapart-etc.md) | E | 068, 125 | ready | clone-engine |
 | 072 | [Effector falloff via field lists](../agents/tasks/072-effector-field-falloff.md) | E | 068, 059 | done (parity-pending: multi-layer lists, no observation) | clone-engine, fields |
-| 073 | [Matrix object](../agents/tasks/073-matrix-object.md) | E | 065 | ready | clone-engine |
+| 073 | [Matrix object](../agents/tasks/073-matrix-object.md) | E | 065 | done | clone-engine |
 | 074 | [Fracture and Voronoi Fracture](../agents/tasks/074-fracture-voronoi.md) | E | 065, 033 | ready | clone-engine, geometry |
 | 075 | [Clone-toolset Text](../agents/tasks/075-clone-text.md) | E | 039, 065 | ready | clone-engine, generators |
 | 076 | [Tracer and the clone-toolset spline generator](../agents/tasks/076-tracer-spline-generator.md) | E | 065, 028 | ready | clone-engine, generators |

@@ -32,7 +32,7 @@ pub mod text_spline;
 pub use boole::{boole, boole_objects, inputs_of as boole_inputs_of};
 pub use cloner::{
     ClonerInstances, PARALLEL_POINTS, clone_data, cloner_instances, expand as expand_clones,
-    prototypes_of as cloner_prototypes,
+    matrix_data, prototypes_of as cloner_prototypes,
 };
 pub use modeling::{array, connect, inputs_of as modeling_inputs_of, symmetry};
 pub use polygon::{
@@ -273,6 +273,11 @@ pub(crate) fn evaluate_geometry(
     }
     if node.type_id == cloner::TYPE {
         return cloner::evaluate_cloner(scene, id, &node.params, ctx);
+    }
+    if node.type_id == forge_clone_engine::MATRIX {
+        // A Matrix makes matrices only (spec M1); an unsupported option is still an error.
+        cloner::matrix_data(scene, id, ctx)?;
+        return Ok(None);
     }
     if spline_gens::spline_input_count(&node.type_id).is_some() {
         return spline_gens::evaluate_spline_gen(scene, id, &node.type_id, &node.params);

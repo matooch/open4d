@@ -901,3 +901,48 @@ modes and Unsupported, the Delay modes, frame 0 identity, determinism). The Dela
   Strength 50 %; a Target Object at (0, 100, 0) (clone at the same height), at (300, 0, 0).
 - Delay: Mode Even / Blend / Spring with a Time effector before it, Strength 50 %, frames 0, 1, 2, 5, 10 (record the
   clone data at each).
+
+---
+
+# Clone toolset: Matrix (brief 073)
+
+Sources: observation O31 [clone-generators-2.md](../parity/clone-generators-2.md) (parameter tables,
+cases `matrix/defaults`, `matrix/linear`), the cloner sections C1-C9 above. Golden data: `tests/golden/matrix/`
+(`samples.json` kind `clones`, tolerance 1e-4; `mesh.obj` is the observer's separate 20 cm cube).
+
+## M1. The Matrix object (`forge.matrix`)
+
+A Matrix makes clone data and no geometry. It has the cloner's distribution modes and Transform tab
+unchanged (C3-C7, C3.1) and none of the prototype options: it has no `clones_mode`, `reset_coordinates`,
+`fix_texture`, `instance_mode` or `viewport_mode`. Its parameter ids are the cloner's, plus `generate`.
+
+| Id | Label | Default |
+|---|---|---|
+| `mode` | Mode (Object, Linear, Radial, Grid, Honeycomb) | Grid (the cloner's default too; the observed label is "Grid", not "Grid Array") |
+| `generate` | Generate (Matrices Only, Thinking Particles) | Matrices Only |
+| `grid_count` | Count | (40, 1, 40) (cloner: (3, 1, 3)) |
+| `grid_size` | Size | (10.5, 10.5, 10.5) (cloner: 200) |
+| all others | as the cloner's | as the cloner's (O31 per-mode tables agree for Linear: P (0, 50, 0), step values 100 %) |
+
+Rules:
+- `matrix_data(scene, id, ctx)` (crates/generators) is `generate` of the settings read through the Matrix's
+  own descriptors, then the node's effector list (E1). The result has `child = 0` for every clone.
+- Evaluating the node gives no mesh (`Ok(None)`): `matrix/defaults` and `matrix/linear` export only the separate cube.
+- Consumers: Object-mode cloners (brief 066) and the Tracer (M3 below) read `matrix_data`. Viewport matrix
+  axes belong to brief 079.
+- `matrix/defaults` (Grid, 40 x 1 x 40, size 10.5, per step): 1600 clones, first at (-204.75, 0, -204.75), x fastest, same as
+  C6. `matrix/linear` (Linear, count 5, P (0, 50, 0)): clones at y = 0, 50, ... 200, as C4.
+
+Returns `BuildError::Unsupported`: `generate` = Thinking Particles (no particle system in the clone toolset), and Object mode
+(the cloner's Object mode is brief 066).
+
+**Parity-pending:** the per-mode default counts of the O31 table are mislabelled in the observation (the "Object" table shows
+count 5, the "Linear" one shows (40, 1, 40)); we keep the cloner's Linear default count (3) because `matrix/linear` sets
+the count to 5 explicitly. Radial, Honeycomb and Matrix-with-effectors have no observed case; they share the cloner code.
+
+## M2. Parity
+
+Test `crates/generators/tests/matrix_parity.rs` rebuilds both cases from `case.toml` (labels mapped per mode: on the Linear
+tab `p` is the step position and the Transform tab's P is `effects_p`; on the Grid tab `p` is the Transform tab's P),
+compares the clone data (level B) and checks the node produces no geometry and that our 20 cm cube equals the case's
+`mesh.obj` (level A on the standalone cube). Result: **2 of 2** exact. `UNSUPPORTED` / `KNOWN_MISMATCH`: none.

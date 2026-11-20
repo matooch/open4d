@@ -184,3 +184,31 @@ pub fn clone_data(
         .map_err(map_error)?;
     Ok(Some(clones))
 }
+
+/// The matrices of a Matrix object (spec M1): the cloner's clone data with no prototypes, so
+/// the object draws nothing itself. `Ok(None)` if `id` is not a Matrix. Object-mode cloners
+/// and the Tracer read these.
+pub fn matrix_data(
+    scene: &Scene,
+    id: NodeId,
+    ctx: &EvalCtx,
+) -> Result<Option<CloneData>, BuildError> {
+    let Some(node) = scene
+        .node(id)
+        .filter(|n| n.type_id == forge_clone_engine::MATRIX)
+    else {
+        return Ok(None);
+    };
+    if matches!(
+        node.params.get("generate"),
+        Some(Value::Enum(g)) if g == "thinking_particles"
+    ) {
+        return Err(BuildError::Unsupported(
+            "Matrix generating thinking particles",
+        ));
+    }
+    let settings = forge_clone_engine::matrix_settings(&node.params);
+    let mut clones = generate(&settings, ctx).map_err(map_error)?;
+    apply_effectors(scene, id, &mut clones, ctx).map_err(map_error)?;
+    Ok(Some(clones))
+}

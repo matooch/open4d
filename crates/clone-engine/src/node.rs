@@ -412,11 +412,13 @@ impl Plugin for CloneToolset {
         r.register(crate::formula::formula_type())?;
         r.register(crate::time::time_type())?;
         r.register(crate::target::target_type())?;
-        r.register(crate::delay::delay_type())
+        r.register(crate::delay::delay_type())?;
+        r.register(crate::matrix::matrix_type())
     }
 }
 
-/// Typed parameter access with defaults from the descriptors.
+/// Typed parameter access with defaults from the descriptors. A parameter the type does not
+/// have (the Matrix has no prototype options) reads as the cloner's default.
 pub(crate) struct Params<'a> {
     pub(crate) ty: &'a NodeType,
     pub(crate) values: &'a BTreeMap<String, Value>,
@@ -424,7 +426,16 @@ pub(crate) struct Params<'a> {
 
 impl Params<'_> {
     fn get(&self, id: &str) -> Value {
-        let desc = self.ty.find_param(id).expect("cloner reads its own params");
+        let fallback;
+        let desc = match self.ty.find_param(id) {
+            Some(d) => d,
+            None => {
+                fallback = cloner_type();
+                fallback
+                    .find_param(id)
+                    .expect("cloner reads its own params")
+            }
+        };
         self.values
             .get(id)
             .and_then(|v| desc.validate(v.clone()).ok())
@@ -477,8 +488,13 @@ impl Params<'_> {
 
 /// Reads a cloner's parameters (defaults and clamping from the descriptors).
 pub fn settings_from_params(values: &BTreeMap<String, Value>) -> Settings {
-    let ty = cloner_type();
-    let p = Params { ty: &ty, values };
+    settings_of(&cloner_type(), values)
+}
+
+/// Reads the settings of any node type that uses the cloner's parameter ids (the cloner, the
+/// Matrix).
+pub(crate) fn settings_of(ty: &NodeType, values: &BTreeMap<String, Value>) -> Settings {
+    let p = Params { ty, values };
     let mode = match p.option("mode").as_str() {
         "object" => Mode::Object,
         "linear" => Mode::Linear,

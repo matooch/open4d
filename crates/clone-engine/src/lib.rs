@@ -11,6 +11,7 @@ mod formula;
 mod grid;
 mod honeycomb;
 mod linear;
+mod matrix;
 mod node;
 mod plain;
 mod radial;
@@ -25,6 +26,7 @@ pub use data::{CloneData, CloneItem};
 pub use delay::{DELAY, Delay, DelayMode, WINDOW as DELAY_WINDOW, delay_type};
 pub use effector::{Effector, EffectorCtx, apply_effectors, effector_from_node};
 pub use formula::{DEFAULT_FORMULA, FORMULA, Formula, formula_type};
+pub use matrix::{MATRIX, matrix_settings, matrix_type};
 pub use node::{CLONER, CloneToolset, cloner_type, settings_from_params};
 pub use plain::{ColorMode, PLAIN, Plain, Space, TransformMode, plain_type};
 pub use random::{
