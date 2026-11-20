@@ -14,8 +14,9 @@ pub enum Kind {
     Shatter,
 }
 
-/// Parameters of both deformers (`speed` is used by Explosion only). `strength`,
-/// `end_size` and `randomness` are percent as the app shows them, `angle_speed` radians.
+/// Parameters of both deformers (`speed` is used by Explosion only). `strength` and
+/// `randomness` are percent as the app shows them, `end_size` a plain factor (the polygon
+/// scale at full strength), `angle_speed` radians.
 #[derive(Debug, Clone, Copy)]
 pub struct BlastParams {
     pub strength: f64,
@@ -67,19 +68,22 @@ pub fn blast(mesh: &mut PolyMesh, kind: Kind, p: &BlastParams, seed: u64) {
         return;
     }
     let r = (p.randomness / 100.0).clamp(0.0, 1.0);
-    let scale = 1.0 + (p.end_size / 100.0 - 1.0) * s;
-    let half = 0.75 * p.angle_speed * s;
+    // End Size is a plain factor (MODIFIERS.md §11, explosion/end-size-100): 1 + (E - 1)·s.
+    let scale = 1.0 + (p.end_size - 1.0) * s;
+    // Rotation range: nonlinear in the strength, independent of Randomness (§11).
+    let half = 0.5 * p.angle_speed * s * (1.0 + s);
     let mut rng = Rng::new(seed ^ 0x5348_4154_5445_5231);
-    // `u` in [0,1) pulled to the middle as randomness falls.
+    // `u` in [0,1) pulled to the middle as randomness falls (offsets only: the rotation
+    // angles do not depend on Randomness).
     let draw = |rng: &mut Rng| (1.0 - r) * 0.5 + r * rng.unit();
     let mut points = Vec::with_capacity(mesh.polys.len() * 4);
     let mut polys = Vec::with_capacity(mesh.polys.len());
     for poly in &mesh.polys {
         let src: Vec<DVec3> = poly.iter().map(|&i| mesh.points[i as usize]).collect();
         let c = src.iter().copied().sum::<DVec3>() / src.len().max(1) as f64;
-        let ey = (2.0 * draw(&mut rng) - 1.0) * half;
-        let ex = (2.0 * draw(&mut rng) - 1.0) * half;
-        let ez = (2.0 * draw(&mut rng) - 1.0) * half;
+        let ey = (2.0 * rng.unit() - 1.0) * half;
+        let ex = (2.0 * rng.unit() - 1.0) * half;
+        let ez = (2.0 * rng.unit() - 1.0) * half;
         let rot =
             DMat3::from_rotation_y(ey) * DMat3::from_rotation_x(ex) * DMat3::from_rotation_z(ez);
         let centre = match kind {
@@ -90,7 +94,7 @@ pub fn blast(mesh: &mut PolyMesh, kind: Kind, p: &BlastParams, seed: u64) {
                 let v = DVec3::new(ring * phi.cos(), z, ring * phi.sin());
                 let radial = c.normalize_or_zero();
                 let dir = (radial + 1.5 * r * v).normalize_or(v);
-                c + dir * (15.0 * p.speed * s * rng.unit())
+                c + dir * (15.0 * p.speed * s * draw(&mut rng))
             }
             Kind::Shatter => {
                 let a = 100.0 * s * r * (rng.unit() + rng.unit() - 1.0);
