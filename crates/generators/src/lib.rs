@@ -4,6 +4,7 @@
 pub mod atom_array;
 pub mod axis;
 mod boole;
+mod clone_spline;
 mod cloner;
 mod cube;
 pub mod editable_spline;
@@ -28,6 +29,7 @@ pub mod spline_tools;
 pub mod splines;
 mod subdivision;
 pub mod text_spline;
+pub mod tracer;
 
 pub use boole::{boole, boole_objects, inputs_of as boole_inputs_of};
 pub use cloner::{
@@ -109,6 +111,8 @@ impl Plugin for Primitives {
         r.register(spline_gens::sweep_type())?;
         r.register(atom_array::node_type())?;
         r.register(spline_mask::node_type())?;
+        r.register(tracer::node_type())?;
+        r.register(clone_spline::node_type())?;
         r.register(boole::node_type())?;
         r.register(polygon::selection_tag_type())?;
         r.register(polygon::node_type())
@@ -280,7 +284,7 @@ pub(crate) fn evaluate_geometry(
         return Ok(None);
     }
     if spline_gens::spline_input_count(&node.type_id).is_some() {
-        return spline_gens::evaluate_spline_gen(scene, id, &node.type_id, &node.params);
+        return spline_gens::evaluate_spline_gen(scene, id, &node.type_id, &node.params, ctx);
     }
     if modeling::input_count(&node.type_id).is_some() || node.type_id == modeling::INSTANCE {
         return modeling::evaluate_modeling(scene, id, &node.type_id, &node.params, ctx);

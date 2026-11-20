@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use forge_core::{Category, NodeId, NodeType, ParamDesc, Scene, Unit, Value};
+use forge_core::{Category, EvalCtx, NodeId, NodeType, ParamDesc, Scene, Unit, Value};
 use glam::DVec3;
 
 use crate::spline_sampling::{Interpolation, Sampling, add_params, sample};
@@ -185,6 +185,8 @@ pub(crate) fn is_spline(type_id: &str) -> bool {
             | editable_spline::TYPE
             | crate::spline_mask::TYPE
             | crate::text_spline::TYPE
+            | crate::tracer::TYPE
+            | crate::clone_spline::TYPE
     ) || spline_prims::node_type(type_id).is_some()
 }
 
@@ -279,9 +281,12 @@ pub fn build_curve(type_id: &str, values: &BTreeMap<String, Value>) -> Result<Cu
     if type_id == crate::text_spline::TYPE {
         return crate::text_spline::build_curve(values);
     }
-    if type_id == crate::spline_mask::TYPE {
+    if type_id == crate::spline_mask::TYPE
+        || type_id == crate::tracer::TYPE
+        || type_id == crate::clone_spline::TYPE
+    {
         return Err(BuildError::Failed(
-            "a spline mask is built from its children".into(),
+            "this spline is built from the scene".into(),
         ));
     }
     let ty = node_type_of(type_id).ok_or_else(|| BuildError::UnknownType(type_id.to_string()))?;
@@ -476,21 +481,39 @@ impl HelixShape {
     }
 }
 
+/// The curve of a spline node in its own space: generators that read the scene (mask, Tracer,
+/// clone-toolset spline) build it from it, the others from their parameters.
+fn node_curve(scene: &Scene, id: NodeId, ctx: &EvalCtx) -> Result<Option<Curve>, BuildError> {
+    let Some(node) = scene.node(id) else {
+        return Ok(None);
+    };
+    match node.type_id.as_str() {
+        crate::spline_mask::TYPE => crate::spline_mask::curve_of(scene, id),
+        crate::tracer::TYPE => crate::tracer::curve_of(scene, id, ctx),
+        crate::clone_spline::TYPE => crate::clone_spline::curve_of(scene, id),
+        t => build_curve(t, &node.params).map(Some),
+    }
+}
+
 /// A spline node's curve in its parent's space (placed by its local transform).
 pub(crate) fn placed_curve(scene: &Scene, id: NodeId) -> Result<Option<Curve>, BuildError> {
+    placed_curve_at(scene, id, &EvalCtx::default())
+}
+
+/// [`placed_curve`] at the evaluation context `ctx` (the Tracer follows the frames up to it).
+pub(crate) fn placed_curve_at(
+    scene: &Scene,
+    id: NodeId,
+    ctx: &EvalCtx,
+) -> Result<Option<Curve>, BuildError> {
     let Some(node) = scene.node(id) else {
         return Ok(None);
     };
     if !is_spline(&node.type_id) {
         return Ok(None);
     }
-    let curve = if node.type_id == crate::spline_mask::TYPE {
-        match crate::spline_mask::curve_of(scene, id)? {
-            Some(c) => c,
-            None => return Ok(None),
-        }
-    } else {
-        build_curve(&node.type_id, &node.params)?
+    let Some(curve) = node_curve(scene, id, ctx)? else {
+        return Ok(None);
     };
     let m = scene.local_transform(id).expect("node exists").matrix();
     Ok(Some(curve.transformed(&m)))
@@ -504,11 +527,7 @@ pub fn sampled_loops(scene: &Scene, id: NodeId) -> Option<Vec<(Vec<DVec3>, bool)
     if !is_spline(&node.type_id) {
         return None;
     }
-    let curve = if node.type_id == crate::spline_mask::TYPE {
-        crate::spline_mask::curve_of(scene, id).ok()??
-    } else {
-        build_curve(&node.type_id, &node.params).ok()?
-    };
+    let curve = node_curve(scene, id, &EvalCtx::default()).ok()??;
     let loops: Vec<(Vec<DVec3>, bool)> = std::iter::once(&curve)
         .chain(curve.extra.iter())
         .map(|c| (c.points(), c.closed))
@@ -525,11 +544,7 @@ pub fn polyline_mesh(scene: &Scene, id: NodeId) -> Option<forge_geometry::PolyMe
     if !is_spline(&node.type_id) {
         return None;
     }
-    let curve = if node.type_id == crate::spline_mask::TYPE {
-        crate::spline_mask::curve_of(scene, id).ok()??
-    } else {
-        build_curve(&node.type_id, &node.params).ok()?
-    };
+    let curve = node_curve(scene, id, &EvalCtx::default()).ok()??;
     let points = curve.points();
     let n = points.len();
     if n < 2 {
