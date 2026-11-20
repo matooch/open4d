@@ -156,6 +156,11 @@ impl Pose {
     }
 }
 
+/// The share of the previous output that a full-strength delay keeps per frame: the persistence
+/// is `0.999 * strength` (`cloner/delay-blend-f1`: 0.5005 of the way after one frame at
+/// strength 50 %, `delay-spring-f5`: 17.082914 against 17.0833 without the factor).
+const PERSISTENCE: f64 = 0.999;
+
 /// The rotation vector (axis times angle, shortest way) of `a · b⁻¹`.
 fn rotation_vector(a: DQuat, b: DQuat) -> DVec3 {
     let mut q = (a * b.inverse()).normalize();
@@ -199,38 +204,32 @@ impl Delay {
             let value = falloff
                 .sample(ctx.cloner_world.transform_point3(at), ctx.eval)
                 .value;
-            let s = (self.strength * value).clamp(0.0, 1.0);
+            let s = (self.strength * value).clamp(0.0, 1.0) * PERSISTENCE;
             let mut inputs = history
                 .iter()
                 .map(|h| Pose::of(&h.matrices[i]))
                 .chain(std::iter::once(Pose::of(&data.matrices[i])));
-            let mut previous = inputs.next().expect("history is not empty");
-            let mut out = previous;
+            let mut out = inputs.next().expect("history is not empty");
             let mut velocity = Velocity::default();
             for x in inputs {
-                out = self.step(out, previous, x, s, &mut velocity);
-                previous = x;
+                out = self.step(out, x, s, &mut velocity);
             }
             data.matrices[i] = out.matrix();
         }
         Ok(())
     }
 
-    /// One frame: the output `y` follows the input `x` (`previous` is the last frame's
-    /// input), `s` the delay of the clone.
-    fn step(&self, y: Pose, previous: Pose, x: Pose, s: f64, v: &mut Velocity) -> Pose {
+    /// One frame: the output `y` follows the input `x`, `s` the delay of the clone.
+    fn step(&self, y: Pose, x: Pose, s: f64, v: &mut Velocity) -> Pose {
         let k = 1.0 - s;
         let mut out = x;
         match self.mode {
-            DelayMode::Even => {
+            // Blend is observed (`cloner/delay-blend-f1 .. f10`: exponential smoothing of the
+            // input); Even has no case and shares the rule (parity-pending).
+            DelayMode::Even | DelayMode::Blend => {
                 out.pos = y.pos + (x.pos - y.pos) * k;
                 out.rot = y.rot.slerp(x.rot, k);
                 out.scale = y.scale + (x.scale - y.scale) * k;
-            }
-            DelayMode::Blend => {
-                out.pos = previous.pos.lerp(x.pos, k);
-                out.rot = previous.rot.slerp(x.rot, k);
-                out.scale = previous.scale.lerp(x.scale, k);
             }
             DelayMode::Spring => {
                 v.pos = v.pos * s + (x.pos - y.pos) * k;

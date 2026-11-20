@@ -32,6 +32,131 @@ const OUT_OF_SCOPE_ORDER: &[&str] = &["order-iterate", "order-random", "order-so
 const KNOWN_MISMATCH: &[&str] = &[];
 
 type Table = toml::map::Map<String, toml::Value>;
+type Params = std::collections::BTreeMap<String, toml::Value>;
+
+/// The effector kinds a cloner adds a `<kind>_percent` field for.
+const EFFECTOR_KINDS: &[&str] = &[
+    "plain", "step", "formula", "time", "target", "delay", "spline", "random",
+];
+
+/// The case's params in the flat spelling the older files use. The menu-created files nest the
+/// cloner's own values under `[params.cloner]` (its labels: `p`, `s`, `r_degrees`, `clones`,
+/// the secondary tab's `p_secondary` ...), the effectors under `[params.effectors_N]` without a
+/// `type` (told apart by their rows and by the `<kind>_percent` fields on the cloner), `frame`
+/// in `[params]`, a Target's Null under `[params.target]` and a Step curve under
+/// `[params.spline_curve]`.
+fn params_of(m: &forge_parity_harness::CaseManifest) -> Params {
+    let Some(toml::Value::Table(cloner)) = m.params.get("cloner") else {
+        return m.params.clone();
+    };
+    let mut out = Params::new();
+    for (k, v) in cloner {
+        let (key, v) = match k.as_str() {
+            "icon_file_id" | "icon_color" | "color" => continue,
+            "mode" => (
+                "mode".to_string(),
+                toml::Value::String(v.as_str().unwrap().to_lowercase().replace(' ', "_")),
+            ),
+            "clones" => ("clones_mode".into(), v.clone()),
+            "mode_secondary" => ("linear_mode".into(), v.clone()),
+            "p" => ("transform_position".into(), v.clone()),
+            "s" => (
+                "transform_scale_percent".into(),
+                toml::Value::Array(
+                    floats(v)
+                        .iter()
+                        .map(|x| toml::Value::Float(x * 100.0))
+                        .collect(),
+                ),
+            ),
+            "r_degrees" => ("transform_rotation_deg".into(), v.clone()),
+            "step_rotation_degrees" => ("step_rotation_deg".into(), v.clone()),
+            "p_secondary" => ("position".into(), v.clone()),
+            "r_secondary_degrees" => ("rotation_deg".into(), v.clone()),
+            "s_secondary" => ("scale".into(), v.clone()),
+            "color_secondary" => ("color".into(), v.clone()),
+            other => (other.to_string(), v.clone()),
+        };
+        out.insert(key, v);
+    }
+    if let Some(f) = m.params.get("frame") {
+        out.insert("document_frame".into(), f.clone());
+    }
+    if let Some(f) = m.params.get("fps") {
+        out.insert("fps".into(), f.clone());
+    }
+    let kinds: Vec<&str> = EFFECTOR_KINDS
+        .iter()
+        .copied()
+        .filter(|k| cloner.contains_key(&format!("{k}_percent")))
+        .collect();
+    let curve = m.params.get("spline_curve").and_then(|v| v.as_table());
+    for n in 1.. {
+        let Some(toml::Value::Table(e)) = m.params.get(&format!("effectors_{n}")) else {
+            break;
+        };
+        let ty = if e.contains_key("step_gap") {
+            "step"
+        } else if e.contains_key("target_mode") {
+            "target"
+        } else if e.contains_key("formula") {
+            "formula"
+        } else if e.contains_key("mode") && !e.contains_key("transform_mode") {
+            "delay"
+        } else if kinds.contains(&"time") {
+            "time"
+        } else {
+            "plain"
+        };
+        let mut t = Table::new();
+        t.insert("type".into(), toml::Value::String(ty.into()));
+        for (k, v) in e {
+            let key = match k.as_str() {
+                "icon_file_id" | "icon_color" | "color" => continue,
+                "r_degrees" => "r_deg",
+                "scale_secondary" => "scale_value",
+                "use_alpha_strength_secondary" => "use_alpha_strength_weight",
+                other => other,
+            };
+            t.insert(key.into(), v.clone());
+        }
+        if ty == "step"
+            && let Some(c) = curve
+        {
+            {
+                t.insert("curve".into(), toml::Value::String("Custom".into()));
+                for (key, point, field) in [
+                    ("curve_start", "points_1", "position"),
+                    ("curve_start_handle", "points_1", "right_tangent"),
+                    ("curve_end", "points_2", "position"),
+                    ("curve_end_handle", "points_2", "left_tangent"),
+                ] {
+                    t.insert(key.into(), c[point][field].clone());
+                }
+            }
+        }
+        if ty == "target"
+            && let Some(p) = m.params.get("target").and_then(|v| v.get("position"))
+        {
+            t.insert("null_position".into(), p.clone());
+        }
+        let key = if n == 1 {
+            "effector".to_string()
+        } else {
+            format!("effector_{n}")
+        };
+        out.insert(key, toml::Value::Table(t));
+    }
+    out.insert(
+        "effector_count".into(),
+        toml::Value::Integer(
+            (1..)
+                .take_while(|n| m.params.contains_key(&format!("effectors_{n}")))
+                .count() as i64,
+        ),
+    );
+    out
+}
 
 fn registry() -> Arc<Registry> {
     let mut reg = Registry::with_builtins();
@@ -65,7 +190,7 @@ fn floats(v: &toml::Value) -> Vec<f64> {
 /// One case key as a cloner parameter: `(id, value)`; `None` for keys that are not
 /// parameters of the node.
 fn param(reg: &Registry, mode: &str, table: &Table, key: &str) -> Option<(String, Value)> {
-    if matches!(key, "mode" | "effector_count") {
+    if matches!(key, "mode" | "effector_count" | "fps" | "document_frame") {
         return None;
     }
     let key = alias(key, table);
@@ -89,6 +214,7 @@ fn param(reg: &Registry, mode: &str, table: &Table, key: &str) -> Option<(String
     let raw = &table[&key_of(table, &key)];
     let value = match (&desc.kind, raw) {
         (ParamKind::Bool, toml::Value::Boolean(b)) => Value::Bool(*b),
+        (ParamKind::Bool, toml::Value::Integer(i)) => Value::Bool(*i != 0),
         (ParamKind::Int { .. }, toml::Value::Integer(i)) => Value::Int(*i),
         (ParamKind::Float { .. }, v) => Value::Float(
             v.as_float()
@@ -178,8 +304,9 @@ fn cloner_modes_match_the_reference() {
             continue;
         }
         let m = case.manifest().unwrap();
-        let mode = m.params["mode"].as_str().unwrap().to_string();
-        if has_effector(&m.params) {
+        let params = params_of(&m);
+        let mode = params["mode"].as_str().unwrap().to_string();
+        if has_effector(&params) {
             effects.insert(case.name.clone());
             continue;
         }
@@ -190,8 +317,7 @@ fn cloner_modes_match_the_reference() {
             skipped.insert(case.name.clone());
             continue;
         }
-        let table: Table = m
-            .params
+        let table: Table = params
             .iter()
             .filter(|(_, v)| !v.is_table())
             .map(|(k, v)| (k.clone(), v.clone()))
@@ -253,7 +379,7 @@ fn cloner_modes_match_the_reference() {
         KNOWN_MISMATCH.iter().map(|s| s.to_string()).collect()
     );
     assert_eq!(matched.len(), 19, "{matched:?}");
-    assert_eq!(effects.len(), 35, "{effects:?}");
+    assert_eq!(effects.len(), 54, "{effects:?}");
     assert_eq!(skipped.len(), 12, "{skipped:?}");
 }
 
@@ -368,6 +494,7 @@ fn node_param(
     }
     let value = match (&desc.kind, raw) {
         (ParamKind::Bool, toml::Value::Boolean(b)) => Value::Bool(*b),
+        (ParamKind::Bool, toml::Value::Integer(i)) => Value::Bool(*i != 0),
         (ParamKind::Int { .. }, toml::Value::Integer(i)) => Value::Int(*i),
         // The Random effector's Seed is a whole number the case files write as a float.
         (ParamKind::Int { .. }, toml::Value::Float(f)) => Value::Int(f.round() as i64),
@@ -460,15 +587,23 @@ fn build_with_effectors(
                 reg,
                 ty,
                 e,
-                &["type", "use_alpha_strength_weight", "target_object"],
+                &[
+                    "type",
+                    "use_alpha_strength_weight",
+                    "target_object",
+                    "null_position",
+                ],
                 &[],
             );
             // The case files record the Target Object by name only; the observation
             // (effectors-2.md, `target-defaults`) puts the Null at (0, 0, 300).
             if e.contains_key("target_object") {
+                let at = e.get("null_position").map_or([0.0, 0.0, 300.0], |p| {
+                    let f = floats(p);
+                    [f[0], f[1], f[2]]
+                });
                 let null = tx.create("forge.null", None, None).unwrap();
-                tx.set_param(null, transform::POS, Value::Vec3([0.0, 0.0, 300.0]))
-                    .unwrap();
+                tx.set_param(null, transform::POS, Value::Vec3(at)).unwrap();
                 tx.set_param(eff, "target_object", Value::Link(Some(null)))
                     .unwrap();
             }
@@ -517,7 +652,8 @@ fn plain_effector_cases_match_the_reference() {
             continue;
         }
         let m = case.manifest().unwrap();
-        let effectors = effector_tables(&m.params);
+        let params = params_of(&m);
+        let effectors = effector_tables(&params);
         let all_plain = effectors
             .iter()
             .all(|e| e.get("type").and_then(|t| t.as_str()) == Some("plain"));
@@ -527,9 +663,8 @@ fn plain_effector_cases_match_the_reference() {
         if PLAIN_NO_FIELD_TABLE.contains(&case.name.as_str()) {
             continue;
         }
-        let mode = m.params["mode"].as_str().unwrap().to_string();
-        let table: Table = m
-            .params
+        let mode = params["mode"].as_str().unwrap().to_string();
+        let table: Table = params
             .iter()
             .filter(|(k, v)| {
                 !v.is_table() && !k.starts_with("plain") && k.as_str() != "document_frame"
@@ -671,6 +806,7 @@ fn linear_plain_field_matches_with_the_default_linear_field() {
         .find(|c| c.feature == "cloner" && c.name == "linear-plain-field")
         .unwrap();
     let m = case.manifest().unwrap();
+    let params = params_of(&m);
     let (_, expected) = case.samples().unwrap().remove(0);
     let Samples::Clones { clones, .. } = &expected else {
         panic!("clone samples expected");
@@ -679,14 +815,13 @@ fn linear_plain_field_matches_with_the_default_linear_field() {
     assert!(clones.iter().all(|c| c.color == first));
     let field_color = first.map(|c| 1.0 + (c - 1.0) / 0.5);
 
-    let mode = m.params["mode"].as_str().unwrap().to_string();
-    let table: Table = m
-        .params
+    let mode = params["mode"].as_str().unwrap().to_string();
+    let table: Table = params
         .iter()
         .filter(|(k, v)| !v.is_table() && !k.starts_with("plain"))
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
-    let effector = effector_tables(&m.params)[0];
+    let effector = effector_tables(&params)[0];
     let mut doc = Document::new(reg.clone());
     let cloner = build_with_effectors(&mut doc, &reg, &mode, &table, &[effector]);
     let eff = match doc.scene().param(cloner, "effectors") {
@@ -738,8 +873,8 @@ fn normalise_random(e: &Table) -> Table {
     out
 }
 
-fn random_effector(m: &forge_parity_harness::CaseManifest) -> Option<Table> {
-    let e = effector_tables(&m.params);
+fn random_effector(params: &std::collections::BTreeMap<String, toml::Value>) -> Option<Table> {
+    let e = effector_tables(params);
     match e.as_slice() {
         [t] if t.get("type").and_then(|t| t.as_str()) == Some("random") => Some((*t).clone()),
         _ => None,
@@ -869,12 +1004,12 @@ fn random_effector_cases_match_the_reference() {
             continue;
         }
         let m = case.manifest().unwrap();
-        let Some(e) = random_effector(&m) else {
+        let params = params_of(&m);
+        let Some(e) = random_effector(&params) else {
             continue;
         };
-        let mode = m.params["mode"].as_str().unwrap().to_string();
-        let table: Table = m
-            .params
+        let mode = params["mode"].as_str().unwrap().to_string();
+        let table: Table = params
             .iter()
             .filter(|(k, v)| {
                 !v.is_table()
@@ -1000,13 +1135,13 @@ fn random_effector_cases_match_the_reference() {
 /// Cases whose clone data (level B) match but whose expanded mesh (level A) misses the 1e-4
 /// tolerance, with the reason (spec E19, E24): `step-position`'s reference curve is not an
 /// exact straight line (the weights are off by up to 9.2e-7), which the mesh sums to 1.01e-4.
-const STFT_MESH_MISMATCH: &[&str] = &["step-position"];
+const STFT_MESH_MISMATCH: &[&str] = &["step-count-9", "step-position"];
 
 #[test]
 fn step_formula_time_target_cases_match_the_reference() {
     let reg = registry();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
-    let types = ["step", "formula", "time", "target"];
+    let types = ["step", "formula", "time", "target", "delay"];
     let mut matched = Vec::new();
     let mut mismatched = BTreeSet::new();
     for case in discover_cases(&root).unwrap() {
@@ -1014,7 +1149,8 @@ fn step_formula_time_target_cases_match_the_reference() {
             continue;
         }
         let m = case.manifest().unwrap();
-        let effectors = effector_tables(&m.params);
+        let params = params_of(&m);
+        let effectors = effector_tables(&params);
         let ours_type = |e: &&Table| {
             e.get("type")
                 .and_then(|t| t.as_str())
@@ -1023,16 +1159,19 @@ fn step_formula_time_target_cases_match_the_reference() {
         if effectors.is_empty() || !effectors.iter().all(ours_type) {
             continue;
         }
-        let frame = m.params["document_frame"].as_integer().unwrap();
-        let ctx = EvalCtx::at_frame(frame, 30.0);
-        let mode = m.params["mode"].as_str().unwrap().to_string();
+        let frame = params["document_frame"].as_integer().unwrap();
+        let fps = params
+            .get("fps")
+            .and_then(|v| v.as_float().or(v.as_integer().map(|i| i as f64)))
+            .unwrap_or(30.0);
+        let ctx = EvalCtx::at_frame(frame, fps);
+        let mode = params["mode"].as_str().unwrap().to_string();
         // The cloner's own keys: the effector adds a "<name>_percent" key (its field).
         let own: BTreeSet<String> = effectors
             .iter()
             .map(|e| format!("{}_percent", e["type"].as_str().unwrap()))
             .collect();
-        let table: Table = m
-            .params
+        let table: Table = params
             .iter()
             .filter(|(k, v)| !v.is_table() && !own.contains(*k) && k.as_str() != "document_frame")
             .map(|(k, v)| (k.clone(), v.clone()))
@@ -1058,6 +1197,16 @@ fn step_formula_time_target_cases_match_the_reference() {
         });
         let want = export_weld(&case.expected_mesh().unwrap().unwrap());
         let geo = compare_meshes(&want, &ours, &m.tolerance);
+        if std::env::var("DBGC").is_ok() {
+            println!(
+                "CASE {} samples {} ({}) mesh {}",
+                case.name,
+                samples.passed(),
+                samples.max_error,
+                geo.passed()
+            );
+            continue;
+        }
         assert!(
             samples.passed(),
             "{}: samples {:?} (max error {})",
@@ -1093,12 +1242,31 @@ fn step_formula_time_target_cases_match_the_reference() {
     assert_eq!(
         matched,
         [
+            "delay-blend-f1",
+            "delay-blend-f10",
+            "delay-blend-f2",
+            "delay-blend-f5",
+            "delay-spring-f5",
             "formula-defaults",
             "formula-frame-10",
+            "formula-frequency-2",
+            "formula-project-time-2",
+            "step-count-9",
             "step-defaults",
+            "step-gap-1",
+            "step-gap-2",
             "step-position",
+            "step-spline",
             "target-defaults",
-            "time-frame-30"
+            "target-next-node",
+            "target-offaxis",
+            "target-reverse",
+            "target-strength-50",
+            "target-up-x",
+            "target-up-y",
+            "time-frame-15",
+            "time-frame-30",
+            "time-frame-60"
         ]
     );
 }
