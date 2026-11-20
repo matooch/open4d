@@ -1,0 +1,42 @@
+feature = "shaders"
+observation = "docs/parity/shaders.md"
+description = "Tiles shader at its default settings"
+mesh = "mesh.obj"
+
+[params]
+width = 400.0
+height = 400.0
+width_segments = 10
+height_segments = 10
+orientation = "+Y"
+grid = 32
+sample_time_s = 0.0
+
+[params.material]
+name = "Mat"
+
+[params.shader]
+type = "tiles"
+blur_offset_percent = 0.0
+blur_scale_percent = 0.0
+grout_color = [0.0, 0.0, 0.0]
+tiles_color_1 = [0.5, 0.0, 0.0]
+tiles_color_2 = [0.5, 0.5, 0.5]
+tiles_color_3 = [0.0, 0.0, 0.5]
+pattern = "Squares"
+grout_width_percent = 5.0
+bevel_width_percent = 30.0
+bevel = true
+randomize_color = false
+orientation = "U"
+global_scale_percent = 100.0
+u_scale_percent = 100.0
+v_scale_percent = 100.0
+radial_scale_percent = 100.0
+rotate_deg = 0.0
+delta_percent = 100.0
+seed = 665
+
+[import]
+scale = 1.0
+flip_z = false

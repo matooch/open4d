@@ -1,0 +1,14 @@
+feature = "uv"
+observation = "docs/parity/uv-projection.md"
+description = "Sphere with its default settings"
+mesh = "mesh.obj"
+
+[params]
+radius = 100.0
+segments = 16
+type = "Standard"
+render_perfect = true
+
+[import]
+scale = 1.0
+flip_z = false

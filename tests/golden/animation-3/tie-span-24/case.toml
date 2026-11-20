@@ -1,0 +1,10 @@
+feature = "animation-3"
+observation = "docs/parity/animation-3.md"
+description = "Cube position X keyed 0 at frame 0 and 100 at frame 10, document fps 24, sampled every frame 0-10"
+
+[params]
+param = "pos_x"
+keys = [[0, 0.0], [10, 100.0]]
+object = "Cube"
+document_fps = 24
+sample_frames = ["0..10 every frame"]

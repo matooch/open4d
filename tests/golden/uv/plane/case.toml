@@ -1,0 +1,15 @@
+feature = "uv"
+observation = "docs/parity/uv-projection.md"
+description = "Plane with its default settings"
+mesh = "mesh.obj"
+
+[params]
+width = 400.0
+height = 400.0
+width_segments = 10
+height_segments = 10
+orientation = "+Y"
+
+[import]
+scale = 1.0
+flip_z = false

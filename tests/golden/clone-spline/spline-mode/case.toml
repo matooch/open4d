@@ -1,0 +1,14 @@
+feature = "clone-spline"
+observation = "docs/parity/clone-toolset-3.md"
+description = "MoSpline in Spline mode with a default Circle spline as source, extruded"
+mesh = "mesh.obj"
+
+[params]
+mode = "MoSpline"
+mospline_plugin_id = 440000054
+spline_mode = 1
+spline_mode_label = "Spline"
+source_spline = "Circle"
+source_spline_plugin_id = 5181
+generator_defaults = true
+extrude_plugin_id = 5116

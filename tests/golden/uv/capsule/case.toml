@@ -1,0 +1,21 @@
+feature = "uv"
+observation = "docs/parity/uv-projection.md"
+description = "Capsule with its default settings"
+mesh = "mesh.obj"
+
+[params]
+radius = 50.0
+height = 200.0
+height_segments = 4
+cap_segments = 4
+rotation_segments = 16
+orientation = "+Y"
+slice = false
+from_deg = 0.0
+to_deg = 180.0
+regular_grid = false
+width = 10.0
+
+[import]
+scale = 1.0
+flip_z = false

@@ -1,0 +1,16 @@
+feature = "animation-2"
+observation = "docs/parity/animation-2.md"
+description = "Same as align-to-spline with Tangential on: cube position and rotation sampled"
+
+[params]
+param = ["pos_x", "pos_y", "pos_z", "rot_h", "rot_p", "rot_b"]
+tag = "Align to Spline"
+tag_plugin_id = 5699
+spline = "Circle"
+spline_plugin_id = 5181
+spline_radius = 200.0
+tangential = true
+position_keys = [[0, 0.0], [90, 1.0]]
+object = "Cube"
+document_fps = 30
+sample_frames = ["0..90 every frame", "plus 0.5, 14.5, 29.5"]

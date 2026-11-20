@@ -1,0 +1,24 @@
+feature = "constraints"
+observation = "docs/parity/constraints.md"
+description = "Constraint tag Aim at driver with up vector null at (0,500,0); driver Null keyed f0 (0,0,0) H0 deg to f30 (200,100,0) H90 deg; Cube at (0, 0, -200)"
+mesh = "mesh.obj"
+
+[params]
+mode = "Aim at driver with up vector null at (0,500,0)"
+enabled_modes = [1001, 1003]
+tag_plugin_id = 1019364
+target_row = 20001
+driver_frame_0_pos = [0.0, 0.0, 0.0]
+driver_frame_0_rotation_deg = [0.0, 0.0, 0.0]
+driver_frame_30_pos = [200.0, 100.0, 0.0]
+driver_frame_30_rotation_deg = [90.0, 0.0, 0.0]
+object_start_pos = [0, 0, -200]
+document_fps = 30
+sample_frames = [0, 30]
+mesh_frame = 15
+aim_axis = "Z+"
+up_target_pos = [0, 500, 0]
+
+[import]
+scale = 1.0
+flip_z = false

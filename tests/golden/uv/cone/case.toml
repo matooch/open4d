@@ -1,0 +1,30 @@
+feature = "uv"
+observation = "docs/parity/uv-projection.md"
+description = "Cone with its default settings"
+mesh = "mesh.obj"
+
+[params]
+top_radius = 0.0
+bottom_radius = 100.0
+height = 200.0
+height_segments = 4
+rotation_segments = 16
+orientation = "+Y"
+caps = true
+cap_segments = 1
+top_fillet = false
+top_fillet_radius = 3.0
+top_fillet_height = 3.0
+bottom_fillet = false
+bottom_fillet_radius = 3.0
+bottom_fillet_height = 3.0
+fillet_segments = 3
+slice = false
+from_deg = 0.0
+to_deg = 180.0
+regular_grid = false
+width = 10.0
+
+[import]
+scale = 1.0
+flip_z = false

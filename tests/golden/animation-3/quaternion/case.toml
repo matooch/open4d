@@ -1,0 +1,11 @@
+feature = "animation-3"
+observation = "docs/parity/animation-3.md"
+description = "Cube rotation H (rotation Y) keyed 170 deg at frame 0 and -170 deg at frame 30; both keys set to Quaternion interpolation (Linear SLERP)"
+
+[params]
+param = ["rot_h", "rot_p", "rot_b"]
+keys = [[0, [0.0, 170.0, 0.0]], [30, [0.0, -170.0, 0.0]]]
+interpolation = "Quaternion (Linear SLERP)"
+object = "Cube"
+document_fps = 30
+sample_frames = ["0..60 every frame"]

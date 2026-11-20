@@ -1,0 +1,17 @@
+feature = "instance-time"
+observation = "docs/parity/clone-toolset-3.md"
+description = "MoInstance (MoGraph instance generator) in Object mode referencing a cube keyed 0 -> 300 in x over frames 0-30; all other parameters default; evaluated and exported at frame 30"
+mesh = "mesh.obj"
+
+[params]
+mode = "MoInstance"
+moinstance_plugin_id = 1018957
+distribution = "Object"
+reference_object = "Cube"
+reference_key_x = [[0, 0.0], [30, 300.0]]
+document_fps = 30
+export_frame = 30
+
+[import]
+scale = 1.0
+flip_z = false

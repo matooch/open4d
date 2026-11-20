@@ -1,0 +1,21 @@
+feature = "tags-2"
+observation = "docs/parity/tags-2.md"
+description = "The same cube; a vertex map tag with weight = point index / point count"
+mesh = "mesh.obj"
+
+[params]
+
+[params.object]
+type = "polygon"
+name = "Cube"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+
+[params.vertex_map]
+name = "Vertex Map"
+point_count = 26
+first_weights = [0.0, 0.038462, 0.076923, 0.115385, 0.153846, 0.192308, 0.230769, 0.269231]
+
+[import]
+scale = 1.0
+flip_z = false

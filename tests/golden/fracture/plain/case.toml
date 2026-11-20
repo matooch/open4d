@@ -1,0 +1,18 @@
+feature = "fracture"
+observation = "docs/parity/clone-generators-2.md"
+description = "Fracture in Explode Segments mode (mode 1) around a 200 cm cube whose every polygon is disconnected (24 points, 6 quads), with one Plain effector at P (0, 100, 0) as a second child of the Fracture."
+mesh = "mesh.obj"
+
+[params]
+generator = "fracture"
+mode = "Explode Segments"
+display = "None"
+p = [0.0, 0.0, 0.0]
+r_deg = [0.0, 0.0, 0.0]
+s = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+
+[import]
+scale = 1.0
+flip_z = false

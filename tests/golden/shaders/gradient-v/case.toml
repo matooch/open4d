@@ -1,0 +1,38 @@
+feature = "shaders"
+observation = "docs/parity/shaders.md"
+description = "Gradient shader, Type 2D - V, default colours"
+mesh = "mesh.obj"
+
+[params]
+width = 400.0
+height = 400.0
+width_segments = 10
+height_segments = 10
+orientation = "+Y"
+grid = 32
+sample_time_s = 0.0
+
+[params.material]
+name = "Mat"
+
+[params.shader]
+type = "gradient"
+blur_offset_percent = 0.0
+blur_scale_percent = 0.0
+gradient_type = "2D - V"
+cycle = true
+start = [-100.0, 0.0, 0.0]
+end = [100.0, 0.0, 0.0]
+radius = 100.0
+turbulence_percent = 0.0
+octaves = 5.0
+scale_percent = 100.0
+frequency = 0.0
+seed = 0
+angle_deg = 0.0
+absolute = false
+space = "Object"
+
+[import]
+scale = 1.0
+flip_z = false

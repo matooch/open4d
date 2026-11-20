@@ -1,0 +1,26 @@
+feature = "constraints"
+observation = "docs/parity/constraints.md"
+description = "Constraint tag PSR position, single target weight 0.5 (weights normalize); driver Null keyed f0 (0,0,0) H0 deg to f30 (200,100,0) H90 deg; Cube at (0, 0, 0)"
+mesh = "mesh.obj"
+
+[params]
+mode = "PSR position, single target weight 0.5 (weights normalize)"
+enabled_modes = [1000]
+tag_plugin_id = 1019364
+target_row = 10001
+driver_frame_0_pos = [0.0, 0.0, 0.0]
+driver_frame_0_rotation_deg = [0.0, 0.0, 0.0]
+driver_frame_30_pos = [200.0, 100.0, 0.0]
+driver_frame_30_rotation_deg = [90.0, 0.0, 0.0]
+object_start_pos = [0, 0, 0]
+document_fps = 30
+sample_frames = [0, 30]
+mesh_frame = 15
+position = true
+rotation = false
+scale = false
+weight = 0.5
+
+[import]
+scale = 1.0
+flip_z = false
