@@ -1,0 +1,19 @@
+feature = "tags-2"
+observation = "docs/parity/tags-2.md"
+description = "A cube with a Compositing tag, Seen by Camera off"
+mesh = "mesh.obj"
+
+[params]
+
+[params.object]
+type = "polygon"
+name = "Cube"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+
+[params.compositing]
+seen_by_camera = 0
+
+[import]
+scale = 1.0
+flip_z = false
