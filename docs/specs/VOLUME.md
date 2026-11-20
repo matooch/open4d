@@ -17,7 +17,12 @@ Volumes are discretisation-sensitive, so parity is **geometric** with one except
 volume mesher (§7) turned out to reproduce the reference vertex positions and counts exactly for
 the polygon sources, so those cases are also compared by counts (§7.8).
 
-STATUS (kept in sync with docs/parity/STATUS.md): §1-§5 brief 080, see the table at the end.
+STATUS (kept in sync with docs/parity/STATUS.md): §1-§5 brief 080, §6 and §7 briefs 081 and 083,
+§8 brief 082, §9 brief 085, §10 brief 086, §11 brief 084. Golden volumes cases: 20 of 21 match
+geometrically (`crates/volume/tests/volumes_parity.rs`), 10 also with equal counts and vertices;
+`smooth-strength` is a known mismatch (§8.3); subtract / intersect and the VDB export were not
+observable (O32, O33). Also: O33 data notes in §8.2 and §9 (case file operators, field-layer count),
+and `torus-defaults` holds a Platonic (type 4), not a torus, as its case file says.
 
 ## 1. Sparse grid (`SparseGrid<T>`)
 
