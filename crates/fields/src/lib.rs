@@ -11,6 +11,7 @@ mod cone;
 mod cylinder;
 mod formula;
 mod group;
+mod modifier;
 mod node;
 mod radial;
 mod random;
@@ -28,6 +29,7 @@ pub use cone::{CONE, Cone, cone_type};
 pub use cylinder::{CYLINDER, Cylinder, cylinder_type};
 pub use formula::{FORMULA, FormulaField, formula_type};
 pub use group::{GROUP, GroupField, group_type};
+pub use modifier::{CLAMP_LAYER, COLORIZE_LAYER, CURVE_LAYER, INVERT_LAYER, Modifier, REMAP_LAYER};
 pub use node::{
     BOX, FIELD_LIST, FieldToolset, LINEAR, SPHERICAL, box_type, field_list_param, linear_type,
     spherical_type,
@@ -177,9 +179,17 @@ fn field_from_node_at(
     node::build_field(&node.type_id, &node.params, world).ok_or(FieldError::NotAField(id.0))?
 }
 
+/// What a row of a field list evaluates.
+pub enum LayerKind {
+    /// A field with its own value in space.
+    Field(Box<dyn Field>),
+    /// A modifier layer: a function of the value accumulated below it (F8).
+    Modifier(Modifier),
+}
+
 /// One row of a field list.
 pub struct Layer {
-    pub field: Box<dyn Field>,
+    pub kind: LayerKind,
     /// Layer strength (fraction).
     pub strength: f64,
     pub blend: BlendMode,
@@ -188,9 +198,17 @@ pub struct Layer {
 impl Layer {
     pub fn new(field: Box<dyn Field>) -> Layer {
         Layer {
-            field,
+            kind: LayerKind::Field(field),
             strength: 1.0,
             blend: BlendMode::Normal,
+        }
+    }
+
+    /// Folds this row into `acc`, the value of the rows below it, at one position.
+    fn fold(&self, acc: &mut FieldSample, p_world: DVec3, ctx: &EvalCtx) {
+        match &self.kind {
+            LayerKind::Field(f) => acc.blend(&f.sample(p_world, ctx), self.blend, self.strength),
+            LayerKind::Modifier(m) => acc.blend(&m.sample_of(acc), self.blend, self.strength),
         }
     }
 }
@@ -257,8 +275,15 @@ impl FieldList {
             })
             .filter(|r| forge_core::visibility::own(scene, r.target).2)
             .map(|r| {
-                field_from_node_at(scene, r.target, depth).map(|field| Layer {
-                    field,
+                let kind = match scene
+                    .node(r.target)
+                    .and_then(|n| modifier::build(&n.type_id, &n.params))
+                {
+                    Some(m) => m.map(LayerKind::Modifier),
+                    None => field_from_node_at(scene, r.target, depth).map(LayerKind::Field),
+                }?;
+                Ok(Layer {
+                    kind,
                     strength: r.strength,
                     blend: BlendMode::from_id(&r.blend).unwrap_or_default(),
                 })
@@ -287,8 +312,7 @@ impl FieldList {
         }
         let mut acc = FieldSample::from_value(0.0);
         for layer in self.layers.iter().rev() {
-            let s = layer.field.sample(p_world, ctx);
-            acc.blend(&s, layer.blend, layer.strength);
+            layer.fold(&mut acc, p_world, ctx);
         }
         acc
     }
@@ -301,8 +325,17 @@ impl FieldList {
         }
         let mut acc = vec![FieldSample::from_value(0.0); points.len()];
         for layer in self.layers.iter().rev() {
-            for (a, s) in acc.iter_mut().zip(layer.field.sample_many(points, ctx)) {
-                a.blend(&s, layer.blend, layer.strength);
+            match &layer.kind {
+                LayerKind::Field(f) => {
+                    for (a, s) in acc.iter_mut().zip(f.sample_many(points, ctx)) {
+                        a.blend(&s, layer.blend, layer.strength);
+                    }
+                }
+                LayerKind::Modifier(m) => {
+                    for a in acc.iter_mut() {
+                        a.blend(&m.sample_of(a), layer.blend, layer.strength);
+                    }
+                }
             }
         }
         acc

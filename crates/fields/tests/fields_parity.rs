@@ -33,18 +33,46 @@ fn in_scope(name: &str) -> bool {
         || layered(name)
         || name == "group-field"
         || name.starts_with("formula-")
+        || name.starts_with("mod-")
+        || name == "mirror-graph"
 }
+
+/// Cases whose feature is not implemented (FIELDS.md F8): listed, skipped, never failing.
+const PENDING: &[(&str, &str)] = &[
+    (
+        "decay-frame20",
+        "time layers: the committed samples are unreliable",
+    ),
+    (
+        "delay-frame20",
+        "time layers: the committed samples are unreliable",
+    ),
+    ("vmap-from-field", "Vertex Map tags do not exist yet"),
+    (
+        "restrict-bend",
+        "Vertex Map and Restriction tags do not exist yet",
+    ),
+];
 
 /// Cases of two or three Spherical layers in a field list (FIELDS.md F7).
 fn layered(name: &str) -> bool {
-    name.starts_with("blend-") || name.starts_with("two-layers-") || name == "three-layers"
+    name.starts_with("blend-")
+        || name.starts_with("two-layers-")
+        || name == "three-layers"
+        || name.starts_with("mod-")
 }
 
 /// Cases whose options are not derived: building them must fail with `Unsupported`.
-const UNSUPPORTED: &[(&str, &str)] = &[(
-    "shader-noise",
-    "the Shader field needs the shaders of brief 125",
-)];
+const UNSUPPORTED: &[(&str, &str)] = &[
+    (
+        "shader-noise",
+        "the Shader field needs the shaders of brief 125",
+    ),
+    (
+        "mod-step",
+        "the Step layer depends on the bounds of the sampled set (F8)",
+    ),
+];
 
 /// Cases built but differing from the observation (pinned so a fix shows up).
 const KNOWN_MISMATCH: &[&str] = &[];
@@ -141,6 +169,15 @@ fn param(reg: &Registry, ty_id: &str, key: &str, raw: &toml::Value) -> Option<(S
                 .unwrap_or_else(|| panic!("{id}: no option labelled {s:?}"));
             Value::Enum(o.id.clone())
         }
+        (ParamKind::Vec3List, toml::Value::Array(knots)) => Value::Vec3List(
+            knots
+                .iter()
+                .map(|k| {
+                    let f = floats(k);
+                    [f[0], f[1], f.get(2).copied().unwrap_or(0.0)]
+                })
+                .collect(),
+        ),
         (ParamKind::String, toml::Value::String(s)) => Value::String(s.clone()),
         other => panic!("{id}: unexpected value {other:?}"),
     };
@@ -155,17 +192,48 @@ struct Built {
 }
 
 /// A Spherical layer named `name` at `<name>_position` with radius `size`.
-fn layer_node(tx: &mut Tx, p: &BTreeMap<String, toml::Value>, name: &str, size: f64) -> NodeId {
+fn layer_node(
+    reg: &Registry,
+    tx: &mut Tx,
+    p: &BTreeMap<String, toml::Value>,
+    name: &str,
+    size: f64,
+) -> NodeId {
+    if name != "Spherical" && !p.contains_key(&format!("{name}_position")) {
+        return modifier_node(reg, tx, p, name);
+    }
     let n = tx.create(forge_fields::SPHERICAL, None, None).unwrap();
     tx.set_param(n, "radius", Value::Float(size)).unwrap();
-    let pos = floats(&p[&format!("{name}_position")]);
-    tx.set_param(n, transform::POS, Value::Vec3([pos[0], pos[1], pos[2]]))
-        .unwrap();
+    if let Some(pos) = p.get(&format!("{name}_position")) {
+        let pos = floats(pos);
+        tx.set_param(n, transform::POS, Value::Vec3([pos[0], pos[1], pos[2]]))
+            .unwrap();
+    }
+    n
+}
+
+/// A modifier layer named `name` (`Remap`, `Curve`, ...), its parameters from the `<name>_*` keys.
+fn modifier_node(
+    reg: &Registry,
+    tx: &mut Tx,
+    p: &BTreeMap<String, toml::Value>,
+    name: &str,
+) -> NodeId {
+    let ty = format!("forge.field.{}_layer", name.to_lowercase());
+    let n = tx.create(&ty, None, None).unwrap();
+    let prefix = format!("{name}_");
+    for (key, raw) in p.iter().filter(|(k, _)| k.starts_with(&prefix)) {
+        let key = key.strip_prefix(&prefix).unwrap();
+        if let Some((id, v)) = param(reg, &ty, key, raw) {
+            tx.set_param(n, &id, v).unwrap();
+        }
+    }
     n
 }
 
 /// Rows for the layers `names` (top to bottom) with `modes` and `strengths` in percent.
 fn rows_of(
+    reg: &Registry,
     tx: &mut Tx,
     p: &BTreeMap<String, toml::Value>,
     names: &[&str],
@@ -177,7 +245,7 @@ fn rows_of(
         .iter()
         .enumerate()
         .map(|(i, name)| {
-            let node = layer_node(tx, p, name, size);
+            let node = layer_node(reg, tx, p, name, size);
             LinkRow {
                 strength: strengths[i] / 100.0,
                 ..LinkRow::new(node, &modes[i].to_lowercase())
@@ -240,7 +308,7 @@ fn build_list(
                 let names: Vec<&str> = names.iter().map(String::as_str).collect();
                 let size = m.params.get("size").or(m.params.get("radius")).unwrap();
                 let size = size.as_float().unwrap();
-                let rows = rows_of(tx, &m.params, &names, &modes, &strengths, size);
+                let rows = rows_of(reg, tx, &m.params, &names, &modes, &strengths, size);
                 tx.set_param(holder, forge_fields::FIELD_LIST, Value::LinkRows(rows))?;
                 return Ok((holder, true));
             }
@@ -263,7 +331,7 @@ fn build_list(
                 );
                 let names: Vec<&str> = names.iter().map(String::as_str).collect();
                 let size = m.params["size"].as_float().unwrap();
-                let rows = rows_of(tx, &m.params, &names, &modes, &strengths, size);
+                let rows = rows_of(reg, tx, &m.params, &names, &modes, &strengths, size);
                 tx.set_param(node, forge_fields::FIELD_LIST, Value::LinkRows(rows))?;
             }
             Ok((node, false))
@@ -309,10 +377,15 @@ fn exact_field_types_match_the_reference() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
     let mut matched = BTreeSet::new();
     let mut skipped = 0;
+    let mut pending = 0;
     let mut unsupported = BTreeSet::new();
     let mut mismatched = BTreeSet::new();
     for case in discover_cases(&root).unwrap() {
         if case.feature != "fields" {
+            continue;
+        }
+        if PENDING.iter().any(|(n, _)| *n == case.name) {
+            pending += 1;
             continue;
         }
         if let Some((_, reason)) = UNSUPPORTED.iter().find(|(n, _)| *n == case.name) {
@@ -363,9 +436,11 @@ fn exact_field_types_match_the_reference() {
     }
     // 27 (brief 057) + cylinder 2, cone 1, torus 1, capsule 1, radial 4 (brief 058) + 9 blend
     // modes, blend-normal-50, three-layers, 2 two-layers, group-field, 2 formula (brief 059).
-    assert_eq!(matched.len(), 52, "{matched:?}");
-    // The 4 Random cases are statistical (below); shader-noise is Unsupported.
-    assert_eq!(skipped, 4);
+    // + the 5 modifier layers and mirror-graph (O49, F8).
+    assert_eq!(matched.len(), 58, "{matched:?}");
+    // The 5 Random cases are statistical (below); shader-noise and mod-step are Unsupported.
+    assert_eq!(skipped, 5);
+    assert_eq!(pending, PENDING.len());
     assert_eq!(
         unsupported,
         UNSUPPORTED.iter().map(|(n, _)| n.to_string()).collect()
@@ -433,7 +508,18 @@ fn random_field_matches_the_reference_statistically() {
         );
         // Both inside [0, 1] and uncorrelated at the grid step.
         assert!(o.min >= 0.0 && o.max <= 1.0, "{}: {o:?}", case.name);
-        assert!(r.lag1.abs() < 0.15 && o.lag1.abs() < 0.15, "{}", case.name);
+        assert!(
+            case.name == "random-space-none" || (r.lag1.abs() < 0.15 && o.lag1.abs() < 0.15),
+            "{}",
+            case.name
+        );
+        if case.name == "random-space-none" {
+            // Space None: one constant for every sample, at the field-space origin (F8).
+            assert!(r.std < 1e-12 && o.std < 1e-9, "{r:?} {o:?}");
+            seen.insert(case.name.clone());
+            by_name.insert(case.name.clone(), (theirs, b.ours));
+            continue;
+        }
         if case.name == "random-random-mode" {
             // Random mode is uniform: mean 0.5, std 1/sqrt(12) = 0.289.
             assert!((o.mean - 0.5).abs() < 0.05, "{o:?}");
@@ -464,12 +550,18 @@ fn random_field_matches_the_reference_statistically() {
             "random-defaults",
             "random-global",
             "random-random-mode",
-            "random-seed"
+            "random-seed",
+            "random-space-none"
         ]
     );
     // The field sits at the origin unrotated: Global and Field coincide, exactly, in both.
     assert_eq!(by_name["random-global"].0, by_name["random-defaults"].0);
     assert_eq!(by_name["random-global"].1, by_name["random-defaults"].1);
+    // Space None is the value at the origin (grid index 364), in the reference and in ours.
+    let none = &by_name["random-space-none"];
+    let tol = 1e-9;
+    assert!((none.0[0] - by_name["random-defaults"].0[364]).abs() < tol);
+    assert!((none.1[0] - by_name["random-defaults"].1[364]).abs() < tol);
     // A different seed gives a different field.
     assert_ne!(by_name["random-seed"].1, by_name["random-defaults"].1);
 }

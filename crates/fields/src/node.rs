@@ -209,7 +209,10 @@ impl Plugin for FieldToolset {
         r.register(random_type())?;
         r.register(crate::group_type())?;
         r.register(crate::formula_type())?;
-        r.register(crate::shader_type())
+        r.register(crate::shader_type())?;
+        crate::modifier::types()
+            .into_iter()
+            .try_for_each(|t| r.register(t))
     }
 }
 
