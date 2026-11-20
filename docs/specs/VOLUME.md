@@ -98,10 +98,128 @@ operation applied to the backgrounds.
 - **area** and **volume** (closed meshes) each within 2 %;
 - the same **Euler characteristic** `V - E + F` of the welded meshes (`WELD_TOLERANCE`).
 
-## 6. Builder
+## 6. Volume Builder (`forge.volume_builder`)
 
-*(brief 081, filled in with that brief.)*
+Category `Generator`, label "Volume Builder". It produces a volume, not a polygon mesh: its own
+geometry evaluation is `None` and the mesher (§7) or another consumer reads the volume with
+`build_volume(scene, builder, ctx)`.
 
-## 7. Mesher
+### 6.1 Parameters (ids and defaults from O32; the defaults are observed starting values)
 
-*(brief 083, filled in with that brief.)*
+| id | label | kind | default | range / options |
+|---|---|---|---|---|
+| `voxel_size` | Voxel Size | Float, distance | 10 | 0.001 .. 1e20, step 0.1 |
+| `interior_voxel_range` | Interior Voxel Range | Int | 2 | 1 .. 2147483647 |
+| `exterior_voxel_range` | Exterior Voxel Range | Int | 2 | 1 .. 2147483647 |
+| `spline_voxel_range` | Spline Voxel Range | Int | 2 | 1 .. 2147483647 |
+| `particle_voxel_range` | Particle Voxel Range | Int | 2 | 1 .. 2147483647 |
+| `volume_type` | Volume Type | Enum `sdf, fog, vector` | `sdf` | `vector` is `Unsupported` |
+| `auto_update_settings` | Auto Update Settings | Bool | on | stored only |
+| `override_grid_matrix` | Override Grid Matrix | Bool | off | on is `Unsupported` (not observed) |
+| `objects` | Objects | LinkRows, blends `union, subtract, intersect` | empty | §6.2 |
+
+### 6.2 The object list
+
+- The list is the builder's **children in tree order** (O32: "the builder picks up its direct
+  children"; no separate add call exists). A child without geometry of its own (a Null) is
+  traversed: its children are entries with their full world transforms (**O32 hierarchy**, both
+  cubes under the Null contributed). There is no "use hierarchy" switch (the O32 notes).
+- The `objects` rows are **overrides** keyed by child: a row names the child's blend (`union`
+  default) and `enabled`. Children without a row are enabled unions. The per-entry operation is
+  not scriptable in the reference (O32 subtract / intersect: not observed), so the three blends
+  are **parity-pending, own design**: `union`, `subtract` (`acc - entry`), `intersect`.
+- A disabled node (`object.enabled` off) or a disabled row is skipped.
+- Entries are applied top to bottom; the **first** entry initialises the accumulator whatever its
+  blend (own design).
+- Entry kinds:
+  - **polygon objects** (anything `forge_generators::evaluate` turns into a mesh, clones
+    included) go through `mesh_to_sdf` (§2) in builder space with the interior and exterior
+    ranges;
+  - **splines** (anything `splines::polyline_mesh` accepts) go through `spline_to_sdf` (§3) with the
+    spline radius of §6.3 and `spline_voxel_range`;
+  - **volume builders** as children: their volume, resampled trilinearly onto this lattice when the
+    lattice differs (**own design**);
+  - filter layers (§8) and field layers (§9) belong to briefs 082 and 085.
+- Entry meshes are placed with `world(builder)^-1 * world(child)`, so the grid is in the builder's
+  local space; the mesher puts the mesh into its own space with the builder's local transform.
+
+### 6.3 Spline radius
+
+A spline entry becomes a tube of radius `0.735 * spline_voxel_range * voxel_size`
+(`SPLINE_RADIUS_PER_RANGE`; §3 capsule chain over the spline's sampled polyline). Derived from
+**O33 spline-source and spline-radius**: sweeping the radius against the golden meshes, the
+polygon area matches at 14.71 (spline-source) and 14.68 (spline-radius) at voxel size 10, range 2.
+The factor is the only fit and only the range 2 is observed, so it is **parity-pending**;
+the helix itself (O33: start and end radius 200 or 20, 4 pi, height 200) and the golden both run
+along -z from 0 to -200 (the golden bbox z -213.9 .. 12.7), which our helix matches.
+The scripted case form stores percent parameters as fractions (`radial_bias = 0.5` is 50 %).
+
+### 6.4 Fog
+
+`volume_type = fog` builds the distance field as above, then maps it to a density with
+`fog = clamp((-sdf - 0.7 voxel) / (4 voxel), 0, 1)` (`sdf_to_fog`): 0 outside, on the surface and
+up to 0.7 voxel inside, 1 from 4.7 voxels inside; samples at or beyond the interior band (`-interior band`, including
+the filled interior of §2.5) are 1 so a deep interior is full density; background 0. The fog is meshed with inside
+above the threshold (§7.3). **O33 fog-input** (one case): the reference mesh has 1664 points
+and its surface lies about 6 to 8 units inside the distance-field surface at voxel size 10
+(bbox x +-93.3 against +-98.0); sweeping an offset and a ramp, `0.7` and `4` give the
+geometric match (Hausdorff 2.5 below voxel / 2, area +1.3 %) with 1568 points. The formula is
+a fit, **parity-pending**: the reference's own density function is not derived (an
+OpenVDB-style `sdf-to-fog` with the surface at density 0 gives 1832 points and a Hausdorff of
+10). `vector` volumes are `Unsupported`.
+
+## 7. Mesher (`forge.volume_mesher`)
+
+Category `Generator`, label "Volume Mesher"; its first builder child is built (§6) and meshed in
+the mesher's own space (the builder's local transform applied). No builder child: no mesh.
+
+### 7.1 Parameters (O32)
+
+| id | label | kind | default | notes |
+|---|---|---|---|---|
+| `surface_threshold` | Surface Threshold | Float | 0.01 | -1e20 .. 1e20, step 0.01; §7.2 |
+| `voxel_range_threshold` | Voxel Range Threshold | Float | 0.5 | 0 .. 1, stored, no observed effect |
+| `use_absolute_value_iso` | Use Absolute Value (ISO) | Bool | off | stored (no observed effect) |
+| `adaptive` | Adaptive | Float | 0 | 0 .. 1; brief 083 |
+| `create_curvature_map` | Create Curvature Map | Bool | off | on is `Unsupported` |
+| `curvature_direction` | Curvature Direction | Enum `both, convex, concave` | `both` | stored |
+
+### 7.2 Surface extraction (adaptive 0)
+
+Derived from **O32 cube-defaults** and confirmed on every polygon case (all quads, point and
+face counts equal to the reference):
+
+1. A lattice sample is **inside** when its value is below the iso value (distance fields) and
+   **outside** otherwise, so a sample exactly on the surface (value `0`) is outside. For the
+   default cube (voxel 10, faces at +-100) the outermost samples are at +-100 (outside) and the
+   inside starts at +-90.
+2. Every lattice cell (the 8 samples around it) with both sides gets **one vertex**: the mean of
+   the points where the iso value crosses its 12 edges (linear interpolation of the sample
+   values). For the cube this gives the observed -93.333 corner vertices (three crossings at
+   -100, -90, -90) and -95 / -85 edge and face vertices; the face vertex `(-100, -85, -85)` is
+   the mean of four crossings at exactly -100.
+3. Every lattice edge with an inside and an outside end gets a **quad** from the four cells that
+   share it, wound counter-clockwise seen from outside.
+4. Mixed cells with more than two sign regions still get one vertex (no case seen); no
+   triangles come out at adaptive 0 (O32: all quads).
+
+Result, 2168 points / 2166 faces for the default cube, every vertex position equal to 1e-3 to
+the reference (sorted comparison); the same counts for sphere (1832/1830), sphere at voxel 5
+(7328/7326), cube at voxel 5 and 20 (9128/9126, 488/486), union-two (2952/2950), hierarchy
+(3384/3382) and the platonic of `torus-defaults` (1400/1398).
+
+The surface threshold: **O32 mesher-threshold** (0.5 at voxel 10) is byte-identical to 0.01, so
+for distance fields a threshold within `0.05 voxel` of zero (inclusive) means iso 0; larger
+magnitudes shift the iso value unchanged. Parity-pending (only one probe value).
+
+### 7.3 Fog
+
+Fog volumes are meshed with inside above the threshold (`HighInside`); the threshold applies as
+given (0.01 default, **O33 fog-input**).
+
+### 7.4 Parity
+
+Cases are compared with `compare_volume_mesh` at the voxel size (§5) and, for the polygon
+sources, also by point and face count (strict). The reference quad numbering and start corners
+are not reproduced; the fan triangulation of non-planar quads at the cube edges makes the
+two-sided Hausdorff 0.43 (cube, voxel 10), well below voxel / 2.

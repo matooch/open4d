@@ -1,12 +1,20 @@
+//! forge-volume: sparse voxel grids, signed distance fields, CSG and the volume mesher.
 //! Spec: docs/specs/VOLUME.md.
 
 pub mod bvh;
 pub mod csg;
 pub mod grid;
+pub mod mesher;
+pub mod node;
 pub mod sdf;
 
 pub use csg::{CsgOp, combine, negate, smooth_min};
 pub use grid::{BLOCK, SparseGrid};
+pub use mesher::{MeshOptions, Polarity, mesh_volume, volume_to_mesh};
+pub use node::{
+    BUILDER, MESHER, Volume, VolumeBuildError, VolumeKind, VolumePlugin, build_volume,
+    mesh_volume_node, sdf_to_fog,
+};
 pub use sdf::{PointUnion, SdfParams, mesh_to_sdf, points_to_sdf, spline_to_sdf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
