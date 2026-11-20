@@ -77,3 +77,5 @@ api-id command
 api-bignum 44000
 # case.toml keys must be labels, not label_<field number> (4 or more digits).
 api-key-suffix 4
+# ... and never a raw field number `p<digits>` (6 or more digits).
+api-key-field 6

@@ -167,6 +167,7 @@ api-id parameter
 api-id command
 api-bignum 44000
 api-key-suffix 4
+api-key-field 6
 ";
 
 fn api_cfg() -> Config {
@@ -190,6 +191,10 @@ fn api_directives_parse_and_validate() {
     assert_eq!(c.api_tick_prefixes, vec!["FL"]);
     assert_eq!(c.api_ids, vec!["id", "parameter", "command"]);
     assert_eq!(c.api_key_suffix, Some(4));
+    assert_eq!(c.api_key_field, Some(6));
+    assert!(Config::parse("api-key-field").is_err());
+    assert!(Config::parse("api-key-field x").is_err());
+    assert!(Config::parse("api-key-field 0").is_err());
     assert!(Config::parse("api-key-suffix").is_err());
     assert!(Config::parse("api-key-suffix x").is_err());
     assert!(Config::parse("api-key-suffix 0").is_err());
@@ -273,10 +278,39 @@ fn api_key_suffix_flags_label_underscore_digits_keys() {
 }
 
 #[test]
+fn api_key_field_flags_p_plus_digits_keys() {
+    assert_eq!(key("p536871355 = \"\""), Some((1, "p536871355".into())));
+    assert_eq!(key("  p123456 = 1.0"), Some((3, "p123456".into())));
+    assert_eq!(key("\"p536871355\" = \"\""), Some((2, "p536871355".into())));
+}
+
+#[test]
+fn api_key_field_ignores_short_digits_labels_values_and_other_lines() {
+    assert_eq!(key("p12345 = 1"), None);
+    assert_eq!(key("p1132 = \"x\""), None);
+    assert_eq!(key("pos = [0.0, 0.0, 0.0]"), None);
+    assert_eq!(key("p123456x = 1"), None);
+    assert_eq!(key("pp123456 = 1"), None);
+    assert_eq!(key("q123456 = 1"), None);
+    assert_eq!(key("name = \"p123456\""), None);
+    assert_eq!(key("[params.p123456]"), None);
+    assert_eq!(key("# p123456 = 1"), None);
+    assert_eq!(key("p = 1"), None);
+    // Without the directive the rule is off.
+    let no_field = Config::parse("api-key-suffix 4\n").unwrap();
+    assert_eq!(api_key_matches("p536871355 = 1", &no_field), None);
+    let only_field = Config::parse("api-key-field 6\n").unwrap();
+    assert_eq!(
+        api_key_matches("p536871355 = 1", &only_field),
+        Some((1, "p536871355".into()))
+    );
+    assert_eq!(api_key_matches("falloff_1004 = 1", &only_field), None);
+}
+
+#[test]
 fn api_key_suffix_ignores_short_suffixes_values_and_other_lines() {
     assert_eq!(key("color_2 = [1.0, 1.0, 1.0]"), None);
     assert_eq!(key("enable_move_999 = true"), None);
-    assert_eq!(key("p536871355 = \"\""), None);
     assert_eq!(key("name = \"falloff_1004\""), None);
     assert_eq!(key("note = \"a_1234 = b\""), None);
     assert_eq!(key("[params.effector_1234]"), None);

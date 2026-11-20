@@ -36,6 +36,8 @@ pub struct Config {
     pub api_bignums: Vec<String>,
     /// `api-key-suffix`: minimum digit count of a trailing `_<digits>` on a `.toml` key.
     pub api_key_suffix: Option<usize>,
+    /// `api-key-field`: minimum digit count of a `.toml` key that is `p` plus digits only.
+    pub api_key_field: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,6 +97,14 @@ impl Config {
                     _ => {
                         return Err(err(
                             "`api-key-suffix` needs a digit count of 1 or more".into()
+                        ));
+                    }
+                },
+                "api-key-field" => match arg.parse::<usize>() {
+                    Ok(n) if n >= 1 => cfg.api_key_field = Some(n),
+                    _ => {
+                        return Err(err(
+                            "`api-key-field` needs a digit count of 1 or more".into()
                         ));
                     }
                 },
@@ -298,11 +308,14 @@ pub fn api_matches(line: &str, cfg: &Config) -> Vec<(usize, String)> {
     out
 }
 
-/// `api-key-suffix` hit on a `.toml` line: a key (bare or quoted, before `=`) that ends in
-/// `_<digits>` with at least the configured number of digits. Returns
+/// `api-key-suffix` / `api-key-field` hit on a `.toml` line: a key (bare or quoted, before
+/// `=`) that ends in `_<digits>` with at least the configured number of digits, or that is
+/// `p` followed only by at least the configured number of digits. Returns
 /// `(1-based column, key)`. Table headers and values are not looked at.
 pub fn api_key_matches(line: &str, cfg: &Config) -> Option<(usize, String)> {
-    let min = cfg.api_key_suffix?;
+    if cfg.api_key_suffix.is_none() && cfg.api_key_field.is_none() {
+        return None;
+    }
     let trimmed = line.trim_start();
     let indent = line.chars().count() - trimmed.chars().count();
     let (key_part, _) = trimmed.split_once('=')?;
@@ -314,10 +327,19 @@ pub fn api_key_matches(line: &str, cfg: &Config) -> Option<(usize, String)> {
     if bare.is_empty() || !bare.chars().all(|c| is_ident(c) || c == '-' || c == '.') {
         return None;
     }
+    let quote = usize::from(key.starts_with('"'));
+    let hit = (indent + 1 + quote, bare.to_string());
+    if let Some(min) = cfg.api_key_field
+        && let Some(digits) = bare.strip_prefix('p')
+        && digits.len() >= min
+        && digits.chars().all(|c| c.is_ascii_digit())
+    {
+        return Some(hit);
+    }
+    let min = cfg.api_key_suffix?;
     let (stem, digits) = bare.rsplit_once('_')?;
     if !stem.is_empty() && digits.len() >= min && digits.chars().all(|c| c.is_ascii_digit()) {
-        let quote = usize::from(key.starts_with('"'));
-        return Some((indent + 1 + quote, bare.to_string()));
+        return Some(hit);
     }
     None
 }

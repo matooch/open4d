@@ -5,17 +5,17 @@ mesh = "mesh.obj"
 
 [params]
 size = [100.0, 250.0, 400.0]
-p536871510 = ""
+group_heading_1 = ""
 alignment = "Y+"
 mode = "Within Box"
-p536871511 = ""
+group_heading_2 = ""
 strength_percent = 50.0
-p536871512 = ""
-p536871513 = ""
+group_heading_3 = ""
+group_heading_4 = ""
 curvature_percent = 100.0
-p536871514 = ""
+group_heading_5 = ""
 fillet = false
-p536871515 = ""
+group_heading_6 = ""
 pos = [0.0, 0.0, 0.0]
 rot = [0.0, 0.0, 0.0]
 
