@@ -1453,6 +1453,7 @@ dependencies = [
  "forge-parity-harness",
  "forge-platform",
  "forge-rig",
+ "forge-shaders",
  "forge-volume",
  "glam",
  "rayon",
@@ -1579,6 +1580,7 @@ dependencies = [
 name = "forge-generators"
 version = "0.1.0"
 dependencies = [
+ "forge-anim",
  "forge-clone-engine",
  "forge-core",
  "forge-fields",
@@ -1794,6 +1796,21 @@ dependencies = [
  "forge-core",
  "rhai",
  "serde_json",
+]
+
+[[package]]
+name = "forge-shaders"
+version = "0.1.0"
+dependencies = [
+ "forge-core",
+ "forge-image",
+ "forge-material",
+ "forge-noise",
+ "forge-parity-harness",
+ "glam",
+ "serde_json",
+ "thiserror 2.0.21",
+ "toml",
 ]
 
 [[package]]

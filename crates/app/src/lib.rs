@@ -43,6 +43,7 @@ pub fn default_registry() -> Result<Registry, RegistryError> {
     registry.install(&forge_rig::Rig)?;
     registry.install(&forge_volume::VolumePlugin)?;
     registry.install(&forge_material::MaterialPlugin)?;
+    registry.install(&forge_shaders::ShadersPlugin)?;
     Ok(registry)
 }
 

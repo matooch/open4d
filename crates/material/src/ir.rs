@@ -153,7 +153,13 @@ pub struct ShadeCtx {
     pub uvw: [f64; 3],
     pub position: [f64; 3],
     pub normal: [f64; 3],
+    /// Direction from the surface point to the viewer (zero when unknown).
+    pub view: [f64; 3],
     pub time: f64,
+    /// Weight of the active vertex map at the point, when the host has one.
+    pub vertex_weight: Option<f64>,
+    /// Ambient occlusion at the point (1 = open), when the renderer supplies it.
+    pub ao: Option<f64>,
 }
 
 /// The shader hook of the interpreter.

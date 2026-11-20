@@ -1,0 +1,22 @@
+[package]
+name = "forge-shaders"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Procedural and image shaders sampled at a point (docs/specs/SHADERS.md)."
+
+[dependencies]
+forge-core = { path = "../core" }
+forge-image = { path = "../image" }
+forge-material = { path = "../material" }
+forge-noise = { path = "../noise" }
+glam = "0.34"
+thiserror = "2"
+
+[dev-dependencies]
+forge-parity-harness = { path = "../parity-harness" }
+serde_json = "1"
+toml = "1"
+
+[lints]
+workspace = true
