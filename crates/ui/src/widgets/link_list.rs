@@ -20,6 +20,18 @@ pub fn moved(items: &[NodeId], i: usize, delta: isize) -> Vec<NodeId> {
     out
 }
 
+/// The node type a field list's folder button creates: a Group field (FIELDS.md F7).
+pub const GROUP_FIELD: &str = "forge.field.group";
+
+/// `rows` (the JSON of [`rows_json`]) plus a row for `node`.
+pub fn with_new_row(rows: &serde_json::Value, node: NodeId, blend: &str) -> serde_json::Value {
+    let mut rows = rows.clone();
+    if let Some(a) = rows.as_array_mut() {
+        a.push(json!({"target": node.0, "blend": blend, "strength": 100.0, "enabled": true}));
+    }
+    rows
+}
+
 fn ids(items: &[NodeId]) -> serde_json::Value {
     json!(items.iter().map(|n| n.0).collect::<Vec<_>>())
 }
@@ -218,6 +230,12 @@ pub fn show_rows(
                 }
             });
         combo.response.clone().labelled_by(cx.label);
+        if accepts.contains(&Category::Field) && button(ui, "Folder", "Add Folder".into()) {
+            edit = Some(Edit {
+                create: Some(GROUP_FIELD.to_string()),
+                ..Edit::commit(rows_json(items))
+            });
+        }
         if let Some(dropped) = combo.response.dnd_release_payload::<NodeId>()
             && !has(*dropped)
         {

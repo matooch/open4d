@@ -27,6 +27,7 @@ pub fn show(ui: &mut egui::Ui, cx: &Cx, row: &AttrRow, min: i64, max: i64) -> Op
         value: json!(x),
         component: None,
         target: None,
+        create: None,
         phase: if r.dragged() {
             Phase::Drag {
                 started: r.drag_started(),

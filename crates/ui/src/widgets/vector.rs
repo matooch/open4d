@@ -33,6 +33,7 @@ pub fn show(ui: &mut egui::Ui, cx: &Cx, row: &AttrRow, unit: Unit) -> Option<Edi
                     value: json!(d),
                     component: Some(k as u8),
                     target: None,
+                    create: None,
                     phase: if r.dragged() {
                         Phase::Drag {
                             started: r.drag_started(),

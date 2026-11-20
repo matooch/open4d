@@ -718,6 +718,36 @@ display. Cloners with enabled deformer children keep the expanded fallback (VIEW
   projection), the 10 000 clone instance data builds and culls.
 - Instancing: a cloner of 10 000 clones is one `DrawItem::Instanced`.
 
+### 16.6 Field list folders and field display (brief 064)
+
+Sources: own design from docs/roadmap/areas/D-deformers-fields.md; GUI session G4 is
+unanswered, so **the columns, the folder wording, the gizmo and preview looks are
+parity-pending G4**. The table of layers (enable box, name, blend, strength, move, remove, add
+drop-down, drop target) is 16.1; this section adds the folder and the viewport display.
+
+- **Folder.** A `LinkRows` list that accepts fields has a **Folder** button (`Add Folder`).
+  It creates a Group field (`forge.field.group`, FIELDS.md F7: a field whose own rows are a nested
+  list) with `object.create`, makes the owner the active object again and appends a row for the
+  group (first blend mode, 100 %, enabled) with `param.edit`: two undo steps (create, then
+  list edit). Selecting the group shows its own `fields` list, which is edited with the same widget.
+  `Edit.create` carries the type id from the widget to the editor.
+- **Gizmos.** `field_overlay::shown_fields` collects the fields to draw for the selection: the
+  selected fields and the enabled rows of the `fields` list of the selected deformers, effectors
+  and groups (groups opened, each field once). `field_gizmo` gives world-space line strips of the
+  shape (`local_gizmo` in the field's space, then its world matrix): Spherical three circles of
+  `radius`; Box the twelve edges of the box of half sizes `size`; Linear the two planes at `-length` and
+  `+length` along its direction and the axis between; Cylinder two circles at `-height`, `+height` and four
+  side lines (the surface of F6 is at |axial| = height); Cone the base circle at `-height / 2` and two
+  lines to the apex at `+height / 2`. Other field types have no gizmo. The editor paints the strips in the
+  selection colour; strips are cut where they pass behind the camera (`project_strip`).
+- **Preview.** View > **Field Preview** (`Views.field_preview`, off by default, not undoable, not a command) paints one
+  dot per point of the selected meshes and of the parents of the selected nodes (at most `MAX_DOTS` = 5000 dots, points behind the
+  camera or outside the pane skipped), coloured by the value of the first selected owner's list (a
+  selected field is a list of itself): `value_colour` is blue at 0, white at 0.5, red at 1 (clamped).
+  The value comes from the same `FieldList::sample` the deformers and effectors use, at the world position.
+- Tests: `crates/ui/tests/field_display.rs` (pure gizmo and preview functions, the folder button with undo,
+  the Field Preview menu entry). Not tested headless: the painted pixels.
+
 ## 17. Node editor (`node_canvas`, `node_editor`; brief 109)
 
 Sources: project design (docs/roadmap/areas/H-rigging.md "Node expressions"), NODES.md, the

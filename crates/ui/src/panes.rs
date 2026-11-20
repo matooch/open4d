@@ -40,6 +40,8 @@ pub struct Views {
     /// Clone index and axes overlay of the selected cloners (UI.md §16.3).
     pub clone_indices: bool,
     pub clone_axes: bool,
+    /// Field value preview on the points of the selected meshes (UI.md §16.5).
+    pub field_preview: bool,
     /// Motion paths and onion skin of the selected objects (ANIM.md section 2b).
     pub motion: forge_command::MotionDisplay,
     saved: [PaneState; 4],
@@ -59,6 +61,7 @@ impl Views {
             antialias: true,
             clone_indices: false,
             clone_axes: false,
+            field_preview: false,
             motion: forge_command::MotionDisplay::default(),
             saved: Pane::ALL.map(|p| PaneState {
                 camera: pane_camera(p, base),

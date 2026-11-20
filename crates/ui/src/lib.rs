@@ -18,6 +18,7 @@ pub mod coordinates;
 pub mod crash_notice;
 pub mod cutting;
 pub mod dock;
+pub mod field_overlay;
 pub mod history_panel;
 pub mod hud;
 pub mod icons;

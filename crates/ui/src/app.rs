@@ -1292,6 +1292,10 @@ impl Editor {
             ("view.antialias", json!({"enabled": !v.antialias})),
         );
         ui.separator();
+        let mut preview = v.field_preview;
+        if ui.checkbox(&mut preview, "Field Preview").changed() {
+            self.state.views.field_preview = preview;
+        }
         item(
             ui,
             self,
@@ -1508,6 +1512,7 @@ impl Editor {
             );
         }
         self.paint_clone_overlay(ui, &shown, pane, rect);
+        self.paint_field_overlay(ui, &shown, pane, rect);
         if pane == self.state.views.active {
             self.paint_snap_marker(ui, rect, ppp, size);
         }
@@ -1693,6 +1698,55 @@ impl Editor {
                     Theme::current(ui.ctx()).weak_text,
                 );
             }
+        }
+    }
+
+    /// Gizmos of the selected fields, and with View > Field Preview the field value on the
+    /// points of the selected meshes (UI.md §16.6).
+    fn paint_field_overlay(
+        &self,
+        ui: &Ui,
+        scene: &forge_core::Scene,
+        pane: Pane,
+        rect: egui::Rect,
+    ) {
+        use crate::field_overlay as fo;
+        let selected = &self.state.selection.nodes;
+        let fields = fo::shown_fields(scene, selected);
+        let preview = self.state.views.field_preview;
+        if fields.is_empty() && !preview {
+            return;
+        }
+        let camera = self.state.pane_camera(pane);
+        let size = [f64::from(rect.width()), f64::from(rect.height())];
+        let painter = ui.painter().with_clip_rect(rect);
+        let at = |p: [f32; 2]| rect.min + egui::vec2(p[0], p[1]);
+        let colour = Theme::current(ui.ctx()).component_selection;
+        for id in fields {
+            for strip in fo::field_gizmo(scene, id) {
+                for run in fo::project_strip(&strip, &camera, size) {
+                    let pts: Vec<egui::Pos2> = run.into_iter().map(at).collect();
+                    painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, colour)));
+                }
+            }
+        }
+        if !preview {
+            return;
+        }
+        let frame = self.state.timeline.current;
+        let ctx = forge_core::EvalCtx::at_frame(frame, f64::from(scene.settings().fps));
+        let mut points = Vec::new();
+        let mut meshes: Vec<NodeId> = selected.iter().copied().collect();
+        meshes.extend(selected.iter().filter_map(|id| scene.node(*id)?.parent));
+        meshes.dedup();
+        for id in meshes {
+            if let Ok(m) = self.state.app.eval_mesh(id, frame) {
+                points.extend(m.points);
+            }
+        }
+        for dot in fo::selected_preview(scene, selected, &points, &ctx, &camera, size) {
+            let [r, g, b] = fo::value_colour(dot.value);
+            painter.circle_filled(at(dot.at), 2.5, egui::Color32::from_rgb(r, g, b));
         }
     }
 
@@ -2488,6 +2542,25 @@ impl Editor {
             let mut nodes: Vec<NodeId> = self.state.selection.nodes.iter().copied().collect();
             if !nodes.contains(&id) {
                 nodes.insert(0, id);
+            }
+            let mut edit = edit;
+            if let Some(type_id) = edit.create.take() {
+                // The field list's folder button (UI.md §16.6): create the group, put it
+                // back as the active object, then add its row to the list.
+                let blend = match &row.widget {
+                    Widget::LinkRows { blends, .. } => {
+                        blends.first().map(|b| b.id.clone()).unwrap_or_default()
+                    }
+                    _ => String::new(),
+                };
+                if self.run(("object.create", json!({"type": type_id})))
+                    && let Some(new) = self.state.selection.active
+                {
+                    edit.value = widgets::link_list::with_new_row(&edit.value, new, &blend);
+                    self.state.selection.click(id);
+                } else {
+                    return;
+                }
             }
             self.run(("param.edit", edit.args(&row.param, &nodes, gesture)));
         }
