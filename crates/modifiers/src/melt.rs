@@ -167,7 +167,11 @@ mod tests {
     #[test]
     fn spread_is_exact_at_the_observed_strengths() {
         // melt/no-random-s*: k = 1 + 4 a(s) for Melted Size 400 %.
-        for (s, k) in [(0.1, 1.792_066_268), (0.5, 4.180_240_39), (1.0, 4.963_199_44)] {
+        for (s, k) in [
+            (0.1, 1.792_066_268),
+            (0.5, 4.180_240_39),
+            (1.0, 4.963_199_44),
+        ] {
             assert!((1.0 + 4.0 * spread_curve(s) - k).abs() < 1e-8, "{s}");
         }
         assert_eq!(spread_curve(0.0), 0.0);
@@ -188,7 +192,10 @@ mod tests {
             radial_randomness: 0.0,
             ..MeltParams::default()
         };
-        let mut pts = vec![DVec3::new(100.0, 100.0, 100.0), DVec3::new(-70.0, 100.0, 0.0)];
+        let mut pts = vec![
+            DVec3::new(100.0, 100.0, 100.0),
+            DVec3::new(-70.0, 100.0, 0.0),
+        ];
         melt(&mut pts, &p, 4);
         assert!((pts[0].x / 100.0 - 1.792_066_268).abs() < 1e-8);
         assert!((pts[1].x / -70.0 - 1.792_066_268).abs() < 1e-8);

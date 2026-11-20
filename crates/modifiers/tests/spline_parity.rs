@@ -37,8 +37,6 @@ const KNOWN_MISMATCH: &[&str] = &[
     "spline-rail/one-spline",
     // the rule of the X splines (20.3)
     "spline-rail/x-splines",
-    // the rule holds; the reference's linear spline ends 1e-4 short of its end (20.3)
-    "spline-rail/uneven",
 ];
 
 /// Observed options we do not build.
@@ -135,18 +133,28 @@ fn spline_type_id(t: &Table) -> &'static str {
 /// `rotation_deg`.
 fn editable_spline(tx: &mut Tx, t: &Table) -> NodeId {
     let id = tx.create("forge.spline", None, None).unwrap();
-    let points = t["points"].as_array().unwrap().iter().map(|p| DVec3::from_array(vec3(p)));
+    let points = t["points"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| DVec3::from_array(vec3(p)));
     let data = SplineData::from_points(points.collect(), t["closed"].as_bool().unwrap());
     for (k, v) in data.to_values() {
         tx.set_param(id, &k, v).unwrap();
     }
-    tx.set_param(id, "type", Value::Enum("linear".into())).unwrap();
+    tx.set_param(id, "type", Value::Enum("linear".into()))
+        .unwrap();
     if let Some(v) = t.get("position") {
-        tx.set_param(id, "transform.pos", Value::Vec3(vec3(v))).unwrap();
+        tx.set_param(id, "transform.pos", Value::Vec3(vec3(v)))
+            .unwrap();
     }
     if let Some(v) = t.get("rotation_deg") {
-        tx.set_param(id, "transform.rot", Value::Vec3(vec3(v).map(f64::to_radians)))
-            .unwrap();
+        tx.set_param(
+            id,
+            "transform.rot",
+            Value::Vec3(vec3(v).map(f64::to_radians)),
+        )
+        .unwrap();
     }
     id
 }
@@ -370,10 +378,11 @@ fn spline_deformers_match_the_reference() {
             "spline-rail/defaults",
             "spline-rail/limited",
             "spline-rail/scale-before-50",
+            "spline-rail/uneven",
             "spline-rail/within-box",
         ]
     );
-    assert_eq!(pinned.len(), 8, "{pinned:?}");
+    assert_eq!(pinned.len(), 7, "{pinned:?}");
 }
 
 /// What the golden data supports for the pinned cases, asserted on the golden and on ours.
@@ -499,7 +508,11 @@ fn check_invariants(key: &str, orig: &Mesh, ours: &Mesh, gold: &Mesh) {
                 for i in 0..orig.positions.len() {
                     let d = v(m, i) - v(orig, i);
                     if d.length() > 1e-9 {
-                        assert!(near(i) < 30.0, "{key} {who}: moved point {i} at {}", near(i));
+                        assert!(
+                            near(i) < 30.0,
+                            "{key} {who}: moved point {i} at {}",
+                            near(i)
+                        );
                         assert!(d.x.abs() < 1e-9 && d.z.abs() < 1e-9, "{key} {who}: {d:?}");
                         assert!(d.y > 0.0 && d.y <= 50.0 + 1e-9, "{key} {who}: {d:?}");
                         by.push((near(i), d.y));
@@ -507,7 +520,10 @@ fn check_invariants(key: &str, orig: &Mesh, ours: &Mesh, gold: &Mesh) {
                 }
                 assert_eq!(by.len(), 4, "{key} {who}: moved points");
                 by.sort_by(|a, b| a.0.total_cmp(&b.0));
-                assert!(by.windows(2).all(|w| w[0].1 >= w[1].1), "{key} {who}: {by:?}");
+                assert!(
+                    by.windows(2).all(|w| w[0].1 >= w[1].1),
+                    "{key} {who}: {by:?}"
+                );
                 assert!((by[0].1 - 50.0).abs() < 0.1, "{key} {who}: nearest {by:?}");
             }
         }
@@ -523,11 +539,17 @@ fn check_invariants(key: &str, orig: &Mesh, ours: &Mesh, gold: &Mesh) {
             let gm = moved(gold);
             assert_eq!(gm.len(), 1, "{key}: golden moved {gm:?}");
             let d = v(gold, gm[0]) - v(orig, gm[0]);
-            assert!((d - DVec3::new(0.0, 100.0, 0.0)).length() < 1e-4, "{key}: {d:?}");
+            assert!(
+                (d - DVec3::new(0.0, 100.0, 0.0)).length() < 1e-4,
+                "{key}: {d:?}"
+            );
             let d = v(ours, gm[0]) - v(orig, gm[0]);
-            assert!((d - DVec3::new(0.0, 100.0, 0.0)).length() < 1e-4, "{key}: ours {d:?}");
+            assert!(
+                (d - DVec3::new(0.0, 100.0, 0.0)).length() < 1e-4,
+                "{key}: ours {d:?}"
+            );
         }
-        "spline-rail/one-spline" | "spline-rail/x-splines" | "spline-rail/uneven" => {
+        "spline-rail/one-spline" | "spline-rail/x-splines" => {
             // y is carried in the world y direction by every case of the rail (20.3): the
             // offset `y' - y` is the same for every y of one (x, z) column, golden and ours
             // (the helices' own y is 0 or the end rise of -0.25).
@@ -549,18 +571,6 @@ fn check_invariants(key: &str, orig: &Mesh, ours: &Mesh, gold: &Mesh) {
                 // z come out 0 (pending: the rule of the X splines).
                 "spline-rail/x-splines" => {
                     assert!(gold.positions.iter().all(|p| p[2].abs() < 1e-6), "{key}");
-                }
-                // The rule of 20.3 holds except at t = 1: the reference's linear spline ends
-                // 1e-4 of its length short (399.96 for 400), ours reaches the end.
-                "spline-rail/uneven" => {
-                    for i in 0..orig.positions.len() {
-                        let e = (v(gold, i) - v(ours, i)).length();
-                        if v(orig, i).z == 100.0 {
-                            assert!(e < 0.05, "{key}: end row {e}");
-                        } else {
-                            assert!(e < 1e-4, "{key}: point {i} {e}");
-                        }
-                    }
                 }
                 _ => {}
             }

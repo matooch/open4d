@@ -112,7 +112,8 @@ fn helper(params: &Table, index: usize) -> Table {
             out.insert(key.into(), v.clone());
         }
     }
-    if let Some(e) = table_of(params, "editable_helpers").and_then(|t| table_of(t, &index.to_string()))
+    if let Some(e) =
+        table_of(params, "editable_helpers").and_then(|t| table_of(t, &index.to_string()))
     {
         out.insert("type".into(), "editable".into());
         for (k, v) in e {
@@ -120,7 +121,9 @@ fn helper(params: &Table, index: usize) -> Table {
         }
         return out;
     }
-    out.extend(our_names(table_of(h, "parameters").expect("helper parameters")));
+    out.extend(our_names(
+        table_of(h, "parameters").expect("helper parameters"),
+    ));
     // A generated spline without a `type` row is the Helix (its own rows).
     if !out.contains_key("type") {
         assert!(out.contains_key("start_radius"), "helper {index}: no type");
@@ -210,12 +213,14 @@ pub fn normalize(params: &Table) -> Table {
             if name.is_empty() {
                 continue;
             }
-            let index = names
-                .iter()
-                .position(|n| *n == name)
-                .unwrap_or_else(|| panic!("link {link} = {name:?}: no such helper in {names:?}"))
-                + 1;
-            out.insert(table_key(link).into(), toml::Value::Table(helper(params, index)));
+            let index =
+                names.iter().position(|n| *n == name).unwrap_or_else(|| {
+                    panic!("link {link} = {name:?}: no such helper in {names:?}")
+                }) + 1;
+            out.insert(
+                table_key(link).into(),
+                toml::Value::Table(helper(params, index)),
+            );
         }
     }
     out

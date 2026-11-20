@@ -271,7 +271,11 @@ fn check_blast(who: &str, b: &Blast, orig: &Mesh, got: &Mesh) {
     if b.shatter {
         for (i, c) in c1.iter().enumerate() {
             let want = c0[i].y * (1.0 - (2.0 * b.s).min(1.0));
-            assert!((c.y - want).abs() < 1e-5, "{who}: face {i} centre y {}", c.y);
+            assert!(
+                (c.y - want).abs() < 1e-5,
+                "{who}: face {i} centre y {}",
+                c.y
+            );
         }
         let bound = 100.0 * b.s * b.r;
         for (name, comp) in [("x", 0), ("z", 2)] {
@@ -409,9 +413,9 @@ fn explosion_shatter_wind_match_the_reference() {
                 "{key} matches exactly now: remove it from the pinned cases"
             );
             if case.feature == "wind" {
-                let flag = params.get("flag").is_none_or(|v| {
-                    v.as_bool().unwrap_or_else(|| v.as_integer() != Some(0))
-                });
+                let flag = params
+                    .get("flag")
+                    .is_none_or(|v| v.as_bool().unwrap_or_else(|| v.as_integer() != Some(0)));
                 let amp = num(&params["amplitude"]);
                 check_wind(&format!("{key} (golden)"), flag, amp, &orig, &expected);
                 check_wind(&format!("{key} (ours)"), flag, amp, &orig, &ours);

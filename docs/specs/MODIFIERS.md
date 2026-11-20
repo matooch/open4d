@@ -1312,9 +1312,8 @@ splines' own 4 points as unused OBJ vertices, which the test drops):**
   (hypotheses: the full box, refuted by 300 units at the top and bottom rows; x and z only; no limit at all: the last two
   agree with the data, the second is used).
 - `uneven` (Z splines `(−150, 0, 0)→(−150, 0, 200)` and `(150, 0, 0)→(150, 0, 400)`): the rule above holds at every
-  point except the `t = 1` row, where the reference ends 1e-4 of the spline's length short (`z = 199.98` and `399.96`
-  instead of 200 and 400; the Uniform sampler of the linear editable spline, the same effect as the Helix's "1e-4
-  short", is in the generators crate): pinned.
+  point, **exact** since the sampler gives a linear editable spline its Uniform points too (the `t = 1` row then ends
+  1e-4 of the spline's length short, `z = 199.98` and `399.96`, like the Helix; SPLINES.md).
 - `x-splines` (both X splines straight along x at z = 0, linked top and bottom beside the two Helix Z splines): x and y are those of
   `defaults` but **every point's z is 0**. The X splines are therefore applied; which of their coordinates replaces z is not
   derivable from a straight line at z = 0: pinned.

@@ -159,7 +159,11 @@ mod tests {
     #[test]
     fn spherical_pole_reads_a_quarter_turn_and_manual_has_no_displacement() {
         let mut pole = vec![DVec3::new(0.0, 200.0, 0.0)];
-        formula(&mut pole, &params(Effect::Spherical, "Sin(u*2*PI)*0.2"), 0.0);
+        formula(
+            &mut pole,
+            &params(Effect::Spherical, "Sin(u*2*PI)*0.2"),
+            0.0,
+        );
         assert!((pole[0].y - 240.0).abs() < 1e-9, "{:?}", pole[0]);
         let mut m = vec![DVec3::new(50.0, 7.0, 9.0)];
         formula(&mut m, &params(Effect::Manual, "1"), 0.0);
