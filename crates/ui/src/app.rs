@@ -17,7 +17,9 @@ use serde_json::{Value as Json, json};
 use crate::animate::{AnimEdit, KeyState, key_frames, key_states};
 use crate::attributes::{Gesture, Widget, attribute_rows_multi};
 use crate::clone_overlay::{OverlayOptions, selected_cloner_marks};
-use crate::commands::{category_label, clone_toolset_menu, create_menu, execute};
+use crate::commands::{
+    CHARACTER_TYPES, category_label, character_menu, clone_toolset_menu, create_menu, execute,
+};
 use crate::component_edit::{
     ComponentDrag, component_coords, component_transform_args, pivot_world,
 };
@@ -774,6 +776,14 @@ impl Editor {
                         }
                     }
                 });
+                ui.menu_button("Character", |ui| {
+                    for entry in character_menu(self.state.doc.scene().registry()) {
+                        if ui.button(&entry.label).clicked() {
+                            self.run((entry.command, entry.args));
+                            ui.close();
+                        }
+                    }
+                });
                 ui.separator();
                 // a long category (Generator) is taller than a small window: scroll it
                 let max_height = (ui.ctx().content_rect().height() - 48.0).max(120.0);
@@ -784,6 +794,9 @@ impl Editor {
                             .max_height(max_height)
                             .show(ui, |ui| {
                                 for (type_id, label) in items {
+                                    if CHARACTER_TYPES.contains(&type_id.as_str()) {
+                                        continue;
+                                    }
                                     if ui.button(label).clicked() {
                                         self.run(("object.create", json!({"type": type_id})));
                                         ui.close();
@@ -1475,6 +1488,16 @@ impl Editor {
         if motion_pending {
             ui.ctx().request_repaint();
         }
+        let eval_ctx = forge_core::EvalCtx::at_frame(
+            self.state.timeline.current,
+            f64::from(shown.settings().fps),
+        );
+        let selected_now = self.state.selection.nodes.clone();
+        let (overlay, volumes_pending) =
+            self.state.volumes.overlay(&shown, &selected_now, &eval_ctx);
+        if volumes_pending {
+            ui.ctx().request_repaint();
+        }
         let tex = self.viewport.render(
             rs,
             pane,
@@ -1493,6 +1516,7 @@ impl Editor {
                 frame: previewed.is_none().then_some(&*scheduled),
                 splines: &crate::spline_edit::editor_draws(&shown, &self.state),
                 motion: &motion,
+                overlay: &overlay,
             },
         );
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));

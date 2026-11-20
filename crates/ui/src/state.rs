@@ -83,6 +83,8 @@ pub struct EditorState {
     pub spline_sel: crate::spline_edit::SplineSelection,
     /// Caches of the motion path and onion skin overlays (ANIM.md section 2b). Not saved.
     pub motion: crate::motion_view::MotionState,
+    /// Preview workers of the volume meshers (VIEWPORT.md section 14). Not saved.
+    pub volumes: crate::scene_overlay::VolumeViews,
 }
 
 impl Deref for EditorState {
@@ -146,6 +148,7 @@ impl EditorState {
             snap_hit: None,
             spline_sel: Default::default(),
             motion: Default::default(),
+            volumes: Default::default(),
         }
     }
 }

@@ -733,3 +733,24 @@ colour-interpolated surface (own design, follow-up for a vertex-colour shader).
 crates/viewport/tests/rig_display.rs (pure; our own expected values stand in for the brief's
 baseline image, there is no GPU in the container): edge counts and colours per style, the ramp
 stops and monotone red channel from 0.5, markers per vertex and `hide_zero`, selection colour.
+
+### 13.4 Editor wiring (brief 192)
+`forge_ui::scene_overlay` maps the scene to the lists above; the pane adds them to the curve
+line set, so no new pipeline is involved. `SceneOverlay::collect(scene, selected)` (pure) reads
+every joint (`forge.joint`) into a `JointDraw` (`end` = the first child joint's world position,
+`length` = `bone_vector` length, styles from `display_object` / `display_joint`), the weight
+markers of each *selected* joint (for each object whose weight tag lists the joint: the object's
+evaluated points in world space and the joint's weight per point), and the volume lines of every
+mesher (§14). `overlay_lines(&SceneOverlay, &Palette, &Camera, size)` is camera dependent
+(circle markers, weight squares) and is called per pane, like the motion overlay. Tests:
+`crates/ui/tests/scene_overlay.rs` (headless: a joint chain with a skinned cube and a volume
+mesher produce joint, weight and box lines; a scene without them produces none).
+
+## 14. Volume display wiring (brief 192)
+A mesher node's box is drawn in the scene overlay from `forge_volume::PreviewWorker` results
+(VOLUME.md §11): `VolumeViews` keeps one worker per mesher node, requests a preview when the
+scene revision changes and never waits (the previous preview stays up, VOLUME.md §11.2). The
+box is `Preview::bounds` in the mesher's space, transformed by the mesher's world matrix, drawn
+with `box_lines` in `BOX_COLOR`. The `slice` display is shown as the box only (the slice
+samples are not part of the preview job; parity-pending). The coarse preview mesh is not drawn: the mesher's own
+mesh is drawn by the ordinary evaluation.

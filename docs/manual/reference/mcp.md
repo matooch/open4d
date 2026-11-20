@@ -225,4 +225,7 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `graph_get` | Get Graph. Not an undoable edit. Runs command `graph.get`. |
 | `graph_node_types` | List Graph Node Types. Not an undoable edit. Runs command `graph.node_types`. |
 | `graph_evaluate` | Evaluate Graph. Not an undoable edit. Runs command `graph.evaluate`. |
+| `joint_create_chain` | Create Joint Chain. Undoable editing command. Runs command `joint.create_chain`. |
+| `joint_align` | Align Joints. Undoable editing command. Runs command `joint.align`. |
+| `joint_mirror` | Mirror Joints. Undoable editing command. Runs command `joint.mirror`. |
 | `plugin_list` | List Plugins. Not an undoable edit. Runs command `plugin.list`. |

@@ -121,6 +121,8 @@ pub struct SceneView<'a> {
     pub splines: &'a [forge_viewport::curves::SplineDraw],
     /// Motion paths and onion-skin ghosts of the selected objects (VIEWPORT.md section 12).
     pub motion: &'a forge_viewport::motion::MotionDraw,
+    /// Joints, weight markers and volume boxes (VIEWPORT.md sections 13.4 and 14).
+    pub overlay: &'a crate::scene_overlay::SceneOverlay,
 }
 
 /// Base colour of selected objects (our palette).
@@ -647,6 +649,7 @@ impl ViewportPanel {
             frame,
             splines,
             motion,
+            overlay,
         } = view;
         let device = &rs.device;
         let samples = base.msaa.samples();
@@ -779,6 +782,7 @@ impl ViewportPanel {
             cam,
             [f64::from(size[0]), f64::from(size[1])],
         ));
+        curve_lines.extend(overlay.lines(&palette, cam, [f64::from(size[0]), f64::from(size[1])]));
         let curve_set = LineSet::new(device, &curve_lines);
         let frame = Frame {
             meshes: &draw,

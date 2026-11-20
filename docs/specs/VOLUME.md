@@ -179,6 +179,17 @@ a fit, **parity-pending**: the reference's own density function is not derived (
 OpenVDB-style `sdf-to-fog` with the surface at density 0 gives 1832 points and a Hausdorff of
 10). `vector` volumes are `Unsupported`.
 
+
+### 6.5 Consumed inputs (brief 048)
+
+The builder and the mesher are `consuming_children` types (CORE.md §2): every
+child of a builder (meshes, splines, filters, fields, nested builders, Nulls and what they hold)
+and the builder under a mesher is consumed, so the viewport and export draw the mesher's mesh and
+not its inputs. An input is evaluated like any object (`forge_generators::evaluate`), so a
+subdivision under a cloner under a builder is expanded first: the builder sees the cloner's
+clones. Bypassing the builder (layer with generators off) draws its children as themselves
+again. Own design (the observed meshes, O32/O33, only hold the mesher's output).
+
 ## 7. Mesher (`forge.volume_mesher`)
 
 Category `Generator`, label "Volume Mesher"; its first builder child is built (§6) and meshed in
@@ -461,7 +472,7 @@ return in under 50 ms and the old preview stays visible; at most two further com
 
 `forge_viewport::volume` (pure, no GPU): `box_lines` (12 edges), `value_color`, `slice_markers`
 (a cross of half length `0.2 voxel` per sample) and `display_lines` combining them for a
-`VolumeDisplay`. Not done: the editor panel does not call `PreviewWorker` yet and draws no volume
-lines (the UI crates are outside this brief's files); until then a mesher node is drawn through the
-ordinary synchronous evaluation.
-
+`VolumeDisplay`. The editor calls `PreviewWorker` and draws the box of every mesher (VIEWPORT.md §14, brief 192); the
+slice markers are not drawn yet. The mesher's own mesh is drawn through the ordinary evaluation, which
+reaches it through the registry evaluator hook (PLUGINS.md §8: `forge_generators::evaluate` calls
+the evaluator `VolumePlugin` sets for `forge.volume_mesher`; no crate cycle).

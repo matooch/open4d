@@ -369,6 +369,36 @@ pub fn clone_toolset_menu(registry: &Registry) -> Vec<ToolsetEntry> {
     out
 }
 
+/// The types the Create > Character submenu lists instead of their category's submenu.
+pub const CHARACTER_TYPES: [&str; 3] = ["forge.joint", "forge.skin", "forge.weight_tag"];
+
+/// The Create > Character submenu (docs/specs/RIG.md section 7): Joint, Skin and Weight tag when
+/// the rig plugin is installed, then the joint commands that work on the selection.
+pub fn character_menu(registry: &Registry) -> Vec<ToolsetEntry> {
+    let mut out: Vec<ToolsetEntry> = CHARACTER_TYPES
+        .iter()
+        .filter_map(|id| registry.get(id))
+        .map(|t| ToolsetEntry {
+            label: t.label.clone(),
+            command: "object.create",
+            args: serde_json::json!({"type": t.id}),
+        })
+        .collect();
+    if !out.is_empty() {
+        out.push(ToolsetEntry {
+            label: "Align Joints".into(),
+            command: "joint.align",
+            args: serde_json::json!({}),
+        });
+        out.push(ToolsetEntry {
+            label: "Mirror Joints".into(),
+            command: "joint.mirror",
+            args: serde_json::json!({}),
+        });
+    }
+    out
+}
+
 pub fn category_label(c: Category) -> &'static str {
     match c {
         Category::Object => "Object",

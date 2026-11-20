@@ -359,6 +359,10 @@ Rules (behaviour moved unchanged from the former `Command` enum, UI.md §5 and A
   component of each object's current value. `gesture` merges edits with the same number and
   objects into one undo step (`drag:<ids>:<param>:<gesture>`).
 
+- `joint.create_chain`, `joint.align`, `joint.mirror` (registered by forge-app, RIG.md §7, brief 192):
+  the joint tools as undoable commands, one transaction each; bad input is `Failed` /
+  `InvalidArgs` and changes nothing.
+
 ## 7. Tests
 
 `crates/command/tests/registry.rs`: every command has a unique well-formed id, a non-empty

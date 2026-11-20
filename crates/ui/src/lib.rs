@@ -35,6 +35,7 @@ pub mod object_manager;
 pub mod palette;
 pub mod panes;
 pub mod prefs;
+pub mod scene_overlay;
 pub mod screenshot;
 pub mod script_panel;
 pub mod snapping;

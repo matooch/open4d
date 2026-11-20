@@ -51,7 +51,7 @@ position (the bone in this joint's local space, before this joint's scale); othe
 descendants, depth first. The bind pose of a joint is its world matrix at bind time, stored
 relative to the skinned object (§2).
 
-### 1.3 Joint tools (library functions on `Tx`; command wrappers are not registered, see §7)
+### 1.3 Joint tools (library functions on `Tx`; command wrappers in §7)
 - `create_chain(tx, parent, points, prefix, align)`: joints named `prefix1`, `prefix2`, …
   (O34 names J1, J2, J3); the first at `points[0]` (parent space), each next a child at the
   difference of the points. With `align` each joint but the last is aligned to its child.
@@ -179,6 +179,22 @@ named `arm_L_1`, `arm_L_2`, weights authored on x > 0 only, the arm mirrored wit
 weights mirrored; posing the left arm B +0.6 and the right arm B -0.6 gives a mesh where every
 point has a mirror image (1e-9); the mirrored rows equal the reflected copies with swapped
 slots; twin lookup by name; unmatched and side handling.
+
+## 7. Editor integration (brief 192)
+
+Own design; no observation. The rig crate cannot depend on `forge-command` (command ->
+generators -> modifiers -> rig), so the three command wrappers live in `forge-app`
+(`crates/app/src/rig_commands.rs`, registered by `default_command_registry`), like `param.edit`.
+Every command is one transaction (one undo step) and fails without changing anything.
+
+| Command | Args | Does |
+|---|---|---|
+| `joint.create_chain` | `points` (at least one `[x,y,z]`, in `parent` space), `parent` (node id, optional), `prefix` (default `Joint`), `align` (`x`, `y`, `z`, optional) | `create_chain`; selects the root joint; returns `{nodes}` root first |
+| `joint.align` | `nodes` (default: the selection), `axis` (default `z`) | `align_joint` for every joint in the list (parents before children); non-joints are an error |
+| `joint.mirror` | `nodes` (default: the selection; each must be a joint), `plane` (`yz` default, `xz`, `xy`), `suffix` (optional) | `mirror_chain` for each root; `suffix` selects `RenameRule::Suffix`, otherwise `LeftRight`; selects the new roots; returns `{nodes}` |
+
+Display (VIEWPORT.md §13.4): the editor draws every joint's bone and joint marker and, for a
+selected joint, the weight squares of the objects whose weight tag lists it.
 
 ## 8. Parity cases and what is pinned
 

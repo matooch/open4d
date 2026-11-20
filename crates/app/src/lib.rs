@@ -9,6 +9,7 @@ pub mod diagnostics;
 pub mod motion;
 pub mod param_edit;
 pub mod query;
+pub mod rig_commands;
 pub mod schedule;
 pub mod select;
 
@@ -39,6 +40,7 @@ pub fn default_registry() -> Result<Registry, RegistryError> {
     registry.install(&FieldToolset)?;
     registry.install(&forge_nodes::NodesToolset)?;
     registry.install(&forge_rig::Rig)?;
+    registry.install(&forge_volume::VolumePlugin)?;
     Ok(registry)
 }
 
@@ -49,6 +51,7 @@ pub fn default_command_registry() -> CommandRegistry {
     param_edit::register(&mut commands).expect("param.edit is unique");
     coords::register(&mut commands).expect("transform.edit is unique");
     forge_nodes::register_commands(&mut commands).expect("graph.* ids are unique");
+    rig_commands::register(&mut commands).expect("joint.* ids are unique");
     commands
 }
 

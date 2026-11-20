@@ -1,6 +1,6 @@
 # 192 · Volume and rig nodes in the editor: evaluation hook, commands, display
 
-Status: ready · Area: F, H · Depends on: 081, 083, 100, 101, 112, 084 · Observations: – (integration; parity is already covered by the crate tests) · Touches: generators, app, command, ui, viewport, volume, rig
+Status: done · Area: F, H · Depends on: 081, 083, 100, 101, 112, 084 · Observations: – (integration; parity is already covered by the crate tests) · Touches: generators, app, command, ui, viewport, volume, rig
 
 ## Goal
 Briefs 080–086 and 100–113 built `forge-volume` and `forge-rig` as tested libraries, but a user can't
@@ -30,13 +30,13 @@ use them in the editor:
   are produced for a scene with a joint chain and a volume builder.
 
 ## Done when
-- [ ] `App::new_default()` registers the volume types; creating a Volume Builder with a cube child and a
+- [x] `App::new_default()` registers the volume types; creating a Volume Builder with a cube child and a
       Volume Mesher above it through `object.create` / the RPC yields a mesh equal to `mesh_volume_node`.
-- [ ] `joint.create_chain`, `joint.align`, `joint.mirror` run through the command registry (CLI, RPC, MCP),
+- [x] `joint.create_chain`, `joint.align`, `joint.mirror` run through the command registry (CLI, RPC, MCP),
       are undoable, and are in the generated reference.
-- [ ] The Create menu shows the new types; `icons` tests pass.
-- [ ] The editor draws joints, bones, weight markers and volume boxes (headless draw-list test).
-- [ ] The gate passes, BACKLOG.md is updated; Finish below is followed.
+- [x] The Create menu shows the new types; `icons` tests pass.
+- [x] The editor draws joints, bones, weight markers and volume boxes (headless draw-list test).
+- [x] The gate passes, BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -46,3 +46,21 @@ use them in the editor:
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- Result: all five boxes done. The evaluation hook already existed (`Registry::set_evaluator`, PLUGINS.md §8:
+  `forge_generators::evaluate` dispatches to a plugin evaluator before its own match, no crate cycle) and
+  `VolumePlugin` sets the mesher's; the missing step was installing `VolumePlugin` in `default_registry`
+  (forge-app gained the `forge-volume` dependency). Builder and Filter have no evaluator (no geometry of their own).
+- Commands: `joint.create_chain`, `joint.align`, `joint.mirror` in `crates/app/src/rig_commands.rs` (forge-app is
+  the crate above both rig and command), registered by `default_command_registry`, one undo step each, in
+  `docs/manual/reference`. Spec RIG.md §7, COMMANDS.md.
+- UI: Create > Generator lists Volume Builder / Filter / Mesher (registry driven); new Create > Character submenu
+  (`character_menu`: Joint, Skin, Weight, Align Joints, Mirror Joints; those types are skipped in their category
+  submenus). Three new SVG icons (`volume_*`) and icon-table rows for them and the joint commands; the Joint, Skin
+  and Weight icons already existed.
+- Display: `forge_ui::scene_overlay` (`SceneOverlay::collect`, `VolumeViews`) feeds joints and bones, the weight
+  squares of selected joints and the box of each mesher through the pane's existing line set (live panel and
+  screenshots). Volume boxes come from `PreviewWorker` (one per mesher, never blocks). Spec VIEWPORT.md §13.4, §14.
+- Tests: `crates/app/tests/rig_volume.rs` (4), `crates/ui/tests/scene_overlay.rs` (6, headless), icons suite.
+- Not done (parity-pending, own design): slice markers and the coarse preview mesh are not drawn; weights show as
+  squares, not a colour surface. Generators as clone / volume inputs is brief 048 (the builder's cube child is still
+  drawn as its own object until then).
