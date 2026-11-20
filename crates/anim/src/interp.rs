@@ -25,11 +25,15 @@ pub fn quantize_time(time: f64) -> f64 {
 
 /// The value of `track` at `time` (seconds). An empty track reads 0.
 pub fn value_at(track: &Track, time: f64) -> f64 {
-    let keys = &track.keys;
+    let t = effective_time(&track.keys, time);
+    eval(&track.keys, &[], t)
+}
+
+/// Evaluates at the already resolved time `t`.
+fn eval(keys: &[Key], user: &[Option<UserTangent>], t: f64) -> f64 {
     let (Some(first), Some(last)) = (keys.first(), keys.last()) else {
         return 0.0;
     };
-    let t = effective_time(keys, time);
     if t <= first.time {
         return first.value;
     }
@@ -45,7 +49,7 @@ pub fn value_at(track: &Track, time: f64) -> f64 {
     match a.interp {
         Interp::Step => a.value,
         Interp::Linear => a.value + (b.value - a.value) * ((t - a.time) / (b.time - a.time)),
-        Interp::Spline => spline_segment(keys, j - 1, t),
+        Interp::Spline => spline_segment(keys, user, j - 1, t),
     }
 }
 
@@ -67,8 +71,17 @@ struct Tangent {
     left: f64,
     /// Handle length in time units, right side.
     right: f64,
-    /// Value per time unit; 0 at ends and local extremes.
-    slope: f64,
+    /// Value offset of the left handle end from the key (minus slope times handle length
+    /// for an automatic tangent).
+    left_dv: f64,
+    /// Value offset of the right handle end from the key.
+    right_dv: f64,
+    /// Handle lengths used only to decide exact ties: the stored read-back where there is
+    /// one, else the automatic length on the handle grid.
+    grid_left: f64,
+    grid_right: f64,
+    /// Left / right side was replaced by a user tangent.
+    edited: [bool; 2],
 }
 
 fn tangent(keys: &[Key], i: usize) -> Tangent {
@@ -78,7 +91,11 @@ fn tangent(keys: &[Key], i: usize) -> Tangent {
         return Tangent {
             left: len,
             right: len,
-            slope: 0.0,
+            left_dv: 0.0,
+            right_dv: 0.0,
+            grid_left: quantize_handle(len),
+            grid_right: quantize_handle(len),
+            edited: [false; 2],
         };
     }
     if i + 1 == keys.len() {
@@ -86,7 +103,11 @@ fn tangent(keys: &[Key], i: usize) -> Tangent {
         return Tangent {
             left: len,
             right: len,
-            slope: 0.0,
+            left_dv: 0.0,
+            right_dv: 0.0,
+            grid_left: quantize_handle(len),
+            grid_right: quantize_handle(len),
+            edited: [false; 2],
         };
     }
     let (p, n) = (keys[i - 1], keys[i + 1]);
@@ -106,7 +127,11 @@ fn tangent(keys: &[Key], i: usize) -> Tangent {
     Tangent {
         left: len,
         right: len,
-        slope,
+        left_dv: -(slope * len),
+        right_dv: slope * len,
+        grid_left: quantize_handle(len),
+        grid_right: quantize_handle(len),
+        edited: [false; 2],
     }
 }
 
@@ -115,22 +140,107 @@ fn bezier(p: [f64; 4], s: f64) -> f64 {
     u * u * u * p[0] + 3.0 * u * u * s * p[1] + 3.0 * u * s * s * p[2] + s * s * s * p[3]
 }
 
-fn spline_segment(keys: &[Key], i: usize, t: f64) -> f64 {
+/// A tangent set on a key by the user (ANIM.md §1.5a): the handle ends relative to the key,
+/// as the reference reads them back (`tangents.json`; times in seconds here).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct UserTangent {
+    /// Left handle end: (time offset <= 0 in seconds, value offset).
+    pub left: (f64, f64),
+    /// Right handle end: (time offset >= 0 in seconds, value offset).
+    pub right: (f64, f64),
+}
+
+/// Whether a read-back handle (`len`, `dv`) of key `i` on `side` (-1 left, 1 right) is
+/// evaluated as the automatic handle (`auto_len`, `auto_dv`), ANIM.md §1.5a: it is
+/// (a) the automatic handle to within 2 grid steps in time and 1e-6 relative in value,
+/// (b) the display tangent the reference reads back on keys it has not edited: a third of
+/// the span from the previous key and a third of that chord, mirrored on the two sides, or (c) of zero length (a key
+/// that was never evaluated reads all zeros).
+fn is_automatic(
+    len: f64,
+    dv: f64,
+    auto_len: f64,
+    auto_dv: f64,
+    keys: &[Key],
+    i: usize,
+    side: i32,
+) -> bool {
+    let close = |a: f64, b: f64| (a - b).abs() <= 1e-6 * a.abs().max(b.abs()).max(1.0);
+    if len <= 0.0 || ((len - auto_len).abs() <= 2.0 * HANDLE_GRID && close(dv, auto_dv)) {
+        return true;
+    }
+    // Display tangent: a third of the span and of the chord from the previous key, mirrored.
+    let Some(p) = i.checked_sub(1).map(|j| keys[j]) else {
+        return false;
+    };
+    let (span, chord) = (keys[i].time - p.time, keys[i].value - p.value);
+    (len - span / 3.0).abs() <= 2.0 * HANDLE_GRID && close(dv, f64::from(side) * chord / 3.0)
+}
+
+/// The tangent of key `i`: the automatic one, each side replaced by the user's where that
+/// side differs from the automatic handle.
+fn tangent_with(keys: &[Key], user: &[Option<UserTangent>], i: usize) -> Tangent {
+    let mut t = tangent(keys, i);
+    if let Some(Some(u)) = user.get(i) {
+        let (ll, rl) = (-u.left.0, u.right.0);
+        if ll > 0.0 {
+            t.grid_left = ll;
+        }
+        if rl > 0.0 {
+            t.grid_right = rl;
+        }
+        if !is_automatic(ll, u.left.1, t.left, t.left_dv, keys, i, -1) {
+            t.left = ll;
+            t.left_dv = u.left.1;
+            t.edited[0] = true;
+        }
+        if !is_automatic(rl, u.right.1, t.right, t.right_dv, keys, i, 1) {
+            t.right = rl;
+            t.right_dv = u.right.1;
+            t.edited[1] = true;
+        }
+    }
+    t
+}
+
+/// The value of `track` at exactly `time` seconds (no millisecond rounding), with `user[i]`
+/// the user tangent of key `i` (a missing or `None` entry is automatic). ANIM.md §1.5a:
+/// this is how the O38 observations were sampled.
+pub fn value_at_exact(track: &Track, user: &[Option<UserTangent>], time: f64) -> f64 {
+    eval(&track.keys, user, time)
+}
+
+fn spline_segment(keys: &[Key], user: &[Option<UserTangent>], i: usize, t: f64) -> f64 {
     let (a, b) = (keys[i], keys[i + 1]);
-    let (ta, tb) = (tangent(keys, i), tangent(keys, i + 1));
-    let xs = [a.time, a.time + ta.right, b.time - tb.left, b.time];
+    let (ta, tb) = (tangent_with(keys, user, i), tangent_with(keys, user, i + 1));
+    // In a segment with a user-edited handle, the automatic handles sit on the handle grid
+    // (ANIM.md §1.5a; `weighted-long`, `weighted-short`: 9.999996 frames at key 0).
+    let on_grid = ta.edited != [false; 2] || tb.edited != [false; 2];
+    let (ra, lb) = if on_grid {
+        (
+            if ta.edited[1] {
+                ta.right
+            } else {
+                ta.grid_right
+            },
+            if tb.edited[0] { tb.left } else { tb.grid_left },
+        )
+    } else {
+        (ta.right, tb.left)
+    };
+    let xs = [a.time, a.time + ra, b.time - lb, b.time];
     let ys = [
         a.value,
-        a.value + ta.slope * ta.right,
-        b.value - tb.slope * tb.left,
+        a.value + ta.right_dv,
+        b.value + tb.left_dv,
         b.value,
     ];
     // The same time polynomial with the handle lengths on the reference's grid; it only
     // decides exact ties (below).
     let grid_xs = [
         a.time,
-        a.time + quantize_handle(ta.right),
-        b.time - quantize_handle(tb.left),
+        a.time + ta.grid_right,
+        b.time - tb.grid_left,
         b.time,
     ];
     // Bisection on the curve parameter; the answer is the middle of the final interval.
