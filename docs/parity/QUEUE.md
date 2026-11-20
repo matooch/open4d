@@ -51,7 +51,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O35 | Rigging II: IK | [ik.md](ik.md) | `tests/golden/ik/` samples + meshes | done |
 | O36 | Constraints | [constraints.md](constraints.md) | `tests/golden/constraints/` samples + meshes | done (7 of 9 cases; see form) |
 | O37 | Pose Morph | [pose-morph.md](pose-morph.md) | `tests/golden/pose-morph/` meshes | blocked (strength track not scriptable; see form) |
-| O54 | Tags II | [tags-2.md](tags-2.md) | `tests/golden/tags-2/` | todo |
+| O54 | Tags II | [tags-2.md](tags-2.md) | `tests/golden/tags-2/` | done |
 | O28 | UV coordinates and projection | [uv-projection.md](uv-projection.md) | `tests/golden/uv/` meshes | done |
 | O29 | Scene, camera, light, material, render defaults | [scene-defaults.md](scene-defaults.md) | form only | partial |
 | O30 | Render references | [render-reference.md](render-reference.md) | `tests/golden/render/` PNG + meshes | partial (8 of 10 cases; spot and infinite lights render a fully black frame from a script — see the form. The two uncommitted folders tests/golden/render/spot/ and /infinite/ must be deleted by hand) |
