@@ -919,7 +919,7 @@ unchanged (C3-C7, C3.1) and none of the prototype options: it has no `clones_mod
 | Id | Label | Default |
 |---|---|---|
 | `mode` | Mode (Object, Linear, Radial, Grid, Honeycomb) | Grid (the cloner's default too; the observed label is "Grid", not "Grid Array") |
-| `generate` | Generate (Matrices Only, Thinking Particles) | Matrices Only |
+| `generate` | Generate (Matrices Only, Particles) | Matrices Only |
 | `grid_count` | Count | (40, 1, 40) (cloner: (3, 1, 3)) |
 | `grid_size` | Size | (10.5, 10.5, 10.5) (cloner: 200) |
 | all others | as the cloner's | as the cloner's (O31 per-mode tables agree for Linear: P (0, 50, 0), step values 100 %) |
@@ -933,7 +933,7 @@ Rules:
 - `matrix/defaults` (Grid, 40 x 1 x 40, size 10.5, per step): 1600 clones, first at (-204.75, 0, -204.75), x fastest, same as
   C6. `matrix/linear` (Linear, count 5, P (0, 50, 0)): clones at y = 0, 50, ... 200, as C4.
 
-Returns `BuildError::Unsupported`: `generate` = Thinking Particles (no particle system in the clone toolset), and Object mode
+Returns `BuildError::Unsupported`: `generate` = Particles (no particle system in the clone toolset), and Object mode
 (the cloner's Object mode is brief 066).
 
 **Parity-pending:** the per-mode default counts of the O31 table are mislabelled in the observation (the "Object" table shows

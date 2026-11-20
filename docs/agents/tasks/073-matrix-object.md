@@ -26,7 +26,7 @@ A Matrix object: a cloner that produces only matrices (no geometry), usable as a
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report
-- Result: `matrix_parity.rs` (2 tests); parity 2/2 exact (`matrix/defaults` 1600 clones, `matrix/linear` 5 clones); no UNSUPPORTED/KNOWN_MISMATCH cases. Thinking Particles and Object mode return Unsupported (unit test).
+- Result: `matrix_parity.rs` (2 tests); parity 2/2 exact (`matrix/defaults` 1600 clones, `matrix/linear` 5 clones); no UNSUPPORTED/KNOWN_MISMATCH cases. Particles and Object mode return Unsupported (unit test).
 - Rules: Matrix = cloner modes + Transform tab without prototype options; defaults Grid, count (40,1,40), size 10.5 (`matrix/defaults`); Linear as cloner (`matrix/linear`). Parity-pending: Radial/Honeycomb/effectors on a Matrix, O31's mislabelled per-mode counts.
 - Deviations: none. Viewport axes are brief 079; Object-mode/Tracer consumers read `matrix_data` (Tracer in 076).
 - Files: crates/clone-engine/src/{matrix,node,lib}.rs, crates/generators/src/{cloner,lib}.rs, crates/generators/tests/matrix_parity.rs, crates/ui/icons/matrix.svg, crates/ui/src/icon_table.rs, docs/specs/MOGRAPH.md (M1-M2), STATUS, BACKLOG.

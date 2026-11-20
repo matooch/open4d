@@ -177,7 +177,7 @@ fn matrix_options_without_rules_are_unsupported() {
     let id = doc
         .transact("m", |tx| {
             let id = tx.create("forge.matrix", None, None)?;
-            tx.set_param(id, "generate", Value::Enum("thinking_particles".into()))?;
+            tx.set_param(id, "generate", Value::Enum("particles".into()))?;
             Ok(id)
         })
         .unwrap();

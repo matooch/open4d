@@ -201,11 +201,9 @@ pub fn matrix_data(
     };
     if matches!(
         node.params.get("generate"),
-        Some(Value::Enum(g)) if g == "thinking_particles"
+        Some(Value::Enum(g)) if g == "particles"
     ) {
-        return Err(BuildError::Unsupported(
-            "Matrix generating thinking particles",
-        ));
+        return Err(BuildError::Unsupported("Matrix generating particles"));
     }
     let settings = forge_clone_engine::matrix_settings(&node.params);
     let mut clones = generate(&settings, ctx).map_err(map_error)?;

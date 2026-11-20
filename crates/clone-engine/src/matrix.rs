@@ -50,7 +50,7 @@ pub fn matrix_type() -> NodeType {
                     "matrices_only",
                     &[
                         ("matrices_only", "Matrices Only"),
-                        ("thinking_particles", "Thinking Particles"),
+                        ("particles", "Particles"),
                     ],
                 )
                 .group("Object"),
