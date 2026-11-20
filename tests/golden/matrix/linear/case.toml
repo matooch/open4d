@@ -1,0 +1,29 @@
+feature = "matrix"
+observation = "docs/parity/clone-generators-2.md"
+description = "Matrix generator with one 20 cm cube as its child, Mode Linear (mode 1) and Count 5, so the five clones sit on the default step offset of 50 cm along +Y. Samples carry the clone matrices; the mesh is a separate 20 cm cube at the origin."
+mesh = "mesh.obj"
+
+[params]
+generator = "matrix"
+mode = "Linear"
+generate = "Matrices Only"
+count = 5
+offset = 0
+mode_1271 = "Per Step"
+amount_percent = 100.0
+p = [0.0, 50.0, 0.0]
+s_percent = [100.0, 100.0, 100.0]
+r_deg = [0.0, 0.0, 0.0]
+step_mode = "Single Value"
+step_size_percent = 100.0
+step_rotation_deg = [0.0, 0.0, 0.0]
+display = "None"
+p_5501 = [0.0, 0.0, 0.0]
+r_deg_5503 = [0.0, 0.0, 0.0]
+s = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+
+[import]
+scale = 1.0
+flip_z = false
