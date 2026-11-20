@@ -87,9 +87,18 @@ fn linear_edge_counts() {
 }
 
 #[test]
-fn linear_offset_shifts_along_the_line() {
+fn linear_offset_prepends_hidden_clones() {
+    // C4, `linear-offset`: Offset 1 adds a hidden clone at t = 0; the visible ones start at 50.
     let d = run(&[mode("linear"), ("linear_offset", Value::Float(1.0))]).unwrap();
-    assert_eq!(pos(&d, 0), DVec3::new(0.0, 50.0, 0.0));
+    assert_eq!(d.len(), 4);
+    assert_eq!(d.visible_count(), 3);
+    assert!(!d.visible[0]);
+    assert_eq!(pos(&d, 0), DVec3::ZERO);
+    assert_eq!(pos(&d, 1), DVec3::new(0.0, 50.0, 0.0));
+    // A fractional Offset only shifts the pattern (parity-pending).
+    let d = run(&[mode("linear"), ("linear_offset", Value::Float(0.5))]).unwrap();
+    assert_eq!(d.len(), 3);
+    assert_eq!(pos(&d, 0), DVec3::new(0.0, 25.0, 0.0));
 }
 
 #[test]
@@ -110,8 +119,19 @@ fn transform_tab_applies_to_every_clone() {
 
 #[test]
 fn radial_variation_is_seeded_and_bounded() {
+    // Variation scales the Offset (C5): without an Offset nothing moves.
+    let no_offset = [
+        mode("radial"),
+        ("radial_offset_variation", Value::Float(1.0)),
+    ];
+    assert_eq!(
+        run(&no_offset).unwrap(),
+        run(&[mode("radial")]).unwrap(),
+        "Offset 0: variation is a no-op"
+    );
     let base = [
         mode("radial"),
+        ("radial_offset", Value::Float(1.0)),
         ("radial_offset_variation", Value::Float(1.0)),
     ];
     let a = run(&base).unwrap();
@@ -120,15 +140,16 @@ fn radial_variation_is_seeded_and_bounded() {
     let mut other = base.to_vec();
     other.push(("radial_offset_seed", Value::Int(42)));
     assert_ne!(a, run(&other).unwrap());
-    // Each angle moves by at most half a step (36 degrees for 5 clones).
-    let plain = run(&[mode("radial")]).unwrap();
+    // Each angle moves by at most half the Offset (0.5 rad), clone 0 not at all.
+    let plain = run(&[mode("radial"), ("radial_offset", Value::Float(1.0))]).unwrap();
+    assert_eq!(pos(&a, 0), pos(&plain, 0));
     for i in 0..5 {
         let angle = |d: &CloneData| pos(d, i).x.atan2(pos(d, i).z);
         let mut diff = (angle(&a) - angle(&plain)).abs();
         if diff > std::f64::consts::PI {
             diff = std::f64::consts::TAU - diff;
         }
-        assert!(diff <= 36f64.to_radians() + 1e-9, "clone {i}: {diff}");
+        assert!(diff <= 0.5 + 1e-9, "clone {i}: {diff}");
     }
 }
 
@@ -221,7 +242,8 @@ fn honeycomb_orientation_picks_the_plane() {
 }
 
 #[test]
-fn honeycomb_variation_is_seeded() {
+fn honeycomb_variation_moves_whole_lines_but_not_the_first_and_last() {
+    // C9, `honey-var`: one shift per interior line, both ends fixed.
     let v = [
         mode("honeycomb"),
         ("honeycomb_offset_variation", Value::Float(0.5)),
@@ -229,7 +251,12 @@ fn honeycomb_variation_is_seeded() {
     ];
     let a = run(&v).unwrap();
     assert_eq!(a, run(&v).unwrap());
-    assert_ne!(a, run(&[mode("honeycomb")]).unwrap());
+    let plain = run(&[mode("honeycomb")]).unwrap();
+    assert_ne!(a, plain);
+    assert_eq!(a.len(), plain.len());
+    // The first line (the first clones of the list) does not move.
+    assert_eq!(pos(&a, 0), pos(&plain, 0));
+    assert_eq!(pos(&a, 1), pos(&plain, 1));
 }
 
 #[test]

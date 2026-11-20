@@ -43,12 +43,18 @@ pub(crate) fn generate(s: &Honeycomb) -> Result<Vec<CloneItem>, CloneError> {
         } else {
             along / 2
         };
-        let line_pos = (c as f64 - (lines as f64 - 1.0) / 2.0) * line_step;
+        let mut line_pos = (c as f64 - (lines as f64 - 1.0) / 2.0) * line_step;
+        // Variations move a whole line, never the first and the last (C9, `honey-var`).
+        let mut along_shift = 0.0;
+        if c > 0 && c + 1 < lines {
+            line_pos += s.perpendicular_variation * line_step * rng.next_signed();
+            along_shift = -(s.offset_variation * along_step * rng.next_f64());
+        }
         for m in 0..count {
             let along_pos = (m as f64 + s.offset * parity as f64) * along_step
-                - (along as f64 - 1.0) / 4.0 * along_step;
-            let a = along_pos + s.offset_variation * along_step * rng.next_signed() / 2.0;
-            let l = line_pos + s.perpendicular_variation * line_step * rng.next_signed() / 2.0;
+                - (along as f64 - 1.0) / 4.0 * along_step
+                + along_shift;
+            let (a, l) = (along_pos, line_pos);
             let (w, h) = match s.offset_direction {
                 OffsetDirection::Height => (l, a),
                 OffsetDirection::Width => (a, l),

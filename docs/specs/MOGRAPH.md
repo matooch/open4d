@@ -185,8 +185,15 @@ Colour is `clone_color`, weight is `clone_weight` (fraction), `time` 0, `index` 
 
 ## C4. Linear
 
-`t_i = i + linear_offset` (i = 0 .. count - 1; **parity-pending** for a non-zero offset: all samples
-have offset 0). `u_i = t_i / (count - 1)` (0 when count is 1).
+`t_i = i + linear_offset` (i = 0 .. count - 1). `u_i = t_i / (count - 1)` (0 when count is 1).
+
+**Offset** (`cloner/linear-offset`, offset 1, count 5, P = (0, 50, 0): the samples hold **6** clones at
+y = 0, 50, ..., 250 and the first one is hidden (`visible = false`; the mesh holds the 5 visible cubes
+at y = 50 .. 250)). An integral offset `o >= 1` therefore prepends `o` hidden clones to the list: the
+list has `count + o` entries, entry `j` has `t_j = j` (so the visible ones are `t = o .. o + count - 1`,
+the same positions as `t_i = i + o`) and `u` stays `t / (count - 1)`. A non-integral offset keeps the
+shifted formula without extra clones (**parity-pending**: 1.5 was not observable, the app's Offset is a
+checkbox in this build).
 
 Per Step (`linear_mode = per_step`, default), with `a = amount`:
 
@@ -215,8 +222,12 @@ Angle of clone `i`: `a_i = start + offset + i · (end - start) / count`. The div
 **count, also for partial arcs**: `radial-plane-start-end` (count 5, 0°..180°) has a_i = 0, 36°, 72°,
 108°, 144° (y = 150 cos a_i = 121.35 for i = 1). With the defaults the arc is the full circle and the
 last clone is one step short of the first: 0, 72°, ... 288°. `radial-offset` (offset 30°, count 8)
-starts at 30°: (25, 0, 43.301). Offset Variation (seeded, **parity-pending**): each angle gets
-`+ variation · step · (2 r - 1) / 2` with `r` the next number of the seeded generator (C9).
+starts at 30°: (25, 0, 43.301). Offset Variation scales the **Offset**, not the step
+(`radial-var-1`, `-var-2`: Offset 0, Variation 50 %, seeds 1 and 2 give exactly the unvaried circle).
+Each angle gets `+ variation · offset · r / 2` with `r` in [-1, 1] the next number of the seeded
+generator (C9), so with Offset 0 nothing moves. The control the observer reports without numbers (Offset
+30°, Variation 50 %, two seeds: clone 0 stays on the offset position, the later clones fan out around
+it) is read as: clone 0 takes no jitter (**parity-pending**, no numbers).
 
 Position and axes by plane (`s = sin a`, `c = cos a`, radius `R`), proven by `radial-defaults`
 (XZ), `radial-plane-start-end` (ZY) and `radial-xy` (XY):
@@ -252,8 +263,13 @@ Forms. With `u_k = (i_k - (n_k - 1) / 2) / ((n_k - 1) / 2)` in [-1, 1] (0 for `n
 - Fill `f` (all non-cubic forms): a clone is also hidden when `r < 1 - f`. `grid-fill-50` (sphere, 50 %):
   **32 visible**, the centre clone (r = 0) hidden, the six `r = 0.5` clones kept (the bound is
   inclusive). Fill 100 % hides nothing more. Linear in `r` is the only form checked against one
-  data point: **parity-pending** (sphere only; cylinder fill and non-uniform sizes unobserved,
-  normalisation per axis by the half extent is our reading).
+  data point: **parity-pending** (non-uniform sizes unobserved, normalisation per axis by the half
+  extent is our reading).
+  Cylinder fill (`grid-cyl-fill`, 5 x 5 x 5, Fill 50 %: **62 visible** of 125, 13 on each end layer
+  `uy = ±1` and 12 on the three layers between): the hollow is the axis column only, `r = sqrt(ux^2 +
+  uz^2) < 1 - f` hides a clone **unless it is on an end layer** (`|uy| = 1`): the centre column is
+  hidden at y = 0, ±200 and visible at y = ±400. **Parity-pending** (one case, so whether the end
+  layers stay filled for other fills or only the layer ring is unproven).
 - Object form: `Unsupported` (brief 066).
 
 Epsilon of the visibility tests: 1e-9 on `r`.
@@ -299,10 +315,23 @@ Multi-Instance = GPU/renderer instancing of one prototype).
 
 ## C9. Randomness
 
-Offset Variation, Honeycomb variations use `forge_clone_engine::SplitMix64` seeded with the
-parameter seed: deterministic and platform independent. The reference's sequence is not
-reproducible from the observations (no sample with a non-zero variation exists), so any such case
-is compared statistically (range and moments), never exactly (area file, "Randomness").
+Radial Offset Variation and the Honeycomb variations use `forge_clone_engine::SplitMix64` seeded with
+the parameter seed: deterministic and platform independent. The reference's sequence is not
+reproducible from the observations (hypothesis 1: SplitMix64 `next_f64` of seed 1, with
+`(2 r - 1)` or `r` as the draws, fits none of the eight line shifts of `honey-var`), so any case with a moving variation is
+compared statistically (range and moments), never exactly (area file, "Randomness").
+
+**Honeycomb variations** (`honey-var`, 10 x 10 Z (XY), Offset Direction Height, both variations 50 %,
+seed 1, 50 clones): the variations move **whole lines**. All clones of a line (a column of 5 here) share one
+shift; the first and the last line (columns 0 and 9) do not move; the eight interior lines shift
+perpendicular by -106.2 .. +124.8 (x; line step 300, so within `± perpendicular_variation · line step`
+= ±150) and along by -72.0 .. -11.2 (y, never positive; the along step is 346.41, so within
+`-offset_variation · along step · u`, `u` in [0, 1)). Perpendicular shift of interior line k, in
+order: 26.368, -60.396, 22.001, 99.473, -106.182, -89.244, 124.811, 98.085; along: -38.359, -71.953, -16.779,
+-21.785, -65.264, -66.542, -11.237, -49.960. Our model draws two numbers per interior line (perpendicular
+`r` in [-1, 1), then along `u` in [0, 1)); the exact sequence differs, so `honey-var` is a
+`KNOWN_MISMATCH` (seed-sequence mismatch, structure derived). The earlier per-clone jitter was wrong
+(**parity-pending**: the sign of the along shift and the draw order are inferred from one case).
 
 ## C10. Parity
 
@@ -314,15 +343,34 @@ mode-prefixed ids) under a `forge.cube` of size 20 and compares
   visibility and count exact), and
 - the expanded mesh with `mesh.obj` (`compare_meshes`, strict; after `export_weld` on both sides).
 
-Matched: **19 of 19** cases run, each at both levels (samples and expanded mesh): linear 5
-(`linear-defaults`, `-count-step`, `-cumulative`, `-mode-endpoint`, `-scale-step`), radial 5
-(`radial-defaults`, `-plane-start-end`, `-align-off`, `-offset`, `-xy`), grid 6 (`grid-defaults`,
-`-3x2x4`, `-endpoint`, `-sphere-form`, `-cylinder-form`, `-fill-50`), honeycomb 3
-(`honeycomb-defaults`, `-small`, `-offset`). `KNOWN_MISMATCH` and `UNSUPPORTED` are empty.
+Matched: **31 of 34** cases run, each at both levels (samples and expanded mesh): linear 8
+(`linear-defaults`, `-count-step`, `-cumulative`, `-mode-endpoint`, `-scale-step`, `-amount`,
+`-endpoint-sr`, `-offset`), radial 7 (`radial-defaults`, `-plane-start-end`, `-align-off`, `-offset`,
+`-xy`, `-var-1`, `-var-2`), grid 8 (`grid-defaults`, `-3x2x4`, `-endpoint`, `-sphere-form`,
+`-cylinder-form`, `-fill-50`, `-cyl-fill`, `-sphere-uneven`), honeycomb 8 (`honeycomb-defaults`, `-small`,
+`-offset`, `honey-endpoint`, `-odd-even`, `-orient-x`, `-orient-y`) and `transform-rs`. The case files may spell the mode
+as the label (`Grid Array`, `Linear`); the test maps it to the id.
 
-Not run here (pinned by count in the test, 47 of the 66 cloner cases): 35 cases with
+`KNOWN_MISMATCH` (2):
+- `honey-var`: structure derived (C9: one shift per interior line, ends fixed) but the reference's random
+  sequence is not reproducible, so the shifts differ.
+- `linear-rstep` (R = (0, 20, 0), Step Rotation (0, 10, 0), count 5, P = (0, 50, 0)): the clone axes turn 20 degrees
+  about X per clone (y axis of clone 1: (0, 0.866, -0.5)), but the positions follow
+  `p_i = p_(i-1) + 50 · (0, cos 10i°, -sin 10i°)` (clone 1: (0, 49.240, -8.682), clone 2: (0, 96.225, -25.783),
+  clone 4: (0, 177.829, -82.923)), i.e. a chain `(Rx(10°) · T(P))^i` for the position and an extra `10°` per clone for the
+  orientation. Hypotheses tried: (1) orientation `R·t + Step·t` (30° per clone, fails); (2) the chain with the step
+  rotation only (orientation 10°, fails); (3) the chain angle taken from R (20°, fails the positions). The description
+  says the step rotation is "H" 10° but the file stores it in the second (P) slot, so the observation should be redone
+  with the step rotation read back.
+
+`UNSUPPORTED` (1): `reset-coords-off` (observation needs redoing: the child cube's position (0, 50, 0) and rotation are only in
+the description, not in `case.toml`, and the y range 36.34..63.66 of the baked mesh needs a turn about X or Z, not H). Its
+reading, parity-pending: with Reset Coordinates off the clone matrices stay the identity and the
+child keeps its own transform (3 identical cubes).
+
+Not run here (pinned by count in the test, 54 effector cases and 13 others of the 101 cloner cases): the cases with
 an effector (`[params.effector]` or `effector_count > 0`: briefs 068+), 8 Object-mode cases
-(`object-*`: brief 066), `order-iterate`, `order-random`, `order-sort` (several children and the
+(`object-*`: brief 066), `order-iterate`, `order-random`, `order-sort`, `blend-order` (several children and the
 Clones modes: brief 067) and `nested`. `nested` is covered by a separate test
 (`a_cloner_inside_a_cloner_matches_the_nested_mesh`): a Radial cloner (count 4) as the only
 prototype of a Linear cloner (count 3) expands with no extra code and matches the mesh; the case
