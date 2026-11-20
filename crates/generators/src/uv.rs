@@ -51,11 +51,7 @@ pub fn primitive_uvs(
         }
         "forge.capsule" if up(&p) && !p.bool("slice") => {
             let profile = capsule_profile(&p);
-            revolve(
-                mesh,
-                p.int("rotation_segments"),
-                Wall::Capsule(profile),
-            )
+            revolve(mesh, p.int("rotation_segments"), Wall::Capsule(profile))
         }
         "forge.torus" if up(&p) && !p.bool("slice") => torus(
             mesh,
@@ -203,10 +199,7 @@ enum Wall {
 /// Capsule rings (y, v) with v the cumulative chord length over the total.
 fn capsule_profile(p: &Params) -> Vec<(f64, f64)> {
     let (r, h) = (p.float("radius"), p.float("height"));
-    let (cs, hs) = (
-        p.int("cap_segments"),
-        p.int("height_segments"),
-    );
+    let (cs, hs) = (p.int("cap_segments"), p.int("height_segments"));
     let mid = (h - 2.0 * r).max(0.0);
     let mut pts: Vec<(f64, f64)> = Vec::new(); // (rho, y)
     for k in 0..=cs {
