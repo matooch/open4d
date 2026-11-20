@@ -60,7 +60,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O44 | Exchange references (FBX, glTF, Alembic, STL, PLY) | [exchange.md](exchange.md) | `tests/golden/exchange/` | done (morph not observed) |
 | O39 | Dynamics: rigid bodies | [dynamics.md](dynamics.md) | `tests/golden/dynamics/` samples + meshes | partial (8 of 9 cases; gravity-half not observed because the scene gravity is not reachable from a script and the body tag has no gravity parameter - see the form) |
 | O40 | Particles and forces | [particles.md](particles.md) | `tests/golden/particles/` samples + meshes | blocked (0 of 10 cases: the emitter exposes no particle list to a script, so no position, velocity or age can be read - see the form) |
-| O41 | Soft bodies and connectors | [soft-bodies.md](soft-bodies.md) | `tests/golden/soft-bodies/` samples + meshes | partial (4 of 6 cases: soft-sphere-drop, soft-sphere-stiff, soft-sphere-pressure, hinge; spring and ball-socket use the same recipe and wait for the next window - see the form) |
+| O41 | Soft bodies and connectors | [soft-bodies.md](soft-bodies.md) | `tests/golden/soft-bodies/` samples + meshes | done (6 of 6 cases; the ball-socket track is identical to the hinge one - see the form) |
 | O10 | Selection and tool behaviour in the GUI | (form comes with batch 10) | form only | gui-only |
 | G1 | GUI session: layout and managers | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G1 | answers in GUI-SESSIONS.md | gui-only |
 | G2 | GUI session: shortcuts and navigation | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G2 | answers in GUI-SESSIONS.md | gui-only |
