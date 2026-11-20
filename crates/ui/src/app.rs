@@ -1051,6 +1051,11 @@ impl Editor {
                     self.run(c);
                 }
             }
+            Panel::WeightManager => {
+                for c in crate::weight_manager::weight_manager_ui(ui, &mut self.state) {
+                    self.run(c);
+                }
+            }
             Panel::ContentBrowser => {
                 for a in crate::content_browser::content_browser_ui(ui, &mut self.state) {
                     match a {
@@ -2113,6 +2118,19 @@ impl Editor {
             {
                 (r[2], r[3]) = (x, y);
             }
+        }
+        if self.state.weight_panel.painting
+            && crate::weight_manager::paint_target(&self.state).is_some()
+        {
+            if (response.clicked() || response.dragged_by(egui::PointerButton::Primary))
+                && let Err(e) = crate::weight_manager::paint_dab(&mut self.state, [x, y], [w, h])
+            {
+                self.state.status = e;
+            }
+            if response.drag_stopped() || response.clicked() {
+                crate::weight_manager::end_stroke(&mut self.state);
+            }
+            return;
         }
         if response.clicked()
             && let Err(e) = viewport_click(&mut self.state, [x, y], [w, h], mods)

@@ -6,6 +6,7 @@ pub mod auto_weights;
 pub mod display;
 pub mod joint;
 pub mod mirror;
+pub mod paint;
 pub mod skin;
 pub mod tools;
 pub mod weights;

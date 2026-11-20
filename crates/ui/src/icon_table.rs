@@ -556,4 +556,9 @@ pub(crate) const ICON_MAP: &[(&str, &str)] = &[
     ("view.shading", "shading"),
     ("view.shadows", "shadow"),
     ("view.toggle_expanded", "expand"),
+    ("weights.mirror", "weight"),
+    ("weights.normalise", "weight"),
+    ("weights.paint", "weight"),
+    ("weights.prune", "weight"),
+    ("weights.smooth", "weight"),
 ];

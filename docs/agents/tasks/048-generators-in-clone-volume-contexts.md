@@ -1,6 +1,6 @@
 # 048 · Generators as clone and volume inputs (consumed-input rules)
 
-Status: ready · Area: C · Depends on: 065, 081 · Observations: – · Touches: generators
+Status: done · Area: C · Depends on: 065, 081 · Observations: – · Touches: generators
 
 ## Goal
 Cloners and volume builders consume their children like the other generators, and `is_consumed` and the evaluation rules stay consistent.
@@ -13,8 +13,8 @@ Cloners and volume builders consume their children like the other generators, an
 - Extend `is_consumed` and evaluation for cloner and volume builder children. Add tests for nested generators (subdivision under cloner, cloner under volume builder).
 
 ## Done when
-- [ ] CORE.md evaluation section updated; tests.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] CORE.md evaluation section updated; tests.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -24,7 +24,8 @@ Cloners and volume builders consume their children like the other generators, an
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
+- Result: 3 tests added (crates/app/tests/consumed_inputs.rs); no parity data (own design).
+- Rules: `NodeType.consumes_children` makes all children of a volume builder/mesher consumed, also through consumed Nulls; bypassed builders draw children again.
 - Rules derived, with the case that proves each; parity-pending rules.
 - Deviations from the design decisions, and why.
 - Files changed.

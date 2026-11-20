@@ -46,6 +46,7 @@ pub mod timeline;
 pub mod tools;
 pub mod tree;
 pub mod viewport_panel;
+pub mod weight_manager;
 pub mod widgets;
 pub mod workspaces;
 

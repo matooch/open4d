@@ -40,6 +40,9 @@ pub struct NodeType {
     pub params: Vec<ParamDesc>,
     /// Whether the UI's Create menu offers this type (docs/specs/CORE.md §2).
     pub in_create_menu: bool,
+    /// Whether the children of a node of this type are its inputs and are consumed
+    /// (docs/specs/CORE.md §2, brief 048). Not saved in files.
+    pub consumes_children: bool,
 }
 
 impl NodeType {
@@ -50,12 +53,19 @@ impl NodeType {
             category,
             params: Vec::new(),
             in_create_menu: true,
+            consumes_children: false,
         }
     }
 
     /// Keeps the type out of the Create menu.
     pub fn not_in_create_menu(mut self) -> NodeType {
         self.in_create_menu = false;
+        self
+    }
+
+    /// Marks the type's children as consumed inputs.
+    pub fn consuming_children(mut self) -> NodeType {
+        self.consumes_children = true;
         self
     }
 
