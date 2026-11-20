@@ -142,10 +142,16 @@ Keep the probe code itself in `~/forge-observer/`; these are the lessons, in pla
 - A script that returns nothing at all ("Function returned None") usually means the app
   aborted inside a call. Isolate the last few calls in a tiny separate probe rather than
   editing the big one.
+- Never trigger an export or command that opens a dialog (for example the VDB export). A
+  dialog needs a human and freezes the app's script runner until someone closes it. If a
+  case needs such an export, mark it "needs a human: export opens a dialog" in the form's
+  Notes column and move on.
 
 ## 8. Things a human must do
 
 Skip these in unattended runs. Leave them for the owner and say so in the form:
 - jobs marked `gui-only`, and anything a form says belongs to a GUI session (G1–G8);
 - cases that need a font picked in the GUI (O48's `dv-*` rows);
+- cases that need an export or command that opens a dialog (for example the VDB export):
+  "needs a human: export opens a dialog";
 - cases that still exported undeformed after §4.4 (solver deformers, Spline Wrap).
