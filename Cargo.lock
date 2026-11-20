@@ -1657,6 +1657,7 @@ dependencies = [
  "forge-generators",
  "forge-geometry",
  "forge-noise",
+ "forge-rig",
  "forge-parity-harness",
  "glam",
  "toml",
@@ -1742,6 +1743,20 @@ version = "0.1.0"
 [[package]]
 name = "forge-render-gpu"
 version = "0.1.0"
+
+[[package]]
+name = "forge-rig"
+version = "0.1.0"
+dependencies = [
+ "forge-anim",
+ "forge-core",
+ "forge-generators",
+ "forge-geometry",
+ "forge-modifiers",
+ "forge-parity-harness",
+ "glam",
+ "toml",
+]
 
 [[package]]
 name = "forge-rpc"

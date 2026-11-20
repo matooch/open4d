@@ -1,0 +1,21 @@
+[package]
+name = "forge-rig"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Rigging: joints, joint tools, weight tag, skin deformer, auto weights (docs/specs/RIG.md)."
+
+[dependencies]
+forge-core = { path = "../core" }
+forge-geometry = { path = "../geometry" }
+glam = "0.34"
+
+[dev-dependencies]
+forge-anim = { path = "../anim" }
+forge-generators = { path = "../generators" }
+forge-modifiers = { path = "../modifiers" }
+forge-parity-harness = { path = "../parity-harness" }
+toml = "1"
+
+[lints]
+workspace = true
