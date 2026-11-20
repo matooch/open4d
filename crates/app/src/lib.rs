@@ -38,6 +38,7 @@ pub fn default_registry() -> Result<Registry, RegistryError> {
     registry.install(&CloneToolset)?;
     registry.install(&FieldToolset)?;
     registry.install(&forge_nodes::NodesToolset)?;
+    registry.install(&forge_rig::Rig)?;
     Ok(registry)
 }
 

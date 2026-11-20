@@ -19,6 +19,7 @@ forge-io = { path = "../io" }
 forge-modifiers = { path = "../modifiers" }
 forge-nodes = { path = "../nodes" }
 forge-platform = { path = "../platform" }
+forge-rig = { path = "../rig" }
 glam = "0.34"
 schemars = "1"
 serde = { version = "1", features = ["derive"] }

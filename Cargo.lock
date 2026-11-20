@@ -1449,6 +1449,7 @@ dependencies = [
  "forge-nodes",
  "forge-parity-harness",
  "forge-platform",
+ "forge-rig",
  "glam",
  "rayon",
  "schemars",
