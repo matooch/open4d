@@ -1515,6 +1515,7 @@ dependencies = [
 name = "forge-command"
 version = "0.1.0"
 dependencies = [
+ "forge-anim",
  "forge-core",
  "forge-generators",
  "forge-geometry",

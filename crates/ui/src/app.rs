@@ -903,20 +903,22 @@ impl Editor {
                     }
                 }
                 ui.separator();
-                for p in Panel::ALL {
-                    ui.menu_button(format!("Move {}", p.title()), |ui| {
-                        for a in Area::ALL {
-                            if self.state.dock.area_of(p) != Some(a)
-                                && ui
-                                    .button(format!("{} to {}", p.title(), a.label()))
-                                    .clicked()
-                            {
-                                self.state.dock.move_panel(p, a);
-                                ui.close();
+                ui.menu_button("Move panel", |ui| {
+                    for p in Panel::ALL {
+                        ui.menu_button(format!("Move {}", p.title()), |ui| {
+                            for a in Area::ALL {
+                                if self.state.dock.area_of(p) != Some(a)
+                                    && ui
+                                        .button(format!("{} to {}", p.title(), a.label()))
+                                        .clicked()
+                                {
+                                    self.state.dock.move_panel(p, a);
+                                    ui.close();
+                                }
                             }
-                        }
-                    });
-                }
+                        });
+                    }
+                });
                 ui.separator();
                 if ui.button("Command palette\u{2026}").clicked() {
                     self.run(cmd("ui.command_palette"));
@@ -1053,6 +1055,16 @@ impl Editor {
             }
             Panel::WeightManager => {
                 for c in crate::weight_manager::weight_manager_ui(ui, &mut self.state) {
+                    self.run(c);
+                }
+            }
+            Panel::DopeSheet => {
+                for c in crate::dopesheet::dope_sheet_ui(ui, &mut self.state) {
+                    self.run(c);
+                }
+            }
+            Panel::ValueGraph => {
+                for c in crate::fcurve::value_graph_ui(ui, &mut self.state) {
                     self.run(c);
                 }
             }

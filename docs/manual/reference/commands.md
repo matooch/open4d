@@ -2,7 +2,7 @@
 
 # Command reference
 
-175 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+183 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -132,6 +132,14 @@
 | [`marker.set_color`](#markerset_color) | Set Marker Color | yes | `marker_set_color` |
 | [`marker.list`](#markerlist) | List Markers | no | `marker_list` |
 | [`marker.jump`](#markerjump) | Jump to Marker | no | `marker_jump` |
+| [`key.move`](#keymove) | Move Keys | yes | `key_move` |
+| [`key.scale`](#keyscale) | Scale Keys | yes | `key_scale` |
+| [`key.delete`](#keydelete) | Delete Selected Keys | yes | `key_delete` |
+| [`key.set_interp`](#keyset_interp) | Set Key Interpolation | yes | `key_set_interp` |
+| [`key.set_tangent`](#keyset_tangent) | Set Key Tangent | yes | `key_set_tangent` |
+| [`key.paste`](#keypaste) | Paste Keys | yes | `key_paste` |
+| [`track.set_behavior`](#trackset_behavior) | Track Behavior | yes | `track_set_behavior` |
+| [`key.euler_filter`](#keyeuler_filter) | Euler Filter | yes | `key_euler_filter` |
 | [`file.new`](#filenew) | New | no | `file_new` |
 | [`file.open`](#fileopen) | Open | no | `file_open` |
 | [`file.save`](#filesave) | Save | no | `file_save` |
@@ -1508,6 +1516,89 @@ Autokey. Not an undoable edit.
 
 Example: `forge cmd scene.forge key.autokey --args '{"enabled":true}'`
 
+### `key.move`
+
+Move Keys. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `keys` | array of object | yes |  |
+| `delta_frames` | number | yes | Frames to move by. |
+| `delta_value` | number | no | Value change in display units (degrees for angles, percent as shown). Default: `0.0`. |
+| `ripple` | boolean | no | Also move every later key of the same tracks in time. Default: `false`. |
+
+Example: `forge cmd scene.forge key.move --args '{"delta_frames":5.0,"keys":[{"frame":10.0,"node":1,"track":"transform.pos.x"}]}'`
+
+### `key.scale`
+
+Scale Keys. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `keys` | array of object | yes |  |
+| `pivot_frame` | number | yes | The frame that stays where it is. |
+| `factor` | number | yes | Time scale factor (not zero; negative mirrors). |
+
+Example: `forge cmd scene.forge key.scale --args '{"factor":2.0,"keys":[{"frame":10.0,"node":1,"track":"transform.pos.x"}],"pivot_frame":0.0}'`
+
+### `key.delete`
+
+Delete Selected Keys. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `keys` | array of object | yes |  |
+
+Example: `forge cmd scene.forge key.delete --args '{"keys":[{"frame":10.0,"node":1,"track":"transform.pos.x"}]}'`
+
+### `key.set_interp`
+
+Set Key Interpolation. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `keys` | array of object | yes |  |
+| `interp` | string | yes | `spline`, `linear` or `step`. |
+
+Example: `forge cmd scene.forge key.set_interp --args '{"interp":"linear","keys":[{"frame":10.0,"node":1,"track":"transform.pos.x"}]}'`
+
+### `key.set_tangent`
+
+Set Key Tangent. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes |  |
+| `track` | string | yes |  |
+| `frame` | number | yes |  |
+| `preset` | string | yes | `auto`, `linear`, `ease`, `ease_in`, `ease_out`, `zero_angle`, `zero_length` or `user`. |
+| `broken` | boolean or null | no |  |
+| `left` | object \| null | no | New handles for `user`. |
+| `right` | object \| null | no |  |
+| `weighted` | boolean or null | no |  |
+
+Example: `forge cmd scene.forge key.set_tangent --args '{"frame":10.0,"node":1,"preset":"ease","track":"transform.pos.x"}'`
+
+### `key.paste`
+
+Paste Keys. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `keys` | array of object | yes |  |
+
+Example: `forge cmd scene.forge key.paste --args '{"keys":[{"frame":20.0,"interp":"spline","node":1,"track":"transform.pos.x","value":5.0}]}'`
+
+### `key.euler_filter`
+
+Euler Filter. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes |  |
+
+Example: `forge cmd scene.forge key.euler_filter --args '{"node":1}'`
+
 
 ## `timeline`
 
@@ -1709,6 +1800,22 @@ Jump to Marker. Not an undoable edit.
 | `forward` | boolean | yes | true: next key, false: previous key. |
 
 Example: `forge cmd scene.forge marker.jump --args '{"forward":true}'`
+
+
+## `track`
+
+### `track.set_behavior`
+
+Track Behavior. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes |  |
+| `track` | string | yes |  |
+| `after` | string or null | no |  |
+| `before` | string or null | no | `constant`, `continue`, `repeat`, `offset_repeat` or `oscillate`; unchanged when absent. |
+
+Example: `forge cmd scene.forge track.set_behavior --args '{"after":"repeat","node":1,"track":"transform.pos.x"}'`
 
 
 ## `file`

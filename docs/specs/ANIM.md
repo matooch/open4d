@@ -319,6 +319,49 @@ or `Oscillate`. They are applied by remapping the (already resolved) time into t
   the segment's own curve, then decomposed back to `(h, p, b)`. 170 -> -170 about one axis then
   takes the short way. Parity-pending.
 
+## 1b. Key editing commands (briefs 090 and 091, own design, parity-pending G5)
+Every edit of the dope sheet and the value graph is a registry command, one undo step, callable
+through RPC, MCP and the `forge` CLI. Keys are addressed as `{node, track, frame}` (fractional
+frames allowed; matched to a nanosecond); values are in display units (degrees, percent).
+`forge_anim::keyedit` holds the pure track functions.
+- `key.move {keys, delta_frames, delta_value?, ripple?}`: moves keys in time and value; a key
+  landing on another key replaces it; `ripple` moves every key at or after the earliest selected one
+  of each track in time (later keys keep their value). Tangents and point arrays stay attached.
+- `key.scale {keys, pivot_frame, factor}`: scales time about the pivot; user handles scale with the
+  spacing; a negative factor mirrors (the handle sides swap).
+- `key.delete {keys}`: removes keys; a track that loses its last key is removed.
+- `key.set_interp {keys, interp}`; `key.paste {keys: [{node, track, frame, value, interp}]}`
+  (replaces keys at the same frame, creates the track).
+- `key.set_tangent {node, track, frame, preset, left?, right?, broken?, weighted?}`: presets `auto`,
+  `linear` (chord), `ease`, `ease_in`, `ease_out`, `zero_angle`, `zero_length` (section 1.5b), or
+  `user` with handle ends `{dt_frames, dv}` relative to the key.
+- `track.set_behavior {node, track, before?, after?}` (section 1.9); `key.euler_filter {node}`
+  (section 1.11, all `transform.rot.*` tracks of the node).
+A command that changes nothing or names a missing key, track or preset is an error and adds no undo
+step.
+
+### Dope sheet (`crates/ui/src/dopesheet.rs`, `fcurve_logic.rs`)
+A track tree (an object row with a summary of all its keys, then one row per track; click an object
+row to collapse), a frame ruler (click or drag to scrub through `timeline.set_frame`), keys as
+diamonds. Click selects (Shift toggles), a drag on empty space box-selects, a drag on a key moves the
+selection by whole frames (snapping on; free when off) and sends one `key.move` on release, a summary
+key stands for all keys of its object at that frame. Buttons: Delete (also the Delete key), Spline /
+Linear / Step, Copy / Paste (at the current frame), Scale 1/2 and Scale 2 about the current frame,
+Ripple, Snap, "Selected objects only". Pan with the scroll wheel, zoom with pinch / ctrl-scroll about
+the cursor (`TimeView`). Shared pure logic (`TimeView`, `ValueView`, `KeySelection`, `hit_test`,
+`box_select`, `scale_about`, `rows`) is covered without egui.
+
+### Value graph (`crates/ui/src/fcurve.rs`)
+One curve per numeric track of the selected objects, drawn by sampling `value_at_exact` (the
+playback evaluator), coloured by axis (X red, Y green, Z blue); a checkbox per curve hides it. Keys
+are dots; the selected spline keys show their two evaluated handles (`forge_anim::handles`: automatic,
+chord or user, as the curve uses them). Dragging a handle sends `key.set_tangent` `user`; dragging a key
+sends `key.move` with the frame and value change; box select as in the dope sheet. Toolbar: Frame all,
+Frame selected, Snap, Normalised (each curve's key range maps to 0..100; value drags and handle drags
+are off there), tangent presets, Break / Unify, Weighted / Unweighted, and numeric frame and value
+fields for a single selected key. Which modifier keys do what in the reference is the open question
+G5 (parity-pending).
+
 ## 2. Timeline, record and autokey (`crates/ui/src/{animate,timeline}.rs`)
 
 Sources: docs/parity/keyframes.md §3 (one record makes 9 tracks, a recorded key is a

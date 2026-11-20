@@ -1,6 +1,6 @@
 # 090 · Dope sheet manager
 
-Status: ready · Area: G · Depends on: 089, 011 · Observations: G5 · Touches: ui
+Status: done (parity-pending)
 
 ## Goal
 A dope sheet with the track tree, key selection, move/scale/ripple, copy/paste, all through registry commands.
@@ -27,10 +27,10 @@ A dope sheet with the track tree, key selection, move/scale/ripple, copy/paste, 
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- Result: `crates/ui/src/{dopesheet,fcurve_logic}.rs`, `crates/anim/src/keyedit.rs`, `crates/command/src/builtin/keys.rs` (key.move, key.scale, key.delete, key.set_interp, key.paste, track.set_behavior, key.euler_filter, key.set_tangent), Dope Sheet panel in the dock. Tests: `crates/ui/tests/key_edit.rs` (box select + move + undo and click + paste under egui_kittest, command and pure-logic tests). No parity data: own design, parity-pending G5.
+- Rules: ANIM.md §1b. Moves are whole frames when snap is on; ripple moves the selected key and all later keys of the track.
+- Deviations: the Window menu's per-panel "Move X" entries are now under one "Move panel" submenu (16 panels overflowed the menu and hid "Reset layout"); `tests/ui.rs` clicks it first. Panels are registered as dock panels, not opened by default. Copy/paste clipboard is panel state (paste is a stateless `key.paste`).
+- Files: crates/ui/src/{dopesheet,fcurve_logic,dock,app,lib,icon_table}.rs, crates/ui/tests/{key_edit,ui}.rs, crates/command/src/builtin/{keys,mod}.rs, crates/command/Cargo.toml, crates/anim/src/keyedit.rs, docs/manual/reference/*, docs/specs/ANIM.md.
+- Open: G5 answers for the reference's gestures, modifiers, ripple and summary-row behaviour.
+- Gate: see 091.

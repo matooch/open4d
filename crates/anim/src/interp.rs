@@ -522,3 +522,15 @@ pub fn speed_at(track: &Track, time: f64) -> f64 {
         }
     }
 }
+
+/// The evaluated handles of key `i` as `((left dt, left dv), (right dt, right dv))` in seconds
+/// and value units relative to the key (left `dt` is not positive): the automatic ease, the
+/// chord or the stored user handle, exactly as the curve uses them (for drawing and editing).
+pub fn handles(track: &Track, i: usize) -> Option<((f64, f64), (f64, f64))> {
+    let keys = &track.keys;
+    if i >= keys.len() || keys.len() < 2 {
+        return None;
+    }
+    let t = tangent_with(keys, &resolve(&track.tangents), i);
+    Some(((-t.left, t.left_dv), (t.right, t.right_dv)))
+}

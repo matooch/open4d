@@ -21,6 +21,7 @@ mod param;
 mod snap;
 mod spline;
 pub use param::{stored as display_to_stored, value_from_json as param_value_from_json};
+mod keys;
 mod timeline;
 pub use timeline::timeline_state;
 mod tools;
@@ -40,6 +41,7 @@ pub fn register_editor_commands(r: &mut CommandRegistry) -> Result<(), CommandEr
     snap::register(r)?;
     param::register(r)?;
     timeline::register(r)?;
+    keys::register(r)?;
     file::register(r)?;
     browser::register(r)?;
     Ok(())
