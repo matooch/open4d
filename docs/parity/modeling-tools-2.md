@@ -108,3 +108,12 @@ These outstanding cases are not complete. No existing fixture was changed. Full 
   - Array likewise has no command: its fields must be read from the GUI before the row can be written.
 - Grow Selection, from the same family, is now recorded in the selection form, which is where the
   evidence for "a dialog does not always mean a dead end" lives.
+
+### Close Polygon Hole, tried again 2026-11-20
+
+The tool returns false from a script in every container variant tried, and the mesh stays at 8 points
+and 5 polygons: with the four border edges of the hole selected in edge mode and the hole edge given
+in the container, with the polygon next to the hole selected and its index given, with the quad
+polytype, and with the n-gon polytype and nothing selected. Deleting the top polygon itself works
+(the cube goes to 5 polygons). The row stays not observed; the dialog entry remains the only working
+route found.
