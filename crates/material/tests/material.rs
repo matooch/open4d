@@ -131,5 +131,5 @@ fn texture_tag_defaults() {
     assert_eq!(d("projection"), Value::Enum("spherical".into()));
     assert_eq!(d("tiles_u"), Value::Float(1.0));
     assert_eq!(d("length_u"), Value::Float(1.0));
-    assert_eq!(d("scale"), Value::Vec3([1.0; 3]));
+    assert_eq!(d("size"), Value::Vec3([100.0; 3]));
 }

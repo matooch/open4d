@@ -599,7 +599,7 @@ pub fn texture_tag_type() -> NodeType {
     b.on("seamless", "Seamless", false);
     b.add(ParamDesc::vec3("position", "Position", [0.0; 3]));
     b.add(ParamDesc::vec3("rotation", "Rotation", [0.0; 3]).unit(Unit::Angle));
-    b.add(ParamDesc::vec3("scale", "Scale", [1.0; 3]));
+    b.add(ParamDesc::vec3("size", "Size", [100.0; 3]).range(1e-6, 1e12));
     b.ty
 }
 

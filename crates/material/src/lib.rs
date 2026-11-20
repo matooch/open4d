@@ -4,6 +4,7 @@
 pub mod ir;
 pub mod material;
 pub mod params;
+pub mod projection;
 
 pub use ir::{
     Alpha, Bump, Diffuse, DiffuseModel, Displacement, Fog, IrNode, MixMode, NodeIx, NormalMap,
@@ -11,3 +12,4 @@ pub use ir::{
 };
 pub use material::Material;
 pub use params::{MATERIAL, MaterialPlugin, TEXTURE_TAG, standard_type, texture_tag_type};
+pub use projection::{Camera, Projection, ProjectionError, TagSpace, generate_uvw};

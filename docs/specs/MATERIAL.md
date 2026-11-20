@@ -96,8 +96,8 @@ polygon selection tag by name, empty = whole object); `projection` enum `spheric
 O28 notes "Spherical is the default"), `cylindrical`, `flat`, `cubic`, `frontal`, `spatial`,
 `uvw`, `shrink_wrap`, `camera`; `side` enum `both`, `front`, `back`; `mix_textures` off;
 `offset_u`, `offset_v` 0 %; `length_u`, `length_v` 100 %; `tiles_u`, `tiles_v` 1;
-`repeat_u`, `repeat_v` 1; `seamless` off; `position` (0,0,0), `rotation` (0,0,0) radians,
-`scale` (1,1,1) (the tag's own transform, the projection space, brief 127). Projection maths is
+`repeat_u`, `repeat_v` 1; `seamless` off; `position` (0,0,0), `rotation` (0,0,0) radians (heading, pitch, bank),
+`size` (100,100,100) (the tag's own transform with its Size, O28: the projection space, UV.md U4). Projection maths is
 in UV.md.
 
 ## M5 Unsupported / parity-pending

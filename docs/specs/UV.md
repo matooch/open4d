@@ -62,3 +62,38 @@ sphere 151, cylinder 97, cone 97, torus 561, plane 121, disc 18, capsule 219 use
 - Parity-pending: cone with a top radius > 0 (cap radius), tube cap annulus for a non-default inner
   radius, cube with separate surfaces.
 - No OBJ `vt` reader or writer in `forge-io` (follow-up); the O28 files are parsed in the tests.
+
+## U4 Projections and Generate UVW (brief 127)
+
+Sources: O28 Part B (`proj-*`, 7 cases: a default Sphere made editable, 114 points / 128 polygons,
+projection set on the texture tag, then Generate UVW Coordinates). `forge_material::projection`:
+`generate_uvw(mesh, &TagSpace, Projection, object_to_world) -> Result<CornerUvs, ProjectionError>`.
+
+- **Tag space.** `TagSpace { position, rotation (heading, pitch, bank, radians), size }` with the tag's
+  params `position`, `rotation`, `size` (default 100: O28 `size`). Points go object -> tag space by
+  `R^-1 (p - position)` (identity at the defaults; only the defaults and the Size were observed).
+  Coordinates scale by `1 / size`: `proj-cubic-scaled` (Size 50) is exactly twice `proj-cubic`.
+- **Flat** (`proj-flat`): `u = 0.5 + x / (2 sx)`, `v = 0.5 + y / (2 sy)`.
+- **Cylindrical** (`proj-cylindrical`): `u = atan2(z, x) / 2 pi` (mod 1), `v = 0.5 + y / (2 sy)`.
+- **Spherical** (`proj-spherical`): `u` as cylindrical, `v = atan2(rho, -y) / pi`. Seam rule as the primitive sphere (U2): per polygon, if the corner `u` span exceeds 0.5 the corners
+  below 0.5 get `+1`; a corner on the axis takes the `u` of the previous corner of the polygon (bottom pole fans take the
+  larger of the other two, top fans the smaller; unlike the primitive sphere, which takes the lower one). Cylindrical and
+  spherical coincide with the sphere's own layout where the sphere's rings are equally spaced.
+- **Cubic** (`proj-cubic`, `proj-cubic-scaled`): per polygon, the axis of the largest Newell-normal
+  component (ties: x, then y, then z) and its sign pick the face; `(u, v) = 0.5 + (a p_i, b p_j) /
+  (2 size)` with: normal -x `(-z, y)`, +x `(z, y)`, -y `(x, -z)`, +y `(x, z)`, -z `(x, y)`,
+  +z `(-x, y)`; zero error on all 128 polygons of the sphere.
+- **Offset, length, tiles** are not applied by Generate UVW: `proj-cylindrical-offset` (Offset U 25 %)
+  equals `proj-cylindrical` value for value. They stay on the tag for render-time mapping.
+  Length / tiles / repetitions: **parity-pending** (assumed the same).
+- **Frontal** (`proj-frontal`): a pinhole projection through the document's scene camera
+  (`Camera { position, heading, pitch, bank, aspect }`): `forward = (-sin H cos P, sin P, cos H cos P)`,
+  `right = normalize(up x forward)`, `u = 0.5 + x_c / z_c`, `v = 0.5 + (16 / 9) y_c / z_c`. A free
+  fit of all 114 vertices gives that form (residual 3e-6) with `ku = 0.99905`, heading 44.985 deg,
+  bank 0.005 deg, so the recorded rotation (45, -19.45) and focal ratio do not reproduce the
+  reference exactly. **Known mismatch**: with the recorded camera the largest corner error is
+  3.6e-4 (tolerance 1e-5); pinned. The cause (rounded recorded angles or an unrecorded film setting)
+  needs a re-observation with the camera's focal length, film size and exact rotation.
+- **Unsupported** (`ProjectionError::Unsupported`): Spatial, UVW Mapping (identity, no data),
+  Shrink Wrapping, Camera Mapping, a Frontal projection without a camera, (a non-default tag
+  `rotation` or `position` is implemented but was not observed: **parity-pending**).
