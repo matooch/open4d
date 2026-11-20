@@ -58,6 +58,15 @@ Unblocks: E/067, 076, 077, 078.
 | random-f/sorted | Linear count 20, Random mode Sorted (if offered) | samples |
 | random-f/rot-h | Linear count 20, Random with Position off and Rotation on, R (90, 0, 0) | samples |
 
+## Follow-up cases (planner, after the O50 cloner parity repair)
+
+Redo these two cases as new case folders (keep the old ones):
+
+| Case | Redo as | What was missing |
+|---|---|---|
+| reset-coords-off | reset-coords-off-2 | The child cube's position and rotation must be in `case.toml` (under the child's table), not only in the description |
+| linear-rstep | linear-rstep-2 | The step rotation was described as H but stored in the second (P) slot. Set only Step Rotation H = 10°, read back all three step-rotation values, and store them in H, P, B order |
+
 ## Case results
 
 | Case | State |

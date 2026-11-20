@@ -61,6 +61,15 @@ tangent angles, lock tangent lengths, weighted tangent, and so on.
 | after-continue | the same; Continue | stays at 100 after the last key: the last key's auto tangent is flat, so there is no slope to continue |
 | before-repeat | keys 30 → 0, 60 → 100; before-behaviour Repeat | repeats backwards: 50.0001 at frame 15; at the exact boundary frame 0 it holds the last value of the shifted cycle, 100 |
 
+## Follow-up cases (planner, after the O38 parity repair)
+
+Redo these two cases as new case folders (keep the old ones):
+
+| Case | Redo as | What was missing |
+|---|---|---|
+| linear-to-spline | linear-to-spline-2 | `case.toml` must record each key's interpolation (e.g. `interpolation_by_key = ["Linear", "Spline"]`), not only the description |
+| broken | broken-2 | The read-back right tangent (10, 40) does not match the sampled curve, which follows the automatic flat tangent. Set the broken tangent, **read it back after setting**, evaluate the samples, and record both. If they still disagree, say so in the row |
+
 ## Notes
 
 Case data: `tests/golden/keyframes/<case>/samples.json` (kind track, param pos_x, fps 30,
