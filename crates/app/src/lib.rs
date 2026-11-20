@@ -23,7 +23,7 @@ use forge_core::{Document, EvalCtx, NodeId, Registry, RegistryError, Scene, Scen
 use forge_fields::FieldToolset;
 use forge_generators::{Primitives, evaluate};
 use forge_geometry::PolyMesh;
-use forge_io::formats::{IoError, Options, export_text};
+use forge_io::formats::{IoError, Options, export_bytes};
 use forge_modifiers::Deformers;
 use serde_json::Value;
 
@@ -240,11 +240,11 @@ impl App {
         options: &Options,
     ) -> Result<usize, AppError> {
         let scene = self.eval.get(self.doc.scene(), frame);
-        let (text, count) = export_text(format, &scene, roots, options).map_err(|e| match e {
+        let (bytes, count) = export_bytes(format, &scene, roots, options).map_err(|e| match e {
             IoError::NothingToExport => AppError::NothingToExport,
             other => AppError::Io(other.to_string()),
         })?;
-        std::fs::write(path, text).map_err(|e| AppError::Io(e.to_string()))?;
+        std::fs::write(path, bytes).map_err(|e| AppError::Io(e.to_string()))?;
         Ok(count)
     }
 

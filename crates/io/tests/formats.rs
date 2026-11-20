@@ -24,12 +24,17 @@ fn cube_scene() -> forge_core::Scene {
 
 #[test]
 fn table_and_extension_lookup() {
-    assert_eq!(formats().len(), 1);
+    assert_eq!(
+        formats().iter().map(|f| f.id).collect::<Vec<_>>(),
+        ["obj", "stl", "ply"]
+    );
     let obj = format_by_id("obj").unwrap();
     assert!(obj.import && obj.export);
     assert_eq!(obj.extensions, &["obj"]);
     assert_eq!(format_for_path("a/b/Model.OBJ").unwrap().id, "obj");
-    assert!(format_for_path("model.stl").is_none());
+    assert_eq!(format_for_path("model.STL").unwrap().id, "stl");
+    assert_eq!(format_for_path("model.ply").unwrap().id, "ply");
+    assert!(format_for_path("model.dxf").is_none());
     assert!(format_for_path("noext").is_none());
     assert!(format_by_id("OBJ").is_none());
 }
@@ -101,8 +106,8 @@ fn read_text_flip_z_and_errors() {
         Err(IoError::Parse(_))
     ));
     assert_eq!(
-        read_text("stl", "", &none).unwrap_err(),
-        IoError::UnknownFormat("stl".into())
+        read_text("dxf", "", &none).unwrap_err(),
+        IoError::UnknownFormat("dxf".into())
     );
 }
 
@@ -118,4 +123,54 @@ fn export_text_errors() {
         export_text("zzz", empty.scene(), None, &none),
         Err(IoError::UnknownFormat(_))
     ));
+}
+
+#[test]
+fn stl_and_ply_options_and_byte_entry_points() {
+    use forge_io::formats::{export_bytes, ply_write_options, read_bytes, stl_write_options};
+    for id in ["stl", "ply"] {
+        let descs = export_options(id).unwrap();
+        let opts = default_options(&descs);
+        assert_eq!(opts["binary"], Value::Bool(true), "{id}");
+        assert_eq!(opts["scale"], Value::Float(1.0), "{id}");
+        assert_eq!(import_options(id).unwrap().len(), 1);
+    }
+    assert_eq!(
+        stl_write_options(&default_options(&export_options("stl").unwrap())),
+        forge_io::stl::WriteOptions::default()
+    );
+    assert_eq!(
+        ply_write_options(&default_options(&export_options("ply").unwrap())),
+        forge_io::ply::WriteOptions::default()
+    );
+    let scene = cube_scene();
+    for id in ["stl", "ply"] {
+        let opts = default_options(&export_options(id).unwrap());
+        let (bytes, n) = export_bytes(id, &scene, None, &opts).unwrap();
+        assert_eq!(n, 1);
+        let back = read_bytes(id, &bytes, &default_options(&import_options(id).unwrap())).unwrap();
+        assert_eq!(back.len(), 1, "{id}");
+        assert!(!back[0].mesh.polys.is_empty());
+        // a binary file is not text
+        assert_eq!(
+            export_text(id, &scene, None, &opts).unwrap_err(),
+            IoError::Unsupported(id.into(), "text export"),
+            "{id}"
+        );
+    }
+    // the ASCII forms are text
+    let off = resolve_options(
+        &export_options("stl").unwrap(),
+        &map(json!({"binary": false})),
+    )
+    .unwrap();
+    let (text, _) = export_text("stl", &scene, None, &off).unwrap();
+    assert!(text.starts_with("solid "));
+    let off = resolve_options(
+        &export_options("ply").unwrap(),
+        &map(json!({"binary": false})),
+    )
+    .unwrap();
+    let (text, _) = export_text("ply", &scene, None, &off).unwrap();
+    assert!(text.starts_with("ply\nformat ascii 1.0\n"));
 }

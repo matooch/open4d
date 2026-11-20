@@ -165,7 +165,7 @@ The options themselves are the ones §1 already defines. Every action is a regis
 
 ### 3.1 Format table (`forge_io::formats`)
 `FormatInfo { id, label, extensions, import, export }`. `formats()` lists them in a fixed
-order; today one entry: `obj`, "Wavefront OBJ", extensions `["obj"]`, import and export.
+order: `obj`, "Wavefront OBJ", extensions `["obj"]`; then `stl` and `ply` (§4); all import and export.
 `format_for_path(path)` matches the extension case-insensitively; `format_by_id(id)` matches
 the id exactly (lower case). New formats (area M briefs 164 to 171) add one entry, one pair of
 option lists and one reader/writer arm each.
@@ -180,6 +180,9 @@ id gives `None`.
 | obj | import | `flip_z` | Flip Z | bool | false | `ReadOptions::flip_z` (§1.3) |
 | obj | export | `normals` | Write normals | bool | true | `WriteOptions::normals` (§1.2) |
 | obj | export | `weld` | Merge equal points | bool | true | `WriteOptions::weld` (§1.2) |
+| stl, ply | import | `scale` | Scale | float | 1.0 | multiplier of every coordinate (§4) |
+| stl, ply | export | `binary` | Binary | bool | true | binary or ASCII file (§4) |
+| stl, ply | export | `scale` | Scale | float | 1.0 | multiplier of every coordinate (§4) |
 
 The defaults are the `Default` values of `ReadOptions` and `WriteOptions` (a test pins this).
 
@@ -226,7 +229,7 @@ OK runs `file.import` / `file.export` with the chosen values; Cancel does nothin
 ### 3.6 Batch conversion (CLI.md `forge convert`)
 `forge convert <input> --out <dir> [--format obj] [--option key=value]... [--frame N] [--recursive]
 [--force]` converts one scene file or every scene file of a folder. The glue is in `apps/forge`;
-the formats and options are those above. Rules in CLI.md.
+the formats and options are those above. Converting to `forge` imports each file with the options its own format knows (an option no importable format knows is an error). Rules in CLI.md.
 
 ### 3.7 Checks
 - `crates/io/tests/formats.rs`: the format table, extension lookup (case-insensitive), option
@@ -238,3 +241,56 @@ the formats and options are those above. Rules in CLI.md.
 - `apps/forge/tests/convert.rs`: folder conversion, recursion, options, `--force`, skipped files,
   failures with exit code, `--format forge` from OBJ files, no window.
 - `crates/ui/tests/io_dialog.rs`: the options window (UI.md §27).
+
+## 4. STL and PLY (`forge_io::stl`, `forge_io::ply`; brief 169)
+
+Sources: [exchange.md](../parity/exchange.md) (O44) and the files `scene.stl` of
+`tests/golden/exchange/{static-mesh,hierarchy,anim-transform,skinned-arm,materials,camera-light}` (binary STL, the
+exporter's default options: Scale 1, unit centimetres), the STL and PLY formats as publicly documented. **PLY was not observed**
+(O44: no public export call found, no `scene.ply`), so everything in §4.2 is our own design, **parity-pending**.
+
+Both formats are binary or text, so §3.3 gains the byte entry points `export_bytes(id, scene, roots, &Options) -> (Vec<u8>, usize)`
+and `read_bytes(id, bytes, &Options) -> Vec<ObjObject>`; `export_text` / `read_text` call them and require UTF-8 (a binary result is
+`IoError::Unsupported(id, "text export")`). The commands (`file.import`, `file.export`) and `App::export_at` use the byte forms and write
+or read the file as bytes. Table additions: `stl` "STL" (`stl`), `ply` "PLY" (`ply`), both import and export, after `obj`.
+
+### 4.1 STL (`crates/io/src/stl.rs`)
+**Writer, binary** (default; the only form observed): 80-byte header (text `Forge3D STL export`, zero padded), `u32` triangle count, then
+per triangle 50 bytes: unit normal (3 `f32`), three vertices (9 `f32`), attribute `u16` 0, little endian. Rules, each seen on all 6 files
+(1 468 triangles: 12, 12, 36, 208, 272, and 0 for `camera-light`):
+- **Axes.** A scene point `(x, y, z)` is written `(x, z, y)` (y and z swapped; our scene is Y-up, the format Z-up). This is a mirror, so
+  the winding is reversed to keep the normals outward (next rule). Positions are the world-space evaluated points, no scale (Scale 1,
+  centimetres) except the option `scale`.
+- **Triangulation.** Per polygon, in face order: a triangle `[a, b, c]` is written `[a, c, b]`; a quad `[a, b, c, d]` is written as the two
+  triangles `[a, c, b]`, `[a, d, c]` (the fan from the first corner, in reversed winding). Polygons with more corners are
+  ear-clipped (`forge_geometry::triangulate::triangulate_poly`) and every triangle is reversed the same way (**parity-pending**: no n-gon was exported).
+- **Normal.** The unit vector `(v1 - v0) x (v2 - v0)` of the written triangle (computed in `f64`, stored `f32`; zero for a degenerate triangle).
+- **No sharing:** STL stores every triangle's vertices; objects are written one after the other in scene order (the objects of §1.4).
+  A scene with no polygon is a file of header and count 0 (`camera-light`); `export_*` still reports `NothingToExport` before writing, as for OBJ.
+**Writer, ASCII** (option `binary` off, own design, **parity-pending**): `solid <name>` per object, `facet normal nx ny nz`, `outer loop`, three
+`vertex x y z` lines, `endloop`, `endfacet`, `endsolid <name>`; numbers in Rust shortest `f32` formatting.
+**Reader:** a file is binary when its size is `84 + 50 * count`, otherwise ASCII (`solid` first; the whole file is parsed, `solid` blocks
+become objects, names after `solid`). Triangles go back through the inverse of the rules: points `(x, y, z) -> (x, z, y)`, a triangle `[p0, p1, p2]` becomes the
+polygon `[p0, p2, p1]`; points that are bitwise equal after the `f32` read are merged (STL repeats every shared vertex), in first-occurrence order. Normals and the attribute
+are ignored. The binary file is one object `Object` (STL has no names). Errors: a truncated file, a count that does not fit the size, a non-finite number, an ASCII
+facet without three vertices.
+Options: export `binary` bool true, `scale` float 1.0 (a multiplier of every coordinate); import `scale` float 1.0 (multiplier). The observed
+export table also lists a unit (`centimeters`); other units are not modelled (**parity-pending**).
+
+### 4.2 PLY (`crates/io/src/ply.rs`, own design)
+**Writer:** `format binary_little_endian 1.0` (option `binary` on, default) or `format ascii 1.0`. Header lines: `ply`, `format ...`,
+`comment Forge3D PLY export`, `element vertex N`, `property float x`, `property float y`, `property float z`, `element face M`,
+`property list uchar uint vertex_indices`, `end_header`. One vertex list for the whole file (objects concatenated, world space, scene axes, no swap,
+`f32`), one face per polygon with its corners as written (n-gons kept, indices global); objects are not named (PLY has no objects). ASCII numbers use the shortest
+`f32` formatting. Option `scale` (1.0).
+**Reader:** `ply` magic, `format ascii 1.0` / `binary_little_endian 1.0` / `binary_big_endian 1.0`, `comment` and `obj_info` lines skipped, any number of elements; `vertex`
+properties `x`, `y`, `z` of any numeric type are used and others skipped; the `face` element's list property named `vertex_indices` or `vertex_index`
+gives the polygons (index type any integer type); other elements and properties are skipped by their declared size. Faces with fewer than 3 corners and an
+index out of range are errors with the element number; the result is one object `Object`. Errors: a missing magic, an unknown format keyword, a
+list property that is not a face list, a file shorter than its header declares. Option `scale` (1.0).
+
+### 4.3 Checks
+`crates/io/tests/exchange_stl_ply.rs`: for the six `exchange` cases the golden `scene.stl` equals our binary STL of the case's `mesh.obj` geometry
+(triangle count, vertices and normals within `1e-3`, exact corner order), a read of the golden file gives back the OBJ's point set (within `1e-3`) and
+polygons as triangles; round trips (`write` then `read` for STL binary, STL ASCII, PLY ASCII, PLY binary: points and polygons); the readers' error cases; the
+scene entry points (`export_bytes` of a cube scene, `read_bytes`), format table and option defaults. Level B (INFRA.md).
