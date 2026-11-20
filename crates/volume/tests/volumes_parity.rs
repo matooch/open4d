@@ -138,6 +138,52 @@ fn apply(tx: &mut Tx, reg: &Registry, id: NodeId, type_id: &str, t: &Table) {
     }
 }
 
+/// The operator index of a filter case: the description names it (`Operator 4`); the case table
+/// of the mean, median and Laplacian cases still reads 0 (VOLUME.md section 8.2).
+fn operator_index(t: &Table, description: &str) -> i64 {
+    description
+        .split("Operator ")
+        .nth(1)
+        .and_then(|rest| rest.chars().next()?.to_digit(10))
+        .map_or_else(|| t["operator"].as_integer().unwrap(), i64::from)
+}
+
+fn apply_filter(tx: &mut Tx, id: NodeId, t: &Table, description: &str) {
+    let kind = ["offset", "reshape", "smooth"][t["type"].as_integer().unwrap() as usize];
+    tx.set_param(id, "kind", Value::Enum(kind.into())).unwrap();
+    let op = match operator_index(t, description) {
+        0 => "gaussian",
+        1 => "mean",
+        2 => "median",
+        4 => "laplacian",
+        other => panic!("operator {other}"),
+    };
+    tx.set_param(id, "smooth_operator", Value::Enum(op.into()))
+        .unwrap();
+    tx.set_param(id, "offset", Value::Float(f(&t["offset"])))
+        .unwrap();
+    tx.set_param(
+        id,
+        "iterations",
+        Value::Int(t["iterations"].as_integer().unwrap()),
+    )
+    .unwrap();
+    tx.set_param(id, "strength", Value::Float(f(&t["strength"])))
+        .unwrap();
+    tx.set_param(
+        id,
+        "voxel_distance",
+        Value::Int(t["voxel_distance"].as_integer().unwrap()),
+    )
+    .unwrap();
+    tx.set_param(
+        id,
+        "voxel_range",
+        Value::Int(t["voxel_range"].as_integer().unwrap()),
+    )
+    .unwrap();
+}
+
 pub struct Built {
     pub doc: Document,
     pub mesher: NodeId,
@@ -145,7 +191,7 @@ pub struct Built {
 }
 
 /// The scene a case describes: mesher, builder child, the input objects under the builder.
-pub fn build_case(reg: &Arc<Registry>, params: &Table) -> Built {
+pub fn build_case(reg: &Arc<Registry>, params: &Table, description: &str) -> Built {
     let mut doc = Document::new(reg.clone());
     let (mesher, builder) = doc
         .transact("case", |tx| {
@@ -184,6 +230,11 @@ pub fn build_case(reg: &Arc<Registry>, params: &Table) -> Built {
                 other => panic!("volume type {other}"),
             };
             tx.set_param(builder, "volume_type", Value::Enum(vt.into()))?;
+            // a filter layer is listed above the objects, so it is the first child
+            if let Some(t) = params.get("filter").and_then(|v| v.as_table()) {
+                let id = tx.create("forge.volume_filter", Some(builder), None)?;
+                apply_filter(tx, id, t, description);
+            }
             // inputs: input, input2, ..., or a Null `input` with children input_a, input_b
             let table = |k: &str| params.get(k).and_then(|v| v.as_table());
             let mut parents: BTreeMap<&str, NodeId> = BTreeMap::new();
@@ -221,19 +272,13 @@ fn mesh_of(b: &Built) -> Mesh {
 
 /// Cases the reference observed that depend on later briefs (filter layers: 082, field layers:
 /// 085, adaptivity: 083); each is listed with the reason and asserted still unmatched or unbuilt.
-const UNSUPPORTED: &[(&str, &str)] = &[
-    ("dilate", "filter layer: brief 082"),
-    ("erode", "filter layer: brief 082"),
-    ("smooth-gaussian", "filter layer: brief 082"),
-    ("smooth-laplacian", "filter layer: brief 082"),
-    ("smooth-mean", "filter layer: brief 082"),
-    ("smooth-median", "filter layer: brief 082"),
-    ("smooth-strength", "filter layer: brief 082"),
-    ("field-layer", "field layer: brief 085"),
-];
+const UNSUPPORTED: &[(&str, &str)] = &[("field-layer", "field layer: brief 085")];
 
 /// Built, but the geometric comparison fails.
-const KNOWN_MISMATCH: &[(&str, &str)] = &[];
+const KNOWN_MISMATCH: &[(&str, &str)] = &[(
+    "smooth-strength",
+    "three Gaussian iterations: the reference rounds the cube to a near sphere, our iterated box means reach area +6.5 %, Hausdorff 7.5 (VOLUME.md 8.3)",
+)];
 
 /// Cases whose point and face counts equal the reference's and whose every vertex is within
 /// 1e-3 of a reference vertex (VOLUME.md section 7.2).
@@ -295,17 +340,29 @@ fn volumes_match_the_reference_geometrically() {
         let params: Table = man.params.clone().into_iter().collect();
         if let Some((_, why)) = UNSUPPORTED.iter().find(|(n, _)| *n == case.name) {
             assert!(
-                params.contains_key("filter") || params.contains_key("field"),
-                "{}: listed as unsupported ({why}) but has no layer",
+                params.contains_key("field"),
+                "{}: listed as unsupported ({why}) but has no field layer",
                 case.name
             );
             continue;
         }
-        let built = build_case(&reg, &params);
+        let built = build_case(&reg, &params, man.description.as_deref().unwrap_or(""));
         let ours = mesh_of(&built);
         let exp = case.expected_mesh().unwrap().unwrap();
         let voxel = f(&params["builder"].as_table().unwrap()["voxel_size"]);
         let r = compare_volume_mesh(&exp, &ours, voxel);
+        if std::env::var_os("VOLUME_REPORT").is_some() {
+            println!(
+                "{:<18} pts {:>5}/{:<5} haus {:.2}/{:.2} area {:.0}/{:.0}",
+                case.name,
+                exp.positions.len(),
+                ours.positions.len(),
+                r.hausdorff_expected_to_actual,
+                r.hausdorff_actual_to_expected,
+                r.area.0,
+                r.area.1
+            );
+        }
         if let Some((_, why)) = KNOWN_MISMATCH.iter().find(|(n, _)| *n == case.name) {
             assert!(
                 !r.passed(),
@@ -342,7 +399,7 @@ fn volumes_match_the_reference_geometrically() {
     }
     assert!(listed.iter().all(|n| seen.contains(*n)), "stale list entry");
     assert_eq!(seen.len(), 21, "the volumes golden set changed");
-    assert_eq!(matched.len(), 13, "matched: {matched:?}");
+    assert_eq!(matched.len(), 19, "matched: {matched:?}");
     for n in EXACT {
         assert!(matched.iter().any(|m| m == n), "{n} missing");
     }

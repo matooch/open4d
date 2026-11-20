@@ -129,8 +129,11 @@ geometry evaluation is `None` and the mesher (§7) or another consumer reads the
   not scriptable in the reference (O32 subtract / intersect: not observed), so the three blends
   are **parity-pending, own design**: `union`, `subtract` (`acc - entry`), `intersect`.
 - A disabled node (`object.enabled` off) or a disabled row is skipped.
-- Entries are applied top to bottom; the **first** entry initialises the accumulator whatever its
-  blend (own design).
+- Entries are applied **bottom to top**: the last child is evaluated first and the first child
+  (top of the list) last. Derived from **O33 smooth-gaussian and the other filter cases**: the
+  filter is listed above the cube and filters it, so a layer acts on everything below it. The
+  bottom entry initialises the accumulator whatever its blend (own design); every other entry is
+  combined with the result so far by its blend (§4), filter layers (§8) transform it.
 - Entry kinds:
   - **polygon objects** (anything `forge_generators::evaluate` turns into a mesh, clones
     included) go through `mesh_to_sdf` (§2) in builder space with the interior and exterior
@@ -139,7 +142,7 @@ geometry evaluation is `None` and the mesher (§7) or another consumer reads the
     spline radius of §6.3 and `spline_voxel_range`;
   - **volume builders** as children: their volume, resampled trilinearly onto this lattice when the
     lattice differs (**own design**);
-  - filter layers (§8) and field layers (§9) belong to briefs 082 and 085.
+  - filter layers (`forge.volume_filter`, §8); field layers belong to brief 085 (§9).
 - Entry meshes are placed with `world(builder)^-1 * world(child)`, so the grid is in the builder's
   local space; the mesher puts the mesh into its own space with the builder's local transform.
 
@@ -260,3 +263,75 @@ Cases are compared with `compare_volume_mesh` at the voxel size (§5) and, for t
 sources, also by point and face count (strict). The reference quad numbering and start corners
 are not reproduced; the fan triangulation of non-planar quads at the cube edges makes the
 two-sided Hausdorff 0.43 (cube, voxel 10), well below voxel / 2.
+
+## 8. Filter layers (`forge.volume_filter`)
+
+A child of the builder that transforms the distance field accumulated from the entries below it
+(§6.2). Filters change the active band only (values outside it are the backgrounds) and every filter
+step is followed by a **re-distance** (§8.1).
+
+### 8.1 Re-distance
+
+`redistance(grid, band)`: the sign is `value < 0`; for each lattice edge with a sign change the
+linear crossing gives the distance of both ends to the interface; the rest of the dense box
+(active bounds grown by the band) follows from a first order fast sweeping solve of
+`|grad d| = 1` (8 orderings, twice), the voxels next to the surface initialised with
+`|value| / |gradient|` (never above the edge crossing); samples beyond the band are dropped and the interior is
+filled (§2.5). A grid that is already a distance field comes back with the same surface (the
+cube-defaults mesh after a re-distance has Hausdorff 0.43 to the reference, the fan triangulation
+effect of §7.8).
+
+### 8.2 Parameters (O33)
+
+The scripted reference form names a filter by integers; read-back of a fresh filter: Type 2,
+Operator 0, Offset 5, Iterations 1, Strength 1, Voxel Distance 2, Voxel Range 3.
+**Data note:** the `[params.filter]` tables of the mean, median and Laplacian cases still read
+`operator = 0`; the case descriptions and the O33 table say Operator 1, 2 and 4, and the meshes
+differ accordingly, so the operator is read from the description.
+
+| id | label | kind | default | notes |
+|---|---|---|---|---|
+| `kind` | Type | Enum `offset, reshape, smooth` (reference 0, 1, 2) | `smooth` | other reference types not observed |
+| `smooth_operator` | Operator | Enum `gaussian, mean, median, laplacian` (reference 0, 1, 2, 4) | `gaussian` | reference 3 not observed: not offered |
+| `offset` | Offset | Float, distance | 5 | `offset` and `reshape` only; ignored by `smooth` (O33 notes) |
+| `iterations` | Iterations | Int 1 .. 1000 | 1 | |
+| `strength` | Strength | Float 0 .. 1 | 1 | clamped (O33: 5.0 reads back 1.0, no change); blend of the filtered field into the input, 1 = filtered |
+| `voxel_distance` | Voxel Distance | Int 1 .. 16 | 2 | window half width of mean and median; the Gaussian uses twice this |
+| `voxel_range` | Voxel Range | Int 1 .. 16 | 3 | stored, no observed effect |
+
+The type `offset` (reference Type 0: "changes the mesh" with Offset 10, direction not observed)
+moves the surface outwards by `offset` (own design, parity-pending).
+
+### 8.3 Operators
+
+All read neighbours through `get` (unstored voxels read the background or the filled interior),
+update the active voxels, run `iterations` times, each iteration followed by the re-distance with
+the band of the builder.
+
+- **mean**: box mean of half width `voxel_distance`, separable. Golden **smooth-mean**: 2168 points
+  as the reference, Hausdorff 2.1.
+- **median**: median of the `(2 voxel_distance + 1)^3` cube. Golden **smooth-median**: 2096 points
+  as the reference, Hausdorff 0.57.
+- **gaussian**: the sequence of box means of half widths `2 voxel_distance, ..., 2, 1` (a Gaussian
+  as iterated boxes), then one re-distance per iteration. Golden **smooth-gaussian** (1 iteration):
+  2096 points as the reference, Hausdorff 3.3, area -0.3 %. **smooth-strength** (3 iterations): the
+  reference has 1776 points, area 121312 and a nearly spherical bbox +-94.7; the same rule gives
+  1832 points, area +6.5 % and Hausdorff 7.5: a **known mismatch**. Scanning widths 3 to 6 and the
+  place of the re-distance found no single rule for 1 and 3 iterations.
+- **laplacian**: explicit Laplacian flow `v += strength / 6 * L(v)` with the 7-point Laplacian;
+  the re-distance leaves a cube's surface unchanged. Golden **smooth-laplacian**: the reference
+  mesh is byte-identical to the unfiltered cube; ours is the same surface (Hausdorff 0.43).
+
+**Reshape** (`offset` is the radius): `offset > 0` closes (dilate by the radius, then erode),
+`offset < 0` opens (erode, then dilate); each step shifts the field by the radius and
+re-distances. Derived from **O33 dilate and erode** at voxel 10: closing a cube changes nothing
+(topology and bbox equal to the unfiltered cube, vertices move up to 0.31); opening rounds the
+convex edges and corners (topology equal, the face centres stay on the cube, bbox +-100, 992 of
+2168 vertices move up to 4.28, the quarter circle `r (sqrt(2) - 1) = 4.14` of an edge opened with
+radius 10). Goldens: dilate Hausdorff 0.74, erode 3.55 (limit 5), area within 1.9 % (limit 2 %).
+
+Not observed and `Unsupported`: the curve remap and the other reference filter types.
+
+## 9. Field layers
+
+*(brief 085.)*

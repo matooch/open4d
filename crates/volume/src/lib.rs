@@ -3,6 +3,7 @@
 
 pub mod bvh;
 pub mod csg;
+pub mod filters;
 pub mod grid;
 pub mod mesher;
 pub mod node;
@@ -15,7 +16,7 @@ pub use mesher::{
     volume_to_mesh,
 };
 pub use node::{
-    BUILDER, MESHER, Volume, VolumeBuildError, VolumeKind, VolumePlugin, build_volume,
+    BUILDER, FILTER, MESHER, Volume, VolumeBuildError, VolumeKind, VolumePlugin, build_volume,
     mesh_volume_node, sdf_to_fog,
 };
 pub use sdf::{PointUnion, SdfParams, mesh_to_sdf, points_to_sdf, spline_to_sdf};

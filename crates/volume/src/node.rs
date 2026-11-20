@@ -12,11 +12,13 @@ use forge_geometry::PolyMesh;
 use glam::{DMat4, DVec3, IVec3};
 
 use crate::csg::{CsgOp, combine};
+use crate::filters::{self, Band, FilterKind, SmoothOp};
 use crate::grid::SparseGrid;
 use crate::sdf::{SdfParams, mesh_to_sdf, spline_to_sdf};
 
 pub const BUILDER: &str = "forge.volume_builder";
 pub const MESHER: &str = "forge.volume_mesher";
+pub const FILTER: &str = "forge.volume_filter";
 
 /// Why a volume could not be built.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -90,6 +92,36 @@ fn builder_type() -> NodeType {
         ))
 }
 
+fn filter_type() -> NodeType {
+    NodeType::new(FILTER, "Volume Filter", Category::Generator)
+        .param(ParamDesc::enumeration(
+            "kind",
+            "Type",
+            "smooth",
+            &[
+                ("offset", "Offset"),
+                ("reshape", "Reshape"),
+                ("smooth", "Smooth"),
+            ],
+        ))
+        .param(ParamDesc::enumeration(
+            "smooth_operator",
+            "Operator",
+            "gaussian",
+            &[
+                ("gaussian", "Gaussian"),
+                ("mean", "Mean"),
+                ("median", "Median"),
+                ("laplacian", "Laplacian Flow"),
+            ],
+        ))
+        .param(ParamDesc::float("offset", "Offset", 5.0).unit(Unit::Distance))
+        .param(ParamDesc::int("iterations", "Iterations", 1).range(1, 1000))
+        .param(ParamDesc::float("strength", "Strength", 1.0).range(0.0, 1.0))
+        .param(ParamDesc::int("voxel_distance", "Voxel Distance", 2).range(1, 16))
+        .param(ParamDesc::int("voxel_range", "Voxel Range", 3).range(1, 16))
+}
+
 fn mesher_type() -> NodeType {
     NodeType::new(MESHER, "Volume Mesher", Category::Generator)
         .param(
@@ -139,6 +171,7 @@ impl Plugin for VolumePlugin {
 
     fn register(&self, r: &mut Registry) -> Result<(), RegistryError> {
         r.register(builder_type())?;
+        r.register(filter_type())?;
         r.register(mesher_type())?;
         r.set_evaluator(MESHER, Arc::new(MesherEvaluator))
     }
@@ -204,6 +237,13 @@ enum Source {
     Mesh(PolyMesh),
     Spline { points: Vec<DVec3>, closed: bool },
     Volume(Box<Volume>),
+    Filter(FilterSpec),
+}
+
+/// A filter layer as read from its node.
+struct FilterSpec {
+    kind: FilterKind,
+    iterations: u32,
 }
 
 struct Settings {
@@ -254,6 +294,10 @@ fn gather(
     if !forge_core::visibility::enabled(scene, node) {
         return Ok(());
     }
+    if n.type_id == FILTER {
+        out.push((node, Source::Filter(filter_spec(&n.params))));
+        return Ok(());
+    }
     let world = scene
         .world_matrix(node)
         .ok_or_else(|| VolumeBuildError::Failed("a list entry has no transform".into()))?;
@@ -289,6 +333,32 @@ fn gather(
         }
         Err(forge_generators::BuildError::Unsupported(w)) => Err(VolumeBuildError::Unsupported(w)),
         Err(e) => Err(VolumeBuildError::Failed(e.to_string())),
+    }
+}
+
+fn filter_spec(values: &BTreeMap<String, Value>) -> FilterSpec {
+    let p = P {
+        ty: filter_type(),
+        values,
+    };
+    let distance = p.float("offset");
+    let kind = match p.enumeration("kind").as_str() {
+        "offset" => FilterKind::Offset { distance },
+        "reshape" => FilterKind::Reshape { distance },
+        _ => FilterKind::Smooth {
+            op: match p.enumeration("smooth_operator").as_str() {
+                "mean" => SmoothOp::Mean,
+                "median" => SmoothOp::Median,
+                "laplacian" => SmoothOp::Laplacian,
+                _ => SmoothOp::Gaussian,
+            },
+            width: p.int("voxel_distance") as u32,
+            strength: p.float("strength"),
+        },
+    };
+    FilterSpec {
+        kind,
+        iterations: p.int("iterations") as u32,
     }
 }
 
@@ -387,12 +457,23 @@ fn build_volume_inner(
     for c in node.children.clone() {
         gather(scene, c, ctx, &to_builder, &mut entries, depth)?;
     }
+    let band = Band {
+        exterior: s.sdf.exterior_band(),
+        interior: s.sdf.interior_band(),
+    };
+    // bottom to top: a layer acts on everything below it (VOLUME.md section 6.2)
     let mut acc: Option<SparseGrid<f32>> = None;
-    for (id, source) in entries {
+    for (id, source) in entries.into_iter().rev() {
         // a row keyed by the direct child; entries below a Null have no row of their own
         let row = overrides.iter().find(|r| r.target == id);
         let Some(blend) = blend_of(row) else { continue };
         let grid = match source {
+            Source::Filter(f) => {
+                if let Some(a) = acc.take() {
+                    acc = Some(filters::apply(&a, f.kind, f.iterations, band));
+                }
+                continue;
+            }
             Source::Mesh(m) => mesh_to_sdf(&m, &s.sdf),
             Source::Spline { points, closed } => {
                 spline_to_sdf(&points, closed, spline_radius(&s), &s.sdf)

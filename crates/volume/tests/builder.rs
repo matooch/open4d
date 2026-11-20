@@ -119,6 +119,7 @@ fn entries_are_unions_by_default_and_the_mesh_covers_both() {
 
 #[test]
 fn the_objects_rows_set_the_blend_and_enabled_per_child() {
+    // children are the list top to bottom, evaluated bottom to top: `b` first, then `a` by its blend
     let mut s = scene();
     let a = s.add("forge.cube", None, [0.0, 0.0, 0.0]);
     let b = s.add("forge.cube", None, [100.0, 0.0, 0.0]);
@@ -131,26 +132,25 @@ fn the_objects_rows_set_the_blend_and_enabled_per_child() {
         value(&s, [-8, 0, 0]) < 0.0 && value(&s, [18, 0, 0]) < 0.0,
         "union"
     );
-    blend(&mut s, vec![LinkRow::new(b, "subtract")]);
-    assert!(value(&s, [-8, 0, 0]) < 0.0, "a only");
+    blend(&mut s, vec![LinkRow::new(a, "subtract")]);
+    assert!(value(&s, [18, 0, 0]) < 0.0, "b only");
     assert!(value(&s, [5, 0, 0]) > 0.0, "the overlap is cut away");
-    assert!(value(&s, [18, 0, 0]) > 0.0, "b alone does not appear");
-    blend(&mut s, vec![LinkRow::new(b, "intersect")]);
+    assert!(value(&s, [-8, 0, 0]) > 0.0, "a alone does not appear");
+    blend(&mut s, vec![LinkRow::new(a, "intersect")]);
     assert!(value(&s, [5, 0, 0]) < 0.0);
     assert!(value(&s, [-8, 0, 0]) > 0.0 && value(&s, [18, 0, 0]) > 0.0);
-    let mut off = LinkRow::new(b, "union");
+    let mut off = LinkRow::new(a, "union");
     off.enabled = false;
     blend(&mut s, vec![off]);
-    assert!(value(&s, [18, 0, 0]) > 0.0, "a disabled row is skipped");
+    assert!(value(&s, [-8, 0, 0]) > 0.0, "a disabled row is skipped");
     // a disabled object is skipped too
     blend(&mut s, vec![]);
     s.set(b, "object.enabled", Value::Bool(false));
     assert!(value(&s, [18, 0, 0]) > 0.0 && value(&s, [-8, 0, 0]) < 0.0);
-    let _ = a;
 }
 
 #[test]
-fn the_first_entry_starts_the_accumulator_whatever_its_blend() {
+fn the_bottom_entry_starts_the_accumulator_whatever_its_blend() {
     let mut s = scene();
     let a = s.add("forge.cube", None, [0.0; 3]);
     let builder = s.builder;
@@ -284,4 +284,90 @@ fn splines_become_tubes() {
     assert!(v.grid.get(idx) < 0.0, "{p0:?}");
     assert!(v.grid.get(idx + IVec3::X * 3) > 0.0);
     assert!((f64::from(v.grid.get(idx)) - (0.0 - 14.7)).abs() < 1e-3);
+}
+
+#[test]
+fn a_filter_layer_acts_on_the_entries_below_it() {
+    let mut s = scene();
+    // list: the filter on top, the cube below it
+    let filter = s.add("forge.volume_filter", None, [0.0; 3]);
+    let cube = s.add("forge.cube", None, [0.0; 3]);
+    s.set(filter, "kind", Value::Enum("reshape".into()));
+    s.set(filter, "offset", Value::Float(-10.0));
+    // opening with radius 10 rounds the edges: the mesh loses volume and keeps its faces
+    let opened = s.mesh().unwrap();
+    let plain = {
+        let b = s.builder;
+        s.set(
+            b,
+            "objects",
+            Value::LinkRows(vec![LinkRow {
+                enabled: false,
+                ..LinkRow::new(filter, "union")
+            }]),
+        );
+        let m = s.mesh().unwrap();
+        s.set(b, "objects", Value::LinkRows(vec![]));
+        m
+    };
+    let vol = |m: &forge_geometry::PolyMesh| {
+        m.polys
+            .iter()
+            .map(|f| {
+                (1..f.len() - 1)
+                    .map(|i| {
+                        m.points[f[0] as usize]
+                            .dot(m.points[f[i] as usize].cross(m.points[f[i + 1] as usize]))
+                            / 6.0
+                    })
+                    .sum::<f64>()
+            })
+            .sum::<f64>()
+    };
+    assert!(
+        vol(&opened) < vol(&plain) - 1000.0,
+        "{} {}",
+        vol(&opened),
+        vol(&plain)
+    );
+    assert_eq!(opened.polys.len(), plain.polys.len());
+    assert!(value(&s, [0, 0, 0]) < 0.0);
+    // the same filter below the cube (last child) has nothing to act on
+    let builder = s.builder;
+    s.d.transact("move", |tx| tx.move_node(filter, Some(builder), Some(1)))
+        .unwrap();
+    assert_eq!(
+        s.d.scene().node(builder).unwrap().children,
+        vec![cube, filter]
+    );
+    assert!(value(&s, [-9, -9, -9]) < 0.0);
+}
+
+#[test]
+fn filter_parameters_and_offset() {
+    let mut s = scene();
+    let filter = s.add("forge.volume_filter", None, [0.0; 3]);
+    s.add("forge.cube", None, [0.0; 3]);
+    s.set(filter, "kind", Value::Enum("offset".into()));
+    s.set(filter, "offset", Value::Float(10.0));
+    // the surface moves out by one voxel: the sample on the cube face is now inside
+    assert!(value(&s, [-10, 0, 0]) < 0.0);
+    assert!(value(&s, [-11, 0, 0]) >= 0.0);
+    s.set(filter, "kind", Value::Enum("smooth".into()));
+    s.set(filter, "strength", Value::Float(0.0));
+    // strength 0 blends nothing in: the cube is unchanged
+    assert_eq!(value(&s, [-10, 0, 0]), 0.0);
+    let ty =
+        s.d.scene()
+            .registry()
+            .get("forge.volume_filter")
+            .unwrap()
+            .clone();
+    assert_eq!(ty.find_param("iterations").unwrap().default, Value::Int(1));
+    assert_eq!(
+        ty.find_param("voxel_distance").unwrap().default,
+        Value::Int(2)
+    );
+    assert_eq!(ty.find_param("voxel_range").unwrap().default, Value::Int(3));
+    assert_eq!(ty.find_param("offset").unwrap().default, Value::Float(5.0));
 }
