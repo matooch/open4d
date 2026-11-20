@@ -1,0 +1,18 @@
+feature = "animation-2"
+observation = "docs/parity/animation-2.md"
+description = "Cube with a Vibrate tag, position only: amplitude (50, 50, 50), frequency 2, seed 0"
+
+[params]
+param = ["pos_x", "pos_y", "pos_z"]
+tag = "Vibrate"
+enable_position = true
+enable_scale = false
+enable_rotation = false
+position_amplitude = [50.0, 50.0, 50.0]
+position_frequency = 2.0
+seed = 0.0
+regular_pulse = false
+relative = true
+object = "Cube"
+document_fps = 30
+sample_frames = ["0..90 every frame", "plus 0.5, 14.5, 29.5"]

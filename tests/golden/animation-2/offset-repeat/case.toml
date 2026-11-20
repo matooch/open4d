@@ -1,0 +1,11 @@
+feature = "animation-2"
+observation = "docs/parity/animation-2.md"
+description = "Cube pos X keyed 0 to 100 over f0..f30, track after-behaviour set to Offset Repeat"
+
+[params]
+param = "pos_x"
+keys = [[0, 0.0], [30, 100.0]]
+after_behaviour = "Offset Repeat"
+object = "Cube"
+document_fps = 30
+sample_frames = ["0..90 every frame", "plus 0.5, 14.5, 29.5"]
