@@ -1446,6 +1446,7 @@ dependencies = [
  "forge-generators",
  "forge-geometry",
  "forge-io",
+ "forge-material",
  "forge-modeling",
  "forge-modifiers",
  "forge-nodes",
@@ -1623,6 +1624,13 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "toml",
+]
+
+[[package]]
+name = "forge-material"
+version = "0.1.0"
+dependencies = [
+ "forge-core",
 ]
 
 [[package]]

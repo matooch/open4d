@@ -1,0 +1,12 @@
+[package]
+name = "forge-material"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Standard material, texture tag and the shading IR (docs/specs/MATERIAL.md)."
+
+[dependencies]
+forge-core = { path = "../core" }
+
+[lints]
+workspace = true

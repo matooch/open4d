@@ -1,6 +1,6 @@
 # 123 · Material model: Standard material + material tag + IR compile
 
-Status: waiting: O29 · Area: J · Depends on: – · Observations: O29 · Touches: material (new), plugin
+Status: done · Area: J · Depends on: – · Observations: O29 · Touches: material (new), plugin
 
 ## Goal
 A Standard material node with the reference default channels, a material tag on objects, and a shading IR both renderers consume.
@@ -16,9 +16,9 @@ A Standard material node with the reference default channels, a material tag on 
 - Material tag: link + projection (projection details in 127).
 
 ## Done when
-- [ ] MATERIAL.md spec citing O29.
-- [ ] IR unit tests.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] MATERIAL.md spec citing O29.
+- [x] IR unit tests.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -28,9 +28,8 @@ A Standard material node with the reference default channels, a material tag on 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: 8 tests in crates/material/tests/material.rs; no golden cases (O29 is a form only, O43 needs a renderer).
+- Rules: O29 defaults pinned (`defaults_match_o29`); channel/mix/enable rules in MATERIAL.md M3 are parity-pending (published models).
+- Deviations: materials and shaders cannot be scene nodes yet (`Document::create` refuses `Category::Material`; no Slot for them), so the tag's `material` link cannot be set and texture slots are shader-name strings; `Material::from_values` builds from a param map. A core brief must add hosting. Percent fields are stored as fractions.
+- Files: crates/material (new), docs/specs/MATERIAL.md, crates/app (plugin install), icons material + tag_texture.
+- Open: core slot for Material/Shader nodes.

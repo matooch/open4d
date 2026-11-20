@@ -42,6 +42,7 @@ pub fn default_registry() -> Result<Registry, RegistryError> {
     registry.install(&forge_nodes::NodesToolset)?;
     registry.install(&forge_rig::Rig)?;
     registry.install(&forge_volume::VolumePlugin)?;
+    registry.install(&forge_material::MaterialPlugin)?;
     Ok(registry)
 }
 
