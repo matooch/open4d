@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::layers::{self, Layer, Layers};
 use crate::{
     Category, LinkRow, MeshData, Node, NodeId, Registry, Scene, SceneSettings, TimeConfig, Track,
-    Value, parse_target,
+    Value, parse_track_target,
 };
 
 pub const FORMAT: &str = "forge3d-scene";
@@ -930,7 +930,7 @@ impl Loader<'_> {
         for (key, track) in r.tracks {
             let verdict = match &ty {
                 None => Ok(()),
-                Some(ty) => parse_target(&key, |p| ty.find_param(p))
+                Some(ty) => parse_track_target(&key, |p| ty.find_param(p))
                     .map(|_| ())
                     .and_then(|()| track.validate()),
             };

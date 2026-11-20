@@ -7,7 +7,7 @@ use crate::layers::{self, Layer, LayerId, Layers};
 use crate::scene::{Slot, SlotOwner, Subtree};
 use crate::{
     Category, Key, NodeId, ParamError, ParamKind, Registry, Scene, SceneSettings, TimeConfig,
-    Track, TrackError, Value, parse_target,
+    Track, TrackError, Value, parse_track_target,
 };
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -366,7 +366,7 @@ impl Tx<'_> {
                 .registry()
                 .get(&node.type_id)
                 .ok_or_else(|| EditError::UnknownType(node.type_id.clone()))?;
-            parse_target(key, |p| ty.find_param(p))?;
+            parse_track_target(key, |p| ty.find_param(p))?;
             t.validate()?;
         }
         self.push(Edit::SetTrack {

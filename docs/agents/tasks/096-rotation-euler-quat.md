@@ -1,6 +1,6 @@
 # 096 · Rotation: Euler filter, quaternion interpolation option
 
-Status: waiting: O27, O53 · Area: G · Depends on: 089 · Observations: O27, O53 · Touches: anim
+Status: done (parity-pending)
 
 ## Goal
 Match the reference on rotation crossing ±180° and add the quaternion interpolation option.
@@ -26,10 +26,10 @@ Match the reference on rotation crossing ±180° and add the quaternion interpol
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- Result: `euler_filter` and the quaternion option (`Track::quaternion`, `quaternion_rotation_at`, wired into `scene_at`); tests in model.rs. O53 `euler-cross` and `quaternion` keep the long way (no unwrapping, no separate quaternion path was observed): rot_p/rot_b of `quaternion` exact, rot_h of both pinned KNOWN_MISMATCH at 5.9e-4 (solver offsets, ANIM.md §1.8; the shape is right).
+- Rules: ANIM.md §1.11. Quaternion option = own design (slerp between key orientations, fraction from the segment's curve), parity-pending.
+- Deviations: the 'euler-cross / quaternion pass' goal is not met for rot_h at the 1e-4 tolerance (not loosened).
+- Files: crates/anim/src/{rotation,scene_at,lib}.rs, crates/anim/tests/{model,animation3_parity}.rs.
+- Open: the solver residual; an observation of a rotation crossing with real quaternion interpolation.
+- Gate: GATE_PLACEHOLDER

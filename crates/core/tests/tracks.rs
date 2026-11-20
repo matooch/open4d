@@ -77,7 +77,8 @@ fn set_track_validates_and_rejects_bad_targets() {
 
     let before = file::save(doc.scene());
     for (key, t, expect) in [
-        ("segments", good.clone(), "BadTarget"),
+        ("note", good.clone(), "BadTarget"),
+        ("tint", good.clone(), "BadTarget"),
         ("offset", good.clone(), "BadTarget"),
         ("size", Track::default(), "Empty"),
         ("size", track(&[(1.0, 0.0), (0.5, 1.0)]), "Unsorted"),
@@ -216,7 +217,7 @@ fn invalid_stored_tracks_are_dropped_with_a_warning_and_unknown_types_keep_their
     let text = r#"(format: "forge3d-scene", version: 4, roots: [
         (id: 1, type_id: "test.box", name: "b", tags: [], children: [], params: {}, tracks: {
             "size": (keys: [(time: 0.0, value: 1.0, interp: Spline)]),
-            "segments": (keys: [(time: 0.0, value: 1.0, interp: Spline)]),
+            "note": (keys: [(time: 0.0, value: 1.0, interp: Spline)]),
             "offset.y": (keys: [(time: 1.0, value: 1.0, interp: Step), (time: 0.0, value: 2.0, interp: Spline)]),
         }),
         (id: 2, type_id: "ghost.type", name: "g", tags: [], children: [], params: {}, tracks: {
@@ -233,7 +234,7 @@ fn invalid_stored_tracks_are_dropped_with_a_warning_and_unknown_types_keep_their
         .collect();
     assert_eq!(tracks, ["size"]);
     assert_eq!(report.warnings.len(), 3, "{:?}", report.warnings);
-    assert!(report.warnings.iter().any(|w| w.contains("segments")));
+    assert!(report.warnings.iter().any(|w| w.contains("note")));
     assert!(report.warnings.iter().any(|w| w.contains("offset.y")));
     assert!(
         scene
@@ -276,4 +277,28 @@ fn with_params_validates_clamps_and_stamps_fresh_revisions() {
     // an unchanged value keeps the revision
     let (same, _) = scene.with_params([(id, "size".to_string(), Value::Float(100.0))]);
     assert_eq!(same.node(id).unwrap().rev, scene.node(id).unwrap().rev);
+}
+
+#[test]
+fn track_targets_cover_every_value_type() {
+    use forge_core::TrackTarget as T;
+    let (doc, id) = doc_with_box();
+    let reg = doc.scene().registry();
+    let ty = reg.get(&doc.scene().node(id).unwrap().type_id).unwrap();
+    let find = |p: &str| ty.find_param(p);
+    assert_eq!(
+        forge_core::parse_track_target("segments", find),
+        Ok(T::Int("segments".into()))
+    );
+    assert_eq!(
+        forge_core::parse_track_target("enabled", find),
+        Ok(T::Bool("enabled".into()))
+    );
+    assert_eq!(
+        forge_core::parse_track_target("tint.b", find),
+        Ok(T::Channel("tint".into(), 2))
+    );
+    assert!(forge_core::parse_track_target("tint", find).is_err());
+    assert!(forge_core::parse_track_target("note", find).is_err());
+    assert!(forge_core::parse_track_target("offset.x", find).is_ok());
 }

@@ -1426,6 +1426,7 @@ version = "0.1.0"
 dependencies = [
  "forge-core",
  "forge-generators",
+ "forge-modifiers",
  "forge-parity-harness",
  "glam",
  "serde_json",

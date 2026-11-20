@@ -28,4 +28,7 @@ pub use param::{
 pub use registry::{Category, NodeEvaluator, NodeType, Plugin, Registry, RegistryError};
 pub use scene::{Node, NodeId, Scene, SceneSettings};
 pub use time::{Marker, PlayMode, TimeConfig, TimeDisplay};
-pub use track::{Interp, Key, Target, Track, TrackError, parse_target};
+pub use track::{
+    Behavior, Handle, Interp, Key, KeyTangent, TangentMode, Target, Track, TrackError, TrackTarget,
+    parse_target, parse_track_target,
+};

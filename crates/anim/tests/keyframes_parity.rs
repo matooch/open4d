@@ -3,19 +3,13 @@
 use std::path::Path;
 
 use forge_anim::{UserTangent, value_at, value_at_exact};
-use forge_core::{Interp, Key, Track};
+use forge_core::{Behavior, Interp, Key, Track};
 use forge_parity_harness::{GoldenCase, Samples, compare_samples, discover_cases};
 
 /// Observed cases whose options are not derived.
-/// Track before/after behaviours are not in the data model and `linear-to-spline` has no
-/// machine-readable per-key interpolation (docs/specs/ANIM.md §1.5a).
-const UNSUPPORTED: &[&str] = &[
-    "keyframes/after-offset",
-    "keyframes/after-oscillate",
-    "keyframes/after-repeat",
-    "keyframes/before-repeat",
-    "keyframes/linear-to-spline",
-];
+/// `linear-to-spline` has no machine-readable per-key interpolation (docs/specs/ANIM.md
+/// §1.5a). The behaviour cases are evaluated since §1.9.
+const UNSUPPORTED: &[&str] = &["keyframes/linear-to-spline"];
 
 /// Cases we evaluate but that differ, pinned so a fix shows up.
 /// `broken`: the read-back right tangent is not what is evaluated (ANIM.md §1.5a).
@@ -51,6 +45,25 @@ fn number(v: &toml::Value) -> f64 {
         .expect("number")
 }
 
+/// The behaviour a case description states: "after-behaviour Offset Repeat",
+/// "before-behaviour Repeat" (`case.toml` has no field for it; ANIM.md §1.9).
+fn behaviour(description: &str, side: &str) -> Behavior {
+    let marker = format!("{side}-behaviour ");
+    let Some(at) = description.find(&marker) else {
+        return Behavior::Constant;
+    };
+    let rest = &description[at + marker.len()..];
+    let name = rest.split(',').next().unwrap_or("").trim();
+    match name {
+        "Repeat" => Behavior::Repeat,
+        "Offset Repeat" => Behavior::OffsetRepeat,
+        "Oscillate" => Behavior::Oscillate,
+        "Continue" => Behavior::Continue,
+        "Constant" => Behavior::Constant,
+        other => panic!("unknown behaviour {other:?}"),
+    }
+}
+
 fn interp(name: &str) -> Interp {
     match name {
         "spline" => Interp::Spline,
@@ -76,7 +89,8 @@ fn track_of(case: &GoldenCase, fps: f64, angle: bool) -> Track {
             .map(|i| interp(i.as_str().unwrap()))
             .collect()
     });
-    Track::new(
+    let description = case.manifest().unwrap().description.unwrap_or_default();
+    let mut track = Track::new(
         keys.iter()
             .enumerate()
             .map(|(n, k)| {
@@ -87,7 +101,10 @@ fn track_of(case: &GoldenCase, fps: f64, angle: bool) -> Track {
                 Key::new(number(&k[0]) / fps, value).with_interp(i)
             })
             .collect(),
-    )
+    );
+    track.before = behaviour(&description, "before");
+    track.after = behaviour(&description, "after");
+    track
 }
 
 /// Evaluates the case's track at every sample frame of `expected`.
@@ -172,6 +189,6 @@ fn keyframes_match_the_reference() {
     let expected_unsupported: Vec<String> = UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, expected_unsupported);
     assert_eq!(matched.len() + mismatched.len() + unsupported.len(), 36);
-    // 38 sample files in all; the five UNSUPPORTED cases are not evaluated.
-    assert_eq!(files, 33);
+    // the UNSUPPORTED case is not evaluated.
+    assert_eq!(files, 37);
 }
