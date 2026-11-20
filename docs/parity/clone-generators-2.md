@@ -343,6 +343,12 @@ Matrix per mode (defaults only; the app shows no usable Min/Max for these):
 | `clone-text/depth` | 300 points / 328 polygons; samples kind `clones`, 2 clones; clone positions (65.478516, 71.728516, 0) (196.09375, 71.728516, 0) |
 | `tracer/two-nulls` | not observed: the Tracer emitted no spline with either the Nulls as children or in its Trace Link list, so the Extrude above it baked empty (3 attempts, see Notes) |
 
+## Follow-up (planner, after brief 076)
+
+| Case | Redo as | What was missing |
+|---|---|---|
+| turtle | turtle-2 | The spline generator's Turtle settings (premise, rules, angle, length, iterations, everything on its tab) must be in `case.toml` |
+
 ## Notes
 - Probes are in /Users/bigman/forge-observer/probes (o31_b33.py, o31_b34.py, o31_b38.py,
   o31_b40.py, o31_desc.json, o31_tables.md). Clones are counted with

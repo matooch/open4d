@@ -70,6 +70,17 @@ Redo these two cases as new case folders (keep the old ones):
 | linear-to-spline | linear-to-spline-2 | `case.toml` must record each key's interpolation (e.g. `interpolation_by_key = ["Linear", "Spline"]`), not only the description |
 | broken | broken-2 | The read-back right tangent (10, 40) does not match the sampled curve, which follows the automatic flat tangent. Set the broken tangent, **read it back after setting**, evaluate the samples, and record both. If they still disagree, say so in the row |
 
+## Follow-up: record behaviours as fields (planner, after brief 093)
+
+For every case that sets a before/after behaviour, `case.toml` must hold it as fields, e.g.
+`before_behavior = "Constant"` and `after_behavior = "Repeat"` under `[params]`, not only in the
+description. Add the fields to new cases. Also observe the two behaviours never seen:
+
+| Case | Setup | Record |
+|---|---|---|
+| before-offset | keys 0 → 0 and 30 → 100, Before = Offset Repeat | `samples.json` frames −60 … 30 step 5 |
+| before-oscillate | the same, Before = Oscillate | the same |
+
 ## Notes
 
 Case data: `tests/golden/keyframes/<case>/samples.json` (kind track, param pos_x, fps 30,
