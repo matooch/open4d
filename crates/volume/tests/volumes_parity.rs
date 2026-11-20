@@ -233,10 +233,7 @@ const UNSUPPORTED: &[(&str, &str)] = &[
 ];
 
 /// Built, but the geometric comparison fails.
-const KNOWN_MISMATCH: &[(&str, &str)] = &[(
-    "mesher-adaptive",
-    "adaptivity is not derived yet (brief 083): adaptive 0.5 is ignored",
-)];
+const KNOWN_MISMATCH: &[(&str, &str)] = &[];
 
 /// Cases whose point and face counts equal the reference's and whose every vertex is within
 /// 1e-3 of a reference vertex (VOLUME.md section 7.2).
@@ -250,6 +247,7 @@ const EXACT: &[&str] = &[
     "hierarchy",
     "torus-defaults",
     "mesher-threshold",
+    "mesher-adaptive",
 ];
 
 /// Largest distance from a point of `a` to the nearest point of `b` (hash grid of 2 units;
@@ -324,11 +322,18 @@ fn volumes_match_the_reference_geometrically() {
                 "{}: counts",
                 case.name
             );
-            assert!(
-                ours.faces.iter().all(|f| f.len() == 4),
-                "{}: quads only",
-                case.name
-            );
+            let adaptive = params["mesher"].as_table().unwrap()["adaptive"].as_float() != Some(0.0);
+            if adaptive {
+                // O32 mesher-adaptive: 30 quads and 42 triangles
+                let quads = |m: &Mesh| m.faces.iter().filter(|f| f.len() == 4).count();
+                assert_eq!(quads(&exp), quads(&ours), "{}: quad count", case.name);
+            } else {
+                assert!(
+                    ours.faces.iter().all(|f| f.len() == 4),
+                    "{}: quads only",
+                    case.name
+                );
+            }
             let (e, o) = (export_weld(&exp), export_weld(&ours));
             let d = max_nearest(&e, &o).max(max_nearest(&o, &e));
             assert!(d < 1e-3, "{}: vertices differ by {d}", case.name);
@@ -337,7 +342,7 @@ fn volumes_match_the_reference_geometrically() {
     }
     assert!(listed.iter().all(|n| seen.contains(*n)), "stale list entry");
     assert_eq!(seen.len(), 21, "the volumes golden set changed");
-    assert_eq!(matched.len(), 12, "matched: {matched:?}");
+    assert_eq!(matched.len(), 13, "matched: {matched:?}");
     for n in EXACT {
         assert!(matched.iter().any(|m| m == n), "{n} missing");
     }

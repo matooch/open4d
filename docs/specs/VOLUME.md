@@ -15,7 +15,7 @@ equations", Math. Comp. 2005.
 
 Volumes are discretisation-sensitive, so parity is **geometric** with one exception: the
 volume mesher (§7) turned out to reproduce the reference vertex positions and counts exactly for
-the polygon sources, so those cases are also compared by counts (§7.4).
+the polygon sources, so those cases are also compared by counts (§7.8).
 
 STATUS (kept in sync with docs/parity/STATUS.md): §1-§5 brief 080, see the table at the end.
 
@@ -206,7 +206,8 @@ face counts equal to the reference):
 Result, 2168 points / 2166 faces for the default cube, every vertex position equal to 1e-3 to
 the reference (sorted comparison); the same counts for sphere (1832/1830), sphere at voxel 5
 (7328/7326), cube at voxel 5 and 20 (9128/9126, 488/486), union-two (2952/2950), hierarchy
-(3384/3382) and the platonic of `torus-defaults` (1400/1398).
+(3384/3382), the platonic of `torus-defaults` (1400/1398) and, with adaptivity (§7.5), the
+sphere at adaptive 0.5 (53/72, 30 quads).
 
 The surface threshold: **O32 mesher-threshold** (0.5 at voxel 10) is byte-identical to 0.01, so
 for distance fields a threshold within `0.05 voxel` of zero (inclusive) means iso 0; larger
@@ -217,7 +218,43 @@ magnitudes shift the iso value unchanged. Parity-pending (only one probe value).
 Fog volumes are meshed with inside above the threshold (`HighInside`); the threshold applies as
 given (0.01 default, **O33 fog-input**).
 
-### 7.4 Parity
+### 7.5 Adaptivity (octree block merge)
+
+Derived from **O32 mesher-adaptive** (sphere, adaptive 0.5: 53 points, 72 faces = 30 quads and
+42 triangles). Every one of the 53 reference vertices is the **mean of the adaptive-0 vertices of
+an aligned block of cells**: 28 blocks of 4x4x4 cells and 25 blocks of 8x8x8 cells (block keys are
+`floor(cell / size)`, cell = lattice index of the lower corner; the unmerged mesh of §7.2 is the
+input). The blocks partition all 1832 adaptive-0 vertices exactly once, and mapping the adaptive-0
+quads to their blocks (corners that fall into one block merge, a quad with three distinct blocks
+is a triangle, fewer than three is dropped, a polygon with the same block set as an earlier one
+is dropped) gives 30 quads and 42 triangles.
+
+Rule (`merge_blocks`): from the 8-cell block downwards (8, 4, 2, then single cells), a block with
+more than one vertex becomes a **leaf** when every vertex lies within `tolerance` of the plane
+through the block's vertex mean along the mean vertex normal (`max |(p - mean) . n| <= tolerance`);
+otherwise its eight sub-blocks are tried. Vertex normals are the normalised sums of the incident
+face normals `(p1 - p0) x (p2 - p0)` of the unmerged mesh; the mean normal is the normalised sum of
+the vertex normals. A leaf's vertex is the mean of its vertices. `tolerance = 2 * adaptive *
+voxel_size`. On the sphere the octant blocks have deviations 9.97 to 11.19 and the cap blocks 4.0
+to 5.1 (our measure); the octant `[-1,-1,-1]` at 9.97 merged and its mirror images split, so the
+threshold lies between 9.97 and 10.04 at adaptive 0.5, which `2 * 0.5 * 10 = 10` fits. The
+factor 2 is derived from this one case, **parity-pending** (the decision is borderline).
+Adaptive 0 skips the merge: the output equals §7.2.
+
+### 7.6 Normals
+
+`gradient_normals(volume, points)`: central differences of the trilinear field with step half a
+voxel, normalised; outward for distance fields (the gradient), towards decreasing density for fog
+(minus the gradient). The mesh node itself returns polygons only (smooth shading follows from the
+normals when a consumer asks for them). Own design.
+
+### 7.7 Other parameters
+
+`use_absolute_value_iso` meshes the shell `|value| < threshold` (the field's absolute value, same
+rules). Own design, **parity-pending** (no observation). `voxel_range_threshold` and
+`curvature_direction` are stored and have no effect; `create_curvature_map` is `Unsupported`.
+
+### 7.8 Parity
 
 Cases are compared with `compare_volume_mesh` at the voxel size (§5) and, for the polygon
 sources, also by point and face count (strict). The reference quad numbering and start corners

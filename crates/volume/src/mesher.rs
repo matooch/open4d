@@ -59,6 +59,19 @@ fn inside(v: f32, iso: f64, pol: Polarity) -> bool {
 /// Marching cell mesh of the iso-surface `value == iso` of `grid`, in world space. Quads are
 /// wound counter-clockwise seen from outside.
 pub fn volume_to_mesh(grid: &SparseGrid<f32>, iso: f64, pol: Polarity) -> PolyMesh {
+    cell_mesh(grid, iso, pol).mesh
+}
+
+/// The cell mesh of [`volume_to_mesh`] with the lattice cell (lower corner index) of every
+/// vertex, the input of the adaptive merge.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CellMesh {
+    pub mesh: PolyMesh,
+    pub cells: Vec<IVec3>,
+}
+
+/// [`volume_to_mesh`] keeping the cell of each vertex.
+pub fn cell_mesh(grid: &SparseGrid<f32>, iso: f64, pol: Polarity) -> CellMesh {
     let active: Vec<IVec3> = grid.active_voxels().into_iter().map(|(i, _)| i).collect();
     // Lattice edges with a sign change, from every edge touching an active voxel.
     let mut edges: BTreeSet<((i32, i32, i32), usize)> = BTreeSet::new();
@@ -111,7 +124,118 @@ pub fn volume_to_mesh(grid: &SparseGrid<f32>, iso: f64, pol: Polarity) -> PolyMe
         }
         polys.push(quad);
     }
-    PolyMesh { points, polys }
+    let mut cell_of = vec![IVec3::ZERO; points.len()];
+    for ((x, y, z), i) in &cells {
+        cell_of[*i as usize] = IVec3::new(*x, *y, *z);
+    }
+    CellMesh {
+        mesh: PolyMesh { points, polys },
+        cells: cell_of,
+    }
+}
+
+/// Cells per block edge at the coarsest merge level (the 8-voxel leaf of the sparse grid).
+const MAX_LEVEL: u32 = 3;
+
+/// Per-vertex unit normals of a mesh: normalised sums of the incident face normals.
+fn vertex_normals(mesh: &PolyMesh) -> Vec<DVec3> {
+    let mut n = vec![DVec3::ZERO; mesh.points.len()];
+    for f in &mesh.polys {
+        let p = |i: usize| mesh.points[f[i] as usize];
+        let fn_ = (p(1) - p(0)).cross(p(2) - p(0));
+        for &v in f {
+            n[v as usize] += fn_;
+        }
+    }
+    n.iter().map(|v| v.normalize_or_zero()).collect()
+}
+
+fn block_key(c: IVec3, level: u32) -> IVec3 {
+    let s = 1 << level;
+    IVec3::new(c.x.div_euclid(s), c.y.div_euclid(s), c.z.div_euclid(s))
+}
+
+/// Largest distance of the vertices of a block from the plane through their mean along their
+/// mean normal.
+fn plane_deviation(members: &[usize], points: &[DVec3], normals: &[DVec3]) -> f64 {
+    let n = members.len() as f64;
+    let mean = members.iter().map(|&i| points[i]).sum::<DVec3>() / n;
+    let navg = members
+        .iter()
+        .map(|&i| normals[i])
+        .sum::<DVec3>()
+        .normalize_or_zero();
+    members
+        .iter()
+        .map(|&i| (points[i] - mean).dot(navg).abs())
+        .fold(0.0, f64::max)
+}
+
+/// Merges aligned blocks of 2, 4 or 8 cells into one vertex each (VOLUME.md section 7.5):
+/// from the largest block down, a block whose vertices lie within `tolerance` of their mean
+/// plane becomes a leaf with the mean of its vertices; the quads follow the leaves, losing
+/// corners that fall together (triangles) and duplicates.
+pub fn merge_blocks(cm: &CellMesh, tolerance: f64) -> PolyMesh {
+    let points = &cm.mesh.points;
+    let normals = vertex_normals(&cm.mesh);
+    // leaf id of every vertex
+    let mut leaf_of = vec![usize::MAX; points.len()];
+    let mut leaves: Vec<Vec<usize>> = Vec::new();
+    let mut top: BTreeMap<(i32, i32, i32), Vec<usize>> = BTreeMap::new();
+    for (i, c) in cm.cells.iter().enumerate() {
+        top.entry(key(block_key(*c, MAX_LEVEL)))
+            .or_default()
+            .push(i);
+    }
+    let mut stack: Vec<(u32, Vec<usize>)> =
+        top.into_values().rev().map(|m| (MAX_LEVEL, m)).collect();
+    while let Some((level, members)) = stack.pop() {
+        if level == 0 || plane_deviation(&members, points, &normals) <= tolerance {
+            for &i in &members {
+                leaf_of[i] = leaves.len();
+            }
+            leaves.push(members);
+            continue;
+        }
+        let mut children: BTreeMap<(i32, i32, i32), Vec<usize>> = BTreeMap::new();
+        for &i in &members {
+            children
+                .entry(key(block_key(cm.cells[i], level - 1)))
+                .or_default()
+                .push(i);
+        }
+        for (_, m) in children.into_iter().rev() {
+            stack.push((level - 1, m));
+        }
+    }
+    let out_points: Vec<DVec3> = leaves
+        .iter()
+        .map(|m| m.iter().map(|&i| points[i]).sum::<DVec3>() / m.len() as f64)
+        .collect();
+    let mut seen: BTreeSet<Vec<usize>> = BTreeSet::new();
+    let mut polys = Vec::new();
+    for f in &cm.mesh.polys {
+        let mut ring: Vec<usize> = Vec::with_capacity(4);
+        for &v in f {
+            let l = leaf_of[v as usize];
+            if ring.last() != Some(&l) {
+                ring.push(l);
+            }
+        }
+        if ring.len() > 1 && ring.first() == ring.last() {
+            ring.pop();
+        }
+        let mut distinct = ring.clone();
+        distinct.sort_unstable();
+        distinct.dedup();
+        if distinct.len() == ring.len() && ring.len() >= 3 && seen.insert(distinct) {
+            polys.push(ring.iter().map(|&l| l as u32).collect());
+        }
+    }
+    PolyMesh {
+        points: out_points,
+        polys,
+    }
 }
 
 /// The mesher's settings (VOLUME.md section 7).
@@ -125,19 +249,62 @@ pub struct MeshOptions {
     pub adaptive: f64,
 }
 
+/// The plane tolerance of the adaptive merge, in voxels per unit of the adaptive setting
+/// (VOLUME.md section 7.5).
+pub const ADAPTIVE_TOLERANCE_VOXELS: f64 = 2.0;
+
 /// The mesh of a volume in the volume's own space.
 pub fn mesh_volume(volume: &Volume, opts: &MeshOptions) -> PolyMesh {
     let grid = &volume.grid;
+    let voxel = grid.voxel_size();
+    let (field, iso, pol);
+    let absolute;
     match volume.kind {
         VolumeKind::Sdf => {
-            // see VOLUME.md section 7.2: thresholds within 5 % of a voxel do not move the surface
-            let iso = if opts.iso.abs() <= 0.05 * grid.voxel_size() {
+            // VOLUME.md section 7.2: thresholds within 5 % of a voxel do not move the surface
+            iso = if opts.iso.abs() <= 0.05 * voxel {
                 0.0
             } else {
                 opts.iso
             };
-            volume_to_mesh(grid, iso, Polarity::LowInside)
+            pol = Polarity::LowInside;
         }
-        VolumeKind::Fog => volume_to_mesh(grid, opts.iso, Polarity::HighInside),
+        VolumeKind::Fog => {
+            iso = opts.iso;
+            pol = Polarity::HighInside;
+        }
     }
+    // the absolute value of the field meshes the shell `|value| < threshold`
+    if opts.absolute {
+        absolute = grid.map(grid.background().abs(), f32::abs);
+        field = &absolute;
+    } else {
+        field = grid;
+    }
+    let cm = cell_mesh(field, iso, pol);
+    if opts.adaptive > 0.0 {
+        merge_blocks(&cm, opts.adaptive * ADAPTIVE_TOLERANCE_VOXELS * voxel)
+    } else {
+        cm.mesh
+    }
+}
+
+/// Unit surface normals at `points` from the central-difference gradient of the field
+/// (VOLUME.md section 7.6): outward for distance fields, towards decreasing density for fog.
+pub fn gradient_normals(volume: &Volume, points: &[DVec3]) -> Vec<DVec3> {
+    let grid = &volume.grid;
+    let h = grid.voxel_size() * 0.5;
+    let sign = match volume.kind {
+        VolumeKind::Sdf => 1.0,
+        VolumeKind::Fog => -1.0,
+    };
+    points
+        .iter()
+        .map(|p| {
+            let d = |axis: DVec3| {
+                f64::from(grid.trilinear(*p + axis * h)) - f64::from(grid.trilinear(*p - axis * h))
+            };
+            (sign * DVec3::new(d(DVec3::X), d(DVec3::Y), d(DVec3::Z))).normalize_or_zero()
+        })
+        .collect()
 }

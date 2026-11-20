@@ -10,7 +10,10 @@ pub mod sdf;
 
 pub use csg::{CsgOp, combine, negate, smooth_min};
 pub use grid::{BLOCK, SparseGrid};
-pub use mesher::{MeshOptions, Polarity, mesh_volume, volume_to_mesh};
+pub use mesher::{
+    CellMesh, MeshOptions, Polarity, cell_mesh, gradient_normals, merge_blocks, mesh_volume,
+    volume_to_mesh,
+};
 pub use node::{
     BUILDER, MESHER, Volume, VolumeBuildError, VolumeKind, VolumePlugin, build_volume,
     mesh_volume_node, sdf_to_fog,

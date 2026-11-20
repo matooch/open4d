@@ -80,7 +80,7 @@ implementers can avoid collisions.
 | 080 | [forge-volume: sparse grid, mesh/spline/points to SDF, CSG; harness compare_volume_mesh](../agents/tasks/080-forge-volume-grid-sdf.md) | F | – | done | volume (new), parity-harness |
 | 081 | [Volume Builder node (object list, modes, SDF/fog, voxel size, hierarchy)](../agents/tasks/081-volume-builder.md) | F | 080 | done (parity-pending: spline radius factor, fog density, subtract/intersect not observed) | volume, plugin |
 | 082 | [Volume filters (smooth types, dilate/erode, reshape, curve)](../agents/tasks/082-volume-filters.md) | F | 081 | ready | volume |
-| 083 | [Volume Mesher (dual contouring, adaptivity, threshold, normals)](../agents/tasks/083-volume-mesher.md) | F | 081 | ready | volume, geometry |
+| 083 | [Volume Mesher (dual contouring, adaptivity, threshold, normals)](../agents/tasks/083-volume-mesher.md) | F | 081 | done (parity-pending: adaptive tolerance factor, absolute iso; the mesher is a cell mesher with octree block merge, not dual contouring: see VOLUME.md 7) | volume, geometry |
 | 084 | [Volume viewport display (preview iso-surface, slices)](../agents/tasks/084-volume-viewport.md) | F | 083, 143 | ready | viewport |
 | 085 | [Field layers inside the volume builder](../agents/tasks/085-volume-field-layers.md) | F | 081, 059 | ready | volume, fields |
 | 086 | [VDB file read/write](../agents/tasks/086-vdb-io.md) | F | 080 | ready (vdb-export case needs a human; read/write tested against our own files and the observed .vdb if present) | volume, io |
