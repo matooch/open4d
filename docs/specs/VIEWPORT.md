@@ -696,3 +696,40 @@ crates/viewport/tests/motion.rs (pure): segment colours around the current frame
 squares, behind-camera skipped, ghost edge counts, bounding-box fallback, fade monotone, order.
 crates/viewport/tests/display.rs (GPU): the path is visible; baseline `motion_path.png` (160x120,
 the lavapipe tolerance rule of section 8.5, unchanged).
+
+## 13. Rig display: joints, bones and weights (brief 112)
+
+Sources: option names from docs/parity/rigging.md (O34: Display (object) None / Standard / Box /
+Line / Stick / Polygon, Display (joint) None / Axis / Sphere (Wire) / Circle / Sphere, default
+colour (0.4235, 0.8980, 0.5098)); shapes, sizes, the weight ramp and the overlay are our own
+design (**parity-pending**, no observation of the reference's look). Pure: no GPU, no UI
+(`forge_viewport::rig`). The viewport crate does not know the rig crate: the editor maps a
+joint node to a `JointDraw`.
+
+### 13.1 Joints and bones
+`JointDraw { world, end: Option<DVec3>, length, selected }`; the bone runs from the joint
+position to `end` (the first child joint), or `length` along the joint's z axis without a child.
+`joint_lines(&JointDraw, BoneStyle, JointStyle, &Palette, &Camera) -> Vec<DrawLine>`, the bone
+first, then the marker; a selected joint draws in the selection colour, others in `JOINT_COLOR`.
+Let `L` be the bone length.
+- **Bone styles** (`bone_edges`): `None` nothing; `Line` 1 segment; `Standard` and `Polygon` the
+  12 edges of an octahedron (apexes at both ends, a square waist at 0.1 L from the start with
+  radius 0.1 L); `Stick` the same with radius 0.04 L; `Box` the 12 edges of a box of half
+  cross-section 0.1 L from start to end. A zero-length bone draws nothing. `Polygon` has the
+  wire of `Standard` (the filled faces belong to the shaded renderer).
+- **Joint styles** (size 0.15 L): `None`; `Axis` three lines along the joint's world axes in
+  the gizmo x, y, z colours; `SphereWire` and `Sphere` three great circles of 24 segments in the
+  planes of the joint's axes; `Circle` one circle in the camera plane.
+
+### 13.2 Weights
+`weight_color(w)` is the ramp blue (0) - cyan (0.25) - green (0.5) - yellow (0.75) - red (1),
+linear between stops, clamped outside 0..1; `weight_colors` maps a slice. `weight_overlay(points,
+weights, hide_zero, cam, size)` draws a 5 px square (the spline control square helper) at every
+world-space vertex, coloured by the selected joint's weight; `hide_zero` skips weight 0. The
+line pipeline has no per-vertex colour on the shaded mesh, so the overlay is markers, not a
+colour-interpolated surface (own design, follow-up for a vertex-colour shader).
+
+### 13.3 Tests
+crates/viewport/tests/rig_display.rs (pure; our own expected values stand in for the brief's
+baseline image, there is no GPU in the container): edge counts and colours per style, the ramp
+stops and monotone red channel from 0.5, markers per vertex and `hide_zero`, selection colour.
