@@ -1,0 +1,112 @@
+feature = "ik"
+observation = "docs/parity/ik.md"
+description = "pole-x; 3-joint chain, goal (100, 100, 0), pole Null at (0, 100, 200), scripted"
+mesh = "mesh.obj"
+
+[params]
+joints = 3
+spacing = 100.0
+goal_position = [100.0, 100.0, 0.0]
+pole_position = [0.0, 100.0, 200.0]
+
+[params.ik_tag]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+enable = 1
+use_ik = 1
+ik_solver = "2D"
+end = "J3"
+goal = "Goal"
+ik_fk_percent = 0.0
+strength_percent = 100.0
+preferred_rot_percent = 0.0
+goal_offset_percent = 100.0
+axis = "Auto"
+twist_degrees = 0.0
+object = "Pole"
+squash_percent = 0.0
+type = "Position"
+distance = 0.0
+clamp = 0
+stretch_percent = 0.0
+type_secondary = "Position"
+distance_secondary = 0.0
+clamp_secondary = 0
+show_fk = 0
+show_ik = 0
+handle_line = 1
+pole_vector = "Root"
+fk = [1.0, 0.0, 0.0]
+ik = [0.0, 0.0, 1.0]
+handle = [0.0, 1.0, 0.0]
+pole_vector_secondary = [1.0, 0.0, 1.0]
+keep_goal = 0
+constrain_goal = 0
+update_on_goal = 0
+align_goal = 0
+update_ik_on_fk = 1
+max_iterations = 10000
+threshold = 0.01
+enable_secondary = 0
+strength_secondary_percent = 30.0
+drag_percent = 2.0
+pos_hold_percent = 100.0
+rot_hold_percent = 30.0
+collisions = 0
+radius = 5.0
+friction_percent = 10.0
+bounce_percent = 30.0
+gravity = -9.81
+mode = "Include"
+continuous_update = 1
+steps = 1
+auto = 1
+
+[params.joint]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+bone = "To Child"
+axis = "Z"
+length = 100.0
+display = "Standard"
+size = "Length"
+size_secondary = 5.0
+display_secondary = "Axis"
+size_3 = "Bone"
+size_4 = 5.0
+weight_percent = 100.0
+stretch_percent = 100.0
+use_preferred = 1
+weight_secondary_percent = 100.0
+preferred_degrees = [0.0, 0.0, 0.0]
+strength_percent = 100.0
+limit_heading = 0
+limit_pitch = 0
+limit_bank = 0
+minimum_rotation_degrees = [0.0, 0.0, 0.0]
+maximum_rotation_degrees = [0.0, 0.0, 0.0]
+enable = 0
+hub = 0
+origin = "World"
+plane = "World-XY"
+mix_percent = 25.0
+color_secondary = [1.0, 0.0, 0.0]
+
+[params.cube]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+size = [10.0, 10.0, 10.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = 0
+fillet = 0
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[import]
+scale = 1.0
+flip_z = false
