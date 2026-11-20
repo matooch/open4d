@@ -65,9 +65,7 @@ fn build_instances(
     if protos.is_empty() {
         return Ok(None);
     }
-    clones
-        .assign_children(protos.len(), settings.clones_mode)
-        .map_err(map_error)?;
+    clones.assign_children(protos.len(), settings.clones_mode, settings.clones_seed);
     Ok(Some(ClonerInstances {
         prototypes: protos,
         clones,
@@ -179,9 +177,11 @@ pub fn clone_data(
     let settings = settings_from_params(&node.params);
     let mut clones = generate(&settings, ctx).map_err(map_error)?;
     apply_effectors(scene, id, &mut clones, ctx).map_err(map_error)?;
-    clones
-        .assign_children(prototypes_of(scene, id).len(), settings.clones_mode)
-        .map_err(map_error)?;
+    clones.assign_children(
+        prototypes_of(scene, id).len(),
+        settings.clones_mode,
+        settings.clones_seed,
+    );
     Ok(Some(clones))
 }
 

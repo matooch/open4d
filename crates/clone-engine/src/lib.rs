@@ -95,25 +95,40 @@ pub fn generate(settings: &Settings, _ctx: &EvalCtx) -> Result<CloneData, CloneE
 }
 
 impl CloneData {
-    /// Chooses each clone's prototype among `prototypes` children. Iterate repeats the
-    /// children in order; the other Clones modes with several prototypes are brief 067.
-    pub fn assign_children(
-        &mut self,
-        prototypes: usize,
-        clones_mode: ClonesMode,
-    ) -> Result<(), CloneError> {
-        if prototypes > 1 && clones_mode != ClonesMode::Iterate {
-            return Err(CloneError::Unsupported(
-                "cloner Clones modes Random, Blend and Sort with several children",
-            ));
-        }
-        for (i, c) in self.child.iter_mut().enumerate() {
-            *c = if prototypes == 0 {
+    /// Chooses each clone's prototype among `prototypes` children (spec O1-O4):
+    /// - Iterate repeats the children in order (`order-iterate`).
+    /// - Random draws a child per clone from a generator seeded with `seed` (the reference's
+    ///   sequence is not reproduced, `order-random`).
+    /// - Blend maps the clone's place along the list, `i / (count - 1)`, to the child
+    ///   `round(t (n - 1))`, halves up (`blend-order`: 2 children, 5 clones give 0 0 1 1 1).
+    /// - Sort maps the clone weight to the child `round(w (n - 1))` clamped to the list
+    ///   (`order-sort`: all weights 0 give child 0 for every clone).
+    pub fn assign_children(&mut self, prototypes: usize, clones_mode: ClonesMode, seed: u64) {
+        let n = self.child.len();
+        let mut rng = SplitMix64::new(seed);
+        for i in 0..n {
+            let top = prototypes.saturating_sub(1) as f64;
+            self.child[i] = if prototypes <= 1 {
                 0
             } else {
-                (i % prototypes) as u32
+                match clones_mode {
+                    ClonesMode::Iterate => (i % prototypes) as u32,
+                    ClonesMode::Random => {
+                        ((rng.next_f64() * prototypes as f64) as usize).min(prototypes - 1) as u32
+                    }
+                    ClonesMode::Blend => {
+                        let t = if n > 1 {
+                            i as f64 / (n - 1) as f64
+                        } else {
+                            0.0
+                        };
+                        (t * top + 0.5).floor().clamp(0.0, top) as u32
+                    }
+                    ClonesMode::Sort => {
+                        (self.weights[i] * top + 0.5).floor().clamp(0.0, top) as u32
+                    }
+                }
             };
         }
-        Ok(())
     }
 }

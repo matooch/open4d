@@ -65,6 +65,11 @@ pub fn cloner_type() -> NodeType {
             ],
             OBJ,
         ))
+        .param(
+            ParamDesc::int("clones_seed", "Seed", 123_456)
+                .range(0, SEED_MAX)
+                .group(OBJ),
+        )
         .param(ParamDesc::bool("reset_coordinates", "Reset Coordinates", true).group(OBJ))
         .param(en(
             "fix_texture",
@@ -519,6 +524,7 @@ pub(crate) fn settings_of(ty: &NodeType, values: &BTreeMap<String, Value>) -> Se
     Settings {
         mode,
         clones_mode,
+        clones_seed: p.int("clones_seed").max(0) as u64,
         reset_coordinates: p.bool("reset_coordinates"),
         instance_mode,
         transform: TransformTab {

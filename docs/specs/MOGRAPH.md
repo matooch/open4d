@@ -1078,3 +1078,47 @@ Test `crates/generators/tests/fracture.rs`: both cases rebuild the 24-point, 6-q
 output equals it, so the input is the golden mesh itself: this checks the pipeline, not an independent derivation) and compare
 with `mesh.obj` strictly. Result **2 of 2** exact (`explode-segments`, `plain`). Unit test: two islands, effector list moves
 them, Connect is `Unsupported`.
+
+---
+
+# Clone toolset: clone order, several children, nesting (brief 067)
+
+Sources: O21 [cloner-3.md](../parity/cloner-3.md) (`order-iterate`, `order-random`, `order-sort`, `nested`) and the O8 case
+`blend-order` ([cloner.md](../parity/cloner.md)); cases in `tests/golden/cloner/`.
+
+## O1. Children order
+
+The cases `order-*` have three children listed in the order **cone, sphere, cube** (the first clone of `order-iterate` is the cone, not the
+cube the description names first): the observer's insertion put each new child first. The cone and sphere have radius 10
+and default segments, the cube is 20 (these child values are only in the descriptions). `blend-order` lists cube, sphere (two
+children, 5 clones). The cloner's `clones_seed` (id, label Seed, default 123456, the value the observation read back) belongs
+to the Random order; the Matrix has none.
+
+## O2. The four orders (`CloneData::assign_children(n, mode, seed)`)
+
+- **Iterate** (`order-iterate`: clones are cone, sphere, cube, cone, sphere, cube): clone `i` shows child `i mod n`.
+- **Random** (`order-random`, seed 123456: cube, sphere, cube, sphere, sphere, sphere, i.e. child indices 2 1 2 1 1 1): a child per
+  clone from SplitMix64 started at the seed, `floor(u n)`. The reference's sequence is **not reproduced**; three hypotheses
+  on the six observed indices: (1) SplitMix64 and Python/MT19937 draws scaled `floor(u n)` or `mod n`, (2) the glibc `rand`
+  generator, `mod n` and scaled, (3) NumPy `RandomState` scaling and `randint`, each also tried under every permutation of
+  the child order. No match. `order-random` is `KNOWN_MISMATCH` (positions exact, children differ). A test checks the
+  draw is deterministic per seed, in range and uses all children.
+- **Blend** (`blend-order`: cube, cube, sphere, sphere, sphere for 5 clones and 2 children): `t = i / (count - 1)`, child
+  `floor(t (n - 1) + 1/2)`. **Parity-pending**: one case, two children; the reference's Blend may instead blend clone
+  parameters, here the observed meshes are whole children.
+- **Sort** (`order-sort`: all six clones show the first child): child `floor(w (n - 1) + 1/2)` clamped from the clone's weight
+  `w` (0 to 1), after the effectors. **Parity-pending**: only the all-zero-weights case was observed, so this reading (and the
+  value of the axis/sort options) is a guess consistent with it.
+- One child (or none) always gives child 0.
+
+## O3. Nesting
+
+A cloner whose child is a cloner needs no code: the inner cloner is a prototype with geometry and its mesh is expanded by every
+outer clone, outer clone major (`nested`: Linear count 3 over a Radial count 4). The case file does not record the inner cloner,
+so the test `a_cloner_inside_a_cloner_matches_the_nested_mesh` builds it (Radial count 4, cube 20).
+
+## O4. Parity
+
+`cloner_parity.rs::cloner_modes_match_the_reference` now runs the four order cases (at level B and A): **3 of 4 exact**
+(`order-iterate`, `order-sort`, `blend-order`), `order-random` in `KNOWN_MISMATCH` (above). `nested` stays in the separate test.
+Unit test: `crates/clone-engine/tests/modes.rs::children_are_assigned_by_the_clones_mode`.

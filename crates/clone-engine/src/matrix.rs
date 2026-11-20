@@ -14,6 +14,7 @@ pub const MATRIX: &str = "forge.matrix";
 /// Cloner parameters that only make sense with prototypes.
 const PROTOTYPE_PARAMS: &[&str] = &[
     "clones_mode",
+    "clones_seed",
     "reset_coordinates",
     "fix_texture",
     "instance_mode",
