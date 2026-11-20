@@ -136,6 +136,9 @@ pyrocluster_illumination = true
 pyrocluster_shadow_casting = true
 
 [params.material]
+reflection_layer = "Default Specular"
+reflection_type = "GGX"
+reflection_width_percent = 60.0
 name = "Mat"
 enable_color = true
 enable_diffusion = false

@@ -34,6 +34,11 @@ scene objects. The images are 320 × 240, eight-bit RGB.
 
 - The scene, camera, light and render settings are the O30 ones; only the material and (for the
   two checker cases) the texture tag's projection differ.
+- The reflection layer's rows (its Type and its Width) are hidden from a flat read of the
+  material's description, so the three GGX cases record them as explicit keys next to the
+  material table: `reflection_layer`, `reflection_type = "GGX"` and
+  `reflection_width_percent` (10, 60 and 20). Without those keys the three cases would be
+  indistinguishable from each other in their own files, although their renders differ.
 - The renderer's reflection layer has no field labelled "Roughness" in this build. Its Width
   field is the roughness control: Width 10 % gives a tight highlight, 60 % spreads it over the
   whole sphere, 20 % sits between. The case files record the Width value under its own label.
