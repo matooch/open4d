@@ -68,7 +68,9 @@ Params: `weld` true, `tolerance` 0.1 (cm), `phong_mode` enum `manual, average, l
 highest, as_breaks (default)`, `textures` true, `center_axis` false (the link list
 `objects` is not modelled; the children are the inputs).
 Result: the inputs concatenated in child order. With `weld`: points within `tolerance`
-merge into the first occurrence (later points renumbered in order), and a face whose
+merge into the first occurrence (later points renumbered in order) **and sit where the later
+point was** (`connect/tolerance-in`: two cubes 0.5 apart, Tolerance 1, the first cube's x = 100
+points end up at the second cube's x = 100.5; 12 points, 11 faces), and a face whose
 corner set equals that of a **later** face is dropped (`connect/defaults`: A's face at
 x = 100 goes, B's stays). `center_axis = true` → `Unsupported` (not observed).
 
@@ -79,7 +81,10 @@ render_instance, multi_instance`. The local mesh is the reference's local mesh (
 point and face order); the instance's own transform places it. A missing or meshless
 reference gives no geometry, and so does a cycle of instances (an instance of an
 instance follows the chain to its first non-instance). The reference is not consumed
-(it stays visible).
+(it stays visible). **Render Instance** has the same mesh as Instance (`instance/render-instance`:
+the scene export holds the reference cube and the instance cube, 16 points, 12 faces, 8 after
+the weld); the scripted cases export the whole scene, so the test adds the reference's mesh before
+the instance's. Multi-Instance was not observed.
 
 ## 5. Spline inputs
 
@@ -160,7 +165,8 @@ for the rest). The helix biases and `reverse` → `Unsupported`. The circle's `e
 ### 6.2 Intermediate Points (`spline_sampling.rs`)
 
 A spline is a list of cubic Bezier segments `[p0, c0, c1, p1]` (`linear` splines are
-straight pieces and get **no** intermediate points in any mode), closed or open, plus a
+straight pieces and get **no** intermediate points in any mode but Uniform, whose steps run over
+the whole spline: `splines-2/linear-open-uniform`), closed or open, plus a
 `Sampling { mode, number, angle, max_length }` read from its params. `sample(curve)` gives
 the ordered point list the generators consume: for every segment its start point, then the
 segment's interior samples (parameters `t` in `(0, 1)`), and for an open spline the end
@@ -171,7 +177,7 @@ Uniform, Angle by Adaptive and Subdivided, Maximum Length by Subdivided.
 | Mode | Interior samples of one curved segment | Evidence |
 |---|---|---|
 | None | none: only the spline's own points | – (**parity-pending**) |
-| Uniform | `segments · (number + 1)` equal steps of arc length over the **whole** spline (a closed spline keeps all of them, an open one gets the end point too); the spline's own points are not kept unless a step lands on one. Lengths are the polylines through every segment at `t = k/50`; the sample's `t` is interpolated linearly inside its piece | `splines-2/circle-uniform` (36 points of 4 quarters; 5e-7 with 50 pieces, 3e-3 with an exact length, 2e-3 with 40, 3e-3 with 64), `helix-uniform` (900 steps, 6e-7 with the open-spline offsets below), `arc-defaults` (37 points of 4 segments), `arc-sector` (45 points for 5 pieces: arc and chord are stepped as one outline, 5e-7) |
+| Uniform | `segments · (number + 1)` equal steps of arc length over the **whole** spline (a closed spline keeps all of them, an open one gets the end point too); the spline's own points are not kept unless a step lands on one. Lengths are the polylines through every segment at `t = k/50`; the sample's `t` is interpolated linearly inside its piece | `splines-2/circle-uniform` (36 points of 4 quarters; 5e-7 with 50 pieces, 3e-3 with an exact length, 2e-3 with 40, 3e-3 with 64), `helix-uniform` (900 steps, 6e-7 with the open-spline offsets below), `helix-uniform-sub10/-sub50/-sub200`, `arc-uniform-n50/-n200`, `linear-open-uniform` (a two-segment polyline, 1e-4 short at its end), `arc-defaults` (37 points of 4 segments), `arc-sector` (45 points for 5 pieces: arc and chord are stepped as one outline, 5e-7) |
 | Natural | `number` samples at `t = k/(number + 1)` (equal steps of the segment's own parameter) | **parity-pending**: no case. Equal-`t` was the first reading of Uniform and is 1.4 off `circle-uniform`, so it is not Uniform; Natural takes it as the only other even spacing |
 | Adaptive | walk `t` in steps of 1/50 and emit a sample once the tangent differs from the tangent at the previous sample by `angle` (the angle between the two tangents, not the accumulated turn: the flower petal, whose tangent turns back, needs this). If the turn still to come to the segment's end is smaller than the piece just closed, the sample goes to the middle of the previous sample and the end instead (on the 1/50 grid, rounded down), and later samples are measured from the candidate's tangent. For the circle: `t = 0.06·k` (k = 1..15) and 0.94, i.e. 17 points per quarter, 68 in all, for any radius. A piece that turns less than `angle` gets nothing | `extrude/defaults`, `lathe/circle`, `splines-2/{cycloid-defaults, cycloid-epi, flower-defaults, rectangle-rounding, nside-rounding}` (the lone sample at the middle of the cycloid pieces, grid points 18/34 of the epicycloid pieces, the S-shaped flower piece); 5° only, other angles **parity-pending** |
 | Subdivided | the smallest `m` such that each of `m` equal-`t` pieces turns by at most `angle` and has a chord of at most `max_length`; samples at `t = k/m` | **parity-pending**: no case |
@@ -183,11 +189,13 @@ Uniform, Angle by Adaptive and Subdivided, Maximum Length by Subdivided.
   of an open spline lie at `total·k/steps·(1 − 1e-7)` (`UNIFORM_OPEN_LAG`; `helix-uniform`
   lags 1.00e-7 of its arc length from the first step to the last but one; `arc-defaults`
   3.2e-5 → 1.9e-6 and `arc-angles` 9e-5 → 5e-6 with it; closed splines show none:
-  `circle-uniform`). The last point sits at `total·(1 − 1e-4) − 1.26e-8·segments²`
-  (`UNIFORM_END_EXTRA`): `helix-uniform` (100 segments) ends 1.26e-4 before the `1e-4` rule,
-  the 3–4 segment arcs allow 1e-6 at most (`spline-wrap/arc`, which extends its end chord 99
-  lengths, would show more). The square is only the simplest law through those two ends; the
-  cause is unknown (float rounding of the reference's length table was tried: it moves the arc
+  `circle-uniform`). The last point sits at `total·(1 − 1e-4) − 5e-10·segments·total`
+  (`UNIFORM_END_EXTRA`): `helix-uniform` (100 segments) ends 1.26e-4 before the `1e-4` rule and
+  `helix-uniform-sub200` 2.5e-4; the 10- and 50-segment helices and the 4-segment arcs fit within
+  1e-4 with it (`spline-wrap/arc`, which extends its end chord 99 lengths, would show more).
+  The previous squared law (1.26e-8·segments²) failed `-sub200` by 2.5e-4; a fine-length-table
+  end (true arc length) was tried and broke the arcs by 7e-4. Segments x length is only the simplest law
+  through those ends (a per-segment 1.26e-6 gave the 4-segment arc 5e-6, which `spline-wrap/arc` amplifies x100 past 1e-4); the cause is unknown (float rounding of the reference's length table was tried: it moves the arc
   cases by 1.3e-4 and was rejected).
   The R20 Adaptive helix ends exactly on its end point (z −200), so the shortfall is taken as
   part of Uniform (**parity-pending** for None/Natural/Subdivided, which keep the exact end).
@@ -330,8 +338,10 @@ column k, profile index j inner: `[c(k,j), c(k,j+1), c(k+1,j+1), c(k+1,j)]`.
 - **Movement** (brief 042, `lathe/movement`: rectangle at x 300, movement 200): column k is
   lifted by `movement·k/subdivision` along Y (the turn then spans y −200 to 400, size
   600). A moved turn does not close: 33 columns, and the first and last column get caps.
-- **Scaling** (**parity-pending**, no case): x and z are scaled by
-  `1 + (scaling/100 − 1)·k/subdivision` before the rotation; a scaled full turn is open like a
+- **Scaling** (`lathe/r25-scaling-50`, matches exactly): the profile point is scaled
+  **uniformly**, x, y and z, by `1 + (scaling/100 − 1)·k/subdivision` before the rotation (the
+  height scales with the radius: y at column 1 is 0.984375 of the unscaled y for 50 %), and
+  `movement` is added after the scaling; a scaled full turn is open like a
   moved one.
 - **Caps** of an open lathe (partial angle or movement or scaling) of a closed profile come
   from the first and last columns. Triangles: as Extrude's (start from column 0, end from
@@ -400,6 +410,14 @@ rail (§10a); all placed by their transforms; the profile is read in its XY coor
 - **Scale and twist:** with f = length along the path / total length (closed paths
   include the closing chord), the profile is scaled by `1 + (end_scale − 1)·f` and
   rotated by `−end_rotation·f` before the mitre (`sweep/end-scale`, `end-rotation`).
+- **First normal** (`sweep/r25-banking-planar`, a Flower in XY, matches exactly): with Banking on
+  the first ring's normal is `t0 × Z`, normalised (the XY plane's normal; +x at the Flower's inner
+  point and radially outward on the helix). Hypotheses: (1) away from the bend (the former rule: -x
+  on the Flower, rejected), (2) `t0 × Z` (adopted; a tangent along Z falls back to rule 1),
+  (3) `Y × t0` for a tangent tilted towards Z: `sweep/r25-helix-sub4` (Helix Subdivision 4) has a
+  first ring normal `(-0.84, 0, 0.54)` = `Y × t0` for `t0 = (-0.54, 0, -0.84)`, which `t0 × Z`
+  misses (**parity-pending**: the switch between the two, and the sign, are not derived, so
+  `r25-helix-sub4` and `-sub8` stay in `KNOWN_MISMATCH`).
 - **Banking off** (brief 042, `sweep/banking`): the normal is not transported but
   `Y × tangent`, normalised (world up; the profile's x axis stays horizontal), with the same
   bisector tangent; where the tangent is parallel to Y the previous normal is kept
@@ -459,6 +477,13 @@ a 3-array `size` on a cube is `size_x/y/z`; Symmetry's `weld_tolerance` is `tole
   Not derived: Frenet, bend at point 1, parallel transport (four discretisations), coarse
   transport, and projection are rejected. `sweep/helix` (R20) shows the same lag.
   The end scale/rotation rule (§10) is otherwise unchanged.
+- **Follow-up cases (brief 042 rows of generators-3.md).** Matching exactly: `sweep/r25-banking-off-rotated`
+  (a Helix rotated 90° about X with Banking off: the `Y × tangent` rule holds in world space, not
+  the path's own frame), `sweep/r25-banking-planar` (first normal `t0 × Z`, above),
+  `lathe/r25-scaling-50` (§8), `connect/tolerance-in`, `instance/render-instance`. Pinned
+  (`KNOWN_MISMATCH`, reasons in `generators_parity.rs`): `sweep/r25-helix-sub4`, `-sub8`,
+  `-helix-radius`, `-rail-rectangle`. Not buildable: `sweep/r25-scale-end-only` (its 2-point Linear
+  path of length 400 has no recorded points; `UNSUPPORTED`).
 
 ## 11. Parity tests
 

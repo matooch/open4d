@@ -606,7 +606,9 @@ own list).
 ## 11. Explosion (`forge.explosion`) and Shatter (`forge.shatter`)
 
 Source: O19 [deformers-3.md](../parity/deformers-3.md); golden `tests/golden/{explosion,shatter}`
-(`defaults`, `strength-50` each). `explosion-fx/frame-10` belongs to O45 / another brief and
+(`defaults`, `strength-50` each, and the follow-up cases of "Follow-up cases (planner, after brief 053)" on
+1- and 2-polygon planes: `explosion/{one-poly-25,one-poly-100,two-poly-50,rand-0,end-size-100,speed-0,angle-speed-200}`,
+`shatter/{one-poly-25,two-poly-50,rand-0}`). `explosion-fx/frame-10` belongs to O45 / another brief and
 is not covered here. Neither deformer has a Falloff group in the reference, so neither has
 a `fields` param; both carry `enabled` (§0).
 
@@ -615,10 +617,14 @@ a `fields` param; both carry `enabled` (§0).
 | `strength` | Strength | percent | 0 | 0…100 | both |
 | `speed` | Speed | float | 100 | any | Explosion |
 | `angle_speed` | Angle Speed | angle | 100° | any | both |
-| `end_size` | End Size | percent | 0 | 0…1000 | both |
+| `end_size` | End Size | float (plain factor) | 0 | 0…1000 | both |
 | `randomness` | Randomness | percent | 100 | 0…100 | both |
 
-Case files use `strength_percent`, `angle_speed_deg`, `end_size`, `randomness_percent`.
+Case files use `strength_percent`, `angle_speed_deg` (`angle_speed_degrees` in the menu-created form),
+`end_size`, `randomness_percent`. The follow-up cases are written in the menu-created form (`frame` / `fps`,
+`[params.deformer.parameters]`, the plane under `[params.source.parameters]`); the parity tests read both forms
+through `tests/common/mod.rs`. **End Size is a plain number, not a percent** (the form states it): the case
+`end_size = 100.0` means 100, not 1.
 
 ### Topology (derived)
 Both deformers **split the mesh into its polygons**: the result has the same polygon list
@@ -636,13 +642,22 @@ Each polygon `P` with centre `c` (mean of its points) goes to
 a new centre `c'`. A Kabsch fit of all 160 polygons of each case gives residual 0 (≤ 1e-6)
 with `k = 0.5` exactly. With `s = strength/100`:
 
-- `k = 1 + (end_size/100 − 1)·s` (`strength-50`, `end_size 0`: `1 − s = 0.5`).
-  **Parity-pending:** linear in `s` and the unit of `end_size`: one strength only.
-- `Rot = Ry(ey) · Rx(ex) · Rz(ez)` with the three angles independent and uniform in
-  `±h`, `h = 0.75 · angle_speed · s` (37.5° at 100°, 50 %). Proven by the Euler fit of the
-  320 rotations: of the six axis orders only `Y X Z` gives a symmetric spread, max
+- `k = 1 + (E − 1)·s` with `E = end_size` as the plain number. Settled by `explosion/end-size-100` (E = 100,
+  s = 0.5: k = 50.5 measured on both polygons, rigid to 1e-6), `one-poly-25` (E = 0: k = 0.75), `two-poly-50`
+  (k = 0.5) and `one-poly-100` (k = 0: the polygon collapses to a point).
+- `Rot = Ry(ey) · Rx(ex) · Rz(ez)` with the three angles independent and uniform in `±h`,
+  `h = angle_speed · s · (1 + s) / 2` (37.5° at 100°, 50 %). Proven by the Euler fit of the
+  320 rotations of `strength-50`: of the six axis orders only `Y X Z` gives a symmetric spread, max
   |angle| 36.6–37.5° on each of the three axes (both deformers), std ≈ 21.5 ≈ 37.5/√3.
-  **Parity-pending:** the factor 0.75 and the linearity in `s` and `angle_speed`.
+  Settled by the follow-ups (the first polygon draws the same stream in every case): `angle-speed-200`
+  doubles every angle exactly (17.134 / 49.18 / 43.773 against 8.567 / 24.59 / 21.887: linear in
+  `angle_speed`); `one-poly-25` against `two-poly-50` scales all three angles by exactly 2.4
+  (3.569 / 10.246 / 9.119 against 8.567 / 24.59 / 21.887), so the strength law is not linear
+  (that would give 2). Three hypotheses on the ratio 2.4 = g(0.5)/g(0.25): `s^p` needs the odd
+  p = 1.263; `s + s²` fits exactly and gives `h(0.5) = 37.5` as measured; linear fails.
+  **Parity-pending:** only two strengths were observed (s = 1 collapses the polygon, no angle can be read).
+- **Randomness does not touch the rotation:** `rand-0` (explosion and shatter) shows the identical Euler
+  angles of `two-poly-50`, to 1e-3°. The earlier statement that `R = 0` gives no rotation was wrong.
 
 ### Centre `c'`
 - **Explosion:** `c' = c + d`, `|d|` uniform in `[0, 15 · speed · s]` (max measured 749.06
@@ -650,15 +665,22 @@ with `k = 0.5` exactly. With `s = strength/100`:
   vector with a **radial bias**: `normalize(normalize(c) + 1.5·R·v)` with `v` a uniform unit
   vector and `R = randomness/100`. Measured mean of `dir·normalize(c)` is 0.405 (a pure random
   direction would give 0; the blend factor 1.5 gives 0.44, 1.65 gives 0.40).
-  **Parity-pending:** all of it (one strength, one speed, one randomness); the 15, the bias
-  law and the role of `R`.
+  Settled by the follow-ups: `speed-0` leaves every centre where it is (`d = 0`, the rotations are
+  the stream's); `rand-0` moves each centre by exactly `|d| = 375 = 15·100·0.5 / 2` straight away
+  from the origin (`d = ±(375, 0, 0)` at `c = (∓100, 0, 0)`, exact to 1e-3), i.e. `R = 0` fixes the length
+  draw at the middle of its range and the direction at the radial one; the lengths of the other
+  cases stay inside `[0, 15 · speed · s]` (231 of 375 at s = 0.25, 1479 of 1500 at s = 1, 555 and 661
+  of 750 at s = 0.5). **Parity-pending:** the 15 and the linearity of the range in `s` (given the
+  rotation law's `s(1 + s)`), the bias law (1.5) for other `R`, the direction of a polygon at the origin.
 - **Shatter:** `y' = y · (1 − min(1, 2s))` (all 160 centres land exactly on y = 0 at
   `s = 0.5`; the law between 0 and 0.5 is a guess), and `x' = x + dx`, `z' = z + dz` with
   `dx, dz = 100 · s · R · (u1 + u2 − 1)` (a triangular spread: measured std 20.8 and 19.1,
   max 46.7 of 50, lengths peaked around 25). **Parity-pending:** all of it.
 
-`R < 1`: every uniform draw `u` is replaced by `(1 − R)/2 + R·u`, so `R = 0` gives no
-rotation and no random offset. **Parity-pending** (never observed below 100 %).
+`R < 1`: the draws of the **offsets** (Explosion's length, Shatter's two offsets) are replaced by
+`(1 − R)/2 + R·u`, so `R = 0` gives the middle of the range (Explosion) or no offset (Shatter:
+`shatter/rand-0` moves every centre by exactly 0 in x and z). The rotation angles are not drawn through
+`R` (see above). **Parity-pending:** values between 0 and 100 %.
 
 ### Random stream (not matchable; compared statistically)
 The reference draws from one seeded stream polygon by polygon: Shatter polygon `7m + 6` has
@@ -666,17 +688,21 @@ the same rotation as Explosion polygon `6m + 5` for every block `m` (22 pairs, e
 1e-4°), i.e. Shatter consumes 6 values and Explosion 7 per polygon from the same seed.
 The generator itself is not known, so values cannot be reproduced. Ours is SplitMix64
 seeded with `ctx.seed` (deterministic, each polygon draws in order). The strength-50 cases
-therefore **cannot match point by point**; `KNOWN_MISMATCH` pins the exact comparison and the
-parity test applies the same *statistical* checks to the golden and to our mesh (§9):
-topology, `k`, rigidity, Euler range / spread, Shatter `y = 0` and offset bounds, Explosion
-`|d|` bound and radial bias.
-Follow-up case suggestions: strength 25 % and 100 %, End Size 100 %, Randomness 0 %, Speed
-and Angle Speed 0 and 200 on a 1-polygon plane (a single polygon pins each law
-in one read), and the same on a 2-polygon plane to see the stream order.
+therefore **cannot match point by point**, in any case with a nonzero strength; the parity test pins the
+exact comparison and applies the same *invariants* to the golden and to our mesh (§9): topology, `k`,
+rigidity, the Euler range `h` (for polygons that do not collapse), Shatter `y' = y (1 − min(1, 2s))` and the
+offset bound `100·s·R`, Explosion `|d| ≤ 15·speed·s`, the exact `R = 0` and `speed = 0` results, and, over
+many polygons, the spread and radial bias.
+**Stream order (new).** In `shatter/one-poly-25` the three Euler angles are `(−7.486, 3.569, 10.246)`, in
+`explosion/one-poly-25` `(3.569, 10.246, 9.119)`: Explosion's angles are Shatter's shifted by one draw, so
+Explosion consumes one value before its rotation (the 7 against 6 per polygon above). The generator
+stays unknown, so ours (SplitMix64) cannot reproduce the values: pinned `pending: random stream`.
 
 ## 12. Wind (`forge.wind`)
 
-Source: O19; golden `tests/golden/wind/frame-10` (cube 4/8/4, defaults, frame 10 at 30 fps).
+Source: O19; golden `tests/golden/wind/frame-10` (cube 4/8/4, defaults, frame 10 at 30 fps) and the
+follow-up cases (`frame-0`, `frame-20`, `flag-off`, `size-50`, `size-200` on the same cube, `row-x` on a
+10 × 1-segment plane along x; all with `frame` / `fps` written).
 
 | Key | Label | Type | Default | Range |
 |---|---|---|---|---|
@@ -709,17 +735,35 @@ test checks the invariants above on both meshes plus `max|dz| ≤ 1.5·amplitude
 **Parity-pending:** noise type and range, the weight `g` (measured mean `|dz|/amplitude` is
 about 0.81 at |x| = 50 and 0.94 at |x| = 100, between a square-root and a linear weight),
 `fx`/`fy` as sampling factors, `flag` off, the role of `frequency` and `turbulence`.
-The case file has no `frame` / `fps` keys although its description and the form (O19) say
+The case file of `frame-10` has no `frame` / `fps` keys although its description and the form (O19) say
 frame 10 at 30 fps; the test uses 10 / 30 when they are absent.
-Follow-up case suggestions: frame 0 and frame 20 (does it move over time), `flag` off,
-`size` 50 / 200, a plane with 1 row of points along x (to read `g` and the noise).
+
+### Follow-up findings (all pinned: the noise function stays unknown)
+- **It moves over time:** frames 0, 10 and 20 give different `dz` at every point (at (100, −50): 48.7, 61.4,
+  72.5), and the time change is not the same at every y (+12.8 at y = −50, +10.4 at y = −200 for 0 → 10).
+- **Flag off is not "no weight".** With Flag off every point of the cube moves, including `x = 0`
+  (`dz` 88–127 there, i.e. up to 2.5·amplitude, not the 1.5 above), the sign is always positive and `dz` still depends
+  on `(x, y)` only. With Flag on `dz = 0` on `x = 0` exactly.
+- **Flag on is affine in Flag off, per x:** at fixed x, the Flag-on offset against the Flag-off offset over the nine
+  y rows of the same cube and frame lies on a line with slope **`x / (2·size)`** (0.25 at x = ±50, 0.5 at
+  x = ±100 with size 100; the four rows read agree to 1e-3) and an offset `b(x)` that depends on x only
+  (`b = 17.35, 19.40` at x = 50, 100 and `−18.30, −24.92` at x = −50, −100). So the weight is
+  linear in x with no clamp: `row-x` (|x| up to 200, size 100, i.e. slope up to 1) shows `dz` of
+  both signs and `size-50` reaches `dz = −102` at x = 100.
+- `size` changes the pattern (50 and 200 differ from 100 everywhere), not only the weight.
+- `row-x` (plane along x, 22 points): `dz` at x = −200 … 200 step 40 is −43.9, −60.9, −71.9, −65.4, −39.1, 0,
+  38.0, 59.4, 53.5, 18.6, −36.0, the same on both z rows.
+**Parity-pending (pinned `pending: wind noise`):** the noise value itself, so also the offset `b(x)` and the
+scale of Flag off. The test checks the invariants above on the golden and on ours (topology, x/y fixed, `dz`
+independent of z, `|dz| ≤ 2.6·amplitude`, `x = 0` pinned iff Flag on).
 
 ## 13. Parity of §11–12
 
-Test: `crates/modifiers/tests/destructive_parity.rs`, features `explosion` (2), `shatter`
-(2), `wind` (1). Exact (`export_weld`, `compare_meshes`): `explosion/defaults`,
-`shatter/defaults`. `KNOWN_MISMATCH` (statistical checks pass instead): `explosion/strength-50`,
-`shatter/strength-50` (random stream), `wind/frame-10` (noise function).
+Test: `crates/modifiers/tests/destructive_parity.rs`, features `explosion` (9), `shatter` (5), `wind` (7); older
+and menu-created case forms are read through `tests/common/mod.rs`. Exact (`export_weld`, `compare_meshes`):
+`explosion/defaults`, `shatter/defaults`. Pinned (exact comparison must fail, the invariants of §11 / §12 hold
+on golden and ours): the 7 other Explosion and 3 other Shatter cases (`pending: random stream`) and all 6 Wind
+cases (`pending: wind noise`).
 
 ## 14. Cage, Surface, Camera, Collision, Jiggle, Delta Mush, Correction deformers (brief 056)
 
@@ -935,7 +979,7 @@ cube (`export_weld`).
 ## 16. FFD (`forge.ffd`) (brief 052)
 
 Source: O9 [deformers-2.md](../parity/deformers-2.md) (`ffd/defaults`, `ffd/point-moved`) and O45
-[deformers-4.md](../parity/deformers-4.md) (`ffd/ffd-grid-5`); golden `tests/golden/ffd` (3 cases).
+[deformers-4.md](../parity/deformers-4.md) (`ffd/ffd-grid-5`, `ffd/point-x`, `ffd/point-z`, `ffd/grid-2`); golden `tests/golden/ffd` (6 cases).
 (The brief names its sections §9–11; those numbers are taken, so FFD, Formula and Melt are
 §16–18 and their parity is §19.)
 
@@ -963,13 +1007,21 @@ Proof: `ffd/point-moved` (degree 2, point 8 up by 100: all 162 points within 5e-
 which prints 6 decimals) and `ffd/ffd-grid-5` (degree 4, centre point 62 up by 100: 80 points
 move, up to 1.63, all within 4e-7). The degree is the point count minus one on each axis.
 
+Follow-up cases (menu-created form, `[params.lattice]` lists the lattice after the edit, x fastest): `ffd/point-x`
+(point 14, +x middle, moved (50, 0, 0)), `ffd/point-z` (+z middle, (0, 0, 50)) and `ffd/grid-2` (2×2×2, corner 0 moved by
+(50, 50, 50)) match to 5e-7 with the same formula: the axis orientation (x fastest, y, z) and the degree 1 case are
+confirmed. `ffd/grid-small` was not observed (it stayed undeformed in the app).
+
 Parity-pending: the cut-off at the lattice boundary (a point just outside might fade instead of
 stop: no case has a point between the box and a distance away); non-uniform lattices other than
 one moved point; a negative `size`.
 
 ## 17. Formula (`forge.formula`) (brief 052)
 
-Source: O9 (`formula/defaults`, `formula/frame-10`); text language [EXPR.md](EXPR.md).
+Source: O9 (`formula/defaults`, `formula/frame-10`) and the follow-up cases of [deformers-4.md](../parity/deformers-4.md)
+(`formula/d-const`, `d-u`, `d-v`, `effect-manual`, `-spherical`, `-cylindrical`, `-x-radial`, `-z-radial`, `size-nonuniform`);
+text language [EXPR.md](EXPR.md). The follow-ups label the four expression rows by their variables
+(`d(u,v,x,y,z,t)`, `X(x,y,z,t)`, ...); the readers map them to `formula_d`, `formula_x`, `formula_y`, `formula_z`.
 
 | Key | Label | Type | Default |
 |---|---|---|---|
@@ -992,20 +1044,33 @@ x or z; at the axis points (x or z = 0, r = 100 so `u = ½`) `d = 0` at t = 0 an
 `0.2·sin(2π·0.7071)·200 = −38.556`; the (50, 100) column (`u = 0.559`) by −14.495; the point
 (50, 0) (`u = ¼`) by +40 (bbox y max 240). Frame 10 agrees at all 81 columns.
 
+### The other effects (derived from the follow-up cases, all 162 points each)
+- `x_radial` (`u` from y, z; `dir = +x`; `amp = hx`), `z_radial` (`u` from x, y; `dir = +z`; `amp = hz`),
+  `cylindrical` (`u` = angle `atan2(z, x)/2π` mod 1, `dir` = outward in xz, `amp = hx`; the polar-axis points do not
+  move), all by the rules of `y_radial` with the axes exchanged: exact (`effect-x-radial`, `-z-radial`,
+  `-cylindrical`, `size-nonuniform` with a non-uniform `size`).
+- `d = 0.1` (`d-const`) moves every point by `0.1·amp` along `dir`; `d = u` (`d-u`) by `u·amp`. **`v` equals `u`
+  for the radial effects** (`d-v`: dy = 141.421 on the corner columns, 100 on the axis columns, 0 at the poles, i.e.
+  `200·u`; the earlier guess "v = position along the axis" is refuted: three hypotheses, the position along y gave a
+  constant offset per row instead). X Radial and Z Radial take the same rule (no case reads their `v`: parity-pending).
+- `spherical` (`effect-spherical`): `u = atan2(z, x)/2π` mod 1, `dir = p/|p|` (outward), `amp = hx`; the offsets
+  of the 160 off-axis points equal `0.2·sin(2π u)·200` along `dir` (perpendicular part 0). **On the polar axis
+  (x = z = 0) the longitude reads 90° (`u = ¼`, `sin = 1`)**: the two pole points move by `0.2·200 = 40` outward,
+  exactly `(0, ±40, 0)`. `v` is not read by a case (latitude/π + ½ kept, parity-pending).
+- `manual` (`effect-manual`, `X = x*2`): X, Y, Z are applied (`dx = x`) and **`d` does nothing**: dy = 0 at
+  every point although the default `d` is not zero at `u = x/sx + ½`. Two hypotheses fit (no direction for `d` in
+  Manual, or `u = v = 0` there); the first is used. Parity-pending: the role of `d`, `u`, `v` in Manual.
+
 ### Own design (parity-pending, no observation)
-- The other effects, by the same rules with the axes exchanged or the plane rule changed:
-  `x_radial` (`u` from y, z; `dir = +x`; `amp = hx`), `z_radial` (`u` from x, y; `dir = +z`;
-  `amp = hz`), `cylindrical` (`u` = angle about y over 2π in [0,1), `dir` = outward in xz,
-  `amp = hx`), `spherical` (`u` = longitude/2π, `v` = latitude/π + ½, `dir` = outward from the origin,
-  `amp = hx`), `manual` (`u = x/sx + ½`, `v = z/sz + ½`, `dir = +y`, `amp = hy`).
-- `v` for the radial effects is the position along the axis, `0…1` over `size`.
 - No box: the formula applies to every point, also outside `size`.
 - A formula that does not parse acts as the identity for X, Y, Z and as 0 for `d`; a non-finite
   value of one component keeps that component of the original point (for `d`: 0).
 
 ## 18. Melt (`forge.melt`) (brief 052)
 
-Source: O9 (`melt/defaults`, `melt/strength`), parameter table of deformers-2.md.
+Source: O9 (`melt/defaults`, `melt/strength`), parameter table of deformers-2.md, and the follow-up cases of
+[deformers-4.md](../parity/deformers-4.md) (`melt/no-random-s0`, `-s10`, `-s50`, `-s100`, `size-100`, `size-200`,
+`radius-50`, `radius-200`, `noise-scale-50`).
 
 | Key | Label | Default |
 |---|---|---|
@@ -1036,30 +1101,53 @@ Source: O9 (`melt/defaults`, `melt/strength`), parameter table of deformers-2.md
    3.0…4.3 at 111.8, 4.1…4.8 at 141.4. Along a column `F` falls slowly with y (4.9, 4.5, 4.3, 4.15
    for y = 50…200 on the ray (−100, −100)); the law in y is not derived.
 
-### Our model (own design, parity-pending; the random stream is not matchable)
+### What the no-randomness cases show (Radial and Vertical Randomness 0, `melt/no-random-s*`)
+With both randomness settings at 0 the result has no noise at all and is **exact in our model** (below):
+1. `k` is one number for every ray: `1.792066268` at 10 %, `4.18024039` at 50 %, `4.96319944` at 100 %
+   (Melted Size 400 %, all points with `r > 0` agree to 1e-8). Strength 0 changes nothing but the clip: every
+   point with `y ≤ 0` goes to 0 (`no-random-s0`).
+2. **`k = 1 + m·a(s)` with `m = melted_size/100`**, not `1 + (m − 1)·g`: `size-100`, `size-200` and the
+   default 400 % give `k − 1 = 0.4962 : 0.9924 : 1.9849` at the first ray (exactly 1 : 2 : 4) at strength 50 %.
+   `k` does not depend on Radius (`radius-50`, `radius-200`) or on Noise Scale (`noise-scale-50`): all three give the
+   `melt/strength` values exactly.
+3. `a(0.1) = 0.198016567`, `a(0.5) = 0.795060098`, `a(1) = 0.990799860` (from fact 1); with fact 2 of the noisy cases
+   `a(¼) = a(½)/1.6905`. Three hypotheses for the closed form: `1 − e^(−Bs)` (fixes B from `a(½)/a(1)`, then
+   `a(0.1)` is 31 % off), `erf(cs)` (0.6 % off at 0.1), and `1 − f` with `f` a Gaussian of `s` (7 % off at 1): none
+   fits, so `a` is the monotone cubic through the nodes `s = 0, 0.1, ¼, ½, 1` (exact there, **parity-pending
+   between them**). With Randomness 100 % the noisy factor is `0.60 … 0.80` times `a(s)` on every ray
+   (`melt/strength`: (k − 1)/(4 a(½)) from 0.603 to 0.802), multiplicative and independent of `s`.
+4. The height: `y' = y·exp(−8 s² F)` with **`F = 1 + r/20` exactly** (`r` the distance from the axis: 3.5, 4.5355,
+   6, 6.5902, 8.0711 at r = 50, 70.71, 100, 111.8, 141.4; the same at 10 % and 50 %, and `y'/y` does not depend on
+   `y`). `20 = Radius/5` or a constant: with Randomness 0 the Radius cases were not recorded.
+5. With Randomness 100 % the radial part of `F` is smaller (`F − 1` is 0.57 … 0.77 of `r/20` at r = 50…70) and
+   **depends on Radius in a way not explained**: at r = 50 on the ray 0°, `F` is 3.142, 2.691, 1.746 for Radius
+   50, 100, 200, while `k` does not change. The noise also depends on Noise Scale (`F` 2.337 against 2.691 at 50 %
+   on the same ray). Pending.
+
+### Our model (own design where noted; the random stream is not matchable)
 With `s = strength/100`, `m = melted_size/100`, `rr`, `vr` the randomness fractions and `n1, n2 ∈ [0,1]`
 two noises of the angle `θ = atan2(z, x)` (Perlin on the unit circle, seeded by `ctx.seed`, lattice
 scale `10·noise_scale`):
-- `g(s) = (1 − e^(−1.4803 s)) / (1 − e^(−1.4803))` (fitted so that `g(½)/g(¼) = 1.6905`; `g(1) = 1`),
-  `k = 1 + (m − 1)·g·(1.1 + 0.15·rr·(2 n1 − 1))` scales x and z (so `k` = 2.2…2.5 at 25 %);
-- `y' = 0` for `y ≤ 0`, else `y' = y·exp(−8 s²·F)`, `F = (1 + 1.7·(r/(radius/2))^0.65)·(1 + 0.12·vr·(2 n2 − 1))`
-  (the fit of the cap points). `y` itself does not enter `F`.
-The structure (facts 1 to 3) holds; the values do **not** reproduce the reference. `radius` only
-rescales `F` in our model: the cases never changed it (the reference's use of Radius is unobserved).
+- `k = 1 + m·a(s)·(1 − rr·(0.3 − 0.1(2 n1 − 1)))` scales x and z, `a` the node curve of fact 3 (exact for `rr = 0`);
+- `y' = 0` for `y ≤ 0`, else `y' = y·exp(−8 s²·F)`, `F = 1 + (r/20)·(1 − vr·(0.3 − 0.1(2 n2 − 1)))` (exact for `vr = 0`).
+The structure (facts 1 to 3 of the first list) holds for every case; the values with randomness do **not**
+reproduce the reference. `radius` does not enter our model (fact 5).
 
 ## 19. Parity of §16–18
 
-Test: `crates/modifiers/tests/ffd_formula_melt_parity.rs`; features `ffd` (3), `formula` (2),
-`melt` (2); compared like the other deformers (`export_weld`, `compare_meshes`).
+Test: `crates/modifiers/tests/ffd_formula_melt_parity.rs`; features `ffd` (6), `formula` (11),
+`melt` (11); compared like the other deformers (`export_weld`, `compare_meshes`); the menu-created case form is
+read through `tests/common/mod.rs`.
 
-- Exact: `ffd/defaults`, `ffd/point-moved`, `ffd/ffd-grid-5` (3/3); `formula/defaults`,
-  `formula/frame-10` (2/2).
-- `KNOWN_MISMATCH` (must still fail the exact comparison): `melt/defaults`, `melt/strength`. The
-  reference noise is not reproduced (only the structure above is derived). Instead the test asserts,
-  on the golden and on ours alike: same topology as the cube, xz direction preserved and farther from
-  the axis, `y' = 0` for `y ≤ 0`, `0 < y' < y` above, the axis point at `200·e^(−8 s²)`, and `F`
-  independent of the strength on the cap; on the golden, the `k − 1` ratio 1.6905 across all rays.
-- Follow-up cases (planner): Melt with Radial Randomness 0 and Vertical Randomness 0 (removes the
+- Exact: all 6 FFD cases; all 11 Formula cases (`d-v`, `effect-manual`, `effect-spherical` since the rules of §17
+  above); Melt `no-random-s0`, `-s10`, `-s50`, `-s100` (4/11). 21/28 in all.
+- `KNOWN_MISMATCH` (must still fail the exact comparison; `pending: Melt noise`): `melt/defaults`, `strength`,
+  `size-100`, `size-200`, `radius-50`, `radius-200`, `noise-scale-50`. The reference noise is not reproduced
+  (only the structure above is derived). Instead the test asserts, on the golden and on ours alike: same
+  topology as the cube, xz direction preserved and farther from the axis, `y' = 0` for `y ≤ 0`, `0 ≤ y' < y` above
+  (a melted-away point prints 0), the axis point at `200·e^(−8 s²)`, and `F` independent of the strength on the cap;
+  on the golden, the `k − 1` ratio 1.6905 across all rays.
+- Follow-up cases that were asked (planner; all now observed except `ffd/grid-small`): Melt with Radial Randomness 0 and Vertical Randomness 0 (removes the
   noise: gives `g(s)` and the vertical law directly), at Strength 0, 10, 50, 100; Melt with
   Melted Size 100 and 200; Melt with Radius 50 and 200; Melt with Noise Scale 50 (what the noise frequency is);
   Formula with `d = 0.1`, with `d = u` and `d = v` (gives `u`, `v` of each effect), each other effect
@@ -1174,7 +1262,17 @@ exactly 4 points move, and they are exactly the points whose distance to the ori
 (30): `(0, 200, 0)` (distance 0), `(50, 200, 0)` (6.16), `(100, 150, 0)` (19.72), `(100, 200, 0)` (23.61); the
 nearest other points are at 41 and 50. Each of them moves by `d · (0, −1, −1)` with `d` = 200, 155.526, 55.929, 38.534
 (the end point lands on the modifier's start `(0, 0, −200)`), so `d/200 = 1, 0.7776, 0.2796, 0.1927`, falling with the distance.
-These are the only facts.
+These are the only facts of `defaults`.
+
+**Follow-up cases (deformers-4.md).** With straight 2-point Linear splines (original along x from (0,0,0) to (400,0,0), the modifier the
+same 100 higher; only `(100, 0, 0)` of the cube's surface lies on the line), `spline-deformer/lines` and `use-length` match exactly:
+the point moves by `(0, 100, 0)` (weight 1) and nothing else moves; Use Length changes nothing here (parity-pending for curved splines).
+`modifier-moved` (the same Arc and a modifier translated by (0, 50, 0)) moves the same four points as `defaults`, now only in +y,
+by `50·w` with `w = 1, 0.8008, 0.3357, 0.2154` at distances `0, 6.155, 19.722, 23.607` (against `1 − d/30 = 1, 0.7948, 0.3426, 0.2131`):
+a weight that is near but not linear in the distance, and that is **not the same function in `defaults`** (`d/200 = 1, 0.7776, 0.2796, 0.1927` there),
+so the displacement is not `w(distance) · (M − O)` with one weight function: pinned (our weights are the linear ones). `radius-60`:
+only the on-line point moves, the points 50 away stay put although 50 < 60, so Radius does not simply bound the distance
+(pinned `pending: role of Radius`; `lines` at Radius 30 gives the same golden mesh).
 
 Own design, **parity-pending** (mismatch: the shared direction `(0, −1, −1)` and the weights are not reproduced):
 `p' = p + w · (M(f) − O(f))`, with `O(f)`, `M(f)` the original and the modifying polylines at the same arc-length fraction `f`
@@ -1206,15 +1304,36 @@ p' = L(t) + u · (R(t) − L(t)) + (0, y, 0)
 land on the two splines, `x = 0` halfway; `y` is carried in the world Y direction, e.g. `Y = y − 0.2514` at `t = 1`, the Helix's end `y`).
 Unlimited continues beyond the ends as in 20.0 (`t` outside `[0, 1]`, each spline along its own end chord). The fraction runs over the vertex index (`t = k/(n−1)` is vertex `k`): the arc-length fraction of the polyline is off by 0.06 at
 `t = ¼` (the Uniform sampler ends 1e-4 short), the index fraction by under 2e-4. Outside `[0, 1]` each spline continues along its end chord by `t` (resp. `t − 1`) times its length.
+**Follow-up cases (deformers-4.md, menu-created form; the staged cases with hand-made helper splines export the
+splines' own 4 points as unused OBJ vertices, which the test drops):**
+- `limited`, `scale-before-50` and `within-box` equal `spline-rail/defaults` to 5e-7: all three modes and the width scale give
+  the same result here because every cube point has `t ∈ [0, 1]` and `|x| ≤ size_x/2`, `|z| ≤ size_z/2`. The cube is taller
+  than the box (`|y|` up to 200 against 100), and **`within_box` still moves those points**, so the box limits x and z only
+  (hypotheses: the full box, refuted by 300 units at the top and bottom rows; x and z only; no limit at all: the last two
+  agree with the data, the second is used).
+- `uneven` (Z splines `(−150, 0, 0)→(−150, 0, 200)` and `(150, 0, 0)→(150, 0, 400)`): the rule above holds at every
+  point, **exact** since the sampler gives a linear editable spline its Uniform points too (the `t = 1` row then ends
+  1e-4 of the spline's length short, `z = 199.98` and `399.96`, like the Helix; SPLINES.md).
+- `x-splines` (both X splines straight along x at z = 0, linked top and bottom beside the two Helix Z splines): x and y are those of
+  `defaults` but **every point's z is 0**. The X splines are therefore applied; which of their coordinates replaces z is not
+  derivable from a straight line at z = 0: pinned.
+- `one-spline` (only Z Spline Left linked, the right Helix at x = +150 unlinked): `p' = L(t) + (1 − u)·(300, 0, 0) + (0, y, 0)`
+  with `u = x/size_x + ½`: the edge `x = +100` lands on the linked spline and `x = −100` on a copy 300 further in +x, where the
+  unlinked helper stands. The reference evidently reads the other helper; pinned (`y` is carried as in every case).
+
 **Own design, parity-pending:** `limited` clamps `t` to `[0, 1]` and carries the rest of `z` rigidly along the mean end chord; `within_box`
-leaves points outside `|x| ≤ size_x/2, |y| ≤ size_y/2, |z| ≤ size_z/2` unchanged (all of them inside here); `scale_before_start` /
-`scale_after_end` scale the width `R − L` around its middle for `t < 0` / `t > 1`; with one Z spline only, `p' = S(t) + (x, y, 0)`; the X splines and `reference` are not applied.
+leaves points outside `|x| ≤ size_x/2, |z| ≤ size_z/2` unchanged (the data only shows that `y` is not limited); `scale_before_start` /
+`scale_after_end` scale the width `R − L` around its middle for `t < 0` / `t > 1` (no case has a point there); with one Z spline only, `p' = S(t) + (x, y, 0)`
+(**refuted by `one-spline`**, pinned); `reference` is not applied.
 
 ## 21. Parity of §20
 
-Test: `crates/modifiers/tests/spline_parity.rs`; features `spline-wrap` (2), `spline-deformer` (1), `spline-rail` (1);
-the cube is built, each linked spline from its `[params.*]` table (the splines are not in the OBJ).
-Result: **1/4 exact under the 1e-4 tolerance** (`spline-rail/defaults`, since brief 191), **three pinned in `KNOWN_MISMATCH`** (the exact comparison must still fail):
+Test: `crates/modifiers/tests/spline_parity.rs`; features `spline-wrap` (2), `spline-deformer` (5), `spline-rail` (7);
+the cube is built, each linked spline from its `[params.*]` table (the splines are not in the OBJ); the menu-created
+form (`[params.helpers.N]`, `[params.editable_helpers.N]`, links by helper name) is read through `tests/common/mod.rs`.
+Result: **6/14 exact under the 1e-4 tolerance** (`spline-rail/defaults`, since brief 191; and `spline-deformer/lines`, `use-length`,
+`spline-rail/limited`, `scale-before-50`, `within-box` from the follow-ups), **eight pinned in `KNOWN_MISMATCH`** (the exact comparison must still fail):
+the three below plus `spline-deformer/modifier-moved`, `radius-60`, `spline-rail/one-spline`, `x-splines`, `uneven` (reasons in 20.2 / 20.3). The Spline Wrap follow-ups (`box`, `axis-*`, `keep-length`, `clamp`, `strength-50`, `offset-25`, `from-25-to-75`, `banking-45`, `up-vector`, `closed`) have no data (the form marks them as needing an interactive export), so the Wrap options stay parity-pending.
 
 - `spline-rail/defaults`: rule derived (20.3), **exact** since brief 191 fixed the sampled Helix (handles of GENERATORS2 §6.1, open-spline offsets of §6.2); it was 1.9e-4 off before.
 - `spline-wrap/arc`: rule derived (20.1), compared under the recorded degenerate box (`fix_bounding_box`, centre `(0, 0, ½)`,

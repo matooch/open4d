@@ -1,0 +1,46 @@
+feature = "atom-array"
+observation = "docs/parity/generators-3.md"
+description = "atom-array/single-elements; measured fresh menu-created follow-up"
+mesh = "mesh.obj"
+
+[params]
+frame = 0
+fps = 30
+
+[params.generator]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.generator.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+sphere_radius = 5.0
+cylinder_radius = 2.0
+subdivisions = 8
+single_elements = 1
+
+[params.input]
+
+[params.input.1]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.input.1.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+size = [200.0, 200.0, 200.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = 0
+fillet = 0
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[import]
+scale = 1.0
+flip_z = false

@@ -1,0 +1,80 @@
+feature = "cloner"
+observation = "docs/parity/effectors-2.md"
+description = "target-strength-50; measured follow-up, menu-created fresh document"
+mesh = "mesh.obj"
+
+[params]
+frame = 0
+fps = 30
+
+[params.cloner]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+mode = "Linear"
+clones = "Iterate"
+reset_coordinates = 1
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = 5
+offset = 0
+mode_secondary = "Per Step"
+amount_percent = 100.0
+p = [0.0, 50.0, 0.0]
+s = [1.0, 1.0, 1.0]
+r_degrees = [0.0, 0.0, 0.0]
+step_mode = "Single Value"
+step_size_percent = 100.0
+step_rotation_degrees = [0.0, 0.0, 0.0]
+display = "None"
+p_secondary = [0.0, 0.0, 0.0]
+r_secondary_degrees = [0.0, 0.0, 0.0]
+s_secondary = [1.0, 1.0, 1.0]
+color_secondary = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+animation_mode = "Play"
+target_percent = 100.0
+
+[params.child]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+size = [20.0, 20.0, 20.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = 0
+fillet = 0
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[params.effectors_1]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+strength_percent = 50.0
+selection = ""
+target_mode = "Object Target"
+target_object = "Null"
+use_pitch = 1
+reverse_heading = 0
+up_vector = "None"
+repel = 0
+deformation = "Off"
+
+[params.target]
+position = [0.0, 0.0, 300.0]
+
+[params.target.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+shape = "Dot"
+radius = 10.0
+aspect_ratio = 1.0
+orientation = "Camera"
+
+[import]
+scale = 1.0
+flip_z = false

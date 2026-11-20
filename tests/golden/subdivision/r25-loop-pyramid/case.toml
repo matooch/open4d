@@ -1,0 +1,43 @@
+feature = "subdivision"
+observation = "docs/parity/generators-3.md"
+description = "subdivision/r25-loop-pyramid; measured fresh menu-created follow-up"
+mesh = "mesh.obj"
+
+[params]
+frame = 0
+fps = 30
+
+[params.generator]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.generator.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+type = "OpenSubdiv Loop"
+subdivision_editor = 2
+subdivision_renderer = 2
+subdivide_uvs = "Linear, All"
+boundary_interpolation = "Edge"
+edge_crease = "Chaikin"
+
+[params.input]
+
+[params.input.1]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.input.1.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+size = [200.0, 200.0, 200.0]
+segments = 1
+orientation = "+Y"
+
+[import]
+scale = 1.0
+flip_z = false

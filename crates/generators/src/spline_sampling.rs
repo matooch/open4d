@@ -112,12 +112,13 @@ pub fn add_params(t: NodeType, default: Interpolation) -> NodeType {
 /// short of its end, in arc length (observed, `arc-defaults`, `arc-angles` and `helix-uniform`).
 const UNIFORM_END_SHORTFALL: f64 = 1e-4;
 
-/// Extra absolute shortfall of an open spline's last Uniform point, per segment squared: the
-/// 100-segment `helix-uniform` ends 1.26e-4 earlier than `1e-4` of its length, while the 3-4
-/// segment arcs (`arc-defaults`, `arc-angles`, and `spline-wrap/arc` through its 99-length
-/// extension) allow at most 1e-6. The squared law is the simplest that fits those two ends; the
-/// real cause is not known. **Parity-pending.**
-const UNIFORM_END_EXTRA: f64 = 1.26e-8;
+/// Extra absolute shortfall of an open spline's last Uniform point, per segment and per unit of spline length (`5e-10 * segments * total`): the
+/// Helix needs 1.26e-4 at 100 segments and 2.5e-4 at 200 (`helix-uniform`, `-sub200`), the
+/// 10- and 50-segment helices and the 4-segment arcs fit with it too (`-sub10`, `-sub50`,
+/// `arc-uniform-n50`). Proportional to segments x length is the simplest law that fits the 100 and 200
+/// ends and keeps the 4-segment arc at 6e-7, which `spline-wrap/arc` needs (the earlier squared law failed `-sub200` by 2.5e-4, a per-segment 1.26e-6 broke `spline-wrap/arc`); the real cause is not known.
+/// **Parity-pending.**
+const UNIFORM_END_EXTRA: f64 = 5.0e-10;
 
 /// Relative lag of the Uniform points of an open spline before the last one: sample `k` lies
 /// at `(1 - 1e-7)` of its arc length (`helix-uniform`: 1.00e-7 over 2521 long; `arc-defaults`
@@ -127,7 +128,8 @@ const UNIFORM_OPEN_LAG: f64 = 1e-7;
 
 /// The spline's points as the generators consume them: each segment's start point and its
 /// interior samples, then the end point of an open spline (a closed one doesn't repeat
-/// its first point). Straight (`linear`) splines get no interior samples. Uniform spaces
+/// its first point). Straight (`linear`) splines get no interior samples, except in Uniform
+/// (`splines-2/linear-open-uniform`). Uniform spaces
 /// its points over the whole spline instead ([`uniform_params`]).
 pub fn sample(curve: &Curve, s: &Sampling) -> Vec<DVec3> {
     sample_params(curve, s)
@@ -140,7 +142,7 @@ pub fn sample(curve: &Curve, s: &Sampling) -> Vec<DVec3> {
 /// spline tools (SPLINES.md section 8) map an intersection of two sampled outlines back
 /// onto the curve through it.
 pub fn sample_params(curve: &Curve, s: &Sampling) -> Vec<(f64, DVec3)> {
-    if s.mode == Interpolation::Uniform && s.number > 0 && !curve.linear {
+    if s.mode == Interpolation::Uniform && s.number > 0 {
         return uniform_params(curve, s.number)
             .into_iter()
             .map(|t| (t, curve.at(t)))
@@ -200,10 +202,10 @@ pub fn uniform_params(curve: &Curve, number: usize) -> Vec<f64> {
     let count = if curve.closed { steps } else { steps + 1 };
     (0..count)
         .map(|k| {
-            // the open end falls a ten-thousandth of the length short (and a little more
-            // for many segments); the steps before it lag by 1e-7 of their length
+            // the open end falls a ten-thousandth of the length short (and a little more per
+            // segment); the steps before it lag by 1e-7 of their length
             let target = if k == steps {
-                total * (1.0 - UNIFORM_END_SHORTFALL) - UNIFORM_END_EXTRA * (n_seg * n_seg) as f64
+                total * (1.0 - UNIFORM_END_SHORTFALL) - UNIFORM_END_EXTRA * n_seg as f64 * total
             } else if curve.closed {
                 total * k as f64 / steps as f64
             } else {

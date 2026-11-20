@@ -287,6 +287,11 @@ pub fn connect(
             .copied()
             .filter(|&i| (points[i as usize] - q).length() <= tol)
             .min();
+        // the merged point sits where the later point was (`connect/tolerance-in`: the faces of
+        // the first cube at x = 100 move to the second cube's x = 100.5)
+        if let Some(i) = near {
+            points[i as usize] = q;
+        }
         let i = near.unwrap_or_else(|| {
             points.push(q);
             let i = (points.len() - 1) as u32;

@@ -1,0 +1,280 @@
+feature = "text"
+observation = "docs/parity/text.md"
+description = "separate-letters; measured fresh menu-created follow-up"
+mesh = "mesh.obj"
+
+[params]
+
+[params.input]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+font = "menu default; resolved family/style/file not observed"
+
+[params.input.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+text_spline = "AB"
+align = "Left"
+height = 200.0
+horizontal_spacing = 0.0
+vertical_spacing = 0.0
+separate_letters = 1
+plane = "XY"
+reverse = 0
+intermediate_points = "Adaptive"
+number = 8
+angle_degrees = 5.0
+maximum_length = 5.0
+
+[params.extrude]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.extrude.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+direction = "Auto"
+offset = 20.0
+subdivision = 1
+isoparm_subdivision = 10
+flip_normals = 0
+hierarchical = 0
+start_cap = 0
+end_cap = 0
+separate_bevel_controls = 0
+bevel_shape = "Round"
+size = 0.0
+extended_shape = 0
+height = 0.0
+shape_depth_percent = 100.0
+segments = 3
+bevel_shape_secondary = "Round"
+size_secondary = 0.0
+extended_shape_secondary = 0
+height_secondary = 0.0
+shape_depth_secondary_percent = 100.0
+extended_shape_3 = 0
+use_absolute_value = 0
+max_shape_height = 5.0
+segments_secondary = 3
+bevel_outside = 0
+avoid_self_intersections = 1
+caps_type = "N-gon"
+break_phong_rounding = 1
+shell = 0
+start_cap_secondary = 0
+end_cap_secondary = 0
+start_bevel = 0
+end_bevel = 0
+start_shell = 0
+end_shell = 0
+start_cap_3 = 0
+end_cap_3 = 0
+start_step = 0
+end_step = 0
+
+[params.object_tree_1]
+name = "Extrude"
+type = "Extrude"
+position = [0.0, 0.0, 0.0]
+
+[params.object_tree_1.children_1]
+name = "Text Spline"
+type = "Text Spline"
+position = [0.0, 0.0, 0.0]
+children = []
+
+[params.evaluated_text_tree_1]
+name = "Text Spline"
+type = ""
+position = [0.0, 0.0, 0.0]
+children = []
+point_count = 150
+
+[params.evaluated_text_spline]
+point_count = 36
+closed = true
+points = [[88.8671875, 58.7890625, 0.0], [67.08984375, 122.16796875, 0.0], [43.9453125, 58.7890625, 0.0], [56.93359375, 143.45703125, 0.0], [78.90625, 143.45703125, 0.0], [130.95703125, 0.0, 0.0], [109.66796875, 0.0, 0.0], [95.1171875, 42.96875, 0.0], [38.37890625, 42.96875, 0.0], [22.8515625, 0.0, 0.0], [2.9296875, 0.0, 0.0], [202.5390625, 82.8125, 0.0], [221.6796875, 86.23046875, 0.0], [232.421875, 105.56640625, 0.0], [220.99609375, 124.51171875, 0.0], [201.85546875, 127.24609375, 0.0], [167.1875, 127.24609375, 0.0], [167.1875, 82.8125, 0.0], [209.08203125, 16.6015625, 0.0], [234.5703125, 26.953125, 0.0], [239.35546875, 42.7734375, 0.0], [225.390625, 64.0625, 0.0], [205.76171875, 67.08984375, 0.0], [167.1875, 67.08984375, 0.0], [167.1875, 16.6015625, 0.0], [148.14453125, 143.45703125, 0.0], [209.765625, 143.45703125, 0.0], [245.60546875, 128.41796875, 0.0], [251.85546875, 107.91015625, 0.0], [244.140625, 85.64453125, 0.0], [232.6171875, 77.24609375, 0.0], [249.12109375, 67.7734375, 0.0], [258.7890625, 41.89453125, 0.0], [250.09765625, 16.796875, 0.0], [208.7890625, 0.0, 0.0], [148.14453125, 0.0, 0.0]]
+
+[params.evaluated_text_spline.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+type = "Bezier"
+close_spline = 1
+intermediate_points = "Adaptive"
+number = 8
+angle_degrees = 5.0
+maximum_length = 5.0
+
+[params.evaluated_text_spline.segments_1]
+closed = true
+cnt = 3
+
+[params.evaluated_text_spline.segments_2]
+closed = true
+cnt = 8
+
+[params.evaluated_text_spline.segments_3]
+closed = true
+cnt = 7
+
+[params.evaluated_text_spline.segments_4]
+closed = true
+cnt = 7
+
+[params.evaluated_text_spline.segments_5]
+closed = true
+cnt = 11
+
+[params.evaluated_text_spline.tangents_1]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_2]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_3]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_4]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_5]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_6]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_7]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_8]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_9]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_10]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_11]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_12]
+left = [0.0, 0.0, 0.0]
+right = [6.15234375, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_13]
+left = [-3.41796875, -1.708984375, 0.0]
+right = [5.37109375, 2.685546875, 0.0]
+
+[params.evaluated_text_spline.tangents_14]
+left = [0.0, -6.982421875, 0.0]
+right = [0.0, 7.03125, 0.0]
+
+[params.evaluated_text_spline.tangents_15]
+left = [5.712890625, -2.44140625, 0.0]
+right = [-3.22265625, 1.3671875, 0.0]
+
+[params.evaluated_text_spline.tangents_16]
+left = [6.34765625, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_17]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_18]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_19]
+left = [0.0, 0.0, 0.0]
+right = [8.935546875, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_20]
+left = [-3.80859375, -5.17578125, 0.0]
+right = [2.392578125, 3.271484375, 0.0]
+
+[params.evaluated_text_spline.tangents_21]
+left = [0.0, -4.638671875, 0.0]
+right = [0.0, 7.8125, 0.0]
+
+[params.evaluated_text_spline.tangents_22]
+left = [6.982421875, -2.83203125, 0.0]
+right = [-3.7109375, 1.513671875, 0.0]
+
+[params.evaluated_text_spline.tangents_23]
+left = [6.103515625, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_24]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_25]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_26]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_27]
+left = [0.0, 0.0, 0.0]
+right = [12.59765625, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_28]
+left = [-5.322265625, 7.51953125, 0.0]
+right = [3.125, -4.443359375, 0.0]
+
+[params.evaluated_text_spline.tangents_29]
+left = [0.0, 5.810546875, 0.0]
+right = [0.0, -6.787109375, 0.0]
+
+[params.evaluated_text_spline.tangents_30]
+left = [3.857421875, 4.345703125, 0.0]
+right = [-2.001953125, -2.294921875, 0.0]
+
+[params.evaluated_text_spline.tangents_31]
+left = [3.759765625, 1.904296875, 0.0]
+right = [5.517578125, -2.099609375, 0.0]
+
+[params.evaluated_text_spline.tangents_32]
+left = [-2.734375, 2.63671875, 0.0]
+right = [4.833984375, -4.6875, 0.0]
+
+[params.evaluated_text_spline.tangents_33]
+left = [0.0, 8.251953125, 0.0]
+right = [0.0, -6.93359375, 0.0]
+
+[params.evaluated_text_spline.tangents_34]
+left = [4.345703125, 5.615234375, 0.0]
+right = [-6.494140625, -8.3984375, 0.0]
+
+[params.evaluated_text_spline.tangents_35]
+left = [14.16015625, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.evaluated_text_spline.tangents_36]
+left = [0.0, 0.0, 0.0]
+right = [0.0, 0.0, 0.0]
+
+[import]
+scale = 1.0
+flip_z = false

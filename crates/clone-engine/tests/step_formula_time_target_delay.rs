@@ -98,7 +98,7 @@ fn step_curves_end_at_0_and_1_and_ease_differently() {
 }
 
 #[test]
-fn step_with_one_clone_gets_weight_zero_and_a_gap_is_unsupported() {
+fn step_with_one_clone_gets_weight_zero_and_an_unsupported_flag_errors() {
     let d = run(&Step::default(), column(1), 0.0).unwrap();
     assert!((scale_of(&d, 0) - 1.0).abs() < 1e-12);
     let mut gap = Step::default();
@@ -107,6 +107,24 @@ fn step_with_one_clone_gets_weight_zero_and_a_gap_is_unsupported() {
         run(&gap, column(3), 0.0),
         Err(CloneError::Unsupported(_))
     ));
+}
+
+/// Step Gap (spec E19): runs of `gap + 1` clones share the weight of the run's first clone,
+/// the weight still measured against the last clone (`step-gap-1`, `step-gap-2`).
+#[test]
+fn step_gap_holds_the_weight_over_runs() {
+    let weights = |gap: usize| {
+        let step = Step {
+            gap,
+            ..Step::default()
+        };
+        let d = run(&step, column(5), 0.0).unwrap();
+        (0..5).map(|i| scale_of(&d, i) - 1.0).collect::<Vec<_>>()
+    };
+    let close = |a: Vec<f64>, b: [f64; 5]| a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-9);
+    assert!(close(weights(0), [0.0, 0.25, 0.5, 0.75, 1.0]));
+    assert!(close(weights(1), [0.0, 0.0, 0.5, 0.5, 1.0]));
+    assert!(close(weights(2), [0.0, 0.0, 0.0, 0.75, 0.75]));
 }
 
 #[test]
@@ -271,11 +289,16 @@ fn delay_is_the_identity_without_history_and_at_strength_zero() {
 #[test]
 fn delay_modes_follow_a_ramp_differently() {
     let ramp = [0.0, 10.0, 20.0, 30.0];
+    // The persistence is 0.999 * strength (`cloner/delay-blend-f1`).
+    let p = 0.5 * 0.999;
     let even = smooth(&Delay::default(), &ramp);
     assert_eq!(even[0], 0.0);
-    // y1 = 0 + 10 * 0.5 = 5, y2 = 5 + 15 * 0.5 = 12.5, y3 = 12.5 + 17.5 * 0.5 = 21.25.
-    assert!((even[1] - 5.0).abs() < 1e-9 && (even[2] - 12.5).abs() < 1e-9);
-    assert!((even[3] - 21.25).abs() < 1e-9);
+    let mut y = 0.0;
+    for (k, x) in ramp.iter().enumerate().skip(1) {
+        y += (x - y) * (1.0 - p);
+        assert!((even[k] - y).abs() < 1e-9, "even {k}");
+    }
+    // Blend is the observed exponential smoothing: the same numbers as Even.
     let blend = smooth(
         &Delay {
             mode: DelayMode::Blend,
@@ -283,8 +306,7 @@ fn delay_modes_follow_a_ramp_differently() {
         },
         &ramp,
     );
-    // Half way between the last two inputs.
-    assert_eq!(blend, vec![0.0, 5.0, 15.0, 25.0]);
+    assert_eq!(blend, even);
     let spring = smooth(
         &Delay {
             mode: DelayMode::Spring,
@@ -292,8 +314,12 @@ fn delay_modes_follow_a_ramp_differently() {
         },
         &ramp,
     );
-    // v1 = 5, y1 = 5; v2 = 2.5 + 7.5 = 10, y2 = 15 (it overshoots the even mode).
-    assert!((spring[1] - 5.0).abs() < 1e-9 && (spring[2] - 15.0).abs() < 1e-9);
+    let (mut y, mut v) = (0.0, 0.0);
+    for (k, x) in ramp.iter().enumerate().skip(1) {
+        v = v * p + (x - y) * (1.0 - p);
+        y += v;
+        assert!((spring[k] - y).abs() < 1e-9, "spring {k}");
+    }
     assert!(spring[3] > even[3]);
 }
 
@@ -326,5 +352,5 @@ fn delay_channels_can_be_switched_off_and_history_of_another_size_is_ignored() {
     Delay::default()
         .smooth(&[start], &mut end, &FieldList::new(), &ctx)
         .unwrap();
-    assert!((scale_of(&end, 0) - 2.0).abs() < 1e-9);
+    assert!((scale_of(&end, 0) - (1.0 + 2.0 * (1.0 - 0.5 * 0.999))).abs() < 1e-9);
 }

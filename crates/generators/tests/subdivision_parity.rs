@@ -5,7 +5,7 @@ use std::path::Path;
 
 mod common;
 
-use common::{Table, typed_params, with_defaults};
+use common::{Table, enum_id, legacy_params, typed_params, with_defaults};
 use forge_core::Registry;
 use forge_generators::{BuildError, Primitives, build, subdivide_with_creases};
 use forge_geometry::Edge;
@@ -52,6 +52,7 @@ fn subdivision_matches_the_reference() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
     let mut unsupported = BTreeSet::new();
     let mut matched = Vec::new();
+    let mut failed: Vec<String> = Vec::new();
     for case in discover_cases(&root)
         .unwrap()
         .into_iter()
@@ -60,10 +61,12 @@ fn subdivision_matches_the_reference() {
         let key = format!("{}/{}", case.feature, case.name);
         let m = case.manifest().unwrap();
         // `input = "cube"` (older cases) or an `[params.input]` table (O20 cases).
-        let input_table = m.params["input"].as_table();
+        // the scripted follow-up case spells the generator by label (`type`, `subdivision_editor`)
+        let params = legacy_params(m.params.clone().into_iter().collect());
+        let input_table = params["input"].as_table();
         let input_kind = match input_table {
             Some(t) => t["type"].as_str().unwrap().to_string(),
-            None => m.params["input"].as_str().unwrap().to_string(),
+            None => params["input"].as_str().unwrap().to_string(),
         };
         let input = match input_kind.as_str() {
             "cube" if input_table.is_some() => {
@@ -86,6 +89,15 @@ fn subdivision_matches_the_reference() {
                 }
                 mesh
             }
+            "pyramid" if input_table.is_some() => {
+                let t = input_table.unwrap();
+                let own: Table = t
+                    .iter()
+                    .filter(|(k, _)| *k != "type" && *k != "pos")
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
+                build("forge.pyramid", &typed_params(&reg, "forge.pyramid", &own)).unwrap()
+            }
             "cube" | "plane" => {
                 let ty = format!("forge.{input_kind}");
                 let table = with_defaults(&case, &m, &input_kind, &Table::new());
@@ -101,17 +113,19 @@ fn subdivision_matches_the_reference() {
         } else {
             BTreeSet::new()
         };
-        let level = m
-            .params
-            .get("level")
-            .or(m.params.get("level_view"))
+        let level = ["level", "level_view", "subdivision_editor"]
+            .iter()
+            .find_map(|k| params.get(*k))
             .and_then(|v| v.as_integer())
             .unwrap() as usize;
-        let scheme = m
-            .params
+        let sub_ty = reg.get("forge.subdivision").unwrap();
+        let scheme = params
             .get("scheme")
+            .or(params.get("type"))
             .and_then(|v| v.as_str())
-            .unwrap_or("catmull_clark_ngons");
+            .map(|s| enum_id(sub_ty.find_param("scheme").unwrap(), s))
+            .unwrap_or_else(|| "catmull_clark_ngons".to_string());
+        let scheme = scheme.as_str();
         match subdivide_with_creases(&input, level, scheme, &creases) {
             Err(BuildError::Unsupported(what)) => {
                 println!("{key}: unsupported ({what})");
@@ -125,18 +139,28 @@ fn subdivision_matches_the_reference() {
                 };
                 let expected = case.expected_mesh().unwrap().unwrap();
                 let r = compare_meshes(&expected, &ours, &m.tolerance);
-                assert!(
+                println!(
+                    "{key}: passed {} (points {} vs {}, faces {} vs {})",
                     r.passed(),
-                    "{key}: {:?} (max error {:?})",
-                    r.failures,
-                    r.max_position_error
+                    expected.positions.len(),
+                    ours.positions.len(),
+                    expected.faces.len(),
+                    ours.faces.len()
                 );
-                matched.push(key);
+                if r.passed() {
+                    matched.push(key);
+                } else {
+                    failed.push(format!(
+                        "{key}: {:?} (max error {:?})",
+                        r.failures, r.max_position_error
+                    ));
+                }
             }
         }
     }
     println!("matched exactly: {}", matched.join(", "));
+    assert!(failed.is_empty(), "unlisted mismatches: {failed:#?}");
     let want: BTreeSet<String> = UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 16, "{matched:?}");
+    assert_eq!(matched.len(), 17, "{matched:?}");
 }

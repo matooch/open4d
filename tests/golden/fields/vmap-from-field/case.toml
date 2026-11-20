@@ -1,0 +1,51 @@
+feature = "fields"
+observation = "docs/parity/fields-4.md"
+description = "Cube (4/8/4 segments, size_y 400) with a Vertex Map tag; the tag uses fields with one Linear field (Direction Y+, Length 200) as its only layer"
+
+[params]
+object_type = "cube"
+size_x = 200.0
+size_y = 400.0
+size_z = 200.0
+segments_x = 4
+segments_y = 8
+segments_z = 4
+vertex_map_tag = true
+tag_use_fields = true
+tag_invert = false
+tag_use_deformed_points = false
+weights_readback = "weights read by evaluating the tag field list at the object point positions; with Use Fields on the tag keeps no per-point data buffer in R25"
+
+[params.field]
+type = "linear"
+length = 200.0
+direction = "Y+"
+clip_to_shape = false
+enable_remapping = true
+mirror_graph = false
+strength_percent = 100.0
+invert = false
+inner_offset_percent = 0.0
+min_percent = 0.0
+clamp_min = true
+max_percent = 100.0
+clamp_max = true
+multiplier_percent = 100.0
+contour_mode = "None"
+curve_percent = 0.0
+steps = 1
+spline_offset_percent = 0.0
+spline_range_percent = 100.0
+color_mode = "Color"
+length_mode = "Use Value"
+length_scale_percent = 100.0
+invert_direction = true
+strength_mode = "No Remap"
+strength_scale_percent = 100.0
+invert_rotations = false
+layer_strength_percent = 100.0
+layer_blend_mode = "Normal"
+
+[import]
+scale = 1.0
+flip_z = false

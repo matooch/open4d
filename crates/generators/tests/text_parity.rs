@@ -42,7 +42,7 @@ fn cases() -> Vec<GoldenCase> {
         .into_iter()
         .filter(|c| c.feature == "text")
         .collect();
-    assert_eq!(cases.len(), 9, "the nine O48 cases");
+    assert_eq!(cases.len(), 14, "the fourteen O48 cases");
     cases
 }
 
@@ -50,15 +50,40 @@ fn case(name: &str) -> GoldenCase {
     cases().into_iter().find(|c| c.name == name).unwrap()
 }
 
+/// The Text spline's table in the flat spelling of the older files. The menu-created files hold
+/// the values under `[params.input.parameters]` with the app's labels (`text_spline`,
+/// `intermediate_points`, `number`, `angle_degrees`, `maximum_length`) and 0/1 for switches.
 fn input_of(case: &GoldenCase) -> toml::map::Map<String, toml::Value> {
     let m = case.manifest().unwrap();
-    m.params["input"].as_table().unwrap().clone()
+    let input = m.params["input"].as_table().unwrap().clone();
+    let Some(toml::Value::Table(p)) = input.get("parameters") else {
+        return input;
+    };
+    let mut out = toml::map::Map::new();
+    out.insert("type".into(), s("text_spline"));
+    for (k, v) in p {
+        let key = match k.as_str() {
+            "icon_file_id" | "icon_color" | "color" => continue,
+            "text_spline" => "text",
+            "intermediate_points" => "intermediate",
+            "number" => "intermediate_number",
+            "angle_degrees" => "intermediate_angle",
+            "maximum_length" => "intermediate_max_length",
+            other => other,
+        };
+        out.insert(key.into(), v.clone());
+    }
+    out
 }
 
 fn offset_of(case: &GoldenCase) -> f64 {
-    case.manifest().unwrap().params["extrude_offset"]
-        .as_float()
-        .unwrap()
+    let m = case.manifest().unwrap();
+    match m.params.get("extrude_offset") {
+        Some(v) => v.as_float().unwrap(),
+        None => m.params["extrude"]["parameters"]["offset"]
+            .as_float()
+            .unwrap(),
+    }
 }
 
 /// The extrude (caps off) of the Text spline a case describes, with the case's own table
@@ -444,4 +469,79 @@ fn the_default_text_is_text() {
         Value::String(input_of(&case("defaults"))["text"].as_str().unwrap().into())
     );
     assert_eq!(ty.find_param("height").unwrap().default, Value::Float(EM));
+}
+
+#[test]
+fn right_puts_the_ink_max_of_the_line_at_zero() {
+    let c = case("align-right");
+    let (_, g) = golden(&c);
+    close(bbox(&g)[2], 0.0, TOL, "golden ink max x");
+    // as wide as the centred AB
+    let (_, mid) = golden(&case("align-center"));
+    close(
+        bbox(&g)[2] - bbox(&g)[0],
+        bbox(&mid)[2] - bbox(&mid)[0],
+        TOL,
+        "golden ink width",
+    );
+    let (_, o) = ours(&c);
+    close(bbox(&o)[2], 0.0, 1e-9, "ours ink max x");
+    let (_, left) = ours_with(&c, &[("align", s("left"))]);
+    close(
+        bbox(&o)[2] - bbox(&o)[0],
+        bbox(&left)[2] - bbox(&left)[0],
+        1e-9,
+        "ours width",
+    );
+}
+
+#[test]
+fn vertical_spacing_adds_to_the_line_step() {
+    let c = case("vspacing");
+    let (_, g) = golden(&c);
+    let (_, two) = golden(&case("two-lines"));
+    // the same A on line 2 (two-lines has B there): its bottom is 50 below the default step
+    let step_default = bbox(&two[2..])[1];
+    let line2 = bbox(&g[2..]);
+    close(line2[1], -245.996094 - 50.0, UNIT, "golden line 2 bottom");
+    assert!(step_default.abs() < 246.0 + 1.0);
+    // ours: line 2 of the same text is exactly 50 lower
+    let (_, o0) = ours_with(&c, &[("vertical_spacing", f(0.0))]);
+    let (_, o50) = ours(&c);
+    for (p, q) in o0[2..].iter().flatten().zip(o50[2..].iter().flatten()) {
+        close(q[1] - p[1], -50.0, 1e-9, "50 lower");
+        close(q[0], p[0], 1e-9, "x");
+    }
+    assert_eq!(o0[..2], o50[..2], "line 1 is unmoved");
+}
+
+#[test]
+fn a_negative_height_is_the_point_reflection() {
+    let c = case("height-negative");
+    let (_, g) = golden(&c);
+    let (_, a) = golden(&case("a"));
+    let (bg, ba) = (bbox(&g), bbox(&a));
+    close(bg[0], -ba[2], TOL, "golden min x");
+    close(bg[2], -ba[0], TOL, "golden max x");
+    close(bg[1], -ba[3], TOL, "golden min y");
+    close(bg[3], -ba[1], TOL, "golden max y");
+    let (_, pos) = ours_with(&c, &[("height", f(200.0))]);
+    let (_, neg) = ours(&c);
+    for (p, q) in pos.iter().flatten().zip(neg.iter().flatten()) {
+        close(q[0], -p[0], 1e-9, "x");
+        close(q[1], -p[1], 1e-9, "y");
+    }
+}
+
+#[test]
+fn separate_letters_leaves_the_outline_alone() {
+    let c = case("separate-letters");
+    let (gm, g) = golden(&c);
+    let (pm, p) = golden(&case("align-right"));
+    assert_eq!((g.len(), gm.positions.len()), (p.len(), pm.positions.len()));
+    let (bs, bp) = (bbox(&g), bbox(&p));
+    close(bs[2] - bs[0], bp[2] - bp[0], TOL, "golden ink width");
+    let (_, off) = ours_with(&c, &[("separate_letters", toml::Value::Integer(0))]);
+    let (_, on) = ours(&c);
+    assert_eq!(on, off);
 }

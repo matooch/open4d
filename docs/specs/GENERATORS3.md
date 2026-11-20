@@ -37,12 +37,18 @@ Rules (case in brackets):
    `u = unit(ref x d)`, `w = u x d`, `ref = +X`, or `+Y` if `d` is parallel to X. Faces
    `[2k, 2k+1, 2(k+1)+1, 2(k+1)]` (indices mod 2n) (`cube`: all 12 edges, axis-parallel in
    the six directions +-X, +-Y, +-Z; the hand of the ring is clockwise about `d`).
-   **Parity-pending:** the frame for edges not parallel to an axis, and the parallel test
-   (`|d.x| > 1 - 1e-9` here), are extrapolated from the six axis directions.
-5. Odd `subdivisions`: the sphere follows the Sphere primitive's rule (`ceil(n/2)` bands) and
+   **Oblique edges (settled by `atom-array/rotated-cube`, a cube rotated (30°, 45°, 0°), all 12
+   edges oblique, matches exactly):** the reference axis `ref` is the world axis `d` is least
+   aligned with, the first of equal ones in the order X, Y, Z (so the six axis directions keep
+   `ref = +Y` for ±X and `+X` for ±Y and ±Z; an edge with `d = (0.354, 0.707, -0.612)` takes
+   `+X` and one with `d = (0.866, 0, 0.5)` takes `+Y`). Ties use a tolerance of 1e-9.
+5. **Single Elements** does not change the exported mesh (`atom-array/single-elements` equals
+   `atom-array/cube` point for point), so it is stored and ignored. Subdivisions 5 on a Pyramid
+   (`atom-array/pyramid`, 5 points, 8 edges) follows rules 1 to 4 unchanged.
+6. Odd `subdivisions`: the sphere follows the Sphere primitive's rule (`ceil(n/2)` bands) and
    the cylinder has `n` sides. **Parity-pending** (cases use 8 and 6).
 
-`Unsupported` (`BuildError::Unsupported`): `single_elements` on (no case), a spline child.
+`Unsupported` (`BuildError::Unsupported`): a spline child.
 
 ## 2. Spline Mask (`forge.spline_mask`, `spline_mask.rs`)
 
@@ -73,14 +79,42 @@ Rules (cases `spline-mask/union`, `spline-mask/subtract`; both match exactly):
 | `axis` | Axis | enum `xy`, `zy`, `xz`, `viewport` | `xy` |
 | `create_cap` | Create Cap | bool | off |
 
-Mode to operation (SPLINES.md §8.3 names): `union` is `Union` (`spline-mask/union`), `a_minus_b` is `Subtract` of A by
-B (`spline-mask/subtract`), `and` / `or` / `intersection` are `And` / `Or` / `Intersect`
-(**parity-pending**: SPLINES.md §8.3 matched them on the Bezier curves; the mask is observed in two modes only),
-`b_minus_a` is `Subtract` with the operands swapped (**parity-pending**, no case).
+Mode to operation (SPLINES.md §8.3 names), all proven by `tests/golden/spline-mask/*`:
+`union` is `Union` (`spline-mask/union`), `a_minus_b` is `Subtract` of A by B
+(`spline-mask/subtract`), `and` is `And` (`spline-mask/and`, 28 nodes), `or` is `Or`
+(`spline-mask/or`: two loops of 38 nodes), `intersection` is `Intersect`
+(`spline-mask/intersection`: three loops, 104 nodes); each matches exactly, so the
+SPLINES.md §8.3 loop sets and orders hold on the sampled outlines. `b_minus_a` is the **first
+loop of `Or`** (B outside A, then A inside B reversed; `spline-mask/b-minus-a`): it starts at
+the same crossing as `Or` but runs clockwise, which is also why its Extrude Direction Auto goes
+to -z. It is not `Subtract` with the operands swapped.
 With fewer than two spline children the mask has no curve.
 
-`Unsupported`: `axis` other than `xy` (no case: the other planes, and the render view),
-`create_cap` on (no case). A mask input with several loops is `Unsupported` too.
+Further rules from the follow-up cases:
+4. **Result sampling = the first child's Intermediate Points** (type, number, angle, length),
+   not always Uniform 8: a Rectangle (Adaptive) with a Circle gives the 19 nodes of the union
+   with no points in between (`spline-mask/rect-circle`: 38 vertices, 19 faces); two Circles give
+   Uniform 8 as before. (Hypothesis "any child Adaptive" is not separated by the cases.)
+5. **A polygon that only touches the other outline is not a crossing.** The default Circle
+   (Uniform, 36 samples) has a sample on the top edge of the 400 x 400 Rectangle
+   (`spline-mask/rect-circle`); that tangent point does not split the loops, so the corner
+   (200, 200) stays in the union and the loop starts at the first real crossing (200, 173.34).
+   `spline_tools::intersections` skips a hit on a vertex whose two neighbours lie on the same
+   side of the other edge.
+6. **Axis ZY** (`spline-mask/axis-zy`, the circles rotated into the ZY plane): the mask works in
+   the frame (u, v) = (z, y), i.e. the XY rules with x and z swapped, inputs at x = 0; the result
+   is mapped back, so the Extrude (Auto) runs along -x (the plane normal u x v) for a
+   counter-clockwise result: x in [-20, 0]. Matches exactly. Axis XZ and the render view stay
+   `Unsupported` (no case).
+7. **Create Cap on** (`spline-mask/cap`): the mask is a polygon object, the sampled outline ring
+   (432 points for the union) triangulated with the constrained Delaunay rule of
+   GEOMETRY.md §6.1 (`triangulate_delaunay`, the ring as wound), 430 triangles, all at z = 0; the
+   surrounding Extrude contributes nothing. Points and 429 of 430 triangles match;
+   **parity-pending:** triangle 13 (`[6, 7, 210]` in the export, `[6, 7, 209]` here) is a
+   tie-break among the near-cocircular samples of a Bezier arc.
+
+`Unsupported`: `axis` XZ and viewport (no case). A mask input with several loops is
+`Unsupported` too.
 
 ## 3. Parity test (`crates/generators/tests/generators3_parity.rs`)
 

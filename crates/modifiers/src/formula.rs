@@ -55,9 +55,19 @@ fn frame(effect: Effect, p: DVec3, size: DVec3) -> (f64, f64, DVec3, f64) {
     };
     let along = |v: f64, s: f64| if s != 0.0 { v / s + 0.5 } else { 0.5 };
     match effect {
-        Effect::YRadial => (norm(p.x, p.z, h.x, h.z), along(p.y, size.y), DVec3::Y, h.y),
-        Effect::XRadial => (norm(p.y, p.z, h.y, h.z), along(p.x, size.x), DVec3::X, h.x),
-        Effect::ZRadial => (norm(p.x, p.y, h.x, h.y), along(p.z, size.z), DVec3::Z, h.z),
+        // `v` equals `u` for the radial effects (`formula/d-v`, MODIFIERS.md §17).
+        Effect::YRadial => {
+            let u = norm(p.x, p.z, h.x, h.z);
+            (u, u, DVec3::Y, h.y)
+        }
+        Effect::XRadial => {
+            let u = norm(p.y, p.z, h.y, h.z);
+            (u, u, DVec3::X, h.x)
+        }
+        Effect::ZRadial => {
+            let u = norm(p.x, p.y, h.x, h.y);
+            (u, u, DVec3::Z, h.z)
+        }
         Effect::Cylindrical => {
             let u = (p.z.atan2(p.x) / std::f64::consts::TAU).rem_euclid(1.0);
             let out = DVec3::new(p.x, 0.0, p.z).normalize_or_zero();
@@ -65,7 +75,12 @@ fn frame(effect: Effect, p: DVec3, size: DVec3) -> (f64, f64, DVec3, f64) {
         }
         Effect::Spherical => {
             let r = p.length();
-            let u = (p.z.atan2(p.x) / std::f64::consts::TAU).rem_euclid(1.0);
+            // On the polar axis the longitude reads 90 degrees (`formula/effect-spherical`).
+            let u = if p.x == 0.0 && p.z == 0.0 {
+                0.25
+            } else {
+                (p.z.atan2(p.x) / std::f64::consts::TAU).rem_euclid(1.0)
+            };
             let v = if r > 0.0 {
                 (p.y / r).clamp(-1.0, 1.0).asin() / std::f64::consts::PI + 0.5
             } else {
@@ -73,7 +88,8 @@ fn frame(effect: Effect, p: DVec3, size: DVec3) -> (f64, f64, DVec3, f64) {
             };
             (u, v, p.normalize_or_zero(), h.x)
         }
-        Effect::Manual => (along(p.x, size.x), along(p.z, size.z), DVec3::Y, h.y),
+        // Manual has no displacement direction: `d` does nothing (`formula/effect-manual`).
+        Effect::Manual => (along(p.x, size.x), along(p.z, size.z), DVec3::ZERO, 0.0),
     }
 }
 
@@ -127,6 +143,31 @@ mod tests {
         formula(&mut pts, &params(Effect::YRadial, "u"), 0.0);
         assert!((pts[0].y - (7.0 + 0.5 * 200.0)).abs() < 1e-12);
         assert_eq!((pts[0].x, pts[0].z), (100.0, 0.0));
+    }
+
+    #[test]
+    fn v_equals_u_for_the_radial_effects() {
+        for effect in [Effect::YRadial, Effect::XRadial, Effect::ZRadial] {
+            let mut a = vec![DVec3::new(100.0, 40.0, 60.0)];
+            let mut b = a.clone();
+            formula(&mut a, &params(effect, "u"), 0.0);
+            formula(&mut b, &params(effect, "v"), 0.0);
+            assert_eq!(a, b, "{effect:?}");
+        }
+    }
+
+    #[test]
+    fn spherical_pole_reads_a_quarter_turn_and_manual_has_no_displacement() {
+        let mut pole = vec![DVec3::new(0.0, 200.0, 0.0)];
+        formula(
+            &mut pole,
+            &params(Effect::Spherical, "Sin(u*2*PI)*0.2"),
+            0.0,
+        );
+        assert!((pole[0].y - 240.0).abs() < 1e-9, "{:?}", pole[0]);
+        let mut m = vec![DVec3::new(50.0, 7.0, 9.0)];
+        formula(&mut m, &params(Effect::Manual, "1"), 0.0);
+        assert_eq!(m[0], DVec3::new(50.0, 7.0, 9.0));
     }
 
     #[test]

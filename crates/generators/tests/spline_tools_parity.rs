@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 mod common;
 
-use common::{apply, resolved_params};
+use common::{apply, enum_id, resolved_params, scripted_child};
 use forge_core::{Document, EvalCtx, Registry, Value};
 use forge_generators::editable_spline::{self, SplineData, SplineType, tangent_readback};
 use forge_generators::spline_tools::{self, BoolOp};
@@ -28,30 +28,50 @@ fn registry() -> Arc<Registry> {
 /// Cases that match the export exactly (editable objects, interpolation types, tools).
 const MATCHING: &[&str] = &[
     "and",
+    "bool-circle-rect",
+    "bool-disjoint",
+    "bool-nested",
     "chamfer",
+    "chamfer-flat",
+    "chamfer-star",
+    "editable-bezier-moved-extrude",
     "editable-circle",
     "editable-rectangle",
+    "editable-ring",
     "interp-akima",
+    "interp-akima-natural",
     "interp-bezier",
     "interp-bspline",
+    "interp-cubic-natural",
     "interp-linear",
     "intersect",
     "or",
+    "outline-rect",
     "reverse",
     "subdivide",
+    "subdivide-3",
     "subtract",
+    "tangent-readback-moved",
     "union",
 ];
 
 /// Built but not matching. `outline`, `outline-neg`: same structure (two loops, 36 samples
 /// each, order, direction, faces), positions within `OUTLINE_BOUND` (SPLINES.md section 8.2).
-const KNOWN_MISMATCH: &[&str] = &["outline", "outline-neg"];
+const KNOWN_MISMATCH: &[&str] = &["outline", "outline-neg", "outline-r100-d10"];
+
+/// `pending: B-Spline with Intermediate Points other than None`. The export is a uniform
+/// **quadratic** B-spline on a half-shifted parameter (the point at index `i` is
+/// `(P(i-1) + 6 P(i) + P(i+1)) / 8`; ten samples of the case agree to 1e-6, SPLINES.md 1.2),
+/// which is two quadratic pieces per interval, not one cubic Bezier: the sampler needs a
+/// piecewise evaluator first. Same structure (faces) as ours, positions far off.
+const PENDING_SHAPE: &[&str] = &["interp-bspline-natural"];
 
 /// The worst position error a known-mismatch outline may have (measured 3.7e-3).
 const OUTLINE_BOUND: f64 = 0.005;
 
 /// Observed options whose rules are not derived.
-const UNSUPPORTED: &[&str] = &[];
+/// `outline-arc-open`: the outline of an open segment (SPLINES.md 8.2, `pending: open segments`).
+const UNSUPPORTED: &[&str] = &["outline-arc-open"];
 
 /// Cases of the folder that belong to other briefs: the Intermediate Points / primitive
 /// follow-ups of briefs 037 and 038 (`interp-f-*`, `prim-f-*`, checked by their own tests
@@ -60,10 +80,105 @@ fn owned_elsewhere(name: &str) -> bool {
     name.starts_with("interp-f-") || name.starts_with("prim-f-")
 }
 
-fn extrude_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
-    let reg = registry();
+type Table = toml::map::Map<String, toml::Value>;
+
+/// The case's params in the flat spelling of the older files. The menu-created files hold the
+/// input spline(s) as `[params.input]` / `[params.input2]` objects with a `parameters` table
+/// (the app's labels), the command as its menu label, the editable spline before the command
+/// (`editable_before`) and after it (`result_spline`, points and tangent read-backs), the
+/// tool's `settings` and the extrude's offset under `[params.extrude.parameters]`.
+fn params_of(case: &GoldenCase) -> Table {
     let m = case.manifest().unwrap();
     let params = resolved_params(case, &m);
+    let is_scripted = params
+        .get("input")
+        .and_then(|v| v.as_table())
+        .is_some_and(|t| t.contains_key("parameters"));
+    if !is_scripted {
+        return params;
+    }
+    let mut out = Table::new();
+    let label = params["command"].as_str().unwrap();
+    let command = match label {
+        "Set interpolation" | "Make Editable" | "Edit point" | "Edit point and handles" => {
+            "make_editable".to_string()
+        }
+        other => other.to_lowercase().replace(' ', "_"),
+    };
+    out.insert("command".into(), toml::Value::String(command));
+    out.insert("caps".into(), toml::Value::Boolean(false));
+    let offset = params
+        .get("extrude")
+        .and_then(|e| e["parameters"].get("offset"))
+        .cloned()
+        .unwrap_or(toml::Value::Float(20.0));
+    out.insert("extrude_offset".into(), offset);
+    for key in ["input", "input2"] {
+        if let Some(toml::Value::Table(obj)) = params.get(key) {
+            out.insert(key.into(), toml::Value::Table(scripted_child(obj, None)));
+        }
+    }
+    if let Some(s) = params.get("settings") {
+        out.insert("settings".into(), s.clone());
+    }
+    if let Some(r) = params.get("result_spline") {
+        out.insert("result_spline".into(), r.clone());
+    }
+    out
+}
+
+/// The editable data a `result_spline` table records: its points, and its handles from the
+/// tangent read-backs (the read is 0.75 of the handle, SPLINES.md 1.1).
+fn data_of_result(r: &toml::map::Map<String, toml::Value>) -> SplineData {
+    let vec = |v: &toml::Value| {
+        let f: Vec<f64> = v
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_float().or(x.as_integer().map(|i| i as f64)).unwrap())
+            .collect();
+        DVec3::new(f[0], f[1], f[2])
+    };
+    let points: Vec<DVec3> = r["points"].as_array().unwrap().iter().map(vec).collect();
+    let closed = r["closed"].as_bool().unwrap();
+    let mut data = SplineData::from_points(points, closed);
+    let mut segments = Vec::new();
+    for n in 1.. {
+        let Some(seg) = r.get(&format!("segments_{n}")) else {
+            break;
+        };
+        segments.push(editable_spline::Segment {
+            len: seg["cnt"].as_integer().unwrap() as usize,
+            closed: seg["closed"].as_bool().unwrap(),
+        });
+    }
+    if !segments.is_empty() {
+        data.segments = segments;
+    }
+    for i in 0..data.points.len() {
+        if let Some(t) = r.get(&format!("tangents_{}", i + 1)) {
+            data.left[i] = vec(&t["left"]) / editable_spline::TANGENT_READBACK;
+            data.right[i] = vec(&t["right"]) / editable_spline::TANGENT_READBACK;
+        }
+    }
+    data
+}
+
+/// The node type of a case's input spline.
+fn input_type(input: &Table) -> &'static str {
+    match input.get("type").and_then(|t| t.as_str()) {
+        Some("circle_spline") => CIRCLE,
+        Some("rectangle_spline") => RECTANGLE,
+        Some("arc_spline") => "forge.arc_spline",
+        Some("star_spline") => "forge.star_spline",
+        _ if input.contains_key("width") => RECTANGLE,
+        _ => CIRCLE,
+    }
+}
+
+fn extrude_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
+    let reg = registry();
+    let params = params_of(case);
     let mut input = params["input"].as_table().unwrap().clone();
     // `position` is the node's transform, which `apply` spells `pos`
     if let Some(p) = input.remove("position") {
@@ -71,11 +186,7 @@ fn extrude_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
     }
     let settings = params.get("settings").and_then(|v| v.as_table()).cloned();
     let offset = params["extrude_offset"].as_float().unwrap();
-    let ty = if input.contains_key("width") {
-        RECTANGLE
-    } else {
-        CIRCLE
-    };
+    let ty = input_type(&input);
     let mut doc = Document::new(reg.clone());
     let (ex, child) = doc
         .transact("case", |tx| {
@@ -102,6 +213,25 @@ fn extrude_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
         doc.scene().node(editable).unwrap().type_id,
         editable_spline::TYPE
     );
+    // the edit of an Edit point / Set interpolation case: the data and settings the app
+    // reports after it
+    if let Some(toml::Value::Table(r)) = params.get("result_spline") {
+        doc.transact("edit", |tx| {
+            for (k, v) in data_of_result(r).to_values() {
+                tx.set_param(editable, &k, v)?;
+            }
+            let p = r["parameters"].as_table().unwrap();
+            let ty = reg.get(editable_spline::TYPE).unwrap();
+            for (key, id) in [("type", "type"), ("intermediate_points", "intermediate")] {
+                if let Some(label) = p.get(key).and_then(|v| v.as_str()) {
+                    let desc = ty.find_param(id).unwrap();
+                    tx.set_param(editable, id, Value::Enum(enum_id(desc, label)))?;
+                }
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
     if let Some(s) = settings {
         doc.transact("settings", |tx| {
             if let Some(mode) = s.get("intermediate_points").and_then(|v| v.as_str()) {
@@ -159,8 +289,7 @@ fn float(t: &toml::map::Map<String, toml::Value>, key: &str) -> f64 {
 /// The extrude of the result of the case's `command` applied to its editable input(s).
 fn tool_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
     let reg = registry();
-    let m = case.manifest().unwrap();
-    let params = resolved_params(case, &m);
+    let params = params_of(case);
     let command = params["command"].as_str().unwrap().to_string();
     let settings = params.get("settings").and_then(|v| v.as_table()).cloned();
     let offset = params["extrude_offset"].as_float().unwrap();
@@ -175,11 +304,7 @@ fn tool_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
         if let Some(p) = table.remove("position") {
             table.insert("pos".into(), p);
         }
-        let ty = if table.contains_key("width") {
-            RECTANGLE
-        } else {
-            CIRCLE
-        };
+        let ty = input_type(&table);
         let id = doc
             .transact("input", |tx| {
                 let id = tx.create(ty, None, None)?;
@@ -193,7 +318,14 @@ fn tool_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
         editable.push(id);
     }
     let node = editable[0];
-    let failed = |e: spline_tools::ToolError| BuildError::Failed(e.to_string());
+    let failed = |e: spline_tools::ToolError| {
+        let m = e.to_string();
+        if m.contains("not supported yet") {
+            BuildError::Unsupported("outline of an open segment")
+        } else {
+            BuildError::Failed(m)
+        }
+    };
     let result = if let Some(op) = command.strip_prefix("spline_").and_then(BoolOp::from_id) {
         doc.transact("boolean", |tx| {
             Ok(spline_tools::boolean_in_tx(
@@ -214,7 +346,9 @@ fn tool_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
                 let c = spline_tools::chamfer(
                     &data,
                     float(&s, "radius"),
-                    s["flat"].as_bool().unwrap(),
+                    s["flat"]
+                        .as_bool()
+                        .unwrap_or_else(|| s["flat"].as_integer() == Some(1)),
                     None,
                 )
                 .map_err(failed)?;
@@ -273,9 +407,7 @@ fn tool_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
 /// A case's mesh: a tool result if it has a `command`, else the extrude of the editable
 /// spline with its settings.
 fn mesh_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
-    let m = case.manifest().unwrap();
-    let tool = m
-        .params
+    let tool = params_of(case)
         .get("command")
         .and_then(|c| c.as_str())
         .is_some_and(|c| {
@@ -296,6 +428,8 @@ fn editable_and_interpolation_cases_against_the_export() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
     let (mut matched, mut mismatched, mut unsupported) =
         (BTreeSet::new(), BTreeSet::new(), BTreeSet::new());
+    let mut unlisted: Vec<String> = Vec::new();
+    let mut pending = BTreeSet::new();
     for case in discover_cases(&root).unwrap() {
         if case.feature != "spline-tools" || owned_elsewhere(&case.name) {
             continue;
@@ -310,6 +444,12 @@ fn editable_and_interpolation_cases_against_the_export() {
             other => other.unwrap(),
         };
         let r = compare_meshes(&export_weld(&expected), &export_weld(&ours), &tol);
+        if PENDING_SHAPE.contains(&case.name.as_str()) {
+            assert!(!r.passed(), "{}: matches now, remove it", case.name);
+            assert!(r.topology_match, "{}: faces differ", case.name);
+            pending.insert(case.name.clone());
+            continue;
+        }
         if KNOWN_MISMATCH.contains(&case.name.as_str()) {
             assert!(!r.passed(), "{}: matches now, remove it", case.name);
             // the structure is right: same faces, positions within the measured bound
@@ -323,18 +463,21 @@ fn editable_and_interpolation_cases_against_the_export() {
             mismatched.insert(case.name.clone());
             continue;
         }
-        assert!(
-            r.passed(),
-            "{}: {:?} ({:?})",
-            case.name,
-            r.failures,
-            r.max_position_error
-        );
+        if !r.passed() {
+            println!(
+                "UNLISTED {}: {:?} ({:?})",
+                case.name, r.failures, r.max_position_error
+            );
+            unlisted.push(case.name.clone());
+            continue;
+        }
         matched.insert(case.name.clone());
     }
+    assert!(unlisted.is_empty(), "{unlisted:?}");
     let names = |l: &[&str]| l.iter().map(|s| s.to_string()).collect::<BTreeSet<_>>();
     assert_eq!(matched, names(MATCHING));
     assert_eq!(mismatched, names(KNOWN_MISMATCH));
+    assert_eq!(pending, names(PENDING_SHAPE));
     assert_eq!(unsupported, names(UNSUPPORTED));
 }
 
@@ -349,6 +492,8 @@ fn every_case_of_the_folder_is_claimed() {
         assert!(
             MATCHING.contains(&case.name.as_str())
                 || KNOWN_MISMATCH.contains(&case.name.as_str())
+                || PENDING_SHAPE.contains(&case.name.as_str())
+                || UNSUPPORTED.contains(&case.name.as_str())
                 || owned_elsewhere(&case.name),
             "{}: new spline-tools case; claim it or list its brief",
             case.name

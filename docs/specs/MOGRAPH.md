@@ -417,7 +417,7 @@ degrees and percent as typed.
 | `uniform_scale` | Uniform Scale | bool | off | |
 | `absolute_scale` | Absolute Scale | bool | off | |
 | `s` | S | vec3 | (0, 0, 0) | used when Uniform Scale is off |
-| `scale_value` | Scale | float | 0 | the value under Uniform Scale (`scale_1018` in the case files) |
+| `scale_value` | Scale | float | 0 | the value under Uniform Scale |
 | `color_mode` | Color Mode | enum | `fields_color` | `off`, `effector_color`, `custom_color`, `fields_color` |
 | `color` | Color | colour | white | the Custom Color swatch |
 | `use_alpha_strength` | Use Alpha/Strength | bool | off | colour block (the app switches it on with Custom Color) |
@@ -426,7 +426,7 @@ degrees and percent as typed.
 | `modify_clone` | Modify Clone | float, percent | 0 | stored only (nothing observed) |
 | `visibility` | Visibility | bool | off | |
 
-`use_alpha_strength_1071` (the Weight tab's own Use Alpha/Strength) is not stored: no case sets it.
+`use_alpha_strength_weight` (the Weight tab's own Use Alpha/Strength) is not stored: no case sets it.
 
 ## E3. Transform modes and strength
 
@@ -568,7 +568,7 @@ Only the differences from the Plain table (E2) and the new parameters:
 | `animation_speed` | Animation Speed | float, percent | 100 % | noise modes only (E13) |
 | `noise_scale` | Scale | float, percent | 100 % | noise modes only (E13); the case files call it `scale_percent` |
 
-`use_alpha_strength_1071` is not stored (as E2).
+`use_alpha_strength_weight` is not stored (as E2).
 
 ### E12. The random value
 
@@ -686,10 +686,7 @@ permutation, Synchronized, channels independent, noise continuity, Minimum / Max
 Wording as above. Sources: parity observation O14 [effectors-2.md](../parity/effectors-2.md) (parameter tables
 and the cases `step-defaults`, `step-position`, `formula-defaults`, `formula-frame-10`, `target-defaults`,
 `time-frame-30` in `tests/golden/cloner/`), the Plain rules E2-E8, the formula language of [EXPR.md](EXPR.md)
-(degrees mode, E5). Level B (`samples.json`, tolerance 1e-4) and level A (`mesh.obj`). **Delay has no golden case**
-(O14 `delay-skip` is a note without a case directory), so every Delay rule below is own design and
-**parity-pending**; the only observation it must satisfy is "at frame 0 the clone data equal the data without the
-effector".
+(degrees mode, E5). Level B (`samples.json`, tolerance 1e-4) and level A (`mesh.obj`). The Delay's first design was own; the follow-up cases (below) settled Blend and Spring.
 
 Step, Formula and Time are the Plain effector (E2-E8) with a different source of the effect weight `w`; they share
 the Plain parameter table (E2) and differ in the defaults below. Target and Delay have their own parameters.
@@ -712,8 +709,9 @@ Minimum and Maximum in Remap mode (E3) and `value` is the falloff value at the c
 
 ## E19. Step (`forge.effector.step`)
 
-Extra parameters: `curve` (enum, `linear`; also `ease_in`, `ease_out`, `ease_in_out`: the app has an editable
-spline, which has no parameter kind here yet), `step_gap` (int, 0, 0 .. 2147483647).
+Extra parameters: `curve` (enum, `linear`; also `ease_in`, `ease_out`, `ease_in_out` and `custom`: the app's editable spline, two
+Bezier knots held in `curve_start`, `curve_start_handle`, `curve_end`, `curve_end_handle`, x and y of each), `step_gap` (int,
+0, 0 .. 2147483647).
 
 - Source `s = curve(i / (n - 1))`, `i` the position in the clone list, `n` the clone count; `s = 0` if `n = 1`.
   `ease_in(t) = t²`, `ease_out(t) = 1 - (1 - t)²`, `ease_in_out(t) = t²(3 - 2t)`.
@@ -726,7 +724,17 @@ spline, which has no parameter kind here yet), `step_gap` (int, 0, 0 .. 21474836
   digits; the offsets as multiples of 2^-20, 0.96, 0.90, 0.96, which has no rule from three points) gave no rule, so the
   curve stays the straight line and the case is pinned in the test (`STFT_MESH_MISMATCH`). A second case with Count 9 or a
   changed spline would give more points.
-- `step_gap` other than 0 is `Unsupported` (nothing observed), as is any curve edit beyond the four presets.
+- **Step Gap** `g`: the clones come in runs of `g + 1`, and every clone takes the weight of its run's first clone, measured
+  against the last clone: `s = curve((i div (g + 1)) (g + 1) / (n - 1))`. Proofs: `step-gap-1` (Count 5, Scale 1: scales 1, 1,
+  1.5, 1.5, 2) and `step-gap-2` (1, 1, 1, 1.75, 1.75).
+- **Custom curve:** the knots are `(position, handle)` pairs in the curve's own units (x along the list, y the weight) and the
+  Bezier control point of a knot is `position + 4/3 * handle`; the weight is `y` at the parameter where `x` equals
+  `i / (n - 1)` (solved numerically). Proof: `step-spline` (knots (0, 0) handle (1/3, 0) and (1, 1) handle (-1/3, -2/3), i.e.
+  control points x 0, 4/9, 5/9, 1 and y 0, 0, 1/9, 1: weights 0, 0.02274, 0.16667, 0.52274, 1; largest error 7.9e-5, the
+  reference solver's usual 1e-4-scale noise as in `step-position`). The `4/3` was fitted from the three interior weights
+  (ninths come out exactly); a second curve would confirm it (**parity-pending**). The default handles are 0.25 (a straight line).
+- **Known mismatch (level A of `step-count-9`):** like `step-position` the clone data match (Count 9, 9.2e-5) and the expanded mesh
+  does not, for the same reason (pinned in `STFT_MESH_MISMATCH`).
 
 ## E20. Formula (`forge.effector.formula`)
 
@@ -742,7 +750,8 @@ h, p, b in radians), `sx sy sz` (axis lengths), `u v w` (the clone's uvw), `id` 
   `1 + sin` = 1, 1.9511, 1.5878, 0.4122, 0.0489); `formula-frame-10` (frame 10 at 30 fps, `t = 1/3`: clone 0
   `sin(120 degrees)` · 50 = 43.3013, clone 1 `sin(192 degrees)` · 50 = -10.3956 ...). The case shows the result follows the
   document time although the `t` field reads 1, so `t` is the time, not the field. Frame 0 cannot tell `t = time` from
-  `t = time + 1` (period 360 degrees), which is why the field's role (a multiplier here) is **parity-pending**.
+  `t = time + 1` (period 360 degrees). Settled: `formula-project-time-2` (`t` = 2 at frame 10) and `formula-frequency-2` (`f` = 2) match at
+  1e-15 with `t = time · t_project_time` and `f` as a multiplier.
 - Meaning of `px ... w` and `falloff` (value before or inside the formula; the result is also multiplied by the field
   value here) is **parity-pending**: no case uses them.
 
@@ -750,8 +759,7 @@ h, p, b in radians), `sx sy sz` (axis lengths), `u v w` (the clone's uvw), `id` 
 
 - Source `s = project time in seconds`: the values are per second. Proof: `time-frame-30` (1 s): P (0, 100, 0) adds 100
   (y = 100 ... 300) and R.H 90 degrees turns every clone as in `plain-rotation` (x axis (0, 0, 1), z axis (-1, 0, 0)).
-  One sample at `s = 1` cannot tell "per second" from "constant" or "frame / 30": **parity-pending** (follow-up case: the
-  same at frame 15).
+  Settled: `time-frame-15` and `time-frame-60` match exactly (P adds 50 and 200: linear in the time in seconds).
 - Clone `time` (the per-clone time offset of C1) is not written (nothing observed).
 
 ## E22. Target (`forge.effector.target`)
@@ -767,21 +775,29 @@ default; `look_at_camera`, `next_node`, `previous_node`, `field_direction`), `ta
   into cloner space.
 - Strength and falloff: the clone's rotation is the spherical interpolation from its own rotation to the aimed one by
   `w = strength · value` (so 0 leaves it, 1 aims fully).
-- `use_pitch` off removes the component of `d` along `u` before aiming (heading only). `reverse_heading` negates the part of
-  `d` perpendicular to `u` (**parity-pending**). A clone at the target (zero direction) or a direction parallel to `u`
+- `use_pitch` off removes the component of `d` along `u` before aiming (heading only). `reverse_heading` turns the whole
+  direction around, `d = -d` (pitch included; `target-reverse`: clone at y = 50 has `z = (0, 0.1644, -0.9864)`, `x = (-1, 0, 0)`). A clone at the target (zero direction) or a direction parallel to `u`
   keeps its rotation.
 - `next_node` / `previous_node` aim at the next / previous clone (before this effector), the last / first clone keeps the
   direction of the neighbouring pair (**parity-pending**).
+- **Up Vector** other than None (`up` = the chosen world axis): the clone looks **away** from the target, `z = -d`, its X axis
+  is the up axis made perpendicular to `z`, `x = normalise(up - (up . z) z)`, and `y = z x x`. Proofs: `target-up-x` (clone 0:
+  `x = (1, 0, 0)`, `y = (0, -1, 0)`, `z = (0, 0, -1)`) and `target-up-y` (`x = (0, 0.9864, 0.1644)`, `y = (1, 0, 0)`,
+  `z = (0, 0.1644, -0.9864)` for the clone at y = 50). The negative axes and Z are the same rule by assumption (**parity-pending**);
+  with Reverse Heading as well the combination is unobserved.
 - Proof: `target-defaults` (Null at (0, 0, 300), a Null made through its menu command; the case file records the position
   only in the description): clone 0 at the origin keeps the identity frame (`d = +z`); clone at y = 200 has
-  `z = (0, -200, 300) / 360.56 = (0, -0.5547, 0.8321)`, `y = (0, 0.8321, 0.5547)`, `x = (1, 0, 0)`, all five clones at 1e-4.
+  `z = (0, -200, 300) / 360.56 = (0, -0.5547, 0.8321)`, `y = (0, 0.8321, 0.5547)`, `x = (1, 0, 0)`, all five clones at 1e-4;
+  `target-offaxis` (Null at (200, 100, 300)), `target-strength-50` and `target-next-node` match with the same rules.
 - `Unsupported`: modes `look_at_camera` and `field_direction`, Up Vector `object` (needs an up-object link), `repel`
   (nothing observed), a missing Target Object in Object Target mode does nothing.
 
 ## E23. Delay (`forge.effector.delay`)
 
 Parameters: `enabled`, `strength` (**50 %**, 0 .. 100 %), `selection`, `deformation`, `fields`, `mode` (`even` default,
-`blend`, `spring`), `position`, `rotation`, `scale` (all on). All of E23 is **parity-pending** (no case).
+`blend`, `spring`), `position`, `rotation`, `scale` (all on). Blend and Spring are observed (`delay-blend-f1`, `-f2`, `-f5`,
+`-f10`, `delay-spring-f5`: all five match at 1e-4 level B and A); Even has no case (`delay-even-f5` was not observed) and
+shares Blend's rule (**parity-pending**), the replay window is own design.
 
 A clone follows its input (the clone data the earlier effectors left) with a delay. The delay needs the earlier frames,
 so it is computed without hidden state: the effectors before the Delay and the cloner itself are evaluated again at the
@@ -793,10 +809,14 @@ replayed (a parameter animated by a track holds its current-frame value in the r
 the input pose, `y` the output pose (position, rotation quaternion, axis lengths; a channel whose switch is off is not
 smoothed):
 
-- `even`: `y_f = y_(f-1) + (x_f - y_(f-1)) (1 - s)` (rotation: slerp), the first frame `y = x`.
-- `blend`: `y_f = lerp(x_(f-1), x_f, 1 - s)` (only one frame of memory).
-- `spring`: a velocity `v_f = v_(f-1) s + (x_f - y_(f-1)) (1 - s)`, `y_f = y_(f-1) + v_f` per channel (rotation: the
-  rotation vector of `x · y⁻¹`), `v = 0` at the first frame.
+The smoothing keeps `p = 0.999 · s` of the previous output per frame (the factor is fitted: one frame at strength 50 % moves
+0.5005 of the way, `delay-blend-f1`; the exponential recurrence with `a = 0.5005` gives 0.5005, 1.2510, 4.0330, 9.0030 frames
+of Time input at frames 1, 2, 5, 10, observed 0.5005, 1.2510, 4.0330, 9.0030):
+
+- `blend` (and `even`): exponential smoothing `y_f = y_(f-1) + (x_f - y_(f-1)) (1 - p)` (rotation: slerp), the first frame
+  `y = x`. (The earlier one-frame `lerp(x_(f-1), x_f)` reading of Blend was wrong.)
+- `spring`: a velocity `v_f = v_(f-1) p + (x_f - y_(f-1)) (1 - p)`, `y_f = y_(f-1) + v_f` per channel (rotation: the rotation vector
+  of `x · y⁻¹`), `v = 0` at the first frame (`delay-spring-f5`: 17.082914, ours 17.0829138; without the 0.999: 17.0833).
 
 At frame 0 the output equals the input (`delay-skip`). At `s = 0` the output equals the input at every frame. Colour,
 weight, visibility and uvw are not changed. More than one Delay in one cloner's list is `Unsupported` (nested replays).
@@ -804,7 +824,7 @@ weight, visibility and uvw are not changed. More than one Delay in one cloner's 
 ## E24. Parity
 
 Test: `crates/generators/tests/cloner_parity.rs::step_formula_time_target_cases_match_the_reference` rebuilds the six
-cases above from their `case.toml` (effectors created as nodes, the Null of `target-defaults` at (0, 0, 300), the
+cases above and the 19 menu-created follow-ups (`params_of` reads `[params.cloner]`, `[params.effectors_N]` with the type told by their rows, `frame`/`fps`, a Target's Null, a Step curve) from their `case.toml` (effectors created as nodes, the Null of `target-defaults` at (0, 0, 300), the
 document frame as `EvalCtx::at_frame(frame, 30)`), compares clone data (level B) and expanded mesh (level A). Result: **6 of 6 at level B** (`step-defaults`,
 `step-position`, `formula-defaults`, `formula-frame-10`, `target-defaults`, `time-frame-30`) and **5 of 6 at level A**
 (`step-position` is the known mismatch of E19). Unit tests:

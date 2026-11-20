@@ -155,6 +155,43 @@ Follow-up cases proposed in the brief report: B moved along one axis only, B sma
 (strictly inside) and B shifted by a different amount per axis, which separate numbering from
 geometry.
 
+## 5b. R25 follow-up cases (`boole/r25-*-shift-x`, `-uneven`, `-a_minus_b-inside`)
+
+Source: the "Follow-up cases (planner, after brief 043)" rows of
+[generators-3.md](../parity/generators-3.md); the case form is the scripted one
+(`[params.generator.parameters]`, `[params.input.<n>]`; `boolean_type` is the label of `mode`).
+`boole/r25-union-inside` has no folder (not observed), so a union of nested cubes stays
+unobserved.
+
+1. **B wholly inside A, A subtract B: A stays as it is** (`r25-a_minus_b-inside`: a 200 cube
+   minus a 100 cube at the centre exports 8 points and 6 quads, object `Cube` only; no cavity,
+   `Cube.1` is empty). Matches exactly. (An earlier version of this spec and the geometry tests
+   gave the nested cube a cavity of reversed faces.)
+2. **Untouched polygons keep the start corner of their source** (the -X face of the cube is
+   `[6, 7, 1, 0]`, not rotated to its lowest index). Matches in the `inside` case; the cut faces
+   still start at the last new point of the cut run (§5a).
+3. **Coplanar-same fragments are kept** (`r25-union-shift-x`, `r25-a_minus_b-shift-x`: B = A
+   moved 50 along x, so the four side faces of the two cubes lie in the same planes). Union: each
+   solid keeps all of its fragments except the ones inside the other solid, the overlap is
+   doubled and the surface is not closed: A has 9 faces (the x+ face is inside B; each of the four
+   side faces is split at B's x- plane into two quads: the part that lies on B's face and the
+   part outside it) and B 9, 24 points. A subtract B: A keeps the same 9 faces and B contributes
+   its x- face (inside A, reversed): 10 faces, 16 points. The geometric comparison matches (point
+   set, planes, areas, closedness). Previously B's coplanar-same fragments were dropped from a union
+   and A's from a subtract.
+4. **The pieces of a split face stay separate across classes.** `hide_new_edges` merges the kept
+   fragments of one source polygon into one polygon (§4), but a fragment that lies on the other
+   solid's face (coplanar-same) is a polygon of its own, so the side faces above are quads.
+5. `r25-a_minus_b-uneven`, `r25-union-uneven` (B at (30, 50, 70)): counts, polygon sizes and the
+   surface match like the four cases of §5a (20 points / 9 faces, 26 points / 12 faces).
+
+**Still parity-pending (the six cases stay in `KNOWN_MISMATCH`):** the numbering of the new
+points and the face order, now also the order of the two polygons a plane splits a face into. In
+`shift-x` the order alternates by face: the first polygon is the one whose closing cut edge runs
+in the positive axis direction (z- and y+ faces: the part on B's face first; z+ and y- faces: the
+outside part first); this holds for the four faces seen, three hypotheses on the new-point order
+(first use in output order, plane order, coordinate sort) are not yet separated by `uneven`.
+
 ## 6. Parity tests
 
 `crates/generators/tests/boole_parity.rs`: for each `tests/golden/boole/` case, A =

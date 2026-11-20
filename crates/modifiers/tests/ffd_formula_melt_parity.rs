@@ -1,9 +1,14 @@
 //! Parity: docs/specs/MODIFIERS.md §16 (FFD), §17 (Formula), §18 (Melt) and §19 against
 //! tests/golden/{ffd,formula,melt}.
 //!
-//! FFD and Formula match exactly. The reference Melt noise is not reproduced, so the two
-//! Melt cases are pinned in `KNOWN_MISMATCH` (the exact comparison must still fail) and
-//! checked by the structural invariants of spec §18, on the golden mesh and on ours.
+//! FFD and Formula match exactly, and so do the Melt cases with both randomness settings at 0.
+//! The reference Melt noise is not reproduced, so the Melt cases with randomness are pinned in
+//! `KNOWN_MISMATCH` (the exact comparison must still fail) and checked by the structural
+//! invariants of spec §18, on the golden mesh and on ours.
+//!
+//! Cases are read through `common::normalize` (older and menu-created forms).
+
+mod common;
 
 use std::path::Path;
 use std::sync::Arc;
@@ -17,8 +22,17 @@ use glam::DVec3;
 
 const FEATURES: &[&str] = &["ffd", "formula", "melt"];
 
-/// Cases whose exact comparison must still fail (Melt noise not reproduced, spec §18).
-const KNOWN_MISMATCH: &[&str] = &["melt/defaults", "melt/strength"];
+/// Cases whose exact comparison must still fail (`pending: Melt noise`, spec §18): every Melt
+/// case with a randomness above 0.
+const KNOWN_MISMATCH: &[&str] = &[
+    "melt/defaults",
+    "melt/strength",
+    "melt/noise-scale-50",
+    "melt/radius-50",
+    "melt/radius-200",
+    "melt/size-100",
+    "melt/size-200",
+];
 
 /// Observed options we do not derive (none: the Formula effects other than Y Radial are
 /// unobserved, not unsupported).
@@ -27,18 +41,7 @@ const UNSUPPORTED: &[&str] = &[];
 /// One Melt case: its key, then `F` of the cap points for the golden and for ours.
 type CapF = (String, Vec<Option<f64>>, Vec<Option<f64>>);
 
-type Table = toml::map::Map<String, toml::Value>;
-
-fn num(v: &toml::Value) -> f64 {
-    v.as_float()
-        .or(v.as_integer().map(|i| i as f64))
-        .expect("number")
-}
-
-fn vec3(v: &toml::Value) -> [f64; 3] {
-    let a = v.as_array().expect("vec3");
-    [num(&a[0]), num(&a[1]), num(&a[2])]
-}
+use common::forms::{Table, normalize, num, vec3};
 
 /// The `[params.input]` cube.
 fn build_cube(tx: &mut forge_core::Tx, input: &Table) -> NodeId {
@@ -49,7 +52,12 @@ fn build_cube(tx: &mut forge_core::Tx, input: &Table) -> NodeId {
             continue;
         }
         let value = match v {
-            toml::Value::Integer(i) if k.starts_with("segments") => Value::Int(*i),
+            toml::Value::Integer(i) if k.starts_with("segments") || k == "fillet_segments" => {
+                Value::Int(*i)
+            }
+            toml::Value::Integer(i) if k == "fillet" || k == "separate_surfaces" => {
+                Value::Bool(*i != 0)
+            }
             other => Value::Float(num(other)),
         };
         tx.set_param(cube, k, value).unwrap();
@@ -96,6 +104,12 @@ fn set_deformer(tx: &mut forge_core::Tx, id: NodeId, feature: &str, params: &Tab
     if feature == "ffd" {
         // The observer moved one lattice point by a delta (deformer at the origin).
         let get = |axis: &str| params[axis].as_integer().unwrap() as usize;
+        if let Some(lattice) = params.get("lattice").and_then(|l| l.get("all_points")) {
+            // The menu-created cases record every lattice point after the edit.
+            let list = lattice.as_array().unwrap().iter().map(vec3).collect();
+            tx.set_param(id, "grid", Value::Vec3List(list)).unwrap();
+            return (frame, fps);
+        }
         let counts = [
             get("grid_points_x"),
             get("grid_points_y"),
@@ -163,7 +177,8 @@ fn melt_structure(name: &str, cube: &[DVec3], out: &[DVec3]) {
         if p.y <= 0.0 {
             assert_eq!(q.y, 0.0, "{name}: {p:?} did not collapse");
         } else {
-            assert!(q.y > 0.0 && q.y < p.y, "{name}: {p:?} -> {q:?}");
+            // Not above 0: a point that has melted away prints 0 with the export's 6 decimals.
+            assert!(q.y >= 0.0 && q.y < p.y, "{name}: {p:?} -> {q:?}");
         }
     }
 }
@@ -204,7 +219,7 @@ fn ffd_formula_melt_match_the_reference() {
         }
         let key = format!("{}/{}", case.feature, case.name);
         let m = case.manifest().unwrap();
-        let params: Table = m.params.clone().into_iter().collect();
+        let params = normalize(&m.params.clone().into_iter().collect());
         let b = build(&reg, &case, &params);
         let mesh = match evaluate(b.doc.scene(), b.cube, &b.ctx) {
             Err(forge_generators::BuildError::Unsupported(what)) => {
@@ -314,6 +329,7 @@ fn ffd_formula_melt_match_the_reference() {
     let want: std::collections::BTreeSet<String> =
         UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 3 + 2, "{matched:?}");
+    // FFD 6 + Formula 11 + Melt with randomness 0 (strength 0, 10, 50, 100 %) 4.
+    assert_eq!(matched.len(), 6 + 11 + 4, "{matched:?}");
     assert_eq!(pinned.len(), KNOWN_MISMATCH.len(), "{pinned:?}");
 }

@@ -173,8 +173,8 @@ fn r25_loft_has_u_points_per_ring_and_the_r25_quad_order() {
 }
 
 /// Lathe Movement lifts the profile by `movement · k / subdivision` and Scaling scales it
-/// about the axis towards `scaling` per cent at the last column (GENERATORS2.md §8; the
-/// movement is `lathe/movement`, the scaling has no case and is **parity-pending**).
+/// uniformly (x, y and z) towards `scaling` per cent at the last column, the movement added
+/// after (GENERATORS2.md §8; `lathe/movement`, `lathe/r25-scaling-50`).
 #[test]
 fn lathe_moves_and_scales_along_the_turn() {
     let profile = build_curve("forge.rectangle_spline", &BTreeMap::new())
@@ -189,7 +189,8 @@ fn lathe_moves_and_scales_along_the_turn() {
     // five columns of four points: the turn no longer closes on itself
     assert_eq!(m.points.len(), 20);
     let (first, last) = (m.points[0], m.points[16]);
-    assert!((last.y - first.y - 100.0).abs() < 1e-9);
+    // the scaling is uniform (the height scales with the radius) and the movement comes after it
+    assert!((last.y - (first.y * 0.5 + 100.0)).abs() < 1e-9);
     let radius = |p: DVec3| p.x.hypot(p.z);
     assert!((radius(last) - radius(first) * 0.5).abs() < 1e-9);
 }

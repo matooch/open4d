@@ -156,6 +156,6 @@ Up Vector, Distribution and the rest of the Object-mode fields appear only once 
 
 - Cloner made through the menu starts in Grid Array mode, not Linear. Every mode case sets the mode explicitly.
 - A Cloner with an effector gets one more field, named after the effector (Random: 100 %), the effector's strength on this cloner; it shows in `case.toml` as `random = 100.0`.
-- Effector parameters in `[params.effector]` use the label as shown; when two fields have the same label the second gets the field number appended (`scale_1061`, `use_alpha_strength_1071`). Effector fields that are not numbers (the field list, the time offset) are not recorded.
+- Effector parameters in `[params.effector]` use the label as shown; when two fields have the same label the second gets a descriptive suffix naming its group (`scale_checkbox`, `use_alpha_strength_weight`); the app's field numbers are never written. Effector fields that are not numbers (the field list, the time offset) are not recorded.
 - Plain effector defaults seen: Strength 100 %, Transform Mode Relative, Position on with P (0, 100, 0), Rotation off, Scale off, Color Mode shown as Fields Color, Deformation Off. Random effector defaults: Strength 100 %, Max 100 %, Min −100 %, Random Mode Random, Seed 12345, P (50, 50, 50), Space Global, Animation Speed 100 %, Scale 100 %.
 - Not covered by the form and not observed: Clones modes other than Iterate, Fill below 100 %, other Grid forms, other Object distributions, effector Color Mode, Fix Texture, Multi-Instance.

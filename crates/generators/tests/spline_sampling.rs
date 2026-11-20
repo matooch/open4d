@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 mod common;
 
-use common::{apply, resolved_params};
+use common::{create_spline, resolved_params};
 use forge_core::{Document, EvalCtx, Registry, Value};
 use forge_generators::splines::{CIRCLE, HELIX, RECTANGLE, build_curve};
 use forge_generators::{BuildError, Primitives, evaluate};
@@ -24,6 +24,8 @@ const MATCHING: &[&str] = &[
     "arc-angles",
     "arc-defaults",
     "arc-sector",
+    "arc-uniform-n200",
+    "arc-uniform-n50",
     "circle-ellipse",
     "circle-ring",
     "circle-uniform",
@@ -33,6 +35,7 @@ const MATCHING: &[&str] = &[
     "flower-defaults",
     "fourside-defaults",
     "fourside-types",
+    "linear-open-uniform",
     "nside-8",
     "nside-defaults",
     "nside-rounding",
@@ -48,7 +51,12 @@ const KNOWN_MISMATCH: &[&str] = &[];
 /// Matching on the first ring only: the second ring of `helix-uniform` is displaced along a
 /// direction the extrude does not model (the spline is not planar). The 901 points of the
 /// first ring are within 1e-6 of the export (GENERATORS2.md §6.1).
-const FIRST_RING_ONLY: &[&str] = &["helix-uniform"];
+const FIRST_RING_ONLY: &[&str] = &[
+    "helix-uniform",
+    "helix-uniform-sub10",
+    "helix-uniform-sub200",
+    "helix-uniform-sub50",
+];
 
 /// Not built: the Cogwheel's tooth outline is not derived (GENERATORS2.md §6.3) and the
 /// Formula needs the expression library of brief 052.
@@ -63,7 +71,13 @@ fn auto_direction_is_negative(
     child: forge_core::NodeId,
 ) -> Result<bool, BuildError> {
     let node = doc.scene().node(child).unwrap();
-    let loops = build_curve(&node.type_id, &node.params)?.loops();
+    let loops = if node.type_id == forge_generators::editable_spline::TYPE {
+        let (data, ty, sampling) =
+            forge_generators::editable_spline::settings_of(doc.scene(), child).unwrap();
+        data.curve(ty, sampling).loops()
+    } else {
+        build_curve(&node.type_id, &node.params)?.loops()
+    };
     let ring = &loops[0];
     let area: f64 = (0..ring.len())
         .map(|i| {
@@ -82,7 +96,6 @@ fn extrude_of(case: &forge_parity_harness::GoldenCase) -> Result<Mesh, BuildErro
     let params = resolved_params(case, &m);
     let input = params["input"].as_table().unwrap().clone();
     let offset = params["extrude_offset"].as_float().unwrap();
-    let ty = format!("forge.{}", input["type"].as_str().unwrap());
     let mut doc = Document::new(reg.clone());
     let (ex, child) = doc
         .transact("case", |tx| {
@@ -90,8 +103,7 @@ fn extrude_of(case: &forge_parity_harness::GoldenCase) -> Result<Mesh, BuildErro
             for cap in ["cap_start", "cap_end"] {
                 tx.set_param(ex, cap, Value::Enum("none".into()))?;
             }
-            let child = tx.create(&ty, Some(ex), None)?;
-            apply(tx, &reg, child, &ty, &input);
+            let child = create_spline(tx, &reg, Some(ex), &input);
             Ok((ex, child))
         })
         .unwrap();
@@ -277,8 +289,9 @@ fn adaptive_is_the_observed_walk() {
         wide.len(),
         narrow.len()
     );
-    // straight pieces never get interior points, whatever the mode
-    for m in ["none", "natural", "uniform", "adaptive", "subdivided"] {
+    // straight pieces never get interior points, except in Uniform (arc-length steps over the
+    // whole spline, `splines-2/linear-open-uniform`)
+    for m in ["none", "natural", "adaptive", "subdivided"] {
         assert_eq!(points(RECTANGLE, &[mode(m)]).len(), 4, "{m}");
     }
 }

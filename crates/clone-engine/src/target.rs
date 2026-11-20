@@ -177,19 +177,29 @@ pub(crate) fn from_node(scene: &Scene, id: NodeId) -> Option<Target> {
 
 impl Target {
     /// The frame (columns x, y, z) that looks along `dir`, or `None` for no direction.
+    ///
+    /// Up Vector None: `z` is the direction and the clone's Y stays as upright as it can
+    /// (`target-defaults`). Reverse Heading turns the whole direction around, pitch included
+    /// (`target-reverse`: `z = -d`, `x = (-1, 0, 0)`). With an Up Vector set the clone looks
+    /// **away** (`z = -d`) and its X axis takes the up vector's component across `z`
+    /// (`target-up-x`, `target-up-y`); `y = z x x`.
     fn aim(&self, dir: DVec3, fallback_x: DVec3) -> Option<DMat3> {
         let up = self.up.unwrap_or(DVec3::Y);
-        let along = up * dir.dot(up);
-        let across = dir - along;
         let mut d = dir;
         if !self.use_pitch {
-            d = across;
+            d -= up * dir.dot(up);
         }
         if self.reverse_heading {
-            d = (d - across) - across;
+            d = -d;
         }
-        let z = d.try_normalize()?;
-        let x = up.cross(z).try_normalize().unwrap_or(fallback_x);
+        let mut z = d.try_normalize()?;
+        let x = match self.up {
+            Some(u) => {
+                z = -z;
+                (u - z * u.dot(z)).try_normalize().unwrap_or(fallback_x)
+            }
+            None => up.cross(z).try_normalize().unwrap_or(fallback_x),
+        };
         let y = z.cross(x);
         Some(DMat3::from_cols(x, y, z))
     }

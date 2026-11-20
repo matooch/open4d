@@ -1,6 +1,6 @@
 # Generators III — observation (O20)
 
-Status: observed (59 of 59 cases) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-04
+Status: partial (batch-02 follow-ups collected; full validation blocked); original baseline 59 of 59 cases · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-04
 Method: scripted ([agents/OBSERVER.md](../agents/OBSERVER.md)). Level A. Inputs are made
 through their menu commands and placed as the generator's children in the order given.
 - Export the generator to `tests/golden/<feature>/<case>/mesh.obj`.
@@ -256,10 +256,81 @@ separate the hypotheses it could not; run them like the cases above, R25 default
 | landscape/segments-1000 | 1002001 / 1000000 | (600.000028, 72.612511, 600.000028); mesh.obj is 184 MB |
 
 Method notes: every case started from a new empty document; generator objects were made
-through the app's own Create menu commands (`CallCommand` with the object's command id),
+through the app's own Create menu commands,
 children placed in the order the table gives. Every generator parameter the scene holds
 was read back after the case and written to `case.toml` (percent and degrees shown as
 the Attribute Manager shows them). The Spline Mask cases add `[params]` rows
 `extrude_offset = 20.0` and `caps = false` for their wrapping Extrude, as in
 splines-2's cases. Subdivision Surface cases also record the R25-only
 `r12_compatibility` toggle.
+- Batch-02 `boole/r25-union-shift-x`: Observed; vertices: 24 (unused 0); faces: 18 (4-gons 18); bbox min: (-100, -100, -100); bbox max: (150, 100, 100); size: (250, 200, 200); centre: (25, 0, 0); normals: 6; uvs: 8; complete measured parameters in case.toml.
+
+- Batch-02 `boole/r25-a_minus_b-shift-x`: Observed; vertices: 16 (unused 0); faces: 10 (4-gons 10); bbox min: (-100, -100, -100); bbox max: (100, 100, 100); size: (200, 200, 200); centre: (0, 0, 0); normals: 6; uvs: 8; complete measured parameters in case.toml.
+
+- Batch-02 `boole/r25-union-inside`: not observed: needs interactive export: scripted evaluation left generator output identical to unmodified input after sequential evaluation retry.
+
+- Batch-02 `boole/r25-a_minus_b-inside`: Observed; vertices: 8 (unused 0); faces: 6 (4-gons 6); bbox min: (-100, -100, -100); bbox max: (100, 100, 100); size: (200, 200, 200); centre: (0, 0, 0); normals: 6; uvs: 4; complete measured parameters in case.toml.
+
+- Batch-02 `boole/r25-union-uneven`: Observed; vertices: 26 (unused 0); faces: 12 (4-gons 6, 6-gons 6); bbox min: (-100, -100, -100); bbox max: (130, 150, 170); size: (230, 250, 270); centre: (15, 25, 35); normals: 8; uvs: 21; complete measured parameters in case.toml.
+
+- Batch-02 `boole/r25-a_minus_b-uneven`: Observed; vertices: 20 (unused 0); faces: 9 (4-gons 6, 6-gons 3); bbox min: (-100, -100, -100); bbox max: (100, 100, 100); size: (200, 200, 200); centre: (0, 0, 0); normals: 7; uvs: 21; complete measured parameters in case.toml.
+
+- Batch-02 `subdivision/r25-loop-pyramid`: Observed; vertices: 50 (unused 0); faces: 96 (3-gons 96); bbox min: (-49.731445, -90.722656, -49.731445); bbox max: (49.731445, -10.498047, 49.731445); size: (99.46289, 80.224609, 99.46289); centre: (0, -50.6103515, 0); normals: 54; uvs: 65; complete measured parameters in case.toml.
+
+- Batch-02 `sweep/r25-helix-sub4`: Observed; vertices: 1332 (unused 0); faces: 1298 (4-gons 1296, 36-gons 2); bbox min: (-223.827907, -20, -215.50604); bbox max: (223.827907, 20, 15.506032); size: (447.655814, 40, 231.01207200000002); centre: (0, 0, -100.000004); normals: 1411; uvs: 1403; complete measured parameters in case.toml.
+
+- Batch-02 `sweep/r25-helix-sub8`: Observed; vertices: 2628 (unused 0); faces: 2594 (4-gons 2592, 36-gons 2); bbox min: (-220.165114, -220.148486, -219.854216); bbox max: (220.149533, 220.143623, 19.872838); size: (440.314647, 440.292109, 239.727054); centre: (-0.007790499999998701, -0.002431500000000142, -99.990689); normals: 2686; uvs: 2735; complete measured parameters in case.toml.
+
+- Batch-02 `sweep/r25-helix-radius`: Observed; vertices: 32436 (unused 0); faces: 32402 (4-gons 32400, 36-gons 2); bbox min: (-370.360097, -395.283297, -219.976147); bbox max: (419.972068, 345.381911, 19.93573); size: (790.332165, 740.665208, 239.911877); centre: (24.80598549999999, -24.950693, -100.0202085); normals: 32492; uvs: 33371; complete measured parameters in case.toml.
+
+- Batch-02 `sweep/r25-banking-planar`: Observed; vertices: 16992 (unused 0); faces: 16992 (4-gons 16992); bbox min: (-216.715715, -216.715715, -20); bbox max: (216.715715, 216.715715, 20); size: (433.43143, 433.43143, 40); centre: (0, 0, 0); normals: 17868; uvs: 17501; complete measured parameters in case.toml.
+
+- Batch-02 `sweep/r25-scale-end-only`: Observed; vertices: 360 (unused 0); faces: 326 (4-gons 324, 36-gons 2); bbox min: (0, -200, -200); bbox max: (399.96, 200, 200); size: (399.96, 400, 400); centre: (199.98, 0, 0); normals: 342; uvs: 404; complete measured parameters in case.toml.
+
+- Batch-02 `sweep/r25-banking-off-rotated`: Observed; vertices: 32436 (unused 0); faces: 32402 (4-gons 32400, 36-gons 2); bbox min: (-400, -399.347468, -399.989888); bbox max: (400, 199.367435, 399.989889); size: (800, 598.714903, 799.979777); centre: (0, -99.9900165, 0.0000004999999987376214); normals: 32489; uvs: 33371; complete measured parameters in case.toml.
+
+- Batch-02 `sweep/r25-rail-rectangle`: Observed; vertices: 3604 (unused 0); faces: 3602 (4-gons 3602); bbox min: (-350.350027, -375.326416, -199.979978); bbox max: (399.979223, 325.382725, 0); size: (750.32925, 700.709141, 199.979978); centre: (24.81459799999999, -24.9718455, -99.989989); normals: 1804; uvs: 4507; complete measured parameters in case.toml.
+
+- Batch-02 `lathe/r25-scaling-50`: Observed; vertices: 1221 (unused 0); faces: 1152 (4-gons 1152); bbox min: (-150.182746, 0, -125.663114); bbox max: (200, 199.999998, 175); size: (350.182746, 199.999998, 300.663114); centre: (24.908626999999996, 99.999999, 24.668443000000003); normals: 1221; uvs: 1221; complete measured parameters in case.toml.
+
+- Batch-02 `atom-array/pyramid`: Observed; vertices: 150 (unused 0); faces: 130 (3-gons 60, 4-gons 70); bbox min: (-104.330127, -105, -103.75); bbox max: (104.330127, 105, 103.75); size: (208.660254, 210, 207.5); centre: (0, 0, 0); normals: 74; uvs: 36; complete measured parameters in case.toml.
+
+- Batch-02 `atom-array/rotated-cube`: Observed; vertices: 400 (unused 0); faces: 352 (3-gons 128, 4-gons 224); bbox min: (-162.313218, -146.421356, -177.474487); bbox max: (162.313218, 146.421356, 177.474487); size: (324.626436, 292.842712, 354.948974); centre: (0, 0, 0); normals: 232; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `atom-array/single-elements`: Observed; vertices: 400 (unused 0); faces: 352 (3-gons 128, 4-gons 224); bbox min: (-105, -105, -105); bbox max: (105, 105, 105); size: (210, 210, 210); centre: (0, 0, 0); normals: 36; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `spline-mask/and`: Observed; vertices: 504 (unused 0); faces: 252 (4-gons 252); bbox min: (-50, -184.982361, 0); bbox max: (200, 184.982361, 20); size: (250, 369.964722, 20); centre: (75, 0, 10); normals: 238; uvs: 506; complete measured parameters in case.toml.
+
+- Batch-02 `spline-mask/or`: Observed; vertices: 1368 (unused 0); faces: 684 (4-gons 684); bbox min: (-199.853209, -199.990628, -20); bbox max: (349.853209, 199.990628, 0); size: (549.706418, 399.981256, 20); centre: (75, 0, -10); normals: 633; uvs: 1368; complete measured parameters in case.toml.
+
+- Batch-02 `spline-mask/intersection`: Observed; vertices: 1872 (unused 0); faces: 936 (4-gons 936); bbox min: (-199.853209, -199.990628, 0); bbox max: (349.853209, 199.990628, 20); size: (549.706418, 399.981256, 20); centre: (75, 0, 10); normals: 847; uvs: 1870; complete measured parameters in case.toml.
+
+- Batch-02 `spline-mask/b-minus-a`: Observed; vertices: 684 (unused 0); faces: 342 (4-gons 342); bbox min: (75, -199.990628, -20); bbox max: (349.853209, 199.990628, 0); size: (274.853209, 399.981256, 20); centre: (212.4266045, 0, -10); normals: 326; uvs: 686; complete measured parameters in case.toml.
+
+- Batch-02 `spline-mask/axis-zy`: Observed; vertices: 864 (unused 0); faces: 432 (4-gons 432); bbox min: (-20, -199.916314, -200); bbox max: (0, 199.916314, 350); size: (20, 399.832628, 550); centre: (-10, 0, 75); normals: 418; uvs: 866; complete measured parameters in case.toml.
+
+- Batch-02 `spline-mask/cap`: Observed; vertices: 432 (unused 0); faces: 430 (3-gons 430); bbox min: (-200, -199.916314, 0); bbox max: (350, 199.916314, 0); size: (550, 399.832628, 0); centre: (75, 0, 0); normals: 2; uvs: 0; complete measured parameters in case.toml.
+
+- Batch-02 `spline-mask/rect-circle`: Observed; vertices: 38 (unused 0); faces: 19 (4-gons 19); bbox min: (-200, -200, 0); bbox max: (300, 200, 20); size: (500, 400, 20); centre: (50, 0, 10); normals: 18; uvs: 40; complete measured parameters in case.toml.
+
+- Batch-02 `instance/render-instance`: Observed; vertices: 16 (unused 0); faces: 12 (4-gons 12); bbox min: (-100, -100, -100); bbox max: (100, 100, 100); size: (200, 200, 200); centre: (0, 0, 0); normals: 6; uvs: 4; complete measured parameters in case.toml.
+
+- Batch-02 `instance/multi-instance`: not observed: not observed: Connection closed by Cinema 4D during execute_python; next ping not connected; health recovered after 30 seconds and arithmetic returned 2. No result or mesh produced; unsafe operation withheld for human investigation, no crash diagnosis inferred..
+
+- Batch-02 `connect/tolerance-in`: Observed; vertices: 12 (unused 0); faces: 11 (4-gons 11); bbox min: (-100, -100, -100); bbox max: (300.5, 100, 100); size: (400.5, 200, 200); centre: (100.25, 0, 0); normals: 6; uvs: 4; complete measured parameters in case.toml.
+
+- Batch-02 `connect/tolerance-out`: not observed: needs interactive export: scripted evaluation left generator output identical to unmodified input after sequential evaluation retry.
+
+- Batch-02 `connect/phong-off`: not observed: Requested Phong mode Off is not offered. Public dropdown readback: Manual, Average, Lowest, Highest, As Breaks. Prior preparation failed with Enum option missing Off; no replacement assumed..
+
+- Batch-02 `connect/phong-average`: not observed: needs interactive export: scripted evaluation left generator output identical to unmodified input after sequential evaluation retry.
+
+- Batch-02 `connect/phong-hard`: not observed: Requested Phong mode Hard is not offered. Read dropdown: Manual, Average, Lowest, Highest, As Breaks; no replacement assumed..
+
+### Batch-02 follow-up checkpoint
+
+Recovered the saved spline-mask/and readback and OBJ from the provider HTTP429 interruption; it was not evidence of an app crash. The original CURRENT_CASE is preserved in observer scratch. The prior 17 recorded cases were retained with their recorded hashes. Multi-Instance later closed the bridge connection without producing output; the first health ping failed, but after 30 seconds ping and arithmetic recovered. That unsafe case is withheld for human investigation; no crash diagnosis is asserted. Phong Off and Hard are not dropdown options in this build (Manual, Average, Lowest, Highest, As Breaks were read). Phong Average and tolerance-out were withheld under the unchanged-output rule; unchanged geometry alone does not establish that their options are ineffective. Spline Mask Create Cap exported a planar triangle mesh despite the surrounding Extrude; see its literal measured bounds.
+
+Follow-up accounting: 26 new golden folders; 6 rows withheld or requiring a human; no unprocessed rows. Full working-tree validation still fails on the unrelated restrict-bend duplicate table, so these observations remain uncommitted. Isolated validation of the complete batch returned `ok: 73 cases`; clean-room and whitespace checks passed.
+
+Batch-02 follow-up timestamp (UTC): 2026-11-18T06:54:17.701036+00:00. The header date above records the earlier baseline, not this follow-up collection.

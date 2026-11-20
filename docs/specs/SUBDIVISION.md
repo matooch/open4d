@@ -125,6 +125,10 @@ Utah (1987); parity observations `subdivision/scheme-osd_loop` (R20) and
   `(a, m)`, `(m, b)`. The next internal order is each face's four children, in internal order.
   Proven by the level-2 points 26–97 of `r25-type-osd_loop` (inner edges 26–61 in the order
   face 0, 2, 4, …, 1, 3, 5, …; halves 62–97).
+- **Triangles and quads together** (`subdivision/r25-loop-pyramid`, a default Pyramid: 4
+  triangles and a quad base, Loop at levels 2 and 2; 50 points, 96 triangles; matches exactly):
+  the rules above hold for a mesh that mixes triangles with a quad; the quad base is
+  fan-triangulated like a cube face and its closing edge gets the late number.
 - **Parity-pending:** polygons with more than four corners (fan index, then polygon, is the
   assumed internal order), non-manifold edges (midpoint), sharp edges (`Unsupported`) and the
   inner edges' direction (only matters from level 3).

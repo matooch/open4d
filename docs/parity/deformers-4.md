@@ -1,6 +1,6 @@
 # Deformers IV — observation (O45)
 
-Status: observed · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-04
+Status: partial (batch-02 follow-ups collected; full validation blocked) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-04
 Method: as [deformers-2.md](deformers-2.md) (O9). Unless a row says otherwise:
 - the input is a cube with size_y 400 and segments 4/8/4;
 - the deformer is the cube's child;
@@ -55,9 +55,9 @@ Record each deformer's parameter table once.
 
 ## Parameters (filled once per deformer)
 
-Recorded as in [deformers-2.md](deformers-2.md): label, our key (as written in `case.toml` — `read_obj`-generated snake-case names), default, declared min/max. Vector params are shown as [x, y, z]. Cycle params show defaults as the raw stored id plus the option list in the description's order, because the automatic cycle-label mapping (cycle container lookup) gave a mismatched label on Collision (see Notes), so treat the raw id as authoritative here.
+Recorded as in [deformers-2.md](deformers-2.md): label, our key (as written in `case.toml` — `read_obj`-generated snake-case names), default, declared min/max. Vector params are shown as [x, y, z]. Cycle params show defaults as the raw stored id plus the option list in the description's order, because the automatic cycle-label mapping (option-list lookup) gave a mismatched label on Collision (see Notes), so treat the raw id as authoritative here.
 
-### Spline (id 1008982)
+### Spline
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Original Spline | `original_spline` | unset link | – | – |
@@ -66,9 +66,9 @@ Recorded as in [deformers-2.md](deformers-2.md): label, our key (as written in `
 | Radius | `radius` | 30 | 0 | 1e20 (kept 999999999) |
 | Use Length | `use_length` | off | 0 | 1 |
 | Full Polygons | `full_polygons` | off | 0 | 1 |
-| Shape | `shape` (a shape spline, SplineData) | default spline | – | our case writes it as a linked helper spline |
+| Shape | `shape` (a shape spline) | default spline | – | our case writes it as a linked helper spline |
 
-### Spline Rail (id 1008796)
+### Spline Rail
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Z Spline Left | `z_spline_left` | unset link | – | – |
@@ -81,19 +81,19 @@ Recorded as in [deformers-2.md](deformers-2.md): label, our key (as written in `
 | Scale Before Start | `scale_before_start` | 1.0 | ±1e18 (kept ±999999999) | |
 | Scale After End | `scale_after_end` | 1.0 | ±1e18 (kept ±999999999) | |
 
-### Mesh (cage) deformer (id 1024543)
+### Mesh (cage) deformer
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Auto Init | `auto_init` | off | 0 | 1 |
 | Memory | `memory` (read-only text) | "0 B" | – | – |
 | Strength | `strength` | 1.0 | ±1e18 (kept ±999999999) | |
-| Cages | `cages` (InExcludeData list) | empty | – | – |
+| Cages | `cages` (object list) | empty | – | – |
 | Accuracy | `accuracy` | 0.1 | 0 | 1 |
 | External | `external` | Ignore | – | options: Ignore, Surface, Surface (Area) |
 
-Buttons: Initialize (1001), Restore (1002). Has a Field list (440000245).
+Buttons: Initialize, Restore. Has a Field list.
 
-### Surface deformer (id 1024552)
+### Surface deformer
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Type | `type` | Projection | – | options: Projection, Mapping (U,V), Mapping (V,U) |
@@ -102,9 +102,9 @@ Buttons: Initialize (1001), Restore (1002). Has a Field list (440000245).
 | Proportional | `proportional` | off | 0 | 1 |
 | Surface | `surface` | unset link | – | – |
 
-Buttons: Initialize (1001), Restore (1002). Has a Field list.
+Buttons: Initialize, Restore. Has a Field list.
 
-### Camera deformer (id 1024476)
+### Camera deformer
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Camera | `camera` | unset link | – | – |
@@ -114,9 +114,9 @@ Buttons: Initialize (1001), Restore (1002). Has a Field list.
 | Safe Frame | `safe_frame` | on | 0 | 1 |
 | Draw Grid | `draw_grid` | Active* | – | options: Always, Active, Hierarchy |
 
-\* stored default raw value was 1 while the option list is ['Always', 'Active', 'Hierarchy']; the direct write test was not run on it, so the label mapping was not confirmed (same cycle caveat as Notes). Reset button (2005). Has a Field list.
+\* stored default raw value was 1 while the option list is ['Always', 'Active', 'Hierarchy']; the direct write test was not run on it, so the label mapping was not confirmed (same cycle caveat as Notes). Reset button. Has a Field list.
 
-### Collision deformer (id 1024544)
+### Collision deformer
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Falloff | `falloff` | 3 (raw) | – | options (description order): None, UV, Distance, Surface, Collider |
@@ -125,16 +125,16 @@ Buttons: Initialize (1001), Restore (1002). Has a Field list.
 | Restore Shape | `restore_shape_percent` | 100 % | 0 | 100 % |
 | Curve | `curve` (a spline) | default curve | – | not recorded |
 | Solver | `solver` | 0 (raw) | – | options (description order): Inside, Inside (Stretch), Outside, Outside (Volume), Intersect |
-| Objects (solver list) | not written by read_obj (InExcludeData) | empty | – | – |
-| Objects (second, 1017) | `…` | empty | – | – |
+| Objects (solver list) | not written by read_obj (object list) | empty | – | – |
+| Objects (second) | `…` | empty | – | – |
 | Stretch/Relax group | size 1.0, steps 1, stretch 8, relax 4, stiffness 75 %, struct 100 %, flex 100 % | | | keys `size`, `steps`, `stretch`, `relax`, `stiffness_percent`, `struct_percent`, `flex_percent` |
-| Collision group | falloff 1004 `falloff_1004`, invert 1005 `invert` | invert off | 0 | 1 |
-| Falloff group | falloff 1018 `falloff_1018`, invert 1006 `invert_1006` | invert off | 0 | 1 |
-| Cache section | Enable off (`enable`), Compress off (`compress`), Auto Time on (`auto_time`), Cache 20 (`cache`, min 1 max 1000), Scale 100 % (`scale_percent`) | | | Start/Stop/Offset are BaseTime, not sampled |
+| Collision group | falloff `collision_falloff`, invert `invert` | invert off | 0 | 1 |
+| Falloff group | falloff `falloff_group_falloff`, invert `falloff_group_invert` | invert off | 0 | 1 |
+| Cache section | Enable off (`enable`), Compress off (`compress`), Auto Time on (`auto_time`), Cache 20 (`cache`, min 1 max 1000), Scale 100 % (`scale_percent`) | | | Start/Stop/Offset are time values, not sampled |
 
-Buttons: Calculate (2001), Update (2010), Empty Cache (2003), Load… (2006), Save… (2007). Has a Field list.
+Buttons: Calculate, Update, Empty Cache, Load…, Save…. Has a Field list.
 
-### Jiggle (id 1021284)
+### Jiggle
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | On Stopped | `on_stopped` | off | 0 | 1 |
@@ -146,15 +146,15 @@ Buttons: Calculate (2001), Update (2010), Empty Cache (2003), Load… (2006), Sa
 | Motion Scale | `motion_scale` | 1.0 | 0 | 1e20 (kept 999999999) |
 | Springs | `springs` | 4 | 0 | 100 |
 | Iterations | `iterations` | 4 | 1 | 1000 |
-| Restrict | (InExcludeData) | empty | – | – |
+| Restrict | (object list) | empty | – | – |
 | Gravity | `gravity` | 0 | ±1e20 | |
-| Forces | (InExcludeData) | empty | – | – |
+| Forces | (object list) | empty | – | – |
 | Cache section | Enable off, Compress off, Auto Time on, Cache 20, Scale 100 % | | | as Collision above |
 | several "Map" link fields | not recorded (unset vertex maps) | | | |
 
-Buttons: Calculate (2014), Update (2026), Empty Cache (2016), Load… (2019), Save… (2020). Has a Field list.
+Buttons: Calculate, Update, Empty Cache, Load…, Save…. Has a Field list.
 
-### Delta Mush (id 1035447)
+### Delta Mush
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Strength | `strength` | 1.0 | ±1e18 (kept ±999999999) | |
@@ -164,11 +164,11 @@ Buttons: Calculate (2014), Update (2026), Empty Cache (2016), Load… (2019), Sa
 | Smooth Type | `smooth_type` | 1 | – | options (description order): Fixed, Proportional |
 | Pin Border Points | `pin_border_points` | off | 0 | 1 |
 | Mode | `mode` | 1 | – | options (description order): Exclude, Include |
-| Tags | `tags` (InExcludeData) | empty | – | – |
+| Tags | `tags` (object list) | empty | – | – |
 
-Buttons: Initialize (1005), Release (1006). Has a Field list.
+Buttons: Initialize, Release. Has a Field list.
 
-### Correction (id 1024542)
+### Correction
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Lock | `lock` | off | 0 | 1 |
@@ -176,9 +176,9 @@ Buttons: Initialize (1005), Release (1006). Has a Field list.
 | Mapping | `mapping` | 1 | – | options (description order): UV, Nearest, Normals |
 | Strength | `strength` | 1.0 | ±1e18 (kept ±999999999) | |
 
-Buttons: Update (1003), Freeze (1004), Reset (1005). Has a Field list. The corrected points are not in the Attribute description; they are edited through the object's own point list (the case moved corrected point 0 by (50, 0, 0)).
+Buttons: Update, Freeze, Reset. Has a Field list. The corrected points are not in the Attribute description; they are edited through the object's own point list (the case moved corrected point 0 by (50, 0, 0)).
 
-### Explosion FX (id 1002603)
+### Explosion FX
 | Label | Our key | Default | Min | Max |
 |---|---|---|---|---|
 | Time | `time_percent` | 10 % | 0 | 100 % |
@@ -228,9 +228,10 @@ No Field list on Explosion FX.
 
 - **Mesh deformer and Camera deformer produced no deformation in the exported meshes** under
   scripted/background evaluation on this build, for every workaround tried (Initialize/Restore
-  buttons, Auto Init on, SetDirty, moving the grid point, linking a camera into the view's
-  BASEDRAW_DATA_CAMERA). GetDeformCache() returns nothing for any deformer under ExecutePasses here
-  (even a plain Bend), while SaveDocument's own evaluation does deform Bend etc., so the two cases
+  buttons, Auto Init on, marking the object dirty, moving the grid point, linking a camera into the
+  viewport's camera setting). The scripted read of an object's deformed result returns nothing for any
+  deformer when the scene is evaluated by script here (even a plain Bend), while the app's own
+  save-time evaluation does deform Bend etc., so the two cases
   are recorded as observed (camera-deformer/grid exported the undeformed cube; mesh-deformer/cage
   exported the cube undeformed plus the edited cage object as `Cube.1`). These meshes should be
   regenerated interactively if deformation is required for parity.
@@ -238,7 +239,7 @@ No Field list on Explosion FX.
   cage in mesh-deformer/cage (object `Cube.1`), the surface in surface/defaults (`Plane`), and the
   collider in collision/sphere (`Sphere`). The Spline/Rail/Helix helper splines are not polygons and
   do not appear. The FFD and Camera deformer gizmos are not exported as polygons.
-- The automatic cycle-label mapping (resolving enum ids through the DESC_CYCLE container) gave a
+- The automatic cycle-label mapping (resolving option indices through the option-list lookup) gave a
   label mismatch on Collision: the raw stored Solver value read directly is 0, whose description
   order suggests `Inside`, while the cycle-container lookup resolved it to `Intersect`, and the
   Falloff value 3 resolved to `None` (order suggests `Surface`). Raw ids and option lists are
@@ -302,6 +303,9 @@ case still exports undeformed, say so in its row and move on.
 | formula/d-v | Formula | d = v |
 | formula/effect-manual | Formula | Effect Manual, X = x*2 |
 | formula/effect-spherical | Formula | Effect Spherical (one case per other effect: Cylindrical, X Radial, Z Radial) |
+| formula/effect-cylindrical | Formula | Effect Cylindrical; expanded from effect-spherical follow-up row |
+| formula/effect-x-radial | Formula | Effect X Radial; expanded from effect-spherical follow-up row |
+| formula/effect-z-radial | Formula | Effect Z Radial; expanded from effect-spherical follow-up row |
 | formula/size-nonuniform | Formula | Size (100, 300, 50) |
 | ffd/point-x | FFD | the lattice point at +x middle moved by (50, 0, 0) |
 | ffd/point-z | FFD | the lattice point at +z middle moved by (0, 0, 50) |
@@ -381,3 +385,127 @@ Per-case result overview (vertex/face counts and bounds from each case's `mesh.o
 
 The three derived cases the queue flagged (squash-f/curvature-cubic, squash-f/curvature-quartic,
 wrap-f/spherical-h200) were observed as additional cases, as the rows request.
+
+- Batch-02 `mesh-deformer/cage-redo`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `mesh-deformer/cage-up`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `mesh-deformer/cage-scale`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `surface/defaults-redo`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `surface/tilted`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `camera-deformer/grid-redo`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `camera-deformer/aimed`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `collision/sphere-redo`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `collision/cube-outside`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `jiggle/plane-frames`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `jiggle/stiffness-100`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `jiggle/drag`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `jiggle/gravity`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `delta-mush/iterations`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `correction/uv`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `correction/normals`: not observed: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed..
+
+- Batch-02 `melt/no-random-s0`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-100, 0, -100); bbox max: (100, 200, 100); size: (200, 200, 200); centre: (0, 100, 0); normals: 7; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `melt/no-random-s10`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-179.206627, 0, -179.206627); bbox max: (179.206627, 184.623269, 179.206627); size: (358.413254, 184.623269, 358.413254); centre: (0, 92.3116345, 0); normals: 31; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `melt/no-random-s50`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-418.024039, 0, -418.024039); bbox max: (418.024039, 27.067057, 418.024039); size: (836.048078, 27.067057, 836.048078); centre: (0, 13.5335285, 0); normals: 32; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `melt/no-random-s100`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-496.319944, 0, -496.319944); bbox max: (496.319944, 0.067093, 496.319944); size: (992.639888, 0.067093, 992.639888); centre: (0, 0.0335465, 0); normals: 31; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `melt/size-100`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-153.243029, 0, -160.297566); bbox max: (162.654069, 27.067057, 163.728834); size: (315.897098, 27.067057, 324.02639999999997); centre: (4.705519999999993, 13.5335285, 1.7156340000000085); normals: 120; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `melt/size-200`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-206.486058, 0, -220.595132); bbox max: (225.308139, 27.067057, 227.457668); size: (431.79419700000005, 27.067057, 448.05280000000005); centre: (9.411040499999999, 13.5335285, 3.431268000000003); normals: 113; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `melt/radius-50`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-312.972117, 0, -341.190264); bbox max: (350.616278, 27.067057, 354.915335); size: (663.588395, 27.067057, 696.105599); centre: (18.8220805, 13.5335285, 6.862535500000007); normals: 124; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `melt/radius-200`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-312.972117, 0, -341.190264); bbox max: (350.616278, 27.067057, 354.915335); size: (663.588395, 27.067057, 696.105599); centre: (18.8220805, 13.5335285, 6.862535500000007); normals: 97; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `melt/noise-scale-50`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-312.972117, 0, -341.190264); bbox max: (350.616278, 27.067057, 354.915335); size: (663.588395, 27.067057, 696.105599); centre: (18.8220805, 13.5335285, 6.862535500000007); normals: 127; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `formula/d-const`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-100, -180, -100); bbox max: (100, 220, 100); size: (200, 400, 200); centre: (0, 20, 0); normals: 6; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `formula/d-u`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-100, -200, -100); bbox max: (100, 341.421356, 100); size: (200, 541.4213560000001, 200); centre: (0, 70.710678, 0); normals: 60; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `formula/d-v`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-100, -200, -100); bbox max: (100, 341.421356, 100); size: (200, 541.4213560000001, 200); centre: (0, 70.710678, 0); normals: 60; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `formula/effect-manual`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-200, -200, -100); bbox max: (200, 200, 100); size: (400, 400, 200); centre: (0, 0, 0); normals: 6; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `formula/effect-spherical`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-120, -240, -88.452995); bbox max: (120, 240, 140); size: (240, 480, 228.452995); centre: (0, 0, 25.7735025); normals: 230; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `formula/effect-cylindrical`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-120, -200, -80); bbox max: (120, 200, 140); size: (240, 400, 220); centre: (0, 0, 30); normals: 30; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `formula/effect-x-radial`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-140, -200, -100); bbox max: (140, 200, 100); size: (280, 400, 200); centre: (0, 0, 0); normals: 106; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `formula/effect-z-radial`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-100, -200, -140); bbox max: (100, 200, 140); size: (200, 400, 280); centre: (0, 0, 0); normals: 106; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `formula/size-nonuniform`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-100, -226.430745, -100); bbox max: (100, 229.885131, 100); size: (200, 456.315876, 200); centre: (0, 1.7271929999999998, 0); normals: 50; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `ffd/point-x`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-100, -200, -100); bbox max: (108.680556, 200, 100); size: (208.680556, 400, 200); centre: (4.340277999999998, 0, 0); normals: 74; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `ffd/point-z`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-100, -200, -100); bbox max: (100, 200, 108.680556); size: (200, 400, 208.680556); centre: (0, 0, 4.340277999999998); normals: 75; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `ffd/grid-2`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-100, -200, -100); bbox max: (106.944444, 200, 106.944444); size: (206.944444, 400, 206.944444); centre: (3.472222000000002, 0, 3.472222000000002); normals: 166; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `ffd/grid-small`: not observed: needs interactive export: scripted evaluation left it undeformed after sequential evaluation retry.
+
+- Batch-02 `spline-wrap/box`: not observed: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding..
+
+- Batch-02 `spline-wrap/axis-y`: not observed: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding..
+
+- Batch-02 `spline-wrap/keep-length`: not observed: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding..
+
+- Batch-02 `spline-wrap/clamp`: not observed: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding..
+
+- Batch-02 `spline-wrap/strength-50`: not observed: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding..
+
+- Batch-02 `spline-wrap/offset-25`: not observed: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding..
+
+- Batch-02 `spline-wrap/from-25-to-75`: not observed: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding..
+
+- Batch-02 `spline-wrap/banking-45`: not observed: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding..
+
+- Batch-02 `spline-wrap/up-vector`: not observed: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding..
+
+- Batch-02 `spline-wrap/closed`: not observed: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding..
+
+- Batch-02 `spline-deformer/lines`: Observed; vertices: 166 (unused 4); faces: 160 (4-gons 160); bbox min: (-100, -200, -100); bbox max: (400, 200, 100); size: (500, 400, 200); centre: (150, 0, 0); normals: 7; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `spline-deformer/modifier-moved`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-100, -200, -100); bbox max: (100, 250, 100); size: (200, 450, 200); centre: (0, 25, 0); normals: 21; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `spline-deformer/radius-60`: Observed; vertices: 166 (unused 4); faces: 160 (4-gons 160); bbox min: (-100, -200, -100); bbox max: (400, 200, 100); size: (500, 400, 200); centre: (150, 0, 0); normals: 7; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `spline-deformer/use-length`: Observed; vertices: 166 (unused 4); faces: 160 (4-gons 160); bbox min: (-100, -200, -100); bbox max: (400, 200, 100); size: (500, 400, 200); centre: (150, 0, 0); normals: 7; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `spline-rail/limited`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-350, -200.251444, -199.97994); bbox max: (350, 200.000188, 0); size: (700, 400.251632, 199.97994); centre: (0, -0.12562799999999186, -99.98997); normals: 47; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `spline-rail/within-box`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-350, -200.251444, -199.97994); bbox max: (350, 200.000188, 0); size: (700, 400.251632, 199.97994); centre: (0, -0.12562799999999186, -99.98997); normals: 47; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `spline-rail/scale-before-50`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-350, -200.251444, -199.97994); bbox max: (350, 200.000188, 0); size: (700, 400.251632, 199.97994); centre: (0, -0.12562799999999186, -99.98997); normals: 47; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `spline-rail/x-splines`: Observed; vertices: 166 (unused 4); faces: 160 (4-gons 160); bbox min: (-350, -200.251444, 0); bbox max: (400, 200.000188, 0); size: (750, 400.251632, 0); centre: (25, -0.12562799999999186, 0); normals: 4; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `spline-rail/one-spline`: Observed; vertices: 162 (unused 0); faces: 160 (4-gons 160); bbox min: (-350, -200.251444, -199.97994); bbox max: (350, 200.000188, 0); size: (700, 400.251632, 199.97994); centre: (0, -0.12562799999999186, -99.98997); normals: 48; uvs: 45; complete measured parameters in case.toml.
+
+- Batch-02 `spline-rail/uneven`: Observed; vertices: 166 (unused 4); faces: 160 (4-gons 160); bbox min: (-150, -200, 0); bbox max: (150, 200, 400); size: (300, 400, 400); centre: (0, 0, 200); normals: 11; uvs: 45; complete measured parameters in case.toml.
+
+### Batch-02 follow-up checkpoint
+
+Follow-up collection is partial: solver/correction and Spline Wrap rows remain human-only, including every multi-frame and multi-setting variant named within those rows. Formula Spherical was expanded into the three additional requested effects as explicit rows. Unspecified straight-line helper length was chosen literally as 400, points (0,0,0) to (400,0,0); unequal Z rails use lengths 200 and 400 at x -150 and 150. X rail helpers stay at their default transform, because no offsets were specified. Editable helper splines contribute four unused OBJ vertices in the staged cases; their points and transforms are recorded, so golden info bounds can include these helpers. Melt strength 0 with randomness 0 still clipped the lower input to y 0: the observed bounds are not an assumed unchanged baseline. ffd/grid-small remained undeformed after the sequential retry and has no golden folder. Initial straight-spline preparation failed once due to a stale cached observer helper and once due to a path separator in the scratch document name; both reports are retained in scratch, then a fresh separator-free owned document succeeded. No app crash is inferred from these probe errors.
+
+Follow-up accounting: 31 new golden folders; 27 rows withheld or requiring a human; no unprocessed rows. Full working-tree validation still fails on the unrelated restrict-bend duplicate table, so these observations remain uncommitted. Isolated validation of the complete batch returned `ok: 73 cases`; clean-room and whitespace checks passed.
+
+Batch-02 follow-up timestamp (UTC): 2026-11-18T06:54:17.701036+00:00. The header date above records the earlier baseline, not this follow-up collection.

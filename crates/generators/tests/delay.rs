@@ -43,11 +43,11 @@ fn y_at(doc: &Document, cloner: NodeId, frame: i64) -> f64 {
 #[test]
 fn delay_lags_behind_a_moving_input_and_is_stable_per_frame() {
     let (doc, cloner, _, _) = scene();
-    // The input is 10 cm per frame. Even mode at 50 %: y_f = y_(f-1) + (x_f - y_(f-1)) / 2.
+    // The input is 10 cm per frame. Even mode at 50 %: persistence 0.999 * 0.5, y_f = y_(f-1) + (x_f - y_(f-1)) (1 - p).
     assert_eq!(y_at(&doc, cloner, 0), 0.0);
     let mut y = 0.0;
     for f in 1..=12 {
-        y += (10.0 * f as f64 - y) * 0.5;
+        y += (10.0 * f as f64 - y) * (1.0 - 0.5 * 0.999);
         assert!((y_at(&doc, cloner, f) - y).abs() < 1e-9, "frame {f}");
     }
     // Evaluating a frame twice, or after another frame, gives the same result.

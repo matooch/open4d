@@ -38,13 +38,19 @@ const UNSUPPORTED: &[&str] = &["boole/quality-off"];
 
 /// Built, but the strict comparison (R25 point set and numbering) differs.
 const KNOWN_MISMATCH: &[&str] = &[
-    // pending brief 043 (BOOLE.md §5a): the objects, point counts, face counts, polygon
-    // sizes and surface match; the new points' numbering, the face order of the union
-    // family and the start corners of the cut faces are not derived for all four cases.
+    // pending (BOOLE.md §5a): the objects, point counts, face counts, polygon sizes and surface
+    // match; the new points' numbering, the face order of the union family, the order of the
+    // two polygons a plane splits a face into, and the start corners of the cut faces are
+    // not derived (the follow-up cases `-shift-x` and `-uneven` confirm the layout and the
+    // surface, not the order).
     "boole/r25-a_minus_b",
+    "boole/r25-a_minus_b-shift-x",
+    "boole/r25-a_minus_b-uneven",
     "boole/r25-a_without_b",
     "boole/r25-intersect",
     "boole/r25-union",
+    "boole/r25-union-shift-x",
+    "boole/r25-union-uneven",
 ];
 
 #[test]
@@ -53,6 +59,7 @@ fn boole_matches_the_reference_geometrically() {
     let mut unsupported = BTreeSet::new();
     let mut matched = Vec::new();
     let mut mismatch = BTreeSet::new();
+    let mut underived: Vec<String> = Vec::new();
     let reg = {
         let mut r = Registry::with_builtins();
         r.install(&Primitives).unwrap();
@@ -65,13 +72,14 @@ fn boole_matches_the_reference_geometrically() {
     {
         let key = format!("{}/{}", case.feature, case.name);
         let m = case.manifest().unwrap();
-        let r25 = m.params.contains_key("input2");
+        let params = resolved_params(&case, &m);
+        let r25 = params.contains_key("input2");
         if !r25 {
             assert_eq!(m.tolerance.compare, Compare::Geometric, "{key}");
         }
 
         let (a, b) = if r25 {
-            let t = |k: &str| m.params[k].as_table().unwrap().clone();
+            let t = |k: &str| params[k].as_table().unwrap().clone();
             (
                 cube_input(&reg, &t("input")),
                 cube_input(&reg, &t("input2")),
@@ -87,15 +95,13 @@ fn boole_matches_the_reference_geometrically() {
             }
             (a, b)
         };
-        let mut values = BTreeMap::new();
-        for (k, v) in &resolved_params(&case, &m) {
-            let v = match v {
-                toml::Value::String(s) => Value::Enum(s.clone()),
-                toml::Value::Boolean(b) => Value::Bool(*b),
-                _ => continue,
-            };
-            values.insert(k.clone(), v);
-        }
+        // the generator's own scalars; the scripted cases spell them by label
+        let own: Table = params
+            .iter()
+            .filter(|(k, v)| !v.is_table() && *k != "b_pos")
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        let values = typed_params(&reg, "forge.boole", &own);
 
         // R25 cases are compared in the export layout (two objects, own points).
         let result = if r25 {
@@ -126,28 +132,50 @@ fn boole_matches_the_reference_geometrically() {
                 } else if compare_meshes(&expected, &ours, &m.tolerance).passed() {
                     matched.push(key);
                 } else {
-                    println!("{key}: known mismatch (strict)");
                     // what is derived: layout, counts, polygon sizes and the surface
-                    assert_eq!(expected.positions.len(), ours.positions.len(), "{key}");
                     let sizes = |m: &Mesh| {
                         let mut s: Vec<usize> = m.faces.iter().map(Vec::len).collect();
                         s.sort();
                         s
                     };
-                    assert_eq!(sizes(&expected), sizes(&ours), "{key}: polygon sizes");
+                    let strict = compare_meshes(&expected, &ours, &m.tolerance);
+                    println!(
+                        "{key}: first strict failures {:?}",
+                        strict.failures.iter().take(2).collect::<Vec<_>>()
+                    );
                     let r = compare_geometric(&expected, &ours, &m.tolerance);
-                    assert!(r.passed(), "{key}: {:?}", r.failures);
+                    let derived = expected.positions.len() == ours.positions.len()
+                        && sizes(&expected) == sizes(&ours)
+                        && r.passed();
+                    println!(
+                        "{key}: strict mismatch, derived {derived} (points {} vs {}, faces {} vs {}, sizes {:?} vs {:?}, {:?})",
+                        expected.positions.len(),
+                        ours.positions.len(),
+                        expected.faces.len(),
+                        ours.faces.len(),
+                        sizes(&expected),
+                        sizes(&ours),
+                        r.failures
+                    );
+                    if !derived {
+                        underived.push(key.clone());
+                    }
                     mismatch.insert(key);
                 }
             }
         }
     }
     println!("matched geometrically: {}", matched.join(", "));
+    assert!(
+        underived.is_empty(),
+        "not even the surface matches: {underived:?}"
+    );
     let want: BTreeSet<String> = UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
     let want: BTreeSet<String> = KNOWN_MISMATCH.iter().map(|s| s.to_string()).collect();
     assert_eq!(mismatch, want, "known-mismatch set changed");
-    assert_eq!(matched.len(), 5, "{matched:?}");
+    // five geometric R20 cases, and `r25-a_minus_b-inside` exactly
+    assert_eq!(matched.len(), 6, "{matched:?}");
 }
 
 /// The cut-face polygon counts the reference shows: n-gons with hide on, quads off.

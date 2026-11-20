@@ -1,0 +1,116 @@
+feature = "spline-tools"
+observation = "docs/parity/spline-tools.md"
+description = "interp-cubic-natural; measured fresh menu-created follow-up"
+mesh = "mesh.obj"
+
+[params]
+command = "Set interpolation"
+
+[params.input]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.input.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+width = 400.0
+height = 400.0
+rounding = 0
+radius = 50.0
+plane = "XY"
+reverse = 0
+intermediate_points = "Adaptive"
+number = 8
+angle_degrees = 5.0
+maximum_length = 5.0
+
+[params.editable_before]
+point_count = 4
+closed = true
+segments = []
+points = [[200.0, 200.0, 0.0], [-200.0, 200.0, 0.0], [-200.0, -200.0, 0.0], [200.0, -200.0, 0.0]]
+tangents = []
+
+[params.editable_before.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+type = "Linear"
+close_spline = 1
+intermediate_points = "Adaptive"
+number = 8
+angle_degrees = 5.0
+maximum_length = 5.0
+
+[params.result_spline]
+point_count = 4
+closed = true
+segments = []
+points = [[250.0, 250.0, 0.0], [-200.0, 200.0, 0.0], [-200.0, -200.0, 0.0], [200.0, -200.0, 0.0]]
+tangents = []
+
+[params.result_spline.parameters]
+icon_file_id = ""
+icon_color = "None"
+color = [1.0, 0.9, 0.4]
+type = "Cubic"
+close_spline = 1
+intermediate_points = "Natural"
+number = 8
+angle_degrees = 5.0
+maximum_length = 5.0
+
+[params.extrude]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.extrude.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+direction = "Auto"
+offset = 20.0
+subdivision = 1
+isoparm_subdivision = 10
+flip_normals = 0
+hierarchical = 0
+start_cap = 0
+end_cap = 0
+separate_bevel_controls = 0
+bevel_shape = "Round"
+size = 0.0
+extended_shape = 0
+height = 0.0
+shape_depth_percent = 100.0
+segments = 3
+bevel_shape_secondary = "Round"
+size_secondary = 0.0
+extended_shape_secondary = 0
+height_secondary = 0.0
+shape_depth_secondary_percent = 100.0
+extended_shape_3 = 0
+use_absolute_value = 0
+max_shape_height = 5.0
+segments_secondary = 3
+bevel_outside = 0
+avoid_self_intersections = 1
+caps_type = "N-gon"
+break_phong_rounding = 1
+shell = 0
+start_cap_secondary = 0
+end_cap_secondary = 0
+start_bevel = 0
+end_bevel = 0
+start_shell = 0
+end_shell = 0
+start_cap_3 = 0
+end_cap_3 = 0
+start_step = 0
+end_step = 0
+
+[import]
+scale = 1.0
+flip_z = false

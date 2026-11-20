@@ -1,6 +1,6 @@
 feature = "modeling-tools"
 observation = "docs/parity/modeling-tools-3.md"
-description = "Cube made editable with 1 x 1 x 1 segments; the top-front edge (points 1 and 3) beveled in edge mode with Bevel Mode Solid (1100 = 1, as the older bevel-solid case), offset 20, Subdivision 1 (other settings at their Reset Values defaults)"
+description = "Cube made editable with 1 x 1 x 1 segments; the top-front edge (points 1 and 3) beveled in edge mode with Bevel Mode Solid (value 1 in the Bevel Mode list, as the older bevel-solid case), offset 20, Subdivision 1 (other settings at their Reset Values defaults)"
 mesh = "mesh.obj"
 
 [params]

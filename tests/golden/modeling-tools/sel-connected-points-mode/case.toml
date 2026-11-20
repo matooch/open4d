@@ -1,0 +1,40 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "sel-connected-points-mode; measured follow-up, menu-created fresh document"
+mesh = "mesh.obj"
+
+[params]
+second_cube_offset = [200.0, 200.0, 0.0]
+shared_vertex_count = 2
+selection_mode = "Points"
+selected_points = [0]
+input_points = [[-100.0, -100.0, -100.0], [-100.0, 100.0, -100.0], [100.0, -100.0, -100.0], [100.0, 100.0, -100.0], [100.0, -100.0, 100.0], [100.0, 100.0, 100.0], [-100.0, -100.0, 100.0], [-100.0, 100.0, 100.0], [100.0, 300.0, -100.0], [300.0, 100.0, -100.0], [300.0, 300.0, -100.0], [300.0, 100.0, 100.0], [300.0, 300.0, 100.0], [100.0, 300.0, 100.0]]
+input_polygons = [[0, 1, 3, 2], [2, 3, 5, 4], [4, 5, 7, 6], [6, 7, 1, 0], [1, 7, 5, 3], [6, 0, 2, 4], [3, 8, 10, 9], [9, 10, 12, 11], [11, 12, 13, 5], [5, 13, 8, 3], [8, 13, 12, 10], [5, 3, 9, 11]]
+points_before = 14
+polygons_before = 12
+tool = "Select Connected"
+
+[params.source]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+size = [200.0, 200.0, 200.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = 0
+fillet = 0
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[params.settings]
+
+[params.result_objects_1]
+name = "Cube"
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[import]
+scale = 1.0
+flip_z = false

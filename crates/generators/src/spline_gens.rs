@@ -366,8 +366,10 @@ pub fn lathe(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMesh
         let (s, c) = (angle * f).sin_cos();
         let scale = 1.0 + (scaling - 1.0) * f;
         points.extend(profile.iter().map(|q| {
+            // Scaling is uniform: the profile height scales with its radius
+            // (`lathe/r25-scaling-50`)
             let (x, z) = (q.x * scale, q.z * scale);
-            DVec3::new(x * c - z * s, q.y + movement * f, x * s + z * c)
+            DVec3::new(x * c - z * s, q.y * scale + movement * f, x * s + z * c)
         }));
     }
     let at = |k: usize, j: usize| ((k % columns) * m + j % m) as u32;
@@ -669,7 +671,8 @@ pub fn sweep(
             (None, None) => DVec3::Y,
         })
         .collect();
-    // Initial normal: away from the bend at the first point, else any perpendicular.
+    // Initial normal: away from the bend at the first point, else any perpendicular (the
+    // fallback of the Z rule below).
     let bend = match (incoming[0], outgoing[0]) {
         (Some(a), Some(b)) => a - b,
         _ => outgoing[1.min(n - 1)]
@@ -678,6 +681,13 @@ pub fn sweep(
     };
     let t0 = tangents[0];
     let mut normal = (bend - t0 * bend.dot(t0)).normalize_or_zero();
+    // The first normal is `tangent x Z`, the plane normal of the XY-plane path
+    // (`sweep/r25-banking-planar`, the Flower: +x at its inner point, where "away from the bend"
+    // gives -x); a tangent along Z falls back to the bend rule.
+    let up = t0.cross(DVec3::Z);
+    if up.length() > 1e-6 {
+        normal = up.normalize();
+    }
     if normal == DVec3::ZERO {
         normal = t0.any_orthonormal_vector();
     }

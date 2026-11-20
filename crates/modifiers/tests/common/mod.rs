@@ -3,6 +3,8 @@
 //! built from `tests/defaults/r20.toml` plus its own params, the case winning.
 #![allow(dead_code)]
 
+pub mod forms;
+
 use std::path::{Path, PathBuf};
 
 use forge_parity_harness::{CaseManifest, GoldenCase, app_version, defaults_overlay};

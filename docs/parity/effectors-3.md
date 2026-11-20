@@ -40,9 +40,9 @@ Rotation / Scale / Color Mode / Use Alpha/Strength / Weight, U, V Transform / Mo
 | Rotation | `rotation` | off | – | – |
 | Scale | `scale` | off | – | – |
 | Color Mode | `color_mode` | Off | – | Off, Effector Color, Custom Color, Fields Color |
-| Use Alpha/Strength (Weight tab block) | `use_alpha_strength_1071` | on | – | – |
+| Use Alpha/Strength (Weight tab block) | `use_alpha_strength_weight` | on | – | – |
 
-"Indexed" is a switch next to Random Mode, not an entry of its list. Uniform Scale and the Scale value (`uniform_scale`, `scale_1018`) appear once Scale is on; with Scale on the observed values were Uniform Scale on, Scale 1 (the value set by the probe; the default value of the hidden field was not read).
+"Indexed" is a switch next to Random Mode, not an entry of its list. Uniform Scale and the Scale value (`uniform_scale`, `scale_value`) appear once Scale is on; with Scale on the observed values were Uniform Scale on, Scale 1 (the value set by the probe; the default value of the hidden field was not read).
 
 ### Shader
 | Label | Our key | Default | Min | Max |
@@ -51,7 +51,7 @@ Rotation / Scale / Color Mode / Use Alpha/Strength / Weight, U, V Transform / Mo
 | Rotation | `rotation` | off | – | – |
 | Scale | `scale` | on | – | – |
 | Uniform Scale | `uniform_scale` | on | – | – |
-| Scale (value) | `scale_1018` | 0.5 | −1e20 (kept ±999999999) | 1e20 |
+| Scale (value) | `scale_value` | 0.5 | −1e20 (kept ±999999999) | 1e20 |
 | Color Mode | `color_mode` | Effector Color as the file reads it (the stored value is 3; the drop-down list order differs from the stored numbers) | – | Off, Effector Color, Custom Color, Fields Color |
 | Blending Mode | `blending_mode` | Default | – | Default, Add, Subtract, Multiply, Divide |
 | Channel | `channel` | Color (stored 830); reads "Custom Shader" once a shader is inserted | – | Color, Luminance, Transparency, Environment, Bump, Alpha, Specular, Displacement, Diffusion, Normal, Custom Shader |
@@ -115,7 +115,7 @@ Spline has no Maximum, Minimum or Selection.
 | Rotation | `rotation` | off | – | – |
 | Scale | `scale` | on | – | – |
 | Uniform Scale | `uniform_scale` | on | – | – |
-| Scale (value) | `scale_1018` | **−1** | −1e20 (kept ±999999999) | 1e20 |
+| Scale (value) | `scale_value` | **−1** | −1e20 (kept ±999999999) | 1e20 |
 | Color Mode | `color_mode` | Off | – | as above |
 
 ## Cases

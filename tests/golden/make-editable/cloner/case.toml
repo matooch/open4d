@@ -1,0 +1,85 @@
+feature = "make-editable"
+observation = "docs/parity/make-editable.md"
+description = "cloner; complete resulting tree and transforms in observation form"
+mesh = "mesh.obj"
+
+[params]
+command = "Make Editable"
+frame = 0
+fps = 30
+
+[params.input_1]
+object_type = "Cloner"
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+name = "Cloner"
+visible_in_editor = "Default"
+visible_in_renderer = "Default"
+enabled = 1
+display_color = "Material"
+color_2 = [1.0, 1.0, 1.0]
+x_ray = 0
+position = [0.0, 0.0, 0.0]
+rotation = [0.0, 0.0, 0.0]
+rotation_order = "HPB"
+scale = [1.0, 1.0, 1.0]
+quaternion_rotation = 0
+frozen_position = [0.0, 0.0, 0.0]
+frozen_rotation = [0.0, 0.0, 0.0]
+frozen_scale = [1.0, 1.0, 1.0]
+mode = "Grid"
+clones = "Iterate"
+reset_coordinates = 1
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = [3.0, 1.0, 1.0]
+mode_2 = "Per-Step"
+size = [200.0, 200.0, 200.0]
+form = "Cubic"
+fill = 1.0
+display = "None"
+p = [0.0, 0.0, 0.0]
+r = [0.0, 0.0, 0.0]
+s = [1.0, 1.0, 1.0]
+color_3 = [1.0, 1.0, 1.0]
+w_uv_orientation = "Z+"
+weight = 0.0
+animation_mode = "Play"
+
+[params.input_2]
+object_type = "Cube"
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+name = "Cube"
+visible_in_editor = "Default"
+visible_in_renderer = "Default"
+enabled = 1
+display_color = "Material"
+color_2 = [1.0, 1.0, 1.0]
+x_ray = 0
+position = [0.0, 0.0, 0.0]
+rotation = [0.0, 0.0, 0.0]
+rotation_order = "HPB"
+scale = [1.0, 1.0, 1.0]
+quaternion_rotation = 0
+frozen_position = [0.0, 0.0, 0.0]
+frozen_rotation = [0.0, 0.0, 0.0]
+frozen_scale = [1.0, 1.0, 1.0]
+size = [200.0, 200.0, 200.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = 0
+fillet = 0
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[import]
+scale = 1.0
+flip_z = false
+
+[tolerance]
+compare = "geometric"

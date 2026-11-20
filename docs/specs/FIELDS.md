@@ -372,3 +372,54 @@ parameters yet.
 | Formula result limit | clamp 0..1 before vs after Remapping | formula `2*px/100` with Invert on |
 | Formula `t` and `f` | seconds scale, units of `t` | formula `t` sampled at 0 s and 1 s with the time delta 100 % and 50 % |
 | Shader field | everything | brief 125 and a shader-noise case on a finer grid |
+
+## F8. Modifier layers, Mirror Graph, Random Space None (O49)
+
+Source: [fields-4.md](../parity/fields-4.md) (O49); golden `tests/golden/fields/{mod-remap,mod-curve,mod-step,mod-colorize,mod-invert,
+mod-clamp,mirror-graph,random-space-none,decay-frame20,delay-frame20,vmap-from-field,restrict-bend}`. All
+`fields` cases are sampled on the 729-point grid of F5 except the two vertex-map cases (a mesh, and one `track` file).
+
+### Modifier layers (`mod-*`)
+A **modifier layer** is a row of a field list that has no shape of its own: it transforms the value accumulated from the
+rows below it (list order top to bottom, evaluated bottom to top, F7). Each case is one Spherical field (Size 200, defaults) with one
+modifier layer above it, Normal at 100 %. The modifier's value is the whole row: `acc' = acc + (m(acc) − acc)·strength`
+(the strength and blend law of F7 applied to `m(acc)`; **parity-pending**: every case is at 100 % Normal).
+The modifiers, each proven on all 729 samples (7 distinct values: 1.0 at the centre, 0.5 at radius 150, 0.0 from radius 200):
+
+| node type | parameters | `m(v)` | proving case |
+|---|---|---|---|
+| `forge.field.remap_layer` | `min` 0 %, `max` 100 % | `min + v·(max − min)` (0.2 at the outer edge to 0.8 at the centre for 20 % / 80 %) | `mod-remap` |
+| `forge.field.invert_layer` | none | `1 − v` (centre 0, radius 150 → 0.5, 1 from radius 200) | `mod-invert` |
+| `forge.field.clamp_layer` | `minimum` 0, `clamp_min` on, `maximum` 100, `clamp_max` on (plain numbers) | `clamp(v, minimum, maximum)` per flag: nothing in 0..1 is clipped at the defaults | `mod-clamp` |
+| `forge.field.colorize_layer` | `source`, `mode`, `base_color`, `base_density`, `value_as_alpha` (colour channel only) | `v` (the value channel passes through) | `mod-colorize` |
+| `forge.field.curve_layer` | `offset` 0 %, `before_curve`, `after_curve` (Clamp), the shape | the default shape, two knots (0,0)–(1,1) with collinear tangents, is the identity; other shapes are `FieldError::Unsupported("curve layer shape")` | `mod-curve` |
+
+The Colorize and Curve layers' other rows are stored without effect. The colour channel of a modifier row keeps the colour of
+the rows below (**parity-pending**: no case samples it).
+
+**`mod-step` is not derived.** Its Step layer (Contour Mode Step, 4 steps) gives the *normalised coordinate along the layer
+direction over the sampled bounds*, quantised into 4 steps (only 0, 0.25, 0.5, 0.75, 1 occur; 92 / 546 / 91 points at
+1.0 / between / 0.0): a function of the position inside the sampled set, **not of the value below** (the centre is 0.5
+although the Spherical there is 1). The bounds of the sampled point set are not a property of the field, so this layer cannot
+be a function `FieldSample → value`. Pinned `pending: Step layer`.
+
+### Decay, Delay, Freeze (`decay-frame20`, `delay-frame20`, `freeze-frame10`)
+Time-dependent layers over a Spherical moving from x = −200 (frame 0) to +200 (frame 30), sampled after stepping from frame 0.
+The committed samples are known to be unreliable: the observer's own frame-by-frame reproduction differed in 83 and 160 of 729 points
+(max 0.447 and 0.606), so they cannot be used as a reference. No model; `freeze-frame10` was not observed. Pinned `pending: time layers`.
+
+### Mirror Graph (`mirror-graph`)
+A fresh Linear field has Mirror Graph **off** (Length 100, Direction X+, Clip off). With it on, the 729 samples are identical to the off case
+(the ramp is symmetric: 0 for x ≤ −100, 0.125 at −75, 0.5 at 0, 0.875 at 75, 1 for x ≥ 100), which is what our Linear field gives, exactly
+(the flag is stored without effect, F4). Matched.
+
+### Random, Space None (`random-space-none`)
+With Space None the Random field returns **one constant for every sample**: 0.6376993060112 at all 729 points, which is
+exactly the value of `random-defaults` at its sample point (0, 0, 0). So Space None samples the noise at the field-space origin
+(our `q = 0`, F6). The noise values are not reproducible (F6), so the test checks, statistically, that the reference is constant, that
+ours is constant and that each equals its own Space Field value at the origin.
+
+### Vertex maps (`vmap-from-field`, `restrict-bend`)
+A Vertex Map tag whose field list holds one Linear field (Y+, Length 200) on a 4/8/4 cube of height 400, and a Bend (strength 90)
+restricted to that map. Vertex maps and the Restriction tag do not exist yet: both cases are listed as pending and skipped by the
+field parity test (`restrict-bend` carries a mesh, `vmap-from-field` a `track` file with the weight per point index).

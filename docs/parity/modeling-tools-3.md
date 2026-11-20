@@ -80,16 +80,16 @@ Same export procedure as the cases above.
 
 | Case (folder) | Input | Command and settings |
 |---|---|---|
-| arr-f-array-4 | default cube made editable, all polygons selected | Array, count 4 along X, offset 300 |
-| arr-f-array-2x2-rot-scale | the same | Array, counts 2 × 2 × 1, offsets (200, 200, 0), rotation (0°, 0°, 45°), scale 50 % |
-| arr-f-array-nothing-selected | default cube made editable, no polygon selected | Array, count 3 along X, offset 300 |
-| sel-connected-corner | two editable cubes merged into one object, touching at one corner point only; one polygon of the first selected | Select Connected |
-| sel-connected-t-junction | three quads sharing one edge (a T), one quad selected | Select Connected |
-| sel-connected-points-mode | the two cubes of `sel-connected-point-only`, one point selected | Select Connected in Points mode |
-| sel-grow-use-edge | default 3 × 3 × 3 cube, one polygon selected | Grow Selection with Use Edge on |
-| arr-f-randomize-30 | 30 default cubes in a row (x 0, 300, …) | Randomize, position ±100, seed 1; record every object's transform |
-| arr-f-transfer-hpb | a cube rotated (H 10°, P 20°, B 30°) as source and a default cube as target | Transfer, all components |
-| arr-f-duplicate-total | a default cube | Duplicate, 3 copies, Mode Total, offset (600, 0, 0) |
+| arr-f-array-4 | default cube made editable, all polygons selected | Observed; vertices: 32 (unused 0); faces: 24 (4-gons 24); bbox min: (-100, -100, -100); bbox max: (400, 100, 100); size: (500, 200, 200); centre: (150, 0, 0); normals: 6; uvs: 4; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
+| arr-f-array-2x2-rot-scale | the same | Observed; vertices: 32 (unused 0); faces: 24 (4-gons 24); bbox min: (-130.22072, -100, -100); bbox max: (311.416049, 330.22072, 100); size: (441.63676899999996, 430.22072, 200); centre: (90.5976645, 115.11035999999999, 0); normals: 20; uvs: 4; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
+| arr-f-array-nothing-selected | default cube made editable, no polygon selected | Observed; vertices: 24 (unused 0); faces: 18 (4-gons 18); bbox min: (-100, -100, -100); bbox max: (400, 100, 100); size: (500, 200, 200); centre: (150, 0, 0); normals: 6; uvs: 4; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
+| sel-connected-corner | two editable cubes merged into one object, touching at one corner point only; one polygon of the first selected | Observed; vertices: 15 (unused 0); faces: 12 (4-gons 12); bbox min: (-100, -100, -100); bbox max: (300, 300, 300); size: (400, 400, 400); centre: (100, 100, 100); normals: 6; uvs: 4; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
+| sel-connected-t-junction | three quads sharing one edge (a T), one quad selected | Observed; vertices: 8 (unused 0); faces: 3 (4-gons 3); bbox min: (-100, -100, 0); bbox max: (100, 100, 100); size: (200, 200, 100); centre: (0, 0, 50); normals: 2; uvs: 8; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
+| sel-connected-points-mode | the two cubes of `sel-connected-point-only`, one point selected | Observed; vertices: 14 (unused 0); faces: 12 (4-gons 12); bbox min: (-100, -100, -100); bbox max: (300, 300, 100); size: (400, 400, 200); centre: (100, 100, 0); normals: 6; uvs: 4; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
+| sel-grow-use-edge | default 3 × 3 × 3 cube, one polygon selected | Observed; vertices: 56 (unused 0); faces: 54 (4-gons 54); bbox min: (-100, -100, -100); bbox max: (100, 100, 100); size: (200, 200, 200); centre: (0, 0, 0); normals: 6; uvs: 16; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
+| arr-f-randomize-30 | 30 default cubes in a row (x 0, 300, …) | Observed; vertices: 240 (unused 0); faces: 180 (4-gons 180); bbox min: (-308.704816, -501.334455, -585.739676); bbox max: (8858.074821, 479.39421, 441.217565); size: (9166.779637, 980.728665, 1026.957241); centre: (4274.6850025, -10.970122500000002, -72.26105550000003); normals: 14; uvs: 4; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
+| arr-f-transfer-hpb | a cube rotated (H 10°, P 20°, B 30°) as source and a default cube as target | Observed; vertices: 16 (unused 0); faces: 12 (4-gons 12); bbox min: (-153.0187, -162.566414, -144.908648); bbox max: (153.0187, 162.566414, 144.908648); size: (306.0374, 325.132828, 289.817296); centre: (0, 0, 0); normals: 6; uvs: 4; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
+| arr-f-duplicate-total | a default cube | Observed; vertices: 32 (unused 0); faces: 24 (4-gons 24); bbox min: (-100, -100, -100); bbox max: (700, 100, 100); size: (800, 200, 200); centre: (300, 0, 0); normals: 6; uvs: 4; complete measured parameters in new case.toml; full validation blocked by unrelated existing fixture |
 
 Arrange along a circle and along a spline did nothing through scripting: run them by hand in GUI
 session G3 and record the result.
@@ -144,3 +144,14 @@ session G3 and record the result.
   named `Cube.0`, `Cube.1`, `Cube.2` (copies start counting at 0), per-step move
   (200, 0, 0) puts them at x = 0/200/400/600 (world-space mesh in
   `arr-f-duplicate/mesh.obj`).
+
+### Authorized full-run follow-up checkpoint (2026-11-17)
+
+- Observer: Hermes, scripted public bridge; app version 25010; original observation metadata above preserved. Licence permission is owner-confirmed in observer state, not an independent licence review.
+- New measured cases: 10. Safe-scope follow-ups exhausted; full validation/publication remain blocked by the unrelated existing restrict-bend duplicate parameter table. No commit or push.
+- Every new case records measured visible parameters and exact input readbacks. Scratch probes and raw descriptions remain outside the repository.
+
+- O58 literal interpretations: Array exposes **Rot. Var.** and **Scale Var.**, not fixed per-copy rotation/scale. The 2×2 row sets those visible variation controls to (0°, 0°, 45°) and 50%; their exact measured readbacks are in the manifest. No regular rotation/scale control was invented. Duplicate “Total” is represented by Linear mode, Per Step off, Move (600, 0, 0); the observed original plus three copies are recorded with exact transforms.
+- Selection input construction: a menu-created cube/plane was made editable in its own call, then its points/polygons were set to the requested shared topology before the single selection command. Corner uses offset (200, 200, 200) and one shared vertex; the points-mode row literally reuses the earlier specified (200, 200, 0) offset, which geometrically shares **two** vertices/an edge, not one corner. All input points/polygons are recorded, not inferred. T-junction has three quads sharing exactly one edge.
+- Grow Use Edge succeeded safely through the noninteractive selection command, using its public Use Edge control. The tool palette description alone omits that control; the known-crashing dialog was never opened. Result selection: polygons 1, 3, 4, 5, 7.
+- Randomize: all 30 input/output object transforms are in case.toml. Move was set/read as (100, 100, 100), Scale and Rotate (0, 0, 0), Seed 1. Observed maximum absolute per-axis displacement was [99.98713489622423, 90.71620349273262, 95.74681427527834], exceeding the nominal range; this is the genuine command result, not an assumed ±100 distribution.

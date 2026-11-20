@@ -272,7 +272,7 @@ impl Deformers {
         ty.param(
             ParamDesc::float("angle_speed", "Angle Speed", 100f64.to_radians()).unit(Unit::Angle),
         )
-        .param(pct("end_size", "End Size", 0.0).range(0.0, 1000.0))
+        .param(ParamDesc::float("end_size", "End Size", 0.0).range(0.0, 1000.0))
         .param(pct("randomness", "Randomness", 100.0).range(0.0, 100.0))
         .param(enabled_param())
     }

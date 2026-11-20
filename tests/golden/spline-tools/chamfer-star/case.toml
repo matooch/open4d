@@ -1,0 +1,249 @@
+feature = "spline-tools"
+observation = "docs/parity/spline-tools.md"
+description = "chamfer-star; measured fresh menu-created follow-up"
+mesh = "mesh.obj"
+
+[params]
+command = "Chamfer"
+selection = "All points"
+
+[params.input]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.input.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+inner_radius = 100.0
+outer_radius = 200.0
+twist_percent = 0.0
+points = 8
+plane = "XY"
+reverse = 0
+intermediate_points = "Adaptive"
+number = 8
+angle_degrees = 5.0
+maximum_length = 5.0
+
+[params.editable_before]
+point_count = 16
+closed = true
+segments = []
+points = [[200.0, 1.2246467991473532e-14, 0.0], [92.38795325112868, 38.26834323650898, 0.0], [141.42135623730948, 141.4213562373095, 0.0], [38.268343236508976, 92.38795325112868, 0.0], [-0.0, 200.0, 0.0], [-38.268343236508976, 92.38795325112868, 0.0], [-141.42135623730948, 141.4213562373095, 0.0], [-92.38795325112868, 38.26834323650898, 0.0], [-200.0, 1.2246467991473532e-14, 0.0], [-92.38795325112868, -38.268343236508976, 0.0], [-141.4213562373095, -141.42135623730948, 0.0], [-38.26834323650899, -92.38795325112868, 0.0], [-2.4492935982947064e-14, -200.0, 0.0], [38.26834323650897, -92.38795325112868, 0.0], [141.42135623730948, -141.42135623730954, 0.0], [92.38795325112865, -38.26834323650903, 0.0]]
+tangents = []
+
+[params.editable_before.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+type = "Linear"
+close_spline = 1
+intermediate_points = "Adaptive"
+number = 8
+angle_degrees = 5.0
+maximum_length = 5.0
+
+[params.settings]
+flat = 0
+radius = 10.0
+realtime_update = 1
+
+[params.result_spline]
+point_count = 32
+closed = true
+segments = []
+points = [[173.50505032771906, -9.421973270883006, 0.0], [173.50505032771906, 9.421973270883017, 0.0], [102.82420757422037, 34.557065785652746, 0.0], [97.14323000080906, 48.272158890919705, 0.0], [129.34893884884312, 116.02425646484359, 0.0], [116.02425646484356, 129.34893884884312, 0.0], [48.2721588909197, 97.14323000080907, 0.0], [34.55706578565274, 102.82420757422037, 0.0], [9.421973270883013, 173.50505032771903, 0.0], [-9.421973270883013, 173.50505032771903, 0.0], [-34.55706578565274, 102.82420757422037, 0.0], [-48.2721588909197, 97.14323000080907, 0.0], [-116.02425646484356, 129.34893884884312, 0.0], [-129.34893884884312, 116.02425646484359, 0.0], [-97.14323000080906, 48.272158890919705, 0.0], [-102.82420757422037, 34.557065785652746, 0.0], [-173.50505032771903, 9.421973270883024, 0.0], [-173.50505032771903, -9.421973270883004, 0.0], [-102.82420757422037, -34.55706578565274, 0.0], [-97.14323000080907, -48.2721588909197, 0.0], [-129.34893884884312, -116.02425646484355, 0.0], [-116.02425646484357, -129.3489388488431, 0.0], [-48.27215889091971, -97.14323000080906, 0.0], [-34.55706578565275, -102.82420757422037, 0.0], [-9.421973270883035, -173.50505032771903, 0.0], [9.42197327088299, -173.50505032771903, 0.0], [34.55706578565273, -102.82420757422037, 0.0], [48.272158890919684, -97.14323000080907, 0.0], [116.02425646484353, -129.34893884884315, 0.0], [129.3489388488431, -116.02425646484357, 0.0], [97.14323000080903, -48.27215889091975, 0.0], [102.82420757422032, -34.557065785652796, 0.0]]
+
+[params.result_spline.parameters]
+icon_file_id = ""
+icon_color = "None"
+color = [1.0, 0.9, 0.4]
+type = "Bezier"
+close_spline = 1
+intermediate_points = "Adaptive"
+number = 8
+angle_degrees = 5.0
+maximum_length = 5.0
+
+[params.result_spline.tangents_1]
+left = [0.0, 0.0, 0.0]
+right = [4.783268391494297, 1.7009968876924841, -0.0]
+
+[params.result_spline.tangents_2]
+left = [4.783268391494298, -1.7009968876924813, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_3]
+left = [0.0, 0.0, 0.0]
+right = [-4.04963299103416, 1.4401059171789343, -0.0]
+
+[params.result_spline.tangents_4]
+left = [-1.8452142896129178, -3.881831608941113, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_5]
+left = [0.0, 0.0, 0.0]
+right = [2.17949508179632, 4.585067949925454, -0.0]
+
+[params.result_spline.tangents_6]
+left = [4.585067949925453, 2.179495081796322, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_7]
+left = [0.0, 0.0, 0.0]
+right = [-3.8818316089411127, -1.8452142896129184, -0.0]
+
+[params.result_spline.tangents_8]
+left = [1.4401059171789343, -4.0496329910341595, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_9]
+left = [0.0, 0.0, 0.0]
+right = [-1.7009968876924817, 4.783268391494298, -0.0]
+
+[params.result_spline.tangents_10]
+left = [1.7009968876924817, 4.783268391494298, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_11]
+left = [0.0, 0.0, 0.0]
+right = [-1.4401059171789343, -4.0496329910341595, -0.0]
+
+[params.result_spline.tangents_12]
+left = [3.8818316089411127, -1.8452142896129184, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_13]
+left = [0.0, 0.0, 0.0]
+right = [-4.585067949925453, 2.179495081796322, -0.0]
+
+[params.result_spline.tangents_14]
+left = [-2.17949508179632, 4.585067949925454, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_15]
+left = [0.0, 0.0, 0.0]
+right = [1.8452142896129178, -3.881831608941113, -0.0]
+
+[params.result_spline.tangents_16]
+left = [4.04963299103416, 1.4401059171789343, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_17]
+left = [0.0, 0.0, 0.0]
+right = [-4.783268391494298, -1.7009968876924813, -0.0]
+
+[params.result_spline.tangents_18]
+left = [-4.783268391494298, 1.7009968876924826, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_19]
+left = [0.0, 0.0, 0.0]
+right = [4.04963299103416, -1.4401059171789352, -0.0]
+
+[params.result_spline.tangents_20]
+left = [1.845214289612919, 3.881831608941113, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_21]
+left = [0.0, 0.0, 0.0]
+right = [-2.179495081796322, -4.585067949925453, -0.0]
+
+[params.result_spline.tangents_22]
+left = [-4.585067949925454, -2.1794950817963206, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_23]
+left = [0.0, 0.0, 0.0]
+right = [3.881831608941114, 1.8452142896129182, -0.0]
+
+[params.result_spline.tangents_24]
+left = [-1.4401059171789343, 4.04963299103416, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_25]
+left = [0.0, 0.0, 0.0]
+right = [1.7009968876924817, -4.783268391494299, -0.0]
+
+[params.result_spline.tangents_26]
+left = [-1.7009968876924828, -4.783268391494299, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_27]
+left = [0.0, 0.0, 0.0]
+right = [1.440105917178935, 4.0496329910341595, -0.0]
+
+[params.result_spline.tangents_28]
+left = [-3.8818316089411127, 1.8452142896129196, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_29]
+left = [0.0, 0.0, 0.0]
+right = [4.585067949925455, -2.1794950817963237, -0.0]
+
+[params.result_spline.tangents_30]
+left = [2.1794950817963223, -4.585067949925455, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.result_spline.tangents_31]
+left = [0.0, 0.0, 0.0]
+right = [-1.845214289612919, 3.8818316089411127, -0.0]
+
+[params.result_spline.tangents_32]
+left = [-4.0496329910341595, -1.4401059171789365, -0.0]
+right = [0.0, 0.0, 0.0]
+
+[params.extrude]
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[params.extrude.parameters]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+direction = "Auto"
+offset = 20.0
+subdivision = 1
+isoparm_subdivision = 10
+flip_normals = 0
+hierarchical = 0
+start_cap = 0
+end_cap = 0
+separate_bevel_controls = 0
+bevel_shape = "Round"
+size = 0.0
+extended_shape = 0
+height = 0.0
+shape_depth_percent = 100.0
+segments = 3
+bevel_shape_secondary = "Round"
+size_secondary = 0.0
+extended_shape_secondary = 0
+height_secondary = 0.0
+shape_depth_secondary_percent = 100.0
+extended_shape_3 = 0
+use_absolute_value = 0
+max_shape_height = 5.0
+segments_secondary = 3
+bevel_outside = 0
+avoid_self_intersections = 1
+caps_type = "N-gon"
+break_phong_rounding = 1
+shell = 0
+start_cap_secondary = 0
+end_cap_secondary = 0
+start_bevel = 0
+end_bevel = 0
+start_shell = 0
+end_shell = 0
+start_cap_3 = 0
+end_cap_3 = 0
+start_step = 0
+end_step = 0
+
+[import]
+scale = 1.0
+flip_z = false

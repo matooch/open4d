@@ -16,8 +16,10 @@ const FEATURES: &[&str] = &["atom-array", "spline-mask"];
 /// Observed options whose rules are not derived (none: every observed case is built).
 const UNSUPPORTED: &[&str] = &[];
 
-/// Built but differing (none).
-const KNOWN_MISMATCH: &[&str] = &[];
+/// Built but differing: `spline-mask/cap` has every point and 429 of 430 triangles; face 13 is
+/// `[6, 7, 209]` for us and `[6, 7, 210]` in the export. pending: the Delaunay tie-break of
+/// the near-cocircular Bezier arc samples of a 432-point ring (GENERATORS3.md §2 rule 5).
+const KNOWN_MISMATCH: &[&str] = &["spline-mask/cap"];
 
 fn registry() -> Arc<Registry> {
     let mut reg = Registry::with_builtins();
@@ -39,8 +41,9 @@ fn type_of(t: &Table) -> String {
 }
 
 /// The sign of Extrude Direction Auto: the guess of the spline tests (signed area of all
-/// loops, a zero total follows the first loop).
-fn auto_sign(curve: &forge_generators::splines::Curve) -> f64 {
+/// loops, a zero total follows the first loop), in the plane frame (u, v) of the mask Axis
+/// (`zy`: u = z, v = y).
+fn auto_sign(curve: &forge_generators::splines::Curve, zy: bool) -> f64 {
     let areas: Vec<f64> = curve
         .loops()
         .iter()
@@ -48,6 +51,14 @@ fn auto_sign(curve: &forge_generators::splines::Curve) -> f64 {
             (0..ring.len())
                 .map(|i| {
                     let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+                    let (a, b) = if zy {
+                        (
+                            glam::DVec3::new(a.z, a.y, a.x),
+                            glam::DVec3::new(b.z, b.y, b.x),
+                        )
+                    } else {
+                        (a, b)
+                    };
                     a.x * b.y - b.x * a.y
                 })
                 .sum()
@@ -82,6 +93,13 @@ fn build(case: &GoldenCase) -> Result<Mesh, BuildError> {
             }
         }
     }
+    // Create Cap makes the mask a polygon object that the Extrude passes through.
+    if own
+        .get("create_cap")
+        .is_some_and(|v| v.as_integer() == Some(1))
+    {
+        extrude = None;
+    }
     let mut doc = Document::new(reg.clone());
     let (root, generator) = doc
         .transact("case", |tx| {
@@ -105,9 +123,16 @@ fn build(case: &GoldenCase) -> Result<Mesh, BuildError> {
         .unwrap();
     if let Some((offset, caps)) = extrude {
         let curve = spline_mask::curve_of(doc.scene(), generator)?.expect("mask curve");
-        let sign = auto_sign(&curve);
+        let zy = own.get("axis").and_then(|v| v.as_str()) == Some("ZY (Along X)");
+        let sign = auto_sign(&curve, zy);
         doc.transact("extrude", |tx| {
-            tx.set_param(root, "movement", Value::Vec3([0.0, 0.0, sign * offset]))?;
+            // the plane normal is u x v: +z for XY, -x for ZY
+            let movement = if zy {
+                [-sign * offset, 0.0, 0.0]
+            } else {
+                [0.0, 0.0, sign * offset]
+            };
+            tx.set_param(root, "movement", Value::Vec3(movement))?;
             if !caps {
                 for cap in ["cap_start", "cap_end"] {
                     tx.set_param(root, cap, Value::Enum("none".into()))?;
@@ -133,6 +158,7 @@ fn build(case: &GoldenCase) -> Result<Mesh, BuildError> {
 fn atom_array_and_spline_mask_match_the_reference() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
     let (mut matched, mut unsupported) = (BTreeSet::new(), BTreeSet::new());
+    let mut failed: Vec<String> = Vec::new();
     for case in discover_cases(&root).unwrap() {
         if !FEATURES.contains(&case.feature.as_str()) {
             continue;
@@ -148,7 +174,8 @@ fn atom_array_and_spline_mask_match_the_reference() {
             other => other.unwrap(),
         };
         let expected = export_weld(&case.expected_mesh().unwrap().unwrap());
-        let r = compare_meshes(&expected, &export_weld(&ours), &tol);
+        let ours = export_weld(&ours);
+        let r = compare_meshes(&expected, &ours, &tol);
         if KNOWN_MISMATCH.contains(&key.as_str()) {
             assert!(
                 !r.passed(),
@@ -156,15 +183,25 @@ fn atom_array_and_spline_mask_match_the_reference() {
             );
             continue;
         }
-        assert!(
+        println!(
+            "{key}: passed {} (points {} vs {}, faces {} vs {})",
             r.passed(),
-            "{key}: {:?} (max error {:?})",
-            r.failures,
-            r.max_position_error
+            expected.positions.len(),
+            ours.positions.len(),
+            expected.faces.len(),
+            ours.faces.len()
         );
+        if !r.passed() {
+            failed.push(format!(
+                "{key}: {:?} (max error {:?})",
+                r.failures, r.max_position_error
+            ));
+            continue;
+        }
         matched.insert(key);
     }
+    assert!(failed.is_empty(), "unlisted mismatches: {failed:#?}");
     let want: BTreeSet<String> = UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 4, "{matched:?}");
+    assert_eq!(matched.len(), 5 + 8, "{matched:?}");
 }

@@ -11,7 +11,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | # | Job | Form | Output | Status |
 |---|---|---|---|---|
 | O2 | Keyframe interpolation | [keyframes.md](keyframes.md) | `tests/golden/keyframes/` samples | done |
-| O3 | Make Editable / Current State to Object | [make-editable.md](make-editable.md) | `tests/golden/make-editable/` meshes + tree notes | todo (8 follow-up cases) |
+| O3 | Make Editable / Current State to Object | [make-editable.md](make-editable.md) | `tests/golden/make-editable/` meshes + tree notes | done |
 | O5 | Re-checks from O1/O4 | [rechecks.md](rechecks.md) | form only (+ 2 meshes) | done |
 | O6 | Modeling tools (U4) | [modeling-tools.md](modeling-tools.md) | `tests/golden/modeling-tools/` meshes | done |
 | O7 | Fields: values in space (P2) | [fields.md](fields.md) | `tests/golden/fields/` samples | done |
@@ -20,7 +20,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O11 | Follow-ups to O5–O9 | [followups-1.md](followups-1.md) | new cases in fields/, cloner/, wrap/, squash-stretch/, modeling-tools/, rechecks/ | done |
 | O12 | Keyframes II (tangent rule) | [keyframes-2.md](keyframes-2.md) | `tests/golden/keyframes/` samples | done |
 | O13 | Fields II (more types, layers) | [fields-2.md](fields-2.md) | `tests/golden/fields/` samples | done |
-| O14 | Effectors II | [effectors-2.md](effectors-2.md) | `tests/golden/cloner/` samples | todo (18 follow-up cases) |
+| O14 | Effectors II | [effectors-2.md](effectors-2.md) | `tests/golden/cloner/` samples | partial |
 | O15 | Re-checks II (sweep caps, extrude bevel) | [rechecks-2.md](rechecks-2.md) | `tests/golden/rechecks/` meshes | done |
 | O16 | Keyframes III (confirm brief 09's fitted rules) | [keyframes-3.md](keyframes-3.md) | `tests/golden/keyframes/` samples | done |
 | O25 | Modeling tools II (U4) | [modeling-tools-2.md](modeling-tools-2.md) | `tests/golden/modeling-tools/` meshes | partial |
@@ -29,35 +29,35 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O23 | Fields III (blend modes, more types) | [fields-3.md](fields-3.md) | `tests/golden/fields/` samples | done |
 | O22 | Effectors III | [effectors-3.md](effectors-3.md) | `tests/golden/cloner/` samples + meshes | done |
 | O21 | Cloner III | [cloner-3.md](cloner-3.md) | `tests/golden/cloner/` samples + meshes | done |
-| O17 | Spline primitives II | [splines-2.md](splines-2.md) | `tests/golden/splines-2/` meshes | todo (6 follow-up cases) |
+| O17 | Spline primitives II | [splines-2.md](splines-2.md) | `tests/golden/splines-2/` meshes | partial |
 | O18 | Primitives III | [primitives-3.md](primitives-3.md) | `tests/golden/<object>/` meshes | done |
-| O58 | Modeling tools III (020/021 follow-ups) | [modeling-tools-3.md](modeling-tools-3.md) | `tests/golden/modeling-tools/` meshes | todo (10 follow-up cases) |
-| O20 | Generators III | [generators-3.md](generators-3.md) | `tests/golden/<generator>/` meshes | todo (32 follow-up cases) |
-| O19 | Deformers III | [deformers-3.md](deformers-3.md) | `tests/golden/<deformer>/` meshes | todo (16 follow-up cases) |
-| O45 | Deformers IV | [deformers-4.md](deformers-4.md) | `tests/golden/<deformer>/` meshes | todo (55 follow-up cases; solver deformers and Spline Wrap need interactive export) |
-| O46 | Spline tools and editable splines | [spline-tools.md](spline-tools.md) | `tests/golden/spline-tools/` meshes | todo (15 follow-up cases) |
+| O58 | Modeling tools III (020/021 follow-ups) | [modeling-tools-3.md](modeling-tools-3.md) | `tests/golden/modeling-tools/` meshes | partial |
+| O20 | Generators III | [generators-3.md](generators-3.md) | `tests/golden/<generator>/` meshes | partial |
+| O19 | Deformers III | [deformers-3.md](deformers-3.md) | `tests/golden/<deformer>/` meshes | partial |
+| O45 | Deformers IV | [deformers-4.md](deformers-4.md) | `tests/golden/<deformer>/` meshes | partial |
+| O46 | Spline tools and editable splines | [spline-tools.md](spline-tools.md) | `tests/golden/spline-tools/` meshes | partial |
 | O56 | Caps and bevel tab | [caps-bevel.md](caps-bevel.md) | `tests/golden/caps-bevel/` meshes | done |
-| O48 | Text spline | [text.md](text.md) | `tests/golden/text/` meshes | todo (9 follow-up cases) |
-| O49 | Fields IV: modifier layers, vertex maps | [fields-4.md](fields-4.md) | `tests/golden/fields/` samples + meshes | todo |
+| O48 | Text spline | [text.md](text.md) | `tests/golden/text/` meshes | partial |
+| O49 | Fields IV: modifier layers, vertex maps | [fields-4.md](fields-4.md) | `tests/golden/fields/` samples + meshes | done |
 | O42 | Shaders on a UV grid | [shaders.md](shaders.md) | `tests/golden/shaders/` samples | todo |
 | O27 | Animation II (tracks, tags) | [animation-2.md](animation-2.md) | `tests/golden/animation-2/` samples | todo |
 | O38 | F-curves: tangents and behaviours | [fcurves.md](fcurves.md) | `tests/golden/keyframes/` samples | todo |
 | O53 | Animation III: more track types | [animation-3.md](animation-3.md) | `tests/golden/animation-3/` samples + meshes | todo |
 | O31 | Clone-toolset generators II | [clone-generators-2.md](clone-generators-2.md) | meshes + samples | todo |
 | O50 | Clone toolset III | [clone-toolset-3.md](clone-toolset-3.md) | cloner/, clone-spline/, tracer/ | todo |
-| O32 | Volume builder and mesher | [volumes.md](volumes.md) | `tests/golden/volumes/` meshes | todo |
-| O33 | Volumes II: filters, sources, VDB | [volumes-2.md](volumes-2.md) | `tests/golden/volumes/` meshes + .vdb | todo |
-| O34 | Rigging I: joints and skinning | [rigging.md](rigging.md) | `tests/golden/rigging/` meshes | todo |
+| O32 | Volume builder and mesher | [volumes.md](volumes.md) | `tests/golden/volumes/` meshes | observed (10 of 12 cases; subtract/intersect not scriptable) |
+| O33 | Volumes II: filters, sources, VDB | [volumes-2.md](volumes-2.md) | `tests/golden/volumes/` meshes + .vdb | observed (11 of 13 cases; points-source and vdb-export not scriptable) |
+| O34 | Rigging I: joints and skinning | [rigging.md](rigging.md) | `tests/golden/rigging/` meshes | done |
 | O35 | Rigging II: IK | [ik.md](ik.md) | `tests/golden/ik/` samples + meshes | todo |
 | O36 | Constraints | [constraints.md](constraints.md) | `tests/golden/constraints/` samples + meshes | todo |
 | O37 | Pose Morph | [pose-morph.md](pose-morph.md) | `tests/golden/pose-morph/` meshes | todo |
 | O54 | Tags II | [tags-2.md](tags-2.md) | `tests/golden/tags-2/` | todo |
 | O28 | UV coordinates and projection | [uv-projection.md](uv-projection.md) | `tests/golden/uv/` meshes | todo |
-| O29 | Scene, camera, light, material, render defaults | [scene-defaults.md](scene-defaults.md) | form only | todo |
+| O29 | Scene, camera, light, material, render defaults | [scene-defaults.md](scene-defaults.md) | form only | partial |
 | O30 | Render references | [render-reference.md](render-reference.md) | `tests/golden/render/` PNG + meshes | todo |
 | O43 | Material renders | [material-renders.md](material-renders.md) | `tests/golden/render/` PNG + meshes | todo |
 | O57 | Camera projection | [camera.md](camera.md) | `tests/golden/camera/` PNG + meshes | todo |
-| O44 | Exchange references (FBX, glTF, Alembic, STL, PLY) | [exchange.md](exchange.md) | `tests/golden/exchange/` | todo |
+| O44 | Exchange references (FBX, glTF, Alembic, STL, PLY) | [exchange.md](exchange.md) | `tests/golden/exchange/` | done (morph not observed) |
 | O39 | Dynamics: rigid bodies | [dynamics.md](dynamics.md) | `tests/golden/dynamics/` samples + meshes | todo |
 | O40 | Particles and forces | [particles.md](particles.md) | `tests/golden/particles/` samples + meshes | todo |
 | O41 | Soft bodies and connectors | [soft-bodies.md](soft-bodies.md) | `tests/golden/soft-bodies/` samples + meshes | todo |

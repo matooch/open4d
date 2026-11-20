@@ -16,8 +16,12 @@ const FEATURES: &[&str] = &[
     "symmetry", "array", "connect", "instance", "extrude", "lathe", "loft", "sweep",
 ];
 
-/// Observed cases not derived yet (none: every observed option is built).
-const UNSUPPORTED: &[&str] = &[];
+/// Observed cases not derived yet or without the input data to build them.
+const UNSUPPORTED: &[&str] = &[
+    // pending: the case records no points for its "straight 2-point Linear spline of length 400"
+    // (only `type = "Linear"` and the Intermediate Points settings), so the path is unknown.
+    "sweep/r25-scale-end-only",
+];
 
 /// Cases we build but that differ, pinned so a fix shows up (GENERATORS2.md §9–10: a
 /// 6-point loft section snaps two samples to segment starts; the sweep frame along a
@@ -37,6 +41,20 @@ const KNOWN_MISMATCH: &[&str] = &[
     // Banking-on frame mismatch of `sweep/helix` (GENERATORS2.md §10a).
     "sweep/rail",
     "sweep/scale-end",
+    // Follow-up cases (generators-3.md, brief 042). The Flower (`sweep/r25-banking-planar`) and
+    // the rotated Banking-off helix match; the helix routes below do not.
+    // pending: the Bezier helix of the radius-changing rail is off by 0.29 (path alone, handles
+    // now follow the previous chord as `evaluated_path` shows), the Sampler or the Banking-on frame
+    // is not derived (GENERATORS2.md §10a).
+    "sweep/r25-helix-radius",
+    // pending: Helix Subdivision 4 (5 points, handles along z): the first ring's frame is
+    // `Y x t0`, not our `t0 x Z`, for a tangent tilted 57 degrees from Z; the rule between the two
+    // frames is not derived, so every ring is off (error 31).
+    "sweep/r25-helix-sub4",
+    // pending: as `r25-helix-sub4` (Subdivision 8, error 7.3).
+    "sweep/r25-helix-sub8",
+    // pending: as `sweep/rail`: the rail helix with End Radius 400 (error 1.1e-2).
+    "sweep/r25-rail-rectangle",
 ];
 
 /// Cases whose caps contain an exactly cocircular quad that the reference splits the other
@@ -51,12 +69,18 @@ fn generators_match_the_reference() {
     let reg = Arc::new(reg);
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
     let mut matched = Vec::new();
+    let mut failed: Vec<String> = Vec::new();
     let mut unsupported = std::collections::BTreeSet::new();
     for case in discover_cases(&root).unwrap() {
         if !FEATURES.contains(&case.feature.as_str()) {
             continue;
         }
         let key = format!("{}/{}", case.feature, case.name);
+        if UNSUPPORTED.contains(&key.as_str()) {
+            println!("{key}: unsupported (input data not recorded)");
+            unsupported.insert(key);
+            continue;
+        }
         let m = case.manifest().unwrap();
         let params = resolved_params(&case, &m);
         let mut inputs: Vec<(&String, &toml::map::Map<String, toml::Value>)> = params
@@ -66,6 +90,7 @@ fn generators_match_the_reference() {
         inputs.sort_by_key(|(k, _)| k.trim_start_matches("input").parse::<u32>().unwrap_or(1));
 
         let mut doc = Document::new(reg.clone());
+        let mut reference = None;
         let gen_type = format!("forge.{}", case.feature);
         let generator = doc
             .transact("case", |tx| {
@@ -79,6 +104,7 @@ fn generators_match_the_reference() {
                     apply(tx, &reg, child, &ty, t);
                     if instance {
                         tx.set_param(generator, "reference", Value::Link(Some(child)))?;
+                        reference = Some(child);
                     }
                 }
                 Ok(generator)
@@ -95,14 +121,37 @@ fn generators_match_the_reference() {
                 .unwrap_or_else(|| panic!("{key}: no geometry")),
         };
         let world = doc.scene().local_transform(generator).unwrap().matrix();
-        let ours = export_weld(&Mesh {
+        let mut ours = Mesh {
             positions: mesh
                 .points
                 .iter()
                 .map(|p| world.transform_point3(*p).to_array())
                 .collect(),
             faces: mesh.polys.clone(),
-        });
+        };
+        // The scripted instance cases export the whole scene: the reference stays visible,
+        // so its object comes first, then the instance (`instance/render-instance`).
+        if let (true, Some(r)) = (m.params.contains_key("generator"), reference) {
+            let rm = evaluate(doc.scene(), r, &forge_core::EvalCtx::default())
+                .unwrap()
+                .expect("reference geometry");
+            let rw = doc.scene().local_transform(r).unwrap().matrix();
+            let base = rm.points.len() as u32;
+            let mut positions: Vec<[f64; 3]> = rm
+                .points
+                .iter()
+                .map(|p| rw.transform_point3(*p).to_array())
+                .collect();
+            positions.extend(ours.positions);
+            let mut faces = rm.polys.clone();
+            faces.extend(
+                ours.faces
+                    .iter()
+                    .map(|f| f.iter().map(|i| i + base).collect::<Vec<u32>>()),
+            );
+            ours = Mesh { positions, faces };
+        }
+        let ours = export_weld(&ours);
         let expected = export_weld(&case.expected_mesh().unwrap().unwrap());
         if KNOWN_MISMATCH.contains(&key.as_str()) {
             let r = compare_meshes(&expected, &ours, &m.tolerance);
@@ -119,19 +168,31 @@ fn generators_match_the_reference() {
             continue;
         }
         let r = compare_meshes(&expected, &ours, &m.tolerance);
-        assert!(
+        println!(
+            "{key}: passed {} (points {} vs {}, faces {} vs {})",
             r.passed(),
-            "{key}: {:?} (max error {:?})",
-            r.failures,
-            r.max_position_error
+            expected.positions.len(),
+            ours.positions.len(),
+            expected.faces.len(),
+            ours.faces.len()
         );
+        if !r.passed() {
+            failed.push(format!(
+                "{key}: {:?} (max error {:?})",
+                r.failures, r.max_position_error
+            ));
+            continue;
+        }
         matched.push(key);
     }
     println!("matched exactly: {}", matched.join(", "));
+    assert!(failed.is_empty(), "unlisted mismatches: {failed:#?}");
     let want: std::collections::BTreeSet<String> =
         UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched.len(), 13 + 11 + 10 + 2, "{matched:?}");
+    // 36 before the follow-up cases, plus connect/tolerance-in, instance/render-instance,
+    // lathe/r25-scaling-50, sweep/r25-banking-off-rotated and sweep/r25-banking-planar
+    assert_eq!(matched.len(), 13 + 11 + 10 + 2 + 5, "{matched:?}");
 }
 
 /// Exact positions and faces up to a trailing run of triangles in both meshes (the

@@ -54,12 +54,19 @@ A segment list of control points becomes a `Curve` (cubic Bezier pieces, GENERAT
   (`editable-rectangle`: Linear + Adaptive gives only the 4 corners).
 - **Bezier**: the pieces above (`editable-circle`: Bezier + Uniform 8 reproduces the
   circle's 36 samples per ring, 72 vertices).
-- **Cubic**: Catmull-Rom (`forge_geometry::Spline` kind `CatmullRom`), **Akima**,
-  **B-Spline** (uniform cubic B-spline): the piece between two points is converted to the
-  equivalent Bezier piece from the curve's value and derivative at both ends
-  (`B0 = C(0)`, `B1 = B0 + C'(0)/3`, `B2 = B3 - C'(1)/3`, `B3 = C(1)`). Open ends use the
-  reflected phantom points of `forge_geometry::Spline`. The handles are ignored.
-  **Parity-pending** for every mode other than None: no golden case samples these curves.
+- **Cubic**: the C2 interpolating cubic spline through the points (second derivatives from
+  `M(i-1) + 4 M(i) + M(i+1) = 6 (P(i+1) - 2 P(i) + P(i-1))`, periodic when closed, natural, `M = 0`, at the ends of an open
+  chain: **parity-pending**), converted to one Bezier piece per interval from its end values and derivatives
+  (`B1 = B0 + C'(0)/3`, `B2 = B3 - C'(1)/3`). Proof: `interp-cubic-natural` (a rectangle with point 0 moved by (50, 50),
+  Natural 8: 72 vertices within 1e-6 of the export; Catmull-Rom was 26 off).
+- **Akima**: as `forge_geometry::Spline` kind `Akima` (`interp-akima-natural` matches). The handles are ignored.
+- **B-Spline**: with Intermediate Points None the points joined by lines. With any other mode the export is a uniform
+  **quadratic** B-spline on a half-shifted parameter: at global parameter `s`, `j = floor(s + 1/2)`, `u = s + 1/2 - j`,
+  `C(s) = ((1-u)^2 P(j-1) + (1 + 2u - 2u^2) P(j) + u^2 P(j+1)) / 2` (`interp-bspline-natural`: the first ten Natural samples of
+  the moved rectangle agree to 1e-6, the first point is `(P(-1) + 6 P(0) + P(1)) / 8`). Each interval is two quadratic pieces
+  with a C1 join, not one cubic Bezier, so the sampler (one Bezier per interval) cannot reproduce it yet: the existing cubic B-spline
+  conversion stays as is and the case is pinned (`PENDING_SHAPE`, `pending: piecewise evaluator`). Open ends and the other
+  modes are unobserved.
 
 Each segment of the spline is its own loop (`Curve.extra` carries the second and later
 ones, as the reference reports a Ring or Cogwheel hole as extra segments).
@@ -152,7 +159,7 @@ sampled loops (object space) the viewport draws. The handle-link rule while drag
 ## 7. Parity-pending and unsupported
 
 - Interpolation types other than Bezier/Linear under any Intermediate Points mode but None
-  (no case samples them); Cubic's definition (Catmull-Rom) is a guess.
+  (no case samples them) except Cubic and Akima Natural (1.2); B-Spline is pending (1.2).
 - Tangent handles of other primitives (Cogwheel `prim-f-cog-tooth`, Notes) were not
   compared: the form gives them, no test consumes them (follow-up below).
 - The `0.75` tangent read-back factor is shown by two cases (circle, helix). The helix
@@ -174,25 +181,32 @@ runs clockwise); the real rule belongs to brief 044. All tools are pure function
 
 ### 8.1 Chamfer (`chamfer`)
 
-Params: `radius` (distance along both edges, default 10), `flat` (off), `indices` (default
+Params: `radius` (default 10: the fillet radius, or with `flat` the distance along both edges), `flat` (off), `indices` (default
 all points). Each selected corner point `P` of a segment (an open segment's two ends are
 not corners) is replaced by two points: `A` on the incoming edge and `B` on the outgoing
-edge, both at distance `min(radius, half the edge)` from `P`, in the order `A`, `B`.
+edge, both at distance `min(reach, half the edge)` from `P`, in the order `A`, `B`, with `reach = radius * tan(turn / 2)` for
+the arc (a circle of that radius touches both edges there) and `reach = radius` for `flat`. Proof of the arc rule: `chamfer-star`
+(radius 10 at the 39 degree tips of the default Star: the points are 28.1 from the tip, 32 points, 320 samples).
 Corners are found on the chords between the points (the handles of the neighbours are not
 followed: **parity-pending** for curved neighbours).
 - `flat` on: `A` and `B` get zero handles (a straight cut).
 - `flat` off: an arc. `A.right = dir_in * h`, `B.left = -dir_out * h` (the other two
   handles zero, so the pieces to the neighbours are straight), with
-  `h = CIRCLE_KAPPA * rho * turn / 90 deg`, `rho = d / tan(turn / 2)` (`d` the distance,
-  `turn` the angle between the two edges' directions), i.e. the quarter-arc handle of
-  GENERATORS2.md section 6.1. The type becomes `bezier`.
+  `h = CIRCLE_KAPPA * d * (pi - turn) / 90 deg` (`d` the reach, `turn` the angle between the two edges' directions, so
+  `pi - turn` is the corner's inner angle): the quarter-arc handle of GENERATORS2.md section 6.1 for a right angle
+  (`chamfer`), 6.75 for the 39 degree tip of `chamfer-star` (fitted to the export's arc within 0.014; the earlier
+  `kappa * rho * turn / 90 deg` gave 8.66 and 24 points per tip arc against the export's 22). The type becomes `bezier`.
 Proof: `chamfer` (rectangle, radius 40, Flat off): 4 corners to 8 points
 `(200,160) (160,200) (-160,200) ...`, then the shared Adaptive sampler gives the 72 points
-per ring of the export (the same curve as the rounded Rectangle of splines-2). Flat on and
-turn angles other than 90 degrees: **parity-pending** (no case; the arc handle is the
-primitive's rule applied to any corner).
+per ring of the export (the same curve as the rounded Rectangle of splines-2). `chamfer-flat` (rectangle, radius 40, Flat on): 8 points
+`(200,160) (160,200) ...` joined by straight cuts. Flat on at turn angles other than 90 degrees: **parity-pending** (the cut
+is taken `radius` along the edges; the arc handle is the primitive's rule applied to any corner).
 
 ### 8.2 Create Outline (`outline`) - known mismatch
+
+Follow-ups: `outline-rect` (rectangle, 20) matches exactly; `outline-r100-d10` (circle radius 100, 10) is a second known mismatch of
+the same size as `outline` (1.8e-3, structure exact, within `OUTLINE_BOUND`); `outline-arc-open` (an open Arc) is
+`Unsupported` (`pending: outline of an open segment`).
 
 Param `distance` (default 10). Every segment must be closed (an open one is `Failed`:
 **parity-pending**). The result has the original segments and, for each, an offset
@@ -250,6 +264,9 @@ Rules, all from the five cases (they all show the same two circles):
    | `subtract` (a minus b) | `a_out+ b_in-` |
    | `or` | `b_out- a_in+`, then `a_out+ b_in-` (B minus A, A minus B; the lens is left out) |
    | `intersect` | `b_out- a_in+`, then `a_in+ b_in+`, then `a_out+ b_in-` (all three regions) |
+   A piece that is a whole loop (no crossing) is never reversed: `bool-nested` (circle r200 minus circle r100, same centre)
+   lists the inner circle forward from its first point, `(100, 0)` counter-clockwise, as a second segment; `bool-disjoint`
+   (union of two circles at x +-300) keeps both circles as they are.
    Pieces are chained end to start through their split points. A loop that contains a
    reversed piece starts with its first reversed piece, other loops with their first piece
    in a's order (`subtract` starts at the lower crossing with the reversed b piece,

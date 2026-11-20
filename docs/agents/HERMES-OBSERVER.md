@@ -21,6 +21,11 @@ You **never**:
 - edit an existing golden case (create a new case folder instead and say why in the form);
 - commit probe scripts, app scene files, screenshots, renders of the app's UI, parameter IDs
   or symbol names (they stay in `~/forge-observer/`);
+- write IDs (object type, parameter, command or group numbers) or scripting-API names
+  (`c4d.` calls, constants, method or class names) in forms or case files: write the label the
+  app shows (e.g. "Spline", "Source = Value"). The cleanroom gate now checks `docs/parity/`
+  and `tests/golden/` (md, toml, json) for this, so run `cargo run -q -p forge-cleanroom`
+  before each commit as well as `golden check`;
 - invent, estimate or "fill in" a number. If you could not read it, write `not observed`
   and the reason;
 - call the forbidden tools in [OBSERVER.md](OBSERVER.md) §0.
@@ -99,7 +104,8 @@ never cost the rest of the queue. Do not retry it later in the same run.
 
 ## 5. Commit, push, hand back
 
-- After **every 5 cases** and at the end of each job: run `golden check`, then commit only
+- After **every 5 cases** and at the end of each job: run `golden check` and
+  `cargo run -q -p forge-cleanroom` (both must pass), then commit only
   your files with the message `Observation: <form title> (<job>, N cases)` and, if allowed,
   push (`git push origin observations`). If pushing is not allowed or fails, leave the
   commit local; the owner pushes.
@@ -136,10 +142,16 @@ Keep the probe code itself in `~/forge-observer/`; these are the lessons, in pla
 - A script that returns nothing at all ("Function returned None") usually means the app
   aborted inside a call. Isolate the last few calls in a tiny separate probe rather than
   editing the big one.
+- Never trigger an export or command that opens a dialog (for example the VDB export). A
+  dialog needs a human and freezes the app's script runner until someone closes it. If a
+  case needs such an export, mark it "needs a human: export opens a dialog" in the form's
+  Notes column and move on.
 
 ## 8. Things a human must do
 
 Skip these in unattended runs. Leave them for the owner and say so in the form:
 - jobs marked `gui-only`, and anything a form says belongs to a GUI session (G1–G8);
 - cases that need a font picked in the GUI (O48's `dv-*` rows);
+- cases that need an export or command that opens a dialog (for example the VDB export):
+  "needs a human: export opens a dialog";
 - cases that still exported undeformed after §4.4 (solver deformers, Spline Wrap).

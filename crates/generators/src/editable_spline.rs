@@ -23,6 +23,82 @@ pub fn tangent_readback(handle: DVec3) -> DVec3 {
     handle * TANGENT_READBACK
 }
 
+/// The derivative at every point (per unit of the point index) of the C2 interpolating cubic
+/// spline through `pts`: periodic when `closed`, natural (zero second derivative) at the ends
+/// otherwise (`interp-cubic-natural`: closed, 1e-6 over ten samples; the open ends are
+/// **parity-pending**).
+pub(crate) fn natural_cubic_derivatives(pts: &[DVec3], closed: bool) -> Vec<DVec3> {
+    let n = pts.len();
+    // second derivatives M: M[i-1] + 4 M[i] + M[i+1] = 6 (y[i+1] - 2 y[i] + y[i-1]); a natural
+    // end has M = 0
+    let mut a = vec![vec![0.0f64; n]; n];
+    let mut rhs = vec![DVec3::ZERO; n];
+    for i in 0..n {
+        let (prev, next) = if closed {
+            ((i + n - 1) % n, (i + 1) % n)
+        } else {
+            (i.wrapping_sub(1), i + 1)
+        };
+        if !closed && (i == 0 || i + 1 == n) {
+            a[i][i] = 1.0;
+            continue;
+        }
+        a[i][prev] += 1.0;
+        a[i][i] += 4.0;
+        a[i][next] += 1.0;
+        rhs[i] = (pts[next] - 2.0 * pts[i] + pts[prev]) * 6.0;
+    }
+    // Gaussian elimination with partial pivoting (n is the point count of one segment)
+    for col in 0..n {
+        let piv = (col..n)
+            .max_by(|x, y| a[*x][col].abs().total_cmp(&a[*y][col].abs()))
+            .expect("a column");
+        a.swap(col, piv);
+        rhs.swap(col, piv);
+        let d = a[col][col];
+        if d.abs() < 1e-12 {
+            continue;
+        }
+        for row in col + 1..n {
+            let f = a[row][col] / d;
+            if f != 0.0 {
+                let pivot_row = a[col].clone();
+                for (x, y) in a[row][col..].iter_mut().zip(&pivot_row[col..]) {
+                    *x -= f * y;
+                }
+                rhs[row] = rhs[row] - rhs[col] * f;
+            }
+        }
+    }
+    let mut m = vec![DVec3::ZERO; n];
+    for row in (0..n).rev() {
+        let mut v = rhs[row];
+        for k in row + 1..n {
+            v -= m[k] * a[row][k];
+        }
+        m[row] = if a[row][row].abs() < 1e-12 {
+            DVec3::ZERO
+        } else {
+            v / a[row][row]
+        };
+    }
+    (0..n)
+        .map(|i| {
+            let j = if closed {
+                (i + 1) % n
+            } else {
+                (i + 1).min(n - 1)
+            };
+            if !closed && i + 1 == n {
+                // the last point of an open chain: the derivative from the last interval's end
+                let h = i - 1;
+                return (pts[i] - pts[h]) + (m[h] + m[i] * 2.0) / 6.0;
+            }
+            (pts[j] - pts[i]) - (m[i] * 2.0 + m[j]) / 6.0
+        })
+        .collect()
+}
+
 /// The interpolation type of an editable spline (`type` param).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SplineType {
@@ -314,9 +390,17 @@ impl SplineData {
                     ]
                 })
                 .collect(),
+            SplineType::Cubic => {
+                let d = natural_cubic_derivatives(&pts, closed);
+                (0..spans)
+                    .map(|i| {
+                        let j = (i + 1) % n;
+                        [pts[i], pts[i] + d[i] / 3.0, pts[j] - d[j] / 3.0, pts[j]]
+                    })
+                    .collect()
+            }
             other => {
                 let kind = match other {
-                    SplineType::Cubic => SplineKind::CatmullRom,
                     SplineType::Akima => SplineKind::Akima,
                     _ => SplineKind::BSpline,
                 };

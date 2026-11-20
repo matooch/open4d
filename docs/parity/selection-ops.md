@@ -1,6 +1,6 @@
 # Selection commands — observation (O26)
 
-Status: partial (6 of 11 cases observed) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-10-29
+Status: partial (6 of 11 baseline cases observed; 2 additional variants observed) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-10-29
 Method: scripted. Unblocks: batch 11 (loop, ring, grow, shrink, convert).
 
 Every case:
@@ -57,8 +57,99 @@ Results, as read back after the command:
 - shrink-poly: the 16 front polygons shrink to the 4 middle ones (5, 6, 9, 10).
 - invert-poly: the 4 top polygons (16-19) invert to the other 20; no points or edges selected.
 - convert-poly-to-point: the 4 top polygons give the 9 top points (2, 5, 8, 11, 14, 17, 20, 23, 24). The source polygons stay selected.
-- convert-point-to-poly: the 9 top points give the 4 top polygons only (tolerant off: a polygon needs all its points; side polygons with 2 selected points are not chosen). The source points stay selected. TODO: the tolerant-on ("any") rule was not run.
+- convert-point-to-poly: the 9 top points give the 4 top polygons only (tolerant off: a polygon needs all its points; side polygons with 2 selected points are not chosen). The source points stay selected. Historical missing variant resolved on 2026-11-17 by `convert-point-to-poly-tolerant-on` below; the existing baseline fixture is unchanged.
 - convert-edge-to-poly: the 8 border segments of the top face give no polygon (a polygon needs all 4 edges selected). The form said "4 outer edges"; at 2/2/2 each side has 2 segments, so all 8 were selected. A separate edges-to-points run (not committed) gave the 8 border points, which confirmed the edge code.
-- select-connected: after Disconnect (default settings, no Preserve Groups) every top polygon is its own piece, so selecting 16 and running Select Connected leaves only polygon 16. This case does not show spreading. TODO: a variant with Disconnect and Preserve Groups was not run.
+- select-connected: after Disconnect (default settings, no Preserve Groups) every top polygon is its own piece, so selecting 16 and running Select Connected leaves only polygon 16. This case does not show spreading. Historical missing variant resolved on 2026-11-17 by `select-connected-preserve-groups` below; the existing baseline fixture is unchanged.
 
 How commands were run: Shrink, Select Connected and Invert through their menu commands on the active object in polygon mode. Convert Selection and Disconnect through the modeling-command call (Convert has no dialog; its from/to/tolerant values were set explicitly: points 0, edges 1, polygons 2, confirmed by the results above). One command per probe, a ping after each.
+
+## convert-point-to-poly-tolerant-on (2026-11-17)
+
+New named variant permitted by the missing variant in Notes; existing cases are unchanged. Menu-created cube, Segments 2/2/2, made editable. Full input readback in manifest. One modeling/selection command per probe with ping between. Selection result:
+
+```json
+{
+  "points": [
+    2,
+    5,
+    8,
+    11,
+    14,
+    17,
+    20,
+    23,
+    24
+  ],
+  "edges": [],
+  "polys": [
+    2,
+    3,
+    6,
+    7,
+    10,
+    11,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+  ]
+}
+```
+
+`golden info`:
+
+```text
+vertices: 26 (unused 0)
+faces: 24 (4-gons 24)
+bbox min: (-100, -100, -100)
+bbox max: (100, 100, 100)
+size: (200, 200, 200)
+centre: (0, 0, 0)
+normals: 6
+uvs: 9
+```
+
+## select-connected-preserve-groups (2026-11-17)
+
+New named variant permitted by the missing variant in Notes; existing cases are unchanged. Menu-created cube, Segments 2/2/2, made editable. Full input readback in manifest. One modeling/selection command per probe with ping between. Selection result:
+
+```json
+{
+  "points": [],
+  "edges": [],
+  "polys": [
+    16,
+    17,
+    18,
+    19
+  ]
+}
+```
+
+`golden info`:
+
+```text
+vertices: 34 (unused 0)
+faces: 24 (4-gons 24)
+bbox min: (-100, -100, -100)
+bbox max: (100, 100, 100)
+size: (200, 200, 200)
+centre: (0, 0, 0)
+normals: 6
+uvs: 9
+```
+
+## Safe-scope outcome (2026-11-17)
+
+Two new named variants resolve the explicit missing variants from Notes. Tolerant on selected 12 polygons, exactly the polygons with any top-face input point (checked against the exported geometry); all nine source points remain selected. Disconnect with Preserve Groups increased the mesh from 26 to 34 points; selecting polygon 16 and running Select Connected selected 16, 17, 18, 19, demonstrating spreading across the connected top patch. The six existing fixture folders were not modified. Both successful scratch documents were closed.
+
+Five baseline cases remain explicitly outstanding, and were not retried:
+- `loop-edge`: not observed: needs the GUI: interactive Loop/Ring Selection.
+- `loop-poly`: not observed: needs the GUI: interactive Loop/Ring Selection.
+- `ring-edge`: not observed: needs the GUI: interactive Loop/Ring Selection.
+- `grow-poly`: not observed: needs the GUI: only Grow Selection dialog is available; previous run crashed.
+- `grow-point`: not observed: needs the GUI: only Grow Selection dialog is available; previous run crashed.
+
+O26 remains partial, not complete. All nine newly created cases across O3 and O26 pass isolated copied-root validation (exit 0, ok: 9 cases). Full golden check exit 1 remains blocked by the unrelated pre-existing fields/restrict-bend duplicate table at line 7; cleanroom exit 0. No commit or push, because the required full golden validator has not passed. The next ten jobs remain queued and were not started.

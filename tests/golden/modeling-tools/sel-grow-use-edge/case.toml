@@ -1,0 +1,35 @@
+feature = "modeling-tools"
+observation = "docs/parity/modeling-tools-3.md"
+description = "sel-grow-use-edge; measured follow-up, menu-created fresh document"
+mesh = "mesh.obj"
+
+[params]
+selected_polygons = [4]
+selection_mode = "Polygons"
+tool = "Grow Selection"
+
+[params.source]
+icon_file_id = ""
+icon_color = 0
+color = [1.0, 0.9, 0.4]
+size = [200.0, 200.0, 200.0]
+segments_x = 3
+segments_y = 3
+segments_z = 3
+separate_surfaces = 0
+fillet = 0
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[params.settings]
+use_edge = true
+
+[params.result_objects_1]
+name = "Cube"
+position = [0.0, 0.0, 0.0]
+rotation_degrees = [-0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+
+[import]
+scale = 1.0
+flip_z = false
