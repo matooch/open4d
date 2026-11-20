@@ -44,7 +44,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O38 | F-curves: tangents and behaviours | [fcurves.md](fcurves.md) | `tests/golden/keyframes/` samples | partial |
 | O53 | Animation III: more track types | [animation-3.md](animation-3.md) | `tests/golden/animation-3/` samples + meshes | partial |
 | O31 | Clone-toolset generators II | [clone-generators-2.md](clone-generators-2.md) | meshes + samples | partial (7 of 10 cases; Voronoi Fracture and Tracer could not be baked) |
-| O50 | Clone toolset III | [clone-toolset-3.md](clone-toolset-3.md) | cloner/, clone-spline/, tracer/, effector-f/ | in-progress (11 effector-f cases exported; 5 effector-f cases and all of random-f remain — the reference app stopped answering the bridge, see /Users/bigman/forge-observer/log.md) |
+| O50 | Clone toolset III | [clone-toolset-3.md](clone-toolset-3.md) | cloner/, clone-spline/, tracer/, effector-f/, random-f/ | partial (44 of 49 rows observed; the 5 that need a human or a GUI step stay not observed: selection-tag, weight-tag, linear-offset-15, on-spline, on-spline-step — see the form) |
 | O32 | Volume builder and mesher | [volumes.md](volumes.md) | `tests/golden/volumes/` meshes | observed (10 of 12 cases; subtract/intersect not scriptable) |
 | O33 | Volumes II: filters, sources, VDB | [volumes-2.md](volumes-2.md) | `tests/golden/volumes/` meshes + .vdb | observed (11 of 13 cases; points-source and vdb-export not scriptable) |
 | O34 | Rigging I: joints and skinning | [rigging.md](rigging.md) | `tests/golden/rigging/` meshes | done |
