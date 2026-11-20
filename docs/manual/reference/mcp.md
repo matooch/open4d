@@ -228,4 +228,9 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `joint_create_chain` | Create Joint Chain. Undoable editing command. Runs command `joint.create_chain`. |
 | `joint_align` | Align Joints. Undoable editing command. Runs command `joint.align`. |
 | `joint_mirror` | Mirror Joints. Undoable editing command. Runs command `joint.mirror`. |
+| `weights_paint` | Paint Weights. Undoable editing command. Runs command `weights.paint`. |
+| `weights_normalise` | Normalise Weights. Undoable editing command. Runs command `weights.normalise`. |
+| `weights_prune` | Prune Weights. Undoable editing command. Runs command `weights.prune`. |
+| `weights_smooth` | Smooth Weights. Undoable editing command. Runs command `weights.smooth`. |
+| `weights_mirror` | Mirror Weights. Undoable editing command. Runs command `weights.mirror`. |
 | `plugin_list` | List Plugins. Not an undoable edit. Runs command `plugin.list`. |

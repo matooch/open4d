@@ -12,6 +12,7 @@ pub mod query;
 pub mod rig_commands;
 pub mod schedule;
 pub mod select;
+pub mod weight_commands;
 
 use std::sync::Arc;
 
@@ -52,6 +53,7 @@ pub fn default_command_registry() -> CommandRegistry {
     coords::register(&mut commands).expect("transform.edit is unique");
     forge_nodes::register_commands(&mut commands).expect("graph.* ids are unique");
     rig_commands::register(&mut commands).expect("joint.* ids are unique");
+    weight_commands::register(&mut commands).expect("weights.* ids are unique");
     commands
 }
 

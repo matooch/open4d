@@ -243,3 +243,61 @@ Other exchange formats (FBX, glTF, Alembic skins) are not read here.
 
 Not modelled (observed in O34's parameter table, not used by any case): Skin Coord, Transform,
 Length, Blend, Map, Mode, Force, List; Spherical and Blended types; the weight tag's vertex map.
+
+## 9. Weight tools (brief 102)
+
+Own design; GUI session G6 (brush modes, falloff, weight manager layout) is unanswered, so every
+rule here is **parity-pending**. Source: standard skinning practice (public literature); no
+observation.
+
+### 9.1 Brush
+`Brush { mode, radius, strength, falloff, target }` (`forge_rig::paint`). `radius > 0` in object
+units, `strength` in `[0, 1]`, `target` (Set only) in `[0, 1]`, default 1. Falloff by the
+distance `d` of a point from the stroke centre (`t = d / radius`, zero at `t >= 1`):
+`constant` 1, `linear` `1 - t`, `smooth` `1 - (3 t^2 - 2 t^3)`. The factor of a point is
+`f = strength * falloff(d)`.
+
+`stroke(weights, points, adjacency, slot, centre, brush)` changes the weight `w` of joint `slot`
+of every point inside the radius, then keeps the row normalised:
+| mode | new `w` |
+|---|---|
+| `add` | `min(w + f, 1)` |
+| `subtract` | `max(w - f, 0)` |
+| `set` | `w + (target - w) f` |
+| `smooth` | `w + (avg - w) f`, `avg` the mean `slot` weight of the point's edge neighbours (0 for a missing weight; a point without neighbours is unchanged) |
+
+Normalise: the other slots of the row are scaled by `(1 - w) / (sum of the others)` so the row
+sums to 1; when the others sum to 0 the row keeps `w` as it is (a point that has only this
+joint and `w < 1` stays below 1 until normalised by hand). Rows that held no weights and end
+up with `w = 0` stay empty. Points are processed from the old weights (a smooth stroke does not
+see its own changes). `adjacency` comes from the mesh polygons (`point_adjacency`): the points
+that share an edge, sorted, without duplicates.
+
+### 9.2 Tools
+`smooth_weights(weights, adjacency, iterations, factor)`: `iterations` times, every point's row
+becomes `(1 - factor) row + factor mean(neighbour rows)` (all slots at once, so sums stay);
+points without neighbours keep their row. `normalise` and `prune` are the `WeightMap` methods
+(§2); `mirror_tag_weights` is §5.2.
+
+### 9.3 Commands (forge-app, `crates/app/src/weight_commands.rs`)
+Each is one transaction and fails without changing anything. `object` is the skinned object
+(default: the selected object) and must carry a weight tag; the mesh is its unskinned
+evaluation, brush centres are in object space.
+| Command | Args | Does |
+|---|---|---|
+| `weights.paint` | `object`, `joint` (node id of a joint in the tag's list), `center` `[x,y,z]`, `radius`, `strength` (default 1), `mode` (`add` default, `subtract`, `set`, `smooth`), `falloff` (`smooth` default, `linear`, `constant`), `target` | one `stroke`; returns `{points}` the number of points inside the radius |
+| `weights.normalise` | `object` | `WeightMap::normalise` |
+| `weights.prune` | `object`, `threshold` (default 0.01) | `WeightMap::prune` |
+| `weights.smooth` | `object`, `iterations` (default 1), `factor` (default 0.5) | `smooth_weights` |
+| `weights.mirror` | `object`, `plane` (default `yz`), `from` (`positive` default, `negative`) | `mirror_tag_weights`; returns `{copied, unmatched}` |
+
+### 9.4 Weight manager (UI)
+A panel (Window menu, Weight Manager; docks at the right bottom) for the selected object's weight tag: the tag's joints as a
+list (name, point count with a weight), the active joint for painting, the brush settings (mode,
+radius, strength, falloff) and buttons Normalise, Prune, Smooth, Mirror that run the commands.
+Painting in the viewport sends `weights.paint` with the picked surface point; a stroke dragged
+over several frames is merged into one undo step by the UI (one `weights.paint` per drag
+sample, grouped). Test: egui_kittest drives the panel and one paint sample.
+
+Tests: `crates/rig/tests/weight_paint.rs` (brush modes, falloff, normalise rule, smooth,
+prune, adjacency), `crates/app/tests/weight_commands.rs` (commands, undo), `crates/ui/tests/weight_manager.rs`.

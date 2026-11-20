@@ -26,6 +26,7 @@ use crate::prefs::UiPrefs;
 use crate::screenshot::OffscreenGpu;
 use crate::script_panel::ScriptPanelState;
 use crate::tools::ToolState;
+use crate::weight_manager::WeightPanel;
 
 pub use forge_command::NodeSelection;
 
@@ -49,6 +50,8 @@ pub struct EditorState {
     pub console: ConsoleState,
     /// The Layers panel: selected rows and rename (docs/specs/UI.md §22).
     pub layer_panel: LayerPanel,
+    /// The Weight Manager panel: active joint and brush (docs/specs/RIG.md §9.4).
+    pub weight_panel: WeightPanel,
     /// The Content Browser panel: tab, search and the name box (docs/specs/UI.md §26).
     pub browser_panel: BrowserPanel,
     /// The Node Editor's tag, canvas and cache (docs/specs/UI.md §17).
@@ -131,6 +134,7 @@ impl EditorState {
             script: ScriptPanelState::default(),
             console: ConsoleState::default(),
             layer_panel: LayerPanel::default(),
+            weight_panel: WeightPanel::default(),
             browser_panel: BrowserPanel::default(),
             node_editor: NodeEditorState::default(),
             offscreen: OffscreenGpu::default(),

@@ -1,6 +1,6 @@
 # 102 · Weight tools: paint brush, weight manager, normalise/mirror/smooth/prune
 
-Status: ready · Area: H · Depends on: 101, 150 · Observations: G6 · Touches: rig, ui, viewport
+Status: done (parity-pending G6) · Area: H · Depends on: 101, 150 · Observations: G6 · Touches: rig, ui, viewport
 
 ## Goal
 Paint weights interactively and edit them in a weight manager.
@@ -14,8 +14,8 @@ Paint weights interactively and edit them in a weight manager.
 - Brush modes add/subtract/set/smooth with strength and falloff; each stroke is one undoable command. Tools are commands usable from the CLI.
 
 ## Done when
-- [ ] Unit tests for normalise/mirror/smooth/prune; egui_kittest for a paint stroke.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Unit tests for normalise/mirror/smooth/prune; egui_kittest for a paint stroke.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -25,7 +25,9 @@ Paint weights interactively and edit them in a weight manager.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
+- Result: 8 rig unit tests, 3 command tests, 3 egui_kittest tests; no parity data (G6 unanswered).
+- Rules: RIG.md section 9 (brush modes, falloff, normalise rule, smooth); all parity-pending.
+- Files: crates/rig/src/paint.rs, crates/app/src/weight_commands.rs, crates/ui/src/weight_manager.rs, dock/app/state hooks, tests, RIG.md, reference docs.
 - Rules derived, with the case that proves each; parity-pending rules.
 - Deviations from the design decisions, and why.
 - Files changed.

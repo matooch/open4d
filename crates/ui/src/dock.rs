@@ -49,11 +49,12 @@ pub enum Panel {
     Console,
     Layers,
     ContentBrowser,
+    WeightManager,
 }
 
 impl Panel {
     /// Every panel, in Window menu order.
-    pub const ALL: [Panel; 13] = [
+    pub const ALL: [Panel; 14] = [
         Panel::CommandBar,
         Panel::ToolPalette,
         Panel::Viewport,
@@ -67,6 +68,7 @@ impl Panel {
         Panel::Console,
         Panel::Layers,
         Panel::ContentBrowser,
+        Panel::WeightManager,
     ];
 
     /// The panels `Dock::default()` opens; the others open from the Window menu.
@@ -95,6 +97,7 @@ impl Panel {
             Panel::Console => "Console",
             Panel::Layers => "Layers",
             Panel::ContentBrowser => "Content Browser",
+            Panel::WeightManager => "Weight Manager",
         }
     }
 
@@ -113,6 +116,7 @@ impl Panel {
             Panel::Console => Area::Bottom,
             Panel::Layers => Area::RightBottom,
             Panel::ContentBrowser => Area::RightBottom,
+            Panel::WeightManager => Area::RightBottom,
         }
     }
 }

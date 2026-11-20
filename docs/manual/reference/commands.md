@@ -2,7 +2,7 @@
 
 # Command reference
 
-170 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+175 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -175,6 +175,11 @@
 | [`joint.create_chain`](#jointcreate_chain) | Create Joint Chain | yes | `joint_create_chain` |
 | [`joint.align`](#jointalign) | Align Joints | yes | `joint_align` |
 | [`joint.mirror`](#jointmirror) | Mirror Joints | yes | `joint_mirror` |
+| [`weights.paint`](#weightspaint) | Paint Weights | yes | `weights_paint` |
+| [`weights.normalise`](#weightsnormalise) | Normalise Weights | yes | `weights_normalise` |
+| [`weights.prune`](#weightsprune) | Prune Weights | yes | `weights_prune` |
+| [`weights.smooth`](#weightssmooth) | Smooth Weights | yes | `weights_smooth` |
+| [`weights.mirror`](#weightsmirror) | Mirror Weights | yes | `weights_mirror` |
 | [`plugin.list`](#pluginlist) | List Plugins | no | `plugin_list` |
 
 ## `object`
@@ -2150,6 +2155,71 @@ Mirror Joints. One undo step.
 | `suffix` | string or null | no | Append this suffix to the names instead of swapping left and right. |
 
 Example: `forge cmd scene.forge joint.mirror --args '{"plane":"yz"}'`
+
+
+## `weights`
+
+### `weights.paint`
+
+Paint Weights. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `joint` | integer | yes | A joint of the weight tag's list. |
+| `center` | array of number (length 3) | yes | Stroke centre in object space. |
+| `radius` | number | yes |  |
+| `falloff` | `"constant"` \| `"linear"` \| `"smooth"` \| null | no |  |
+| `mode` | `"add"` \| `"subtract"` \| `"set"` \| `"smooth"` \| null | no |  |
+| `object` | integer or null | no | The skinned object (default: the active node). |
+| `strength` | number or null | no | 0 to 1 (default 1). |
+| `target` | number or null | no | Value `set` moves towards, 0 to 1 (default 1). |
+
+Example: `forge cmd scene.forge weights.paint --args '{"center":[0.0,0.0,0.0],"joint":1,"radius":50.0}'`
+
+### `weights.normalise`
+
+Normalise Weights. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `object` | integer or null | no | The skinned object (default: the active node). |
+
+Example: `forge cmd scene.forge weights.normalise --args '{}'`
+
+### `weights.prune`
+
+Prune Weights. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `object` | integer or null | no |  |
+| `threshold` | number or null | no | Weights below this are dropped (default 0.01). |
+
+Example: `forge cmd scene.forge weights.prune --args '{"threshold":0.01}'`
+
+### `weights.smooth`
+
+Smooth Weights. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `factor` | number or null | no | 0 to 1 (default 0.5). |
+| `iterations` | integer or null | no | Default 1. |
+| `object` | integer or null | no |  |
+
+Example: `forge cmd scene.forge weights.smooth --args '{"factor":0.5,"iterations":1}'`
+
+### `weights.mirror`
+
+Mirror Weights. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `from` | `"positive"` \| `"negative"` \| null | no |  |
+| `object` | integer or null | no |  |
+| `plane` | `"yz"` \| `"xz"` \| `"xy"` \| null | no |  |
+
+Example: `forge cmd scene.forge weights.mirror --args '{"from":"positive","plane":"yz"}'`
 
 
 ## `plugin`
