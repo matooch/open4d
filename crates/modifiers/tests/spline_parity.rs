@@ -44,7 +44,7 @@ const KNOWN_MISMATCH: &[&str] = &[
 /// Observed options we do not build.
 const UNSUPPORTED: &[&str] = &[];
 
-use common::{Table, normalize, num, vec3};
+use common::forms::{Table, normalize, num, vec3};
 
 fn enum_id(s: &str) -> String {
     let s = s.replace('\u{2212}', "-");

@@ -15,7 +15,7 @@ mod common;
 use std::path::Path;
 use std::sync::Arc;
 
-use common::{Table, normalize, num};
+use common::forms::{Table, normalize, num};
 use forge_core::{Document, EvalCtx, NodeId, ParamKind, Registry, Value};
 use forge_generators::{Primitives, evaluate};
 use forge_modifiers::Deformers;

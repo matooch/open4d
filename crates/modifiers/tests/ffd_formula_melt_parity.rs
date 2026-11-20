@@ -41,7 +41,7 @@ const UNSUPPORTED: &[&str] = &[];
 /// One Melt case: its key, then `F` of the cap points for the golden and for ours.
 type CapF = (String, Vec<Option<f64>>, Vec<Option<f64>>);
 
-use common::{Table, normalize, num, vec3};
+use common::forms::{Table, normalize, num, vec3};
 
 /// The `[params.input]` cube.
 fn build_cube(tx: &mut forge_core::Tx, input: &Table) -> NodeId {
