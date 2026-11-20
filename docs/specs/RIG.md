@@ -149,7 +149,36 @@ its nearest bone, determinism, and that a 0.8 rad bend with these weights stretc
 more than 60 %. The "auto-weights" O34 case is therefore UNSUPPORTED (no data), not matched.
 
 ## 5. Mirroring (brief 113)
-See below once implemented.
+
+Own design (no observation). Joint chains are mirrored by `mirror_chain` (§1.3); this section
+adds names and weights.
+
+### 5.1 Names
+`mirror_name(name, RenameRule::LeftRight)`, first match wins:
+1. a `Left` / `Right` word (also `left`/`right`, `LEFT`/`RIGHT`) is swapped, case kept;
+2. a lone `L` / `R` (or `l` / `r`) token between `_`, `.`, `-` or spaces is swapped
+   (`Arm_L` -> `Arm_R`, `hand.R.001` -> `hand.L.001`, `L_arm` -> `R_arm`);
+3. otherwise `_mirror` is appended (`Spine` -> `Spine_mirror`).
+`RenameRule::Suffix(s)` appends `s`. The brief's rules `L_`/`R_`, `.L`/`.R`, `_left`/`_right`
+are all covered by 1 and 2.
+
+### 5.2 Weights
+`joint_mirror_map(scene, joints, rename)` gives for every slot the slot of the joint named by
+`mirror_name` (itself for centre joints and joints without a twin).
+`mirror_weights(points, weights, slot_map, plane, from, centre_tolerance, max_distance)`:
+every point on the side opposite to `from` takes the weights of the nearest source-side point
+to its reflection, joint slots renamed by `slot_map`; points within `centre_tolerance` of the
+plane keep their weights; a reflection with no source point within `max_distance` is counted as
+`unmatched` and left alone. `mirror_tag_weights` does this for a weight tag (centre tolerance
+1e-6 and distance limit 1e-3 of the bounding box diagonal) and stores the result;
+`add_joints_to_tag` appends the mirrored joints to the tag's list. Nearest search is brute force
+(`O(n²)`).
+
+Test (`crates/rig/tests/mirroring.rs`): a cube body with a centre joint, a left arm chain
+named `arm_L_1`, `arm_L_2`, weights authored on x > 0 only, the arm mirrored with `mirror_chain`,
+weights mirrored; posing the left arm B +0.6 and the right arm B -0.6 gives a mesh where every
+point has a mirror image (1e-9); the mirrored rows equal the reflected copies with swapped
+slots; twin lookup by name; unmatched and side handling.
 
 ## 8. Parity cases and what is pinned
 
