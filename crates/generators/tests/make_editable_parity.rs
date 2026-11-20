@@ -21,6 +21,22 @@ use forge_parity_harness::{Mesh, compare_geometric, compare_meshes, discover_cas
 /// Cases whose exported mesh we build but whose tree we do not reproduce (EDITABLE.md §1.6).
 const TREE_PENDING: &[&str] = &["array"];
 
+/// Menu-created follow-ups whose resulting tree is only in the observation's prose readback
+/// (`docs/parity/make-editable.md`, "<case> readback"), not in the case file: the mesh is
+/// compared, the tree is `pending: tree not machine-readable`. The newer menu-created Extrude
+/// also reports caps integrated in one polygon object where the older `extrude` reports Cap
+/// children; the exported meshes agree (EDITABLE.md section 1.2).
+const TREE_NOT_RECORDED: &[&str] = &[
+    "array-tree",
+    "cloner",
+    "extrude-cap-off",
+    "extrude-csto",
+    "extrude-triangles",
+    "lathe-caps",
+    "two-objects",
+    "two-objects-csto",
+];
+
 /// Cases with no mesh to compare (tree only).
 const TREE_ONLY: &[&str] = &["spline"];
 
@@ -56,13 +72,14 @@ fn registry() -> Arc<Registry> {
     let mut r = Registry::with_builtins();
     r.install(&Primitives).unwrap();
     r.install(&Deformers).unwrap();
+    r.install(&forge_clone_engine::CloneToolset).unwrap();
     Arc::new(r)
 }
 
 /// Our node type of a case file's `type` key.
 fn type_id(key: &str) -> String {
     match key {
-        "circle" | "rectangle" => format!("forge.{key}_spline"),
+        "circle" | "rectangle" | "arc" => format!("forge.{key}_spline"),
         other => format!("forge.{other}"),
     }
 }
@@ -105,9 +122,11 @@ fn set_table(tx: &mut forge_core::Tx, reg: &Registry, id: NodeId, ty: &str, tabl
     let mut plain = Table::new();
     for (k, v) in table {
         match k.as_str() {
-            "type" | "child" => {}
+            "node" | "child" => {}
+            "type" if !table.contains_key("node") => {}
             "position" => tx.set_param(id, "transform.pos", vec3(v, false)).unwrap(),
             "rotation_hpb_deg" => tx.set_param(id, "transform.rot", vec3(v, true)).unwrap(),
+            "scale_xyz" => tx.set_param(id, "transform.scale", vec3(v, false)).unwrap(),
             _ => {
                 plain.insert(k.clone(), v.clone());
             }
@@ -139,33 +158,235 @@ fn rename_deg(table: &Table) -> Table {
         .collect()
 }
 
-fn build_scene(reg: &Arc<Registry>, input: &Table) -> (Document, NodeId) {
+/// The node-type key of a case object: `node` (menu-created form, where `type` may be a
+/// param such as the Sphere's) or `type` (the older files).
+fn kind(t: &Table) -> &str {
+    t.get("node")
+        .or(t.get("type"))
+        .and_then(|v| v.as_str())
+        .unwrap()
+}
+
+/// Objects whose `input_2` is their child (the generators); anything else is a second root.
+const PARENTS: &[&str] = &["extrude", "lathe", "cloner", "array"];
+
+/// One menu-created object table (`object_type`, the app's labels, raw radians and fractions)
+/// as the flat table `set_table` reads: display keys dropped, the switches of the second
+/// bevel and cap tabs dropped where the type has no such param, `rotation` in radians.
+fn flat_object(reg: &Registry, obj: &Table) -> Table {
+    let key = obj
+        .get("object_type")
+        .or(obj.get("type"))
+        .and_then(|v| v.as_str())
+        .unwrap()
+        .to_lowercase();
+    let ty = type_id(&key);
+    let node = reg.get(&ty).unwrap_or_else(|| panic!("no node type {ty}"));
+    let mut out = Table::new();
+    out.insert("node".into(), toml::Value::String(key.clone()));
+    if key == "cloner" {
+        // the Grid mode's own rows; the rest of the form is at its defaults in the observed case
+        out.insert(
+            "mode".into(),
+            toml::Value::String(obj["mode"].as_str().unwrap().to_lowercase()),
+        );
+        for (from, to) in [("count", "grid_count"), ("size", "grid_size")] {
+            if let Some(v) = obj.get(from) {
+                out.insert(to.into(), v.clone());
+            }
+        }
+        if let Some(p) = obj.get("position") {
+            out.insert("position".into(), p.clone());
+        }
+        return out;
+    }
+    let radians = |v: &toml::Value| {
+        toml::Value::Float(
+            v.as_float()
+                .or(v.as_integer().map(|i| i as f64))
+                .unwrap()
+                .to_degrees(),
+        )
+    };
+    for (k, v) in obj {
+        match k.as_str() {
+            "object_type" => continue,
+            "type" if node.find_param("type").is_none() => continue,
+            "name"
+            | "visible_in_editor"
+            | "visible_in_renderer"
+            | "enabled"
+            | "display_color"
+            | "x_ray"
+            | "rotation_order"
+            | "quaternion_rotation"
+            | "icon_file_id"
+            | "icon_color"
+            | "frozen_position"
+            | "frozen_rotation"
+            | "frozen_scale" => continue,
+            _ if k.starts_with("color") => continue,
+            "direction" | "hierarchical" if node.find_param(k).is_none() => continue,
+            "offset" if key == "extrude" => {
+                // Direction Auto goes along +Z here (the sign is the export tests' business)
+                let f = v.as_float().or(v.as_integer().map(|i| i as f64)).unwrap();
+                out.insert(
+                    "movement".into(),
+                    toml::Value::Array(vec![0.0.into(), 0.0.into(), f.into()]),
+                );
+                continue;
+            }
+            "caps_type" => {
+                out.insert("cap_type".into(), v.clone());
+                continue;
+            }
+            "scale" if node.find_param("scale").is_none() => {
+                out.insert("scale_xyz".into(), v.clone());
+                continue;
+            }
+            "rotation" => {
+                // raw radians: the test's `set_table` reads degrees
+                out.insert(
+                    "rotation_hpb_deg".into(),
+                    toml::Value::Array(v.as_array().unwrap().iter().map(&radians).collect()),
+                );
+                continue;
+            }
+            // the splines' Intermediate Points angle and the Lathe's turn are raw radians
+            "angle" => {
+                let id = if node.find_param("intermediate_angle").is_some() {
+                    "intermediate_angle"
+                } else {
+                    "angle"
+                };
+                out.insert(id.into(), radians(v));
+                continue;
+            }
+            "intermediate_points" | "number" | "maximum_length" | "radius"
+                if key == "rectangle" || key == "arc" || key == "circle" =>
+            {
+                let id = common::resolve_key(node, k);
+                out.insert(id, v.clone());
+                continue;
+            }
+            "scaling" if node.find_param("scaling").is_some() => {
+                out.insert(
+                    "scaling".into(),
+                    toml::Value::Float(v.as_float().unwrap() * 100.0),
+                );
+                continue;
+            }
+            "start_cap" | "end_cap" => {
+                let id = if k == "start_cap" {
+                    "cap_start"
+                } else {
+                    "cap_end"
+                };
+                let on = v.as_integer().is_some_and(|i| i != 0);
+                out.insert(
+                    id.into(),
+                    toml::Value::String(if on { "cap" } else { "none" }.into()),
+                );
+                continue;
+            }
+            _ => {}
+        }
+        // raw radians of an angle param (`start_angle`, `end_angle`): the readers below take degrees
+        if node
+            .find_param(k)
+            .is_some_and(|d| d.ui.unit == forge_core::Unit::Angle)
+            && v.is_float()
+        {
+            out.insert(k.clone(), radians(v));
+            continue;
+        }
+        let known = node.find_param(k).is_some();
+        let second_tab = k.ends_with("_2") || k.ends_with("_3");
+        if !known && (second_tab || common::is_bevel_key(k) || k == "shape_depth") {
+            continue;
+        }
+        out.insert(k.clone(), v.clone());
+    }
+    out
+}
+
+/// One object of a case (and its child) in the document; returns its id.
+fn add_object(
+    tx: &mut forge_core::Tx,
+    reg: &Registry,
+    input: &Table,
+) -> Result<NodeId, forge_core::EditError> {
+    let ty = type_id(kind(input));
+    let id = tx.create(&ty, None, None)?;
+    set_table(tx, reg, id, &ty, &rename_deg(input));
+    // the app names its generator "Subdivision Surface"; our label is shorter
+    if ty == "forge.subdivision" {
+        tx.rename(id, "Subdivision Surface")?;
+    }
+    // objects that carry a smoothing tag when created in the app
+    if ["forge.cube", "forge.sphere", "forge.extrude"].contains(&ty.as_str()) {
+        tx.attach_tag(forge_core::smoothing::TAG, id, None)?;
+    }
+    if let Some(toml::Value::Table(child)) = input.get("child") {
+        let cty = type_id(kind(child));
+        let c = tx.create(&cty, Some(id), None)?;
+        set_table(tx, reg, c, &cty, &rename_deg(child));
+        if cty == "forge.cube" {
+            tx.attach_tag(forge_core::smoothing::TAG, c, None)?;
+        }
+    }
+    Ok(id)
+}
+
+/// The objects of a case: the legacy `[params.input]` (with its `child`) or the menu-created
+/// `[params.input_1]`, `[params.input_2]`, ... (the second is the first's child when the first
+/// is a generator, else another root).
+fn objects_of(reg: &Registry, params: &Table) -> Vec<Table> {
+    if let Some(toml::Value::Table(input)) = params.get("input") {
+        // array-tree: the legacy `input`/`child` shape with the menu-created labels
+        if input.contains_key("visible_in_editor") {
+            let mut flat = flat_object(reg, input);
+            if let Some(toml::Value::Table(c)) = input.get("child") {
+                flat.insert("child".into(), toml::Value::Table(flat_object(reg, c)));
+            }
+            return vec![flat];
+        }
+        return vec![input.clone()];
+    }
+    let flat: Vec<Table> = (1..)
+        .map_while(|n| params.get(&format!("input_{n}")).and_then(|v| v.as_table()))
+        .map(|t| flat_object(reg, t))
+        .collect();
+    let mut roots: Vec<Table> = Vec::new();
+    for obj in flat {
+        let parent_type = roots.last().map(|r| kind(r).to_string());
+        match parent_type {
+            Some(t)
+                if PARENTS.contains(&t.as_str())
+                    && !roots.last().unwrap().contains_key("child") =>
+            {
+                roots
+                    .last_mut()
+                    .unwrap()
+                    .insert("child".into(), toml::Value::Table(obj));
+            }
+            _ => roots.push(obj),
+        }
+    }
+    roots
+}
+
+fn build_scene(reg: &Arc<Registry>, objects: &[Table]) -> (Document, Vec<NodeId>) {
     let mut d = Document::new(reg.clone());
-    let id = d
+    let ids = d
         .transact("case", |tx| {
-            let ty = type_id(input["type"].as_str().unwrap());
-            let id = tx.create(&ty, None, None)?;
-            set_table(tx, reg, id, &ty, &rename_deg(input));
-            // the app names its generator "Subdivision Surface"; our label is shorter
-            if ty == "forge.subdivision" {
-                tx.rename(id, "Subdivision Surface")?;
-            }
-            // objects that carry a smoothing tag when created in the app
-            if ["forge.cube", "forge.sphere", "forge.extrude"].contains(&ty.as_str()) {
-                tx.attach_tag(forge_core::smoothing::TAG, id, None)?;
-            }
-            if let Some(toml::Value::Table(child)) = input.get("child") {
-                let cty = type_id(child["type"].as_str().unwrap());
-                let c = tx.create(&cty, Some(id), None)?;
-                set_table(tx, reg, c, &cty, &rename_deg(child));
-                if cty == "forge.cube" {
-                    tx.attach_tag(forge_core::smoothing::TAG, c, None)?;
-                }
-            }
-            Ok(id)
+            objects
+                .iter()
+                .map(|o| add_object(tx, reg, o))
+                .collect::<Result<Vec<_>, _>>()
         })
         .unwrap();
-    (d, id)
+    (d, ids)
 }
 
 /// The scene as the exporter writes it: pre-order, skipping consumed inputs, tags and
@@ -214,6 +435,7 @@ fn make_editable_cases_match_the_reference() {
     let reg = registry();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
     let (mut matched, mut mismatched) = (Vec::new(), Vec::new());
+    let mut unsupported: Vec<String> = Vec::new();
     let mut trees = 0;
     for case in discover_cases(&root).unwrap() {
         if case.feature != "make-editable" {
@@ -222,26 +444,41 @@ fn make_editable_cases_match_the_reference() {
         let key = case.name.clone();
         let m = case.manifest().unwrap();
         let params = resolved_params(&case, &m);
-        let toml::Value::Table(input) = params["input"].clone() else {
-            panic!("{key}: no input")
+        let objects = objects_of(&reg, &params);
+        let command = match params["command"].as_str().unwrap() {
+            "Make Editable" => "make_editable",
+            "Current State to Object" => "current_state_to_object",
+            other => other,
         };
-        let command = params["command"].as_str().unwrap();
-        let (mut d, src) = build_scene(&reg, &input);
-        let result = d.transact(command, |tx| {
-            Ok(match command {
-                "make_editable" => make_editable(tx, src),
-                "current_state_to_object" => current_state_to_object(tx, src),
-                other => panic!("{key}: command {other}"),
-            })
-        });
-        let new = match result.unwrap() {
-            Ok(new) => new,
-            Err(EditableError::Build(_)) => panic!("{key}: unsupported but {UNSUPPORTED:?}"),
-            Err(e) => panic!("{key}: {e}"),
-        };
+        let (mut d, srcs) = build_scene(&reg, &objects);
+        let mut news = Vec::new();
+        for src in srcs {
+            let result = d.transact(command, |tx| {
+                Ok(match command {
+                    "make_editable" => make_editable(tx, src),
+                    "current_state_to_object" => current_state_to_object(tx, src),
+                    other => panic!("{key}: command {other}"),
+                })
+            });
+            match result.unwrap() {
+                Ok(new) => news.push(new),
+                Err(EditableError::Build(what)) => {
+                    println!("{key}: UNSUPPORTED {what}");
+                    unsupported.push(key.clone());
+                    break;
+                }
+                Err(e) => panic!("{key}: {e}"),
+            }
+        }
+        if unsupported.last() == Some(&key) {
+            continue;
+        }
+        let new = news[0];
 
         // observed tree
-        if !TREE_PENDING.contains(&key.as_str()) {
+        if TREE_NOT_RECORDED.contains(&key.as_str()) {
+            assert!(expected_tree(&key).is_none());
+        } else if !TREE_PENDING.contains(&key.as_str()) {
             let want = expected_tree(&key).unwrap_or_else(|| panic!("{key}: no expected tree"));
             assert_eq!(tree_all(d.scene()), want, "{key}: tree");
             trees += 1;
@@ -291,7 +528,8 @@ fn make_editable_cases_match_the_reference() {
     }
     println!("matched: {matched:?}; mismatched: {mismatched:?}; trees: {trees}");
     assert_eq!(mismatched, KNOWN_MISMATCH, "known mismatch set changed");
-    assert_eq!(matched.len(), 8, "{matched:?}");
+    assert_eq!(matched.len(), 16, "{matched:?}");
+    assert_eq!(unsupported, UNSUPPORTED);
     assert_eq!(trees, 8);
 }
 

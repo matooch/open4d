@@ -155,7 +155,11 @@ pub fn normalize(ty: &forge_core::NodeType, table: &Table) -> Table {
     let mut out = Table::new();
     for (k, v) in table {
         let k = &resolve_key(ty, k);
-        if ty.find_param(k).is_none() && (is_time_key(k) || is_ui_key(k) || is_bevel_key(k)) {
+        let split = ty.find_param(&format!("{k}_x")).is_some();
+        if ty.find_param(k).is_none()
+            && !split
+            && (is_time_key(k) || is_ui_key(k) || is_bevel_key(k))
+        {
             continue;
         }
         // Start / End cap checkboxes of the scripted form are our `cap_start` / `cap_end`.
@@ -212,6 +216,13 @@ pub fn with_defaults(case: &GoldenCase, manifest: &CaseManifest, ty: &str, table
         .into_iter()
         .collect();
     for (k, v) in table {
+        // a vector the case spells whole (`segments = [4, 8, 4]`) replaces the overlay's split
+        // components (`segments_x`, ...)
+        if v.as_array().is_some_and(|a| a.len() == 3) {
+            for axis in ["x", "y", "z"] {
+                out.remove(&format!("{k}_{axis}"));
+            }
+        }
         out.insert(k.clone(), v.clone());
     }
     out

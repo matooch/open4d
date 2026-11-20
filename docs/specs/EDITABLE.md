@@ -116,6 +116,7 @@ tags without the UVW and data tags, children) and, for the spline, the editable 
 | `cube-deformed` | §1.2 steps 2 and 3 (bent only live) |
 | `cube-deformed-csto`, `subdivision-csto` | §1.3 |
 | `extrude` | §1.2 step 5 |
+| `array-tree`, `extrude-cap-off`, `extrude-triangles`, `lathe-caps`, `extrude-csto`, `cloner`, `two-objects`, `two-objects-csto` | menu-created follow-ups (`[params.input_1]`, `[params.input_2]`, raw radians and fractions; the test reads them as the older flat form): the exported mesh of each matches at the case's geometric tolerance (8 more meshes, 16 in all). The trees are in the observation's prose readbacks only, so they are not asserted (`pending: tree not machine-readable`); the readback of `extrude-cap-off` and `extrude-triangles` shows the caps integrated in one polygon object where `extrude` lists Cap children, which the exported mesh cannot tell apart |
 | `spline` | the primitive becomes `forge.spline` with 4 closed points (SPLINES.md §3); tree only |
 | `array` | mesh only: the eight cubes at the Array's offsets. The form's tree column is empty and the export names eight objects `Cube.8` … `Cube.1` ("this command does not make them polygon objects"), so our single merged polygon object matches the surface but **not the tree**: **parity-pending**, see the follow-up cases in the brief report |
 
