@@ -1,6 +1,6 @@
 # Constraints — observation (O36)
 
-Status: observed (7 of 9 cases; Clamp inert and the IK-chain case not run — see Notes) · App version: Cinema 4D 2025.1.0 (25.010) · OS: macOS 26.7.2 (25G332, arm64) · Observer: Hermes · Date: 2026-11-20
+Status: observed (7 of 9 cases; Clamp inert, IK-chain case not run — see Notes) · App version: Cinema 4D 2025.1.0 (25.010) · OS: macOS 26.7.2 (25G332, arm64) · Observer: Hermes · Date: 2026-11-20
 Method: scripted, 30 fps. Unblocks: H/105, 111. Level B.
 
 ## Setup
