@@ -99,6 +99,20 @@ transfer a weight map — there is no auto-weight call.
 | j2-scale | J2 scale (1, 1.5, 1) | bbox (−20, −150, −20) .. (20, 225, 20): the 1.5 Y scale propagates along the chain to the geometry above J2 (150 × 1.5 = 225) |
 | auto-weights | rebind with the app’s automatic weighting (the bind command or the weight tag’s auto-weight function). **Skip if it opens a dialog.** Pose J2 B 90° | not observed: the weight tag scripting surface has no auto-weight function (only per-point weight reads and writes and weight-map read and transfer), and the interactive Auto Weight command opens a modal dialog, which the case says to skip. No per-point readout was produced |
 
+## Follow-up cases (planner, after brief 101)
+
+The Skin deformer matches `bind-pose` exactly, but the four posed cases differ from our linear blend by
+4e-4 to 1.5e-3 with identical topology (RIG.md §8). These cases tell apart weight storage, joint-matrix
+precision and export rounding. Same rig and weights as above unless a row says otherwise.
+
+| Case | Setup | Record |
+|---|---|---|
+| weights-readback | the rig as bound, no pose | Read back every point's three weights through the weight tag's per-point read, at full precision (no rounding). `samples.json` kind `track`, param `weight_j1` / `weight_j2` / `weight_j3`, frame = point index |
+| j2-bend-90-points | J2 rotation B 90° | Read the deformed point positions straight from the evaluated object (the deform cache), at full precision, not through OBJ. `samples.json` kind `track`, params `x` / `y` / `z`, frame = point index |
+| j2-bend-90-matrix | J2 rotation B 90° | Read J2's global matrix (offset and the three axes) at full precision, and its rotation as shown in the Coordinates manager. Write all twelve numbers in the row |
+| j2-bend-90-single | J2 rotation B 90°, but every point weighted 100 % to J2 (weights (0, 1, 0)) | `mesh.obj` and the same full-precision point readout as `j2-bend-90-points`. With one joint per point there is no blending, so any difference is matrix or export precision |
+| j2-bend-90-blended | J2 rotation B 90°, Skin Type = Blended (Blend left at its default) | `mesh.obj` |
+
 ## Notes
 - Each case is a fresh document: cylinder through its menu command (radius 20, height 300, height
   segments 12, rotation segments 8, Orientation +Y) → Make Editable (106 points, 112 polygons), then the
