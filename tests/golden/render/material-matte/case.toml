@@ -1,0 +1,26 @@
+feature = "render"
+observation = "docs/parity/render-reference.md"
+description = "Default sphere with a Standard material, Color (0.8, 0.8, 0.8), the material reflectance switched off, no light object (the renderer's default light)"
+mesh = "mesh.obj"
+
+[params]
+render_width = 320
+render_height = 240
+camera_position = [0.0, 200.0, -600.0]
+camera_rotation_deg = [-15.0, 0.0, 0.0]
+camera_sensor_mm = 36.0
+camera_zoom = 1.0
+
+[params.object]
+type = "sphere"
+name = "Sphere"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+radius = 100.0
+segments = 16
+sphere_type = "Standard"
+render_perfect = true
+
+[import]
+scale = 1.0
+flip_z = false
