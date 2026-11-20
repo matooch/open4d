@@ -1,0 +1,29 @@
+feature = "shaders"
+observation = "docs/parity/shaders.md"
+description = "Checkerboard shader at its default settings (U and V frequency 10 each)"
+mesh = "mesh.obj"
+
+[params]
+width = 400.0
+height = 400.0
+width_segments = 10
+height_segments = 10
+orientation = "+Y"
+grid = 32
+sample_time_s = 0.0
+
+[params.material]
+name = "Mat"
+
+[params.shader]
+type = "checkerboard"
+blur_offset_percent = 0.0
+blur_scale_percent = 0.0
+color_1 = [1.0, 1.0, 1.0]
+color_2 = [0.0, 0.0, 0.0]
+u_frequency = 10.0
+v_frequency = 10.0
+
+[import]
+scale = 1.0
+flip_z = false
