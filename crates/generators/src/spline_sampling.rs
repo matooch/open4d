@@ -112,13 +112,13 @@ pub fn add_params(t: NodeType, default: Interpolation) -> NodeType {
 /// short of its end, in arc length (observed, `arc-defaults`, `arc-angles` and `helix-uniform`).
 const UNIFORM_END_SHORTFALL: f64 = 1e-4;
 
-/// Extra absolute shortfall of an open spline's last Uniform point, per segment: the
+/// Extra absolute shortfall of an open spline's last Uniform point, per segment and per unit of spline length (`5e-10 * segments * total`): the
 /// Helix needs 1.26e-4 at 100 segments and 2.5e-4 at 200 (`helix-uniform`, `-sub200`), the
 /// 10- and 50-segment helices and the 4-segment arcs fit with it too (`-sub10`, `-sub50`,
-/// `arc-uniform-n50`). Linear in the segment count is the simplest law that fits the 100 and 200
-/// ends (the earlier squared law failed `-sub200` by 2.5e-4); the real cause is not known.
+/// `arc-uniform-n50`). Proportional to segments x length is the simplest law that fits the 100 and 200
+/// ends and keeps the 4-segment arc at 6e-7, which `spline-wrap/arc` needs (the earlier squared law failed `-sub200` by 2.5e-4, a per-segment 1.26e-6 broke `spline-wrap/arc`); the real cause is not known.
 /// **Parity-pending.**
-const UNIFORM_END_EXTRA: f64 = 1.26e-6;
+const UNIFORM_END_EXTRA: f64 = 5.0e-10;
 
 /// Relative lag of the Uniform points of an open spline before the last one: sample `k` lies
 /// at `(1 - 1e-7)` of its arc length (`helix-uniform`: 1.00e-7 over 2521 long; `arc-defaults`
@@ -205,7 +205,7 @@ pub fn uniform_params(curve: &Curve, number: usize) -> Vec<f64> {
             // the open end falls a ten-thousandth of the length short (and a little more per
             // segment); the steps before it lag by 1e-7 of their length
             let target = if k == steps {
-                total * (1.0 - UNIFORM_END_SHORTFALL) - UNIFORM_END_EXTRA * n_seg as f64
+                total * (1.0 - UNIFORM_END_SHORTFALL) - UNIFORM_END_EXTRA * n_seg as f64 * total
             } else if curve.closed {
                 total * k as f64 / steps as f64
             } else {

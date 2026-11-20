@@ -189,13 +189,13 @@ Uniform, Angle by Adaptive and Subdivided, Maximum Length by Subdivided.
   of an open spline lie at `total·k/steps·(1 − 1e-7)` (`UNIFORM_OPEN_LAG`; `helix-uniform`
   lags 1.00e-7 of its arc length from the first step to the last but one; `arc-defaults`
   3.2e-5 → 1.9e-6 and `arc-angles` 9e-5 → 5e-6 with it; closed splines show none:
-  `circle-uniform`). The last point sits at `total·(1 − 1e-4) − 1.26e-6·segments`
+  `circle-uniform`). The last point sits at `total·(1 − 1e-4) − 5e-10·segments·total`
   (`UNIFORM_END_EXTRA`): `helix-uniform` (100 segments) ends 1.26e-4 before the `1e-4` rule and
   `helix-uniform-sub200` 2.5e-4; the 10- and 50-segment helices and the 4-segment arcs fit within
   1e-4 with it (`spline-wrap/arc`, which extends its end chord 99 lengths, would show more).
   The previous squared law (1.26e-8·segments²) failed `-sub200` by 2.5e-4; a fine-length-table
-  end (true arc length) was tried and broke the arcs by 7e-4. Linear is only the simplest law
-  through those ends; the cause is unknown (float rounding of the reference's length table was tried: it moves the arc
+  end (true arc length) was tried and broke the arcs by 7e-4. Segments x length is only the simplest law
+  through those ends (a per-segment 1.26e-6 gave the 4-segment arc 5e-6, which `spline-wrap/arc` amplifies x100 past 1e-4); the cause is unknown (float rounding of the reference's length table was tried: it moves the arc
   cases by 1.3e-4 and was rejected).
   The R20 Adaptive helix ends exactly on its end point (z −200), so the shortfall is taken as
   part of Uniform (**parity-pending** for None/Natural/Subdivided, which keep the exact end).
