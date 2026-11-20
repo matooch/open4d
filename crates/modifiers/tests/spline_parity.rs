@@ -566,13 +566,10 @@ fn check_invariants(key: &str, orig: &Mesh, ours: &Mesh, gold: &Mesh) {
                     assert!((p.y - (base + o.y)).abs() < 1e-3, "{key} {who}: y at {o:?}");
                 }
             }
-            match key {
-                // X Spline Top and Bottom (straight lines along x at z = 0) make every point's
-                // z come out 0 (pending: the rule of the X splines).
-                "spline-rail/x-splines" => {
-                    assert!(gold.positions.iter().all(|p| p[2].abs() < 1e-6), "{key}");
-                }
-                _ => {}
+            // X Spline Top and Bottom (straight lines along x at z = 0) make every point's
+            // z come out 0 (pending: the rule of the X splines).
+            if key == "spline-rail/x-splines" {
+                assert!(gold.positions.iter().all(|p| p[2].abs() < 1e-6), "{key}");
             }
         }
         other => panic!("no invariants for {other}"),
