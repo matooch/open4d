@@ -1,0 +1,12 @@
+feature = "clone-spline"
+observation = "docs/parity/clone-toolset-3.md"
+description = "MoSpline in Turtle mode with all defaults (default premise, rules and values), extruded"
+mesh = "mesh.obj"
+
+[params]
+mode = "MoSpline"
+mospline_plugin_id = 440000054
+spline_mode = 3
+spline_mode_label = "Turtle"
+generator_defaults = true
+extrude_plugin_id = 5116

@@ -1,0 +1,19 @@
+feature = "tracer"
+observation = "docs/parity/clone-toolset-3.md"
+description = "Tracer (plugin 1018655) with the default tracing mode and Sample Step 1, trace link = cube keyed 0 -> 300 in x over frames 0-30; the document is stepped frame by frame 0-30 and the trace spline is extruded (Extrude 5116, defaults) and exported at frame 30"
+mesh = "mesh.obj"
+
+[params]
+object = "Tracer"
+tracer_plugin_id = 1018655
+trace_mode = "default"
+sample_step = 1
+trace_link = "Cube"
+reference_key_x = [[0, 0.0], [30, 300.0]]
+document_fps = 30
+export_frame = 30
+extrude = "default"
+
+[import]
+scale = 1.0
+flip_z = false
