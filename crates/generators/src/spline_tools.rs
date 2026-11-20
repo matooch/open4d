@@ -148,8 +148,9 @@ pub struct Chamfered {
     pub curved: bool,
 }
 
-/// Chamfer: each selected corner point becomes two points `distance` away along the edges
-/// (at most half an edge), joined by an arc (`flat` off) or a straight cut (`flat` on).
+/// Chamfer: each selected corner point becomes two points along the edges (at most half an
+/// edge away), joined by an arc of radius `distance` (`flat` off) or a straight cut `distance`
+/// from the corner (`flat` on).
 pub fn chamfer(
     data: &SplineData,
     distance: f64,
@@ -195,14 +196,23 @@ pub fn chamfer(
                 keep(&mut out);
                 continue;
             }
-            let d = distance.min(len_in / 2.0).min(len_out / 2.0);
+            // an arc of radius `distance` touches the edges `distance * tan(turn / 2)` from the
+            // corner (`chamfer-star`: radius 10 at the 39 degree tips cuts 28.1 off); a flat
+            // cut is `distance` along the edges (a right angle cannot tell the two apart)
+            let reach = if flat {
+                distance
+            } else {
+                distance * (turn / 2.0).tan()
+            };
+            let d = reach.min(len_in / 2.0).min(len_out / 2.0);
             let (a, b) = (p - dir_in * d, p + dir_out * d);
             let (ha, hb) = if flat {
                 (DVec3::ZERO, DVec3::ZERO)
             } else {
                 curved = true;
-                let rho = d / (turn / 2.0).tan();
-                let h = CIRCLE_KAPPA * rho * turn / FRAC_PI_2;
+                // `chamfer-star`: the handle is the quarter-arc one of the reach, scaled by the
+                // corner's inner angle (a right angle gives the rectangle's)
+                let h = CIRCLE_KAPPA * d * (PI - turn) / FRAC_PI_2;
                 (dir_in * h, -dir_out * h)
             };
             out.points.extend([a, b]);
@@ -679,7 +689,12 @@ fn pick(pieces: &[Piece], inside: bool, rev: bool) -> Vec<Oriented<'_>> {
     pieces
         .iter()
         .filter(|p| p.inside == inside)
-        .map(|piece| Oriented { piece, rev })
+        // a whole loop (no crossing) keeps its direction, whatever the region asks for
+        // (`spline-tools/bool-nested`: the hole is the inner circle as it was)
+        .map(|piece| Oriented {
+            piece,
+            rev: rev && piece.from.is_some(),
+        })
         .collect()
 }
 
@@ -1047,10 +1062,10 @@ mod tests {
                 .len(),
             1
         );
-        // a hole: the inner square comes back reversed
+        // a hole: the inner square comes back as it was (a whole loop keeps its direction)
         let hole = boolean(&a, &inner, BoolOp::Subtract).unwrap();
         assert_eq!(hole.data.segments.len(), 2);
-        assert!((area(&hole.data).abs() - (10000.0 - 100.0)).abs() < 1e-9);
+        assert!((area(&hole.data).abs() - (10000.0 + 100.0)).abs() < 1e-9);
         assert_eq!(
             boolean(&a, &inner, BoolOp::Union)
                 .unwrap()

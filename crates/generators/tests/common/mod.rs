@@ -232,6 +232,7 @@ pub fn scripted_child_type(t: &Table) -> &'static str {
         _ if has("orientation") && has("size") => "pyramid",
         _ if has("radial_bias_percent") => "helix_spline",
         _ if has("petals") => "flower_spline",
+        _ if has("outer_radius") && has("twist_percent") => "star_spline",
         _ if has("rounding") => "rectangle_spline",
         _ if has("ellipse") && has("ring") => "circle_spline",
         _ if has("start_angle_degrees") && has("radius") => "arc_spline",
@@ -244,7 +245,7 @@ pub fn scripted_child_type(t: &Table) -> &'static str {
 
 /// One scripted object (`position`, `rotation_degrees`, `scale`, `parameters`) as a legacy
 /// child table: `type`, `pos`, a non-identity `rot` / `xscale`, and its parameters.
-fn scripted_child(obj: &Table, ty: Option<&str>) -> Table {
+pub fn scripted_child(obj: &Table, ty: Option<&str>) -> Table {
     let params = obj
         .get("parameters")
         .and_then(|v| v.as_table())
