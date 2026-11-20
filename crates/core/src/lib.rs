@@ -11,6 +11,7 @@ mod param;
 mod registry;
 mod scene;
 pub mod smoothing;
+pub mod tags;
 pub mod time;
 mod track;
 pub mod transform;

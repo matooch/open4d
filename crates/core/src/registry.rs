@@ -154,6 +154,14 @@ impl Registry {
             .expect("built-ins are valid");
         r.register(crate::smoothing::node_type())
             .expect("built-ins are valid");
+        for ty in [
+            crate::tags::point_selection_type(),
+            crate::tags::edge_selection_type(),
+            crate::tags::vertex_map_type(),
+            crate::tags::restriction_type(),
+        ] {
+            r.register(ty).expect("built-ins are valid");
+        }
         r
     }
 
