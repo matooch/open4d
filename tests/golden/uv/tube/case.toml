@@ -1,0 +1,25 @@
+feature = "uv"
+observation = "docs/parity/uv-projection.md"
+description = "Tube with its default settings"
+mesh = "mesh.obj"
+
+[params]
+outer_radius = 100.0
+inner_radius = 50.0
+rotation_segments = 16
+cap_segments = 1
+height = 100.0
+height_segments = 4
+orientation = "+Y"
+fillet = false
+fillet_segments = 3
+fillet_radius = 3.0
+slice = false
+from_deg = 0.0
+to_deg = 180.0
+regular_grid = false
+width = 10.0
+
+[import]
+scale = 1.0
+flip_z = false
