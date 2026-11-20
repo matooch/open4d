@@ -92,15 +92,22 @@ pub fn animate(
     }
     let mut diagnostics = Vec::new();
     if has_tags {
-        let run = forge_nodes::apply_expressions_in(
-            working,
-            forge_nodes::NodeRegistry::builtin(),
-            time,
-            tag_ids,
-        );
-        working = run.scene;
-        diagnostics = run.diagnostics;
-        touched.extend(run.touched);
+        // expression, IK and constraint tags in priority order (RIG.md section 12)
+        for tag in forge_rig::tags::run_order(scene, tag_ids) {
+            if forge_rig::tags::is_rig_tag(&working, tag) {
+                touched.extend(forge_rig::tags::apply_tag(&mut working, tag));
+                continue;
+            }
+            let run = forge_nodes::apply_expressions_in(
+                working,
+                forge_nodes::NodeRegistry::builtin(),
+                time,
+                &[tag],
+            );
+            working = run.scene;
+            diagnostics.extend(run.diagnostics);
+            touched.extend(run.touched);
+        }
     }
     Animated {
         scene: working,
@@ -112,7 +119,7 @@ pub fn animate(
 /// The nodes with tracks and the expression tags of a scene (the `animate` inputs).
 pub fn animation_inputs(scene: &Scene) -> (Vec<NodeId>, Vec<NodeId>, bool) {
     let tracks = forge_anim::track_nodes(scene);
-    let tags = forge_nodes::expression_tags(scene);
+    let tags = animation_tag_ids(scene);
     let enabled = expression_tags_enabled(scene, &tags);
     (tracks, tags, enabled)
 }
@@ -272,10 +279,24 @@ pub fn draw_output(scene: &Scene, id: NodeId, ctx: &EvalCtx) -> NodeOutput {
     node_output(scene, id, ctx)
 }
 
+/// Expression, IK and constraint tags in document order (the tags of the tag stage).
+pub fn animation_tag_ids(scene: &Scene) -> Vec<NodeId> {
+    forge_rig::tags::document_tags(
+        scene,
+        &[
+            forge_nodes::TAG,
+            forge_rig::IK_TAG,
+            forge_rig::CONSTRAINT_TAG,
+        ],
+    )
+}
+
 fn expression_tags_enabled(scene: &Scene, ids: &[NodeId]) -> bool {
     ids.iter().any(|id| {
         scene.node(*id).is_some_and(|n| {
-            n.type_id == forge_nodes::TAG
+            (n.type_id == forge_nodes::TAG
+                || n.type_id == forge_rig::IK_TAG
+                || n.type_id == forge_rig::CONSTRAINT_TAG)
                 && !matches!(
                     n.params.get("enabled"),
                     Some(forge_core::Value::Bool(false))
@@ -410,7 +431,7 @@ impl Scheduler {
             _ => (
                 depgraph::all_nodes(scene),
                 forge_anim::track_nodes(scene),
-                forge_nodes::expression_tags(scene),
+                animation_tag_ids(scene),
             ),
         };
         let has_tracks = !track_ids.is_empty();

@@ -204,12 +204,15 @@ Transactions:
 ### 5a. Evaluation order of one frame (area H, brief 108; refined by brief 111)
 
 `forge-app` builds the evaluated scene of a frame in this order: (1) animation tracks,
-`scene_at`; (2) expression tags, `forge_nodes::apply_expressions`, in document order (an
-object, its tags in order, then its children), each tag seeing the writes of the earlier
-ones; (3) generators and deformers, which read the evaluated scene when geometry is asked
-for; (4) dynamics (later). An expression therefore overrides an animated value of the same
-parameter and every generator sees the expression's output. Priorities between expression tags
-and constraints/IK are brief 111. Details: NODES.md section 5.
+`scene_at`; (2) tags: expression tags (`forge_nodes::apply_expressions_in`), IK tags and
+constraint tags (`forge_rig::tags`), sorted by (priority group, priority number, document
+order), the document order being an object, its tags in order, then its children; each tag
+sees the writes of the tracks and of the tags before it; (3) generators and deformers, which
+read the evaluated scene when geometry is asked for; (4) dynamics (later). An expression
+therefore overrides an animated value of the same parameter and every generator sees the
+output of the tags. Expression tags have the implicit priority `expression`, 0; the IK and
+constraint tags carry `priority_group` and `priority` params (RIG.md section 12), and
+`forge_app::schedule::animate` dispatches each tag by its type. Details: NODES.md section 5.
 
 ### 5b. Dependency graph and evaluation scheduler (brief 180)
 

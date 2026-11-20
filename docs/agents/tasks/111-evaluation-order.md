@@ -1,6 +1,6 @@
 # 111 · Evaluation order: tag priorities, expressions before generators
 
-Status: waiting: O36 · Area: H · Depends on: 104, 105, 108 · Observations: O36 · Touches: core
+Status: done (O36 ordering case not recorded: own unit tests) · Area: H · Depends on: 104, 105, 108 · Observations: O36 · Touches: core
 
 ## Goal
 Implement and document the per-frame order: tracks, expressions/tags by priority, generators/deformers, dynamics.
@@ -26,9 +26,8 @@ Implement and document the per-frame order: tracks, expressions/tags by priority
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: `crates/rig/tests/tag_order.rs` (4), `crates/app/tests/rig_tags.rs` (1). O36 recorded no IK-then-constraint case, so there is no parity number; the rule is our own (group, number, document order) and stays parity-pending.
+- Rules (RIG.md §12, CORE.md §5a): expression, IK and constraint tags sorted by (priority group, priority, document order) in `forge_app::schedule::animate`, after tracks and before generators; a constraint before an IK moves the IK goal in the same frame, the reverse order gives the stale goal.
+- Deviations: `dynamics` and `generators` groups only order tags among themselves (no dynamics stage yet; geometry is evaluated lazily after all tags).
+- Files: crates/app/src/schedule.rs, crates/rig/src/tags.rs, crates/app/tests/rig_tags.rs, docs/specs/CORE.md, docs/specs/RIG.md.
+- Open questions: the reference's default priority per tag type.
