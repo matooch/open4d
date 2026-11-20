@@ -1,0 +1,85 @@
+feature = "effector-f"
+observation = "docs/parity/clone-toolset-3.md"
+description = "Linear cloner Count 5 P step (0,50,0) of 20 cm cubes; Plain effector with Visibility on and a default Linear field (Direction Y+) in its field list"
+mesh = "mesh.obj"
+
+[params]
+clones = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = 5
+offset = 0
+mode = "Per Step"
+amount_percent = 100.0
+p = [0.0, 50.0, 0.0]
+s_percent = [1.0, 1.0, 1.0]
+r_deg = [0.0, 0.0, 0.0]
+step_mode = "Single Value"
+step_size_percent = 100.0
+step_rotation_deg = [0.0, 0.0, 0.0]
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+animation_mode = "Play"
+plain_percent = 100.0
+effector_count = 1
+
+[params.effector]
+type = "plain"
+name = "Plain"
+strength_percent = 100.0
+selection = ""
+maximum_percent = 100.0
+minimum_percent = 0.0
+transform_mode = "Relative"
+transform_space = "Node"
+position = true
+p = [0.0, 100.0, 0.0]
+rotation = false
+scale = false
+color_mode = "Fields Color"
+use_alpha_strength = false
+blending_mode = "Default"
+use_alpha_strength_weight = false
+weight_transform_percent = 0.0
+u_transform_percent = 0.0
+v_transform_percent = 0.0
+modify_clone_percent = 0.0
+visibility = true
+deformation = "Off"
+
+[params.effector.field]
+type = "linear"
+name = "Linear Field"
+position = [0.0, 0.0, 0.0]
+field_type = "Linear Field"
+length = 100.0
+direction = "Y+"
+clip_to_shape = false
+enable_remapping = true
+strength_percent = 100.0
+invert = false
+inner_offset_percent = 0.0
+min_percent = 0.0
+clamp_min = true
+max_percent = 100.0
+clamp_max = true
+multiplier_percent = 100.0
+contour_mode = "None"
+color_mode = "Color"
+color = [0.734507, 0.671353, 0.705845]
+length_remap = "Use Value"
+scale_percent = 100.0
+invert_direction = true
+strength = "No Remap"
+scale_percent_value = 100.0
+invert_rotations = false
+
+[import]
+scale = 1.0
+flip_z = false
