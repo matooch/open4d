@@ -56,7 +56,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O29 | Scene, camera, light, material, render defaults | [scene-defaults.md](scene-defaults.md) | form only | partial |
 | O30 | Render references | [render-reference.md](render-reference.md) | `tests/golden/render/` PNG + meshes | partial (8 of 10 cases; spot and infinite lights render a fully black frame from a script — see the form. The two uncommitted folders tests/golden/render/spot/ and /infinite/ must be deleted by hand) |
 | O43 | Material renders | [material-renders.md](material-renders.md) | `tests/golden/render/` PNG + meshes | done |
-| O57 | Camera projection | [camera.md](camera.md) | `tests/golden/camera/` PNG + meshes | todo |
+| O57 | Camera projection | [camera.md](camera.md) | `tests/golden/camera/` PNG + meshes | partial (4 of 9 cases: focal-18, film-offset, ortho-front, ortho-top. default / focal-100 / aspect-square render an empty frame because the calibration plane is not in view at those lenses; sensor has no preset list; the Physical renderer cannot be selected from a script — see the form) |
 | O44 | Exchange references (FBX, glTF, Alembic, STL, PLY) | [exchange.md](exchange.md) | `tests/golden/exchange/` | done (morph not observed) |
 | O39 | Dynamics: rigid bodies | [dynamics.md](dynamics.md) | `tests/golden/dynamics/` samples + meshes | todo |
 | O40 | Particles and forces | [particles.md](particles.md) | `tests/golden/particles/` samples + meshes | todo |
