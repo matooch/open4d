@@ -1,0 +1,7 @@
+feature = "keyframes"
+observation = "docs/parity/fcurves.md"
+description = "position X, key 30 with weighted tangents on and a short left tangent (-2 frames, -5)"
+
+[params]
+param = "pos_x"
+keys = [[0, 0], [30, 100]]

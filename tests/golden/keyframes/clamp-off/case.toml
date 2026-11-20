@@ -1,0 +1,7 @@
+feature = "keyframes"
+observation = "docs/parity/fcurves.md"
+description = "position X, middle key with overshoot clamp switched off"
+
+[params]
+param = "pos_x"
+keys = [[0, 0], [30, 100], [60, 0]]

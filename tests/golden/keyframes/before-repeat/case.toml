@@ -1,0 +1,7 @@
+feature = "keyframes"
+observation = "docs/parity/fcurves.md"
+description = "position X, keys 30 -> 0 and 60 -> 100, track before-behaviour Repeat"
+
+[params]
+param = "pos_x"
+keys = [[30, 0], [60, 100]]
