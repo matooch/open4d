@@ -98,19 +98,19 @@ Unblocks: E/067, 076, 077, 078.
 | `effector-f/blend-add` | 3 clones, colour (0.5, 0.5, 0) each: Blending Mode Add sums the Custom Color (0.5, 0, 0) and the cloner colour (0, 0.5, 0) channel by channel |
 | `effector-f/blend-multiply` | 3 clones, colour (0, 0, 0) each: Blending Mode Multiply is the channel-wise product of (0.5, 0, 0) and (0, 0.5, 0) |
 | `effector-f/order` | 3 clones at (0, 0, 100) (0, 50, 100) (0, 100, 100), every clone with axes x (0, 0, 1), y (0, 1, 0), z (-1, 0, 0): with A (Rotation, R (90, 0, 0)) created before B (P (100, 0, 0)) the rotation reaches every clone and B's 100 unit translation lands on z instead of x |
-| `effector-f/remap-minmax` | not observed: a field cannot be linked from a script — `c4d.FieldList` has no `InsertObject` (marker `remap` in /Users/bigman/forge-observer/probes/o50_b83.json) — and the app stopped answering before a fallback was tried. See /Users/bigman/forge-observer/log.md |
-| `effector-f/visibility` | not observed: the reference app stopped answering the MCP bridge (execute_python timed out after 120 s, then three health checks one minute apart failed to get an answer; see /Users/bigman/forge-observer/log.md) |
-| `effector-f/order-swapped` | not observed: same app stop; only the A-then-B order was exported as `effector-f/order` |
-| `effector-f/per-effector-50` | not observed: same app stop, hit while the per-effector strength container was being probed |
-| `effector-f/linear-plain-field` | not observed: same app stop; the existing `cloner/linear-plain-field` case was left untouched (rule: never edit existing golden cases) |
-| `random-f/count50-s12345` | not observed: the app stopped answering the bridge before the `random-f` family was started |
-| `random-f/indexed-50` | not observed: the app stopped answering the bridge before the `random-f` family was started |
-| `random-f/gaussian-50` | not observed: the app stopped answering the bridge before the `random-f` family was started |
-| `random-f/noise-steps` | not observed: the app stopped answering the bridge before the `random-f` family was started |
-| `random-f/turbulence` | not observed: the app stopped answering the bridge before the `random-f` family was started |
-| `random-f/synchronized` | not observed: the app stopped answering the bridge before the `random-f` family was started |
-| `random-f/sorted` | not observed: the app stopped answering the bridge before the `random-f` family was started |
-| `random-f/rot-h` | not observed: the app stopped answering the bridge before the `random-f` family was started |
+| `effector-f/remap-minmax` | not observed: a field cannot be linked from a script — `c4d.FieldList` has no `InsertObject` (marker `remap` in /Users/bigman/forge-observer/probes/o50_b83.json) — and the follow-up probe that was to use a fallback never returned (bridge timeouts, timeline note at the end) |
+| `effector-f/visibility` | not observed: the probe that builds this case hit the 120 s bridge timeout twice (`o50_b84`, `o50_b85`, see /Users/bigman/forge-observer/notes.md); the app then answered a one-line ping three times and afterwards stopped answering altogether (see the timeline note at the end of this form) |
+| `effector-f/order-swapped` | not observed: the app stopped answering before the swapped pair could be built; only the A-then-B order was exported as `effector-f/order` |
+| `effector-f/per-effector-50` | not observed: the app stopped answering while the per-effector strength container was being probed |
+| `effector-f/linear-plain-field` | not observed: the app stopped answering before this case was built; the existing `cloner/linear-plain-field` case was left untouched (rule: never edit existing golden cases) |
+| `random-f/count50-s12345` | not observed: the `random-f` family was not reached — the effector probes began timing out at the 120 s bridge limit and the app then stopped answering |
+| `random-f/indexed-50` | not observed: the `random-f` family was not reached — the effector probes began timing out at the 120 s bridge limit and the app then stopped answering |
+| `random-f/gaussian-50` | not observed: the `random-f` family was not reached — the effector probes began timing out at the 120 s bridge limit and the app then stopped answering |
+| `random-f/noise-steps` | not observed: the `random-f` family was not reached — the effector probes began timing out at the 120 s bridge limit and the app then stopped answering |
+| `random-f/turbulence` | not observed: the `random-f` family was not reached — the effector probes began timing out at the 120 s bridge limit and the app then stopped answering |
+| `random-f/synchronized` | not observed: the `random-f` family was not reached — the effector probes began timing out at the 120 s bridge limit and the app then stopped answering |
+| `random-f/sorted` | not observed: the `random-f` family was not reached — the effector probes began timing out at the 120 s bridge limit and the app then stopped answering |
+| `random-f/rot-h` | not observed: the `random-f` family was not reached — the effector probes began timing out at the 120 s bridge limit and the app then stopped answering |
 
 ## Notes
 - Blend order: 5 clones of a cube (size 20) and a sphere (r 10) in Linear mode at the default (0, 50, 0) step bake to a 358-point / 396-polygon mesh; clone weights read 0 because no weight tag is present, as in the O8 cloner cases.
@@ -134,3 +134,5 @@ Unblocks: E/067, 076, 077, 078.
 - Colour reaches the clones through the Color Mode cycle plus the blending cycle: Custom Color (1, 0, 0) at Strength 50 % with Use Alpha/Strength on gives (0.25, 0.375, 0) against a cloner colour of (0, 0.5, 0), while the same effector with the toggle off gives exactly (1, 0, 0). Add sums effector and clone colour (0.5, 0, 0) + (0, 0.5, 0) = (0.5, 0.5, 0); Multiply gives (0, 0, 0).
 - With two effectors the creation order is what applies: A (Rotation) before B (P (100, 0, 0)) turns every clone and sends B's translation to z, giving (0, 0, 100) (0, 50, 100) (0, 100, 100).
 - A directory of cases under `tests/golden/cloner/effector-f/` makes `golden -- check` fail with `cloner/effector-f: missing case.toml` — the harness reads that path as a case, not as a parent. The effector cases therefore live at `tests/golden/effector-f/<case>/` with `feature = "effector-f"`.
+
+- Bridge timeline for this segment (2026-11-20, UTC). `o50_b84.py` and `o50_b85.py` each ended with `Timeout waiting for response from Cinema 4D (120s) for execute_python`. A one-line ping (`ping_obs.py`) then succeeded three times, so the app was still taken to be alive. Three health checks one minute apart around 13:30 Z all returned `Not connected to Cinema 4D`, with the process (pid 83267) at 99 % CPU, uptime 6 h 17 m, and 127.0.0.1:5555 still listening. The app was neither restarted nor killed (rule); the run stops here. The `effector-f` rows above cover only the cases exported before that point — nothing in them is estimated.
