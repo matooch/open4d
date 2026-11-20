@@ -20,7 +20,9 @@ const EXACT: &[&str] = &[
 /// Built but different: the recorded camera does not reproduce the reference (UV.md U4).
 const KNOWN_MISMATCH: &[&str] = &["proj-frontal"];
 
-fn parse(src: &str) -> (Vec<Vec<usize>>, Vec<[f64; 2]>, Vec<Vec<usize>>) {
+type Parsed = (Vec<Vec<usize>>, Vec<[f64; 2]>, Vec<Vec<usize>>);
+
+fn parse(src: &str) -> Parsed {
     let (mut vt, mut faces, mut fvt) = (vec![], vec![], vec![]);
     for l in src.lines() {
         let t: Vec<&str> = l.split_whitespace().collect();
