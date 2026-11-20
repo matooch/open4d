@@ -142,7 +142,7 @@ geometry evaluation is `None` and the mesher (§7) or another consumer reads the
     spline radius of §6.3 and `spline_voxel_range`;
   - **volume builders** as children: their volume, resampled trilinearly onto this lattice when the
     lattice differs (**own design**);
-  - filter layers (`forge.volume_filter`, §8); field layers belong to brief 085 (§9).
+  - filter layers (`forge.volume_filter`, §8) and field layers (§9).
 - Entry meshes are placed with `world(builder)^-1 * world(child)`, so the grid is in the builder's
   local space; the mesher puts the mesh into its own space with the builder's local transform.
 
@@ -334,4 +334,29 @@ Not observed and `Unsupported`: the curve remap and the other reference filter t
 
 ## 9. Field layers
 
-*(brief 085.)*
+A field node (category `Field`: Linear, Spherical, Box, ... from `forge-fields`, with its Remapping
+and world transform) as a child of the builder is a layer that acts on everything below it, like a
+filter (§6.2). Without anything below it it does nothing.
+
+For every **active** voxel the field is sampled at the voxel's world position (builder world matrix
+times the lattice position) and turned into `t = max(0, (f - 0.5) / 0.5)`; the value becomes
+
+| mode (the `objects` row's blend) | result |
+|---|---|
+| add (`union`, no row: default) | `value - K t strength` |
+| subtract (`subtract`) | `value + K t strength` |
+| multiply (`intersect`) | `value (1 + t strength)` |
+
+with `K = 0.625 * voxel_size` and `strength` the row strength. The grid stays a distance field only
+approximately; the mesher only needs the sign and the values near the surface.
+
+Derived from **O33 field-layer** (cube 200, Spherical field size 200 above it, default mode,
+voxel 10): the golden mesh has 2648 points, the faces of the cube bulge by up to 4.95 at their
+centres (bbox +-104.95), falling to nothing near the edges, and the corners stay put. A Spherical
+field of size 200 is 1 inside half its radius and falls linearly to 0 at the radius; the bulge
+profile follows `max(0, 2 f - 1)`: scanning a threshold of 0.3 to 0.6, an exponent of 0.5 to 2 and
+a scale of 4 to 12, a threshold of 0.5, exponent 1 and scale 6.2 give 2648 points and a Hausdorff
+distance of 1.0 (a plain `f` gave 8 and pushed the corner samples inside). `K = 6.25` at voxel
+10 is the fitted scale (nearest-vertex distance 0.54 at 6.2 to 6.25); that it is proportional to
+the voxel size, the threshold 0.5 and the modes subtract and multiply are **parity-pending**
+(one case, default mode). Layers act on the band only.

@@ -404,3 +404,45 @@ pub fn apply(
     }
     g
 }
+
+/// How a field layer combines with the distance field below it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldMode {
+    /// The field grows the volume: `value - K t`.
+    Add,
+    /// The field shrinks it: `value + K t`.
+    Subtract,
+    /// The field scales the distances: `value (1 + t)` (the surface does not move).
+    Multiply,
+}
+
+/// Field strength to distance: `K = FIELD_DISTANCE_PER_VOXEL * voxel_size` at field value 1 above
+/// the threshold [`FIELD_THRESHOLD`] (VOLUME.md section 9, O33 field-layer).
+pub const FIELD_DISTANCE_PER_VOXEL: f64 = 0.625;
+/// Field values below this are ignored; `t = (f - threshold) / (1 - threshold)` above it.
+pub const FIELD_THRESHOLD: f64 = 0.5;
+
+/// Applies sampled field values to the given active voxels: `t = max(0, (f - 0.5) / 0.5)`
+/// times `strength`, then the mode.
+pub fn apply_field_values(
+    grid: &SparseGrid<f32>,
+    voxels: &[(IVec3, f32)],
+    values: &[f64],
+    mode: FieldMode,
+    strength: f64,
+    voxel_size: f64,
+) -> SparseGrid<f32> {
+    let k = FIELD_DISTANCE_PER_VOXEL * voxel_size;
+    let mut out = grid.clone();
+    for ((i, v), f) in voxels.iter().zip(values) {
+        let t = ((f - FIELD_THRESHOLD) / (1.0 - FIELD_THRESHOLD)).max(0.0) * strength;
+        let value = f64::from(*v);
+        let new = match mode {
+            FieldMode::Add => value - k * t,
+            FieldMode::Subtract => value + k * t,
+            FieldMode::Multiply => value * (1.0 + t),
+        };
+        out.set(*i, new as f32);
+    }
+    out
+}

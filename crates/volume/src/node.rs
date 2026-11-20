@@ -238,6 +238,7 @@ enum Source {
     Spline { points: Vec<DVec3>, closed: bool },
     Volume(Box<Volume>),
     Filter(FilterSpec),
+    Field(Box<dyn forge_fields::Field>),
 }
 
 /// A filter layer as read from its node.
@@ -296,6 +297,17 @@ fn gather(
     }
     if n.type_id == FILTER {
         out.push((node, Source::Filter(filter_spec(&n.params))));
+        return Ok(());
+    }
+    if scene
+        .node_type(node)
+        .is_some_and(|t| t.category == Category::Field)
+    {
+        let field = forge_fields::field_from_node(scene, node).map_err(|e| match e {
+            forge_fields::FieldError::Unsupported(w) => VolumeBuildError::Unsupported(w),
+            e => VolumeBuildError::Failed(e.to_string()),
+        })?;
+        out.push((node, Source::Field(field)));
         return Ok(());
     }
     let world = scene
@@ -360,6 +372,29 @@ fn filter_spec(values: &BTreeMap<String, Value>) -> FilterSpec {
         kind,
         iterations: p.int("iterations") as u32,
     }
+}
+
+/// Applies a field layer to the accumulated distance field (VOLUME.md section 9).
+fn apply_field(
+    grid: &SparseGrid<f32>,
+    field: &dyn forge_fields::Field,
+    mode: filters::FieldMode,
+    strength: f64,
+    builder_world: &DMat4,
+    ctx: &EvalCtx,
+    s: &Settings,
+) -> SparseGrid<f32> {
+    let voxels = grid.active_voxels();
+    let points: Vec<DVec3> = voxels
+        .iter()
+        .map(|(i, _)| builder_world.transform_point3(grid.index_to_world(*i)))
+        .collect();
+    let values: Vec<f64> = field
+        .sample_many(&points, ctx)
+        .iter()
+        .map(|v| v.value)
+        .collect();
+    filters::apply_field_values(grid, &voxels, &values, mode, strength, s.sdf.voxel_size)
 }
 
 /// Resamples a volume onto another lattice (trilinear) within its active bounds.
@@ -471,6 +506,26 @@ fn build_volume_inner(
             Source::Filter(f) => {
                 if let Some(a) = acc.take() {
                     acc = Some(filters::apply(&a, f.kind, f.iterations, band));
+                }
+                continue;
+            }
+            Source::Field(field) => {
+                if let Some(a) = acc.take() {
+                    let mode = match row.map(|r| r.blend.as_str()) {
+                        Some("subtract") => filters::FieldMode::Subtract,
+                        Some("intersect") => filters::FieldMode::Multiply,
+                        _ => filters::FieldMode::Add,
+                    };
+                    let strength = row.map_or(1.0, |r| r.strength);
+                    acc = Some(apply_field(
+                        &a,
+                        field.as_ref(),
+                        mode,
+                        strength,
+                        &world,
+                        ctx,
+                        &s,
+                    ));
                 }
                 continue;
             }

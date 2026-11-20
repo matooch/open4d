@@ -10,6 +10,7 @@ use glam::{DVec3, IVec3};
 fn doc() -> Document {
     let mut r = Registry::with_builtins();
     r.install(&Primitives).unwrap();
+    r.install(&forge_fields::FieldToolset).unwrap();
     r.install(&VolumePlugin).unwrap();
     Document::new(Arc::new(r))
 }
@@ -370,4 +371,83 @@ fn filter_parameters_and_offset() {
     );
     assert_eq!(ty.find_param("voxel_range").unwrap().default, Value::Int(3));
     assert_eq!(ty.find_param("offset").unwrap().default, Value::Float(5.0));
+}
+
+#[test]
+fn a_field_layer_bulges_the_faces_of_the_cube_below_it() {
+    let mut s = scene();
+    let field = s.add("forge.field.spherical", None, [0.0; 3]);
+    s.set(field, "radius", Value::Float(200.0));
+    s.add("forge.cube", None, [0.0; 3]);
+    let plain = {
+        let b = s.builder;
+        s.set(
+            b,
+            "objects",
+            Value::LinkRows(vec![LinkRow {
+                enabled: false,
+                ..LinkRow::new(field, "union")
+            }]),
+        );
+        let v = s.volume();
+        s.set(b, "objects", Value::LinkRows(vec![]));
+        v
+    };
+    let v = s.volume();
+    // the face sample (-10, 0, 0) is on the surface (0), the field (1 inside half its radius)
+    // pulls it by K = 6.25 inside
+    assert_eq!(plain.grid.get(IVec3::new(-10, 0, 0)), 0.0);
+    assert!((f64::from(v.grid.get(IVec3::new(-10, 0, 0))) + 6.25).abs() < 1e-4);
+    // the corner sample: field value 0.27, below the threshold: untouched
+    assert_eq!(
+        v.grid.get(IVec3::new(-10, -10, -10)),
+        plain.grid.get(IVec3::new(-10, -10, -10))
+    );
+    // outside the band nothing is stored or changed
+    assert_eq!(v.grid.active_count(), plain.grid.active_count());
+    let m = s.mesh().unwrap();
+    let hi = m.points.iter().fold(0.0f64, |a, p| a.max(p.x));
+    assert!(hi > 104.0 && hi < 106.0, "{hi}");
+    assert!(
+        m.points
+            .iter()
+            .any(|p| (p.x.abs() - 93.3333).abs() < 1e-3 && (p.y.abs() - 93.3333).abs() < 1e-3)
+    );
+}
+
+#[test]
+fn field_modes_rows_and_position() {
+    let mut s = scene();
+    let field = s.add("forge.field.spherical", None, [0.0; 3]);
+    s.set(field, "radius", Value::Float(200.0));
+    s.add("forge.cube", None, [0.0; 3]);
+    let at = |s: &Scene| s.volume().grid.get(IVec3::new(-10, 0, 0));
+    let b = s.builder;
+    s.set(
+        b,
+        "objects",
+        Value::LinkRows(vec![LinkRow::new(field, "subtract")]),
+    );
+    assert!((f64::from(at(&s)) - 6.25).abs() < 1e-4);
+    let mut half = LinkRow::new(field, "union");
+    half.strength = 0.5;
+    s.set(b, "objects", Value::LinkRows(vec![half]));
+    assert!((f64::from(at(&s)) + 3.125).abs() < 1e-4);
+    s.set(
+        b,
+        "objects",
+        Value::LinkRows(vec![LinkRow::new(field, "intersect")]),
+    );
+    // multiply scales the distances: the surface sample stays 0, a deeper one grows
+    assert_eq!(at(&s), 0.0);
+    assert!((s.volume().grid.get(IVec3::new(-9, 0, 0)) + 20.0).abs() < 1e-4);
+    // a field moved away has no effect on the cube
+    s.set(b, "objects", Value::LinkRows(vec![]));
+    s.set(field, "transform.pos", Value::Vec3([2000.0, 0.0, 0.0]));
+    assert_eq!(at(&s), 0.0);
+    // a field with nothing below it does nothing; voxel size scales K
+    s.set(field, "transform.pos", Value::Vec3([0.0; 3]));
+    s.set(b, "voxel_size", Value::Float(20.0));
+    let v = s.volume();
+    assert!((f64::from(v.grid.get(IVec3::new(-5, 0, 0))) + 12.5).abs() < 1e-4);
 }

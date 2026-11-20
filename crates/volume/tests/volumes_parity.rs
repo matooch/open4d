@@ -14,6 +14,7 @@ type Table = toml::map::Map<String, toml::Value>;
 fn registry() -> Arc<Registry> {
     let mut r = Registry::with_builtins();
     r.install(&Primitives).unwrap();
+    r.install(&forge_fields::FieldToolset).unwrap();
     r.install(&VolumePlugin).unwrap();
     Arc::new(r)
 }
@@ -235,6 +236,12 @@ pub fn build_case(reg: &Arc<Registry>, params: &Table, description: &str) -> Bui
                 let id = tx.create("forge.volume_filter", Some(builder), None)?;
                 apply_filter(tx, id, t, description);
             }
+            // a field layer is listed above the objects too
+            if let Some(t) = params.get("field").and_then(|v| v.as_table()) {
+                assert_eq!(t["type"].as_str(), Some("spherical_field"));
+                let id = tx.create("forge.field.spherical", Some(builder), None)?;
+                tx.set_param(id, "radius", Value::Float(f(&t["size"])))?;
+            }
             // inputs: input, input2, ..., or a Null `input` with children input_a, input_b
             let table = |k: &str| params.get(k).and_then(|v| v.as_table());
             let mut parents: BTreeMap<&str, NodeId> = BTreeMap::new();
@@ -270,9 +277,8 @@ fn mesh_of(b: &Built) -> Mesh {
     }
 }
 
-/// Cases the reference observed that depend on later briefs (filter layers: 082, field layers:
-/// 085, adaptivity: 083); each is listed with the reason and asserted still unmatched or unbuilt.
-const UNSUPPORTED: &[(&str, &str)] = &[("field-layer", "field layer: brief 085")];
+/// Observed cases whose options are not built; each is listed with the reason.
+const UNSUPPORTED: &[(&str, &str)] = &[];
 
 /// Built, but the geometric comparison fails.
 const KNOWN_MISMATCH: &[(&str, &str)] = &[(
@@ -339,12 +345,7 @@ fn volumes_match_the_reference_geometrically() {
         let man = case.manifest().unwrap();
         let params: Table = man.params.clone().into_iter().collect();
         if let Some((_, why)) = UNSUPPORTED.iter().find(|(n, _)| *n == case.name) {
-            assert!(
-                params.contains_key("field"),
-                "{}: listed as unsupported ({why}) but has no field layer",
-                case.name
-            );
-            continue;
+            panic!("{}: unsupported ({why}) is not asserted yet", case.name);
         }
         let built = build_case(&reg, &params, man.description.as_deref().unwrap_or(""));
         let ours = mesh_of(&built);
@@ -399,7 +400,7 @@ fn volumes_match_the_reference_geometrically() {
     }
     assert!(listed.iter().all(|n| seen.contains(*n)), "stale list entry");
     assert_eq!(seen.len(), 21, "the volumes golden set changed");
-    assert_eq!(matched.len(), 19, "matched: {matched:?}");
+    assert_eq!(matched.len(), 20, "matched: {matched:?}");
     for n in EXACT {
         assert!(matched.iter().any(|m| m == n), "{n} missing");
     }
