@@ -979,7 +979,7 @@ cube (`export_weld`).
 ## 16. FFD (`forge.ffd`) (brief 052)
 
 Source: O9 [deformers-2.md](../parity/deformers-2.md) (`ffd/defaults`, `ffd/point-moved`) and O45
-[deformers-4.md](../parity/deformers-4.md) (`ffd/ffd-grid-5`); golden `tests/golden/ffd` (3 cases).
+[deformers-4.md](../parity/deformers-4.md) (`ffd/ffd-grid-5`, `ffd/point-x`, `ffd/point-z`, `ffd/grid-2`); golden `tests/golden/ffd` (6 cases).
 (The brief names its sections §9–11; those numbers are taken, so FFD, Formula and Melt are
 §16–18 and their parity is §19.)
 
@@ -1007,13 +1007,21 @@ Proof: `ffd/point-moved` (degree 2, point 8 up by 100: all 162 points within 5e-
 which prints 6 decimals) and `ffd/ffd-grid-5` (degree 4, centre point 62 up by 100: 80 points
 move, up to 1.63, all within 4e-7). The degree is the point count minus one on each axis.
 
+Follow-up cases (menu-created form, `[params.lattice]` lists the lattice after the edit, x fastest): `ffd/point-x`
+(point 14, +x middle, moved (50, 0, 0)), `ffd/point-z` (+z middle, (0, 0, 50)) and `ffd/grid-2` (2×2×2, corner 0 moved by
+(50, 50, 50)) match to 5e-7 with the same formula: the axis orientation (x fastest, y, z) and the degree 1 case are
+confirmed. `ffd/grid-small` was not observed (it stayed undeformed in the app).
+
 Parity-pending: the cut-off at the lattice boundary (a point just outside might fade instead of
 stop: no case has a point between the box and a distance away); non-uniform lattices other than
 one moved point; a negative `size`.
 
 ## 17. Formula (`forge.formula`) (brief 052)
 
-Source: O9 (`formula/defaults`, `formula/frame-10`); text language [EXPR.md](EXPR.md).
+Source: O9 (`formula/defaults`, `formula/frame-10`) and the follow-up cases of [deformers-4.md](../parity/deformers-4.md)
+(`formula/d-const`, `d-u`, `d-v`, `effect-manual`, `-spherical`, `-cylindrical`, `-x-radial`, `-z-radial`, `size-nonuniform`);
+text language [EXPR.md](EXPR.md). The follow-ups label the four expression rows by their variables
+(`d(u,v,x,y,z,t)`, `X(x,y,z,t)`, ...); the readers map them to `formula_d`, `formula_x`, `formula_y`, `formula_z`.
 
 | Key | Label | Type | Default |
 |---|---|---|---|
@@ -1036,20 +1044,33 @@ x or z; at the axis points (x or z = 0, r = 100 so `u = ½`) `d = 0` at t = 0 an
 `0.2·sin(2π·0.7071)·200 = −38.556`; the (50, 100) column (`u = 0.559`) by −14.495; the point
 (50, 0) (`u = ¼`) by +40 (bbox y max 240). Frame 10 agrees at all 81 columns.
 
+### The other effects (derived from the follow-up cases, all 162 points each)
+- `x_radial` (`u` from y, z; `dir = +x`; `amp = hx`), `z_radial` (`u` from x, y; `dir = +z`; `amp = hz`),
+  `cylindrical` (`u` = angle `atan2(z, x)/2π` mod 1, `dir` = outward in xz, `amp = hx`; the polar-axis points do not
+  move), all by the rules of `y_radial` with the axes exchanged: exact (`effect-x-radial`, `-z-radial`,
+  `-cylindrical`, `size-nonuniform` with a non-uniform `size`).
+- `d = 0.1` (`d-const`) moves every point by `0.1·amp` along `dir`; `d = u` (`d-u`) by `u·amp`. **`v` equals `u`
+  for the radial effects** (`d-v`: dy = 141.421 on the corner columns, 100 on the axis columns, 0 at the poles, i.e.
+  `200·u`; the earlier guess "v = position along the axis" is refuted: three hypotheses, the position along y gave a
+  constant offset per row instead). X Radial and Z Radial take the same rule (no case reads their `v`: parity-pending).
+- `spherical` (`effect-spherical`): `u = atan2(z, x)/2π` mod 1, `dir = p/|p|` (outward), `amp = hx`; the offsets
+  of the 160 off-axis points equal `0.2·sin(2π u)·200` along `dir` (perpendicular part 0). **On the polar axis
+  (x = z = 0) the longitude reads 90° (`u = ¼`, `sin = 1`)**: the two pole points move by `0.2·200 = 40` outward,
+  exactly `(0, ±40, 0)`. `v` is not read by a case (latitude/π + ½ kept, parity-pending).
+- `manual` (`effect-manual`, `X = x*2`): X, Y, Z are applied (`dx = x`) and **`d` does nothing**: dy = 0 at
+  every point although the default `d` is not zero at `u = x/sx + ½`. Two hypotheses fit (no direction for `d` in
+  Manual, or `u = v = 0` there); the first is used. Parity-pending: the role of `d`, `u`, `v` in Manual.
+
 ### Own design (parity-pending, no observation)
-- The other effects, by the same rules with the axes exchanged or the plane rule changed:
-  `x_radial` (`u` from y, z; `dir = +x`; `amp = hx`), `z_radial` (`u` from x, y; `dir = +z`;
-  `amp = hz`), `cylindrical` (`u` = angle about y over 2π in [0,1), `dir` = outward in xz,
-  `amp = hx`), `spherical` (`u` = longitude/2π, `v` = latitude/π + ½, `dir` = outward from the origin,
-  `amp = hx`), `manual` (`u = x/sx + ½`, `v = z/sz + ½`, `dir = +y`, `amp = hy`).
-- `v` for the radial effects is the position along the axis, `0…1` over `size`.
 - No box: the formula applies to every point, also outside `size`.
 - A formula that does not parse acts as the identity for X, Y, Z and as 0 for `d`; a non-finite
   value of one component keeps that component of the original point (for `d`: 0).
 
 ## 18. Melt (`forge.melt`) (brief 052)
 
-Source: O9 (`melt/defaults`, `melt/strength`), parameter table of deformers-2.md.
+Source: O9 (`melt/defaults`, `melt/strength`), parameter table of deformers-2.md, and the follow-up cases of
+[deformers-4.md](../parity/deformers-4.md) (`melt/no-random-s0`, `-s10`, `-s50`, `-s100`, `size-100`, `size-200`,
+`radius-50`, `radius-200`, `noise-scale-50`).
 
 | Key | Label | Default |
 |---|---|---|
@@ -1080,30 +1101,53 @@ Source: O9 (`melt/defaults`, `melt/strength`), parameter table of deformers-2.md
    3.0…4.3 at 111.8, 4.1…4.8 at 141.4. Along a column `F` falls slowly with y (4.9, 4.5, 4.3, 4.15
    for y = 50…200 on the ray (−100, −100)); the law in y is not derived.
 
-### Our model (own design, parity-pending; the random stream is not matchable)
+### What the no-randomness cases show (Radial and Vertical Randomness 0, `melt/no-random-s*`)
+With both randomness settings at 0 the result has no noise at all and is **exact in our model** (below):
+1. `k` is one number for every ray: `1.792066268` at 10 %, `4.18024039` at 50 %, `4.96319944` at 100 %
+   (Melted Size 400 %, all points with `r > 0` agree to 1e-8). Strength 0 changes nothing but the clip: every
+   point with `y ≤ 0` goes to 0 (`no-random-s0`).
+2. **`k = 1 + m·a(s)` with `m = melted_size/100`**, not `1 + (m − 1)·g`: `size-100`, `size-200` and the
+   default 400 % give `k − 1 = 0.4962 : 0.9924 : 1.9849` at the first ray (exactly 1 : 2 : 4) at strength 50 %.
+   `k` does not depend on Radius (`radius-50`, `radius-200`) or on Noise Scale (`noise-scale-50`): all three give the
+   `melt/strength` values exactly.
+3. `a(0.1) = 0.198016567`, `a(0.5) = 0.795060098`, `a(1) = 0.990799860` (from fact 1); with fact 2 of the noisy cases
+   `a(¼) = a(½)/1.6905`. Three hypotheses for the closed form: `1 − e^(−Bs)` (fixes B from `a(½)/a(1)`, then
+   `a(0.1)` is 31 % off), `erf(cs)` (0.6 % off at 0.1), and `1 − f` with `f` a Gaussian of `s` (7 % off at 1): none
+   fits, so `a` is the monotone cubic through the nodes `s = 0, 0.1, ¼, ½, 1` (exact there, **parity-pending
+   between them**). With Randomness 100 % the noisy factor is `0.60 … 0.80` times `a(s)` on every ray
+   (`melt/strength`: (k − 1)/(4 a(½)) from 0.603 to 0.802), multiplicative and independent of `s`.
+4. The height: `y' = y·exp(−8 s² F)` with **`F = 1 + r/20` exactly** (`r` the distance from the axis: 3.5, 4.5355,
+   6, 6.5902, 8.0711 at r = 50, 70.71, 100, 111.8, 141.4; the same at 10 % and 50 %, and `y'/y` does not depend on
+   `y`). `20 = Radius/5` or a constant: with Randomness 0 the Radius cases were not recorded.
+5. With Randomness 100 % the radial part of `F` is smaller (`F − 1` is 0.57 … 0.77 of `r/20` at r = 50…70) and
+   **depends on Radius in a way not explained**: at r = 50 on the ray 0°, `F` is 3.142, 2.691, 1.746 for Radius
+   50, 100, 200, while `k` does not change. The noise also depends on Noise Scale (`F` 2.337 against 2.691 at 50 %
+   on the same ray). Pending.
+
+### Our model (own design where noted; the random stream is not matchable)
 With `s = strength/100`, `m = melted_size/100`, `rr`, `vr` the randomness fractions and `n1, n2 ∈ [0,1]`
 two noises of the angle `θ = atan2(z, x)` (Perlin on the unit circle, seeded by `ctx.seed`, lattice
 scale `10·noise_scale`):
-- `g(s) = (1 − e^(−1.4803 s)) / (1 − e^(−1.4803))` (fitted so that `g(½)/g(¼) = 1.6905`; `g(1) = 1`),
-  `k = 1 + (m − 1)·g·(1.1 + 0.15·rr·(2 n1 − 1))` scales x and z (so `k` = 2.2…2.5 at 25 %);
-- `y' = 0` for `y ≤ 0`, else `y' = y·exp(−8 s²·F)`, `F = (1 + 1.7·(r/(radius/2))^0.65)·(1 + 0.12·vr·(2 n2 − 1))`
-  (the fit of the cap points). `y` itself does not enter `F`.
-The structure (facts 1 to 3) holds; the values do **not** reproduce the reference. `radius` only
-rescales `F` in our model: the cases never changed it (the reference's use of Radius is unobserved).
+- `k = 1 + m·a(s)·(1 − rr·(0.3 − 0.1(2 n1 − 1)))` scales x and z, `a` the node curve of fact 3 (exact for `rr = 0`);
+- `y' = 0` for `y ≤ 0`, else `y' = y·exp(−8 s²·F)`, `F = 1 + (r/20)·(1 − vr·(0.3 − 0.1(2 n2 − 1)))` (exact for `vr = 0`).
+The structure (facts 1 to 3 of the first list) holds for every case; the values with randomness do **not**
+reproduce the reference. `radius` does not enter our model (fact 5).
 
 ## 19. Parity of §16–18
 
-Test: `crates/modifiers/tests/ffd_formula_melt_parity.rs`; features `ffd` (3), `formula` (2),
-`melt` (2); compared like the other deformers (`export_weld`, `compare_meshes`).
+Test: `crates/modifiers/tests/ffd_formula_melt_parity.rs`; features `ffd` (6), `formula` (11),
+`melt` (11); compared like the other deformers (`export_weld`, `compare_meshes`); the menu-created case form is
+read through `tests/common/mod.rs`.
 
-- Exact: `ffd/defaults`, `ffd/point-moved`, `ffd/ffd-grid-5` (3/3); `formula/defaults`,
-  `formula/frame-10` (2/2).
-- `KNOWN_MISMATCH` (must still fail the exact comparison): `melt/defaults`, `melt/strength`. The
-  reference noise is not reproduced (only the structure above is derived). Instead the test asserts,
-  on the golden and on ours alike: same topology as the cube, xz direction preserved and farther from
-  the axis, `y' = 0` for `y ≤ 0`, `0 < y' < y` above, the axis point at `200·e^(−8 s²)`, and `F`
-  independent of the strength on the cap; on the golden, the `k − 1` ratio 1.6905 across all rays.
-- Follow-up cases (planner): Melt with Radial Randomness 0 and Vertical Randomness 0 (removes the
+- Exact: all 6 FFD cases; all 11 Formula cases (`d-v`, `effect-manual`, `effect-spherical` since the rules of §17
+  above); Melt `no-random-s0`, `-s10`, `-s50`, `-s100` (4/11). 21/28 in all.
+- `KNOWN_MISMATCH` (must still fail the exact comparison; `pending: Melt noise`): `melt/defaults`, `strength`,
+  `size-100`, `size-200`, `radius-50`, `radius-200`, `noise-scale-50`. The reference noise is not reproduced
+  (only the structure above is derived). Instead the test asserts, on the golden and on ours alike: same
+  topology as the cube, xz direction preserved and farther from the axis, `y' = 0` for `y ≤ 0`, `0 ≤ y' < y` above
+  (a melted-away point prints 0), the axis point at `200·e^(−8 s²)`, and `F` independent of the strength on the cap;
+  on the golden, the `k − 1` ratio 1.6905 across all rays.
+- Follow-up cases that were asked (planner; all now observed except `ffd/grid-small`): Melt with Radial Randomness 0 and Vertical Randomness 0 (removes the
   noise: gives `g(s)` and the vertical law directly), at Strength 0, 10, 50, 100; Melt with
   Melted Size 100 and 200; Melt with Radius 50 and 200; Melt with Noise Scale 50 (what the noise frequency is);
   Formula with `d = 0.1`, with `d = u` and `d = v` (gives `u`, `v` of each effect), each other effect

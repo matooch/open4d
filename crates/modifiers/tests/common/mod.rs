@@ -41,9 +41,16 @@ fn our_names(t: &Table) -> Table {
     t.iter()
         .filter(|(k, _)| !COSMETIC.contains(&k.as_str()))
         .map(|(k, v)| {
-            let key = k
-                .strip_suffix("_degrees")
-                .map_or(k.clone(), |b| format!("{b}_deg"));
+            let key = match k.as_str() {
+                // The Formula's four expression rows are labelled by their variables.
+                "d_u_v_x_y_z_t" => "formula_d".to_string(),
+                "x_x_y_z_t" => "formula_x".to_string(),
+                "y_x_y_z_t" => "formula_y".to_string(),
+                "z_x_y_z_t" => "formula_z".to_string(),
+                _ => k
+                    .strip_suffix("_degrees")
+                    .map_or(k.clone(), |b| format!("{b}_deg")),
+            };
             (key, v.clone())
         })
         .collect()
