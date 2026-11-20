@@ -1752,6 +1752,13 @@ dependencies = [
 [[package]]
 name = "forge-render-api"
 version = "0.1.0"
+dependencies = [
+ "forge-image",
+ "forge-material",
+ "glam",
+ "tempfile",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "forge-render-bridge"
