@@ -1,6 +1,6 @@
 # 072 · Effector falloff via field lists
 
-Status: ready · Area: E · Depends on: 068, 059 · Observations: O22 · Touches: clone-engine, fields
+Status: done · Area: E · Depends on: 068, 059 · Observations: O22 · Touches: clone-engine, fields
 
 ## Goal
 Every effector takes a field list as falloff (same field stack as deformers).
@@ -15,8 +15,8 @@ Every effector takes a field list as falloff (same field stack as deformers).
 - Evaluate the field list at each clone position (world space) and multiply the effector strength. Reuse `forge-fields` exactly; no copy of the layer logic.
 
 ## Done when
-- [ ] Falloff cases pass.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Falloff cases pass.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -32,3 +32,6 @@ Every effector takes a field list as falloff (same field stack as deformers).
 - Files changed.
 - Open questions or data that would settle them (the reviewer turns these into follow-up forms).
 - The last lines of the gate output.
+- Result: falloff via field lists was already wired for every effector (shared `FieldList::from_param`, plain-field-* cases 14/14 exact). Added spec section "Field lists of any shape" (MOGRAPH.md E8) and the test `effector_falloff_takes_a_whole_field_list` (Spherical under Invert, disabled row, Random effector).
+- Parity-pending: multi-layer lists on an effector (no observation).
+- Files: docs/specs/MOGRAPH.md, crates/app/tests/cloner.rs, BACKLOG, this brief.
