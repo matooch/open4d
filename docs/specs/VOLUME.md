@@ -116,6 +116,9 @@ geometry evaluation is `None` and the mesher (§7) or another consumer reads the
 | `volume_type` | Volume Type | Enum `sdf, fog, vector` | `sdf` | `vector` is `Unsupported` |
 | `auto_update_settings` | Auto Update Settings | Bool | on | stored only |
 | `override_grid_matrix` | Override Grid Matrix | Bool | off | on is `Unsupported` (not observed) |
+| `display` | Display | Enum `box, preview, slice` | `preview` | viewport only, §11 (own design) |
+| `slice_axis` | Slice Axis | Enum `x, y, z` | `y` | §11 |
+| `slice_index` | Slice Index | Int | 0 | lattice index of the slice plane, §11 |
 | `objects` | Objects | LinkRows, blends `union, subtract, intersect` | empty | §6.2 |
 
 ### 6.2 The object list
@@ -419,4 +422,41 @@ active values of a node without active values, is not written at all). We write 
 - Every length is checked against the data left; counts above 65536 tiles or children are an
   error. The reader never panics on any input (brief 182 fuzzes it).
 - Round trip of a grid we wrote is exact: values, active flags, background, voxel size and origin.
+
+## 11. Viewport display
+
+Own design (GUI session G4, [GUI-SESSIONS.md](../parity/GUI-SESSIONS.md), is unanswered): every
+rule here is **parity-pending**.
+
+### 11.1 What is shown
+
+The builder's `display` setting: `box` (the box of the active voxels), `preview` (the box and a
+coarse iso-surface mesh) or `slice` (the box and the active voxels of the plane `slice_axis =
+slice_index`, drawn as small crosses coloured by value: blue inside, white on the surface,
+orange outside, saturating at the band). The full-resolution mesh of a mesher node is the
+node's ordinary geometry; the preview is what the viewport shows while editing.
+
+The preview builds the volume with `BuildOptions { max_cells }` (default 48, `DEFAULT_PREVIEW_CELLS`):
+the voxel size is raised so the mesh and spline entries span at most `max_cells` cells along their
+longest axis (never lowered), everything else (ranges, entries, filters, fields, mesher
+settings) is the scene's, and the scene is not changed. `build_preview` returns the mesh in the
+mesher's space, the box of the active voxels (mesher space) and the voxel size used.
+
+### 11.2 Off the main thread
+
+`PreviewWorker` runs the computation on a worker thread. `request(scene, mesher)` stores a scene
+copy and returns at once; requests made while a computation runs coalesce into the newest one
+(one running plus at most one queued); `snapshot()` never waits and returns the newest finished
+preview, which **stays up while a newer one computes**, the last error (a failed or panicking
+computation keeps the last good preview) and whether work is pending. The compute function is a
+parameter, so a test can slow it down (tests/preview.rs: five requests during a held computation
+return in under 50 ms and the old preview stays visible; at most two further computations run).
+
+### 11.3 Draw lists
+
+`forge_viewport::volume` (pure, no GPU): `box_lines` (12 edges), `value_color`, `slice_markers`
+(a cross of half length `0.2 voxel` per sample) and `display_lines` combining them for a
+`VolumeDisplay`. Not done: the editor panel does not call `PreviewWorker` yet and draws no volume
+lines (the UI crates are outside this brief's files); until then a mesher node is drawn through the
+ordinary synchronous evaluation.
 

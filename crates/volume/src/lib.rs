@@ -7,6 +7,7 @@ pub mod filters;
 pub mod grid;
 pub mod mesher;
 pub mod node;
+pub mod preview;
 pub mod sdf;
 pub mod vdb;
 
@@ -19,6 +20,11 @@ pub use mesher::{
 pub use node::{
     BUILDER, FILTER, MESHER, Volume, VolumeBuildError, VolumeKind, VolumePlugin, build_volume,
     mesh_volume_node, sdf_to_fog,
+};
+pub use node::{BuildOptions, build_volume_with, mesh_volume_node_with};
+pub use preview::{
+    DEFAULT_PREVIEW_CELLS, Preview, PreviewFn, PreviewSnapshot, PreviewWorker, SliceSample,
+    build_preview, slice_range, slice_samples, volume_bounds,
 };
 pub use sdf::{PointUnion, SdfParams, mesh_to_sdf, points_to_sdf, spline_to_sdf};
 pub use vdb::{

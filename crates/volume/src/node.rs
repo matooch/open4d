@@ -80,6 +80,19 @@ fn builder_type() -> NodeType {
             "Override Grid Matrix",
             false,
         ))
+        .param(ParamDesc::enumeration(
+            "display",
+            "Display",
+            "preview",
+            &[("box", "Box"), ("preview", "Preview"), ("slice", "Slice")],
+        ))
+        .param(ParamDesc::enumeration(
+            "slice_axis",
+            "Slice Axis",
+            "y",
+            &[("x", "X"), ("y", "Y"), ("z", "Z")],
+        ))
+        .param(ParamDesc::int("slice_index", "Slice Index", 0).range(-1_000_000, 1_000_000))
         .param(ParamDesc::link_rows(
             "objects",
             "Objects",
@@ -288,6 +301,7 @@ fn gather(
     to_builder: &DMat4,
     out: &mut Vec<(NodeId, Source)>,
     depth: u32,
+    opts: &BuildOptions,
 ) -> Result<(), VolumeBuildError> {
     let Some(n) = scene.node(node) else {
         return Ok(());
@@ -318,7 +332,7 @@ fn gather(
         if depth > 8 {
             return Err(VolumeBuildError::Failed("builders nested too deep".into()));
         }
-        let vol = build_volume_inner(scene, node, ctx, depth + 1)?;
+        let vol = build_volume_inner(scene, node, ctx, depth + 1, opts)?;
         out.push((node, Source::Volume(Box::new(vol))));
         return Ok(());
     }
@@ -339,7 +353,7 @@ fn gather(
         Ok(None) => {
             // no geometry of its own (a Null): its children are entries too
             for c in n.children.clone() {
-                gather(scene, c, ctx, to_builder, out, depth)?;
+                gather(scene, c, ctx, to_builder, out, depth, opts)?;
             }
             Ok(())
         }
@@ -468,11 +482,20 @@ pub const FOG_OFFSET: f64 = 0.7;
 /// Voxels over which fog density rises from 0 to 1.
 pub const FOG_RAMP: f64 = 4.0;
 
+/// Overrides for a build that do not change the scene (the viewport preview).
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct BuildOptions {
+    /// Coarsen the voxel size so the mesh and spline entries span at most this many cells along
+    /// their longest axis (VOLUME.md section 11.1).
+    pub max_cells: Option<u32>,
+}
+
 fn build_volume_inner(
     scene: &Scene,
     builder: NodeId,
     ctx: &EvalCtx,
     depth: u32,
+    opts: &BuildOptions,
 ) -> Result<Volume, VolumeBuildError> {
     let node = scene
         .node(builder)
@@ -482,7 +505,7 @@ fn build_volume_inner(
         ty: builder_type(),
         values: &node.params,
     };
-    let s = settings(&p)?;
+    let mut s = settings(&p)?;
     let world = scene
         .world_matrix(builder)
         .ok_or_else(|| VolumeBuildError::Failed("the builder has no transform".into()))?;
@@ -490,7 +513,13 @@ fn build_volume_inner(
     let overrides = rows(&node.params);
     let mut entries = Vec::new();
     for c in node.children.clone() {
-        gather(scene, c, ctx, &to_builder, &mut entries, depth)?;
+        gather(scene, c, ctx, &to_builder, &mut entries, depth, opts)?;
+    }
+    if let Some(cells) = opts.max_cells {
+        let extent = entries_extent(&entries);
+        if extent / s.sdf.voxel_size > f64::from(cells.max(1)) {
+            s.sdf.voxel_size = extent / f64::from(cells.max(1));
+        }
     }
     let band = Band {
         exterior: s.sdf.exterior_band(),
@@ -571,7 +600,38 @@ pub fn build_volume(
     builder: NodeId,
     ctx: &EvalCtx,
 ) -> Result<Volume, VolumeBuildError> {
-    build_volume_inner(scene, builder, ctx, 0)
+    build_volume_inner(scene, builder, ctx, 0, &BuildOptions::default())
+}
+
+/// [`build_volume`] with overrides.
+pub fn build_volume_with(
+    scene: &Scene,
+    builder: NodeId,
+    ctx: &EvalCtx,
+    opts: &BuildOptions,
+) -> Result<Volume, VolumeBuildError> {
+    build_volume_inner(scene, builder, ctx, 0, opts)
+}
+
+/// Longest side of the box of the mesh and spline entries (0 when there are none).
+fn entries_extent(entries: &[(NodeId, Source)]) -> f64 {
+    let (mut lo, mut hi) = (DVec3::splat(f64::MAX), DVec3::splat(f64::MIN));
+    for (_, s) in entries {
+        let points: &[DVec3] = match s {
+            Source::Mesh(m) => &m.points,
+            Source::Spline { points, .. } => points,
+            _ => continue,
+        };
+        for p in points {
+            lo = lo.min(*p);
+            hi = hi.max(*p);
+        }
+    }
+    if lo.x > hi.x {
+        0.0
+    } else {
+        (hi - lo).max_element()
+    }
 }
 
 #[derive(Debug)]
@@ -602,6 +662,16 @@ pub fn mesh_volume_node(
     mesher: NodeId,
     ctx: &EvalCtx,
 ) -> Result<Option<PolyMesh>, VolumeBuildError> {
+    Ok(mesh_volume_node_with(scene, mesher, ctx, &BuildOptions::default())?.map(|(m, _)| m))
+}
+
+/// [`mesh_volume_node`] with build overrides, also returning the volume it meshed.
+pub fn mesh_volume_node_with(
+    scene: &Scene,
+    mesher: NodeId,
+    ctx: &EvalCtx,
+    opts: &BuildOptions,
+) -> Result<Option<(PolyMesh, Volume)>, VolumeBuildError> {
     let Some(node) = scene.node(mesher) else {
         return Ok(None);
     };
@@ -620,15 +690,15 @@ pub fn mesh_volume_node(
     if p.bool("create_curvature_map") {
         return Err(VolumeBuildError::Unsupported("Create Curvature Map"));
     }
-    let volume = build_volume(scene, builder, ctx)?;
-    let opts = crate::mesher::MeshOptions {
+    let volume = build_volume_with(scene, builder, ctx, opts)?;
+    let mesh_opts = crate::mesher::MeshOptions {
         iso: p.float("surface_threshold"),
         absolute: p.bool("use_absolute_value_iso"),
         adaptive: p.float("adaptive"),
     };
-    let mut mesh = crate::mesher::mesh_volume(&volume, &opts);
+    let mut mesh = crate::mesher::mesh_volume(&volume, &mesh_opts);
     for pt in &mut mesh.points {
         *pt = volume.to_parent.transform_point3(*pt);
     }
-    Ok(Some(mesh))
+    Ok(Some((mesh, volume)))
 }
