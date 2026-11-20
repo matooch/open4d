@@ -1,0 +1,10 @@
+feature = "animation-3"
+observation = "docs/parity/animation-3.md"
+description = "Material Colour keyed (1, 0, 0) at frame 0 and (0, 0, 1) at frame 30 on a cube"
+
+[params]
+param = ["color_r", "color_g", "color_b"]
+keys = [[0, [1.0, 0.0, 0.0]], [30, [0.0, 0.0, 1.0]]]
+object = "Material"
+document_fps = 30
+sample_frames = ["0..60 every frame"]

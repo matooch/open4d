@@ -1,0 +1,10 @@
+feature = "animation-3"
+observation = "docs/parity/animation-3.md"
+description = "Cube; Segments X keyed 1 at frame 0 and 10 at frame 30 on the parameter itself"
+
+[params]
+param = "segments_x"
+keys = [[0, 1], [30, 10]]
+object = "Cube"
+document_fps = 30
+sample_frames = ["0..60 every frame"]
