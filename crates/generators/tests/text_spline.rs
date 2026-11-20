@@ -33,10 +33,14 @@ fn defaults_build_the_word_text() {
 
 #[test]
 fn unsupported_and_failing_inputs_are_errors_not_panics() {
-    assert!(matches!(
-        curve(&[("separate_letters", Value::Bool(true))]),
-        Err(BuildError::Unsupported(_))
-    ));
+    // Separate Letters does not change the outline (`text/separate-letters`)
+    assert_eq!(
+        curve(&[("separate_letters", Value::Bool(true))])
+            .unwrap()
+            .extra
+            .len(),
+        curve(&[]).unwrap().extra.len()
+    );
     assert!(matches!(
         curve(&[("text", text(" "))]),
         Err(BuildError::Failed(_))

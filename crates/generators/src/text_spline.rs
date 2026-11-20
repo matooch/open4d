@@ -67,9 +67,6 @@ fn curve_of(c: &Contour, reverse: bool, sampling: Sampling) -> Curve {
 pub(crate) fn build_curve(values: &BTreeMap<String, Value>) -> Result<Curve, BuildError> {
     let ty = node_type();
     let p = Params { ty: &ty, values };
-    if p.bool("separate_letters") {
-        return Err(BuildError::Unsupported("separate letters"));
-    }
     let height = p.float("height");
     if height == 0.0 {
         return Err(BuildError::Failed("the text height is 0".into()));

@@ -23,6 +23,10 @@ do not depend on the font, each checked against the golden meshes
 | Middle: the **ink bounding box** of the line is centred on x = 0 | `align-center` | bbox x `-127.93 .. 127.93`; the shift equals half the sum of the line's ink min and max |
 | Horizontal Spacing is added once per gap between glyphs | `spacing`, `align-center` | the second glyph moves by the spacing (19.92 for 20, i.e. 204 whole font units, within one font unit) |
 | A newline starts a line one line height lower, at x = 0 | `two-lines` | line 1 is `a` unchanged; line 2 is 245.996 lower at height 200 (1.23 em) |
+| Right: the ink max x of the line is 0 | `align-right` | bbox max x 0, ink as wide as `align-center`'s |
+| Vertical Spacing is added to the line step | `vspacing` | line 2 sits 50 lower than in `two-lines` |
+| Negative height is the point reflection through the origin | `height-negative` | `a` mirrored in x and y |
+| Separate Letters leaves the outline unchanged | `separate-letters` | same loops and counts as plain `AB` |
 | Loops per glyph | `a`, `o`, `word`, `defaults`, `align-center`, `spacing`, `two-lines` | `A` 2, `O` 2, `T` 1, `e` 2, `x` 1, `t` 1, `F` 1, `o` 2, `r` 1, `g` 2, `B` 3 |
 | Outer contours run clockwise, holes counter-clockwise (font order) | `a`, `o` | first loop negative signed area, second positive |
 | Extrude grows toward -Z | all | every vertex has z 0 or -offset |
@@ -44,7 +48,7 @@ default of §3 can be compared vertex for vertex.
 | `height` | float, distance | 200 | em size; range ±1e20 |
 | `horizontal_spacing` | float, distance | 0 | added after every glyph but the last of a line |
 | `vertical_spacing` | float, distance | 0 | added to the line step |
-| `separate_letters` | bool | off | **Unsupported** (§5) |
+| `separate_letters` | bool | off | no effect on the outline (`separate-letters`, §5) |
 | `plane` | enum `xy`, `zy`, `xz` | `xy` | as every spline (§6.1 of GENERATORS2.md) |
 | `reverse` | bool | off | reverses the direction of every contour |
 | `intermediate`, `intermediate_number`, `intermediate_angle`, `intermediate_max_length` | as every spline | Adaptive, 8, 5 deg, 5 | Intermediate Points (GENERATORS2.md §6.2), the shared `spline_sampling::add_params` |
@@ -60,16 +64,17 @@ Let `u = height / units_per_em`. Per line, the pen starts at x = 0:
 1. each character is mapped through the font's `cmap` (missing characters use glyph 0,
    `.notdef`); its outline is placed at `pen` and scaled by `u`; then
    `pen += advance * u + horizontal_spacing` (`spacing`). No kerning (`align-center`: the
-   pair `AB` has none in the reference font; kerning is parity-pending).
+   pair `AB` has none in the reference font). The default-kerning case `kerning` (`AV`) is **parity-pending**: the reference font's
+   advances are not ours, so whether it kerned cannot be separated from the font; only its loop count (A 2, V 1) is checked.
 2. Line `i` (0-based) has its baseline at `y = -i * (line_height * u + vertical_spacing)`
    with `line_height = ascender - descender + line_gap` from the font's `hhea` table
    (`two-lines`: the reference step is 2519 units of 2048 = 1.2300 em; that constant is the
    reference font's and is not reproduced, ours is the bundled font's 2384 units = 1.1641 em;
-   adding `vertical_spacing` is **parity-pending**, the case leaves it at 0).
+   `vertical_spacing` is added to that step: `vspacing` (50) puts line 2 at y -295.996 = -(245.996 + 50) at the glyph bottom).
 3. Alignment shifts a whole line in x by `-ref`, where `ref` is the **ink** bounding box of
    that line's outlines: `ref = (min + max) / 2` for Middle (`align-center`:
    shift `-1340` units = `-(30 + 2650) / 2`, so the bbox is exactly symmetric), `ref = max`
-   for Right (**parity-pending**: only Left and Middle were observed), `0` for Left. A line
+   for Right (`align-right`: AB has ink max x exactly 0), `0` for Left. A line
    without outline (spaces only) is not shifted. Alignment is per line (**parity-pending**:
    the observed two-line text is Left).
 
@@ -82,7 +87,7 @@ in the font's own order: the reference lists a letter's outline before its count
 (`a`, `o`, `word`), while the bundled font stores the counter first. Outer contours keep
 the font's winding, clockwise for TrueType, which is what makes the Auto Extrude direction
 come out -Z (`defaults`, all cases). A negative `height` mirrors the outline through
-the origin (**parity-pending**). A zero `height` or a text without any outline is
+the origin (`height-negative`: `A` at -200 has bbox x -130.96 .. -2.93, y -143.46 .. 0, exactly the point reflection of `a`). A zero `height` or a text without any outline is
 `BuildError::Failed`.
 
 ## 3. Fonts
@@ -120,8 +125,9 @@ the reference (`defaults`). An all-straight contour (the letter `A`) gets only i
 
 ## 5. Unsupported
 
-- `separate_letters` on: the reference makes one spline object per letter; one node here
-  makes one spline. `BuildError::Unsupported("separate letters")`. Not observed.
+- `separate_letters` on: the case `separate-letters` (AB, extruded) gives the same contours and the same mesh counts as plain
+  `AB` (5 loops, 150 faces; bbox x 2.93 .. 258.79 is plain AB's) and its object tree holds no per-letter objects, so the flag is
+  accepted and changes nothing here. Whether Make Editable splits the letters is not observed (**parity-pending**).
 - Variable-font axes, colour glyphs, bidirectional or complex shaping: characters map one
   to one through `cmap`.
 
