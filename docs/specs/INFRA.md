@@ -49,7 +49,8 @@ directives add a second, narrower check:
 | `api-call <Prefix>` | Case-sensitive. Forbidden: a token `<Prefix>` + an uppercase letter + identifier characters, directly followed by `(` (a `Get`/`Set` accessor call). |
 | `api-tick <name>` | Case-sensitive. Forbidden only as a whole backtick-quoted token. For symbols that collide with ordinary words outside code spans. |
 | `api-tick-prefix <P>` | Case-sensitive. Forbidden: a backtick-quoted token that is `<P>` followed by a lowercase letter and then only letters/digits. |
-| `api-id <word>` | Case-insensitive `<word>` at a word start, one space, then 4 or more digits not followed by a digit, a letter, or `.` plus a digit (a sentence-final `.` still hits): `id 1234`, `(ID 1234)`, `parameter 1234`. |
+| `api-id <word>` | Case-insensitive `<word>` at a word start, one space, then 4 or more digits not followed by a digit, a letter, or `.` plus a digit (a sentence-final `.` still hits): `id 1234`, `(ID 1234)`, `parameter 1234`, `command 1234`. |
+| `api-key-suffix <N>` | `.toml` files in scope only. A line `key = ...` whose key (bare or quoted) is `<stem>_<digits>` with at least `<N>` digits is forbidden: case files name a parameter by its label, never `label_<field number>`. Reported as the key. Values, comments and `[table]` headers are not checked; a short suffix such as `color_2` is fine. When two fields share a label, suffix the second with a word naming its group (`bevel_shape_second`). |
 | `api-bignum <digits>` | Forbidden: a 9-digit number starting with `<digits>` that is not part of a longer number or a decimal fraction (not preceded by a digit or `.`, not followed by a digit or `.` plus a digit). |
 
 Hits print as `<path>:<line>:<col>: forbidden api "<matched text>"`. The fix is always to

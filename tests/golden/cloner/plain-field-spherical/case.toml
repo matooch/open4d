@@ -47,7 +47,7 @@ scale = false
 color_mode = "Fields Color"
 use_alpha_strength = false
 blending_mode = "Default"
-use_alpha_strength_1071 = false
+use_alpha_strength_weight = false
 weight_transform_percent = 0.0
 u_transform_percent = 0.0
 v_transform_percent = 0.0
@@ -77,7 +77,7 @@ length = "Use Value"
 scale_percent = 100.0
 invert_direction = true
 strength = "No Remap"
-scale_percent_1005032 = 100.0
+scale_percent_remap = 100.0
 invert_rotations = false
 
 [import]

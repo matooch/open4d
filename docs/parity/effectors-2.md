@@ -26,7 +26,7 @@ with limits ±1e20 % (kept ±999999999 as a fraction). The Parameter-tab block s
 Formula and Time: Transform Mode (`transform_mode`, Relative; Relative, Absolute, Remap), Transform Space
 (`transform_space`, Node; Node, Effector, Object), Position/Rotation/Scale on-off, P / R / S vectors, Color
 Mode (`color_mode`; options Off, Effector Color, Custom Color, Fields Color), Use Alpha/Strength (twice, the
-second `use_alpha_strength_1071`), Blending Mode (Plain only), Weight Transform, U Transform, V Transform and
+second `use_alpha_strength_weight`), Blending Mode (Plain only), Weight Transform, U Transform, V Transform and
 Modify Clone (0 %, ±1e20 %), Visibility (off). P and S are in cm / as a fraction shown in the vector fields; R is in
 degrees. The vectors P, R, S are hidden until their on-off box is on (the app hides them; they can still be set).
 The Custom Color swatch (hidden until Color Mode is Custom Color) defaults to white (1, 1, 1).
@@ -43,7 +43,7 @@ The Custom Color swatch (hidden until Color Mode is Custom Color) defaults to wh
 | Uniform Scale | `uniform_scale` | off | – | – |
 | Absolute Scale | `absolute_scale` | off | – | – |
 | S | `s` | (0, 0, 0) | −1e20 each | 1e20 each |
-| Scale (value under Uniform Scale, hidden) | `scale_1018` | 0 | −1e20 (kept ±999999999) | 1e20 |
+| Scale (value under Uniform Scale, hidden) | `scale_value` | 0 | −1e20 (kept ±999999999) | 1e20 |
 | Color Mode | `color_mode` | Fields Color | – | Off, Effector Color, Custom Color, Fields Color |
 | Blending Mode | `blending_mode` | Default | – | Default, Add, Subtract, Multiply, Divide |
 
@@ -57,9 +57,9 @@ The Custom Color swatch (hidden until Color Mode is Custom Color) defaults to wh
 | Scale | `scale` | **on** | – | – |
 | Uniform Scale | `uniform_scale` | on | – | – |
 | Absolute Scale | `absolute_scale` | off | – | – |
-| Scale (value) | `scale_1018` | 1 | −1e20 (kept ±999999999) | 1e20 |
+| Scale (value) | `scale_value` | 1 | −1e20 (kept ±999999999) | 1e20 |
 | Color Mode | `color_mode` | Off | – | as above |
-| Use Alpha/Strength (Weight tab block) | `use_alpha_strength_1071` | **on** | – | – |
+| Use Alpha/Strength (Weight tab block) | `use_alpha_strength_weight` | **on** | – | – |
 
 P (0, 0, 0), R (0, 0, 0), S (0, 0, 0) when switched on.
 
@@ -74,7 +74,7 @@ P (0, 0, 0), R (0, 0, 0), S (0, 0, 0) when switched on.
 | Rotation | `rotation` | off | – | – |
 | Scale | `scale` | on | – | – |
 | Uniform Scale | `uniform_scale` | on | – | – |
-| Scale (value) | `scale_1018` | 1 | −1e20 | 1e20 |
+| Scale (value) | `scale_value` | 1 | −1e20 | 1e20 |
 | Color Mode | `color_mode` | Off | – | as above |
 
 Six read-only text rows list the formula variables (`px,py,pz`, `rx,ry,rz`, `sx,sy,sz`, `u,v,w`, `id`, `count`, `falloff`); not recorded.

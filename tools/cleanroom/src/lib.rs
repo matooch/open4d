@@ -34,6 +34,8 @@ pub struct Config {
     pub api_ids: Vec<String>,
     /// `api-bignum`: digit prefixes of forbidden 9-digit numbers.
     pub api_bignums: Vec<String>,
+    /// `api-key-suffix`: minimum digit count of a trailing `_<digits>` on a `.toml` key.
+    pub api_key_suffix: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,6 +90,14 @@ impl Config {
                     }
                     cfg.api_bignums.push(arg.to_string());
                 }
+                "api-key-suffix" => match arg.parse::<usize>() {
+                    Ok(n) if n >= 1 => cfg.api_key_suffix = Some(n),
+                    _ => {
+                        return Err(err(
+                            "`api-key-suffix` needs a digit count of 1 or more".into()
+                        ));
+                    }
+                },
                 other => return Err(err(format!("unknown directive `{other}`"))),
             }
         }
@@ -288,6 +298,30 @@ pub fn api_matches(line: &str, cfg: &Config) -> Vec<(usize, String)> {
     out
 }
 
+/// `api-key-suffix` hit on a `.toml` line: a key (bare or quoted, before `=`) that ends in
+/// `_<digits>` with at least the configured number of digits. Returns
+/// `(1-based column, key)`. Table headers and values are not looked at.
+pub fn api_key_matches(line: &str, cfg: &Config) -> Option<(usize, String)> {
+    let min = cfg.api_key_suffix?;
+    let trimmed = line.trim_start();
+    let indent = line.chars().count() - trimmed.chars().count();
+    let (key_part, _) = trimmed.split_once('=')?;
+    let key = key_part.trim_end();
+    let bare = key
+        .strip_prefix('"')
+        .and_then(|k| k.strip_suffix('"'))
+        .unwrap_or(key);
+    if bare.is_empty() || !bare.chars().all(|c| is_ident(c) || c == '-' || c == '.') {
+        return None;
+    }
+    let (stem, digits) = bare.rsplit_once('_')?;
+    if !stem.is_empty() && digits.len() >= min && digits.chars().all(|c| c.is_ascii_digit()) {
+        let quote = usize::from(key.starts_with('"'));
+        return Some((indent + 1 + quote, bare.to_string()));
+    }
+    None
+}
+
 fn at_word_boundary(chars: &[char], s: usize, e: usize) -> bool {
     let start_ok = s == 0 || {
         let prev = chars[s - 1];
@@ -368,6 +402,11 @@ fn check_file(
         if api {
             for (col, entry) in api_matches(line, cfg) {
                 out.push(violation(i + 1, col, Kind::Api, &entry));
+            }
+            if rel.ends_with(".toml")
+                && let Some((col, key)) = api_key_matches(line, cfg)
+            {
+                out.push(violation(i + 1, col, Kind::Api, &key));
             }
         }
     }

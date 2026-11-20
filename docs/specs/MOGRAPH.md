@@ -417,7 +417,7 @@ degrees and percent as typed.
 | `uniform_scale` | Uniform Scale | bool | off | |
 | `absolute_scale` | Absolute Scale | bool | off | |
 | `s` | S | vec3 | (0, 0, 0) | used when Uniform Scale is off |
-| `scale_value` | Scale | float | 0 | the value under Uniform Scale (`scale_1018` in the case files) |
+| `scale_value` | Scale | float | 0 | the value under Uniform Scale |
 | `color_mode` | Color Mode | enum | `fields_color` | `off`, `effector_color`, `custom_color`, `fields_color` |
 | `color` | Color | colour | white | the Custom Color swatch |
 | `use_alpha_strength` | Use Alpha/Strength | bool | off | colour block (the app switches it on with Custom Color) |
@@ -426,7 +426,7 @@ degrees and percent as typed.
 | `modify_clone` | Modify Clone | float, percent | 0 | stored only (nothing observed) |
 | `visibility` | Visibility | bool | off | |
 
-`use_alpha_strength_1071` (the Weight tab's own Use Alpha/Strength) is not stored: no case sets it.
+`use_alpha_strength_weight` (the Weight tab's own Use Alpha/Strength) is not stored: no case sets it.
 
 ## E3. Transform modes and strength
 
@@ -568,7 +568,7 @@ Only the differences from the Plain table (E2) and the new parameters:
 | `animation_speed` | Animation Speed | float, percent | 100 % | noise modes only (E13) |
 | `noise_scale` | Scale | float, percent | 100 % | noise modes only (E13); the case files call it `scale_percent` |
 
-`use_alpha_strength_1071` is not stored (as E2).
+`use_alpha_strength_weight` is not stored (as E2).
 
 ### E12. The random value
 

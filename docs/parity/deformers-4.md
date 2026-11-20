@@ -128,8 +128,8 @@ Buttons: Initialize, Restore. Has a Field list.
 | Objects (solver list) | not written by read_obj (object list) | empty | – | – |
 | Objects (second) | `…` | empty | – | – |
 | Stretch/Relax group | size 1.0, steps 1, stretch 8, relax 4, stiffness 75 %, struct 100 %, flex 100 % | | | keys `size`, `steps`, `stretch`, `relax`, `stiffness_percent`, `struct_percent`, `flex_percent` |
-| Collision group | falloff `falloff_1004`, invert `invert` | invert off | 0 | 1 |
-| Falloff group | falloff `falloff_1018`, invert `invert_1006` | invert off | 0 | 1 |
+| Collision group | falloff `collision_falloff`, invert `invert` | invert off | 0 | 1 |
+| Falloff group | falloff `falloff_group_falloff`, invert `falloff_group_invert` | invert off | 0 | 1 |
 | Cache section | Enable off (`enable`), Compress off (`compress`), Auto Time on (`auto_time`), Cache 20 (`cache`, min 1 max 1000), Scale 100 % (`scale_percent`) | | | Start/Stop/Offset are time values, not sampled |
 
 Buttons: Calculate, Update, Empty Cache, Load…, Save…. Has a Field list.

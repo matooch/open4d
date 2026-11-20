@@ -73,4 +73,7 @@ api-tick-prefix FL
 api-id id
 api-id ids
 api-id parameter
+api-id command
 api-bignum 44000
+# case.toml keys must be labels, not label_<field number> (4 or more digits).
+api-key-suffix 4

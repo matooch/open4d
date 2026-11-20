@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::Path;
 
-use forge_cleanroom::{Config, Kind, api_matches, line_matches, scan};
+use forge_cleanroom::{Config, Kind, api_key_matches, api_matches, line_matches, scan};
 
 const CFG: &str = "\
 # synthetic config
@@ -164,7 +164,9 @@ api-tick Oxyz
 api-tick-prefix FL
 api-id id
 api-id parameter
+api-id command
 api-bignum 44000
+api-key-suffix 4
 ";
 
 fn api_cfg() -> Config {
@@ -186,7 +188,11 @@ fn api_directives_parse_and_validate() {
     assert_eq!(c.api_calls, vec!["Get", "Set"]);
     assert_eq!(c.api_ticks, vec!["Oxyz"]);
     assert_eq!(c.api_tick_prefixes, vec!["FL"]);
-    assert_eq!(c.api_ids, vec!["id", "parameter"]);
+    assert_eq!(c.api_ids, vec!["id", "parameter", "command"]);
+    assert_eq!(c.api_key_suffix, Some(4));
+    assert!(Config::parse("api-key-suffix").is_err());
+    assert!(Config::parse("api-key-suffix x").is_err());
+    assert!(Config::parse("api-key-suffix 0").is_err());
     assert_eq!(c.api_bignums, vec!["44000"]);
     assert!(Config::parse("api-scope").is_err());
     assert!(Config::parse("api-bignum abc").is_err());
@@ -241,6 +247,61 @@ fn api_id_needs_keyword_and_four_digits() {
     assert!(api("id: 1234 and id1234 and valid 1234").is_empty());
     assert!(api("id 1234.5 and id 1234x").is_empty());
     assert!(api("(id / count) with 1000 points").is_empty());
+}
+
+#[test]
+fn api_id_command_keyword() {
+    assert_eq!(api("menu command 5170, radius 20"), vec!["command 5170"]);
+    assert_eq!(api("Command 12345."), vec!["Command 12345"]);
+    assert!(api("the Cylinder menu command, radius 20").is_empty());
+    assert!(api("command 12 and command 1234x and commands 1234").is_empty());
+}
+
+fn key(line: &str) -> Option<(usize, String)> {
+    api_key_matches(line, &api_cfg())
+}
+
+#[test]
+fn api_key_suffix_flags_label_underscore_digits_keys() {
+    assert_eq!(key("falloff_1004 = \"\""), Some((1, "falloff_1004".into())));
+    assert_eq!(
+        key("  scale_percent_1005032 = 100.0"),
+        Some((3, "scale_percent_1005032".into()))
+    );
+    assert_eq!(key("\"mesh_1234\" = \"x\""), Some((2, "mesh_1234".into())));
+    assert_eq!(key("a.b_4000=1"), Some((1, "a.b_4000".into())));
+}
+
+#[test]
+fn api_key_suffix_ignores_short_suffixes_values_and_other_lines() {
+    assert_eq!(key("color_2 = [1.0, 1.0, 1.0]"), None);
+    assert_eq!(key("enable_move_999 = true"), None);
+    assert_eq!(key("p536871355 = \"\""), None);
+    assert_eq!(key("name = \"falloff_1004\""), None);
+    assert_eq!(key("note = \"a_1234 = b\""), None);
+    assert_eq!(key("[params.effector_1234]"), None);
+    assert_eq!(key("# falloff_1004 = 1"), None);
+    assert_eq!(key("_1234 = 1"), None);
+    assert_eq!(key("size_1234x = 1"), None);
+    assert_eq!(
+        api_key_matches("falloff_1004 = 1", &Config::default()),
+        None
+    );
+}
+
+#[test]
+fn api_key_suffix_applies_to_toml_in_scope_only() {
+    let body = b"ok = 1\nfalloff_1004 = \"\"\n";
+    let got = api_scan(&[
+        ("tests/golden/x/case.toml", body),
+        ("tests/golden/x/samples.json", body),
+        ("docs/parity/a.md", body),
+        ("src/case.toml", body),
+    ]);
+    assert_eq!(
+        got,
+        vec!["tests/golden/x/case.toml:2:1: forbidden api \"falloff_1004\""]
+    );
 }
 
 #[test]

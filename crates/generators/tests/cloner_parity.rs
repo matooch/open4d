@@ -322,9 +322,9 @@ const OLD_PERCENT: &[&str] = &[
 const FIELD_SKIP: &[&str] = &[
     "type",
     "color_mode",
-    "length_1005025",
+    "length_mode",
     "scale_percent",
-    "scale_percent_1005032",
+    "scale_percent_remap",
     "invert_direction",
     "invert_rotations",
 ];
@@ -346,7 +346,6 @@ fn node_param(
     if key == "name" {
         return None;
     }
-    let renames = [renames, &[("scale_1018", "scale_value")][..]].concat();
     let renamed = renames
         .iter()
         .find(|(from, _)| *from == key)
@@ -461,7 +460,7 @@ fn build_with_effectors(
                 reg,
                 ty,
                 e,
-                &["type", "use_alpha_strength_1071", "target_object"],
+                &["type", "use_alpha_strength_weight", "target_object"],
                 &[],
             );
             // The case files record the Target Object by name only; the observation
@@ -724,14 +723,14 @@ fn linear_plain_field_matches_with_the_default_linear_field() {
 
 /// A Random effector table in one spelling: the older case files write the percent keys
 /// without the suffix, and call the noise Scale `scale` / `scale_percent` and the Scale
-/// checkbox `scale_1061` / `scale`.
+/// checkbox `scale_checkbox` / `scale`.
 fn normalise_random(e: &Table) -> Table {
     let mut out = Table::new();
     for (k, v) in e {
         let key = match (k.as_str(), v) {
             ("animation_speed", _) => "animation_speed_percent",
             ("scale", toml::Value::Float(_)) | ("scale_percent", _) => "noise_scale_percent",
-            ("scale_1061", _) => "scale",
+            ("scale_checkbox", _) => "scale",
             (other, _) => other,
         };
         out.insert(key.to_string(), v.clone());
