@@ -1,4 +1,8 @@
 # Clean-room gate config. Format: docs/specs/INFRA.md §2.
+# Besides term/word/ext/exclude there are scoped `api-*` directives (INFRA.md §2, "Scoped
+# API/ID rules"): files under an `api-scope` path (md/toml/json only) are checked for the
+# app's scripting-API names and numeric IDs even though docs/ and tests/golden/ are
+# excluded from the term checks. Write the label the app shows, never the number or symbol.
 # Policy: docs/CLEANROOM.md. Add entries freely; removing one needs a reason in the commit.
 
 # Vendor and product names (case-insensitive substrings).
@@ -38,3 +42,35 @@ exclude CLAUDE.md
 exclude docs/
 exclude tests/golden/
 exclude tools/cleanroom/forbidden.txt
+
+# Scripting-API names and numeric IDs must not appear in parity forms or golden case files
+# (docs/agents/OBSERVER.md section 0). Probe scripts stay outside the repo.
+api-scope docs/parity/
+api-scope tests/golden/
+api-prefix c4d.
+api-prefix CallCommand
+api-prefix ExecutePasses
+api-prefix SaveDocument
+api-prefix GetDeformCache
+api-prefix GetCache
+api-prefix InsertUnder
+api-prefix DescID
+api-prefix DescLevel
+api-prefix BaseContainer
+api-prefix FORMAT_
+api-prefix BASEDRAW_
+api-prefix DESC_
+api-prefix MCOMMAND_
+api-call Get
+api-call Set
+api-tick Omatrix
+api-tick Ovolume
+api-tick Ovolumesaver
+api-tick Tvolumebuilder
+api-tick Flinear
+api-tick Frandom
+api-tick-prefix FL
+api-id id
+api-id ids
+api-id parameter
+api-bignum 44000

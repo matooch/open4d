@@ -9,13 +9,31 @@ use std::path::Path;
 /// Directory names never descended into.
 const SKIP_DIRS: [&str; 3] = ["target", ".git", ".claude"];
 
-/// Parsed `forbidden.txt`. All entries are stored ASCII-lowercased.
+/// File extensions the scoped `api-*` rules apply to (never `.obj` or images).
+const API_EXTENSIONS: [&str; 3] = ["md", "toml", "json"];
+
+/// Parsed `forbidden.txt`. `term`/`word`/`ext` entries are stored ASCII-lowercased; the
+/// `api-*` entries keep their case (except `api_ids`, which match case-insensitively).
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Config {
     pub terms: Vec<String>,
     pub words: Vec<String>,
     pub extensions: Vec<String>,
     pub excludes: Vec<String>,
+    /// `api-scope`: path prefixes whose md/toml/json files get the `api-*` rules.
+    pub api_scopes: Vec<String>,
+    /// `api-prefix`: case-sensitive token-start prefixes.
+    pub api_prefixes: Vec<String>,
+    /// `api-call`: accessor-call prefixes (`Get` + `Upper...` + `(`).
+    pub api_calls: Vec<String>,
+    /// `api-tick`: exact names forbidden as a whole backtick-quoted token.
+    pub api_ticks: Vec<String>,
+    /// `api-tick-prefix`: backtick-quoted tokens `<P>` + lowercase letter + alphanumerics.
+    pub api_tick_prefixes: Vec<String>,
+    /// `api-id`: keywords (stored lowercased) followed by a space and 4+ digits.
+    pub api_ids: Vec<String>,
+    /// `api-bignum`: digit prefixes of forbidden 9-digit numbers.
+    pub api_bignums: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,6 +76,18 @@ impl Config {
                     .push(value.trim_start_matches('.').to_string()),
                 // Paths keep their case; they are matched against real file names.
                 "exclude" => cfg.excludes.push(arg.to_string()),
+                "api-scope" => cfg.api_scopes.push(arg.to_string()),
+                "api-prefix" => cfg.api_prefixes.push(arg.to_string()),
+                "api-call" => cfg.api_calls.push(arg.to_string()),
+                "api-tick" => cfg.api_ticks.push(arg.to_string()),
+                "api-tick-prefix" => cfg.api_tick_prefixes.push(arg.to_string()),
+                "api-id" => cfg.api_ids.push(value),
+                "api-bignum" => {
+                    if !arg.chars().all(|c| c.is_ascii_digit()) || arg.len() >= 9 {
+                        return Err(err("`api-bignum` needs fewer than 9 digits".into()));
+                    }
+                    cfg.api_bignums.push(arg.to_string());
+                }
                 other => return Err(err(format!("unknown directive `{other}`"))),
             }
         }
@@ -72,6 +102,13 @@ impl Config {
     fn is_excluded(&self, rel: &str) -> bool {
         self.excludes.iter().any(|p| rel.starts_with(p.as_str()))
     }
+
+    /// True when `rel` is an md/toml/json file under an `api-scope` prefix.
+    fn is_api_checked(&self, rel: &str) -> bool {
+        let ext = rel.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+        ext.is_some_and(|e| API_EXTENSIONS.contains(&e.as_str()))
+            && self.api_scopes.iter().any(|p| rel.starts_with(p.as_str()))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -79,6 +116,7 @@ pub enum Kind {
     Term,
     Word,
     Extension,
+    Api,
 }
 
 impl fmt::Display for Kind {
@@ -87,6 +125,7 @@ impl fmt::Display for Kind {
             Kind::Term => "term",
             Kind::Word => "word",
             Kind::Extension => "extension",
+            Kind::Api => "api",
         })
     }
 }
@@ -136,6 +175,116 @@ pub fn line_matches(line: &str, cfg: &Config) -> Vec<(usize, Kind, String)> {
         }
     }
     out.sort();
+    out
+}
+
+fn is_ident(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// True when `needle` occurs in `chars` at `at`.
+fn starts_with_at(chars: &[char], at: usize, needle: &str) -> bool {
+    needle
+        .chars()
+        .enumerate()
+        .all(|(k, n)| chars.get(at + k) == Some(&n))
+}
+
+/// Scoped API/ID hits in `line` (INFRA.md §2) as `(1-based column, matched text)`,
+/// ordered by column.
+pub fn api_matches(line: &str, cfg: &Config) -> Vec<(usize, String)> {
+    let chars: Vec<char> = line.chars().collect();
+    let text = |s: usize, e: usize| chars[s..e].iter().collect::<String>();
+    let token_start = |s: usize| s == 0 || !is_ident(chars[s - 1]);
+    let mut out = Vec::new();
+    for s in 0..chars.len() {
+        // api-prefix: the whole identifier-ish run after the prefix is reported.
+        if token_start(s) {
+            for p in &cfg.api_prefixes {
+                if starts_with_at(&chars, s, p) {
+                    let mut e = s + p.chars().count();
+                    while e < chars.len() && is_ident(chars[e]) {
+                        e += 1;
+                    }
+                    out.push((s + 1, text(s, e)));
+                }
+            }
+            // api-call: Prefix + Upper + ident chars + '('.
+            for p in &cfg.api_calls {
+                if starts_with_at(&chars, s, p) {
+                    let mut e = s + p.chars().count();
+                    if chars.get(e).is_some_and(char::is_ascii_uppercase) {
+                        while e < chars.len() && is_ident(chars[e]) {
+                            e += 1;
+                        }
+                        if chars.get(e) == Some(&'(') {
+                            out.push((s + 1, text(s, e + 1)));
+                        }
+                    }
+                }
+            }
+            // api-id: keyword, one space, 4+ digits not followed by digit . or letter.
+            for k in &cfg.api_ids {
+                let n = k.chars().count();
+                let kw_hit = chars.len() >= s + n
+                    && chars[s..s + n]
+                        .iter()
+                        .zip(k.chars())
+                        .all(|(c, p)| c.to_ascii_lowercase() == p);
+                if kw_hit && chars.get(s + n) == Some(&' ') {
+                    let mut e = s + n + 1;
+                    while chars.get(e).is_some_and(char::is_ascii_digit) {
+                        e += 1;
+                    }
+                    let digits = e - (s + n + 1);
+                    let next_ok = chars.get(e).is_none_or(|c| {
+                        !(c.is_ascii_alphanumeric()
+                            || (*c == '.' && chars.get(e + 1).is_some_and(char::is_ascii_digit)))
+                    });
+                    if digits >= 4 && next_ok {
+                        out.push((s + 1, text(s, e)));
+                    }
+                }
+            }
+        }
+        // api-tick / api-tick-prefix: a whole backtick-quoted token.
+        if chars[s] == '`' && (s == 0 || chars[s - 1] != '`') {
+            let mut e = s + 1;
+            while e < chars.len() && is_ident(chars[e]) {
+                e += 1;
+            }
+            if chars.get(e) == Some(&'`') && e > s + 1 {
+                let tok = text(s + 1, e);
+                let prefixed = cfg.api_tick_prefixes.iter().any(|p| {
+                    tok.strip_prefix(p.as_str()).is_some_and(|rest| {
+                        rest.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+                            && rest.chars().all(|c| c.is_ascii_alphanumeric())
+                    })
+                });
+                if prefixed || cfg.api_ticks.contains(&tok) {
+                    out.push((s + 2, tok));
+                }
+            }
+        }
+        // api-bignum: exactly 9 digits, not inside a longer number or a fraction.
+        if chars[s].is_ascii_digit()
+            && (s == 0 || !(chars[s - 1].is_ascii_digit() || chars[s - 1] == '.'))
+        {
+            let mut e = s;
+            while chars.get(e).is_some_and(char::is_ascii_digit) {
+                e += 1;
+            }
+            let next_ok = chars
+                .get(e)
+                .is_none_or(|c| *c != '.' || !chars.get(e + 1).is_some_and(char::is_ascii_digit));
+            if e - s == 9 && next_ok && cfg.api_bignums.iter().any(|p| starts_with_at(&chars, s, p))
+            {
+                out.push((s + 1, text(s, e)));
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
     out
 }
 
@@ -199,16 +348,27 @@ fn check_file(
             out.push(violation(0, 0, Kind::Extension, bad));
         }
     }
-    if cfg.is_excluded(rel) {
+    let excluded = cfg.is_excluded(rel);
+    let api = cfg.is_api_checked(rel);
+    if excluded && !api {
         return Ok(());
     }
-    for (_, kind, entry) in line_matches(rel, cfg) {
-        out.push(violation(0, 0, kind, &entry));
+    if !excluded {
+        for (_, kind, entry) in line_matches(rel, cfg) {
+            out.push(violation(0, 0, kind, &entry));
+        }
     }
     let bytes = fs::read(path)?;
     for (i, line) in String::from_utf8_lossy(&bytes).lines().enumerate() {
-        for (col, kind, entry) in line_matches(line, cfg) {
-            out.push(violation(i + 1, col, kind, &entry));
+        if !excluded {
+            for (col, kind, entry) in line_matches(line, cfg) {
+                out.push(violation(i + 1, col, kind, &entry));
+            }
+        }
+        if api {
+            for (col, entry) in api_matches(line, cfg) {
+                out.push(violation(i + 1, col, Kind::Api, &entry));
+            }
         }
     }
     Ok(())

@@ -36,6 +36,27 @@ Line-based; `#` starts a comment; blank lines ignored. Directives:
 
 An unknown directive or a directive without an argument is a config error (exit 2).
 
+### Scoped API/ID rules (parity forms and golden case files)
+`docs/` and `tests/golden/` are excluded from the term checks above because observations
+may name the reference app. They must still never carry the app's parameter, object,
+command or group numbers or its scripting-API names (docs/agents/OBSERVER.md §0). These
+directives add a second, narrower check:
+
+| Directive | Meaning |
+|---|---|
+| `api-scope <path>` | Repo-relative path prefix. Files under it whose extension is `md`, `toml` or `json` get the `api-*` checks below, whether or not the path is excluded. Other files (`.obj`, images) are never API-checked. |
+| `api-prefix <text>` | Case-sensitive. Forbidden where it starts a token (the previous char is not an ASCII letter, digit or `_`); whatever follows is part of the hit. Covers `c4d.`, `CallCommand`, `FORMAT_`, `BASEDRAW_`, ... |
+| `api-call <Prefix>` | Case-sensitive. Forbidden: a token `<Prefix>` + an uppercase letter + identifier characters, directly followed by `(` (a `Get`/`Set` accessor call). |
+| `api-tick <name>` | Case-sensitive. Forbidden only as a whole backtick-quoted token. For symbols that collide with ordinary words outside code spans. |
+| `api-tick-prefix <P>` | Case-sensitive. Forbidden: a backtick-quoted token that is `<P>` followed by a lowercase letter and then only letters/digits. |
+| `api-id <word>` | Case-insensitive `<word>` at a word start, one space, then 4 or more digits not followed by a digit, a letter, or `.` plus a digit (a sentence-final `.` still hits): `id 1234`, `(ID 1234)`, `parameter 1234`. |
+| `api-bignum <digits>` | Forbidden: a 9-digit number starting with `<digits>` that is not part of a longer number or a decimal fraction (not preceded by a digit or `.`, not followed by a digit or `.` plus a digit). |
+
+Hits print as `<path>:<line>:<col>: forbidden api "<matched text>"`. The fix is always to
+write the label the Attribute Manager shows instead of the number or symbol. The checks are
+deliberately narrow (explicit prefixes, not "any ALL_CAPS word") because harness status
+words and file-format field names legitimately appear in the same files.
+
 ### Word boundaries
 A `word` match at `[s, e)` counts only if:
 - **start**: `s == 0`, or the previous char is not ASCII alphanumeric, or the previous
@@ -56,6 +77,8 @@ Effect: identifiers like `xyz_tool`, `XyzTool`, `load_xyz` match; lowercase hex 
 - For each non-excluded file: checks the repo-relative path (`/`-separated) and every
   line of content (bytes decoded lossily as UTF-8) against all `term`/`word` entries.
 - For every file (excluded or not): checks the extension against `ext` entries.
+- For every file under an `api-scope` prefix with extension `md`/`toml`/`json`: applies the `api-*`
+  rules to each line of content (excluded or not).
 - Output, one per violation, sorted by path then line:
   `<path>:<line>:<col>: forbidden <kind> "<entry>"` (path hits use line 0, col 0;
   extension hits use `forbidden extension`). Columns are 1-based char indices.
