@@ -5,7 +5,14 @@ Method: as [render-reference.md](render-reference.md) (O30): Standard renderer, 
 
 **Calibration scene:** a default plane rotated P 90° (facing the camera) at z 0, carrying a
 Checkerboard material with U/V frequency 10 (Luminance channel only, so lighting doesn't
-matter), plus a default cube at (0, 0, −100).
+matter), plus a default cube at (0, 0, −100) carrying a plain white material with only the
+Luminance channel on (so it reads as a white silhouette against the checker, again without lights).
+
+**Check before saving each render:** the image must show the checker. A render that is all or
+mostly black means the scene is wrong (missing material, plane facing away, nothing in frame):
+do not commit it. Read back the camera position and direction, the plane's rotation and the
+materials, fix the scene and render again; after two failed tries mark the case
+`not observed: render black (<what you read back>)`.
 
 Output: `tests/golden/camera/<case>/render.png` and `mesh.obj`. `case.toml` holds every
 camera parameter. Use `feature = "camera"`.

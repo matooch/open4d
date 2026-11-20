@@ -47,6 +47,7 @@ added; implementer resumes).
 ## Files
 
 - [IMPLEMENTER.md](IMPLEMENTER.md): the implementer's step-by-step playbook, codebase map
+- [HERMES-IMPLEMENTER.md](HERMES-IMPLEMENTER.md): rules and queue for an unattended local-model implementer (own clone, one branch per brief, pushes its branch only)
   and pitfalls. Read it fully before every task.
 - [OBSERVER.md](OBSERVER.md): the observer's MCP playbook (allowed tools, probe scripts
   outside the repo, the smoke test).
