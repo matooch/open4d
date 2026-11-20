@@ -118,7 +118,35 @@ the sign chosen against the first influence, normalised, applied to the point. O
 dual quaternion type; its Spherical type is §8.
 
 ## 4. Auto weights (brief 103)
-See §4 below once implemented.
+
+Bone heat (Baran and Popovic 2007), `auto_weights(mesh, bones, options)`; one bone per joint
+(`bones_for_joints`: the joint's world position to its first child joint's, a point for a joint
+without a child joint, in the object's space). For bone `b` solve
+
+`(L + D H) w_b = D H p_b`
+
+with `L` the cotangent stiffness matrix of the triangulated mesh (negative cotangent weights
+clamped to 0 so the matrix stays positive definite), `D` the barycentric vertex areas, `H` the
+diagonal heat `c / d²` of every vertex that has a visible bone (`d` = distance to the nearest
+visible bone, floored at 1e-4 of the bounding box diagonal; `c = heat`, default 1), and `p_b`
+the indicator of the vertices whose nearest visible bone is `b`. A bone is visible from a vertex
+when the segment from the vertex to the bone's closest point crosses no triangle that does not
+use the vertex (`visibility`, default on). `L` is dimensionless and `D H` too, so the result does
+not depend on the model's scale. The system is solved by Jacobi-preconditioned conjugate
+gradients (own code; the design note's nalgebra-sparse is not used: not in the workspace).
+Weights are clamped at 0, optionally pruned (`prune`, relative), normalised to sum 1; a
+vertex no heat reaches (a detached component without a visible bone) takes weight 1 on its
+nearest bone. Deterministic: bone order, vertex order and tie-breaking are fixed.
+`auto_bind(tx, tag, mesh, options)` stores the weights on the tag and binds the current pose.
+
+Parity: level C. O34's auto-weight case was **not observed** (the weight tag has no auto-weight
+call and the app's command opens a dialog; docs/parity/rigging.md), so there is no reference
+data. The test (`crates/rig/tests/auto_weights.rs`) uses the nearest bone as partner, which
+heat diffusion approaches on a tube: on the O34 arm (106 points, bones J1-J2, J2-J3, J3 point)
+the dominant joint equals the nearest bone's for 89 of 89 points (ties skipped), threshold 90 %.
+It also checks ring symmetry, a monotone J1 weight along the arm, that a detached triangle takes
+its nearest bone, determinism, and that a 0.8 rad bend with these weights stretches no edge by
+more than 60 %. The "auto-weights" O34 case is therefore UNSUPPORTED (no data), not matched.
 
 ## 5. Mirroring (brief 113)
 See below once implemented.

@@ -1,6 +1,6 @@
 # 100 · Joint object, bone display, joint tools (align, mirror, chain creation)
 
-Status: waiting: O34 · Area: H · Depends on: 011 · Observations: O34 · Touches: rig (new), plugin, viewport
+Status: done · Area: H · Depends on: 011 · Observations: O34 · Touches: rig (new), plugin, viewport
 
 ## Goal
 A Joint node type with bind pose, chain world matrices, bone display, and the joint commands (create chain, align, mirror).
@@ -31,9 +31,19 @@ Skinning (101).
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: new crate `forge-rig` (`Rig` plugin: `forge.joint`, `forge.weight_tag`, `forge.skin`); joint
+  object with the O34 parameter table, bone vector/length, chain world matrices, bone display geometry
+  (octahedron), `create_chain`, `align_joint`, `mirror_chain` with left/right naming. Tests:
+  `crates/rig/tests/rig_units.rs` (chain positions, bone length, align keeps children in place,
+  mirror reflection and names, display), `rigging_parity.rs`. O34 has no joint-matrix golden; the
+  joint matrices are exercised through the skinned meshes: `bind-pose` exact, the posed cases agree
+  with the reference to its own noise (see 101).
+- Rules derived: HPB rotation convention from TRANSFORM.md gives J2 "B 45" = `Rz(-45)` and the
+  scale of a joint propagates to its children (`j2-scale`: J3 at y = 225); the chain world positions
+  equal `joint_positions`. Parity-pending: bone display shape, align/mirror (own design, not observed).
+- Deviations: the `joint.create_chain` / `joint.align` / `joint.mirror` command wrappers are not
+  registered (forge-command depends on generators which depend on modifiers which depend on
+  forge-rig, so the rig crate cannot register commands itself); the library functions are the
+  commands' bodies. Rotation Order is not modelled (TRANSFORM.md has HPB only).
+- Files: crates/rig/**, docs/specs/RIG.md, docs/parity/STATUS.md, docs/roadmap/BACKLOG.md.
+- Gate: see the final report of the session (run once before the last commit).

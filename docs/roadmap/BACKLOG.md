@@ -100,7 +100,7 @@ implementers can avoid collisions.
 | 100 | [Joint object, bone display, joint tools (align, mirror, chain creation)](../agents/tasks/100-joints.md) | H | 011 | done (O34 mesh cases: bind-pose exact, deformed cases pinned to the reference's 1e-3 noise, RIG.md §8; command wrappers not registered, see RIG.md §1.3) | rig (new), plugin, viewport |
 | 101 | [Skin deformer + Weight tag + bind pose (LBS, DQS option)](../agents/tasks/101-skin-weights.md) | H | 100, 050 | done (parity-pending: 4 of 5 posed O34 cases differ from the reference by its own noise, RIG.md §8) | rig, modifiers |
 | 102 | [Weight tools: paint brush, weight manager, normalise/mirror/smooth/prune](../agents/tasks/102-weight-tools.md) | H | 101, 150 | ready | rig, ui, viewport |
-| 103 | [Auto weights (bone heat)](../agents/tasks/103-auto-weights.md) | H | 101 | ready | rig |
+| 103 | [Auto weights (bone heat)](../agents/tasks/103-auto-weights.md) | H | 101 | done (parity-pending: no reference auto-weight data, O34 case not observed; level C checked against the nearest bone, RIG.md §4) | rig |
 | 104 | [IK tag: 2-bone, chain, pole, twist, IK/FK blend](../agents/tasks/104-ik.md) | H | 100 | waiting: O35 | rig |
 | 105 | [Constraint tag: PSR, Aim, Parent, Clamp](../agents/tasks/105-constraints.md) | H | 100 | waiting: O36 | rig |
 | 106 | [Tags: Target, Align to Spline, Vibrate, Look at Camera, Protection, Display, Compositing](../agents/tasks/106-expression-tags.md) | H | 088 | waiting: O27, O54 | core, rig |
