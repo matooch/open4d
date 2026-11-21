@@ -734,8 +734,9 @@ Grow Selection. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
+| `use_edge` | boolean or null | no | For polygons: grow only across shared edges (default false, O58 `sel-grow-poly`). |
 
-Example: `forge cmd scene.forge select.grow --args '{}'`
+Example: `forge cmd scene.forge select.grow --args '{"use_edge":false}'`
 
 ### `select.shrink`
 
@@ -744,8 +745,9 @@ Shrink Selection. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
+| `use_edge` | boolean or null | no | For polygons: shrink using shared-edge neighbours (default false, O58 `sel-grow-poly`). |
 
-Example: `forge cmd scene.forge select.shrink --args '{}'`
+Example: `forge cmd scene.forge select.shrink --args '{"use_edge":false}'`
 
 ### `select.connected`
 

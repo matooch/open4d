@@ -195,10 +195,12 @@ mode's set of the target (one "Select" transaction each):
   (GEOMETRY.md §4). Edges: the neighbours of an edge are the edges that share a point with
   it; grow adds all neighbours of selected edges; shrink keeps the selected edges whose
   neighbours are all selected.
-  **Observed (O26 `grow-poly`, KNOWN_MISMATCH):** with Grow Selection's *Use Edge* on, polygons
-  grow only across shared edges (front-face polygon 5 of a 4×4×4 cube grows to 1, 4, 5, 6, 9),
-  not across shared points. `grow-point` matches the point rule above. A `use_edge` option for
-  polygon grow is still to do.
+  `select.grow` and `select.shrink` take an optional `use_edge` argument. For polygons it
+  switches between edge-adjacent neighbours (true) and point-adjacent neighbours (false). The
+  default is **false**: O58 `sel-grow-poly` ran Grow Selection "with the command defaults (Use
+  Edge off)" and grows to the 3x3 point-adjacent patch; O26 `grow-poly` sets Use Edge on
+  explicitly. (Brief 195 first set the default to true, following a planner error in the brief.) Points and edges always use edge-neighbours, so
+  `use_edge` does not change their result.
 - With no target in a component mode, they do nothing and the status bar says why
   ("select a polygon object").
 - Model mode: the set is the object selection. All = every node of the hierarchy (not

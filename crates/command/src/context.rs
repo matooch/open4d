@@ -38,7 +38,12 @@ pub trait CommandContext {
     ///
     /// `nodes` names the polygon objects to work on; the component targets when `None`
     /// (EDITABLE.md §6.3).
-    fn select_components(&mut self, op: SelectOp, nodes: Option<&[NodeId]>) -> Result<(), String>;
+    fn select_components(
+        &mut self,
+        op: SelectOp,
+        use_edge: bool,
+        nodes: Option<&[NodeId]>,
+    ) -> Result<(), String>;
     /// Connected, Convert, Loop and Ring on the current mode's set (EDITABLE.md §2.8).
     fn select_extra(&mut self, _cmd: SelectExtra, _nodes: Option<&[NodeId]>) -> Result<(), String> {
         Err("no components headless".into())

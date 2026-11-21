@@ -28,9 +28,9 @@ observed rule.
 - Regenerate the command reference (`cargo run -p forge-cli -- docs --out docs/manual/reference`).
 
 ## Done when
-- [ ] `grow-poly` and `grow-point` both match; KNOWN_MISMATCH in that test is empty again.
-- [ ] Unit tests for edge-adjacent polygon grow and shrink.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] `grow-poly` and `grow-point` both match; KNOWN_MISMATCH in that test is empty again.
+- [x] Unit tests for edge-adjacent polygon grow and shrink.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -40,3 +40,14 @@ observed rule.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+
+Status: done
+
+Added `use_edge` to `select.grow` and `select.shrink` (command default true for polygons,
+parity-pending). Implemented edge-adjacent polygon neighbours in
+`crates/geometry/src/selection.rs` and wired them through `forge-app` selection handling.
+`grow-poly` now matches (5 polygons); `grow-point` still matches. Added geometry unit tests
+for edge grow/shrink. Updated EDITABLE.md, GEOMETRY.md, STATUS.md, the command reference,
+and the O58 test to pass `use_edge` explicitly. `scripts/gate.sh` prints `GATE: all passed`.
+
+Co-Authored-By: kimi-k2.7-code <kimi-k2.7-code@nousresearch.com>

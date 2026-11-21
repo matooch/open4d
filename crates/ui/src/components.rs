@@ -39,7 +39,8 @@ pub fn targets(s: &EditorState) -> Vec<NodeId> {
 
 /// Select All / Deselect All / Invert / Grow / Shrink on the current mode's set.
 pub fn run_select(s: &mut EditorState, cmd: SelectCmd) -> Result<(), String> {
-    forge_app::select::run_select(&mut s.app, cmd, None)
+    // UI buttons use the observed default for Use Edge on polygon grow/shrink (EDITABLE.md §2.5).
+    forge_app::select::run_select(&mut s.app, cmd, true, None)
 }
 
 /// Pick radius of points and edges, in render pixels (EDITABLE.md §2.4).

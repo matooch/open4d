@@ -96,6 +96,7 @@ impl CommandContext for Headless {
     fn select_components(
         &mut self,
         _op: SelectOp,
+        _use_edge: bool,
         _nodes: Option<&[NodeId]>,
     ) -> Result<(), String> {
         Err("no components headless".into())

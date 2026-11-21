@@ -3,6 +3,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::Edge;
 use crate::PolyMesh;
 use crate::mesh::poly_edges;
 
@@ -139,7 +140,7 @@ fn point_neighbors(mesh: &PolyMesh) -> Vec<BTreeSet<u32>> {
 
 /// Polygons sharing a point with each polygon (O58 `sel-grow-poly`: the 3x3 patch around the
 /// start quad, diagonal neighbours included).
-fn poly_neighbors(mesh: &PolyMesh) -> Vec<BTreeSet<u32>> {
+fn point_adjacent_polys(mesh: &PolyMesh) -> Vec<BTreeSet<u32>> {
     let mut at_point: Vec<Vec<u32>> = vec![Vec::new(); mesh.points.len()];
     for (f, p) in mesh.polys.iter().enumerate() {
         for &v in p {
@@ -189,10 +190,43 @@ pub fn shrink_points(mesh: &PolyMesh, points: &IndexSet) -> IndexSet {
     shrink(&point_neighbors(mesh), points)
 }
 
-pub fn grow_polys(mesh: &PolyMesh, polys: &IndexSet) -> IndexSet {
-    grow(&poly_neighbors(mesh), polys)
+/// Polygons sharing an edge with each polygon.
+fn poly_edge_neighbors(mesh: &PolyMesh) -> Vec<BTreeSet<u32>> {
+    let mut at_edge: std::collections::BTreeMap<Edge, Vec<u32>> = std::collections::BTreeMap::new();
+    for (f, p) in mesh.polys.iter().enumerate() {
+        for e in poly_edges(p) {
+            at_edge.entry(e).or_default().push(f as u32);
+        }
+    }
+    let mut n = vec![BTreeSet::new(); mesh.polys.len()];
+    for (f, p) in mesh.polys.iter().enumerate() {
+        for e in poly_edges(p) {
+            if let Some(list) = at_edge.get(&e) {
+                for &other in list {
+                    if other != f as u32 {
+                        n[f].insert(other);
+                    }
+                }
+            }
+        }
+    }
+    n
 }
 
-pub fn shrink_polys(mesh: &PolyMesh, polys: &IndexSet) -> IndexSet {
-    shrink(&poly_neighbors(mesh), polys)
+pub fn grow_polys(mesh: &PolyMesh, polys: &IndexSet, use_edge: bool) -> IndexSet {
+    let neighbors = if use_edge {
+        poly_edge_neighbors(mesh)
+    } else {
+        point_adjacent_polys(mesh)
+    };
+    grow(&neighbors, polys)
+}
+
+pub fn shrink_polys(mesh: &PolyMesh, polys: &IndexSet, use_edge: bool) -> IndexSet {
+    let neighbors = if use_edge {
+        poly_edge_neighbors(mesh)
+    } else {
+        point_adjacent_polys(mesh)
+    };
+    shrink(&neighbors, polys)
 }
