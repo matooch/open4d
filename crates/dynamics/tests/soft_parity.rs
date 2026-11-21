@@ -160,3 +160,81 @@ fn soft_sphere_pressure_changes_nothing_as_observed() {
         );
     }
 }
+
+/// `soft-sphere-pressure-2`: Pressure 100 read back from the tag (`pressure_readback`) before the
+/// simulation, and still the three meshes of the default case (spec §8.5).
+#[test]
+fn pressure_read_back_as_100_still_changes_nothing() {
+    let t = case_table("soft-bodies", "soft-sphere-pressure-2");
+    assert_eq!(t["params"]["pressure_readback"].as_float(), Some(100.0));
+    for file in ["mesh.obj", "mesh-f30.obj", "mesh-f60.obj"] {
+        assert_eq!(
+            golden_sphere("soft-sphere-pressure-2", file),
+            golden_sphere("soft-sphere-drop", file),
+            "{file}"
+        );
+    }
+    // Ours stores Pressure and does not simulate it: the same frames as without.
+    assert_eq!(frames(&world(1.0, 0.0), 30), frames(&world(1.0, 100.0), 30));
+}
+
+fn sample_track(name: &str) -> Vec<f64> {
+    let p = golden("soft-bodies", "soft-sphere-samples").join(format!("samples-{name}.json"));
+    let s = forge_parity_harness::parse_samples(&std::fs::read_to_string(p).unwrap()).unwrap();
+    forge_parity_harness::track_values(&s).expect("frames 0, 1, 2, ...")
+}
+
+/// `soft-sphere-samples` (spec §8.6): the sphere's centre (mean of its points) and lowest point
+/// per frame 0..60 against ours.
+#[test]
+fn soft_sphere_centre_and_lowest_point_per_frame() {
+    let f = frames(&world(structural_of("soft-sphere-drop"), 0.0), 60);
+    let (cx, cy, cz, ly) = (
+        sample_track("centre_x"),
+        sample_track("centre_y"),
+        sample_track("centre_z"),
+        sample_track("lowest_y"),
+    );
+    let mean = |p: &[DVec3], k: usize| p.iter().map(|q| q[k]).sum::<f64>() / p.len() as f64;
+    // The fall (frames 0..15, before the landing): our centre within 6 cm of the reference
+    // (fitted gravity 1000 against the observed fall of about 981 cm/s^2: 1.2 cm at frame 3
+    // growing to 5.8 cm at frame 15, plus semi-implicit Euler).
+    for n in 0..=15 {
+        let e = (mean(&f[n], 1) - cy[n]).abs();
+        assert!(
+            e < 6.0,
+            "frame {n}: centre y {} vs {}",
+            mean(&f[n], 1),
+            cy[n]
+        );
+        // The undeformed sphere's lowest point is 50 cm under its centre (reference and ours).
+        assert!((cy[n] - ly[n] - 50.0).abs() < 1e-3, "reference frame {n}");
+        let lo = f[n].iter().map(|q| q.y).fold(f64::MAX, f64::min);
+        assert!((mean(&f[n], 1) - lo - 50.0).abs() < 0.5, "ours frame {n}");
+    }
+    // The reference sphere drifts sideways by up to 3.4 cm while it rests (not derived: an
+    // unmodelled contact wobble); ours stays within 0.5 cm of the axis.
+    let drift = |t: &[f64]| t.iter().fold(0.0f64, |a, v| a.max(v.abs()));
+    assert!(drift(&cx) > 1.0 && drift(&cz) > 1.0 && drift(&cx) < 3.5 && drift(&cz) < 3.5);
+    for n in 0..=60 {
+        assert!(
+            mean(&f[n], 0).abs() < 0.5 && mean(&f[n], 2).abs() < 0.5,
+            "frame {n}"
+        );
+    }
+    // Pinned (KNOWN_MISMATCH, spec §8.3): after the landing (frame 20 on) the reference's
+    // lowest point is 14 to 27 cm under the plane and its centre rests at 35.3 (+-0.6) cm; ours
+    // rests on the plane (lowest 0.5) with the centre 6 to 14 cm higher.
+    for n in 20..=60 {
+        assert!(ly[n] < -14.0, "reference frame {n}: {}", ly[n]);
+        let lo = f[n].iter().map(|q| q.y).fold(f64::MAX, f64::min);
+        assert!(
+            lo > 0.0,
+            "ours sinks now (frame {n}): remove the pin ({lo})"
+        );
+        assert!(
+            mean(&f[n], 1) - cy[n] > 5.0,
+            "frame {n}: centre matches now"
+        );
+    }
+}

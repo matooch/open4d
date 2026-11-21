@@ -86,6 +86,18 @@ budgeted, `drop-friction-slide`): with the product (0.9) the cube tips over whil
 (−7.8 %), and the observed 45.03 cm equals `v²/(2 g μ)` for μ = 1 at the fitted g. **Parity-pending**
 (one case). Bounce above 100 % is not supported: the descriptor range ends at 1.
 
+**Restitution combine rule, follow-up O39** (`bounce-combine-0`, `-50`, `drop-cube`: the cube's Bounce stays 5 %,
+the plane's is 0, 50, 100 %): the reference's rebound peak after the landing is 25.72472 / 27.28798 /
+29.337369 cm (rest 25, so it rises 0.72 / 2.29 / 4.34 cm) and its lowest point 23.816 / 24.178 / 24.539 cm (the
+sink shrinks by exactly 0.3614 cm per 50 % of plane bounce). Inverting the ideal rebound `h = (r v)² / (2 g)` with
+`v` = the impact speed gives an effective coefficient of about 0.051 / 0.091 / 0.126, roughly `0.05 (1 + 1.5 p)`
+(**fitted, not a rule**). Three hypotheses on the engine's four combine rules, measured with the same scene: the
+product (ours), the minimum (no rebound for any `p`: peak 24.99), the average (rebounds to 50 and 124 cm for
+`p` 50 and 100 %, 0.5 and 1.0 times the impact height scale) and the maximum (114 and 389 cm): none gives a rebound of a
+few centimetres, so the reference's contact is not a plain combine of two coefficients and the product stays (it is
+the only rule with no visible rebound at 5 %). Pinned: the rebound peaks (`KNOWN_MISMATCH`, test
+`bounce_combine_sweep`); asserted: contact frame ±1, rest height 0.05 cm, and the reference's own monotone trend.
+
 ## 2. Scene settings (`forge.dynamics_settings`)
 
 A settings object (Create menu; any place in the tree). The first one in document order is used;
@@ -246,7 +258,10 @@ per-case `Thresholds`:
 | `stack` | every cube stays within 0.25 cm vertically and 0.3 cm sideways of its start and within 1° of upright | reference drift ≤ 0.045 / 0.12 cm; ours is larger because our contacts are softer (0.17 cm sink) | – |
 | `slope-sphere` | x at frame 30; final x and final y | ±10 % | positions per frame (the rolling friction model differs) |
 | `tumble` | contact frame; rest y; rests flat (P and B each within 1° of a multiple of 90°) | ±1; 0.05 cm | rest x, z and heading H (`KNOWN_MISMATCH`: which face it lands on and how far it travels depend on the engine's contact order) |
-| `clones-fall` | clone 4 (centre): free fall frames 0..22 within 1 cm, contact frame ±1, rest y (15.0) 0.05 cm, upright within 1°; clone 0 (corner): free fall frames 0..22 within 1 cm, contact frame ±1; 9 bodies, the cloner itself none; write-back into the clone data | as above | clone 4 lateral drift (`KNOWN_MISMATCH`: the reference ends 1.87 cm from the start in x and z, ours 0); clone 0 end track (`KNOWN_MISMATCH`: the cube's centre is exactly over the plane's corner, the reference tips off and falls to y −2227.8, ours balances on the corner at 15.08) |
+| `clones-fall` | clone 4 (centre): free fall frames 0..22 within 1 cm, contact frame ±1, rest y (15.0) 0.05 cm, upright within 1°; clone 0 (corner): free fall frames 0..22 within 1 cm, contact frame ±1; 9 bodies, the cloner itself none; write-back into the clone data | as above | clone 4 lateral drift (`KNOWN_MISMATCH`: the reference ends 1.87 cm from the start in x and z, ours (−2.27, 1.58)); clone 0 end track (`KNOWN_MISMATCH`: the cube's centre is exactly over the plane's corner, the reference tips off and falls to y −2227.8, ours balances on the corner at 15.08) |
+| `bounce-combine-0`, `-50` (and `drop-cube` as the 100 % point) | contact frame ±1; rest y 0.05 cm; the reference's peaks 25.72 / 27.29 / 29.34 in order | as above | the rebound peaks (`KNOWN_MISMATCH`: ours stays within 0.05 cm of the rest height, §1.5) |
+| `clones-fall-2` | clone 4: free fall 1 cm, contact frame ±1, rest y 0.05 cm, lateral drift from the start below 8 cm in the reference (7.9) and in ours (1.7), ours within 9 cm; clone 0: free fall 1 cm, contact frame ±1 | as above | clone 0 end track (`KNOWN_MISMATCH`: its centre starts 13 and 7 cm inside the plane's corner, so "exactly over the corner" was not the cause; the reference is kicked outwards at the landing, about 4.7 cm per frame in x and z, and falls to y −1986.9; ours stays on the plane); clone 4 drift direction (reference (−7.9, +3.05), ours (+0.7, −1.6)) |
+| `collision-noise-0` | clone 4: contact frame ±1, rest y 0.05 cm, drift below 2.5 cm in ours and within 4.5 cm of the reference | as above | the drift itself: the reference still drifts with Collision Noise 0 (0.94, 0.50 cm against 1.87, 1.87 with the default 0.5 %), so the noise is not the whole cause and our (noise-free) drift is (−2.27, 1.58) cm, the other way (`KNOWN_MISMATCH`) |
 | `gravity-half` | not observed (no golden data) | | `UNSUPPORTED` |
 
 O41 connector cases (`tests/golden/soft-bodies/`, test `crates/dynamics/tests/joints_parity.rs`):
@@ -327,11 +342,11 @@ has one entry per point (after the deformers). The object's transform does not m
 ### 8.5 Pressure: stored, not simulated
 
 Observed: with Pressure 100 the frames are identical to the default's to the last digit (the value
-"is stored but changes nothing visible"). Ours stores `pressure` and does not simulate it, so that
-case matches; the area design's pressure constraint is not implemented because the observation
-shows no effect. Note for the observer: the pressure case's `case.toml` table reads Pressure 0 (its
-body table equals the default case's), so the 100 may never have taken effect; the identical frames
-would then say nothing about pressure.
+"is stored but changes nothing visible"). The follow-up `soft-sphere-pressure-2` reads Pressure 100 back
+from the tag before simulating (`pressure_readback = 100`; its body table still prints 0) and the three
+meshes are again identical to `soft-sphere-drop` (frame 60: y 34.085033), which settles the earlier doubt: the
+setting is read back and has no effect in this build. Ours stores `pressure` and does not simulate it, so
+that case matches; the area design's pressure constraint is not implemented (nothing to fit).
 
 ### 8.6 Parity (O41 soft cases, `crates/dynamics/tests/soft_parity.rs`)
 
@@ -339,7 +354,8 @@ would then say nothing about pressure.
 |---|---|---|---|
 | `soft-sphere-drop` | frame 15: centre height 74.44 and the undeformed 100 cm extents; frames 15, 30, 60: every extent of ours and of the reference within 10 % of 100 cm (reference 99.3 to 104.4 cm); the fall is strictly downward | 5 cm (semi-implicit Euler over-falls 2 cm); 0.5 cm; 10 % | the resting height: the reference sinks to y −21.2 cm, ours rests at +0.5 cm (`KNOWN_MISMATCH`) |
 | `soft-sphere-stiff` | stiffer deforms less: in the reference at frames 30 and 60 (0.37 vs 0.65 cm and 0.69 vs 4.37 cm off 100 cm), in ours over the landing (peak squash 18 vs 22 cm of height); extents within 10 % at frame 60 | as above | the sinking: −15.9 cm (reference) vs +0.5 cm |
-| `soft-sphere-pressure` | frames identical to the default with Pressure 100 (ours: not simulated), and the reference's three meshes are identical to the default case's | exact | none (see §8.5 for the doubt about the data) |
+| `soft-sphere-pressure`, `-2` | frames identical to the default with Pressure 100 (ours: not simulated), and the reference's three meshes are identical to the default case's | exact | none (§8.5: the read-back of the redo settles the doubt) |
+| `soft-sphere-samples` | frames 0..15: our centre height within 6 cm of the per-frame samples (the reference falls at about 981 cm/s², our fitted 1000 and semi-implicit Euler add up to 5.8 cm at frame 15) and the lowest point 50 cm under the centre; the reference's lateral drift is 1 to 3.5 cm, ours below 0.5 cm | 6 cm; 0.5 cm | from frame 20 on: the reference's lowest point is 14 to 27 cm under the plane (−26.5 at frame 21, −14.7 at rest, −15.9 at frame 60) and its centre rests at 35.3 ± 0.6 cm; ours rests on the plane, centre 6 to 14 cm higher (`KNOWN_MISMATCH`; no collision offset of the soft particles is derivable: the sink is 15 cm, not a margin we model). Note: the samples' frame 15 centre (77.73) is 3.3 cm higher than the mean of the exported `mesh.obj` points of `soft-sphere-drop` (74.44), so the two exports are not on one time base |
 
 Bounce ("level C: rest shape, bounce") cannot be compared: the reference shows no rebound at the
 three recorded frames and its contact is not a contact; ours lands without a bounce at the 5 % tag
