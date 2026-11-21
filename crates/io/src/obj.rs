@@ -223,23 +223,29 @@ impl Pending {
             .iter()
             .map(|f| f.iter().map(|g| local[g]).collect())
             .collect();
-        let corner_uvs: Option<CornerUvs> = if self.face_uvs.iter().flatten().any(|u| u.is_none()) {
-            None
-        } else {
-            Some(CornerUvs {
-                corners: self
-                    .face_uvs
-                    .iter()
-                    .map(|face| face.iter().map(|u| uvs[u.unwrap()]).collect())
-                    .collect(),
-            })
-        };
+        let mut corner_uvs: Option<CornerUvs> =
+            if self.face_uvs.iter().flatten().any(|u| u.is_none()) {
+                None
+            } else {
+                Some(CornerUvs {
+                    corners: self
+                        .face_uvs
+                        .iter()
+                        .map(|face| face.iter().map(|u| uvs[u.unwrap()]).collect())
+                        .collect(),
+                })
+            };
         if flip_z {
             for p in &mut points {
                 p.z = -p.z;
             }
             for poly in &mut polys {
                 poly.reverse();
+            }
+            if let Some(uvs) = corner_uvs.as_mut() {
+                for face in &mut uvs.corners {
+                    face.reverse();
+                }
             }
         }
         Some(ObjObject {

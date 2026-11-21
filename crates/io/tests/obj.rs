@@ -223,16 +223,25 @@ o A\nf 1 2 3\no B\nf 6 5 4\n";
 }
 
 #[test]
-fn flip_z_negates_z_and_reverses_winding() {
-    let text = "v 1 2 3\nv 4 5 -6\nv 7 8 9\nv 0 0 0\nf 1 2 3 4\n";
+fn flip_z_negates_z_and_reverses_winding_and_uvs() {
+    let text =
+        "v 1 2 3\nv 4 5 -6\nv 7 8 9\nv 0 0 0\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nf 1/1 2/2 3/3 4/4\n";
     let o = read(text, &ReadOptions { flip_z: true }).unwrap();
     assert_eq!(o[0].mesh.points[0], DVec3::new(1.0, 2.0, -3.0));
     assert_eq!(o[0].mesh.points[1], DVec3::new(4.0, 5.0, 6.0));
     assert_eq!(o[0].mesh.points[3].z, 0.0);
     assert_eq!(o[0].mesh.polys, vec![vec![3, 2, 1, 0]]);
+    assert_eq!(
+        o[0].uvs.as_ref().unwrap().corners,
+        vec![vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]]]
+    );
     let plain = read(text, &ReadOptions::default()).unwrap();
     assert_eq!(plain[0].mesh.polys, vec![vec![0, 1, 2, 3]]);
     assert_eq!(plain[0].mesh.points[0].z, 3.0);
+    assert_eq!(
+        plain[0].uvs.as_ref().unwrap().corners,
+        vec![vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]]
+    );
 }
 
 #[test]

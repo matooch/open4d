@@ -37,6 +37,8 @@ yet, so the `vt` part is empty"). Read and write them.
 
 Status: done
 
+Gate: all passed, 2413 tests (sh scripts/gate.sh).
+
 Added `uvs: Option<CornerUvs>` to `ObjObject`, updated the OBJ writer to emit `vt` lines
 (deduplicated exactly, first-seen order) and faces as `v/vt/vn` (or `v/vt` without normals),
 and the reader to parse `vt` lines and per-corner `vt` indices into `CornerUvs`. Objects
