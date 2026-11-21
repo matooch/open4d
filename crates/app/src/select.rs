@@ -231,6 +231,7 @@ fn component_result(
     mode: EditMode,
     current: &IndexSet,
     cmd: SelectCmd,
+    use_edge: bool,
 ) -> IndexSet {
     let count = match mode {
         EditMode::Model => 0,
@@ -246,8 +247,8 @@ fn component_result(
         (SelectCmd::Shrink, EditMode::Points) => shrink_points(mesh, current),
         (SelectCmd::Grow, EditMode::Edges) => grow_edges(mesh, current),
         (SelectCmd::Shrink, EditMode::Edges) => shrink_edges(mesh, current),
-        (SelectCmd::Grow, EditMode::Polys) => grow_polys(mesh, current),
-        (SelectCmd::Shrink, EditMode::Polys) => shrink_polys(mesh, current),
+        (SelectCmd::Grow, EditMode::Polys) => grow_polys(mesh, current, use_edge),
+        (SelectCmd::Shrink, EditMode::Polys) => shrink_polys(mesh, current, use_edge),
         (_, EditMode::Model) => current.clone(),
     }
 }
@@ -278,7 +279,12 @@ fn select_objects(s: &mut App, cmd: SelectCmd) {
 
 /// Select All / Deselect All / Invert / Grow / Shrink on the current mode's set of every
 /// target (`nodes`: the objects to use instead, EDITABLE.md §6.3): one "Select" step.
-pub fn run_select(s: &mut App, cmd: SelectCmd, nodes: Option<&[NodeId]>) -> Result<(), String> {
+pub fn run_select(
+    s: &mut App,
+    cmd: SelectCmd,
+    use_edge: bool,
+    nodes: Option<&[NodeId]>,
+) -> Result<(), String> {
     if s.mode == EditMode::Model {
         if nodes.is_some() {
             return Err("nodes needs a component mode".into());
@@ -291,7 +297,7 @@ pub fn run_select(s: &mut App, cmd: SelectCmd, nodes: Option<&[NodeId]>) -> Resu
     for id in ids {
         let mesh = base_mesh(s.doc.scene(), id).ok_or("select a polygon object")?;
         let current = selection_of(s.doc.scene(), id, s.mode);
-        next.push((id, component_result(&mesh, s.mode, &current, cmd)));
+        next.push((id, component_result(&mesh, s.mode, &current, cmd, use_edge)));
     }
     write_selections(&mut s.doc, s.mode, &next).map_err(|e| e.to_string())?;
     Ok(())

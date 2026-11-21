@@ -50,21 +50,33 @@ fn grow_and_shrink() {
     let grown = grow_points(&m, &set(&[4]));
     assert_eq!(ids(&grown), [1, 3, 4, 5, 7]);
     assert_eq!(ids(&shrink_points(&m, &grown)), [4]);
-    let gp = grow_polys(&m, &set(&[0]));
+    let gp = grow_polys(&m, &set(&[0]), false);
     // O58 sel-grow-poly: a polygon sharing only a point is a neighbour too
     assert_eq!(ids(&gp), [0, 1, 2, 3], "shares a vertex, not only an edge");
     let one_row = set(&[0, 1]);
     assert_eq!(
-        ids(&shrink_polys(&m, &grow_polys(&m, &one_row))),
+        ids(&shrink_polys(&m, &grow_polys(&m, &one_row, false), false)),
         [0, 1, 2, 3]
     );
-    assert!(shrink_polys(&m, &one_row).is_empty());
+    assert!(shrink_polys(&m, &one_row, false).is_empty());
     let all = set(&[0, 1, 2, 3]);
-    assert_eq!(ids(&shrink_polys(&m, &all)), [0, 1, 2, 3]);
+    assert_eq!(ids(&shrink_polys(&m, &all, false)), [0, 1, 2, 3]);
 }
 
 #[test]
 fn selection_bundle_defaults_empty() {
     let s = Selection::default();
     assert!(s.points.is_empty() && s.edges.is_empty() && s.polys.is_empty());
+}
+
+#[test]
+fn grow_and_shrink_polys_use_edge() {
+    let m = grid();
+    // Polygon 0 shares edges with 1 and 2, only a point with 3.
+    assert_eq!(ids(&grow_polys(&m, &set(&[0]), true)), [0, 1, 2]);
+    // Shrink keeps polygons whose edge-neighbours are all selected.
+    // Polygon 0's edge neighbours are 1 and 2; 1 and 2 also border 3, so only 0 stays.
+    let cross = set(&[0, 1, 2]);
+    assert_eq!(ids(&shrink_polys(&m, &cross, true)), [0]);
+    assert!(shrink_polys(&m, &set(&[0, 3]), true).is_empty());
 }

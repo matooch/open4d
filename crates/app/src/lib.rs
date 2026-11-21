@@ -356,8 +356,13 @@ impl CommandContext for App {
         self.status = text;
     }
 
-    fn select_components(&mut self, op: SelectOp, nodes: Option<&[NodeId]>) -> Result<(), String> {
-        run_select(self, op.into(), nodes)
+    fn select_components(
+        &mut self,
+        op: SelectOp,
+        use_edge: bool,
+        nodes: Option<&[NodeId]>,
+    ) -> Result<(), String> {
+        run_select(self, op.into(), use_edge, nodes)
     }
 
     fn select_extra(&mut self, cmd: SelectExtra, nodes: Option<&[NodeId]>) -> Result<(), String> {
