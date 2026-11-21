@@ -47,7 +47,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O50 | Clone toolset III | [clone-toolset-3.md](clone-toolset-3.md) | cloner/, clone-spline/, tracer/, effector-f/, random-f/ | todo (3 follow-up cases; see the form's Follow-up section) — before: partial (44 of 49 rows observed; the 5 that need a human or a GUI step stay not observed: selection-tag, weight-tag, linear-offset-15, on-spline, on-spline-step — see the form) |
 | O32 | Volume builder and mesher | [volumes.md](volumes.md) | `tests/golden/volumes/` meshes | observed (10 of 12 cases; subtract/intersect not scriptable) |
 | O33 | Volumes II: filters, sources, VDB | [volumes-2.md](volumes-2.md) | `tests/golden/volumes/` meshes + .vdb | observed (11 of 13 cases; points-source and vdb-export not scriptable) |
-| O34 | Rigging I: joints and skinning | [rigging.md](rigging.md) | `tests/golden/rigging/` meshes | todo (5 follow-up cases; see the form's Follow-up section) — before: done |
+| O34 | Rigging I: joints and skinning | [rigging.md](rigging.md) | `tests/golden/rigging/` meshes | done (baseline plus the 5 follow-up cases after brief 101, observed 2026-11-21: weights-readback, j2-bend-90-points, j2-bend-90-matrix, j2-bend-90-single, j2-bend-90-blended) |
 | O35 | Rigging II: IK | [ik.md](ik.md) | `tests/golden/ik/` samples + meshes | todo (2 follow-up cases; see the form's Follow-up section) — before: done |
 | O36 | Constraints | [constraints.md](constraints.md) | `tests/golden/constraints/` samples + meshes | done (7 of 9 cases; see form) |
 | O37 | Pose Morph | [pose-morph.md](pose-morph.md) | `tests/golden/pose-morph/` meshes | blocked (strength track not scriptable; see form) |
