@@ -48,7 +48,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O32 | Volume builder and mesher | [volumes.md](volumes.md) | `tests/golden/volumes/` meshes | observed (10 of 12 cases; subtract/intersect not scriptable) |
 | O33 | Volumes II: filters, sources, VDB | [volumes-2.md](volumes-2.md) | `tests/golden/volumes/` meshes + .vdb | observed (11 of 13 cases; points-source and vdb-export not scriptable) |
 | O34 | Rigging I: joints and skinning | [rigging.md](rigging.md) | `tests/golden/rigging/` meshes | done (baseline plus the 5 follow-up cases after brief 101, observed 2026-11-21: weights-readback, j2-bend-90-points, j2-bend-90-matrix, j2-bend-90-single, j2-bend-90-blended) |
-| O35 | Rigging II: IK | [ik.md](ik.md) | `tests/golden/ik/` samples + meshes | todo (2 follow-up cases; see the form's Follow-up section) — before: done |
+| O35 | Rigging II: IK | [ik.md](ik.md) | `tests/golden/ik/` samples + meshes | done (9 baseline cases plus the 2 follow-ups after brief 104, observed 2026-11-21: rest-orientation, four-joints-2) |
 | O36 | Constraints | [constraints.md](constraints.md) | `tests/golden/constraints/` samples + meshes | done (7 of 9 cases; see form) |
 | O37 | Pose Morph | [pose-morph.md](pose-morph.md) | `tests/golden/pose-morph/` meshes | blocked (strength track not scriptable; see form) |
 | O54 | Tags II | [tags-2.md](tags-2.md) | `tests/golden/tags-2/` | done |

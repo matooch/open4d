@@ -1,0 +1,85 @@
+feature = "ik"
+observation = "docs/parity/ik.md"
+description = "The 3-joint chain as built (spacing 100), no IK tag and no goal; every joint rotation and axis read back from the app"
+mesh = "mesh.obj"
+
+[params]
+joints = 3
+spacing = 100.0
+pose = "the chain as built, no IK tag"
+
+[params.joint]
+bone = "To Child"
+axis = "Z"
+length = 100.0
+unnamed = ""
+unnamed_value = ""
+display = "Standard"
+size = "Length"
+size_value = 5.0
+unnamed_alt = ""
+display_remap = "Axis"
+size_remap = "Bone"
+size_alt = 5.0
+unnamed_b = ""
+weight_percent = 100.0
+stretch_percent = 100.0
+use_preferred = true
+weight_percent_value = 100.0
+preferred_deg = [0.0, 0.0, 0.0]
+strength_percent = 100.0
+limit_heading = false
+limit_pitch = false
+limit_bank = false
+minimum_rotation_deg = [0.0, 0.0, 0.0]
+maximum_rotation_deg = [0.0, 0.0, 0.0]
+enable = false
+hub = false
+mirror = ""
+unnamed_3 = ""
+origin = "World"
+plane = "World-XY"
+object = ""
+unnamed_4 = ""
+mix_percent = 25.0
+unnamed_5 = ""
+color = [1.0, 0.0, 0.0]
+unnamed_6 = ""
+
+[params.j1]
+name = "J1"
+position = [0.0, 0.0, 0.0]
+local_rotation_hpb_deg = [0.0, 0.0, 0.0]
+global_rotation_hpb_deg = [-0.0, 0.0, 0.0]
+local_axes = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+global_axes = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+
+[params.j2]
+name = "J2"
+position = [0.0, 100.0, 0.0]
+local_rotation_hpb_deg = [0.0, 0.0, 0.0]
+global_rotation_hpb_deg = [-0.0, 0.0, 0.0]
+local_axes = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+global_axes = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+
+[params.j3]
+name = "J3"
+position = [0.0, 200.0, 0.0]
+local_rotation_hpb_deg = [0.0, 0.0, 0.0]
+global_rotation_hpb_deg = [-0.0, 0.0, 0.0]
+local_axes = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+global_axes = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+
+[params.cube]
+size = [10.0, 10.0, 10.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = false
+fillet = false
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[import]
+scale = 1.0
+flip_z = false
