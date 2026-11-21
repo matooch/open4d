@@ -155,6 +155,7 @@ fn object(name: &str, tris: &[Tri], scale: f64) -> ObjObject {
         mesh: PolyMesh { points, polys },
         world: DMat4::IDENTITY,
         smoothing_angle: Some(40f64.to_radians()),
+        uvs: None,
     }
 }
 

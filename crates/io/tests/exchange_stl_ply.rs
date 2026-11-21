@@ -18,6 +18,7 @@ fn object(name: &str, points: &[[f64; 3]], polys: &[&[u32]]) -> ObjObject {
         },
         world: DMat4::IDENTITY,
         smoothing_angle: None,
+        uvs: None,
     }
 }
 
@@ -60,6 +61,7 @@ fn the_binary_writer_equals_the_six_golden_stl_files() {
             },
             world: DMat4::IDENTITY,
             smoothing_angle: None,
+            uvs: None,
         };
         let ours = stl::write(std::slice::from_ref(&o), &stl::WriteOptions::default());
         assert_eq!(ours.len(), golden.len(), "{}: file size", case.name);

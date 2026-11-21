@@ -22,9 +22,9 @@ yet, so the `vt` part is empty"). Read and write them.
 - Update IO.md first (replace the "no UVs yet" sentence with the rules above).
 
 ## Done when
-- [ ] Round trip of all 10 primitives keeps UVs exactly; the existing OBJ export tests are unchanged.
-- [ ] Import of a hand-written OBJ with `v/vt`, `v/vt/vn` and negative `vt` indices.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Round trip of all 10 primitives keeps UVs exactly; the existing OBJ export tests are unchanged.
+- [x] Import of a hand-written OBJ with `v/vt`, `v/vt/vn` and negative `vt` indices.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -34,3 +34,16 @@ yet, so the `vt` part is empty"). Read and write them.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+
+Status: done
+
+Added `uvs: Option<CornerUvs>` to `ObjObject`, updated the OBJ writer to emit `vt` lines
+(deduplicated exactly, first-seen order) and faces as `v/vt/vn` (or `v/vt` without normals),
+and the reader to parse `vt` lines and per-corner `vt` indices into `CornerUvs`. Objects
+without UVs produce byte-identical output. `export_scene` reads UVs from `forge.uvw` tags;
+`import_into` writes them back, skipping the tag silently only when the UVW tag type is not
+registered (e.g. smoothing golden files with dummy `vt`). Added unit tests for UV round-trip,
+primitive UV round-trip, hand-written `v/vt/vn` and negative `vt` indices, partial UVs, and
+no-UV output. Updated IO.md and STATUS.md.
+
+Co-Authored-By: kimi-k2.7-code <kimi-k2.7-code@nousresearch.com>
