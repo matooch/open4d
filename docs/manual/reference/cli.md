@@ -208,11 +208,11 @@ forge render <scene> --out [--width] [--height] [--samples] [--max-depth] [--see
 |---|---|---|---|
 | `<scene>` | yes |  |  |
 | `--out` | yes |  | Output path template; tokens {frame}, {frame:N}, {pass}, {name}. The extension picks the format when it is a known one |
-| `--width` | no | `320` |  |
-| `--height` | no | `240` |  |
-| `--samples` | no | `16` |  |
-| `--max-depth` | no | `5` |  |
-| `--seed` | no | `1` |  |
+| `--width` | no |  | Image width (default: the scene's stored render settings, else 320) |
+| `--height` | no |  | Image height (default: the scene's stored render settings, else 240) |
+| `--samples` | no |  | Samples per pixel (default: the scene's stored render settings, else 16) |
+| `--max-depth` | no |  | Path vertices (default: the scene's stored render settings, else 5) |
+| `--seed` | no |  | Sampling seed (default: the scene's stored render settings, else 1) |
 | `--frame` | no |  | One frame (default 0, clamped to the scene range) |
 | `--start` | no |  | First frame of a sequence (needs --end) |
 | `--end` | no |  |  |

@@ -20,6 +20,7 @@ mod polygon;
 mod polygon_prim;
 mod pyramid;
 mod round;
+pub mod scene_objects;
 mod solids;
 mod sphere;
 mod spline_gens;
@@ -117,6 +118,9 @@ impl Plugin for Primitives {
         r.register(clone_spline::node_type())?;
         r.register(boole::node_type())?;
         r.register(polygon::selection_tag_type())?;
+        for t in scene_objects::node_types() {
+            r.register(t)?;
+        }
         r.register(polygon::node_type())
     }
 }

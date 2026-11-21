@@ -922,3 +922,43 @@ fn missing_external_files_warn_only_when_asked_and_the_link_is_kept() {
     let _ = id;
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn render_settings_are_a_pure_addition_to_version_12() {
+    use forge_core::{RenderConfig, RenderFilter};
+    // a file without the field loads with none stored
+    let text = "(format: \"forge3d-scene\", version: 12, roots: [])";
+    let (scene, report) = file::load(registry(), text).unwrap();
+    assert!(scene.render_config().is_none() && report.warnings.is_empty());
+    // a scene without settings writes no `render` field (older readers see the same file)
+    assert!(!file::save(&scene).contains("render"));
+
+    let mut doc = forge_core::Document::new(registry());
+    let cfg = RenderConfig {
+        width: 320,
+        height: 200,
+        samples: 4,
+        filter: RenderFilter::Gaussian,
+        ..RenderConfig::default()
+    };
+    doc.transact("render", |tx| tx.set_render_config(Some(cfg.clone())))
+        .unwrap();
+    let text = file::save(doc.scene());
+    let (back, _) = file::load(registry(), &text).unwrap();
+    assert_eq!(back.render_config(), Some(&cfg));
+    // undo restores "none stored"
+    doc.undo();
+    assert!(doc.scene().render_config().is_none());
+    // invalid settings are refused by the edit and dropped on load
+    let bad = RenderConfig {
+        width: 0,
+        ..RenderConfig::default()
+    };
+    assert!(
+        doc.transact("bad", |tx| tx.set_render_config(Some(bad)))
+            .is_err()
+    );
+    let text = text.replace("width: 320", "width: 0");
+    let (back, report) = file::load(registry(), &text).unwrap();
+    assert!(back.render_config().is_none() && !report.warnings.is_empty());
+}

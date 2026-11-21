@@ -44,7 +44,7 @@ implementers can avoid collisions.
 | 044 | [Shared Caps/Bevel tabs and Extrude R25 options](../agents/tasks/044-caps-bevel-tab.md) | C | 042 | done (parity-pending: Delaunay/Regular Grid caps, bevels pinned) | generators |
 | 045 | [Extrude R25 vertex order](../agents/tasks/045-extrude-r25-order.md) | C | 044 | done (parity-pending: larger outlines) | generators |
 | 046 | [Null display, Instance render modes, Connect weld options](../agents/tasks/046-null-instance-connect-options.md) | C | – | waiting: G8 (O20 follow-ups are in) | generators, viewport |
-| 047 | [Camera, Light, Environment, Floor and Sky as scene objects](../agents/tasks/047-scene-objects-camera-light.md) | C | – | ready | generators, core, viewport |
+| 047 | [Camera, Light, Environment, Floor and Sky as scene objects](../agents/tasks/047-scene-objects-camera-light.md) | C | – | done (camera and light defaults equal O29 for all 9 light types; Environment/Floor/Sky are our design; stereo, composition helpers, volumetric light params not yet; render bridge and `forge render` use the scene objects; render settings stored in v12) | generators, core, viewport |
 | 048 | [Generators as clone and volume inputs (consumed-input rules)](../agents/tasks/048-generators-in-clone-volume-contexts.md) | C | 065, 081 | done | generators |
 | 049 | [Create menu organisation](../agents/tasks/049-create-menu-organisation.md) | C | 148 | ready | ui, core |
 | 050 | [Bend 3-axis gating fix + EvalCtx through evaluation](../agents/tasks/050-bend-gating-evalctx.md) | D | – | done | modifiers, generators, core |

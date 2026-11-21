@@ -201,7 +201,14 @@ of the usual right-handed rotation (what the observed left-handed reference does
 toward -X, so a heading of -15 deg looks to the right (O30: the objects sit left of the image
 centre), `Rp` turns +Z toward +Y (positive pitch looks up) and `Rb` turns +X toward -Y. Only
 the heading sign is observed (O30); pitch and bank follow from the same convention and are
-**parity-pending**. The case files' `camera_rotation_deg = [-15, 0, 0]` is therefore
+**parity-pending**.
+
+**Finding (brief 047): the reference's camera heading sign is opposite the usual right-handed
+one.** The node transform of every object is `Ry(-h) Rx(-p) Rz(-b)` (TRANSFORM.md), which is
+exactly `hpb_matrix`, so a camera *object* needs no conversion: its world matrix is the
+camera-to-world matrix (SCENE-OBJECTS.md S2, test
+`heading_sign_is_the_references_not_the_right_handed_one`). Do not "fix" the sign when adding
+look-at helpers or exporters: a heading of -15 degrees must look to the right. The case files' `camera_rotation_deg = [-15, 0, 0]` is therefore
 `[heading, pitch, bank]`: the form's prose calls it "P -15 deg", which the pictures contradict
 (with pitch -15 and heading 0 the cube would be centred horizontally; see R14).
 
@@ -239,8 +246,12 @@ a layer per pass: beauty as `R G B A`, depth as `Z`, vector passes as `R G B`, i
 
 CLI: `forge render <scene> --out <path> [--width W] [--height H] [--samples N] [--frame N |
 --start A --end B --step S] [--aov depth,normal,...] [--multipart] [--seed N]` (docs/specs/CLI.md).
-The CLI builds the snapshot from the scene's evaluated meshes with a default material, the default
-light and a camera that frames the scene bounds (the scene has no camera or light objects yet).
+The CLI builds the snapshot from the scene's evaluated meshes with a default material and a
+camera that frames the scene bounds; since brief 047 the scene's camera, light, environment, sky and
+floor objects are applied on top (SCENE-OBJECTS.md S5: the first camera replaces the framing
+camera, light objects replace the default light, the fallbacks are unchanged when the scene has
+none) and the scene's stored render settings (S6) are the defaults of `--width`, `--height`,
+`--samples`, `--max-depth` and `--seed`, which override them.
 
 ## R14 Parity with O30 / O43 (level C)
 
@@ -289,6 +300,5 @@ Findings:
 
 ## R13 Not done / follow-ups
 
-Light and camera scene objects (node types and their registration, icon table), the material
-hosted in the document (brief 194), object-shaped area lights, falloff `Steps`, Sobol sampling,
+The material hosted in the document (brief 194), object-shaped area lights, falloff `Steps`, Sobol sampling,
 adaptive sampling, denoising, volumetrics, depth of field and motion blur (138).

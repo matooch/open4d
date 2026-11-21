@@ -8,7 +8,7 @@ use forge_render_api::{
     Aov, Control, FrameRange, Multipass, OutputFormat, OutputSettings, RenderEngine,
     RenderSettings, frames, write_output,
 };
-use forge_render_bridge::snapshot_from_polys;
+use forge_render_bridge::{apply_scene_objects, settings_from_scene, snapshot_from_polys};
 use forge_render_cpu::CpuEngine;
 use serde_json::json;
 
@@ -21,16 +21,21 @@ pub struct RenderArgs {
     /// the format when it is a known one.
     #[arg(long)]
     pub out: String,
-    #[arg(long, default_value_t = 320)]
-    pub width: u32,
-    #[arg(long, default_value_t = 240)]
-    pub height: u32,
-    #[arg(long, default_value_t = 16)]
-    pub samples: u32,
-    #[arg(long, default_value_t = 5)]
-    pub max_depth: u32,
-    #[arg(long, default_value_t = 1)]
-    pub seed: u64,
+    /// Image width (default: the scene's stored render settings, else 320).
+    #[arg(long)]
+    pub width: Option<u32>,
+    /// Image height (default: the scene's stored render settings, else 240).
+    #[arg(long)]
+    pub height: Option<u32>,
+    /// Samples per pixel (default: the scene's stored render settings, else 16).
+    #[arg(long)]
+    pub samples: Option<u32>,
+    /// Path vertices (default: the scene's stored render settings, else 5).
+    #[arg(long)]
+    pub max_depth: Option<u32>,
+    /// Sampling seed (default: the scene's stored render settings, else 1).
+    #[arg(long)]
+    pub seed: Option<u64>,
     /// One frame (default 0, clamped to the scene range).
     #[arg(long, allow_negative_numbers = true)]
     pub frame: Option<i64>,
@@ -113,9 +118,15 @@ pub fn render(a: &RenderArgs) -> Outcome {
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "scene".into());
+    // stored render settings (a pure addition to the scene file), then the flags on top
+    let base = settings_from_scene(app.doc.scene(), RenderSettings::default());
+    let (width, height) = (
+        a.width.unwrap_or(base.width),
+        a.height.unwrap_or(base.height),
+    );
     let out_settings = OutputSettings {
-        width: a.width,
-        height: a.height,
+        width,
+        height,
         path: a.out.clone(),
         name,
         format,
@@ -129,19 +140,20 @@ pub fn render(a: &RenderArgs) -> Outcome {
         },
         ..OutputSettings::default()
     };
-    let settings = RenderSettings {
-        width: a.width,
-        height: a.height,
-        samples: a.samples,
-        max_depth: a.max_depth,
-        seed: a.seed,
+    let mut settings = RenderSettings {
+        width,
+        height,
+        samples: a.samples.unwrap_or(base.samples),
+        max_depth: a.max_depth.unwrap_or(base.max_depth),
+        seed: a.seed.unwrap_or(base.seed),
         aovs,
-        ..RenderSettings::default()
+        ..base
     };
     settings.validate().map_err(|e| user(e.to_string()))?;
     let multiple = list.len() > 1;
     let engine = CpuEngine::new();
     let mut files = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
     for f in &list {
         let scene = app.frame(*f);
         let ids: Vec<NodeId> = all_nodes(&scene)
@@ -156,7 +168,18 @@ pub fn render(a: &RenderArgs) -> Outcome {
                 Err(e) => return Err(e.into()),
             }
         }
-        let snap = snapshot_from_polys(&polys, a.width as f64 / a.height as f64);
+        let mut snap = snapshot_from_polys(&polys, width as f64 / height as f64);
+        let applied = apply_scene_objects(&mut snap, &scene);
+        if applied.scene_has_lights {
+            // lights in the scene (even all switched off) replace the default light
+            settings.default_light = false;
+        }
+        for w in &applied.warnings {
+            eprintln!("warning: {w}");
+            if !warnings.contains(w) {
+                warnings.push(w.clone());
+            }
+        }
         let out = engine
             .render(&snap, &settings, &Control::new())
             .map_err(|e| user(e.to_string()))?;
@@ -168,8 +191,8 @@ pub fn render(a: &RenderArgs) -> Outcome {
         }
     }
     Ok(Out {
-        json: json!({"files": files, "frames": list, "width": a.width, "height": a.height,
-            "samples": a.samples, "format": format.extension()}),
+        json: json!({"files": files, "frames": list, "width": width, "height": height,
+            "samples": settings.samples, "format": format.extension(), "warnings": warnings}),
         text: format!("rendered {} frame(s), {} file(s)", list.len(), files.len()),
     })
 }

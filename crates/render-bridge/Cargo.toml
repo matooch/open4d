@@ -6,6 +6,8 @@ license.workspace = true
 description = "Scene to render snapshot adapter (docs/specs/RENDER.md R1, R12)."
 
 [dependencies]
+forge-core = { path = "../core" }
+forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }
 forge-material = { path = "../material" }
 forge-render-api = { path = "../render-api" }

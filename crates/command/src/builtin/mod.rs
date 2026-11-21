@@ -18,6 +18,7 @@ mod layer;
 mod mesh;
 mod object;
 mod param;
+mod render;
 mod snap;
 mod spline;
 pub use param::{stored as display_to_stored, value_from_json as param_value_from_json};
@@ -41,6 +42,7 @@ pub fn register_editor_commands(r: &mut CommandRegistry) -> Result<(), CommandEr
     snap::register(r)?;
     param::register(r)?;
     timeline::register(r)?;
+    render::register(r)?;
     keys::register(r)?;
     file::register(r)?;
     browser::register(r)?;
