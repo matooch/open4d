@@ -1,0 +1,81 @@
+feature = "cloner"
+observation = "docs/parity/clone-toolset-3.md"
+description = "Linear cloner Count 6 with three children (20 cm cube, Sphere radius 10, Cone radius 10), Clones Iterate"
+mesh = "mesh.obj"
+
+[params]
+mode = "linear"
+clones_mode = "Iterate"
+reset_coordinates = true
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = 6
+offset = 0
+linear_mode = "Per Step"
+amount_percent = 100.0
+transform_position = [0.0, 50.0, 0.0]
+transform_scale_percent = [100.0, 100.0, 100.0]
+transform_rotation_deg = [0.0, 0.0, 0.0]
+step_mode = "Single Value"
+step_size_percent = 100.0
+step_rotation_deg = [0.0, 0.0, 0.0]
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+animation_mode = "Play"
+effector_count = 0
+
+[params.children_0]
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+top_radius = 0.0
+bottom_radius = 10.0
+height = 200.0
+height_segments = 4
+rotation_segments = 16
+orientation = "+Y"
+caps = true
+cap_segments = 1
+top_fillet = false
+top_fillet_radius = 3.0
+top_fillet_height = 3.0
+bottom_fillet = false
+bottom_fillet_radius = 3.0
+bottom_fillet_height = 3.0
+fillet_segments = 3
+slice = false
+from_deg = 0.0
+to_deg = 180.0
+regular_grid = false
+width = 10.0
+
+[params.children_1]
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+radius = 10.0
+segments = 16
+type = "Standard"
+render_perfect = true
+
+[params.children_2]
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+size = [20.0, 20.0, 20.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = false
+fillet = false
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[import]
+scale = 1.0
+flip_z = false

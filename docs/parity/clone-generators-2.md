@@ -1,6 +1,6 @@
 # Clone-toolset generators II — observation (O31)
 
-Status: partial · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-20
+Status: partial (8 of 10 cases; the turtle-2 follow-up observed 2026-11-21) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-20
 Method: scripted. Each generator is made through its menu command; children are
 inputs, as named. Export the whole result as `tests/golden/<feature>/<case>/mesh.obj`, and
 also save the clone data (`samples.json`, kind `clones`, as [cloner.md](cloner.md)) where
@@ -345,9 +345,9 @@ Matrix per mode (defaults only; the app shows no usable Min/Max for these):
 
 ## Follow-up (planner, after brief 076)
 
-| Case | Redo as | What was missing |
-|---|---|---|
-| turtle | turtle-2 | The spline generator's Turtle settings (premise, rules, angle, length, iterations, everything on its tab) must be in `case.toml` |
+| Case | Redo as | What was missing | Result |
+|---|---|---|---|
+| turtle | turtle-2 | The spline generator's Turtle settings (premise, rules, angle, length, iterations, everything on its tab) must be in `case.toml`  observed: rebuilt as `turtle-2` — a fresh MoSpline in Turtle mode (the Mode row reads back 3 = Turtle), extruded and baked with Current State to Object; the mesh matches the original `turtle` exactly: 158 points, 63 polygons, bbox rounds to the recorded values (max difference 0.000453, float export noise); `case.toml` keeps the original keys and adds the full MoSpline table under `[params.mospline]` — premise `^(90)FFFA`, the default rules, result No Errors, growth 5.0, default angle 28, seed 123456, multipliers and grow values, i.e. the whole Turtle tab plus the other tabs. Note: `observation` points at this form because this row lives here; the original case points at `clone-toolset-3.md`, where its main row is |
 
 ## Notes
 - Probes are in /Users/bigman/forge-observer/probes (o31_b33.py, o31_b34.py, o31_b38.py,
@@ -393,3 +393,10 @@ Matrix per mode (defaults only; the app shows no usable Min/Max for these):
   R is exported in degrees as `r_deg`; percentages keep the app's 0-100 range. The per-mode table
   uses the key names the probe read back, which are the same scheme.
 - App version number read back through the scripting interface: 25010 (interface version 25004).
+
+### turtle-2 attempt, 2026-11-21
+
+- `[params.mospline]` is read at frame 0 with the mode already set to Turtle; the row the
+  form calls "angle" appears as `default_angle_deg` per the parameter-table convention.
+- `docs/parity/STATUS.md` still calls `clone-spline/turtle` UNSUPPORTED for missing
+  premise/rules — that file is outside this form and was left alone.

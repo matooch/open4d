@@ -1,6 +1,6 @@
 # Dynamics: rigid bodies — observation (O39)
 
-Status: observed, 8 of 9 cases (`gravity-half` not observed, see its row)  · App version: R25 25.010 · OS: macOS · Observer: Hermes observer, scripted unattended run · Date: 2026-11-20
+Status: observed, 12 of 13 cases (`gravity-half` not observed, see its row)  · App version: R25 25.010 · OS: macOS · Observer: Hermes observer, scripted unattended run · Date: 2026-11-20
 Method: scripted, 30 fps, project 0–90.
 
 Simulate by stepping the document frame by frame from 0, so the simulation runs in order.
@@ -98,33 +98,16 @@ carry the same tag type; the one on the plane is the collider, the one on a movi
 
 ## Follow-up cases (planner, after briefs 115/116)
 
-| Case | Setup | Record |
-|---|---|---|
-| bounce-combine-0 | `drop-cube`, but the plane's Bounce 0 % (cube default) | the same tracks as `drop-cube` |
-| bounce-combine-50 | the same with the plane's Bounce 50 % | the same |
-| clones-fall-2 | `clones-fall`, but the cloner moved by (13, 0, 7) so no clone sits exactly on the plane's edge | the same tracks as `clones-fall` |
-| collision-noise-0 | `clones-fall` with the tag's Collision Noise 0 | the centre clone's tracks |
+| Case | Setup | Record | Result |
+|---|---|---|---|
+| bounce-combine-0 | `drop-cube`, but the plane's Bounce 0 % (cube default) | the same tracks as `drop-cube` | observed: the plane tag Bounce reads back 0 % (its default 100 %); `samples-cube-*` over 91 frames: first contact frame 24, y_min 23.816228 at frame 24, rebound peak 25.72472, ends at 24.999673 — the cube settles with no visible rebound |
+| bounce-combine-50 | the same with the plane's Bounce 50 % | the same | observed: plane Bounce reads back 50 %; first contact frame 24, y_min 24.177597, rebound peak 27.28798, ends at 25.000308 — the rebound peak grows with Bounce: 25.72472 (0 %), 27.28798 (50 %), 29.337369 (100 %, `drop-cube`) |
+| clones-fall-2 | `clones-fall`, but the cloner moved by (13, 0, 7) so no clone sits exactly on the plane's edge | the same tracks as `clones-fall` | observed: cloner at (13, 300, 7); clone 0 starts at (−187, 300, −193) and still tips off the moved plane edge, ending at (−501.587775, −1986.90774, −517.687678); clone 4 starts at (13, 300, 7) and rests on the plane at y 15.002201 (ends x 5.119615, z 10.052614); `samples-clone0-*` and `samples-clone4-*`, 91 frames — the same tracks as `clones-fall` |
+| collision-noise-0 | `clones-fall` with the tag's Collision Noise 0 | the centre clone's tracks | observed: the cloner body tag Collision Noise reads back 0 % (default 0.5 %); the centre clone (index 4) starts at (0, 300, 0) and rests at (0.944188, 15.001608, 0.501539) versus (1.871842, 15.002187, 1.870218) in `clones-fall` — same landing, different jitter path; `samples-clone4-*`, 91 frames |
 
 Also read the scene's dynamics settings in the GUI if a script cannot (gravity, steps per frame)
 and note them under GUI session G9.
-
-## Notes
-
-Started, not finished (unattended window, 2026-11-20). What is now known from the probes:
-
-- The two rigid-body commands exist and run from a script: one puts a "Dynamics Body" tag on the
-  selected object (used for the moving body), the other puts a tag of the same type on the
-  selected object for the static geometry — the probe applied the second to the plane and the
-  first to the cube, and both objects then carry a tag whose attribute manager reads
-  "Dynamics Body".
-- Stepping the document frame by frame does run the simulation: with a 50 cm cube at y 300 over a
-  default 400 x 400 plane and document 30 fps, the cube's global y read 300.000, 299.334,
-  297.559, 294.677, 290.690, 285.600, 279.409, 272.118, 263.729, 254.245, 243.668, 231.998,
-  219.238, 205.391, 190.456, 174.438 at frames 0 to 15. Every value is a global position read
-  with the document set to that frame; no value here is interpolated.
-- The rigid body tag's table, at its defaults, reads: Enabled on; Dynamic (Off / On / Ghost) On;
-  Trigger (Immediately / At Velocity Peak / On Collision / By XPresso) Immediately with Trigger
-  Velocity Threshold 10; Custom Initial Velocity off with Initial Linear Velocity (0, 0, 0) and
+ocity Threshold 10; Custom Initial Velocity off with Initial Linear Velocity (0, 0, 0) and
   Initial Angular Velocity (0, 0, 0); Set Initial State and Clear Initial State buttons; Show in
   Visualization on; plus the collision, mass, friction, bounce and force blocks further down
   the table.
@@ -156,3 +139,16 @@ Started, not finished (unattended window, 2026-11-20). What is now known from th
 - The sphere on the 20 deg slope rolls off the 400 x 400 plane and ends at (669.192, -1593.614,
   1.355) cm at frame 90, so its track is a fall, not a rolling-to-rest curve.
 - The tumble cube lands on another face: B goes from 10 deg to 359.999 deg, essentially one turn.
+
+### Follow-up observations, 2026-11-21
+
+- Bounce sweep on the same drop: rebound peak after contact is 25.72472 / 27.28798 / 29.337369 at
+  plane Bounce 0 / 50 / 100 % (first contact at frame 24 in both new cases, 23 in `drop-cube`).
+- MoGraph matrix source: `GeGetMoData` returns cloner-local matrices in this build — the cloner's
+  own position is not folded in — while the committed `clones-fall` samples hold world positions.
+  The two cloner cases therefore add the cloner's position (13, 300, 7) and (0, 300, 0) to the
+  sampled offsets, reproducing the committed convention; checked against the committed records
+  (clone 4 starts at (0, 300, 0) and rests at y 15.002 in both).
+- The cloner also carries a Data Tag named "Info", so the body tag is found by type
+  ("Dynamics Body") rather than as the last tag in the tag list.
+- Scene gravity/steps stay GUI-only per the section note; untouched here.

@@ -1,0 +1,13 @@
+feature = "keyframes"
+observation = "docs/parity/fcurves.md"
+description = "position X, key 30 with broken tangents, left (-10 frames, -20) and right (10 frames, 40), set then read back before sampling (redo of broken)"
+
+[params]
+param = "pos_x"
+keys = [[0, 0], [30, 100], [60, 0]]
+auto_tangents = false
+break_tangents = true
+tangent_left_frames = -10.0
+tangent_left_value = -20.0
+tangent_right_frames = 10.0
+tangent_right_value = 40.0

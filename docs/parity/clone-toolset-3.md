@@ -1,6 +1,6 @@
 # Clone toolset III — observation (O50)
 
-Status: partial · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-20
+Status: partial (baseline 44 of 49 rows; all 3 follow-up cases observed 2026-11-21) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-20
 Method: as [cloner.md](cloner.md) (O8) for clone data (`samples.json`, kind `clones`) and
 meshes. Spline outputs go through an Extrude as in [splines-2.md](splines-2.md).
 
@@ -62,10 +62,10 @@ Unblocks: E/067, 076, 077, 078.
 
 Redo these two cases as new case folders (keep the old ones):
 
-| Case | Redo as | What was missing |
-|---|---|---|
-| reset-coords-off | reset-coords-off-2 | The child cube's position and rotation must be in `case.toml` (under the child's table), not only in the description |
-| linear-rstep | linear-rstep-2 | The step rotation was described as H but stored in the second (P) slot. Set only Step Rotation H = 10°, read back all three step-rotation values, and store them in H, P, B order |
+| Case | Redo as | What was missing | Result |
+|---|---|---|---|
+| reset-coords-off | reset-coords-off-2 | The child cube's position and rotation must be in `case.toml` (under the child's table), not only in the description |  observed as `reset-coords-off-2`: rebuilt the same scene — `[params]` reads back with no differences at all from the original and the clone samples match exactly (max position difference 0.0); `[params.child]` now holds the cube with position [0, 50, 0], rotation_deg [30, 0, 0], scale [1, 1, 1] plus size 20 and its segment rows |
+| linear-rstep | linear-rstep-2 | The step rotation was described as H but stored in the second (P) slot. Set only Step Rotation H = 10°, read back all three step-rotation values, and store them in H, P, B order |  observed as `linear-rstep-2`: Step Rotation set on the H slot only, read back as [10.0, 0.0, 0.0] in H, P, B order under `step_rotation_deg` (the original stored [0.0, 10.0, 0.0]); it is the only changed row — every other parameter reads back like the original. The corrected slot changes what the app does: the five clones now run straight along +Y (clone 4 at (0, 200, 0) instead of the arced (0, 177.829, -82.923)) while their axes still turn about 80 degrees around a different direction (clone 4 y axis (0.633, 0.174, -0.754) instead of (0, -0.5, -0.866)); maximum position difference to the original 82.922796534 |
 
 ## Case results
 
@@ -126,6 +126,16 @@ Redo these two cases as new case folders (keep the old ones):
 The `order-*` cases' children (cone, sphere, cube) must be in `case.toml` with every parameter
 (under `[params.children_N]` tables in list order), not only in the description. Redo
 `order-iterate` as `order-iterate-2` with that recorded; the other order cases need no redo.
+
+#### order-iterate-2 result (2026-11-21)
+
+Observed: rebuilt the same scene — `[params]` reads back identical to `order-iterate` (no
+differences) and the clone samples match exactly (max position difference 0.0). The children
+are recorded as `[params.children_0]` = Cone, `children_1` = Sphere, `children_2` = Cube —
+the same order the sample rows' `child` indices use (0, 1, 2) — each table holding position
+[0, 0, 0], rotation_deg [0, 0, 0], scale [1, 1, 1] and every primitive setting (cone bottom
+radius 10, sphere radius 10, cube 20 cm). `observation` points at `clone-toolset-3.md`, the
+form holding this follow-up; the original points at `cloner-3.md`, its main row's form.
 
 ## Notes
 - Blend order: 5 clones of a cube (size 20) and a sphere (r 10) in Linear mode at the default (0, 50, 0) step bake to a 358-point / 396-polygon mesh; clone weights read 0 because no weight tag is present, as in the O8 cloner cases.
