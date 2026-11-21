@@ -24,8 +24,8 @@ component of an animatable Vec3 parameter (`"transform.pos.x"`, `"transform.rot.
 rotation H). `parse_target(key, find)` resolves a key against a type's descriptors; a key
 that names anything else (missing, non-animatable, Int/Bool/Colour/..., bad axis) is
 `TrackError::BadTarget`. Param ids may contain dots, so a full match against a Float
-parameter wins before the last `.x|y|z` is split off. Int, Bool, Enum and Colour tracks
-are out of scope. Vec3 tracks need not cover all three components; a component without a
+parameter wins before the last `.x|y|z` is split off. Int, Bool, Enum, Colour, Link and
+mesh point tracks are addressed as in §1.8. Vec3 tracks need not cover all three components; a component without a
 track keeps the stored value.
 
 ### 1.3 Edits
@@ -161,13 +161,8 @@ cases match to the 1e-4 tolerance: `user-tangent-steep`, `user-tangent-flat`,
   a local extreme has slope 0 anyway). Matches.
 - `after-continue`: the last key's automatic tangent is flat, so Continue equals the constant
   extension of §1.4.3. Matches.
-- **UNSUPPORTED** `after-repeat`, `after-offset`, `after-oscillate`, `before-repeat`: the track
-  after/before behaviour is not in the data model (`Track` has keys only) and the `case.toml`
-  holds no structured behaviour field. Observed (parity-pending): Repeat repeats every 30
-  frames (value at 45 and 75 = 50.0001); Offset adds 100 per cycle (150.0001 at 45, 200 at
-  60); Oscillate mirrors each cycle (0 at 60, 100 at 90); before-Repeat runs backwards
-  (50.0001 at 15); at an exact cycle boundary the value is the end of the cycle (frame 90 =
-  100, frame 0 of before-repeat = 100).
+- `after-repeat`, `after-offset`, `after-oscillate`, `before-repeat` match since §1.9 (the
+  behaviour is read from the case description: `case.toml` has no field for it).
 - **UNSUPPORTED** `linear-to-spline`: the `case.toml` has no `interpolation_by_key`; the
   Linear first key is stated only in the description, so the test cannot build the track. Observation
   needs redoing: add `interpolation_by_key = ["linear", "spline", "spline"]`.
@@ -180,6 +175,32 @@ cases match to the 1e-4 tolerance: `user-tangent-steep`, `user-tangent-flat`,
   tangent (10, 40) is not a display tangent, and the case holds no break or auto flags); (3) value clamp on the right segment (needs the clamp flag, which the
   data does not carry). The read-back is not a trustworthy description of the evaluated key,
   so this case needs the flags observed too.
+
+### 1.5b Tangent model, presets, speed (brief 089)
+Data: `Track::tangents` (empty = every key automatic, else one `KeyTangent` per key) with
+`KeyTangent { left, right: Handle { mode, dt, dv }, weighted, broken }`. `TangentMode::Auto` is the
+ease of §1.5, `Chord` the straight line of §1.8, `User` the stored handle end (`dt` seconds, negative
+on the left, `dv` value offset), evaluated exactly as stored whether or not `weighted` is set
+(§1.5a: the curve depends only on the stored handle end). `broken` and `weighted` are editing
+flags. The legacy `value_at_exact(track, user, t)` read-back path classifies each side as Auto or
+User with the §1.5a rules and then uses the same evaluator, so all twelve O38 cases keep their
+result (`keyframes_parity`: 34 of 36 match, `broken` pinned, `linear-to-spline` unsupported).
+Presets (`forge_anim::tangent`, own design, the observations fix only evaluation):
+- `ease`: both handles flat (`dv = 0`), a third of the adjacent span long; `ease_in` / `ease_out`
+  flatten one side only.
+- `zero_angle`: both handles flat, lengths kept (automatic sides get the automatic length).
+- `zero_length`: both handle ends on the key.
+- `set_right_handle(dt, dv)`: unweighted handles keep a third of the span as length and take the
+  slope `dv / dt`; weighted ones take `dt` as length; an unbroken key mirrors the slope onto the left
+  handle, a broken one leaves it.
+- **Overshoot prevention** (O38 `clamp`): the automatic slope already never overshoots (§1.5) and
+  `clamp-off` equals the default, so there is no separate flag; **UNSUPPORTED** as an option
+  (nothing observed distinguishes it).
+- **Speed**: `speed_at(track, t)` is `dv/dt`: 0 for Step and outside the keys, the chord slope for
+  Linear, `(dy/ds) / (dx/ds)` at the solved curve parameter for a spline segment (an ease peaks at
+  1.5 times the mean speed). Used by the speed graph (brief 092).
+- **Not observed / not done**: the `broken` case (§1.5a) stays pinned; `track.set_behavior` and
+  `key.set_tangent` registry commands are not added (they are brief 090/091's UI work).
 
 ### 1.6 Animated scenes (`forge-anim::scene_at`)
 `scene_at(&Scene, time) -> Scene` copies the scene and sets every tracked parameter to
@@ -195,6 +216,151 @@ Version 4 writes `tracks: { "<track key>": (keys: [(time: .., value: .., interp:
 per node, sorted by key; versions 1–3 still load without tracks. A track that does not
 validate against its node's type is dropped with a warning on load (kept as-is on unknown
 types).
+
+### 1.8 Tracks for every value type, point-level animation (O53, `docs/parity/animation-3.md`, brief 088)
+Sources: `tests/golden/animation-3/` (7 cases) and the O53 notes. `forge_core::parse_track_target`
+resolves a track key to a `TrackTarget`; `parse_target` (Float and Vec3 components) is unchanged.
+Key values stay `f64`; the target decides how a value is read (this replaces the planned
+`KeyValue` enum, so existing `Key` literals keep compiling):
+
+| Parameter | Track key | Key value | Evaluation |
+|---|---|---|---|
+| Float | `<id>` | the value | the curve (§1.4, §1.5) |
+| Vec3 | `<id>.x|y|z` | the component | the curve |
+| Colour | `<id>.r|g|b` | the channel | the curve, clamped to >= 0 (`color-track`: linear 1 -> 0 and 0 -> 1) |
+| Int | `<id>` | the number | the curve **floored** after adding 1e-4 (`int-track`) |
+| Bool | `<id>` | 0 / 1 | step: key at or before the time, value >= 0.5 is true |
+| Enum | `<id>` | option index | step, index into the descriptor's options |
+| Link | `<id>` | node id, 0 = none | step |
+| Mesh | `<id>.points` | unused | point-level, below |
+
+- **Int** (`int-track`, keys 1 @ 0 and 10 @ 30): 1 at frames 0-3, 2 at 4-6 ... 10 from 30. That is
+  `floor(1 + 0.3 f)`: the value holds and steps at the integer crossings of the straight
+  line. The 1e-4 added before flooring absorbs the solver's 2^-19 sawtooth (frame 10 is exactly 4).
+- **Colour** and **Float**/**Vec3** keys of the O27 and O53 sessions evaluate as a **straight
+  line**, not the ease of O2 (`color-track` 0.5 @ 15, 0.966666 @ 1; `euler-cross` 158.666546 @ 1;
+  `tie-span-24` 10 per frame; `tie-span-30` 100/7 per frame; also `animation-2/param-track`).
+  Their curve is a spline segment whose handles lie on the chord: handle length = a third of the
+  span rounded to the 4e-7 s grid, handle value offset = chord / span * length. Model:
+  `TangentMode::Chord` (§1.5a gives the tangent model; `Key::new` stays `Auto`, as O2/O12/O16/O38
+  keys ease). The handle grid follows seconds, not frames: the same frame span gives the same
+  curve at 24 and at 30 fps (`tie-span-24`, `tie-span-30`).
+  Sampling is at exact frame times (like §1.5a), so `value_at_exact`.
+- **Bool, enum and link tracks are not observable** in the reference as scripted (`bool-track`,
+  `enum-track`, `link-track` not observed in O53: the parameter keeps its base value). They are
+  implemented as steps by design (parity-pending, no golden data).
+- **Point-level animation** (`pla` not observed): a track on `<mesh param>.points` holds a whole
+  point array per key (`Track::points`, one array per key, same point count; `set_points_key`).
+  `forge_anim::points_at`: constant outside the keys, the previous array for a Step key, else a
+  linear blend of the two neighbouring arrays by time fraction. `scene_at` replaces the points of
+  the mesh parameter and keeps its polygons; an override whose point count differs from the mesh is
+  skipped. Parity-pending.
+- **Generator parameter** (`generator-param`): a Bend's strength track is an ordinary Float track.
+  `scene_at` at frame 15 gives the same mesh as the Bend with that strength stored (test
+  `animation3_parity`). **KNOWN_MISMATCH** `generator-param/mesh.obj`: its bbox (x -99.2..347.9,
+  y -353.7..95.5) fits none of our bends of an 8x8x8 cube (cube size_y 200 or 400, angle 0 or 45,
+  limited or unlimited, strength 45 to 180 degrees tried); the case does not record the cube size or
+  the Bend's size, mode and angle. The form needs those settings.
+- **Solver residual** (KNOWN_MISMATCH `euler-cross`, `quaternion` rot_h and the strength curve of
+  `generator-param`: two-key chords over a 1 s span): every sample is within
+  6e-4 of the curve, but the 1e-4 tolerance fails (euler 5.9e-4 over a 340 degree range, strength
+  1.5e-4 over 90). In units of 2^-19 of the span the reference's time offset is in (-0.53, 0.53)
+  and not on the (k + 1/2) grid of a 19-step bisection. Hypotheses tried: (1) exact-third chord
+  handles with 19 steps; (2) grid-length chord handles with the slope-preserving value offset;
+  (3) grid-length handles with a value offset of chord/3; (4) early stop when |x(mid) - t| < 1e-6 s
+  (it makes `tie-span-*` worse: 1.7e-4). Neither explains the offsets. The same code matches
+  `color-track` (range 1) and `tie-span-24/30` (range 100, 7.3e-5 and 1.5e-5).
+- **File format**: no version bump. The optional track fields (`tangents`, `before`, `after`,
+  `points`, `quaternion`) are serde defaults written only when they differ from the default, so
+  version 11 files load unchanged and files without the new data are byte-identical. (The brief
+  asked for a bump with a migration; a bump would invalidate the byte-stable version-11 fixtures
+  of `native_format` for no data change, so it is left for a change that needs one.) Track keys of
+  the new kinds are validated against the node type like the others (`parse_track_target`).
+
+### 1.9 Before / after behaviours (O38, brief 093)
+`Track::before` and `Track::after` are `Constant` (default), `Continue`, `Repeat`, `OffsetRepeat`
+or `Oscillate`. They are applied by remapping the (already resolved) time into the key range, `span
+= last.time - first.time`, `delta = last.value - first.value`. Source: `keyframes/after-*`,
+`before-repeat`, `after-continue` (the behaviour is read from the case description,
+"after-behaviour X" / "before-behaviour X", because `case.toml` has no field).
+- After: with `x = (t - first) / span`, `k = ceil(x) - 1`, `frac = x - k` in (0, 1]: **Repeat**
+  evaluates at `first + frac * span` (value at 45 and 75 = 50.0001; frame 90 = 100: a cycle
+  boundary reads the end of the cycle). **OffsetRepeat** adds `k * delta` (150.0001 @ 45, 200
+  @ 60). **Oscillate** plays odd cycles backwards, `first + (1 - frac) * span` (0 @ 60, 100 @ 90).
+- Before: with `x = (first - t) / span`: **Repeat** reads `last - frac * span` where `frac` is the
+  fractional part of `x`, and at an exact boundary the value of `last` (`before-repeat` frame 0 =
+  100, frame 5 = 7.4074 = frame 35). **OffsetRepeat** and **Oscillate** before the first key
+  mirror the after rules (parity-pending, not observed).
+- **Continue**: carries on with the slope of the end key's inner handle (the last key's left
+  handle after; the first key's right handle before). The end handles of automatic keys are flat,
+  so `after-continue` equals Constant (matches).
+- Point tracks ignore the behaviours (constant).
+
+### 1.10 Key reduction and bake (brief 093)
+- `reduce_keys(track, tolerance)`: repeatedly removes the interior key whose removal changes the
+  curve least, measured as the largest difference at the *original* key times, and stops when the
+  cheapest removal would exceed `tolerance`. End keys are kept. A track with point keys is not
+  reduced. Own design (no observation).
+- `bake_param(scene, node, param, component, times)`: evaluates `scene_at` at each time and
+  writes a linear key per time with the parameter's value (Float, Int, or a Vec3/Colour component).
+
+### 1.11 Rotation: Euler filter and the quaternion option (O27, O53, brief 096)
+- **Euler tracks** interpolate the stored component values with no unwrapping (`euler-cross`:
+  170 -> -170 degrees goes the long way, -340 degrees of travel; rot_h 90.666889 @ 7, -0.000486
+  @ 15). The shape matches (see the residual in §1.8).
+- `euler_filter(track)` shifts every key by whole turns so it lies within half a turn of the
+  previous key; times, interpolation and tangents are kept (own design).
+- **Quaternion option** (`Track::quaternion` on any of `transform.rot.x|y|z`): O53 `quaternion`
+  forced the key's quaternion item and observed the **same** Euler samples, so the golden data
+  shows no separate path and that case is evaluated as Euler. The option is our own: for a node
+  with the flag, `scene_at` evaluates the rotation as one orientation (`quaternion_rotation_at`):
+  at the two neighbouring key times (union over the three tracks) the Euler values give
+  orientations `Ry(-h) Rx(-p) Rz(-b)`, blended by shortest-arc slerp with a fraction that follows
+  the segment's own curve, then decomposed back to `(h, p, b)`. 170 -> -170 about one axis then
+  takes the short way. Parity-pending.
+
+## 1b. Key editing commands (briefs 090 and 091, own design, parity-pending G5)
+Every edit of the dope sheet and the value graph is a registry command, one undo step, callable
+through RPC, MCP and the `forge` CLI. Keys are addressed as `{node, track, frame}` (fractional
+frames allowed; matched to a nanosecond); values are in display units (degrees, percent).
+`forge_anim::keyedit` holds the pure track functions.
+- `key.move {keys, delta_frames, delta_value?, ripple?}`: moves keys in time and value; a key
+  landing on another key replaces it; `ripple` moves every key at or after the earliest selected one
+  of each track in time (later keys keep their value). Tangents and point arrays stay attached.
+- `key.scale {keys, pivot_frame, factor}`: scales time about the pivot; user handles scale with the
+  spacing; a negative factor mirrors (the handle sides swap).
+- `key.delete {keys}`: removes keys; a track that loses its last key is removed.
+- `key.set_interp {keys, interp}`; `key.paste {keys: [{node, track, frame, value, interp}]}`
+  (replaces keys at the same frame, creates the track).
+- `key.set_tangent {node, track, frame, preset, left?, right?, broken?, weighted?}`: presets `auto`,
+  `linear` (chord), `ease`, `ease_in`, `ease_out`, `zero_angle`, `zero_length` (section 1.5b), or
+  `user` with handle ends `{dt_frames, dv}` relative to the key.
+- `track.set_behavior {node, track, before?, after?}` (section 1.9); `key.euler_filter {node}`
+  (section 1.11, all `transform.rot.*` tracks of the node).
+A command that changes nothing or names a missing key, track or preset is an error and adds no undo
+step.
+
+### Dope sheet (`crates/ui/src/dopesheet.rs`, `fcurve_logic.rs`)
+A track tree (an object row with a summary of all its keys, then one row per track; click an object
+row to collapse), a frame ruler (click or drag to scrub through `timeline.set_frame`), keys as
+diamonds. Click selects (Shift toggles), a drag on empty space box-selects, a drag on a key moves the
+selection by whole frames (snapping on; free when off) and sends one `key.move` on release, a summary
+key stands for all keys of its object at that frame. Buttons: Delete (also the Delete key), Spline /
+Linear / Step, Copy / Paste (at the current frame), Scale 1/2 and Scale 2 about the current frame,
+Ripple, Snap, "Selected objects only". Pan with the scroll wheel, zoom with pinch / ctrl-scroll about
+the cursor (`TimeView`). Shared pure logic (`TimeView`, `ValueView`, `KeySelection`, `hit_test`,
+`box_select`, `scale_about`, `rows`) is covered without egui.
+
+### Value graph (`crates/ui/src/fcurve.rs`)
+One curve per numeric track of the selected objects, drawn by sampling `value_at_exact` (the
+playback evaluator), coloured by axis (X red, Y green, Z blue); a checkbox per curve hides it. Keys
+are dots; the selected spline keys show their two evaluated handles (`forge_anim::handles`: automatic,
+chord or user, as the curve uses them). Dragging a handle sends `key.set_tangent` `user`; dragging a key
+sends `key.move` with the frame and value change; box select as in the dope sheet. Toolbar: Frame all,
+Frame selected, Snap, Normalised (each curve's key range maps to 0..100; value drags and handle drags
+are off there), tangent presets, Break / Unify, Weighted / Unweighted, and numeric frame and value
+fields for a single selected key. Which modifier keys do what in the reference is the open question
+G5 (parity-pending).
 
 ## 2. Timeline, record and autokey (`crates/ui/src/{animate,timeline}.rs`)
 

@@ -107,6 +107,7 @@ fn keys_keep_their_seconds_when_only_the_frame_rate_changes() {
                             interp: Interp::Linear,
                         },
                     ],
+                    ..Track::default()
                 }),
             )?;
             Ok(id)

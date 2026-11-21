@@ -196,9 +196,7 @@ fn exit_codes() {
         forge().arg("bogus").output().unwrap().status.code(),
         Some(1)
     );
-    for stub in [vec!["run", "x.rhai"], vec!["render"]] {
-        assert_eq!(json_run(&stub).0, 1, "{stub:?}");
-    }
+    assert_eq!(json_run(&["run", "x.rhai"]).0, 1);
     // 2: scene cannot be loaded
     assert_eq!(json_run(&["info", s(&d.join("missing.forge"))]).0, 2);
     let bad = d.join("bad.forge");

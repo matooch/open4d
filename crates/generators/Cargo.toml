@@ -8,6 +8,7 @@ description = "Parametric primitives and generators (docs/specs/PRIMITIVES.md)."
 [dependencies]
 rayon = "1"
 forge-clone-engine = { path = "../clone-engine" }
+forge-anim = { path = "../anim" }
 forge-core = { path = "../core" }
 forge-geometry = { path = "../geometry" }
 forge-modifiers = { path = "../modifiers" }

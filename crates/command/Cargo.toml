@@ -6,6 +6,7 @@ license.workspace = true
 description = "Command registry: every user action as a named, typed, undoable command (docs/specs/COMMANDS.md)."
 
 [dependencies]
+forge-anim = { path = "../anim" }
 forge-core = { path = "../core" }
 forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }

@@ -1,6 +1,6 @@
 # 089 · Tangent model: user, broken, weighted, zero angle/length, ease presets, overshoot
 
-Status: waiting: O38 · Area: G · Depends on: 087 · Observations: O38 · Touches: core, anim
+Status: done (parity-pending)
 
 ## Goal
 Full tangent model matching O38: user-edited, broken tangents, weighted tangents, zero angle/length locks, the ease presets, and the overshoot setting.
@@ -28,10 +28,10 @@ Full tangent model matching O38: user-edited, broken tangents, weighted tangents
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- Result: tangent data model (`TangentMode`, `Handle`, `KeyTangent`, per-key in `Track::tangents`), presets in `forge_anim::tangent` (ease, ease in/out, zero angle, zero length, set_right_handle with broken/weighted), `speed_at` (analytic dv/dt). O38 keyframes: 34/36 cases exact (the 10 that were exact stay exact; `broken` still KNOWN_MISMATCH, `linear-to-spline` still UNSUPPORTED: no machine-readable per-key interpolation). Tests: `crates/anim/tests/model.rs`.
+- Rules: the legacy read-back path (§1.5a) now builds `KeyTangent`s and runs the same evaluator; stored user handles are evaluated as stored whether weighted or not.
+- Deviations: no separate overshoot flag (nothing observed distinguishes it; automatic slopes already never overshoot, `clamp-off` = default); registry commands (`key.set_tangent`) left to the UI briefs.
+- Files: as 088 plus crates/anim/src/tangent.rs.
+- Open: observe `broken` with its flags; redo `linear-to-spline` with `interpolation_by_key`.
+- Gate: see brief 096.

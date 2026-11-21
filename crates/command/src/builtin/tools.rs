@@ -396,7 +396,9 @@ impl CommandHandler for ToolCommand {
         ctx.doc_mut().transact(self.desc.label, |tx| {
             for o in &done {
                 let node = o.node;
-                tx.set_param(node, "mesh", Value::Mesh(Arc::new(from_poly_mesh(&o.mesh))))?;
+                let data = Arc::new(from_poly_mesh(&o.mesh));
+                forge_generators::clear_stale_tags(tx, node, &data)?;
+                tx.set_param(node, "mesh", Value::Mesh(data))?;
                 let polys: Vec<u32> = o.selection.polys.iter().collect();
                 tx.set_param(node, SELECTION_POLYS, Value::IndexList(polys))?;
                 // Slide moves points only: the stored edge and point selection stay valid

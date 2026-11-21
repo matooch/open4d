@@ -722,6 +722,39 @@ pub fn apply_deformer(
     points: &mut [DVec3],
     ctx: &EvalCtx,
 ) {
+    restricted(scene, deformer, target, points, |points| {
+        apply_deformer_raw(scene, deformer, target, points, ctx)
+    });
+}
+
+/// Runs `run` on `points`, then limits its effect by the deformer's restriction tag
+/// (EDITABLE.md §7.4): `p' = p0 + w (p - p0)` with `w` the weight of the point's index.
+/// Skipped when there is no usable tag or `run` changed the point count.
+fn restricted(
+    scene: &Scene,
+    deformer: NodeId,
+    target: NodeId,
+    points: &mut [DVec3],
+    run: impl FnOnce(&mut [DVec3]),
+) {
+    let weights = forge_core::tags::restriction_weights(scene, deformer, target, points.len());
+    let Some(weights) = weights else {
+        return run(points);
+    };
+    let before = points.to_vec();
+    run(points);
+    for ((p, p0), w) in points.iter_mut().zip(before).zip(weights) {
+        *p = p0 + (*p - p0) * w;
+    }
+}
+
+fn apply_deformer_raw(
+    scene: &Scene,
+    deformer: NodeId,
+    target: NodeId,
+    points: &mut [DVec3],
+    ctx: &EvalCtx,
+) {
     let (Some(node), Some(ty)) = (scene.node(deformer), scene.node_type(deformer)) else {
         return;
     };
@@ -908,6 +941,29 @@ pub fn apply_deformer_resolved(
     ctx: &EvalCtx,
     resolve: Resolver,
 ) {
+    let count = mesh.points.len();
+    let weights = forge_core::tags::restriction_weights(scene, deformer, target, count);
+    let Some(weights) = weights else {
+        return apply_deformer_unrestricted(scene, deformer, target, mesh, ctx, resolve);
+    };
+    let before = mesh.points.clone();
+    apply_deformer_unrestricted(scene, deformer, target, mesh, ctx, resolve);
+    // Explosion and Shatter split the mesh (point count changes): not restrictable
+    if mesh.points.len() == count {
+        for ((p, p0), w) in mesh.points.iter_mut().zip(before).zip(weights) {
+            *p = p0 + (*p - p0) * w;
+        }
+    }
+}
+
+fn apply_deformer_unrestricted(
+    scene: &Scene,
+    deformer: NodeId,
+    target: NodeId,
+    mesh: &mut PolyMesh,
+    ctx: &EvalCtx,
+    resolve: Resolver,
+) {
     if scene
         .node(deformer)
         .is_some_and(|n| is_spline_type(&n.type_id))
@@ -933,7 +989,7 @@ pub fn apply_deformer_resolved(
     let kind = match scene.node(deformer).map(|n| n.type_id.as_str()) {
         Some(EXPLOSION) => Kind::Explosion,
         Some(SHATTER) => Kind::Shatter,
-        _ => return apply_deformer(scene, deformer, target, &mut mesh.points, ctx),
+        _ => return apply_deformer_raw(scene, deformer, target, &mut mesh.points, ctx),
     };
     let (Some(node), Some(ty)) = (scene.node(deformer), scene.node_type(deformer)) else {
         return;

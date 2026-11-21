@@ -1426,6 +1426,7 @@ version = "0.1.0"
 dependencies = [
  "forge-core",
  "forge-generators",
+ "forge-modifiers",
  "forge-parity-harness",
  "glam",
  "serde_json",
@@ -1445,12 +1446,14 @@ dependencies = [
  "forge-generators",
  "forge-geometry",
  "forge-io",
+ "forge-material",
  "forge-modeling",
  "forge-modifiers",
  "forge-nodes",
  "forge-parity-harness",
  "forge-platform",
  "forge-rig",
+ "forge-shaders",
  "forge-volume",
  "glam",
  "rayon",
@@ -1489,10 +1492,14 @@ dependencies = [
  "forge-command",
  "forge-core",
  "forge-generators",
+ "forge-image",
  "forge-io",
  "forge-mcp",
  "forge-parity-harness",
  "forge-plugin",
+ "forge-render-api",
+ "forge-render-bridge",
+ "forge-render-cpu",
  "forge-rpc",
  "forge-script",
  "serde_json",
@@ -1514,6 +1521,7 @@ dependencies = [
 name = "forge-command"
 version = "0.1.0"
 dependencies = [
+ "forge-anim",
  "forge-core",
  "forge-generators",
  "forge-geometry",
@@ -1576,6 +1584,7 @@ dependencies = [
 name = "forge-generators"
 version = "0.1.0"
 dependencies = [
+ "forge-anim",
  "forge-clone-engine",
  "forge-core",
  "forge-fields",
@@ -1619,6 +1628,19 @@ dependencies = [
  "forge-parity-harness",
  "glam",
  "serde_json",
+ "thiserror 2.0.21",
+ "toml",
+]
+
+[[package]]
+name = "forge-material"
+version = "0.1.0"
+dependencies = [
+ "forge-core",
+ "forge-generators",
+ "forge-geometry",
+ "forge-parity-harness",
+ "glam",
  "thiserror 2.0.21",
  "toml",
 ]
@@ -1734,14 +1756,40 @@ dependencies = [
 [[package]]
 name = "forge-render-api"
 version = "0.1.0"
+dependencies = [
+ "forge-image",
+ "forge-material",
+ "glam",
+ "tempfile",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "forge-render-bridge"
 version = "0.1.0"
+dependencies = [
+ "forge-geometry",
+ "forge-material",
+ "forge-render-api",
+ "glam",
+]
 
 [[package]]
 name = "forge-render-cpu"
 version = "0.1.0"
+dependencies = [
+ "forge-core",
+ "forge-generators",
+ "forge-geometry",
+ "forge-image",
+ "forge-material",
+ "forge-parity-harness",
+ "forge-render-api",
+ "forge-shaders",
+ "glam",
+ "rayon",
+ "toml",
+]
 
 [[package]]
 name = "forge-render-gpu"
@@ -1784,6 +1832,21 @@ dependencies = [
  "forge-core",
  "rhai",
  "serde_json",
+]
+
+[[package]]
+name = "forge-shaders"
+version = "0.1.0"
+dependencies = [
+ "forge-core",
+ "forge-image",
+ "forge-material",
+ "forge-noise",
+ "forge-parity-harness",
+ "glam",
+ "serde_json",
+ "thiserror 2.0.21",
+ "toml",
 ]
 
 [[package]]

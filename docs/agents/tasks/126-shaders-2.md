@@ -1,6 +1,6 @@
 # 126 · Shaders II: Tiles, Checkerboard, Brick, Fusion, Filter, Normalizer, Vertex Map, Field, AO
 
-Status: waiting: O42 · Area: J · Depends on: 125 · Observations: O42 · Touches: shaders
+Status: done · Area: J · Depends on: 125 · Observations: O42 · Touches: shaders
 
 ## Goal
 The remaining shaders from O42.
@@ -14,8 +14,8 @@ The remaining shaders from O42.
 - AO is render-time only (needs ray queries); expose it through the IR as a special node.
 
 ## Done when
-- [ ] O42 cases pass.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] O42 cases pass.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -25,9 +25,5 @@ The remaining shaders from O42.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: Checkerboard, Tiles (Squares), Fusion, Filter, Normalizer, Vertex Map, AO implemented in crates/shaders with brief 125 (same commit); checkerboard and tiles exact (O42). UNSUPPORTED: Brick (noise-perturbed, one case), Field shader (needs a field at the sample point), tile patterns other than Squares, Rotate.
+- Fusion/Filter/Normalizer/Vertex Map/AO have unit tests only (no golden data). See SHADERS.md S4, S5, S8, S9.

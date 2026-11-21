@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::layers::{self, Layer, Layers};
 use crate::{
     Category, LinkRow, MeshData, Node, NodeId, Registry, Scene, SceneSettings, TimeConfig, Track,
-    Value, parse_target,
+    Value, parse_track_target,
 };
 
 pub const FORMAT: &str = "forge3d-scene";
@@ -19,8 +19,8 @@ pub const FORMAT: &str = "forge3d-scene";
 /// `object.*` params and adds the chunk section and file reference params, version 7 the
 /// time configuration (markers, preview range, playback mode), version 8 the expression
 /// tag and its graph parameter (brief 108), version 9 the layer table and the hidden
-/// `object.layer` param (brief 158). Version 10 (brief 189) marks the list-valued parameter kinds (`Vec3List`, CORE.md section 6.9). Version 11 (brief 059) adds `LinkRows`, the field lists with per-row blend mode, strength and enable box (CORE.md section 6.10). Older files still load, through [`MIGRATIONS`].
-pub const VERSION: u32 = 11;
+/// `object.layer` param (brief 158). Version 10 (brief 189) marks the list-valued parameter kinds (`Vec3List`, CORE.md section 6.9). Version 11 (brief 059) adds `LinkRows`, the field lists with per-row blend mode, strength and enable box (CORE.md section 6.10). Version 12 (briefs 027, 194) adds `Value::FloatList` (vertex maps, chunk kind 3) and the document's material list with the shader trees below it (CORE.md sections 2.1 and 6.11). Older files still load, through [`MIGRATIONS`].
+pub const VERSION: u32 = 12;
 
 /// A value whose binary payload is at least this many bytes is written as a chunk by
 /// [`save_with`] (CORE.md §6.2): 42 mesh points or 256 indices.
@@ -30,6 +30,7 @@ pub const CHUNK_MIN_BYTES: usize = 1024;
 const MARKER: &[u8] = b"\n%%FORGE-CHUNKS 1\n";
 const KIND_MESH: u8 = 1;
 const KIND_INDEX_LIST: u8 = 2;
+const KIND_FLOAT_LIST: u8 = 3;
 
 /// The parsed document of a file, before it becomes a scene. Opaque; migrations rewrite it.
 #[derive(Serialize, Deserialize)]
@@ -42,6 +43,9 @@ pub struct SceneFile {
     time: TimeConfig,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     layers: Vec<Layer>,
+    /// The material list with the shader trees as children (version 12, CORE.md section 2.1).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    materials: Vec<NodeRecord>,
     roots: Vec<NodeRecord>,
 }
 
@@ -61,6 +65,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migrate_8_to_9,
     migrate_9_to_10,
     migrate_10_to_11,
+    migrate_11_to_12,
 ];
 
 /// Version 2 added `Value::Mesh`: additive, nothing to rewrite.
@@ -164,6 +169,12 @@ fn migrate_10_to_11(file: &mut SceneFile) -> Vec<String> {
     Vec::new()
 }
 
+/// Version 12 (briefs 027, 194) adds `FloatList` values (new type, nothing to rewrite) and the
+/// `materials` list (a missing field reads as no materials).
+fn migrate_11_to_12(_: &mut SceneFile) -> Vec<String> {
+    Vec::new()
+}
+
 /// Version 10 stored a field row's strength on the field node under this param.
 const LEGACY_LAYER_STRENGTH: &str = "layer_strength";
 /// The version 10 param id of every field list.
@@ -197,8 +208,10 @@ enum StoredValue {
     Mesh(Arc<MeshData>),
     IndexList(Vec<u32>),
     Vec3List(Vec<[f64; 3]>),
+    FloatList(Vec<f64>),
     MeshChunk(u32),
     IndexListChunk(u32),
+    FloatListChunk(u32),
 }
 
 impl From<Value> for StoredValue {
@@ -217,6 +230,7 @@ impl From<Value> for StoredValue {
             Value::Mesh(x) => Self::Mesh(x),
             Value::IndexList(x) => Self::IndexList(x),
             Value::Vec3List(x) => Self::Vec3List(x),
+            Value::FloatList(x) => Self::FloatList(x),
         }
     }
 }
@@ -308,6 +322,7 @@ pub fn save_with(scene: &Scene, opts: &SaveOptions) -> Vec<u8> {
                         + m.polys.iter().map(|p| 4 + 4 * p.len()).sum::<usize>(),
                 ),
                 Value::IndexList(l) => (KIND_INDEX_LIST, 4 + 4 * l.len()),
+                Value::FloatList(l) => (KIND_FLOAT_LIST, 4 + 8 * l.len()),
                 _ => return v.into(),
             };
             if size < self.opts.chunk_min_bytes {
@@ -316,14 +331,15 @@ pub fn save_with(scene: &Scene, opts: &SaveOptions) -> Vec<u8> {
             let payload = match &v {
                 Value::Mesh(m) => encode_mesh(m),
                 Value::IndexList(l) => encode_index_list(l),
+                Value::FloatList(l) => encode_float_list(l),
                 _ => unreachable!("only chunkable kinds get here"),
             };
             let at = self.chunks.len() as u32;
             self.chunks.push((kind, payload));
-            if kind == KIND_MESH {
-                StoredValue::MeshChunk(at)
-            } else {
-                StoredValue::IndexListChunk(at)
+            match kind {
+                KIND_MESH => StoredValue::MeshChunk(at),
+                KIND_INDEX_LIST => StoredValue::IndexListChunk(at),
+                _ => StoredValue::FloatListChunk(at),
             }
         }
 
@@ -360,12 +376,14 @@ pub fn save_with(scene: &Scene, opts: &SaveOptions) -> Vec<u8> {
         chunks: Vec::new(),
     };
     let roots = scene.roots().iter().map(|r| w.record(*r)).collect();
+    let materials = scene.materials().iter().map(|r| w.record(*r)).collect();
     let file = SceneFile {
         format: FORMAT.to_string(),
         version: VERSION,
         settings: scene.settings(),
         time: scene.time().clone(),
         layers: scene.layers().as_slice().to_vec(),
+        materials,
         roots,
     };
     let text = ron::ser::to_string_pretty(
@@ -462,6 +480,9 @@ fn load_inner(
         opts,
     };
     loader.report.warnings = migrate(&mut file, MIGRATIONS, VERSION);
+    for r in file.materials {
+        loader.node(r, Place::Material)?;
+    }
     for r in file.roots {
         loader.node(r, Place::Child(None))?;
     }
@@ -528,7 +549,7 @@ pub fn external_refs(scene: &Scene) -> Vec<ExternalRef> {
         }
     }
     let mut out = Vec::new();
-    for r in scene.roots() {
+    for r in scene.materials().iter().chain(scene.roots()) {
         walk(scene, *r, &mut out);
     }
     out
@@ -701,7 +722,7 @@ fn parse_section(section: &[u8]) -> Result<Vec<RawChunk<'_>>, LoadError> {
     let mut out = Vec::with_capacity(n);
     for _ in 0..n {
         let kind = c.u8()?;
-        if kind != KIND_MESH && kind != KIND_INDEX_LIST {
+        if !matches!(kind, KIND_MESH | KIND_INDEX_LIST | KIND_FLOAT_LIST) {
             return Err(LoadError::Chunk(format!("unknown chunk kind {kind}")));
         }
         let len = c.u64()?;
@@ -748,6 +769,28 @@ fn decode_mesh(payload: &[u8]) -> Result<MeshData, LoadError> {
     Ok(MeshData { points, polys })
 }
 
+fn encode_float_list(l: &[f64]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(4 + 8 * l.len());
+    out.extend_from_slice(&(l.len() as u32).to_le_bytes());
+    for f in l {
+        out.extend_from_slice(&f.to_le_bytes());
+    }
+    out
+}
+
+fn decode_float_list(payload: &[u8]) -> Result<Vec<f64>, LoadError> {
+    let mut c = Cursor { bytes: payload };
+    let n = c.count(8)?;
+    let mut out = Vec::with_capacity(n);
+    for _ in 0..n {
+        out.push(c.f64()?);
+    }
+    if !c.bytes.is_empty() {
+        return Err(LoadError::Chunk("bytes after the float list".into()));
+    }
+    Ok(out)
+}
+
 fn decode_index_list(payload: &[u8]) -> Result<Vec<u32>, LoadError> {
     let mut c = Cursor { bytes: payload };
     let n = c.count(4)?;
@@ -765,6 +808,10 @@ fn decode_index_list(payload: &[u8]) -> Result<Vec<u32>, LoadError> {
 enum Place {
     Child(Option<NodeId>),
     Tag(NodeId),
+    /// An entry of the material list.
+    Material,
+    /// A shader below a material or another shader.
+    Shader(NodeId),
 }
 
 struct Loader<'a> {
@@ -801,11 +848,15 @@ impl Loader<'_> {
             StoredValue::Mesh(x) => Value::Mesh(x),
             StoredValue::IndexList(x) => Value::IndexList(x),
             StoredValue::Vec3List(x) => Value::Vec3List(x),
+            StoredValue::FloatList(x) => Value::FloatList(x),
             StoredValue::MeshChunk(at) => {
                 Value::Mesh(Arc::new(decode_mesh(self.chunk(at, KIND_MESH)?)?))
             }
             StoredValue::IndexListChunk(at) => {
                 Value::IndexList(decode_index_list(self.chunk(at, KIND_INDEX_LIST)?)?)
+            }
+            StoredValue::FloatListChunk(at) => {
+                Value::FloatList(decode_float_list(self.chunk(at, KIND_FLOAT_LIST)?)?)
             }
         })
     }
@@ -875,6 +926,11 @@ impl Loader<'_> {
         if !self.seen.insert(id) {
             return Err(LoadError::DuplicateId(id));
         }
+        if matches!(place, Place::Material | Place::Shader(_)) && !r.tags.is_empty() {
+            return Err(LoadError::Structure(format!(
+                "node {id} is a material or shader and cannot carry tags"
+            )));
+        }
         let ty = self.scene.registry().get(&r.type_id).cloned();
         let mut raw = BTreeMap::new();
         for (key, v) in r.params {
@@ -889,6 +945,8 @@ impl Loader<'_> {
                 let ok = match place {
                     Place::Child(_) => ty.category.is_hierarchy(),
                     Place::Tag(_) => ty.category == Category::Tag,
+                    Place::Material => ty.category == Category::Material,
+                    Place::Shader(_) => ty.category == Category::Shader,
                 };
                 if !ok {
                     return Err(LoadError::Structure(format!(
@@ -930,7 +988,7 @@ impl Loader<'_> {
         for (key, track) in r.tracks {
             let verdict = match &ty {
                 None => Ok(()),
-                Some(ty) => parse_target(&key, |p| ty.find_param(p))
+                Some(ty) => parse_track_target(&key, |p| ty.find_param(p))
                     .map(|_| ())
                     .and_then(|()| track.validate()),
             };
@@ -944,8 +1002,11 @@ impl Loader<'_> {
         let (parent, host) = match place {
             Place::Child(p) => (p, None),
             Place::Tag(h) => (None, Some(h)),
+            Place::Material => (None, None),
+            Place::Shader(p) => (Some(p), None),
         };
-        self.scene.insert_loaded(Node {
+        let top_material = matches!(place, Place::Material);
+        let node = Node {
             id,
             type_id: r.type_id,
             name: r.name,
@@ -956,12 +1017,21 @@ impl Loader<'_> {
             host,
             tracks,
             rev: 0,
-        });
+        };
+        if top_material {
+            self.scene.insert_loaded_material(node);
+        } else {
+            self.scene.insert_loaded(node);
+        }
+        let child_place = match place {
+            Place::Material | Place::Shader(_) => Place::Shader(id),
+            _ => Place::Child(Some(id)),
+        };
         for t in r.tags {
             self.node(t, Place::Tag(id))?;
         }
         for c in r.children {
-            self.node(c, Place::Child(Some(id)))?;
+            self.node(c, child_place)?;
         }
         Ok(())
     }
@@ -986,6 +1056,7 @@ mod tests {
             settings: SceneSettings::default(),
             time: TimeConfig::default(),
             layers: Vec::new(),
+            materials: Vec::new(),
             roots: Vec::new(),
         };
         let notes = migrate(&mut file, &steps, 4);

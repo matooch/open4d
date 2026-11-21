@@ -1,0 +1,20 @@
+[package]
+name = "forge-material"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Standard material, texture tag and the shading IR (docs/specs/MATERIAL.md)."
+
+[dependencies]
+forge-core = { path = "../core" }
+forge-geometry = { path = "../geometry" }
+glam = "0.34"
+thiserror = "2"
+
+[dev-dependencies]
+forge-generators = { path = "../generators" }
+forge-parity-harness = { path = "../parity-harness" }
+toml = "1"
+
+[lints]
+workspace = true

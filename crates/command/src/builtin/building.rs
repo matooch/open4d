@@ -59,6 +59,7 @@ fn commit(
     let (polys, points) = (out.new_polys.clone(), out.new_points.clone());
     let points = if polys.is_empty() { points } else { Vec::new() };
     ctx.doc_mut().transact(label, |tx| {
+        forge_generators::clear_stale_tags(tx, node, &data)?;
         tx.set_param(node, "mesh", Value::Mesh(data))?;
         tx.set_param(node, SELECTION_POLYS, Value::IndexList(polys))?;
         tx.set_param(node, SELECTION_POINTS, Value::IndexList(points))?;

@@ -1,6 +1,6 @@
 # 027 · Selection tags, vertex map tags, restriction tags
 
-Status: waiting: O54 · Area: B · Depends on: 023 · Observations: O54 · Touches: core, generators, ui, modifiers
+Status: done (was waiting: O54) · Area: B · Depends on: 023 · Observations: O54 · Touches: core, generators, ui, modifiers
 
 ## Goal
 Stored selections and vertex weights exist as tags, and deformers can be restricted by them.
@@ -16,9 +16,9 @@ Stored selections and vertex weights exist as tags, and deformers can be restric
 - Topology changes (modeling tools) remap or clear the tags. Document the rule: indices are kept when the topology is unchanged, and tags are cleared otherwise.
 
 ## Done when
-- [ ] EDITABLE.md §6.
-- [ ] O54 selection and vertex map cases match.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] EDITABLE.md §7 (the brief's §6 number was taken by brief 034).
+- [x] O54 selection and vertex map cases match (4/4).
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Out of scope
 Vertex maps from fields (062).
@@ -31,9 +31,8 @@ Vertex maps from fields (062).
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: 4/4 O54 cases exact at level A (point-selection, polygon-selection, edge-selection, vertex-map-tag) in `crates/app/tests/tag_commands.rs` through `select.store`, `select.restore`, `vertexmap.create`; `UNSUPPORTED` and `KNOWN_MISMATCH` empty. Further tests: `crates/modifiers/tests/restriction.rs` (4), `crates/core/tests/materials.rs` (float lists, restriction weights), `tag_commands.rs` (store/restore ops and undo steps, vertex map set, restriction command, topology clearing). The other five tags-2 cases belong to briefs 106 and 110.
+- Rules: stored selections are tags holding `indices`; a vertex map holds one weight per point (`FloatList`, 0..1); a restriction tag on a deformer names a point selection or vertex map tag of the deformed object, weights blend `p0 + w (p - p0)` (EDITABLE.md section 7). Parity-pending: all restriction rules (no observation), vertex map colour default, topology clearing.
+- Deviations: tag ids are `forge.point_selection`, `forge.edge_selection` (plus the existing `forge.polygon_selection`) instead of the proposed `forge.selection_*`, to follow the existing tag; the restriction tag names its target by tag name (survives Make Editable) instead of a link; spec section is EDITABLE.md section 7; the file version bump to 12 is shared with brief 194 (CORE.md 6.11, `scene-v12*` fixtures, v11 fixture migration test); `select.restore` also switches the edit mode to the tag's kind. Explosion and Shatter ignore restriction tags (point count changes). Topology rule: `clear_stale_tags` is called by the cutting, building and modeling-tool writers (indices kept while the polygon lists and point count are unchanged).
+- Files: crates/core (tags.rs, param.rs, file.rs, scene.rs, document.rs), crates/modifiers/src/lib.rs, crates/generators (clear_stale_tags), crates/app/src/tag_commands.rs, crates/command builtin writers, crates/ui (Select menu: Set Selection, Restore Selection; icon table, attribute read-only summary), docs/specs (CORE, EDITABLE, COMMANDS), docs/manual/reference.
+- Open: a restriction tag observation (which target kinds, inversion, whether it multiplies fields); UI for editing vertex maps (a paint tool is out of scope).

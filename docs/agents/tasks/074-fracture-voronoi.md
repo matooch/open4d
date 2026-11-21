@@ -1,6 +1,6 @@
 # 074 · Fracture and Voronoi Fracture
 
-Status: waiting: O31 · Area: E · Depends on: 065, 033 · Observations: O31 · Touches: clone-engine, geometry
+Status: done (Fracture; Voronoi blocked) · Area: E · Depends on: 065, 033 · Observations: O31 · Touches: clone-engine, geometry
 
 ## Goal
 Fracture (explode segments, connected, sorted) and Voronoi Fracture (point sources, seeds, inner faces, offset).
@@ -27,10 +27,9 @@ Fracture (explode segments, connected, sorted) and Voronoi Fracture (point sourc
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- Result: `fracture.rs` (2 tests); parity 2/2 exact (`explode-segments`, `plain`). Voronoi Fracture blocked: the three cases were not observed (no meshes), so it is not implemented or registered; design and the data that would settle it are in spec F2.
+- Rules: spec F1 (islands, pivot at bbox centre parity-pending, effector child inert). `Unsupported`: Explode Segments & Connect.
+- Deviations: none.
+- Files: crates/clone-engine/src/{fracture,node,lib}.rs, crates/generators/src/{fracture,lib}.rs, tests/fracture.rs, icons/fracture.svg, icon_table.rs, spec, STATUS, BACKLOG.
+- Open: a baked Voronoi result; the connector geometry of the Connect mode.

@@ -25,14 +25,9 @@ const OUT_OF_SCOPE_OBJECT: &[&str] = &[
     "object-vertex-align-off",
     "object-volume",
 ];
-/// Several children (Clones modes) and nesting: brief 067.
-const OUT_OF_SCOPE_ORDER: &[&str] = &[
-    "order-iterate",
-    "order-random",
-    "order-sort",
-    "nested",
-    "blend-order",
-];
+/// Nesting: its inner cloner is not recorded in the case file, so it has its own test below
+/// (spec O5).
+const OUT_OF_SCOPE_ORDER: &[&str] = &["nested"];
 
 /// Observed cases we build but that differ, pinned so a fix shows up.
 /// `linear-rstep`: per-step R (0, 20, 0) with Step Rotation (0, 10, 0). The samples turn every clone
@@ -43,7 +38,11 @@ const OUT_OF_SCOPE_ORDER: &[&str] = &[
 ///
 /// `honey-var`: the structure is derived (one shift per interior line, ends fixed, C9) but the
 /// reference's random sequence is not reproducible, so the shifts differ.
-const KNOWN_MISMATCH: &[&str] = &["honey-var", "linear-rstep"];
+///
+/// `order-random`: the clone positions match; which child each clone shows differs because the
+/// reference's random sequence is not reproduced (spec O2): the golden mesh has the children
+/// cube, sphere, cube, sphere, sphere, sphere, ours another valid draw.
+const KNOWN_MISMATCH: &[&str] = &["honey-var", "linear-rstep", "order-random"];
 
 /// Cases that cannot be rebuilt from their `case.toml`, with the reason (C10).
 const UNSUPPORTED: &[(&str, &str)] = &[(
@@ -241,6 +240,7 @@ fn param(reg: &Registry, mode: &str, table: &Table, key: &str) -> Option<(String
         format!("{mode}_{base}"),
         base.to_string(),
         format!("clone_{base}"),
+        format!("clones_{base}"),
     ]
     .into_iter()
     .find(|c| ty.find_param(c).is_some())
@@ -306,8 +306,17 @@ fn sample_of(c: &forge_clone_engine::CloneData, i: usize) -> SampleClone {
     }
 }
 
-/// A cloner with a 20 cm cube child and the case's params.
-fn build(doc: &mut Document, reg: &Registry, mode: &str, table: &Table) -> forge_core::NodeId {
+/// A cloner with the case's children and params. The default child is a 20 cm cube. The
+/// `order-*` cases have the three children of the observation, listed cone, sphere, cube
+/// (the order the meshes show: the first clone is the cone), and `blend-order` a cube and a
+/// sphere. The cone and the sphere have radius 10 and every other parameter at its default.
+fn build(
+    doc: &mut Document,
+    reg: &Registry,
+    mode: &str,
+    name: &str,
+    table: &Table,
+) -> forge_core::NodeId {
     doc.transact("case", |tx: &mut Tx| {
         let cloner = tx.create("forge.cloner", None, None)?;
         tx.set_param(cloner, "mode", Value::Enum(mode.into()))?;
@@ -316,9 +325,24 @@ fn build(doc: &mut Document, reg: &Registry, mode: &str, table: &Table) -> forge
                 tx.set_param(cloner, &id, v)?;
             }
         }
-        let cube = tx.create("forge.cube", Some(cloner), None)?;
-        for axis in ["size_x", "size_y", "size_z"] {
-            tx.set_param(cube, axis, Value::Float(20.0))?;
+        let kinds: &[&str] = if name.starts_with("order-") {
+            &["cone", "sphere", "cube"]
+        } else if name == "blend-order" {
+            &["cube", "sphere"]
+        } else {
+            &["cube"]
+        };
+        for kind in kinds {
+            let child = tx.create(&format!("forge.{kind}"), Some(cloner), None)?;
+            match *kind {
+                "cube" => {
+                    for axis in ["size_x", "size_y", "size_z"] {
+                        tx.set_param(child, axis, Value::Float(20.0))?;
+                    }
+                }
+                "sphere" => tx.set_param(child, "radius", Value::Float(10.0))?,
+                _ => tx.set_param(child, "bottom_radius", Value::Float(10.0))?,
+            }
         }
         Ok(cloner)
     })
@@ -363,7 +387,7 @@ fn cloner_modes_match_the_reference() {
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
         let mut doc = Document::new(reg.clone());
-        let cloner = build(&mut doc, &reg, &mode, &table);
+        let cloner = build(&mut doc, &reg, &mode, &case.name, &table);
 
         // Level B: the clone data.
         let data = clone_data(doc.scene(), cloner, &ctx).unwrap().unwrap();
@@ -418,10 +442,10 @@ fn cloner_modes_match_the_reference() {
         mismatched,
         KNOWN_MISMATCH.iter().map(|s| s.to_string()).collect()
     );
-    assert_eq!(matched.len(), 31, "{matched:?}");
+    assert_eq!(matched.len(), 34, "{matched:?}");
     assert_eq!(unsupported.len(), UNSUPPORTED.len());
     assert_eq!(effects.len(), 54, "{effects:?}");
-    assert_eq!(skipped.len(), 13, "{skipped:?}");
+    assert_eq!(skipped.len(), 9, "{skipped:?}");
 }
 
 /// Nesting needs no extra code (the inner cloner is a prototype with geometry): the
@@ -604,7 +628,7 @@ fn build_with_effectors(
     table: &Table,
     effectors: &[&Table],
 ) -> NodeId {
-    let cloner = build(doc, reg, mode, table);
+    let cloner = build(doc, reg, mode, "", table);
     doc.transact("effectors", |tx: &mut Tx| {
         let mut ids = Vec::new();
         for e in effectors {
@@ -1064,7 +1088,7 @@ fn random_effector_cases_match_the_reference() {
         let mut doc = Document::new(reg.clone());
         let cloner = build_with_effectors(&mut doc, &reg, &mode, &table, &[&e]);
         let mut base_doc = Document::new(reg.clone());
-        let base_cloner = build(&mut base_doc, &reg, &mode, &table);
+        let base_cloner = build(&mut base_doc, &reg, &mode, "", &table);
         let ours = clone_data(doc.scene(), cloner, &ctx).unwrap().unwrap();
         let base = clone_data(base_doc.scene(), base_cloner, &ctx)
             .unwrap()

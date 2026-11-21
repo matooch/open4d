@@ -1,6 +1,6 @@
 # 088 · Tracks for all value types + point-level animation
 
-Status: waiting: O53 · Area: G · Depends on: 087 · Observations: O53 · Touches: core, anim
+Status: done (parity-pending)
 
 ## Goal
 Animate every parameter type (bool, int, enum, colour, vector, link where keyable) and points of editable meshes.
@@ -31,10 +31,10 @@ Euler/quaternion (096).
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- Result: `crates/anim/tests/animation3_parity.rs` (11 sample files + mesh), `crates/anim/tests/model.rs` (13 tests), 2 core tests updated and one added. animation-3: 8/11 sample files exact; 3 KNOWN_MISMATCH (euler-cross and quaternion rot_h at 5.9e-4, generator-param strength curve at 1.5e-4: the reference's solver offsets are not on the 19-step grid; four hypotheses in ANIM.md §1.8) plus `generator-param/mesh.obj` pinned (settings of the cube/Bend not recorded; keyed strength equals stored strength is asserted). bool, enum, link, pla were not observable (O53 notes): implemented by design, parity-pending.
+- Rules: int = floor(line + 1e-4) (`int-track`); O53 keys are straight chords sampled at exact time (`color-track`, `tie-span-24/30`); the handle grid follows seconds. Colour channels `<id>.r|g|b`; Bool/Enum/Link steps; mesh `<id>.points` point tracks (linear blend, parity-pending).
+- Deviations: `Key.value` stays `f64` with a per-target encoding instead of a `KeyValue` enum (other crates build `Key` literals); side data lives in `Track`. No file version bump (additive serde defaults; a bump would invalidate the byte-stable v11 fixtures); `parse_target` kept, `parse_track_target` added.
+- Files: crates/core/src/{track,lib,document,file}.rs, crates/core/tests/{tracks,time,native_format}.rs, crates/anim/src/{interp,scene_at,lib}.rs, crates/anim/tests/*, docs/specs/ANIM.md.
+- Open: observe bool/enum/link/point-level animation through a path that actually drives them; record the cube size and Bend settings of generator-param; explain the solver offsets (euler-cross).
+- Gate: see brief 096 (gate run once at the end).

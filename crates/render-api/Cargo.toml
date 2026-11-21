@@ -3,6 +3,16 @@ name = "forge-render-api"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Render API: snapshot, settings, outputs, AOVs, progress, files (docs/specs/RENDER.md)."
+
+[dependencies]
+forge-image = { path = "../image" }
+forge-material = { path = "../material" }
+glam = "0.34"
+thiserror = "2"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tempfile = "3"

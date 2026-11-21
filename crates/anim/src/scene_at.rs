@@ -1,8 +1,10 @@
 //! Animated scenes (docs/specs/ANIM.md §1.5).
 
-use forge_core::{NodeId, Scene, Target, Value, parse_target};
+use std::sync::Arc;
 
-use crate::value_at;
+use forge_core::{MeshData, NodeId, ParamKind, Scene, TrackTarget, Value, parse_track_target};
+
+use crate::{int_at, points_at, step_at, value_at};
 
 /// A copy of `scene` whose animated parameters hold their values at `time` (seconds).
 /// Vec3 components without a track keep the stored value. Tracks that no longer address
@@ -36,23 +38,73 @@ pub fn overrides(scene: &Scene, ids: &[NodeId], time: f64) -> Vec<(NodeId, Strin
             continue;
         }
         for (key, track) in &node.tracks {
-            let Ok(target) = parse_target(key, |p| ty.find_param(p)) else {
+            let Ok(target) = parse_track_target(key, |p| ty.find_param(p)) else {
                 continue;
             };
-            let v = value_at(track, time);
+            // the value an earlier component or channel of this node produced, else the stored one
+            let base = |out: &[(NodeId, String, Value)], p: &str| {
+                out.iter()
+                    .rev()
+                    .find(|(i, q, _)| *i == id && q == p)
+                    .map(|(_, _, v)| v.clone())
+                    .or_else(|| scene.param(id, p).cloned())
+            };
             match target {
-                Target::Float(p) => out.push((id, p, Value::Float(v))),
-                Target::Component(p, axis) => {
-                    // Start from the value an earlier component of this node produced.
-                    let base = out
-                        .iter()
-                        .rev()
-                        .find(|(i, q, _)| *i == id && *q == p)
-                        .map(|(_, _, v)| v.clone())
-                        .or_else(|| scene.param(id, &p).cloned());
-                    if let Some(Value::Vec3(mut c)) = base {
-                        c[axis] = v;
+                TrackTarget::Float(p) => out.push((id, p, Value::Float(value_at(track, time)))),
+                TrackTarget::Int(p) => out.push((id, p, Value::Int(int_at(track, time, false)))),
+                TrackTarget::Bool(p) => {
+                    out.push((id, p, Value::Bool(step_at(track, time) >= 0.5)));
+                }
+                TrackTarget::Enum(p) => {
+                    let index = step_at(track, time).max(0.0) as usize;
+                    let id_of = ty.find_param(&p).and_then(|d| match &d.kind {
+                        ParamKind::Enum { options } => options.get(index).map(|o| o.id.clone()),
+                        _ => None,
+                    });
+                    if let Some(o) = id_of {
+                        out.push((id, p, Value::Enum(o)));
+                    }
+                }
+                TrackTarget::Link(p) => {
+                    let n = step_at(track, time).max(0.0) as u64;
+                    let link = (n != 0).then_some(NodeId(n));
+                    out.push((id, p, Value::Link(link)));
+                }
+                TrackTarget::Component(p, axis) => {
+                    let rot_tracks =
+                        [0, 1, 2].map(|a| node.tracks.get(&format!("{p}.{}", ["x", "y", "z"][a])));
+                    let quaternion = p == forge_core::transform::ROT
+                        && rot_tracks.iter().flatten().any(|t| t.quaternion);
+                    if quaternion {
+                        // one orientation for the three components: written once, at the
+                        // first of them
+                        let first = rot_tracks.iter().position(|t| t.is_some());
+                        if let (true, Some(Value::Vec3(c))) = (first == Some(axis), base(&out, &p))
+                        {
+                            let r = crate::quaternion_rotation_at(rot_tracks, c.into(), time);
+                            out.push((id, p, Value::Vec3(r.into())));
+                        }
+                    } else if let Some(Value::Vec3(mut c)) = base(&out, &p) {
+                        c[axis] = value_at(track, time);
                         out.push((id, p, Value::Vec3(c)));
+                    }
+                }
+                TrackTarget::Channel(p, axis) => {
+                    if let Some(Value::Color(mut c)) = base(&out, &p) {
+                        c[axis] = value_at(track, time).max(0.0);
+                        out.push((id, p, Value::Color(c)));
+                    }
+                }
+                TrackTarget::Points(p) => {
+                    if let (Some(Value::Mesh(m)), Some(points)) =
+                        (base(&out, &p), points_at(track, time))
+                        && points.len() == m.points.len()
+                    {
+                        let mesh = MeshData {
+                            points,
+                            polys: m.polys.clone(),
+                        };
+                        out.push((id, p, Value::Mesh(Arc::new(mesh))));
                     }
                 }
             }

@@ -35,6 +35,7 @@ pub fn display_value(value: &Value, unit: Unit) -> Json {
         Value::Mesh(m) => json!({"points": m.points.len(), "polys": m.polys.len()}),
         Value::IndexList(i) => json!(i),
         Value::Vec3List(l) => json!(l),
+        Value::FloatList(l) => json!(l),
     }
 }
 

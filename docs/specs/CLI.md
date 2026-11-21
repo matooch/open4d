@@ -131,8 +131,23 @@ else. A failed script (syntax error, runtime error, limit) saves nothing and is 
 the message reads `<script>: line N: <message>` and the printed lines go to stderr. A script
 file that cannot be read is exit 1; a scene that cannot be loaded is exit 2.
 
-### `forge render`
-Stub. It prints `render is not available yet (area K)` and exits 1.
+### `forge render <scene> --out <path> [options]`
+Renders the scene evaluated at one frame or a frame range with the CPU path tracer
+(RENDER.md R4-R12) and writes the images. The scene has no camera or light objects yet, so the
+camera frames the geometry (R12) and the engine adds its default light.
+Options: `--width W` (320), `--height H` (240), `--samples N` (16), `--max-depth N` (5),
+`--seed N` (1), `--frame N` (default 0, clamped to the scene range) or `--start A --end B
+[--step S]` (both together, never with `--frame`), `--format png|tif|jpg|hdr|exr` (default: the
+extension of `--out`, else png), `--depth 8|16|32` (8, or 32 for exr and hdr), `--alpha`,
+`--aov a,b,..|all` (depth, normal, albedo, position, object_id, material_id, shadow, diffuse,
+specular, emission) and `--multipart` (one EXR with a layer per pass; needs exr).
+`--out` is a template with `{frame}`, `{frame:N}`, `{pass}` and `{name}` (the scene file stem);
+a sequence without a frame token gets `{frame:4}`, each pass file gets `_<pass>`.
+JSON: `{"ok": true, "files": [..], "frames": [..], "width", "height", "samples", "format"}`.
+Progress lines (`frame N: path`) go to stderr. Errors: exit 1 for usage (a frame and a range
+together, an empty range, an unknown pass or format, zero size, a format that cannot store the
+depth, `--multipart` without exr), exit 2 for a scene that cannot be loaded. Nothing is written
+on a usage error.
 
 ## 3. Editor forwarding
 
@@ -167,6 +182,7 @@ and exits with its code. Without `--headless` the editor starts.
   frame 0 equals the cube golden, frame 30 is bent between frames 0 and 60, `export` equals
   `eval --export`, two builds are byte-identical. Pending (ignored tests naming the brief):
   cloner with random effector (065, 069), glTF export (164), PNG render (136, 139, 146); a
-  test pins `export --format gltf` and `render` as stubs so enabling them is noticed.
+  test pins `export --format gltf` as a stub so enabling it is noticed. The PNG render of S1 is
+  `s1_png_render` (render tests: `apps/forge/tests/render.rs`).
 - A closed stdout pipe (`forge --json commands | head -c 300`) is exit 0 without a panic:
   output goes through a locked stdout handle and `BrokenPipe` is a quiet success.

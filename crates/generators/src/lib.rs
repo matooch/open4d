@@ -4,10 +4,12 @@
 pub mod atom_array;
 pub mod axis;
 mod boole;
+mod clone_spline;
 mod cloner;
 mod cube;
 pub mod editable_spline;
 mod figure;
+mod fracture;
 mod landscape;
 mod lathe;
 mod modeling;
@@ -28,17 +30,19 @@ pub mod spline_tools;
 pub mod splines;
 mod subdivision;
 pub mod text_spline;
+pub mod tracer;
+pub mod uv;
 
 pub use boole::{boole, boole_objects, inputs_of as boole_inputs_of};
 pub use cloner::{
     ClonerInstances, PARALLEL_POINTS, clone_data, cloner_instances, expand as expand_clones,
-    prototypes_of as cloner_prototypes,
+    matrix_data, prototypes_of as cloner_prototypes,
 };
 pub use modeling::{array, connect, inputs_of as modeling_inputs_of, symmetry};
 pub use polygon::{
     EditableError, POLYGON_SELECTION, SELECTION_EDGES, SELECTION_POINTS, SELECTION_POLYS,
-    TYPE as POLYGON, current_state_to_object, from_poly_mesh, make_editable, spawn_split,
-    to_poly_mesh,
+    TYPE as POLYGON, clear_stale_tags, current_state_to_object, from_poly_mesh, make_editable,
+    spawn_split, to_poly_mesh,
 };
 pub use spline_gens::{extrude, lathe, loft, spline_inputs_of, sweep};
 pub use subdivision::{input_of, subdivide, subdivide_with_creases};
@@ -109,6 +113,8 @@ impl Plugin for Primitives {
         r.register(spline_gens::sweep_type())?;
         r.register(atom_array::node_type())?;
         r.register(spline_mask::node_type())?;
+        r.register(tracer::node_type())?;
+        r.register(clone_spline::node_type())?;
         r.register(boole::node_type())?;
         r.register(polygon::selection_tag_type())?;
         r.register(polygon::node_type())
@@ -274,8 +280,16 @@ pub(crate) fn evaluate_geometry(
     if node.type_id == cloner::TYPE {
         return cloner::evaluate_cloner(scene, id, &node.params, ctx);
     }
+    if node.type_id == fracture::TYPE {
+        return fracture::evaluate_fracture(scene, id, &node.params, ctx);
+    }
+    if node.type_id == forge_clone_engine::MATRIX {
+        // A Matrix makes matrices only (spec M1); an unsupported option is still an error.
+        cloner::matrix_data(scene, id, ctx)?;
+        return Ok(None);
+    }
     if spline_gens::spline_input_count(&node.type_id).is_some() {
-        return spline_gens::evaluate_spline_gen(scene, id, &node.type_id, &node.params);
+        return spline_gens::evaluate_spline_gen(scene, id, &node.type_id, &node.params, ctx);
     }
     if modeling::input_count(&node.type_id).is_some() || node.type_id == modeling::INSTANCE {
         return modeling::evaluate_modeling(scene, id, &node.type_id, &node.params, ctx);
@@ -358,6 +372,7 @@ fn produces_geometry(scene: &Scene, type_id: &str) -> bool {
         || type_id == subdivision::TYPE
         || type_id == boole::TYPE
         || type_id == cloner::TYPE
+        || type_id == fracture::TYPE
         || type_id == polygon::TYPE
         || type_id == modeling::INSTANCE
         || modeling::input_count(type_id).is_some()

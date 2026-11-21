@@ -13,7 +13,7 @@ pub enum Mode {
     Honeycomb,
 }
 
-/// How clones pick their prototype (brief 067 implements all but Iterate).
+/// How clones pick their prototype (spec O1-O4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClonesMode {
     Iterate,
@@ -170,6 +170,8 @@ pub struct Honeycomb {
 pub struct Settings {
     pub mode: Mode,
     pub clones_mode: ClonesMode,
+    /// Seed of the Random clone order.
+    pub clones_seed: u64,
     pub reset_coordinates: bool,
     pub instance_mode: InstanceMode,
     pub transform: TransformTab,

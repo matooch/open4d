@@ -136,8 +136,12 @@ fn listing_is_sorted_and_filterable() {
     assert_eq!(
         ids,
         [
+            "forge.edge_selection",
             "forge.null",
+            "forge.point_selection",
+            "forge.restriction",
             "forge.smoothing",
+            "forge.vertex_map",
             "test.bend",
             "test.box",
             "test.mat",
@@ -145,7 +149,17 @@ fn listing_is_sorted_and_filterable() {
         ]
     );
     let tags: Vec<&str> = r.types_in(Category::Tag).map(|t| t.id.as_str()).collect();
-    assert_eq!(tags, ["forge.smoothing", "test.sel"]);
+    assert_eq!(
+        tags,
+        [
+            "forge.edge_selection",
+            "forge.point_selection",
+            "forge.restriction",
+            "forge.smoothing",
+            "forge.vertex_map",
+            "test.sel"
+        ]
+    );
     let bx = r.get("test.box").unwrap();
     assert_eq!(bx.find_param("segments").unwrap().label, "Segments");
     assert!(bx.find_param("nope").is_none());

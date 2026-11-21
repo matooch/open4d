@@ -156,6 +156,7 @@ fn commit(
     let data = Arc::new(from_poly_mesh(&out.mesh));
     let sel_edges = cut_edges.clone();
     ctx.doc_mut().transact(label, |tx| {
+        forge_generators::clear_stale_tags(tx, node, &data)?;
         tx.set_param(node, "mesh", Value::Mesh(data))?;
         tx.set_param(node, SELECTION_POLYS, Value::IndexList(Vec::new()))?;
         tx.set_param(node, SELECTION_POINTS, Value::IndexList(Vec::new()))?;

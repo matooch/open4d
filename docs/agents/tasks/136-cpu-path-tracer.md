@@ -1,6 +1,6 @@
 # 136 · CPU path tracer core (BVH, instancing, BSDFs from the IR, MIS)
 
-Status: waiting: O30 · Area: K · Depends on: 135 · Observations: O30 · Touches: render-cpu
+Status: done · Area: K · Depends on: 135 · Observations: O30 · Touches: render-cpu
 
 ## Goal
 A deterministic multi-threaded CPU path tracer.
@@ -25,9 +25,8 @@ A deterministic multi-threaded CPU path tracer.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: `forge-render-cpu`: binned-SAH two-level BVH (shared BLAS per mesh), deterministic tiled path tracer (rayon, PCG32 + R2, thread-count independent), Lambert + GGX highlight + dielectric from the shading IR, NEE with MIS, Russian roulette, AOVs, progress/cancel, bump. 12 core tests (BVH vs brute force, instancing, white furnace diffuse/glass, energy bound, determinism over thread counts and tile sizes, cancel/progress, bad input) and `tests/render_parity.rs`: 15/19 O30/O43 cases match the silhouette within 1 px; `area-soft` and the two checker cases KNOWN_MISMATCH, `mat-metal` UNSUPPORTED (reasons in RENDER.md R14), `spot`/`infinite` not observed (folders asserted absent).
+- Rules derived: camera `camera_rotation_deg` is [heading, pitch, bank] and a heading of -15 deg looks right (the form's "P -15" label is wrong); the reference's Cubic filter of width 2 haloes bright edges (silhouette threshold 0.05); `render_perfect` spheres need a fine tessellation. Parity-pending: lighting units, default light, legacy specular width mapping, checker UV phase, bump scale.
+- Deviations: PSNR >= 25 dB is not asserted (the reference lighting is not the lights the forms list); only silhouettes. Sobol sampling and adaptive sampling not done (R2 + PCG instead).
+- Files: crates/render-cpu/**, docs/specs/RENDER.md.
+- Open questions: observe the default light and light units (a white plane under one Omni at a known distance); redo `area-soft` with the light type it describes; redo the checker with the UV grid of a plane to settle the phase; redo spot/infinite.

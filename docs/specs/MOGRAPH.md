@@ -901,3 +901,224 @@ modes and Unsupported, the Delay modes, frame 0 identity, determinism). The Dela
   Strength 50 %; a Target Object at (0, 100, 0) (clone at the same height), at (300, 0, 0).
 - Delay: Mode Even / Blend / Spring with a Time effector before it, Strength 50 %, frames 0, 1, 2, 5, 10 (record the
   clone data at each).
+
+---
+
+# Clone toolset: Matrix (brief 073)
+
+Sources: observation O31 [clone-generators-2.md](../parity/clone-generators-2.md) (parameter tables,
+cases `matrix/defaults`, `matrix/linear`), the cloner sections C1-C9 above. Golden data: `tests/golden/matrix/`
+(`samples.json` kind `clones`, tolerance 1e-4; `mesh.obj` is the observer's separate 20 cm cube).
+
+## M1. The Matrix object (`forge.matrix`)
+
+A Matrix makes clone data and no geometry. It has the cloner's distribution modes and Transform tab
+unchanged (C3-C7, C3.1) and none of the prototype options: it has no `clones_mode`, `reset_coordinates`,
+`fix_texture`, `instance_mode` or `viewport_mode`. Its parameter ids are the cloner's, plus `generate`.
+
+| Id | Label | Default |
+|---|---|---|
+| `mode` | Mode (Object, Linear, Radial, Grid, Honeycomb) | Grid (the cloner's default too; the observed label is "Grid", not "Grid Array") |
+| `generate` | Generate (Matrices Only, Particles) | Matrices Only |
+| `grid_count` | Count | (40, 1, 40) (cloner: (3, 1, 3)) |
+| `grid_size` | Size | (10.5, 10.5, 10.5) (cloner: 200) |
+| all others | as the cloner's | as the cloner's (O31 per-mode tables agree for Linear: P (0, 50, 0), step values 100 %) |
+
+Rules:
+- `matrix_data(scene, id, ctx)` (crates/generators) is `generate` of the settings read through the Matrix's
+  own descriptors, then the node's effector list (E1). The result has `child = 0` for every clone.
+- Evaluating the node gives no mesh (`Ok(None)`): `matrix/defaults` and `matrix/linear` export only the separate cube.
+- Consumers: Object-mode cloners (brief 066) and the Tracer (M3 below) read `matrix_data`. Viewport matrix
+  axes belong to brief 079.
+- `matrix/defaults` (Grid, 40 x 1 x 40, size 10.5, per step): 1600 clones, first at (-204.75, 0, -204.75), x fastest, same as
+  C6. `matrix/linear` (Linear, count 5, P (0, 50, 0)): clones at y = 0, 50, ... 200, as C4.
+
+Returns `BuildError::Unsupported`: `generate` = Particles (no particle system in the clone toolset), and Object mode
+(the cloner's Object mode is brief 066).
+
+**Parity-pending:** the per-mode default counts of the O31 table are mislabelled in the observation (the "Object" table shows
+count 5, the "Linear" one shows (40, 1, 40)); we keep the cloner's Linear default count (3) because `matrix/linear` sets
+the count to 5 explicitly. Radial, Honeycomb and Matrix-with-effectors have no observed case; they share the cloner code.
+
+## M2. Parity
+
+Test `crates/generators/tests/matrix_parity.rs` rebuilds both cases from `case.toml` (labels mapped per mode: on the Linear
+tab `p` is the step position and the Transform tab's P is `effects_p`; on the Grid tab `p` is the Transform tab's P),
+compares the clone data (level B) and checks the node produces no geometry and that our 20 cm cube equals the case's
+`mesh.obj` (level A on the standalone cube). Result: **2 of 2** exact. `UNSUPPORTED` / `KNOWN_MISMATCH`: none.
+
+---
+
+# Clone toolset: Tracer and the spline generator (brief 076)
+
+Sources: observations O31 [clone-generators-2.md](../parity/clone-generators-2.md) (Tracer parameter table; the
+`tracer/two-nulls` case was not observed) and O50 [clone-toolset-3.md](../parity/clone-toolset-3.md) (cases
+`tracer/vertices`, `tracer/interval`, `clone-spline/simple`, `clone-spline/spline-mode`, `clone-spline/turtle`).
+Every golden mesh is the generator's spline through an Extrude with its defaults. Both nodes are splines: they can
+be the input of Extrude, Lathe, Loft and Sweep, and they draw as splines.
+
+## T1. Tracer (`forge.tracer`)
+
+| Id | Label | Default |
+|---|---|---|
+| `tracing_mode` | Tracing Mode (Trace Paths, Trace Single Object, Connect All Objects) | Trace Paths |
+| `sample_step` | Sample Step | 1 |
+| `trace_active`, `trace_vertices`, `use_subgroups` | Trace Active, Trace Vertices, Use Subgroups | on |
+| `handle_cloners` | Nodes Only, Nodes and Edges | Nodes Only |
+| `include_cloner`, `close_spline`, `reverse_sequence` | | off |
+| `space` | Global, Local | Global |
+| `limit` | None, From, To | None |
+| `spline_type` | Linear, Cubic, Bezier, B-Spline, Akima | Linear |
+| `intermediate*` | the Intermediate Points set (spec SPLINES.md) | None |
+| `trace_links` | link list of the traced objects | empty |
+
+Rules:
+- **Trace Paths** (`tracer/vertices`): the Tracer samples the objects at the frames stepped through, 1..F for the document
+  frame F (none at frame 0), and makes one open polyline per traced node: with Trace Vertices on every vertex of the linked
+  object in its point order (8 chains for the cube, in the cube's point order), otherwise its origin; a Matrix or cloner link
+  contributes one node per visible clone (its position). Chains of several links follow in link order. All chains are
+  loops of one spline, in world space (the points are expressed in the Tracer's local frame so that they land at their world
+  position).
+- **Sample Step** `s` (`tracer/interval`, s = 5 gives frames 1, 5, 10, ... 30): the frames `f` with `f = 1` or `f mod s = 0`
+  (parity-pending: one case; whether frame 1 is always sampled or the first step is relative is not separable).
+- The linked object is evaluated at each sampled frame from the scene with its tracks read at exactly that frame
+  (no millisecond rounding of the document time: the observed cube is at x = 10.000106, not 9.9, at frame 1).
+- **Connect All Objects**: one polyline through the origins of the linked objects (the clones of a Matrix or cloner) at the
+  current frame, in link order (parity-pending: not observed, `tracer/two-nulls` was empty in the reference).
+- Close Spline closes every chain; Reverse Sequence reverses each chain's order.
+- Extrude of several open loops: all loops wind the normal way and caps are not made (open splines have none)
+  (`tracer/vertices`: faces `[a, b, b+240, a+240]` for all 232).
+
+`BuildError::Unsupported`: Trace Single Object, spline types other than Linear, Space Local, Limit From/To, Nodes and Edges.
+
+## S1. Clone-toolset spline generator (`forge.clone_spline`)
+
+| Id | Label | Default |
+|---|---|---|
+| `mode` | Simple, Spline, Turtle | Simple |
+| `count` | Count (segments of Simple) | 100 |
+| `length` | Length of Simple | 200 |
+| `source` | Source spline (Spline mode) | none |
+| `intermediate*` | Intermediate Points | None |
+
+- **Simple** (`clone-spline/simple`): an open straight line along +Z from the origin of `length`, in `count` equal segments
+  (`count` + 1 = 101 points, 2 apart).
+- **Spline** (`clone-spline/spline-mode`): an open polyline through the sampled points of the source spline (its own
+  Intermediate Points setting); a closed source repeats its first point at the end, so the default circle gives 37 points
+  and the Extrude 36 quads with no caps (the doubled point welds in the export).
+- **Turtle** is `Unsupported`: the case `clone-spline/turtle` shows a branching 3D plant (16 chains, step lengths 10, 9, 8.1 =
+  x 0.9 per generation, five branches 72 degrees apart around Y) but the default premise, rules, angle and length values of the
+  mode were not recorded. Data that would settle it: the Turtle parameter table with its default strings.
+
+## T2. Evaluation context
+
+`evaluate_spline_gen` passes the evaluation context to its spline inputs (`placed_curve_at`), so a Tracer under an Extrude
+follows the document frame. The viewport's spline drawing and Make Editable use frame 0 (parity-pending: the Tracer shows
+nothing before frame 1).
+
+## T3. Parity
+
+Test `crates/generators/tests/tracer_parity.rs`: Extrude (defaults) over the rebuilt generator, compared with `mesh.obj`
+(`compare_meshes`, strict). The animated cube of the Tracer cases has size 200 and a position-x track with straight-line
+(chord) tangents.
+
+| Case | Result |
+|---|---|
+| `clone-spline/simple` | exact |
+| `clone-spline/spline-mode` | exact |
+| `clone-spline/turtle` | `UNSUPPORTED` (S1) |
+| `tracer/vertices` | `KNOWN_MISMATCH`: counts, face lists and the 8 x 30 chains match; positions differ by up to 5.2e-4 |
+| `tracer/interval` | `KNOWN_MISMATCH`: counts and faces match; positions differ by up to 9.8e-4 |
+
+The two Tracer cases differ from our values by the reference's animation solver noise: the same frame-1 position reads
+10.001106 in `interval` and 10.000106 in `vertices`, so no rule is within 1e-4 of both. The test also asserts
+`topology_match` and a position error below 2e-3 for them, so a regression in the structure still fails.
+
+---
+
+# Clone toolset: Fracture and Voronoi Fracture (brief 074)
+
+Sources: O31 [clone-generators-2.md](../parity/clone-generators-2.md) (parameter tables, cases `fracture/explode-segments`,
+`fracture/plain`; the three `voronoi-fracture/*` cases were not observed). Golden data: `tests/golden/fracture/`.
+
+## F1. Fracture (`forge.fracture`)
+
+Parameters: `mode` (Straight, Explode Segments, Explode Segments & Connect; default Straight, the observed option list and
+default 0), the cloner's Transform tab (`display`, `clone_position`, `clone_rotation`, `clone_scale`, `clone_color`,
+`clone_weight`) and the `effectors` list. The children are the inputs and are consumed.
+
+Rules:
+- Explode Segments (`fracture/explode-segments`): every input mesh is split into its polygon islands (polygons that share a
+  point are one island; islands are ordered by their first polygon). A cube whose 6 quads share no point gives 6 fragments, and
+  the output is the input: the fragments keep the input's points (24) and quads (6), no point is added.
+- A fragment keeps its points in ascending input index and its polygons' corner order, so the output order is fragment by
+  fragment, equal to the input when the islands are in polygon order.
+- Each fragment is a clone whose pivot is its bounding box centre (**parity-pending**: the observation only has identity
+  clones). Its matrix is `T(P) · T(pivot) · Rot(R) · Scale(S)` (the Transform tab as on a cloner, C3.1); effectors in the
+  `effectors` list apply to the fragments in list order (E1), so a Plain effector with P (0, 100, 0) raises every fragment by
+  100.
+- A Plain effector as a child of the Fracture does nothing (`fracture/plain`: identical to `fracture/explode-segments`): only the
+  `effectors` list feeds it.
+- Straight: one fragment per input object, so a single input is unchanged (parity-pending, not observed).
+- The input's own transform is baked into its points.
+
+`BuildError::Unsupported`: Explode Segments & Connect (the connector geometry was not observed).
+
+## F2. Voronoi Fracture
+
+**Blocked, not implemented.** The observer could not bake it (the cache stayed empty after three attempts), so the
+observation has the parameter table and no meshes. The node is not registered. The design stays as in the area plan: cells from
+clipping the input by the bisector planes of seed points (point count, seed), inner faces capped, parity by cell count and
+total volume. Data that would settle it: any baked result (Current State to Object of a Voronoi Fracture with a point count
+of 10 and a seed of 1 on a cube).
+
+## F3. Parity
+
+Test `crates/generators/tests/fracture.rs`: both cases rebuild the 24-point, 6-quad cube as a polygon object (the reference
+output equals it, so the input is the golden mesh itself: this checks the pipeline, not an independent derivation) and compare
+with `mesh.obj` strictly. Result **2 of 2** exact (`explode-segments`, `plain`). Unit test: two islands, effector list moves
+them, Connect is `Unsupported`.
+
+---
+
+# Clone toolset: clone order, several children, nesting (brief 067)
+
+Sources: O21 [cloner-3.md](../parity/cloner-3.md) (`order-iterate`, `order-random`, `order-sort`, `nested`) and the O8 case
+`blend-order` ([cloner.md](../parity/cloner.md)); cases in `tests/golden/cloner/`.
+
+## O1. Children order
+
+The cases `order-*` have three children listed in the order **cone, sphere, cube** (the first clone of `order-iterate` is the cone, not the
+cube the description names first): the observer's insertion put each new child first. The cone and sphere have radius 10
+and default segments, the cube is 20 (these child values are only in the descriptions). `blend-order` lists cube, sphere (two
+children, 5 clones). The cloner's `clones_seed` (id, label Seed, default 123456, the value the observation read back) belongs
+to the Random order; the Matrix has none.
+
+## O2. The four orders (`CloneData::assign_children(n, mode, seed)`)
+
+- **Iterate** (`order-iterate`: clones are cone, sphere, cube, cone, sphere, cube): clone `i` shows child `i mod n`.
+- **Random** (`order-random`, seed 123456: cube, sphere, cube, sphere, sphere, sphere, i.e. child indices 2 1 2 1 1 1): a child per
+  clone from SplitMix64 started at the seed, `floor(u n)`. The reference's sequence is **not reproduced**; three hypotheses
+  on the six observed indices: (1) SplitMix64 and Python/MT19937 draws scaled `floor(u n)` or `mod n`, (2) the glibc `rand`
+  generator, `mod n` and scaled, (3) NumPy `RandomState` scaling and `randint`, each also tried under every permutation of
+  the child order. No match. `order-random` is `KNOWN_MISMATCH` (positions exact, children differ). A test checks the
+  draw is deterministic per seed, in range and uses all children.
+- **Blend** (`blend-order`: cube, cube, sphere, sphere, sphere for 5 clones and 2 children): `t = i / (count - 1)`, child
+  `floor(t (n - 1) + 1/2)`. **Parity-pending**: one case, two children; the reference's Blend may instead blend clone
+  parameters, here the observed meshes are whole children.
+- **Sort** (`order-sort`: all six clones show the first child): child `floor(w (n - 1) + 1/2)` clamped from the clone's weight
+  `w` (0 to 1), after the effectors. **Parity-pending**: only the all-zero-weights case was observed, so this reading (and the
+  value of the axis/sort options) is a guess consistent with it.
+- One child (or none) always gives child 0.
+
+## O3. Nesting
+
+A cloner whose child is a cloner needs no code: the inner cloner is a prototype with geometry and its mesh is expanded by every
+outer clone, outer clone major (`nested`: Linear count 3 over a Radial count 4). The case file does not record the inner cloner,
+so the test `a_cloner_inside_a_cloner_matches_the_nested_mesh` builds it (Radial count 4, cube 20).
+
+## O4. Parity
+
+`cloner_parity.rs::cloner_modes_match_the_reference` now runs the four order cases (at level B and A): **3 of 4 exact**
+(`order-iterate`, `order-sort`, `blend-order`), `order-random` in `KNOWN_MISMATCH` (above). `nested` stays in the separate test.
+Unit test: `crates/clone-engine/tests/modes.rs::children_are_assigned_by_the_clones_mode`.

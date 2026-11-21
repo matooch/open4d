@@ -42,6 +42,27 @@ fn registry() -> Arc<Registry> {
             .param(ParamDesc::string("note", "Note", "")),
     )
     .unwrap();
+    r.register(
+        NodeType::new("test.vmap", "Vertex map holder", Category::Object)
+            .param(ParamDesc::float_list("weights", "Weights").range(0.0, 1.0)),
+    )
+    .unwrap();
+    r.register(
+        NodeType::new("test.material", "Material", Category::Material)
+            .param(ParamDesc::color("color", "Color", [0.8, 0.8, 0.8]))
+            .param(ParamDesc::link(
+                "color.texture",
+                "Texture",
+                &[Category::Shader],
+            )),
+    )
+    .unwrap();
+    r.register(
+        NodeType::new("test.shader", "Shader", Category::Shader)
+            .param(ParamDesc::float("scale", "Scale", 1.0))
+            .param(ParamDesc::link("texture", "Texture", &[Category::Shader])),
+    )
+    .unwrap();
     Arc::new(r)
 }
 
@@ -120,29 +141,57 @@ fn every_old_version_has_a_fixture_that_loads_and_migrates() {
 }
 
 #[test]
-fn version_11_fixtures_are_current_and_byte_stable() {
+fn version_12_fixtures_are_current_and_byte_stable() {
     // The current fixtures pin the on-disk format: change them only with a version bump.
-    let (text_scene, bin_scene) = (fixture_scene(false), fixture_scene(true));
+    let (text_scene, bin_scene) = (fixture_scene_v12(false), fixture_scene_v12(true));
     let opts = SaveOptions::default();
     let text = file::save_with(&text_scene, &opts);
     let bin = file::save_with(&bin_scene, &opts);
     if std::env::var_os("FORGE_WRITE_FIXTURES").is_some() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-        std::fs::write(dir.join("scene-v11.forge"), &text).unwrap();
-        std::fs::write(dir.join("scene-v11-chunked.forge"), &bin).unwrap();
+        std::fs::write(dir.join("scene-v12.forge"), &text).unwrap();
+        std::fs::write(dir.join("scene-v12-chunked.forge"), &bin).unwrap();
     }
-    assert_eq!(text, fixture("scene-v11.forge"), "text fixture drifted");
+    assert_eq!(text, fixture("scene-v12.forge"), "text fixture drifted");
     assert_eq!(
         bin,
-        fixture("scene-v11-chunked.forge"),
+        fixture("scene-v12-chunked.forge"),
         "chunk fixture drifted"
     );
     assert!(!contains(&text, b"%%FORGE-CHUNKS"));
     assert!(contains(&bin, b"\n%%FORGE-CHUNKS 1\n"));
+    assert!(contains(&bin, b"FloatListChunk("));
+    assert!(contains(&text, b"FloatList(["));
+    assert!(contains(&text, b"materials: ["));
     for (bytes, scene) in [(&text, &text_scene), (&bin, &bin_scene)] {
         let (loaded, report) = file::load_bytes(registry(), bytes).unwrap();
         assert!(report.warnings.is_empty(), "{:?}", report.warnings);
         assert_eq!(file::save(&loaded), file::save(scene));
+        assert_eq!(loaded.materials(), scene.materials());
+    }
+}
+
+#[test]
+fn version_11_fixtures_still_load_and_migrate_to_current_without_materials() {
+    // Written by the build of format version 11 (before briefs 027 and 194); never regenerate.
+    for name in ["scene-v11.forge", "scene-v11-chunked.forge"] {
+        let bytes = fixture(name);
+        assert!(contains(&bytes, b"version: 11,"), "{name}");
+        let (scene, report) = file::load_bytes(registry(), &bytes).unwrap();
+        assert!(report.warnings.is_empty(), "{name}: {:?}", report.warnings);
+        assert!(scene.materials().is_empty(), "{name}");
+        let text = file::save(&scene);
+        assert!(text.contains(&format!("version: {VERSION}")), "{text}");
+        assert!(!text.contains("version: 11"), "{text}");
+        assert!(
+            !text.contains("materials:"),
+            "no empty list is written: {text}"
+        );
+        let (again, report) = file::load(registry(), &text).unwrap();
+        assert!(report.warnings.is_empty());
+        assert_eq!(file::save(&again), text, "{name}");
+        // the step is pure: the scene is the one the v11 build wrote
+        assert!(scene.param(NodeId(3), "fields").is_some(), "{name}");
     }
 }
 
@@ -194,7 +243,7 @@ fn version_10_field_lists_migrate_to_rows_with_the_nodes_strength_and_enable_sta
     ]);
     assert_eq!(scene.param(NodeId(1), "fields"), Some(&want));
     let text = file::save(&scene);
-    assert!(text.contains("version: 11"), "{text}");
+    assert!(text.contains(&format!("version: {VERSION}")), "{text}");
     assert!(!text.contains("layer_strength"), "{text}");
     let (again, report) = file::load(registry(), &text).unwrap();
     assert!(report.warnings.is_empty());
@@ -233,11 +282,28 @@ fn a_version_10_reader_refuses_version_11_files() {
             "{name}"
         );
     }
-    // a file this build wrote today is a version 11 file, so a 10 reader refuses it too
+}
+
+#[test]
+fn a_version_11_reader_refuses_version_12_files() {
+    for name in ["scene-v12.forge", "scene-v12-chunked.forge"] {
+        let bytes = fixture(name);
+        assert!(contains(&bytes, b"version: 12,"), "{name}");
+        assert_eq!(
+            file::load_as_reader(registry(), &bytes, 11).err(),
+            Some(LoadError::UnsupportedVersion(12)),
+            "{name}"
+        );
+        assert!(
+            file::load_as_reader(registry(), &bytes, 12).is_ok(),
+            "{name}"
+        );
+    }
+    // a file this build wrote today is a version 12 file, so an 11 reader refuses it too
     let saved = file::save(&fixture_scene(false));
     assert_eq!(
-        file::load_as_reader(registry(), saved.as_bytes(), 10).err(),
-        Some(LoadError::UnsupportedVersion(11))
+        file::load_as_reader(registry(), saved.as_bytes(), 11).err(),
+        Some(LoadError::UnsupportedVersion(12))
     );
 }
 
@@ -421,6 +487,29 @@ fn fixture_scene(big: bool) -> forge_core::Scene {
                 },
             ],
         })?;
+        Ok(())
+    })
+    .unwrap();
+    doc.scene().clone()
+}
+
+/// [`fixture_scene`] plus a vertex map holder (a float list, a chunk in the big form) and a
+/// material list entry with a two-level shader tree and a link from the material to a shader.
+fn fixture_scene_v12(big: bool) -> forge_core::Scene {
+    let mut doc = Document::from_scene(fixture_scene(big));
+    doc.transact("v12", |tx| {
+        let v = tx.create("test.vmap", None, None)?;
+        let n = if big { 200 } else { 4 };
+        let weights = (0..n).map(|i| f64::from(i) / f64::from(n)).collect();
+        tx.set_param(v, "weights", Value::FloatList(weights))?;
+        let m = tx.create_material("test.material", None)?;
+        tx.rename(m, "Wood")?;
+        let top = tx.create_shader("test.shader", m, None)?;
+        let leaf = tx.create_shader("test.shader", top, None)?;
+        tx.set_param(leaf, "scale", Value::Float(2.5))?;
+        tx.set_param(top, "texture", Value::Link(Some(leaf)))?;
+        tx.set_param(m, "color.texture", Value::Link(Some(top)))?;
+        tx.create_material("test.material", None)?;
         Ok(())
     })
     .unwrap();

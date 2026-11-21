@@ -6,12 +6,14 @@
 pub mod animate;
 pub mod coords;
 pub mod diagnostics;
+pub mod material_commands;
 pub mod motion;
 pub mod param_edit;
 pub mod query;
 pub mod rig_commands;
 pub mod schedule;
 pub mod select;
+pub mod tag_commands;
 pub mod weight_commands;
 
 use std::sync::Arc;
@@ -42,6 +44,8 @@ pub fn default_registry() -> Result<Registry, RegistryError> {
     registry.install(&forge_nodes::NodesToolset)?;
     registry.install(&forge_rig::Rig)?;
     registry.install(&forge_volume::VolumePlugin)?;
+    registry.install(&forge_material::MaterialPlugin)?;
+    registry.install(&forge_shaders::ShadersPlugin)?;
     Ok(registry)
 }
 
@@ -54,6 +58,8 @@ pub fn default_command_registry() -> CommandRegistry {
     forge_nodes::register_commands(&mut commands).expect("graph.* ids are unique");
     rig_commands::register(&mut commands).expect("joint.* ids are unique");
     weight_commands::register(&mut commands).expect("weights.* ids are unique");
+    tag_commands::register(&mut commands).expect("tag command ids are unique");
+    material_commands::register(&mut commands).expect("material command ids are unique");
     commands
 }
 

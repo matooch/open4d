@@ -2,7 +2,7 @@
 
 # Command reference
 
-175 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+193 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -132,6 +132,14 @@
 | [`marker.set_color`](#markerset_color) | Set Marker Color | yes | `marker_set_color` |
 | [`marker.list`](#markerlist) | List Markers | no | `marker_list` |
 | [`marker.jump`](#markerjump) | Jump to Marker | no | `marker_jump` |
+| [`key.move`](#keymove) | Move Keys | yes | `key_move` |
+| [`key.scale`](#keyscale) | Scale Keys | yes | `key_scale` |
+| [`key.delete`](#keydelete) | Delete Selected Keys | yes | `key_delete` |
+| [`key.set_interp`](#keyset_interp) | Set Key Interpolation | yes | `key_set_interp` |
+| [`key.set_tangent`](#keyset_tangent) | Set Key Tangent | yes | `key_set_tangent` |
+| [`key.paste`](#keypaste) | Paste Keys | yes | `key_paste` |
+| [`track.set_behavior`](#trackset_behavior) | Track Behavior | yes | `track_set_behavior` |
+| [`key.euler_filter`](#keyeuler_filter) | Euler Filter | yes | `key_euler_filter` |
 | [`file.new`](#filenew) | New | no | `file_new` |
 | [`file.open`](#fileopen) | Open | no | `file_open` |
 | [`file.save`](#filesave) | Save | no | `file_save` |
@@ -180,6 +188,16 @@
 | [`weights.prune`](#weightsprune) | Prune Weights | yes | `weights_prune` |
 | [`weights.smooth`](#weightssmooth) | Smooth Weights | yes | `weights_smooth` |
 | [`weights.mirror`](#weightsmirror) | Mirror Weights | yes | `weights_mirror` |
+| [`select.store`](#selectstore) | Set Selection | yes | `select_store` |
+| [`select.restore`](#selectrestore) | Restore Selection | yes | `select_restore` |
+| [`vertexmap.create`](#vertexmapcreate) | Create Vertex Map | yes | `vertexmap_create` |
+| [`vertexmap.set`](#vertexmapset) | Set Vertex Map Weights | yes | `vertexmap_set` |
+| [`restriction.set`](#restrictionset) | Restrict Deformer | yes | `restriction_set` |
+| [`material.create`](#materialcreate) | Create Material | yes | `material_create` |
+| [`material.delete`](#materialdelete) | Delete Material | yes | `material_delete` |
+| [`material.assign`](#materialassign) | Assign Material | yes | `material_assign` |
+| [`shader.set`](#shaderset) | Set Shader | yes | `shader_set` |
+| [`uv.generate`](#uvgenerate) | Generate UVW | yes | `uv_generate` |
 | [`plugin.list`](#pluginlist) | List Plugins | no | `plugin_list` |
 
 ## `object`
@@ -759,6 +777,29 @@ Ring Selection. One undo step.
 | `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.ring --args '{"across":0}'`
+
+### `select.store`
+
+Set Selection. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `kind` | `"points"` \| `"edges"` \| `"polys"` \| null | no | Default: the current component mode. |
+| `name` | string or null | no | Tag name (default: the tag type's label). |
+| `object` | integer or null | no | A polygon object (default: the active node). |
+
+Example: `forge cmd scene.forge select.store --args '{"kind":"points"}'`
+
+### `select.restore`
+
+Restore Selection. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes | A point, edge or polygon selection tag. |
+| `op` | `"replace"` \| `"add"` \| `"subtract"` \| null | no |  |
+
+Example: `forge cmd scene.forge select.restore --args '{"tag":1}'`
 
 
 ## `transform`
@@ -1508,6 +1549,89 @@ Autokey. Not an undoable edit.
 
 Example: `forge cmd scene.forge key.autokey --args '{"enabled":true}'`
 
+### `key.move`
+
+Move Keys. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `keys` | array of object | yes |  |
+| `delta_frames` | number | yes | Frames to move by. |
+| `delta_value` | number | no | Value change in display units (degrees for angles, percent as shown). Default: `0.0`. |
+| `ripple` | boolean | no | Also move every later key of the same tracks in time. Default: `false`. |
+
+Example: `forge cmd scene.forge key.move --args '{"delta_frames":5.0,"keys":[{"frame":10.0,"node":1,"track":"transform.pos.x"}]}'`
+
+### `key.scale`
+
+Scale Keys. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `keys` | array of object | yes |  |
+| `pivot_frame` | number | yes | The frame that stays where it is. |
+| `factor` | number | yes | Time scale factor (not zero; negative mirrors). |
+
+Example: `forge cmd scene.forge key.scale --args '{"factor":2.0,"keys":[{"frame":10.0,"node":1,"track":"transform.pos.x"}],"pivot_frame":0.0}'`
+
+### `key.delete`
+
+Delete Selected Keys. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `keys` | array of object | yes |  |
+
+Example: `forge cmd scene.forge key.delete --args '{"keys":[{"frame":10.0,"node":1,"track":"transform.pos.x"}]}'`
+
+### `key.set_interp`
+
+Set Key Interpolation. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `keys` | array of object | yes |  |
+| `interp` | string | yes | `spline`, `linear` or `step`. |
+
+Example: `forge cmd scene.forge key.set_interp --args '{"interp":"linear","keys":[{"frame":10.0,"node":1,"track":"transform.pos.x"}]}'`
+
+### `key.set_tangent`
+
+Set Key Tangent. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes |  |
+| `track` | string | yes |  |
+| `frame` | number | yes |  |
+| `preset` | string | yes | `auto`, `linear`, `ease`, `ease_in`, `ease_out`, `zero_angle`, `zero_length` or `user`. |
+| `broken` | boolean or null | no |  |
+| `left` | object \| null | no | New handles for `user`. |
+| `right` | object \| null | no |  |
+| `weighted` | boolean or null | no |  |
+
+Example: `forge cmd scene.forge key.set_tangent --args '{"frame":10.0,"node":1,"preset":"ease","track":"transform.pos.x"}'`
+
+### `key.paste`
+
+Paste Keys. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `keys` | array of object | yes |  |
+
+Example: `forge cmd scene.forge key.paste --args '{"keys":[{"frame":20.0,"interp":"spline","node":1,"track":"transform.pos.x","value":5.0}]}'`
+
+### `key.euler_filter`
+
+Euler Filter. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes |  |
+
+Example: `forge cmd scene.forge key.euler_filter --args '{"node":1}'`
+
 
 ## `timeline`
 
@@ -1709,6 +1833,22 @@ Jump to Marker. Not an undoable edit.
 | `forward` | boolean | yes | true: next key, false: previous key. |
 
 Example: `forge cmd scene.forge marker.jump --args '{"forward":true}'`
+
+
+## `track`
+
+### `track.set_behavior`
+
+Track Behavior. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes |  |
+| `track` | string | yes |  |
+| `after` | string or null | no |  |
+| `before` | string or null | no | `constant`, `continue`, `repeat`, `offset_repeat` or `oscillate`; unchanged when absent. |
+
+Example: `forge cmd scene.forge track.set_behavior --args '{"after":"repeat","node":1,"track":"transform.pos.x"}'`
 
 
 ## `file`
@@ -2220,6 +2360,119 @@ Mirror Weights. One undo step.
 | `plane` | `"yz"` \| `"xz"` \| `"xy"` \| null | no |  |
 
 Example: `forge cmd scene.forge weights.mirror --args '{"from":"positive","plane":"yz"}'`
+
+
+## `vertexmap`
+
+### `vertexmap.create`
+
+Create Vertex Map. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string or null | no |  |
+| `object` | integer or null | no |  |
+| `value` | number or null | no | Weight of every point not given by `weights` (default 0). |
+| `weights` | array of number or null | no |  |
+
+Example: `forge cmd scene.forge vertexmap.create --args '{"value":0.0}'`
+
+### `vertexmap.set`
+
+Set Vertex Map Weights. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes | A vertex map tag. |
+| `points` | array of integer or null | no | Points that take `value`. |
+| `value` | number or null | no |  |
+| `weights` | array of number or null | no | The whole weight list. |
+
+Example: `forge cmd scene.forge vertexmap.set --args '{"points":[0],"tag":1,"value":1.0}'`
+
+
+## `restriction`
+
+### `restriction.set`
+
+Restrict Deformer. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `selection` | string | yes | Name of a point selection or vertex map tag of the deformed object. |
+| `deformer` | integer or null | no | A deformer (default: the active node). |
+| `invert` | boolean or null | no |  |
+
+Example: `forge cmd scene.forge restriction.set --args '{"selection":"Vertex Map"}'`
+
+
+## `material`
+
+### `material.create`
+
+Create Material. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `index` | integer or null | no | Position in the material list (default: the end). |
+| `name` | string or null | no |  |
+| `type` | string or null | no | Material type (default `forge.material.standard`). |
+
+Example: `forge cmd scene.forge material.create --args '{}'`
+
+### `material.delete`
+
+Delete Material. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `materials` | array of integer | yes |  |
+
+Example: `forge cmd scene.forge material.delete --args '{"materials":[1]}'`
+
+### `material.assign`
+
+Assign Material. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `material` | integer | yes |  |
+| `nodes` | array of integer or null | no | Objects (default: the selection). |
+| `projection` | string or null | no | Projection of the new tags (a texture tag `projection` id). |
+
+Example: `forge cmd scene.forge material.assign --args '{"material":1}'`
+
+
+## `shader`
+
+### `shader.set`
+
+Set Shader. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `channel` | string or null | no | A slot: a channel name (`color`, `bump`, ...) or a slot param id. |
+| `material` | integer or null | no | With `channel`: the material. |
+| `params` | object or null | no | Parameters of the new shader, JSON by the shader type's units. |
+| `parent` | integer or null | no | Instead of a slot: a shader that takes the new one as an input. |
+| `type` | string or null | no | A `forge.shader.*` type; null removes the shader of the slot. |
+
+Example: `forge cmd scene.forge shader.set --args '{"channel":"color","material":1,"type":"forge.shader.gradient"}'`
+
+
+## `uv`
+
+### `uv.generate`
+
+Generate UVW. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `camera` | object \| null | no |  |
+| `object` | integer or null | no | A polygon object (default: the active node). |
+| `tag` | integer or null | no | A texture tag of the object (default: its first). |
+
+Example: `forge cmd scene.forge uv.generate --args '{}'`
 
 
 ## `plugin`

@@ -3,16 +3,21 @@
 //! `apply_skin` (called by `forge-modifiers`) and the tools in [`tools`].
 
 pub mod auto_weights;
+pub mod constraint;
 pub mod display;
+pub mod ik;
 pub mod joint;
 pub mod mirror;
 pub mod paint;
 pub mod skin;
+pub mod tags;
 pub mod tools;
 pub mod weights;
 
 use forge_core::{Plugin, Registry, RegistryError};
 
+pub use constraint::CONSTRAINT_TAG;
+pub use ik::IK_TAG;
 pub use joint::{Axis, JOINT};
 pub use skin::{SKIN, apply_skin};
 pub use weights::{WEIGHT_TAG, WeightMap};
@@ -29,6 +34,8 @@ impl Plugin for Rig {
         registry.register(joint::joint_type())?;
         registry.register(weights::weight_tag_type())?;
         registry.register(skin::skin_type())?;
+        registry.register(ik::ik_tag_type())?;
+        registry.register(constraint::constraint_tag_type())?;
         Ok(())
     }
 }
