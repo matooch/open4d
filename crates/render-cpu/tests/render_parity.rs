@@ -16,10 +16,18 @@ use forge_render_cpu::CpuEngine;
 const REFERENCE_THRESHOLD: f32 = 0.05;
 
 /// Cases whose silhouette cannot be compared, with the reason (the spec lists them too).
-const UNSUPPORTED: &[(&str, &str)] = &[(
-    "mat-metal",
-    "silhouette not observable: with the colour channel off only 725 px of the light's reflection are above black",
-)];
+const UNSUPPORTED: &[(&str, &str)] = &[
+    (
+        "checker-plane",
+        "silhouette not defined: the reference's black checker squares are 0, so its luminance \
+         silhouette loses edge pixels; the result is 0 or 1 px depending on the platform's \
+         floating point. The checker phase is the open question (pattern test)",
+    ),
+    (
+        "mat-metal",
+        "silhouette not observable: with the colour channel off only 725 px of the light's reflection are above black",
+    ),
+];
 
 /// Cases that build but differ; asserted to still differ.
 const KNOWN_MISMATCH: &[(&str, &str)] = &[
@@ -40,11 +48,6 @@ const KNOWN_MISMATCH: &[(&str, &str)] = &[
         "the black squares are 0 in the reference, so its luminance silhouette is not the object's; the pattern grid is the same size but its phase differs (see the pattern test)",
     ),
     ("mat-checker-cubic", "as mat-checker-uv"),
-    (
-        "checker-plane",
-        "as mat-checker-uv: the reference's black squares are 0, so its luminance silhouette \
-         loses edge pixels (1 px differs); the pattern phase is checked by the pattern test",
-    ),
 ];
 
 /// Cases the form lists but whose renders were not observed (black): the folders must stay absent
