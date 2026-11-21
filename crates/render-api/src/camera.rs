@@ -5,7 +5,8 @@ use glam::{DMat4, DVec3};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Projection {
     /// Film gate width `sensor_mm` spans the image width; `film_offset` shifts the principal
-    /// point by fractions of the image width (+x right, +y up).
+    /// point by a fraction of the image width in x (+x right) and of the image height in y
+    /// (+y up): `film-offset` (X) and `film-offset-y` (RENDER.md R15).
     Perspective {
         focal_mm: f64,
         sensor_mm: f64,
@@ -87,7 +88,7 @@ impl Camera {
                     f,
                     [
                         w * 0.5 + film_offset[0] * w,
-                        height as f64 * 0.5 - film_offset[1] * w,
+                        height as f64 * 0.5 - film_offset[1] * height as f64,
                     ],
                 ))
             }

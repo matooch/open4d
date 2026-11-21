@@ -29,10 +29,31 @@ fn root() -> PathBuf {
 const UNSUPPORTED: &[(&str, &str)] = &[];
 
 /// Cases that build but differ; asserted to still differ.
-const KNOWN_MISMATCH: &[(&str, &str)] = &[];
+const KNOWN_MISMATCH: &[(&str, &str)] = &[(
+    "ortho-zoom-2",
+    "the orthographic width at zoom 2 is about 510.8 units in the reference (plane 35.0..285.6 px, \
+     cube 125.3 px of 200 units), not 1000 / zoom = 500 (plane 31..288) and not a halving of any \
+     width consistent with ortho-front; a third zoom value is needed",
+)];
 
 /// Cases of the form that were observed as an empty frame: their folders must stay absent until
 /// the observation is redone (docs/parity/camera.md notes).
+/// Cases of the calibration scene (a texture tag is recorded): the plane carries a checker whose
+/// black cells are zero in the reference picture, so they are indistinguishable from the
+/// background and the picture's silhouette is not its geometry. They are compared one-sided
+/// (RENDER.md R15): every lit reference pixel lies within 1 px of a pixel we touch (coverage
+/// above the reference's own 0.05 threshold), and the lit bounding box agrees within 1 px.
+fn is_calibration(name: &str) -> bool {
+    let doc: toml::Table = std::fs::read_to_string(root().join(name).join("case.toml"))
+        .unwrap()
+        .parse()
+        .unwrap();
+    doc["params"]
+        .as_table()
+        .unwrap()
+        .contains_key("texture_tag")
+}
+
 const NOT_OBSERVED: &[&str] = &["default", "focal-100", "aspect-square", "dof", "sensor"];
 
 fn case_names() -> Vec<String> {
@@ -189,11 +210,72 @@ fn mismatch(name: &str) -> usize {
     .silhouette_mismatch_px
 }
 
+/// Lit reference pixels with no covered pixel of ours within 1 px, and the bounding boxes of
+/// the two masks `(x0, y0, x1, y1)`.
+fn one_sided(name: &str) -> (usize, [u32; 4], [u32; 4]) {
+    let c = load(name);
+    let out = CpuEngine::new()
+        .render(&c.snapshot, &settings(c.size), &Control::new())
+        .unwrap();
+    let (w, h) = c.size;
+    let lit = c.expected.mask(REFERENCE_THRESHOLD);
+    let ours: Vec<bool> = (0..(w * h) as usize)
+        .map(|i| out.beauty.data[i * 4 + 3] > REFERENCE_THRESHOLD)
+        .collect();
+    let near = |x: u32, y: u32| {
+        (y.saturating_sub(1)..=(y + 1).min(h - 1)).any(|yy| {
+            (x.saturating_sub(1)..=(x + 1).min(w - 1)).any(|xx| ours[(yy * w + xx) as usize])
+        })
+    };
+    let bbox = |m: &[bool]| {
+        let mut b = [w, h, 0, 0];
+        for y in 0..h {
+            for x in 0..w {
+                if m[(y * w + x) as usize] {
+                    b = [b[0].min(x), b[1].min(y), b[2].max(x), b[3].max(y)];
+                }
+            }
+        }
+        b
+    };
+    let far: Vec<(u32, u32)> = (0..h)
+        .flat_map(|y| (0..w).map(move |x| (x, y)))
+        .filter(|(x, y)| lit[(y * w + x) as usize] && !near(*x, *y))
+        .collect();
+    (far.len(), bbox(&lit), bbox(&ours))
+}
+
+#[test]
+fn calibration_scene_silhouettes_cover_the_reference_within_one_pixel() {
+    let mut checked = 0;
+    for name in case_names().into_iter().filter(|n| is_calibration(n)) {
+        let (far, r, o) = one_sided(&name);
+        println!("{name:16} far reference px {far}, bbox ref {r:?} ours {o:?}");
+        if KNOWN_MISMATCH.iter().any(|(n, _)| *n == name) {
+            let off = (0..4).any(|k| r[k].abs_diff(o[k]) > 1);
+            assert!(off, "{name} now matches: remove it from KNOWN_MISMATCH");
+            continue;
+        }
+        assert_eq!(
+            far, 0,
+            "{name}: reference pixels beyond 1 px of our coverage"
+        );
+        for k in 0..4 {
+            assert!(
+                r[k].abs_diff(o[k]) <= 1,
+                "{name}: bounding box {r:?} vs {o:?}"
+            );
+        }
+        checked += 1;
+    }
+    assert_eq!(checked, 3);
+}
+
 #[test]
 fn silhouettes_match_within_one_pixel() {
     let mut checked = 0;
     for name in case_names() {
-        if UNSUPPORTED.iter().any(|(n, _)| *n == name) {
+        if UNSUPPORTED.iter().any(|(n, _)| *n == name) || is_calibration(&name) {
             continue;
         }
         let m = mismatch(&name);
@@ -223,7 +305,16 @@ fn every_golden_case_is_listed_or_checked() {
     let names = case_names();
     assert_eq!(
         names,
-        ["film-offset", "focal-18", "ortho-front", "ortho-top"]
+        [
+            "aspect-square-2",
+            "default-2",
+            "film-offset",
+            "film-offset-y",
+            "focal-18",
+            "ortho-front",
+            "ortho-top",
+            "ortho-zoom-2"
+        ]
     );
     for (n, why) in UNSUPPORTED.iter().chain(KNOWN_MISMATCH) {
         assert!(names.iter().any(|c| c == n) && !why.is_empty());

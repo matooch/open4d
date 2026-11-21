@@ -239,7 +239,9 @@ fn all_repo_samples_files_parse() {
     // every file parses and validates; the pin was re-counted to (120, 118, 148).
     // Observer batch 4: +66 track files from O39 (dynamics.md, rigid-body position/rotation per
     // frame) and +18 from O41 (soft-bodies.md).
-    assert_eq!((tracks, fields, clones), (204, 118, 148));
+    // Observer batch 5 (follow-ups: keyframes redos and behaviours, dynamics, soft-sphere samples,
+    // rigging readouts, cloner and turtle redos, ik): +47 track files and +5 clone files.
+    assert_eq!((tracks, fields, clones), (251, 118, 153));
 }
 
 #[test]

@@ -535,8 +535,8 @@ pub enum Lens {
     Perspective {
         focal_mm: f64,
         sensor_mm: f64,
-        /// Shift of the principal point in fractions of the image width, +x right, +y up (the
-        /// negated Film Offset parameters).
+        /// Shift of the principal point, +x right (a fraction of the image width), +y up (a
+        /// fraction of the image height): minus Film Offset X, plus Film Offset Y.
         film_offset: [f64; 2],
     },
     /// World width that spans the image width.
@@ -619,9 +619,9 @@ pub fn camera_data(scene: &Scene, id: NodeId) -> Option<CameraData> {
             focal_mm: focal_from_fov(r.f("fov_horizontal"), sensor),
             sensor_mm: sensor,
             // the parameters shift the frame, the lens moves the principal point the other way
-            // (O57 `film-offset`: +20 % X moves the picture left by 20 % of the width; the Y sign
-            // follows by symmetry and is parity-pending)
-            film_offset: [-r.f("film_offset_x"), -r.f("film_offset_y")],
+            // (O57 `film-offset`: +20 % X moves the picture left by 20 % of the width;
+            // `film-offset-y`: +20 % Y moves it up by 20 % of the height, so Y is not negated)
+            film_offset: [-r.f("film_offset_x"), r.f("film_offset_y")],
         }
     } else {
         Lens::Orthographic {
