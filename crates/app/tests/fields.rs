@@ -266,7 +266,7 @@ fn rows_survive_save_and_load() {
         json!([{"target": a.0, "blend": "multiply", "strength": 25.0, "enabled": false}]),
     );
     let text = forge_core::file::save(app.doc.scene());
-    assert!(text.contains("version: 11"));
+    assert!(text.contains(&format!("version: {}", forge_core::file::VERSION)));
     let (scene, report) =
         forge_core::file::load(app.doc.scene().registry().clone(), &text).unwrap();
     assert!(report.warnings.is_empty(), "{:?}", report.warnings);

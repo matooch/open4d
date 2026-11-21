@@ -1,6 +1,6 @@
 # 076 · Tracer and the clone-toolset spline generator
 
-Status: waiting: O31, O50 · Area: E · Depends on: 065, 028 · Observations: O31, O50 · Touches: clone-engine, generators
+Status: done (partial) · Area: E · Depends on: 065, 028 · Observations: O31, O50 · Touches: clone-engine, generators
 
 ## Goal
 Tracer (connect objects / trace paths of vertices, modes and interval) and the spline generator (simple, spline, turtle modes).
@@ -26,10 +26,9 @@ Tracer (connect objects / trace paths of vertices, modes and interval) and the s
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- Result: `tracer_parity.rs` (3 tests); parity 2/5 exact (`clone-spline/simple`, `spline-mode`). `KNOWN_MISMATCH`: `tracer/vertices` and `tracer/interval` (structure exact, positions off by up to 5.2e-4 / 9.8e-4: the reference reads 10.001106 vs 10.000106 at the same frame in the two cases). `UNSUPPORTED`: `clone-spline/turtle` (default premise, rules, angle and length not recorded).
+- Rules (spec MOGRAPH.md T1-T3, S1): see spec. Parity-pending: Connect All, Sample Step phase.
+- Deviations: Extrude of an open multi-loop spline no longer errors on caps and winds all loops outward (shared `spline_gens.rs`); `evaluate_spline_gen` takes the eval context; generators now depends on forge-anim (exact-time track reads).
+- Files: crates/generators/src/{tracer,clone_spline,splines,spline_gens,lib}.rs, Cargo.toml, tests/tracer_parity.rs, ui icons + icon_table, spec, STATUS, BACKLOG.
+- Open: Turtle parameter table with default strings; a re-observation of the Tracer cases; Connect All Objects.

@@ -1,6 +1,6 @@
 # 125 · Shaders I: Noise, Gradient, Color, Fresnel, Falloff, Layer, Colorizer, Bitmap
 
-Status: waiting: O42 · Area: J · Depends on: 063, 123 · Observations: O42 · Touches: shaders (new)
+Status: done · Area: J · Depends on: 063, 123 · Observations: O42 · Touches: shaders (new)
 
 ## Goal
 Procedural shaders sampled at UVW, matching O42 samples.
@@ -15,8 +15,8 @@ Procedural shaders sampled at UVW, matching O42 samples.
 - Parity: UV grid samples (field-kind format, points (u, v, 0)).
 
 ## Done when
-- [ ] O42 cases pass at level B, or statistical with reason.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] O42 cases pass at level B, or statistical with reason.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -26,9 +26,7 @@ Procedural shaders sampled at UVW, matching O42 samples.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: crates/shaders (new), 5 parity tests + 11 unit tests. O42: 6 of 17 cases exact in all channel files (gradient-u, -v, -circular, checkerboard, tiles, fresnel); 10 KNOWN_MISMATCH (8 noise cases, gradient-turbulence, colorizer over noise: the reference noise basis is not public; checked statistically); 1 UNSUPPORTED (brick, 126).
+- Rules derived: smoothstep ramps, V = 1 - v, circular = sqrt2 * r; checker cells half a period; tiles grout/bevel profile and min() combination; colour params are sRGB decoded (see SHADERS.md S2-S4).
+- Deviations: shaders cannot be scene nodes yet (see 123 report); Layer list uses one shared blend mode.
+- Files: crates/shaders, docs/specs/SHADERS.md, crates/app (plugin), icon shader.

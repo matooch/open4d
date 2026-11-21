@@ -22,11 +22,15 @@ forge-generators = { path = "../../crates/generators" }
 forge-io = { path = "../../crates/io" }
 forge-mcp = { path = "../../crates/mcp" }
 forge-plugin = { path = "../../crates/plugin" }
+forge-render-api = { path = "../../crates/render-api" }
+forge-render-bridge = { path = "../../crates/render-bridge" }
+forge-render-cpu = { path = "../../crates/render-cpu" }
 forge-rpc = { path = "../../crates/rpc" }
 forge-script = { path = "../../crates/script" }
 serde_json = "1"
 
 [dev-dependencies]
+forge-image = { path = "../../crates/image" }
 assert_cmd = "2"
 forge-parity-harness = { path = "../../crates/parity-harness" }
 serde_json = "1"

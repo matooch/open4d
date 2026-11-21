@@ -60,6 +60,9 @@ pub enum Value {
     /// An ordered list of 3D vectors (the points and tangents of an editable spline); every
     /// component finite, no range, order meaningful.
     Vec3List(Vec<[f64; 3]>),
+    /// An ordered list of floats (a vertex map: one weight per point index); every item finite
+    /// and inside the parameter's range (docs/specs/CORE.md §1, brief 027).
+    FloatList(Vec<f64>),
 }
 
 /// One row of a [`Value::LinkRows`] list: the target and the row's own data.
@@ -130,6 +133,11 @@ pub enum ParamKind {
     Mesh,
     IndexList,
     Vec3List,
+    /// Range applies per item.
+    FloatList {
+        min: f64,
+        max: f64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -352,7 +360,20 @@ impl ParamDesc {
         d
     }
 
-    /// Hard range for `Int`, `Float` and `Vec3` parameters.
+    /// A hidden, non-animatable list of floats (a vertex map) whose default is empty; the items
+    /// are unbounded until [`ParamDesc::range`] is called.
+    pub fn float_list(id: &str, label: &str) -> ParamDesc {
+        let kind = ParamKind::FloatList {
+            min: f64::MIN,
+            max: f64::MAX,
+        };
+        let mut d = Self::new(id, label, kind, Value::FloatList(Vec::new()));
+        d.ui.hidden = true;
+        d.animatable = false;
+        d
+    }
+
+    /// Hard range for `Int`, `Float`, `Vec3` and `FloatList` (per item) parameters.
     ///
     /// # Panics
     /// On other kinds, or if `min > max`.
@@ -362,7 +383,9 @@ impl ParamDesc {
                 (*lo, *hi) = (min.as_i64(), max.as_i64());
                 assert!(lo <= hi, "range: min > max for `{}`", self.id);
             }
-            ParamKind::Float { min: lo, max: hi } | ParamKind::Vec3 { min: lo, max: hi } => {
+            ParamKind::Float { min: lo, max: hi }
+            | ParamKind::Vec3 { min: lo, max: hi }
+            | ParamKind::FloatList { min: lo, max: hi } => {
                 (*lo, *hi) = (min.as_f64(), max.as_f64());
                 assert!(lo <= hi, "range: min > max for `{}`", self.id);
             }
@@ -483,6 +506,13 @@ impl ParamDesc {
                     finite(*c)?;
                 }
                 Ok(Value::Vec3List(list))
+            }
+            (ParamKind::FloatList { min, max }, Value::FloatList(list)) => {
+                let mut out = Vec::with_capacity(list.len());
+                for f in list {
+                    out.push(finite(f)?.clamp(*min, *max));
+                }
+                Ok(Value::FloatList(out))
             }
             _ => Err(ParamError::TypeMismatch),
         }

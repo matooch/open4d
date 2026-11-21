@@ -60,6 +60,7 @@ fn window_menu_moves_and_closes_panels() {
         Some(Area::Bottom)
     );
     click(&mut h, "Window");
+    click(&mut h, "Move panel");
     click(&mut h, "Move Attributes");
     click(&mut h, "Attributes to left");
     assert_eq!(

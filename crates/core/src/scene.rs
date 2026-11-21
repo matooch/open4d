@@ -63,6 +63,10 @@ pub(crate) enum Slot {
         host: NodeId,
         index: usize,
     },
+    /// A position in the document's material list (CORE.md §2.1).
+    Material {
+        index: usize,
+    },
 }
 
 /// A removed node with everything below it; `nodes[0]` is the root.
@@ -120,6 +124,8 @@ pub struct Scene {
     /// then writes to (`Arc::make_mut`), so animated copies stay cheap (CORE.md section 5b).
     nodes: BTreeMap<NodeId, Arc<Node>>,
     roots: Vec<NodeId>,
+    /// The document's ordered material list (CORE.md §2.1); not part of the object tree.
+    materials: Vec<NodeId>,
     next_id: u64,
     revision: u64,
     settings: SceneSettings,
@@ -133,6 +139,7 @@ impl Scene {
             registry,
             nodes: BTreeMap::new(),
             roots: Vec::new(),
+            materials: Vec::new(),
             next_id: 1,
             revision: 0,
             settings: SceneSettings::default(),
@@ -175,6 +182,12 @@ impl Scene {
 
     pub fn roots(&self) -> &[NodeId] {
         &self.roots
+    }
+
+    /// The document's materials in list order (CORE.md §2.1). Their shaders are the children
+    /// of the material (or of another shader), not entries of this list.
+    pub fn materials(&self) -> &[NodeId] {
+        &self.materials
     }
 
     pub fn param(&self, id: NodeId, param: &str) -> Option<&Value> {
@@ -238,6 +251,23 @@ impl Scene {
             parent = self.node(p)?.parent;
         }
         Some(m)
+    }
+
+    /// Every parameter that holds a link (single, list or rows), over all nodes including
+    /// materials and shaders, as `(node, param id, value)`.
+    pub fn link_params(&self) -> Vec<(NodeId, &str, &Value)> {
+        let mut out = Vec::new();
+        for (id, n) in &self.nodes {
+            for (k, v) in &n.params {
+                if matches!(
+                    v,
+                    Value::Link(Some(_)) | Value::LinkList(_) | Value::LinkRows(_)
+                ) {
+                    out.push((*id, k.as_str(), v));
+                }
+            }
+        }
+        out
     }
 
     /// Max revision over the node, its subtree, its tags and its link targets.
@@ -418,6 +448,7 @@ impl Scene {
             SlotOwner::Children(None) => Some(&self.roots),
             SlotOwner::Children(Some(p)) => self.node(p).map(|n| &n.children),
             SlotOwner::Tags(h) => self.node(h).map(|n| &n.tags),
+            SlotOwner::Materials => Some(&self.materials),
         }
     }
 
@@ -430,12 +461,19 @@ impl Scene {
             SlotOwner::Tags(h) => {
                 &mut Arc::make_mut(self.nodes.get_mut(&h).expect("slot host")).tags
             }
+            SlotOwner::Materials => &mut self.materials,
         }
     }
 
     /// Current slot of a node.
     pub(crate) fn slot_of(&self, id: NodeId) -> Slot {
         let n = &self.nodes[&id];
+        if n.host.is_none()
+            && n.parent.is_none()
+            && let Some(index) = self.materials.iter().position(|m| *m == id)
+        {
+            return Slot::Material { index };
+        }
         let (owner, list) = match n.host {
             Some(h) => (SlotOwner::Tags(h), &self.nodes[&h].tags),
             None => (
@@ -457,6 +495,8 @@ impl Scene {
         self.slot_list_mut(owner).remove(index);
         if let Some(stamp) = owner.node() {
             self.stamp(stamp);
+        } else if owner == SlotOwner::Materials {
+            self.revision += 1;
         }
         slot
     }
@@ -468,9 +508,12 @@ impl Scene {
         match slot {
             Slot::Child { parent, .. } => (n.parent, n.host) = (parent, None),
             Slot::Tag { host, .. } => (n.parent, n.host) = (None, Some(host)),
+            Slot::Material { .. } => (n.parent, n.host) = (None, None),
         }
         if let Some(stamp) = owner.node() {
             self.stamp(stamp);
+        } else if owner == SlotOwner::Materials {
+            self.revision += 1;
         }
     }
 
@@ -517,6 +560,14 @@ impl Scene {
         }
         self.nodes.insert(node.id, Arc::new(node));
     }
+
+    /// [`Scene::insert_loaded`] for a top-level entry of the material list.
+    pub(crate) fn insert_loaded_material(&mut self, mut node: Node) {
+        self.revision += 1;
+        node.rev = self.revision;
+        self.materials.push(node.id);
+        self.nodes.insert(node.id, Arc::new(node));
+    }
 }
 
 /// The owner of an ordered node list.
@@ -524,6 +575,7 @@ impl Scene {
 pub(crate) enum SlotOwner {
     Children(Option<NodeId>),
     Tags(NodeId),
+    Materials,
 }
 
 impl SlotOwner {
@@ -531,6 +583,7 @@ impl SlotOwner {
         match slot {
             Slot::Child { parent, index } => (SlotOwner::Children(parent), index),
             Slot::Tag { host, index } => (SlotOwner::Tags(host), index),
+            Slot::Material { index } => (SlotOwner::Materials, index),
         }
     }
 
@@ -538,6 +591,7 @@ impl SlotOwner {
         match self {
             SlotOwner::Children(parent) => Slot::Child { parent, index },
             SlotOwner::Tags(host) => Slot::Tag { host, index },
+            SlotOwner::Materials => Slot::Material { index },
         }
     }
 
@@ -545,6 +599,7 @@ impl SlotOwner {
         match self {
             SlotOwner::Children(p) => p,
             SlotOwner::Tags(h) => Some(h),
+            SlotOwner::Materials => None,
         }
     }
 }

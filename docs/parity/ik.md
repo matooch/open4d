@@ -92,6 +92,13 @@ Use `feature = "ik"`.
 | four-joints | a 4-joint chain, spacing 100, goal (150, 150, 0) | none | 4-joint chain solves: J2 (99.87, -5.14, 0), J3 (180.04, 54.62, 0); tip (150, 150, 0). |
 | twist | reach-bend, plus the IK tag's twist/rotation parameter at 45° (if present) | none | Twist 45 deg rotates the plane: J2 (85.36, 14.64, 50.00); tip unchanged (100, 100, 0). |
 
+## Follow-up cases (planner, after brief 104)
+
+| Case | Setup | Record |
+|---|---|---|
+| rest-orientation | the chain as built, no IK tag | every joint's local and global rotation (H, P, B) and its axes, written in the row and in `case.toml` |
+| four-joints-2 | the `four-joints` chain, but J2 pre-rotated B 30° before the IK tag is added | joint global positions and axes, as in `four-joints` |
+
 ## Notes
 
 - All nine cases solved with the tag's default 2D solver (Max Iterations 10000, Threshold 0.01);

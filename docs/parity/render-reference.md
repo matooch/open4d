@@ -51,6 +51,17 @@ Infinite: its direction must have a downward (−Y) part. If the light reads bac
 render is still black, mark the case `not observed: render black with the light pointing <direction>`
 instead of committing the image. Never commit an all-black render.
 
+## Follow-up cases (planner, after briefs 136/137)
+
+| Case | Setup | Record |
+|---|---|---|
+| light-units | a 400 × 400 plane facing the camera, white matte material, one Omni light 300 units in front of its centre, intensity 100 %, no default light | `render.png`, and the light's intensity, falloff and units as read back |
+| light-units-200 | the same with the Omni 600 units away | the same (settles falloff) |
+| area-soft-2 | redo `area-soft` with an Area light (shape Rectangle, defaults) at (300, 400, −300) pointing at the origin; read the light type back before rendering and store it as `light_type` | `render.png` |
+| checker-plane | the 400 × 400 plane with the checker material of `mat-checker-uv`, camera straight on | `render.png` (settles the checker phase) |
+
+Every case: also store the camera's rotation as read back, in H, P, B order, under `camera_rotation_deg`.
+
 ## Notes
 
 - The scripting render call needs a bitmap of the output size handed to it and writes the

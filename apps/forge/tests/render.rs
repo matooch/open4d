@@ -1,0 +1,244 @@
+//! `forge render` (docs/specs/CLI.md, RENDER.md R12).
+
+use std::path::{Path, PathBuf};
+
+use assert_cmd::Command;
+use serde_json::{Value, json};
+
+fn dir(name: &str) -> PathBuf {
+    let d = std::env::temp_dir().join(format!("forge-render-test-{}-{name}", std::process::id()));
+    std::fs::remove_dir_all(&d).ok();
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
+fn forge() -> Command {
+    let mut cmd = Command::cargo_bin("forge").unwrap();
+    cmd.env("FORGE_NO_PLUGINS", "1");
+    cmd
+}
+
+fn json_run(args: &[&str]) -> (i32, Value) {
+    let out = forge().arg("--json").args(args).output().unwrap();
+    let text = String::from_utf8(out.stdout).unwrap();
+    let value = serde_json::from_str(&text).unwrap_or_else(|e| panic!("{e}: {text:?}"));
+    (out.status.code().unwrap(), value)
+}
+
+fn s(p: &Path) -> &str {
+    p.to_str().unwrap()
+}
+
+fn cube_scene(d: &Path) -> String {
+    let scene = s(&d.join("a.forge")).to_string();
+    assert_eq!(json_run(&["new", &scene]).0, 0);
+    let args = json!({"type": "forge.cube"}).to_string();
+    let (code, out) = json_run(&["cmd", &scene, "object.create", "--args", &args, "--save"]);
+    assert_eq!(code, 0, "{out}");
+    scene
+}
+
+fn decode(p: &Path) -> forge_image::Image {
+    forge_image::decode(&std::fs::read(p).unwrap(), &forge_image::Limits::default())
+        .unwrap()
+        .image
+}
+
+fn lit_pixels(img: &forge_image::Image) -> usize {
+    img.data
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .filter(|p| p[0] > 0.01)
+        .count()
+}
+
+#[test]
+fn renders_a_png_of_the_cube() {
+    let d = dir("png");
+    let scene = cube_scene(&d);
+    let out = d.join("cube.png");
+    let (code, r) = json_run(&[
+        "render",
+        &scene,
+        "--out",
+        s(&out),
+        "--width",
+        "64",
+        "--height",
+        "48",
+        "--samples",
+        "4",
+    ]);
+    assert_eq!(code, 0, "{r}");
+    assert_eq!(r["ok"], true);
+    let bytes = std::fs::read(&out).unwrap();
+    assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
+    let img = decode(&out);
+    assert_eq!((img.width, img.height), (64, 48));
+    let lit = lit_pixels(&img);
+    assert!(
+        lit > 100 && lit < 64 * 48,
+        "{lit} lit pixels: framed, not blank, not full"
+    );
+    // Deterministic: a second render is byte-identical.
+    let again = d.join("again.png");
+    json_run(&[
+        "render",
+        &scene,
+        "--out",
+        s(&again),
+        "--width",
+        "64",
+        "--height",
+        "48",
+        "--samples",
+        "4",
+    ]);
+    assert_eq!(bytes, std::fs::read(&again).unwrap());
+}
+
+#[test]
+fn renders_an_image_sequence_with_numbered_files() {
+    let d = dir("seq");
+    let scene = cube_scene(&d);
+    let out = d.join("shot");
+    let (code, r) = json_run(&[
+        "render",
+        &scene,
+        "--out",
+        s(&out),
+        "--format",
+        "png",
+        "--start",
+        "0",
+        "--end",
+        "2",
+        "--width",
+        "16",
+        "--height",
+        "12",
+        "--samples",
+        "1",
+    ]);
+    assert_eq!(code, 0, "{r}");
+    assert_eq!(r["frames"], json!([0, 1, 2]));
+    for n in ["shot0000.png", "shot0001.png", "shot0002.png"] {
+        assert!(d.join(n).exists(), "{n}");
+    }
+}
+
+#[test]
+fn writes_passes_separately_and_as_a_multipart_exr() {
+    let d = dir("aov");
+    let scene = cube_scene(&d);
+    let out = d.join("p{frame:2}.exr");
+    let (code, r) = json_run(&[
+        "render",
+        &scene,
+        "--out",
+        s(&out),
+        "--aov",
+        "depth,normal,object_id",
+        "--width",
+        "16",
+        "--height",
+        "12",
+        "--samples",
+        "2",
+    ]);
+    assert_eq!(code, 0, "{r}");
+    for n in [
+        "p00.exr",
+        "p00_depth.exr",
+        "p00_normal.exr",
+        "p00_object_id.exr",
+    ] {
+        assert!(d.join(n).exists(), "{n}");
+    }
+    let m = d.join("multi.exr");
+    let (code, r) = json_run(&[
+        "render",
+        &scene,
+        "--out",
+        s(&m),
+        "--aov",
+        "all",
+        "--multipart",
+        "--width",
+        "16",
+        "--height",
+        "12",
+        "--samples",
+        "1",
+    ]);
+    assert_eq!(code, 0, "{r}");
+    let layers = forge_image::decode_exr_layers(
+        &std::fs::read(&m).unwrap(),
+        &forge_image::Limits::default(),
+    )
+    .unwrap();
+    assert_eq!(layers.len(), 11, "beauty and ten passes");
+    let depth = layers
+        .iter()
+        .find(|l| l.name.as_deref() == Some("depth"))
+        .unwrap();
+    assert!(depth.channels[0].samples.iter().any(|v| *v > 0.0));
+    let ids = layers
+        .iter()
+        .find(|l| l.name.as_deref() == Some("object_id"))
+        .unwrap();
+    assert!(
+        ids.channels[0].samples.contains(&1.0),
+        "first object has id 1"
+    );
+}
+
+#[test]
+fn usage_errors_are_exit_1_and_write_nothing() {
+    let d = dir("errors");
+    let scene = cube_scene(&d);
+    let out = d.join("x.png");
+    for args in [
+        vec![
+            "render",
+            &scene,
+            "--out",
+            s(&out),
+            "--frame",
+            "1",
+            "--start",
+            "0",
+            "--end",
+            "2",
+        ],
+        vec![
+            "render",
+            &scene,
+            "--out",
+            s(&out),
+            "--start",
+            "3",
+            "--end",
+            "1",
+        ],
+        vec!["render", &scene, "--out", s(&out), "--aov", "bogus"],
+        vec!["render", &scene, "--out", s(&out), "--width", "0"],
+        vec![
+            "render",
+            &scene,
+            "--out",
+            s(&d.join("x.jpg")),
+            "--depth",
+            "16",
+        ],
+        vec!["render", &scene, "--out", s(&out), "--multipart"],
+    ] {
+        let (code, r) = json_run(&args);
+        assert_eq!(code, 1, "{args:?}: {r}");
+        assert_eq!(r["ok"], false);
+    }
+    assert!(!out.exists());
+    let (code, _) = json_run(&["render", s(&d.join("missing.forge")), "--out", s(&out)]);
+    assert_eq!(code, 2);
+}

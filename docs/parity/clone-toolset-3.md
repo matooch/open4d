@@ -121,6 +121,12 @@ Redo these two cases as new case folders (keep the old ones):
 | `random-f/sorted` | 20 clones; first clones (44.737, 44.737, 44.737) (-34.211, -34.211, -24.211) (-28.947, -28.947, -8.947), last (-23.684, -23.684, 166.316): in Sorted mode all three offset components are equal on every clone, so every offset lies on the diagonal |
 | `random-f/rot-h` | 20 clones; the positions keep the cloner's P (0, 0, 10) untouched and every clone is turned about Y by a different angle (clone 1 x axis (0.2466, 0, 0.9691), clone 2 (0.9171, 0, -0.3987), clone 3 (0.9062, 0, 0.4229), 20 distinct x axes), y staying (0, 1, 0). The R (90, 0, 0) deg entered in the effector's Rotation row does not turn the clones about X; the probe reads the rotation back in radians and the case records the 90° the Attribute Manager shows |
 
+## Follow-up (planner, after brief 067)
+
+The `order-*` cases' children (cone, sphere, cube) must be in `case.toml` with every parameter
+(under `[params.children_N]` tables in list order), not only in the description. Redo
+`order-iterate` as `order-iterate-2` with that recorded; the other order cases need no redo.
+
 ## Notes
 - Blend order: 5 clones of a cube (size 20) and a sphere (r 10) in Linear mode at the default (0, 50, 0) step bake to a 358-point / 396-polygon mesh; clone weights read 0 because no weight tag is present, as in the O8 cloner cases.
 - Clone selection and clone weights are not scriptable in this build. The scripted selection and weight values land in the live clone data (the matching readers report clones 2 and 4 selected, and weights 0, 0.25, 0.5, 0.75, 1), and the effector accepts the selection tag in its Selection field, but evaluation still treats every clone alike: the Plain effector offsets all five clones by the full (0, 100, 0), selection or weight or not. Rows `cloner/selection-tag` and `cloner/weight-tag` therefore stay not observed; they need a saved scene built in the GUI.

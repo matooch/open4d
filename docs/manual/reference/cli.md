@@ -38,7 +38,7 @@ Headless Forge3D: scenes, commands and export.
 | [`docs`](#forge-docs) | Write the generated reference (commands, CLI, RPC, MCP, scripting) as markdown |
 | [`run`](#forge-run) | Run a Rhai script on a scene (docs/specs/SCRIPTING.md) |
 | [`rpc`](#forge-rpc) | Call a method of a running editor over JSON-RPC (docs/specs/RPC.md) |
-| [`render`](#forge-render) | Render an image (not available yet) |
+| [`render`](#forge-render) | Render an image or an image sequence with the CPU path tracer (docs/specs/RENDER.md) |
 
 ### `forge new`
 
@@ -198,10 +198,27 @@ forge rpc <method> [--params] [--port] [--token]
 
 ### `forge render`
 
-Render an image (not available yet)
+Render an image or an image sequence with the CPU path tracer (docs/specs/RENDER.md)
 
 ```
-forge render
+forge render <scene> --out [--width] [--height] [--samples] [--max-depth] [--seed] [--frame] [--start] [--end] [--step] [--format] [--depth] [--alpha] [--aov] [--multipart]
 ```
 
-No options.
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `<scene>` | yes |  |  |
+| `--out` | yes |  | Output path template; tokens {frame}, {frame:N}, {pass}, {name}. The extension picks the format when it is a known one |
+| `--width` | no | `320` |  |
+| `--height` | no | `240` |  |
+| `--samples` | no | `16` |  |
+| `--max-depth` | no | `5` |  |
+| `--seed` | no | `1` |  |
+| `--frame` | no |  | One frame (default 0, clamped to the scene range) |
+| `--start` | no |  | First frame of a sequence (needs --end) |
+| `--end` | no |  |  |
+| `--step` | no | `1` |  |
+| `--format` | no |  | Format when --out has no known extension: png, tif, jpg, hdr, exr |
+| `--depth` | no |  | Bits per channel: 8, 16 or 32 |
+| `--alpha` | no |  | Write the alpha channel |
+| `--aov` | no |  | Extra passes, comma separated: depth, normal, albedo, position, object_id, material_id, shadow, diffuse, specular, emission, or `all` |
+| `--multipart` | no |  | One multipart EXR file with a layer per pass |

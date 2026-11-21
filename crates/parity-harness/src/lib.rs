@@ -9,8 +9,10 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+pub mod image;
 pub mod samples;
 pub mod volume;
+pub use image::{CompareOptions, ImageBuf, ImageError, ImageReport, compare_image};
 pub use samples::{
     Samples, SamplesReport, compare_samples, parse_samples, samples_info, validate_samples,
 };

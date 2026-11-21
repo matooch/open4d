@@ -24,7 +24,7 @@ implementers can avoid collisions.
 | 024 | [Interactive cutting: Loop/Path Cut, Knife (line, plane, loop), Slide](../agents/tasks/024-interactive-cutting.md) | B | 020, 023 | done (parity-pending: O58, G3 item 7) | modeling, ui, viewport |
 | 025 | [Bridge, Stitch and Sew, Close Polygon Hole, Polygon Pen](../agents/tasks/025-bridge-stitch-close-pen.md) | B | 020 | done | modeling, ui |
 | 026 | [Soft selection and symmetry modeling](../agents/tasks/026-soft-selection-symmetry.md) | B | 023 | done (parity-pending: G3 item 6) | ui, modeling |
-| 027 | [Selection tags, vertex map tags, restriction tags](../agents/tasks/027-selection-vertexmap-restriction-tags.md) | B | 023 | ready | core, generators, ui, modifiers |
+| 027 | [Selection tags, vertex map tags, restriction tags](../agents/tasks/027-selection-vertexmap-restriction-tags.md) | B | 023 | done | core, generators, ui, modifiers |
 | 028 | [Editable spline object and point/tangent editing](../agents/tasks/028-editable-spline.md) | B | 003 | done | core, geometry, generators, ui |
 | 029 | [Spline tools and spline booleans](../agents/tasks/029-spline-tools.md) | B | 028 | done | geometry, modeling |
 | 030 | [Make Editable follow-ups from O3](../agents/tasks/030-make-editable-followups.md) | B | 003, 028 | done | generators, ui |
@@ -64,16 +64,16 @@ implementers can avoid collisions.
 | 064 | [Field list widget and field display](../agents/tasks/064-field-list-widget.md) | D | 059, 150 | done (parity-pending G4: looks, columns) | ui, viewport |
 | 065 | [Clone data, cloner node, Linear / Radial / Grid / Honeycomb modes, instance modes](../agents/tasks/065-cloner-core-modes.md) | E | 050 | done (19/19 samples and meshes; rules parity-pending, see MOGRAPH.md C11) | clone-engine, plugin |
 | 066 | [Object-mode distributions with seeds and selections](../agents/tasks/066-cloner-object-mode.md) | E | 065, 027 | ready | clone-engine |
-| 067 | [Clone order (iterate, random, blend, sort), multiple children, nesting](../agents/tasks/067-clone-order-nesting.md) | E | 065 | ready | clone-engine |
+| 067 | [Clone order (iterate, random, blend, sort), multiple children, nesting](../agents/tasks/067-clone-order-nesting.md) | E | 065 | done (random order statistical) | clone-engine |
 | 068 | [Effector framework + Plain effector (modes, spaces, colour, weight, min/max)](../agents/tasks/068-effector-framework-plain.md) | E | 065, 057 | done (14/14 Plain cases at level B and A; rules parity-pending, see MOGRAPH.md E10) | clone-engine, core |
 | 069 | [Random effector (all modes)](../agents/tasks/069-random-effector.md) | E | 068, 063 | done (exact: counts/visibility/untouched channels 8/8; random values statistical, reference sequence not reproduced) | clone-engine, noise |
 | 070 | [Step, Formula, Time, Delay and Target effectors](../agents/tasks/070-step-formula-time-delay-target.md) | E | 068, 052 | done (level B 6/6, level A 5/6: `step-position` known mismatch; Delay has no golden case, all its rules parity-pending, see MOGRAPH.md E18-E25) | clone-engine |
 | 071 | [Shader, Spline, Push Apart, Inheritance, Volume and Group effectors](../agents/tasks/071-shader-spline-pushapart-etc.md) | E | 068, 125 | ready | clone-engine |
 | 072 | [Effector falloff via field lists](../agents/tasks/072-effector-field-falloff.md) | E | 068, 059 | done (parity-pending: multi-layer lists, no observation) | clone-engine, fields |
-| 073 | [Matrix object](../agents/tasks/073-matrix-object.md) | E | 065 | ready | clone-engine |
-| 074 | [Fracture and Voronoi Fracture](../agents/tasks/074-fracture-voronoi.md) | E | 065, 033 | ready | clone-engine, geometry |
+| 073 | [Matrix object](../agents/tasks/073-matrix-object.md) | E | 065 | done | clone-engine |
+| 074 | [Fracture and Voronoi Fracture](../agents/tasks/074-fracture-voronoi.md) | E | 065, 033 | done (Fracture; Voronoi blocked: not observed) | clone-engine, geometry |
 | 075 | [Clone-toolset Text](../agents/tasks/075-clone-text.md) | E | 039, 065 | ready | clone-engine, generators |
-| 076 | [Tracer and the clone-toolset spline generator](../agents/tasks/076-tracer-spline-generator.md) | E | 065, 028 | ready | clone-engine, generators |
+| 076 | [Tracer and the clone-toolset spline generator](../agents/tasks/076-tracer-spline-generator.md) | E | 065, 028 | done (Turtle unsupported; tracer positions within 1e-3) | clone-engine, generators |
 | 077 | [Instance-over-time generator](../agents/tasks/077-instance-over-time.md) | E | 065, 088 | ready | clone-engine, anim |
 | 078 | [Clone selection and weight tags, clone cache](../agents/tasks/078-clone-tags-cache.md) | E | 065, 027 | ready | clone-engine |
 | 079 | [Clone UI: effector lists, clone display, GPU instancing hookup](../agents/tasks/079-clone-ui.md) | E | 065, 144 | done (parity-pending G4) | ui, viewport |
@@ -85,15 +85,15 @@ implementers can avoid collisions.
 | 085 | [Field layers inside the volume builder](../agents/tasks/085-volume-field-layers.md) | F | 081, 059 | done (parity-pending: scale K, threshold 0.5, subtract / multiply modes: one case) volume, fields |
 | 086 | [VDB file read/write](../agents/tasks/086-vdb-io.md) | F | 080 | done (parity-pending: layout from the public description, no reference file; vdb-export case needs a human; read/write tested against our own files and the observed .vdb if present) | volume, io |
 | 087 | [Keyframe rework: O16 rules (millisecond rounding at other fps; tangent at uneven monotone keys)](../agents/tasks/087-keyframe-rework-o16-rules-millisecond-rounding-at-other-fps.md) | G | – | done | anim |
-| 088 | [Tracks for all value types + point-level animation](../agents/tasks/088-tracks-all-value-types.md) | G | 087 | ready | core, anim |
-| 089 | [Tangent model: user, broken, weighted, zero angle/length, ease presets, overshoot](../agents/tasks/089-tangent-model.md) | G | 087 | ready | core, anim |
-| 090 | [Dope sheet manager](../agents/tasks/090-dope-sheet.md) | G | 089, 011 | ready | ui |
-| 091 | [Value graph (F-curve) manager](../agents/tasks/091-value-graph.md) | G | 089, 090 | ready | ui |
+| 088 | [Tracks for all value types + point-level animation](../agents/tasks/088-tracks-all-value-types.md) | G | 087 | done (parity-pending) | core, anim |
+| 089 | [Tangent model: user, broken, weighted, zero angle/length, ease presets, overshoot](../agents/tasks/089-tangent-model.md) | G | 087 | done (parity-pending) | core, anim |
+| 090 | [Dope sheet manager](../agents/tasks/090-dope-sheet.md) | G | 089, 011 | done (parity-pending) | ui |
+| 091 | [Value graph (F-curve) manager](../agents/tasks/091-value-graph.md) | G | 089, 090 | done (parity-pending) | ui |
 | 092 | [Speed graph mode and speed editing](../agents/tasks/092-speed-graph.md) | G | 091 | ready | ui, anim |
-| 093 | [Track before/after behaviours, key reduction, bake](../agents/tasks/093-track-behaviours-bake.md) | G | 089 | ready | anim |
+| 093 | [Track before/after behaviours, key reduction, bake](../agents/tasks/093-track-behaviours-bake.md) | G | 089 | done | anim |
 | 094 | [Time: markers, preview range, playback modes, fps conversion, time display](../agents/tasks/094-time-markers-playback.md) | G | 010 | done (parity-pending G5) | core, ui |
 | 095 | [Motion paths and onion skin](../agents/tasks/095-motion-paths-onion.md) | G | 010, 143 | done | viewport |
-| 096 | [Rotation: Euler filter, quaternion interpolation option](../agents/tasks/096-rotation-euler-quat.md) | G | 089 | ready | anim |
+| 096 | [Rotation: Euler filter, quaternion interpolation option](../agents/tasks/096-rotation-euler-quat.md) | G | 089 | done (parity-pending) | anim |
 | 097 | [Keyframe indicators on every parameter; key context menu](../agents/tasks/097-keyframe-indicators.md) | G | 088, 150 | ready | ui |
 | 098 | [Animated evaluation performance (dependency-aware re-evaluation)](../agents/tasks/098-animated-eval-performance.md) | G | 180 | done | core, anim |
 | 099 | [S7 acceptance test and animation docs](../agents/tasks/099-s7-animation-acceptance.md) | G | 090–096 | ready | tests, docs |
@@ -101,14 +101,14 @@ implementers can avoid collisions.
 | 101 | [Skin deformer + Weight tag + bind pose (LBS, DQS option)](../agents/tasks/101-skin-weights.md) | H | 100, 050 | done (parity-pending: 4 of 5 posed O34 cases differ from the reference by its own noise, RIG.md §8) | rig, modifiers |
 | 102 | [Weight tools: paint brush, weight manager, normalise/mirror/smooth/prune](../agents/tasks/102-weight-tools.md) | H | 101, 150 | done (parity-pending G6) | rig, ui, viewport |
 | 103 | [Auto weights (bone heat)](../agents/tasks/103-auto-weights.md) | H | 101 | done (parity-pending: no reference auto-weight data, O34 case not observed; level C checked against the nearest bone, RIG.md §4) | rig |
-| 104 | [IK tag: 2-bone, chain, pole, twist, IK/FK blend](../agents/tasks/104-ik.md) | H | 100 | ready | rig |
-| 105 | [Constraint tag: PSR, Aim, Parent, Clamp](../agents/tasks/105-constraints.md) | H | 100 | ready | rig |
+| 104 | [IK tag: 2-bone, chain, pole, twist, IK/FK blend](../agents/tasks/104-ik.md) | H | 100 | done | rig |
+| 105 | [Constraint tag: PSR, Aim, Parent, Clamp](../agents/tasks/105-constraints.md) | H | 100 | done | rig |
 | 106 | [Tags: Target, Align to Spline, Vibrate, Look at Camera, Protection, Display, Compositing](../agents/tasks/106-expression-tags.md) | H | 088 | ready | core, rig |
 | 107 | [Pose Morph tag](../agents/tasks/107-pose-morph.md) | H | 088 | waiting: O37 | rig |
 | 108 | [Node expression engine forge-nodes](../agents/tasks/108-forge-nodes.md) | H | 016 | done | nodes (new) |
 | 109 | [Node expression editor UI](../agents/tasks/109-node-editor-ui.md) | H | 108, 150 | done (parity-pending G6; follow-up: node materials reuse the canvas, brief 124) | ui, nodes |
 | 110 | [User data on any node](../agents/tasks/110-user-data.md) | H | 011, 150 | ready | core, ui |
-| 111 | [Evaluation order: tag priorities, expressions before generators](../agents/tasks/111-evaluation-order.md) | H | 104, 105, 108 | ready | core |
+| 111 | [Evaluation order: tag priorities, expressions before generators](../agents/tasks/111-evaluation-order.md) | H | 104, 105, 108 | done | core |
 | 112 | [Weight and joint display modes in the viewport](../agents/tasks/112-rig-display.md) | H | 101, 143 | done (parity-pending: own design; draw lists and ramp as pure code, weight overlay as markers; VIEWPORT.md §13) | viewport |
 | 113 | [Rig mirroring (joints and weights, left/right naming)](../agents/tasks/113-rig-mirroring.md) | H | 101 | done (own design: no observation; symmetric-deformation unit test, RIG.md §5) | rig |
 | 114 | [S6 acceptance test and rigging docs](../agents/tasks/114-s6-rigging-acceptance.md) | H | 100–113 | ready | tests, docs |
@@ -120,23 +120,23 @@ implementers can avoid collisions.
 | 120 | [Forces: gravity, wind, attractor, deflector, friction, turbulence, rotation](../agents/tasks/120-forces.md) | I | 119, 115, 063 | waiting: O40 | dynamics |
 | 121 | [Particles in the clone toolset and volumes](../agents/tasks/121-particles-in-clones-volumes.md) | I | 119, 076, 081 | ready | dynamics, clone-engine, volume |
 | 122 | [Bake to keys and cache tags; dynamics UI](../agents/tasks/122-dynamics-bake-ui.md) | I | 115, 093 | ready | dynamics, ui |
-| 123 | [Material model: Standard material + material tag + IR compile](../agents/tasks/123-material-model.md) | J | – | ready | material (new), plugin |
+| 123 | [Material model: Standard material + material tag + IR compile](../agents/tasks/123-material-model.md) | J | – | done (8 tests; scene hosting of materials needs a core slot) | material (new), plugin |
 | 124 | [Node material graph + node editor UI](../agents/tasks/124-node-material.md) | J | 123, 109 | ready | material, ui |
-| 125 | [Shaders I: Noise, Gradient, Color, Fresnel, Falloff, Layer, Colorizer, Bitmap](../agents/tasks/125-shaders-1.md) | J | 063, 123 | ready | shaders (new) |
-| 126 | [Shaders II: Tiles, Checkerboard, Brick, Fusion, Filter, Normalizer, Vertex Map, Field, AO](../agents/tasks/126-shaders-2.md) | J | 125 | ready | shaders |
-| 127 | [Texture tag projections + Generate UVW](../agents/tasks/127-texture-projections.md) | J | 123, 128 | ready | material, geometry |
-| 128 | [Corner UVs on PolyMesh; primitive UV parity](../agents/tasks/128-primitive-uvs.md) | J | – | ready | geometry, generators, io |
+| 125 | [Shaders I: Noise, Gradient, Color, Fresnel, Falloff, Layer, Colorizer, Bitmap](../agents/tasks/125-shaders-1.md) | J | 063, 123 | done (6/17 exact; noise basis known mismatch) | shaders (new) |
+| 126 | [Shaders II: Tiles, Checkerboard, Brick, Fusion, Filter, Normalizer, Vertex Map, Field, AO](../agents/tasks/126-shaders-2.md) | J | 125 | done (checker, tiles exact; brick, field shader unsupported) | shaders |
+| 127 | [Texture tag projections + Generate UVW](../agents/tasks/127-texture-projections.md) | J | 123, 128 | done (6/7 exact; frontal known mismatch; no Generate UVW command yet) | material, geometry |
+| 128 | [Corner UVs on PolyMesh; primitive UV parity](../agents/tasks/128-primitive-uvs.md) | J | – | done (10/10 primitives per corner; CornerUvs beside PolyMesh, no OBJ vt IO yet) | geometry, generators, io |
 | 129 | [UV editor (view, transform, relax LSCM, pack, seams)](../agents/tasks/129-uv-editor.md) | J | 128, 150 | ready | ui, geometry |
 | 130 | [Image IO, texture cache, colour management](../agents/tasks/130-image-io-colour.md) | J | – | done | image (new) |
 | 131 | [Material manager UI with preview renders](../agents/tasks/131-material-manager.md) | J | 123, 136 | ready | ui |
 | 132 | [Viewport material display (PBR preview, textures)](../agents/tasks/132-viewport-materials.md) | J | 123, 143 | ready | viewport |
 | 133 | [Environment: sky, HDRI, background, floor](../agents/tasks/133-environment.md) | J | 130, 137 | ready | render-api, generators |
 | 134 | [Material exchange mapping (glTF PBR to node material)](../agents/tasks/134-material-exchange-mapping.md) | J | 124, 164 | ready | io, material |
-| 135 | [Render API: snapshot, settings, outputs, AOV model, progress; harness compare_image](../agents/tasks/135-render-api.md) | K | 123 | ready | render-api, parity-harness |
-| 136 | [CPU path tracer core (BVH, instancing, BSDFs from the IR, MIS)](../agents/tasks/136-cpu-path-tracer.md) | K | 135 | ready | render-cpu |
-| 137 | [Lights (omni, spot, infinite, area, sky) and shadows](../agents/tasks/137-lights-shadows.md) | K | 136 | ready | render-cpu, generators |
+| 135 | [Render API: snapshot, settings, outputs, AOV model, progress; harness compare_image](../agents/tasks/135-render-api.md) | K | 123 | done | render-api, parity-harness |
+| 136 | [CPU path tracer core (BVH, instancing, BSDFs from the IR, MIS)](../agents/tasks/136-cpu-path-tracer.md) | K | 135 | done | render-cpu |
+| 137 | [Lights (omni, spot, infinite, area, sky) and shadows](../agents/tasks/137-lights-shadows.md) | K | 136 | done (light node types not registered; parity: silhouettes 15/19) | render-cpu, generators |
 | 138 | [Physical camera: projection, sensor, ortho, DOF, motion blur](../agents/tasks/138-physical-camera.md) | K | 136, 047 | ready | render-cpu, core |
-| 139 | [Render settings, image sequences, formats, multipass/AOVs](../agents/tasks/139-render-settings-outputs.md) | K | 136, 130 | ready | render-api, render-cpu |
+| 139 | [Render settings, image sequences, formats, multipass/AOVs](../agents/tasks/139-render-settings-outputs.md) | K | 136, 130 | done (settings by CLI flags; not yet stored in the scene) | render-api, render-cpu |
 | 140 | [Picture viewer and render queue](../agents/tasks/140-picture-viewer-queue.md) | K | 139 | ready | ui |
 | 141 | [IPR (interactive render)](../agents/tasks/141-ipr.md) | K | 136 | ready | render-cpu, ui |
 | 142 | [GPU path tracer (wgpu compute)](../agents/tasks/142-gpu-path-tracer.md) | K | 136 | ready | render-gpu |
@@ -190,4 +190,5 @@ implementers can avoid collisions.
 | 191 | [R25 Helix Bézier construction (sampling parity)](../agents/tasks/191-helix-sampling.md) | B | 028, 042 | done | generators |
 | 192 | [Volume and rig nodes in the editor: evaluation hook, commands, display](../agents/tasks/192-volume-rig-integration.md) | F, H | 081, 083, 100, 101, 112, 084 | done | generators, app, command, ui, viewport, volume, rig |
 | 193 | [Parity tests use Extrude's Auto direction](../agents/tasks/193-extrude-tests-use-auto.md) | C | 044, 045 | ready | generators (tests) |
+| 194 | [Materials and shaders in the document: hosting, links, Generate UVW command](../agents/tasks/194-material-hosting.md) | J | 123, 125, 127 | done | core, material, shaders, app, command, ui, io |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |

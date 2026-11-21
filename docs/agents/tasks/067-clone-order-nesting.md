@@ -1,6 +1,6 @@
 # 067 · Clone order (iterate, random, blend, sort), multiple children, nesting
 
-Status: waiting: O50 · Area: E · Depends on: 065 · Observations: O21, O50 · Touches: clone-engine
+Status: done (random order statistical) · Area: E · Depends on: 065 · Observations: O21, O50 · Touches: clone-engine
 
 ## Goal
 Several prototype children are assigned to clones in the reference order; nested cloners expand correctly.
@@ -26,10 +26,9 @@ Several prototype children are assigned to clones in the reference order; nested
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- Result: parity 3/4 order cases exact (iterate, sort, blend), `order-random` KNOWN_MISMATCH (reference RNG not reproduced, three hypotheses, spec O2); `blend-order` un-skipped as asked; `nested` through its rebuild test. Test counts in cloner_parity: 34 matched, 3 mismatched, 9 skipped.
+- Rules: spec O1-O4. Parity-pending: Blend, Sort (one case each).
+- Deviations: `assign_children` takes a seed and no longer errors; new cloner param `clones_seed`.
+- Files: crates/clone-engine/src/{lib,node,settings,matrix}.rs, tests/modes.rs, crates/generators/src/cloner.rs, tests/cloner_parity.rs, spec, STATUS, BACKLOG.
+- Open: the order cases' children parameters in case.toml; a Sort case with non-zero weights or a sort axis; Blend with 3 children.

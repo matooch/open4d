@@ -301,3 +301,150 @@ sample, grouped). Test: egui_kittest drives the panel and one paint sample.
 
 Tests: `crates/rig/tests/weight_paint.rs` (brush modes, falloff, normalise rule, smooth,
 prune, adjacency), `crates/app/tests/weight_commands.rs` (commands, undo), `crates/ui/tests/weight_manager.rs`.
+
+## 10. IK tag (brief 104)
+
+Source: parity observation O35 ([ik.md](../parity/ik.md), `tests/golden/ik`, level B). Code:
+`crates/rig/src/ik.rs`. Node type `forge.ik_tag` (a tag on the root joint of the chain).
+
+| Param | Kind | Default | Notes |
+|---|---|---|---|
+| `enabled` | bool | on | off or an unresolvable setup writes nothing |
+| `end` | link (object) | none | the tip joint; the chain is `end` and its ancestors up to the host |
+| `goal` | link (object) | none | goal: its world position |
+| `pole` | link (object) | none | optional pole object |
+| `twist` | float, angle | 0 | radians; rotates the bend plane about the chord |
+| `strength` | float, percent | 1 | 0..1, weight of the IK result |
+| `ik_fk` | float, percent | 0 | 0 = IK, 1 = FK; the joint rotations are slerped between the two |
+| `priority_group`, `priority` | enum, int | expression, 0 | section 12 |
+
+`threshold` (0.01) and `max_iterations` (10000) of the reference are the stop rule of the
+chain solver (below); the secondary solver, squash/stretch, goal offset and the display options
+of the reference tag are not derived (`Unsupported`: ignored).
+
+**Rules** (chain `J1..Jn`, root `P`, goal `G`, chord `c = (G-P)/|G-P|`, bone lengths `L_i` taken
+from the FK world positions):
+
+1. **Bend plane (hinge `h`)**. With a pole object at `Q`: `q = (Q-P)` minus its part along `c`,
+   `h = normalize(q × c)`; the elbow goes to the side opposite the pole (`pole-x`, `pole-z`).
+   Without a pole: `h` = the root joint's current world Z axis minus its part along `c`,
+   normalised (`reach-bend`, `reach-side`). A degenerate input (pole on the chord, Z along the
+   chord) falls back to the root Z, then to any axis perpendicular to `c`. **Twist** rotates `h`
+   about `c` by `-twist` (`twist`: 45 deg).
+2. **Positions, two bones**. `d = |G-P|` clamped to `[|L1-L2|, L1+L2]` (the chain never
+   stretches: `reach-far` is straight, tip at full length; `reach-near` folds). The root bone
+   points along `c` turned about `h` by `+α`, `cos α = (L1² + d² - L2²) / (2 L1 d)`; the tip lies
+   on the chord at distance `d`. One bone: aim along `c`.
+3. **Positions, three or more bones**: FABRIK in the plane through `P` with normal `h` (FK
+   positions and goal projected onto it), until the tip is within `threshold` of the goal or
+   `max_iterations` passes; an unreachable goal gives the straight chain along `c`.
+4. **Frames**. A joint's bone axis `a` is the unit direction of its first child joint's local
+   position; its up axis `u` is the cyclic partner of the dominant axis of `a` (`Y→Z`, `Z→X`,
+   `X→Y`), made perpendicular to `a`. The world rotation maps `(a, u, a×u)` to `(d, h, d×h)`,
+   with `d` the direction to the next joint. For the O35 chain (bone along local Y, up local Z)
+   this is `y = d`, `z = h`, `x = y × z`, exactly the recorded matrices (all joints of a case
+   share `z`). The tip keeps its FK local rotation (`J3 = J2` in every case).
+5. **Output**. Each joint's local rotation `W_parent⁻¹ · W` as `transform.rot` (h, p, b), mixed
+   with the FK local rotation by `strength · (1 - ik_fk)` (quaternion slerp; the weights are
+   not observed: parity-pending). Positions are not written.
+
+Observation caveats. The reference stops at its 0.01 threshold, so its numbers carry residuals
+up to 0.04 (`reach-straight`, J2 x = 0.043; `reach-side` tip off by 0.003; `reach-near` 5e-4).
+They are outside the recorded tolerance 1e-4, so those cases are pinned (section 13).
+Rest orientation of the O35 joints is not recorded; the harness gives every joint `H = 180°`
+(local x = -X, z = -Z), which reproduces the recorded frames of the straight chain.
+Parity-pending: bone axes other than Y, the IK/FK blend, strength, pole with a twisted root.
+
+**Known mismatch `four-joints`**: our FABRIK gives `J2 (-0.9, 100, 0)`, `J3 (55.5, 182.6, 0)`;
+the reference `J2 (99.87, -5.14, 0)`, `J3 (180.04, 54.62, 0)` (bone directions at -2.95°, 36.67°,
+107.5°). CCD (tip to root and root to tip), a Jacobian pseudo-inverse and FABRIK from the straight
+chain were tried; none reproduces it. The tip reaches the goal in both; only the redundancy
+resolution differs. More data would settle it (the same chain from a different start pose).
+
+## 11. Constraint tag (brief 105)
+
+Source: O36 ([constraints.md](../parity/constraints.md), `tests/golden/constraints`, level B).
+Code: `crates/rig/src/constraint.rs`. Node type `forge.constraint_tag`.
+
+| Param | Kind | Default | Notes |
+|---|---|---|---|
+| `enabled` | bool | on | |
+| `mode` | enum | `psr` | `psr`, `aim`, `parent`, `clamp` |
+| `targets` | link rows | empty | rows are targets; the row strength is the target weight |
+| `position`, `rotation`, `scale` | bool | on, off, off | PSR and Parent toggles |
+| `maintain_offset` | bool | off | PSR: keep the offset captured at activation |
+| `offset_pos`, `offset_rot`, `offset_scale` | vec3 (hidden) | 0, 0, 1 | the captured offset |
+| `aim_axis` | enum | `z` | `x`, `-x`, `y`, `-y`, `z`, `-z`: the local axis that points at the target |
+| `up_target` | link | none | aim: the object the up axis points at |
+| `up_axis` | enum | `y` | local axis turned toward the up target |
+| `clamp_min`, `clamp_max` | float, distance | 0, 0 | clamp: distance limits to the target (0 = off) |
+| `strength` | float, percent | 1 | 0..1, mix with the unconstrained transform |
+| `priority_group`, `priority` | enum, int | expression, 0 | section 12 |
+
+**Target.** The weighted mean of the enabled rows: position and scale by weighted mean,
+rotation by the sign-aligned weighted quaternion sum, normalised. Weights are normalised by
+their sum, so one target always follows fully (`psr-weight-50`).
+
+**PSR.** With `P`/`R`/`S` on: position = target position (`psr-position`), rotation = target
+rotation (`psr-all`), scale = target scale. With `maintain_offset` the result is target +
+`offset_pos` (a world delta, `psr-offset`), target rotation · `offset_rot`, target scale ·
+`offset_scale` (the rotation and scale offsets are parity-pending: O36 only shows the position
+offset). Components that are off keep the object's own value.
+
+**Parent** (`parent`). The object keeps the transform it had relative to the target at
+activation: `world = T · offset` where `offset` (pos/rot/scale) is the object's matrix in the
+target's space; the `P`/`R`/`S` toggles pick which components of the result replace the object's own.
+
+**Aim** (`aim`, `aim-up`). `d` = direction from the object to the target. Without an up target
+the object turns by the minimal rotation (swing) taking its current axis `aim_axis` to `d`
+(`aim`: H 315, P 19.47, B 8.13 at frame 30). With an up target the rotation maps the aim axis to
+`d` and the up axis to the up direction made perpendicular to `d` (`aim-up`: B 341.57).
+O36 saw no response to the axis row, so only `z` is verified; the other axes are parity-pending.
+
+**Clamp.** O36 saw no effect from any clamp setting, so there is no golden case. We implement
+the distance clamp (`clamp_min`/`clamp_max` from the object to the target, along the line) as our
+own behaviour, tested by unit tests only; spline and surface clamps are `Unsupported` (ignored).
+
+**Activation offset.** `capture_offset(scene, tag)` returns the param writes (`offset_*`) for the
+scene's current state; the caller applies them when the tag is activated (frame 0 in the tests).
+
+**Write-back.** The new world matrix becomes a local transform through the parent's inverse
+(`pos`, scale from column lengths, rotation as h, p, b); only enabled tags with a valid target write.
+
+## 12. Tag priority and evaluation order (brief 111)
+
+Source: own design after the public manual's tag priority (group plus number); the order of IK
+and constraints is checked by unit tests, O36 recorded no combined case (the
+`ik-then-constraint` row was not run, see [constraints.md](../parity/constraints.md)).
+Code: `crates/rig/src/tags.rs`; hook: `forge_app::schedule::animate` (CORE.md section 5a).
+
+Every expression, IK and constraint tag has `priority_group` (`initial`, `animation`,
+`expression`, `dynamics`, `generators`, in this order) and `priority` (integer, default 0).
+Expression tags have the implicit `expression`, 0. Tags run sorted by (group, number, document
+order); document order is an object, its tags, then its children. Each tag sees the writes of
+the tags before it and of the tracks. All of this happens before any generator or deformer
+is evaluated, so the `dynamics` and `generators` groups only order tags among themselves
+until a dynamics stage exists. Layers with expressions off skip all three tag kinds.
+
+## 13. Parity cases and what is pinned (briefs 104, 105, 111)
+
+IK (`crates/rig/tests/ik_parity.rs`, 9 cases, level B, every joint's position and three axes
+within the recorded 1e-4):
+
+- exact: `reach-bend`, `reach-far`, `pole-x`, `pole-z`, `twist` (worst 5.9e-5, the reference's own residual);
+- `KNOWN_MISMATCH`, noise of the reference's 0.01 threshold (the rule matches, the recorded
+  numbers carry its residual; our result is exact): `reach-straight` (4.3e-2), `reach-side`
+  (3.6e-3), `reach-near` (5.4e-4); the test requires the error to stay below 0.06 and the tip to
+  reach the goal;
+- `KNOWN_MISMATCH`, rule not derived: `four-joints` (section 10), the tip reaches the goal.
+
+Constraints (`crates/rig/tests/constraints_parity.rs`, 7 cases, six tracks each, 31 frames):
+all 7 exact within 1e-4 when the driver is the curve the reference recorded (`psr-all`'s
+position and H tracks; error below 1e-8). With an ideal smoothstep driver the worst error is
+2.9e-4 (the reference's driver curve itself deviates up to 1.3e-4 degrees), checked against an
+envelope of 1e-3. The recorded meshes (a cube at frame 15) are not compared. `UNSUPPORTED`
+and `KNOWN_MISMATCH` are empty. Not in O36: `clamp-surface`, `ik-then-constraint`.
+
+Ordering (`crates/rig/tests/tag_order.rs`, `crates/app/tests/rig_tags.rs`): own unit tests of
+section 12; there is no reference case, so the order of IK and constraints against each other
+is parity-pending (O36 ordering case not recorded).

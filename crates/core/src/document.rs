@@ -7,7 +7,7 @@ use crate::layers::{self, Layer, LayerId, Layers};
 use crate::scene::{Slot, SlotOwner, Subtree};
 use crate::{
     Category, Key, NodeId, ParamError, ParamKind, Registry, Scene, SceneSettings, TimeConfig,
-    Track, TrackError, Value, parse_target,
+    Track, TrackError, Value, parse_track_target,
 };
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -173,6 +173,15 @@ impl Tx<'_> {
         if self.require(id)?.is_tag() {
             return Err(EditError::WrongCategory(format!("node {id} is a tag")));
         }
+        if self
+            .scene
+            .node_type(id)
+            .is_some_and(|t| matches!(t.category, Category::Material | Category::Shader))
+        {
+            return Err(EditError::WrongCategory(format!(
+                "node {id} is a material or shader, not an object"
+            )));
+        }
         Ok(())
     }
 
@@ -269,10 +278,135 @@ impl Tx<'_> {
         Ok(id)
     }
 
-    /// Removes a node with its subtree and all their tags.
+    /// Creates a material in the document's material list at `index` (None = end)
+    /// (CORE.md §2.1).
+    pub fn create_material(
+        &mut self,
+        type_id: &str,
+        index: Option<usize>,
+    ) -> Result<NodeId, EditError> {
+        let ty = self.type_of(type_id)?;
+        if ty.category != Category::Material {
+            return Err(EditError::WrongCategory(format!(
+                "{type_id} is not a material"
+            )));
+        }
+        let index = self.index_in(SlotOwner::Materials, index, 0)?;
+        let node = self.new_node(&ty);
+        let id = node.id;
+        self.push(Edit::Insert {
+            subtree: Subtree { nodes: vec![node] },
+            slot: Slot::Material { index },
+        });
+        Ok(id)
+    }
+
+    /// Creates a shader as a child of a material or of another shader, at `index`
+    /// (None = end) (CORE.md §2.1).
+    pub fn create_shader(
+        &mut self,
+        type_id: &str,
+        parent: NodeId,
+        index: Option<usize>,
+    ) -> Result<NodeId, EditError> {
+        let ty = self.type_of(type_id)?;
+        if ty.category != Category::Shader {
+            return Err(EditError::WrongCategory(format!(
+                "{type_id} is not a shader"
+            )));
+        }
+        let parent_ok = self
+            .scene
+            .node_type(parent)
+            .is_some_and(|t| matches!(t.category, Category::Material | Category::Shader));
+        self.require(parent)?;
+        if !parent_ok {
+            return Err(EditError::WrongCategory(format!(
+                "node {parent} is not a material or shader"
+            )));
+        }
+        let index = self.index_in(SlotOwner::Children(Some(parent)), index, 0)?;
+        let node = self.new_node(&ty);
+        let id = node.id;
+        self.push(Edit::Insert {
+            subtree: Subtree { nodes: vec![node] },
+            slot: Slot::Child {
+                parent: Some(parent),
+                index,
+            },
+        });
+        Ok(id)
+    }
+
+    /// Moves a material to `index` of the material list (counted after it is taken out).
+    pub fn move_material(&mut self, id: NodeId, index: usize) -> Result<(), EditError> {
+        if !self.scene.materials().contains(&id) {
+            return Err(EditError::WrongCategory(format!(
+                "node {id} is not a material"
+            )));
+        }
+        let index = self.index_in(SlotOwner::Materials, Some(index), 1)?;
+        self.push(Edit::Move {
+            id,
+            slot: Slot::Material { index },
+        });
+        Ok(())
+    }
+
+    /// Removes a node with its subtree and all their tags. Deleting a material or a shader
+    /// first clears every link to a node of the removed subtree, so nothing dangles and one
+    /// undo step brings back both the nodes and the links (CORE.md §2.1).
     pub fn delete(&mut self, id: NodeId) -> Result<(), EditError> {
         self.require(id)?;
+        if self
+            .scene
+            .node_type(id)
+            .is_some_and(|t| matches!(t.category, Category::Material | Category::Shader))
+        {
+            self.clear_links_to_subtree(id)?;
+        }
         self.push(Edit::Remove { id });
+        Ok(())
+    }
+
+    /// Clears the links (single links, list entries and rows) that point into the subtree of
+    /// `id`, outside that subtree.
+    fn clear_links_to_subtree(&mut self, id: NodeId) -> Result<(), EditError> {
+        let mut doomed = vec![id];
+        let mut i = 0;
+        while i < doomed.len() {
+            if let Some(n) = self.scene.node(doomed[i]) {
+                doomed.extend(n.children.iter().chain(&n.tags));
+            }
+            i += 1;
+        }
+        let mut changes: Vec<(NodeId, String, Value)> = Vec::new();
+        for (nid, param, value) in self.scene.link_params() {
+            if doomed.contains(&nid) {
+                continue;
+            }
+            let cleared = match value {
+                Value::Link(Some(t)) if doomed.contains(t) => Some(Value::Link(None)),
+                Value::LinkList(ts) if ts.iter().any(|t| doomed.contains(t)) => Some(
+                    Value::LinkList(ts.iter().copied().filter(|t| !doomed.contains(t)).collect()),
+                ),
+                Value::LinkRows(rows) if rows.iter().any(|r| doomed.contains(&r.target)) => {
+                    Some(Value::LinkRows(
+                        rows.iter()
+                            .filter(|r| !doomed.contains(&r.target))
+                            .cloned()
+                            .collect(),
+                    ))
+                }
+                _ => None,
+            };
+            if let Some(v) = cleared {
+                changes.push((nid, param.to_string(), v));
+            }
+        }
+        for (nid, param, v) in changes {
+            self.set_param(nid, &param, v)?;
+        }
         Ok(())
     }
 
@@ -366,7 +500,7 @@ impl Tx<'_> {
                 .registry()
                 .get(&node.type_id)
                 .ok_or_else(|| EditError::UnknownType(node.type_id.clone()))?;
-            parse_target(key, |p| ty.find_param(p))?;
+            parse_track_target(key, |p| ty.find_param(p))?;
             t.validate()?;
         }
         self.push(Edit::SetTrack {

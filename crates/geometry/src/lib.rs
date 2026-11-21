@@ -10,6 +10,8 @@ pub mod selection_ops;
 pub mod spline;
 pub mod subdivide;
 pub mod triangulate;
+pub mod uv;
 
 pub use halfedge::{HalfEdgeMesh, HeId, TopologyError};
 pub use mesh::{Edge, MeshError, PolyMesh};
+pub use uv::CornerUvs;

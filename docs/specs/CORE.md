@@ -30,6 +30,7 @@ evaluation of real node types (Phases 5+).
 | `IndexList` | `Vec<u32>` | a sorted set of element indices (component selections) |
 | `Vec3List` | `Vec<[f64; 3]>` | every component finite; ordered; hidden, not animatable (editable spline points and handles, SPLINES.md; brief 028) |
 | `LinkList` | `Vec<NodeId>` | an ordered list of node references (a cloner's effector list); order is meaningful |
+| `FloatList` | `Vec<f64>` | every item finite and clamped into the descriptor's range; ordered; hidden, not animatable (vertex map weights, brief 027; `ParamDesc::float_list(..).range(min, max)`, `ParamKind::FloatList { min, max }`) |
 | `LinkRows` | `Vec<LinkRow>` | an ordered list of node references with a row of data each (blend id, strength, enable box): the field lists of effectors, deformers and Group fields (section 6.10) |
 
 `ParamDesc { id, label, kind, default, ui, animatable }`:
@@ -83,8 +84,9 @@ evaluation of real node types (Phases 5+).
 
 `Category`: `Object, Generator, Deformer, Effector, Field, Tag, Material, Shader,
 RenderEngine`. Hierarchy categories (live in the object tree): `Object, Generator,
-Deformer, Effector, Field`. `Tag` nodes attach to a hierarchy node. The other
-categories can be registered but not yet placed in a scene (`NotPlaceable`).
+Deformer, Effector, Field`. `Tag` nodes attach to a hierarchy node. `Material` nodes live in the
+document's material list and `Shader` nodes below them (section 2.1). `RenderEngine` can be
+registered but not placed in a scene (`NotPlaceable`).
 
 `NodeType { id, label, category, params: Vec<ParamDesc> }`, built with
 `NodeType::new(id, label, category).param(desc)…`. `NodeType.in_create_menu` (default
@@ -115,6 +117,34 @@ builder and mesher set the flag (VOLUME.md §6.5). The flag is not saved in file
   flags, brief 149). See docs/specs/TRANSFORM.md §2.
 
 `trait Plugin { fn id(&self) -> &str; fn register(&self, r: &mut Registry) -> Result<(), RegistryError>; }`
+
+### 2.1 Materials and shaders in the document (brief 194)
+
+A document owns an ordered **material list** (`Scene::materials() -> &[NodeId]`), the Material
+manager's list, separate from the object tree (`roots`). Its entries are `Category::Material`
+nodes; they have no parent, no host and no `transform.*` params. A **shader** is a
+`Category::Shader` node whose parent is a material or another shader: it sits in that node's
+ordered `children` (a shader tree per material; the order of a Layer shader's children is
+meaningful). Materials and shaders are ordinary nodes: params, tracks, rename, undo, revisions
+and `deep_revision` work unchanged. Objects, tags, materials and shaders share one id space.
+
+`Tx` operations (each validates first):
+
+| Op | Rules |
+|---|---|
+| `create_material(type_id, index) -> NodeId` | type registered, category `Material`, `index <= len` (None = end) |
+| `create_shader(type_id, parent, index) -> NodeId` | category `Shader`; `parent` is a material or shader node |
+| `move_material(id, index)` | `id` is in the list; `index` counts after removal |
+| `delete(id)` | as before; for a material or shader it first clears every link that points into the removed subtree (single links to `None`, entries and rows removed from lists), in the same transaction, so one undo restores nodes and links. All other deletes leave links dangling (section 3) |
+
+`create` keeps refusing `Material`, `Shader` and `RenderEngine` types (`NotPlaceable`), and
+`attach_tag`, `create` and `move_node` refuse a material or shader as host or parent
+(`WrongCategory`). `Link` params accept targets by category, so a texture tag's `material` link
+(`accepts: [Material]`) and a material channel's shader link (`accepts: [Shader]`) are set with
+`set_param` like any link; links survive undo (node ids are restored). `Scene::link_params()` lists
+every single, list and row link of every node.
+
+File: the `materials` array of the native file (section 6.11).
 
 ## 3. Scene graph (`scene`)
 
@@ -204,12 +234,15 @@ Transactions:
 ### 5a. Evaluation order of one frame (area H, brief 108; refined by brief 111)
 
 `forge-app` builds the evaluated scene of a frame in this order: (1) animation tracks,
-`scene_at`; (2) expression tags, `forge_nodes::apply_expressions`, in document order (an
-object, its tags in order, then its children), each tag seeing the writes of the earlier
-ones; (3) generators and deformers, which read the evaluated scene when geometry is asked
-for; (4) dynamics (later). An expression therefore overrides an animated value of the same
-parameter and every generator sees the expression's output. Priorities between expression tags
-and constraints/IK are brief 111. Details: NODES.md section 5.
+`scene_at`; (2) tags: expression tags (`forge_nodes::apply_expressions_in`), IK tags and
+constraint tags (`forge_rig::tags`), sorted by (priority group, priority number, document
+order), the document order being an object, its tags in order, then its children; each tag
+sees the writes of the tracks and of the tags before it; (3) generators and deformers, which
+read the evaluated scene when geometry is asked for; (4) dynamics (later). An expression
+therefore overrides an animated value of the same parameter and every generator sees the
+output of the tags. Expression tags have the implicit priority `expression`, 0; the IK and
+constraint tags carry `priority_group` and `priority` params (RIG.md section 12), and
+`forge_app::schedule::animate` dispatches each tag by its type. Details: NODES.md section 5.
 
 ### 5b. Dependency graph and evaluation scheduler (brief 180)
 
@@ -467,6 +500,9 @@ the same logical scene.
 | 5 -> 6 | see §6.4 | nothing (additive) |
 | 6 -> 7 | scene `time` (§6.6) | nothing (an absent `time` reads as the defaults) |
 | 7 -> 8 | `forge.expression` tag (§6.7) | nothing (the graph is a string parameter) |
+| 8 -> 9, 9 -> 10 | layers, list kinds (§6.8, §6.9) | nothing |
+| 10 -> 11 | list rows (§6.10) | `fields` link lists become rows, `layer_strength` is removed |
+| 11 -> 12 | float lists, material list (§6.11) | nothing (both are new) |
 
 Missing params of known types take their defaults on load (§6), so params added by later
 builds need no step.
@@ -567,6 +603,30 @@ always writes 11; a reader that knows up to 10 returns `UnsupportedVersion(11)`.
 `scene-v11*.forge` (a holder with two rows, one disabled at 37.5 %) pin the current bytes; `scene-v10*.forge`
 stay as the v10 build wrote them, and a hand-written v10 document in `native_format.rs` covers the field-list
 migration.
+
+### 6.11 Version 12: vertex maps, materials (briefs 027, 194)
+
+One bump covers two additions:
+
+- `Value::FloatList(Vec<f64>)` / `ParamKind::FloatList { min, max }` (section 1): in RON
+  `FloatList([0.0, 0.25])`. A list whose payload reaches `CHUNK_MIN_BYTES` (`4 + 8 n` bytes, 128
+  items) is written as a chunk: kind `3` = `n: u32`, `n x f64` (raw bits), referenced as
+  `FloatListChunk(i)`. This is the "new large value kind gets the next kind number" rule of
+  section 6.2.
+- The **material list**: the top-level `materials: [ ...records... ]` array (same node records as
+  `roots`; a material record's `children` are its shaders, recursively; a material or shader
+  record with `tags` is a `Structure` error, and a record of the wrong category at its place
+  likewise). The field is written only when the list is not empty, so a scene without materials
+  saves exactly as a version 11 scene apart from the version number. Chunk numbers follow the
+  order the records are written: `roots` first, then `materials`. A missing field loads as no
+  materials.
+
+Migration 11 -> 12 (`migrate_11_to_12`) is the identity: both additions are new (a version 11
+file cannot hold either; materials could not be placed in a scene before brief 194). Older builds
+reject a version 12 file with `UnsupportedVersion(12)`. Fixtures: `scene-v12*.forge` (a vertex map
+holder with a float list, a material with a two-level shader tree and a link from material to
+shader) pin the current bytes; `scene-v11*.forge` stay as the version 11 build wrote them and
+`native_format.rs` checks that they load, migrate and resave as version 12.
 
 ## 7. Layers (`layers`; brief 158)
 

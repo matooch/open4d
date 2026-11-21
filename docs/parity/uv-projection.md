@@ -49,6 +49,12 @@ reports its projection as "UVW Mapping"; `case.toml` keeps both the projection t
 | proj-cubic-scaled | Cubic, tag scale (50, 50, 50) | 114 / 54 / 128; first 0.882683 0.500000, 1.207107 0.500000, 1.153281 0.229402 — the half-size tag doubles the coordinates and pushes them past 1 |
 | proj-cylindrical-offset | Cylindrical, offset U 25 % | 114 / 151 / 128; every texture coordinate is identical to `proj-cylindrical` (the two files match value for value), so Offset U 25 % does not reach the generated coordinates in this build |
 
+## Follow-up (planner, after brief 127)
+
+| Case | Redo as | What was missing |
+|---|---|---|
+| proj-frontal | proj-frontal-2 | Record the camera exactly: position, rotation (H, P, B) read back, focal length, sensor/film size and render resolution, in `case.toml` |
+
 ## Notes
 
 - The default OBJ export already writes the UV layer ("Original"): no extra setting was needed

@@ -3,6 +3,13 @@ name = "forge-render-bridge"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Scene to render snapshot adapter (docs/specs/RENDER.md R1, R12)."
+
+[dependencies]
+forge-geometry = { path = "../geometry" }
+forge-material = { path = "../material" }
+forge-render-api = { path = "../render-api" }
+glam = "0.34"
 
 [lints]
 workspace = true

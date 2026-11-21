@@ -1,6 +1,6 @@
 # 105 · Constraint tag: PSR, Aim, Parent, Clamp
 
-Status: waiting: O36 · Area: H · Depends on: 100 · Observations: O36 · Touches: rig
+Status: done · Area: H · Depends on: 100 · Observations: O36 · Touches: rig
 
 ## Goal
 Constraint tag modes matching O36.
@@ -25,9 +25,9 @@ Constraint tag modes matching O36.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: `crates/rig/tests/constraints_parity.rs` (7 O36 cases x 6 tracks x 31 frames + 6 unit tests); 7/7 exact at 1e-4 using the reference's recorded driver curve (the position and H tracks of `psr-all`), error below 1e-8. With an ideal smoothstep driver the worst error is 2.9e-4 (the reference's driver itself deviates by up to 1.3e-4 degrees), guarded by an envelope of 1e-3, tolerance unchanged. `UNSUPPORTED`/`KNOWN_MISMATCH` empty. The cube mesh at frame 15 is not compared.
+- Rules (RIG.md §11): see the spec; Aim = minimal swing (B 8.13) and, with an up target, `z -> d, y -> up` (B 341.57); Parent = target-space offset captured at activation; PSR offset = world delta. Parity-pending: PSR rotation/scale offsets, Aim axes other than Z+, multi-target weights, strength. Clamp: O36 saw no effect, so an own distance clamp with unit tests only.
+- Deviations: `capture_offset` is a library function (no command); no UI for it yet.
+- Files: crates/rig/src/{constraint,tags,lib}.rs, crates/rig/tests/constraints_parity.rs, crates/ui/icons/constraint.svg, crates/ui/src/icon_table.rs, docs/specs/RIG.md.
+- Open data: Clamp activation route; a two-target PSR weight case; Aim with axes other than Z+.
+- Gate: see the report of brief 111 (final).

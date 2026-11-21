@@ -185,6 +185,14 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `marker_set_color` | Set Marker Color. Undoable editing command. Runs command `marker.set_color`. |
 | `marker_list` | List Markers. Not an undoable edit. Runs command `marker.list`. |
 | `marker_jump` | Jump to Marker. Not an undoable edit. Runs command `marker.jump`. |
+| `key_move` | Move Keys. Undoable editing command. Runs command `key.move`. |
+| `key_scale` | Scale Keys. Undoable editing command. Runs command `key.scale`. |
+| `key_delete` | Delete Selected Keys. Undoable editing command. Runs command `key.delete`. |
+| `key_set_interp` | Set Key Interpolation. Undoable editing command. Runs command `key.set_interp`. |
+| `key_set_tangent` | Set Key Tangent. Undoable editing command. Runs command `key.set_tangent`. |
+| `key_paste` | Paste Keys. Undoable editing command. Runs command `key.paste`. |
+| `track_set_behavior` | Track Behavior. Undoable editing command. Runs command `track.set_behavior`. |
+| `key_euler_filter` | Euler Filter. Undoable editing command. Runs command `key.euler_filter`. |
 | `file_new` | New. Not an undoable edit. Runs command `file.new`. |
 | `file_open` | Open. Not an undoable edit. Runs command `file.open`. |
 | `file_save` | Save. Not an undoable edit. Runs command `file.save`. |
@@ -233,4 +241,14 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `weights_prune` | Prune Weights. Undoable editing command. Runs command `weights.prune`. |
 | `weights_smooth` | Smooth Weights. Undoable editing command. Runs command `weights.smooth`. |
 | `weights_mirror` | Mirror Weights. Undoable editing command. Runs command `weights.mirror`. |
+| `select_store` | Set Selection. Undoable editing command. Runs command `select.store`. |
+| `select_restore` | Restore Selection. Undoable editing command. Runs command `select.restore`. |
+| `vertexmap_create` | Create Vertex Map. Undoable editing command. Runs command `vertexmap.create`. |
+| `vertexmap_set` | Set Vertex Map Weights. Undoable editing command. Runs command `vertexmap.set`. |
+| `restriction_set` | Restrict Deformer. Undoable editing command. Runs command `restriction.set`. |
+| `material_create` | Create Material. Undoable editing command. Runs command `material.create`. |
+| `material_delete` | Delete Material. Undoable editing command. Runs command `material.delete`. |
+| `material_assign` | Assign Material. Undoable editing command. Runs command `material.assign`. |
+| `shader_set` | Set Shader. Undoable editing command. Runs command `shader.set`. |
+| `uv_generate` | Generate UVW. Undoable editing command. Runs command `uv.generate`. |
 | `plugin_list` | List Plugins. Not an undoable edit. Runs command `plugin.list`. |

@@ -10,6 +10,7 @@ pub fn summary(v: &Value) -> String {
         Value::Mesh(m) => format!("{} points, {} polygons", m.points.len(), m.polys.len()),
         Value::IndexList(l) => format!("{} indices", l.len()),
         Value::Vec3List(l) => format!("{} points", l.len()),
+        Value::FloatList(l) => format!("{} weights", l.len()),
         other => format!("{other:?}"),
     }
 }

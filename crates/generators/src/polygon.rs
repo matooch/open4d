@@ -46,6 +46,36 @@ pub(crate) fn node_type() -> NodeType {
         .not_in_create_menu()
 }
 
+/// Deletes the stored selection tags and vertex maps of `node` when `new` has another topology
+/// than the mesh stored now: other polygon lists or another point count (EDITABLE.md §7.5).
+/// Call it before writing `new`. Returns how many tags were removed.
+pub fn clear_stale_tags(tx: &mut Tx, node: NodeId, new: &MeshData) -> Result<usize, EditError> {
+    let same = match tx.scene().param(node, "mesh") {
+        Some(Value::Mesh(old)) => old.polys == new.polys && old.points.len() == new.points.len(),
+        _ => true,
+    };
+    if same {
+        return Ok(0);
+    }
+    let stale: Vec<NodeId> = tx
+        .scene()
+        .node(node)
+        .map(|n| n.tags.clone())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|t| {
+            tx.scene().node(*t).is_some_and(|n| {
+                n.type_id == forge_core::tags::VERTEX_MAP
+                    || forge_core::tags::SelectionKind::of_tag_type(&n.type_id).is_some()
+            })
+        })
+        .collect();
+    for t in &stale {
+        tx.delete(*t)?;
+    }
+    Ok(stale.len())
+}
+
 pub fn to_poly_mesh(m: &MeshData) -> PolyMesh {
     PolyMesh {
         points: m.points.iter().map(|p| DVec3::from_array(*p)).collect(),

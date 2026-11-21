@@ -150,6 +150,19 @@ pub fn value_from_json(desc: &ParamDesc, v: &Value) -> Result<Param, CommandErro
                     .collect::<Result<_, _>>()?,
             )
         }
+        ParamKind::FloatList { .. } => {
+            let items = v.as_array().ok_or_else(|| wrong("an array of numbers"))?;
+            Param::FloatList(
+                items
+                    .iter()
+                    .map(|i| {
+                        i.as_f64()
+                            .filter(|f| f.is_finite())
+                            .ok_or_else(|| wrong("an array of numbers"))
+                    })
+                    .collect::<Result<_, _>>()?,
+            )
+        }
         ParamKind::Mesh => {
             return Err(CommandError::Failed(format!(
                 "{}: mesh parameters are not supported",

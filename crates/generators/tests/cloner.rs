@@ -134,10 +134,10 @@ fn two_prototypes_alternate_in_child_order() {
         tx.set_param(c, "clones_mode", Value::Enum("sort".into()))
     })
     .unwrap();
-    assert!(matches!(
-        evaluate(d.scene(), c, &EvalCtx::default()),
-        Err(BuildError::Unsupported(_))
-    ));
+    // Sort follows the clone weights (all 0 here): every clone shows the first child, the cube
+    // (spec O2).
+    let sorted = mesh(&d, c).unwrap();
+    assert_eq!((sorted.points.len(), sorted.polys.len()), (32, 24));
 }
 
 #[test]

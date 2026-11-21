@@ -1,6 +1,6 @@
 //! Track evaluation (docs/specs/ANIM.md §1).
 
-use forge_core::{Interp, Key, Track};
+use forge_core::{Behavior, Interp, Key, KeyTangent, TangentMode, Track};
 
 /// The reference evaluates at document times rounded to whole milliseconds
 /// (ANIM.md §1.4, cases `two-keys`, `mixed-interp`).
@@ -26,11 +26,159 @@ pub fn quantize_time(time: f64) -> f64 {
 /// The value of `track` at `time` (seconds). An empty track reads 0.
 pub fn value_at(track: &Track, time: f64) -> f64 {
     let t = effective_time(&track.keys, time);
-    eval(&track.keys, &[], t)
+    eval_track(track, &resolve(&track.tangents), t)
 }
 
-/// Evaluates at the already resolved time `t`.
-fn eval(keys: &[Key], user: &[Option<UserTangent>], t: f64) -> f64 {
+/// Added to an Int track's value before it is floored: it absorbs the 2^-19 sawtooth of the
+/// curve solver (ANIM.md section 1.8, `int-track`: 4.0 exactly at frame 10).
+const INT_EPSILON: f64 = 1e-4;
+
+/// The value of an Int parameter's track at `time`: the curve floored (ANIM.md section 1.8).
+/// `exact` skips the millisecond rounding of document time.
+pub fn int_at(track: &Track, time: f64, exact: bool) -> i64 {
+    let v = if exact {
+        value_at_exact(track, &[], time)
+    } else {
+        value_at(track, time)
+    };
+    (v + INT_EPSILON).floor() as i64
+}
+
+/// The value of a Bool, Enum or Link track at `time`: the key at or before `time` holds
+/// (the first key before the first), whatever the keys' interpolation (ANIM.md section 1.8).
+pub fn step_at(track: &Track, time: f64) -> f64 {
+    let keys = &track.keys;
+    let i = keys.partition_point(|k| k.time <= time);
+    keys.get(i.saturating_sub(1)).map_or(0.0, |k| k.value)
+}
+
+/// The point array of a point-level track at `time` (ANIM.md section 1.8): constant outside
+/// the keys, a step for Step keys, otherwise a linear blend of the two neighbouring arrays
+/// (parity-pending: not observed). `None` for a track without point keys.
+pub fn points_at(track: &Track, time: f64) -> Option<Vec<[f64; 3]>> {
+    let keys = &track.keys;
+    if track.points.is_empty() || track.points.len() != keys.len() {
+        return None;
+    }
+    let j = keys.partition_point(|k| k.time <= time);
+    if j == 0 {
+        return Some(track.points[0].clone());
+    }
+    if j == keys.len() {
+        return Some(track.points[j - 1].clone());
+    }
+    let (a, b) = (&keys[j - 1], &keys[j]);
+    let (pa, pb) = (&track.points[j - 1], &track.points[j]);
+    if a.interp == Interp::Step {
+        return Some(pa.clone());
+    }
+    let f = (time - a.time) / (b.time - a.time);
+    Some(
+        pa.iter()
+            .zip(pb)
+            .map(|(p, q)| std::array::from_fn(|c| p[c] + (q[c] - p[c]) * f))
+            .collect(),
+    )
+}
+
+/// Tangents with the decision data the evaluator needs: the tie-breaking handle length of
+/// each side when the file stored one (`None`: the automatic length on the grid).
+#[derive(Clone, Copy, Default)]
+struct Resolved {
+    tangent: KeyTangent,
+    grid: [Option<f64>; 2],
+}
+
+fn resolve(tangents: &[KeyTangent]) -> Vec<Resolved> {
+    tangents
+        .iter()
+        .map(|t| Resolved {
+            tangent: *t,
+            grid: [None; 2],
+        })
+        .collect()
+}
+
+/// The value of a track at the resolved time `t`: the behaviours before the first and
+/// after the last key (ANIM.md section 1.9), then the keys.
+fn eval_track(track: &Track, tangs: &[Resolved], t: f64) -> f64 {
+    let keys = &track.keys;
+    let (Some(first), Some(last)) = (keys.first(), keys.last()) else {
+        return 0.0;
+    };
+    let span = last.time - first.time;
+    let delta = last.value - first.value;
+    if t > last.time && span > 0.0 {
+        match track.after {
+            Behavior::Constant => {}
+            Behavior::Continue => {
+                return last.value + end_slope(keys, tangs, true) * (t - last.time);
+            }
+            Behavior::Repeat | Behavior::OffsetRepeat | Behavior::Oscillate => {
+                // x in (0, ...]: whole cycles `k` done before the cycle t is in; at an exact
+                // cycle boundary the value is the end of the cycle that just ended.
+                let x = (t - first.time) / span;
+                let k = x.ceil() - 1.0;
+                let frac = x - k;
+                let (u, shift) = match track.after {
+                    Behavior::Repeat => (first.time + frac * span, 0.0),
+                    Behavior::OffsetRepeat => (first.time + frac * span, k * delta),
+                    _ if k % 2.0 == 0.0 => (first.time + frac * span, 0.0),
+                    _ => (first.time + (1.0 - frac) * span, 0.0),
+                };
+                return eval(keys, tangs, u) + shift;
+            }
+        }
+    }
+    if t < first.time && span > 0.0 {
+        match track.before {
+            Behavior::Constant => {}
+            Behavior::Continue => {
+                return first.value + end_slope(keys, tangs, false) * (t - first.time);
+            }
+            Behavior::Repeat | Behavior::OffsetRepeat | Behavior::Oscillate => {
+                // Backwards from the first key: the value at a cycle boundary is the end of
+                // the cycle, `last` (`before-repeat` frame 0). Offset and oscillate before
+                // the first key were not observed (parity-pending, mirrored from after).
+                let x = (first.time - t) / span;
+                let r = x - x.floor();
+                let whole = if r == 0.0 { x - 1.0 } else { x.floor() + 1.0 };
+                let back = if r == 0.0 { 0.0 } else { r };
+                let (u, shift) = match track.before {
+                    Behavior::Repeat => (last.time - back * span, 0.0),
+                    Behavior::OffsetRepeat => (last.time - back * span, -whole * delta),
+                    _ => {
+                        let k = x.ceil() - 1.0;
+                        let frac = x - k;
+                        if k % 2.0 == 0.0 {
+                            (first.time + frac * span, 0.0)
+                        } else {
+                            (last.time - frac * span, 0.0)
+                        }
+                    }
+                };
+                return eval(keys, tangs, u) + shift;
+            }
+        }
+    }
+    eval(keys, tangs, t)
+}
+
+/// Slope (value per second) a Continue behaviour carries on with: that of the end key's
+/// handle on the inside of the range.
+fn end_slope(keys: &[Key], tangs: &[Resolved], after: bool) -> f64 {
+    let i = if after { keys.len() - 1 } else { 0 };
+    let t = tangent_with(keys, tangs, i);
+    let (len, dv) = if after {
+        (t.left, -t.left_dv)
+    } else {
+        (t.right, t.right_dv)
+    };
+    if len > 0.0 { dv / len } else { 0.0 }
+}
+
+/// Evaluates the keys at the already resolved time `t` (constant outside them).
+fn eval(keys: &[Key], user: &[Resolved], t: f64) -> f64 {
     let (Some(first), Some(last)) = (keys.first(), keys.last()) else {
         return 0.0;
     };
@@ -177,40 +325,107 @@ fn is_automatic(
     (len - span / 3.0).abs() <= 2.0 * HANDLE_GRID && close(dv, f64::from(side) * chord / 3.0)
 }
 
-/// The tangent of key `i`: the automatic one, each side replaced by the user's where that
-/// side differs from the automatic handle.
-fn tangent_with(keys: &[Key], user: &[Option<UserTangent>], i: usize) -> Tangent {
+/// The tangent of key `i`: each side automatic, on the chord, or the user's stored handle.
+fn tangent_with(keys: &[Key], tangs: &[Resolved], i: usize) -> Tangent {
     let mut t = tangent(keys, i);
-    if let Some(Some(u)) = user.get(i) {
-        let (ll, rl) = (-u.left.0, u.right.0);
-        if ll > 0.0 {
-            t.grid_left = ll;
+    let Some(r) = tangs.get(i) else { return t };
+    let k = keys[i];
+    for (side, h) in [(0usize, r.tangent.left), (1, r.tangent.right)] {
+        if let Some(g) = r.grid[side].filter(|g| *g > 0.0) {
+            if side == 0 {
+                t.grid_left = g;
+            } else {
+                t.grid_right = g;
+            }
         }
-        if rl > 0.0 {
-            t.grid_right = rl;
-        }
-        if !is_automatic(ll, u.left.1, t.left, t.left_dv, keys, i, -1) {
-            t.left = ll;
-            t.left_dv = u.left.1;
-            t.edited[0] = true;
-        }
-        if !is_automatic(rl, u.right.1, t.right, t.right_dv, keys, i, 1) {
-            t.right = rl;
-            t.right_dv = u.right.1;
-            t.edited[1] = true;
+        // the neighbour this side's handle points to (none past the ends)
+        let neighbour = if side == 0 {
+            i.checked_sub(1).map(|j| keys[j])
+        } else {
+            keys.get(i + 1).copied()
+        };
+        let (len, dv, edited) = match h.mode {
+            TangentMode::Auto => continue,
+            TangentMode::User => (h.dt.abs(), h.dv, true),
+            TangentMode::Chord => {
+                let Some(n) = neighbour else { continue };
+                // On the line to the neighbour with the handle length on the grid.
+                let span = (n.time - k.time).abs();
+                let len = quantize_handle(span / 3.0);
+                (
+                    len,
+                    (n.value - k.value) / (n.time - k.time).abs() * len,
+                    true,
+                )
+            }
+        };
+        if side == 0 {
+            t.left = len;
+            t.left_dv = dv;
+            t.edited[0] = edited;
+            if h.mode == TangentMode::Chord {
+                t.grid_left = len;
+            }
+        } else {
+            t.right = len;
+            t.right_dv = dv;
+            t.edited[1] = edited;
+            if h.mode == TangentMode::Chord {
+                t.grid_right = len;
+            }
         }
     }
     t
 }
 
-/// The value of `track` at exactly `time` seconds (no millisecond rounding), with `user[i]`
-/// the user tangent of key `i` (a missing or `None` entry is automatic). ANIM.md §1.5a:
-/// this is how the O38 observations were sampled.
-pub fn value_at_exact(track: &Track, user: &[Option<UserTangent>], time: f64) -> f64 {
-    eval(&track.keys, user, time)
+/// The legacy read-back form: `user[i]` as stored by the reference's tangent read-back,
+/// each side classified automatic or user by [`is_automatic`] (ANIM.md section 1.5a).
+fn resolve_legacy(keys: &[Key], user: &[Option<UserTangent>]) -> Vec<Resolved> {
+    (0..keys.len())
+        .map(|i| {
+            let Some(Some(u)) = user.get(i) else {
+                return Resolved::default();
+            };
+            let t = tangent(keys, i);
+            let (ll, rl) = (-u.left.0, u.right.0);
+            let side = |len: f64, dv: f64, auto_len: f64, auto_dv: f64, s: i32| {
+                if is_automatic(len, dv, auto_len, auto_dv, keys, i, s) {
+                    forge_core::Handle::default()
+                } else {
+                    forge_core::Handle {
+                        mode: TangentMode::User,
+                        dt: if s < 0 { -len } else { len },
+                        dv,
+                    }
+                }
+            };
+            Resolved {
+                tangent: KeyTangent {
+                    left: side(ll, u.left.1, t.left, t.left_dv, -1),
+                    right: side(rl, u.right.1, t.right, t.right_dv, 1),
+                    ..KeyTangent::default()
+                },
+                grid: [(ll > 0.0).then_some(ll), (rl > 0.0).then_some(rl)],
+            }
+        })
+        .collect()
 }
 
-fn spline_segment(keys: &[Key], user: &[Option<UserTangent>], i: usize, t: f64) -> f64 {
+/// The value of `track` at exactly `time` seconds (no millisecond rounding), with `user[i]`
+/// the user tangent of key `i` as the reference reads it back (a missing or `None` entry is
+/// automatic; the track's own `tangents` are used for entries that are absent). ANIM.md
+/// section 1.5a: this is how the O38 observations were sampled.
+pub fn value_at_exact(track: &Track, user: &[Option<UserTangent>], time: f64) -> f64 {
+    let tangs = if user.is_empty() {
+        resolve(&track.tangents)
+    } else {
+        resolve_legacy(&track.keys, user)
+    };
+    eval_track(track, &tangs, time)
+}
+
+/// The Bezier control values of segment `i` and the curve parameter solved for time `t`.
+fn spline_solve(keys: &[Key], user: &[Resolved], i: usize, t: f64) -> ([f64; 4], [f64; 4], f64) {
     let (a, b) = (keys[i], keys[i + 1]);
     let (ta, tb) = (tangent_with(keys, user, i), tangent_with(keys, user, i + 1));
     // In a segment with a user-edited handle, the automatic handles sit on the handle grid
@@ -267,5 +482,55 @@ fn spline_segment(keys: &[Key], user: &[Option<UserTangent>], i: usize, t: f64) 
             hi = mid;
         }
     }
-    bezier(ys, 0.5 * (lo + hi))
+    (xs, ys, 0.5 * (lo + hi))
+}
+
+fn spline_segment(keys: &[Key], user: &[Resolved], i: usize, t: f64) -> f64 {
+    let (_, ys, s) = spline_solve(keys, user, i, t);
+    bezier(ys, s)
+}
+
+fn bezier_slope(p: [f64; 4], s: f64) -> f64 {
+    let u = 1.0 - s;
+    3.0 * (u * u * (p[1] - p[0]) + 2.0 * u * s * (p[2] - p[1]) + s * s * (p[3] - p[2]))
+}
+
+/// The speed `dv/dt` of `track` at exactly `time` seconds (value units per second), the
+/// analytic derivative of the segment (ANIM.md section 1.5b): 0 for Step and outside the
+/// keys (constant behaviours), the chord slope for Linear, `(dy/ds) / (dx/ds)` for a spline
+/// segment. Behaviours that repeat the keys are not unfolded (the speed is that of the
+/// segment in the key range, or 0 outside it).
+pub fn speed_at(track: &Track, time: f64) -> f64 {
+    let keys = &track.keys;
+    let tangs = resolve(&track.tangents);
+    let j = keys.partition_point(|k| k.time < time);
+    if j == 0 || j >= keys.len() {
+        return 0.0;
+    }
+    let (a, b) = (&keys[j - 1], &keys[j]);
+    match a.interp {
+        Interp::Step => 0.0,
+        Interp::Linear => (b.value - a.value) / (b.time - a.time),
+        Interp::Spline => {
+            let (xs, ys, s) = spline_solve(keys, &tangs, j - 1, time);
+            let dx = bezier_slope(xs, s);
+            if dx.abs() < 1e-300 {
+                0.0
+            } else {
+                bezier_slope(ys, s) / dx
+            }
+        }
+    }
+}
+
+/// The evaluated handles of key `i` as `((left dt, left dv), (right dt, right dv))` in seconds
+/// and value units relative to the key (left `dt` is not positive): the automatic ease, the
+/// chord or the stored user handle, exactly as the curve uses them (for drawing and editing).
+pub fn handles(track: &Track, i: usize) -> Option<((f64, f64), (f64, f64))> {
+    let keys = &track.keys;
+    if i >= keys.len() || keys.len() < 2 {
+        return None;
+    }
+    let t = tangent_with(keys, &resolve(&track.tangents), i);
+    Some(((-t.left, t.left_dv), (t.right, t.right_dv)))
 }

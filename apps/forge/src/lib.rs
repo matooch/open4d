@@ -6,6 +6,7 @@
 
 mod convert;
 pub mod docs;
+mod render;
 
 use std::ffi::OsString;
 use std::io::Write;
@@ -156,8 +157,8 @@ enum Sub {
         #[arg(long)]
         token: Option<String>,
     },
-    /// Render an image (not available yet).
-    Render,
+    /// Render an image or an image sequence with the CPU path tracer (docs/specs/RENDER.md).
+    Render(render::RenderArgs),
 }
 
 thread_local! {
@@ -337,12 +338,8 @@ fn execute(command: Sub) -> Outcome {
             port,
             token,
         } => rpc(&method, params.as_deref(), port, token),
-        Sub::Render => Err(stub("render", "area K")),
+        Sub::Render(args) => render::render(&args),
     }
-}
-
-fn stub(name: &str, when: &str) -> Fail {
-    user(format!("{name} is not available yet ({when})"))
 }
 
 fn rpc(method: &str, params: Option<&str>, port: Option<u16>, token: Option<String>) -> Outcome {

@@ -298,13 +298,33 @@ fn too_many_clones_is_an_error_not_an_allocation() {
 }
 
 #[test]
-fn children_iterate_and_other_orders_wait_for_brief_067() {
+fn children_are_assigned_by_the_clones_mode() {
     let mut d = run(&[mode("linear"), ("linear_count", Value::Int(5))]).unwrap();
-    d.assign_children(2, ClonesMode::Iterate).unwrap();
+    d.assign_children(2, ClonesMode::Iterate, 1);
     assert_eq!(d.child, vec![0, 1, 0, 1, 0]);
-    d.assign_children(1, ClonesMode::Random).unwrap();
+    d.assign_children(1, ClonesMode::Random, 1);
     assert_eq!(d.child, vec![0; 5]);
-    assert!(d.assign_children(2, ClonesMode::Sort).is_err());
+    // Blend: 5 clones over 2 children.
+    d.assign_children(2, ClonesMode::Blend, 1);
+    assert_eq!(d.child, vec![0, 0, 1, 1, 1]);
+    // Sort follows the weights (all 0: the first child).
+    d.assign_children(3, ClonesMode::Sort, 1);
+    assert_eq!(d.child, vec![0; 5]);
+    d.weights = vec![0.0, 0.25, 0.5, 0.75, 1.0];
+    d.assign_children(3, ClonesMode::Sort, 1);
+    assert_eq!(d.child, vec![0, 1, 1, 2, 2]);
+    // Random: deterministic per seed, every child in range, all children used over 60 clones.
+    let mut d = run(&[mode("linear"), ("linear_count", Value::Int(60))]).unwrap();
+    d.assign_children(3, ClonesMode::Random, 123_456);
+    let again = d.child.clone();
+    d.assign_children(3, ClonesMode::Random, 123_456);
+    assert_eq!(d.child, again);
+    assert!(d.child.iter().all(|c| *c < 3));
+    for k in 0..3 {
+        assert!(d.child.contains(&k));
+    }
+    d.assign_children(3, ClonesMode::Random, 7);
+    assert_ne!(d.child, again);
 }
 
 #[test]

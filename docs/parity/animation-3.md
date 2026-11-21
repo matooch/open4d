@@ -22,6 +22,12 @@ Unblocks: G/088, 096.
 | tie-span-30 | the same at fps 30, keys at frames 0 and 7 | `pos_x` |
 | generator-param | a Bend's strength keyed 0 at 0 and 90 at 30, on the O9 cube | `mesh.obj` at frame 15 |
 
+## Follow-up (planner, after brief 088)
+
+| Case | Redo as | What was missing |
+|---|---|---|
+| generator-param | generator-param-2 | `case.toml` must hold the cube (size, segments) and every Bend setting (size, mode, strength/angle, limits), not only the animated parameter |
+
 ## Notes
 
 Seven cases observed, four not observed; golden check: ok (945 cases). Every observed case

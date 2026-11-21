@@ -8,7 +8,7 @@ use forge_geometry::triangulate::{triangulate_delaunay, triangulate_poly};
 use glam::DVec3;
 
 use crate::spline_sampling::{Interpolation, uniform_params};
-use crate::splines::{Curve, is_spline, placed_curve};
+use crate::splines::{Curve, is_spline, placed_curve_at};
 use crate::{BuildError, Params};
 
 pub const EXTRUDE: &str = "forge.extrude";
@@ -372,11 +372,15 @@ fn nested_in(inner: &[DVec3], outer: &[DVec3], u: DVec3, v: DVec3) -> bool {
 /// outward of the material: a loop running counter-clockwise about the movement winds
 /// the normal way, a clockwise one the other way, and a loop inside an odd number of other
 /// loops (a hole) the opposite of that (`splines-2/circle-ring`; `spline-tools/outline`,
-/// `outline-neg`, `or`, `intersect`). Without a usable movement or for open splines only
-/// the first loop is outer.
+/// `outline-neg`, `or`, `intersect`). Without a usable movement only the first loop is outer;
+/// every chain of an open spline is outer.
 fn outer_loops(loops: &[Vec<DVec3>], movement: DVec3, closed: bool) -> Vec<bool> {
     let by_index = || (0..loops.len()).map(|l| l == 0).collect();
-    if !closed || movement.length_squared() < 1e-18 {
+    if !closed {
+        // Every chain of an open spline winds the normal way (`tracer/vertices`).
+        return vec![true; loops.len()];
+    }
+    if movement.length_squared() < 1e-18 {
         return by_index();
     }
     let axis = movement.normalize();
@@ -449,7 +453,9 @@ pub fn extrude(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMe
     let p = Params { ty: &ty, values };
     no_fillets(&p)?;
     let loops = curve.loops();
-    if loops.len() > 1 && (p.enumeration("cap_start") == "cap" || p.enumeration("cap_end") == "cap")
+    if loops.len() > 1
+        && curve.closed
+        && (p.enumeration("cap_start") == "cap" || p.enumeration("cap_end") == "cap")
     {
         return Err(BuildError::Unsupported(
             "caps of a spline with several loops",
@@ -572,10 +578,11 @@ pub(crate) fn evaluate_spline_gen(
     id: NodeId,
     type_id: &str,
     values: &BTreeMap<String, Value>,
+    ctx: &forge_core::EvalCtx,
 ) -> Result<Option<PolyMesh>, BuildError> {
     let mut curves = Vec::new();
     for c in spline_inputs_of(scene, id) {
-        if let Some(curve) = placed_curve(scene, c)? {
+        if let Some(curve) = placed_curve_at(scene, c, ctx)? {
             curves.push(curve);
         }
     }
@@ -619,7 +626,13 @@ pub(crate) fn split_caps(scene: &Scene, id: NodeId) -> Result<Option<CapSplit>, 
                 values.insert(k.to_string(), Value::Enum(v.to_string()));
             }
         }
-        evaluate_spline_gen(scene, id, &node.type_id, &values)
+        evaluate_spline_gen(
+            scene,
+            id,
+            &node.type_id,
+            &values,
+            &forge_core::EvalCtx::default(),
+        )
     };
     let Some(full) = build(None, None)? else {
         return Ok(None);
