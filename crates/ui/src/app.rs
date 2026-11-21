@@ -389,6 +389,20 @@ impl Editor {
     }
 
     /// Runs a command; an error goes to the status bar. True if it succeeded.
+    /// The stored point, edge and polygon selection tags of the active node, as (id, name).
+    fn stored_selection_tags(&self) -> Vec<(u64, String)> {
+        let scene = self.state.doc.scene();
+        let Some(node) = self.state.selection.active.and_then(|a| scene.node(a)) else {
+            return Vec::new();
+        };
+        node.tags
+            .iter()
+            .filter_map(|t| scene.node(*t))
+            .filter(|t| forge_core::tags::SelectionKind::of_tag_type(&t.type_id).is_some())
+            .map(|t| (t.id.0, t.name.clone()))
+            .collect()
+    }
+
     fn run(&mut self, (id, args): Cmd) -> bool {
         self.run_id(id, args)
     }
@@ -729,6 +743,23 @@ impl Editor {
                         ui.close();
                     }
                 }
+                // Stored selections (EDITABLE.md section 7)
+                ui.separator();
+                if ui.button("Set Selection").clicked() {
+                    self.run(cmd("select.store"));
+                    ui.close();
+                }
+                let stored = self.stored_selection_tags();
+                ui.add_enabled_ui(!stored.is_empty(), |ui| {
+                    ui.menu_button("Restore Selection", |ui| {
+                        for (tag, name) in &stored {
+                            if ui.button(name).clicked() {
+                                self.run(("select.restore", json!({ "tag": tag })));
+                                ui.close();
+                            }
+                        }
+                    });
+                });
             });
             ui.menu_button("Mesh", |ui| {
                 for (i, tool) in crate::tools::tools().into_iter().enumerate() {

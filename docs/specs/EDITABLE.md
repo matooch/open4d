@@ -616,3 +616,84 @@ target uses the object-space matrix directly.
 - `crates/ui/tests/multi_object.rs`: `targets`, click picking the nearer object, rectangle
   select across two objects, a gizmo `ComponentDrag` on two objects (one step), numeric
   coordinates, snap exclusion; an egui_kittest box select and drag across two objects.
+
+## 7. Selection tags, vertex maps and restriction tags (brief 027)
+
+Sources: observation O54 ([docs/parity/tags-2.md](../parity/tags-2.md), cases in
+`tests/golden/tags-2/`: `point-selection`, `polygon-selection`, `edge-selection`,
+`vertex-map-tag`); the restriction rules and the command set are own design and
+**parity-pending** (no observation of a restriction tag exists). The brief names the sections "§6";
+§6 was taken by brief 034, so this is §7.
+
+### 7.1 Tag types (registered by `Registry::with_builtins`, `forge_core::tags`)
+
+| type id | params | holds |
+|---|---|---|
+| `forge.point_selection` | `indices` (IndexList) | point indices of the host's stored mesh |
+| `forge.edge_selection` | `indices` | edge ids as numbered by `PolyMesh::edges()` |
+| `forge.polygon_selection` | `indices` | polygon indices (registered by forge-generators; older than this brief, it also serves the cap `C1` / `C2` tags) |
+| `forge.vertex_map` | `enabled` (on), `color` (white; the display colour, value not observed), `weights` (FloatList 0..1) | one weight per point index |
+| `forge.restriction` | `enabled` (on), `selection` (string), `invert` (off) | names a point selection or vertex map tag of the deformed object |
+
+The brief proposed the ids `forge.selection_points|edges|polys`; the existing
+`forge.polygon_selection` was kept and the two new ids follow its pattern. Weights are the new
+`Value::FloatList` (CORE.md §1, file version 12, §6.11); every item is clamped into 0..1 and must
+be finite. An index at or past the point count is ignored where read; a list shorter than the
+point count reads 0 for the missing points.
+
+### 7.2 What O54 shows (matched)
+
+- `point-selection`: a cube with segments 2/2/2 (26 points, 24 polygons) made editable, points 0-3
+  stored: the tag keeps `[0, 1, 2, 3]` and reads them back.
+- `polygon-selection`: polygons 0-1 stored, read back as `[0, 1]`.
+- `edge-selection`: edge ids `[0, 1]` (the "edge (0, 1)" of the observation reads back as the id
+  set 0, 1), read back unchanged.
+- `vertex-map-tag`: weight = point index / point count (26): the first eight values are `i / 26`
+  to six decimals (0, 0.038462, 0.076923, ...). The tag takes a value per point index.
+
+### 7.3 Commands (COMMANDS.md §6)
+
+- `select.store` (`kind?` points|edges|polys, default the edit mode; `object?` default the active
+  node; `name?` default the type label): copies the object's current set of that kind into a
+  **new** tag on the object (Set Selection). Result `{tag}`. The object must be a polygon object.
+  One undo step "Store Selection".
+- `select.restore` (`tag`, `op?` replace (default) | add | subtract): writes the tag's indices to
+  the host's stored set of the tag's kind and makes that kind the edit mode. One "Select" step,
+  none if nothing changes. Result `{kind, count}`.
+- `vertexmap.create` (`object?`, `name?`, `value?` 0, `weights?`): a vertex map tag on a polygon
+  object with one weight per point (`weights` shorter than the point count is padded with
+  `value`, longer is an error). Result `{tag}`.
+- `vertexmap.set` (`tag`, then `weights` (whole list) or `points` + `value`): one step.
+- `restriction.set` (`deformer?`, `selection`, `invert?`): sets the first restriction tag of the
+  deformer, creating it if there is none. Result `{tag}`.
+
+### 7.4 Restriction
+
+A restriction tag sits on a deformer. `forge_core::tags::restriction_weights(scene, deformer,
+target, point_count)` gives the weight of every point of the object the deformer is applied to:
+the first enabled restriction tag of the deformer decides; its `selection` is the name of a tag of
+the **deformed object** (the first tag with that name that is a point selection or an enabled
+vertex map); a point selection weighs 1 inside and 0 outside, a vertex map its stored weight (0 past
+the end); `invert` replaces `w` by `1 - w`. No tag, an empty or unknown name, or a disabled tag:
+`None`, the deformer acts on every point. `apply_deformer` and `apply_deformer_mesh` /
+`apply_deformer_resolved` then blend like the field falloff: `p' = p0 + w (p - p0)`, where `p0` is the
+point before this deformer. The weight multiplies with a field list (the fields weigh inside the
+deformer; the restriction after it). Not restrictable (the restriction is ignored): Explosion and
+Shatter (they split the mesh, the point count changes), and restrictions that name an edge or polygon
+selection (only point sets and vertex maps weigh points).
+
+### 7.5 Topology changes
+
+Stored selections and vertex maps address point, edge and polygon indices of the stored mesh.
+Indices are kept while the topology is unchanged (point moves, deformers, transforms). A modeling
+operation that changes the point or polygon count clears the object's point, edge and polygon
+selection tags and its vertex maps (the same operations already reset the object's own selection
+sets); `forge_generators::clear_stale_tags(tx, node, old, new)` implements it and the cutting and
+building tools call it. Out-of-range indices are in any case ignored when read (§2.1).
+
+### 7.6 Checks
+
+`crates/core/tests/materials.rs` (restriction weights, float list validation),
+`crates/modifiers/tests/restriction.rs` (selection 0/1, vertex map, invert, mesh entry point),
+`crates/app/tests/tag_commands.rs` (store/restore round trip, vertex maps, restriction command,
+O54 cases) and the file format fixtures (CORE.md §6.11).

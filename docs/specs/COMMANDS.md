@@ -173,6 +173,11 @@ touch history.
 | `select.all` `select.none` `select.invert` `select.grow` `select.shrink` `select.connected` | `nodes?` (polygon objects; the component targets when absent, EDITABLE.md §6.3) | null | yes |
 | `select.convert` | `nodes?`, `to` points, edges, polys; `mode?` strict, tolerant (EDITABLE.md §2.8) | null | yes |
 | `select.loop` `select.ring` | `nodes?`, `across?` 0 or 1 (EDITABLE.md §2.8) | null | yes |
+| `select.store` | `kind?` (points, edges, polys; default the edit mode), `object?`, `name?` (EDITABLE.md §7.3) | `{tag}` | yes |
+| `select.restore` | `tag`, `op?` (replace, add, subtract) | `{kind, count}` | yes |
+| `vertexmap.create` | `object?`, `name?`, `value?`, `weights?` | `{tag}` | yes |
+| `vertexmap.set` | `tag`, `weights` or `points` + `value` | `{count}` | yes |
+| `restriction.set` | `deformer?`, `selection` (tag name), `invert?` | `{tag}` | yes |
 | `graph.add_node` | `tag`, `type`, `values?`, `pos?` (NODES.md §6) | `{node}` | yes |
 | `graph.remove` | `tag`, `node?`, `nodes?` | `{removed_links}` | yes |
 | `graph.connect` | `tag`, `from_node`, `from_port`, `to_node`, `to_port`, `release_node?`, `release_port?` (type and cycle checked) | `{replaced}` | yes |

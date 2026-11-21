@@ -2,7 +2,7 @@
 
 # Command reference
 
-183 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+188 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -188,6 +188,11 @@
 | [`weights.prune`](#weightsprune) | Prune Weights | yes | `weights_prune` |
 | [`weights.smooth`](#weightssmooth) | Smooth Weights | yes | `weights_smooth` |
 | [`weights.mirror`](#weightsmirror) | Mirror Weights | yes | `weights_mirror` |
+| [`select.store`](#selectstore) | Set Selection | yes | `select_store` |
+| [`select.restore`](#selectrestore) | Restore Selection | yes | `select_restore` |
+| [`vertexmap.create`](#vertexmapcreate) | Create Vertex Map | yes | `vertexmap_create` |
+| [`vertexmap.set`](#vertexmapset) | Set Vertex Map Weights | yes | `vertexmap_set` |
+| [`restriction.set`](#restrictionset) | Restrict Deformer | yes | `restriction_set` |
 | [`plugin.list`](#pluginlist) | List Plugins | no | `plugin_list` |
 
 ## `object`
@@ -767,6 +772,29 @@ Ring Selection. One undo step.
 | `nodes` | array of integer or null | no | Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3). |
 
 Example: `forge cmd scene.forge select.ring --args '{"across":0}'`
+
+### `select.store`
+
+Set Selection. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `kind` | `"points"` \| `"edges"` \| `"polys"` \| null | no | Default: the current component mode. |
+| `name` | string or null | no | Tag name (default: the tag type's label). |
+| `object` | integer or null | no | A polygon object (default: the active node). |
+
+Example: `forge cmd scene.forge select.store --args '{"kind":"points"}'`
+
+### `select.restore`
+
+Restore Selection. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes | A point, edge or polygon selection tag. |
+| `op` | `"replace"` \| `"add"` \| `"subtract"` \| null | no |  |
+
+Example: `forge cmd scene.forge select.restore --args '{"tag":1}'`
 
 
 ## `transform`
@@ -2327,6 +2355,50 @@ Mirror Weights. One undo step.
 | `plane` | `"yz"` \| `"xz"` \| `"xy"` \| null | no |  |
 
 Example: `forge cmd scene.forge weights.mirror --args '{"from":"positive","plane":"yz"}'`
+
+
+## `vertexmap`
+
+### `vertexmap.create`
+
+Create Vertex Map. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string or null | no |  |
+| `object` | integer or null | no |  |
+| `value` | number or null | no | Weight of every point not given by `weights` (default 0). |
+| `weights` | array of number or null | no |  |
+
+Example: `forge cmd scene.forge vertexmap.create --args '{"value":0.0}'`
+
+### `vertexmap.set`
+
+Set Vertex Map Weights. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes | A vertex map tag. |
+| `points` | array of integer or null | no | Points that take `value`. |
+| `value` | number or null | no |  |
+| `weights` | array of number or null | no | The whole weight list. |
+
+Example: `forge cmd scene.forge vertexmap.set --args '{"points":[0],"tag":1,"value":1.0}'`
+
+
+## `restriction`
+
+### `restriction.set`
+
+Restrict Deformer. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `selection` | string | yes | Name of a point selection or vertex map tag of the deformed object. |
+| `deformer` | integer or null | no | A deformer (default: the active node). |
+| `invert` | boolean or null | no |  |
+
+Example: `forge cmd scene.forge restriction.set --args '{"selection":"Vertex Map"}'`
 
 
 ## `plugin`

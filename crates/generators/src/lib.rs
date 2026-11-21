@@ -41,8 +41,8 @@ pub use cloner::{
 pub use modeling::{array, connect, inputs_of as modeling_inputs_of, symmetry};
 pub use polygon::{
     EditableError, POLYGON_SELECTION, SELECTION_EDGES, SELECTION_POINTS, SELECTION_POLYS,
-    TYPE as POLYGON, current_state_to_object, from_poly_mesh, make_editable, spawn_split,
-    to_poly_mesh,
+    TYPE as POLYGON, clear_stale_tags, current_state_to_object, from_poly_mesh, make_editable,
+    spawn_split, to_poly_mesh,
 };
 pub use spline_gens::{extrude, lathe, loft, spline_inputs_of, sweep};
 pub use subdivision::{input_of, subdivide, subdivide_with_creases};

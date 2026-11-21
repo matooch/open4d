@@ -241,4 +241,9 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `weights_prune` | Prune Weights. Undoable editing command. Runs command `weights.prune`. |
 | `weights_smooth` | Smooth Weights. Undoable editing command. Runs command `weights.smooth`. |
 | `weights_mirror` | Mirror Weights. Undoable editing command. Runs command `weights.mirror`. |
+| `select_store` | Set Selection. Undoable editing command. Runs command `select.store`. |
+| `select_restore` | Restore Selection. Undoable editing command. Runs command `select.restore`. |
+| `vertexmap_create` | Create Vertex Map. Undoable editing command. Runs command `vertexmap.create`. |
+| `vertexmap_set` | Set Vertex Map Weights. Undoable editing command. Runs command `vertexmap.set`. |
+| `restriction_set` | Restrict Deformer. Undoable editing command. Runs command `restriction.set`. |
 | `plugin_list` | List Plugins. Not an undoable edit. Runs command `plugin.list`. |
