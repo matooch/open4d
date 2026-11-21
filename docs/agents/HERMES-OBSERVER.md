@@ -45,9 +45,12 @@ You **never**:
 Work through the queue in this order, skipping jobs whose Status is `done`, `blocked` or
 `gui-only`:
 
-1. **Follow-up cases** in forms whose Status reads `todo (N follow-up cases …)`. They sit in
-   a section titled `## Follow-up cases (planner, …)` near the end of the form. Only those
-   rows are new; the cases above them are already done.
+1. **Follow-up cases.** Any form with a section titled `## Follow-up …` (planner) near its end,
+   whatever its QUEUE Status says. A follow-up row is open while its case folder does not exist
+   yet (`ls tests/golden/<feature>/<case>`) and its row has no `not observed` reason. Only those
+   rows are new; the cases above them are already done. Find them with
+   `grep -l '^## Follow-up' docs/parity/*.md`. Before writing "QUEUE FINISHED", check that no
+   open follow-up row is left.
 2. **Forms never started**, in the order below. It is the order that unblocks the most
    implementation work:
    O29, O44, O32, O33, O34, O35, O36, O37, O27, O38, O53, O31, O50, O49, O28, O42, O43,

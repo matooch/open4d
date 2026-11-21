@@ -1,6 +1,6 @@
 # Cloner III — observation (O21)
 
-Status: observed (21 of 21 cases; the per-clone child index could not be read, see Notes) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-10-29
+Status: observed (21 of 21 cases; the per-clone child per case is now read from the exported meshes, see Notes) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-10-29, child cells 2026-11-21
 Method: exactly as [cloner.md](cloner.md) (O8). The cloner is made through its menu
 command, and its children are 20 cm cubes. Save the clone data (`samples.json`) and
 `mesh.obj` to `tests/golden/cloner/<case>/`, with
@@ -31,15 +31,21 @@ Clone counts are the number of entries in `samples.json` (visible = the clone-on
 | linear-scale-step | Linear | count 5, scale per step 90 % | The "S (per step)" field, 90 % on all three axes; step mode stays Single Value |
 | radial-align-off | Radial | Align off | 5 clones; first at (0, 0, 50) |
 | radial-offset | Radial | offset 30°, count 8 | 8 clones; first at (25, 0, 43.301). Offset Seed 1234567 (default) |
-| order-iterate | Linear, count 6, **three children**: a cube, a sphere (radius 10) and a cone (radius 10) | clones mode Iterate | 6 clones at y 0 … 250. `child`: **TODO**, see Notes |
-| order-random | the same | clones mode Random | Seed reads **123456**. `child`: TODO |
-| order-sort | the same | clones mode Sort | `child`: TODO |
+| order-iterate | Linear, count 6, **three children**: a cube, a sphere (radius 10) and a cone (radius 10) | clones mode Iterate | 6 clones at y 0 … 250. `child` (clones 0–5): **Cone, Sphere, Cube, Cone, Sphere, Cube** — read from `mesh.obj`, which exports one named object per clone (`Cone_0` … `Cube_5`); the geometry agrees with every name: cone 81 vertices at 20 × 200 × 20, sphere 114 vertices at 20 × 20 × 20, cube 8 vertices at 20 × 20 × 20 |
+| order-random | the same | clones mode Random | Seed reads **123456**. `child` (clones 0–5): **Cube, Sphere, Cube, Sphere, Sphere, Sphere** — read the same way from `mesh.obj`: two cubes (8 vertices), four spheres (114 vertices), no cone |
+| order-sort | the same | clones mode Sort | `child` (clones 0–5): **Cone, Cone, Cone, Cone, Cone, Cone** — every clone shows the cone in this build; all six mesh groups carry the cone geometry (81 vertices, 20 × 200 × 20) |
 | nested | Linear, count 3, whose child is a Radial cloner (count 4) with a cube child | – | `samples.json` holds the outer cloner's 3 clones (y 0, 50, 100); `mesh.obj` holds the whole scene |
 
 ## Notes
 
 - **Clones menu values.** The Clones cycle stores Iterate = 1, Random = 2, Blend = 3, Sort = 4 (not 0, 1, 2, 3). Setting 0 is refused ("parameter set failed"). A first run of the order cases used 0/1/3 and got the wrong modes (Iterate error, Iterate, Blend); those were redone with the right values and the files overwritten.
-- **Which child each clone uses (`child`) is TODO.** The clone-data call has a per-clone clone-index array, but it reads 0 for every clone in all three order cases, including Random and Sort, so it is not the child index. No `child` field was written to `samples.json`. The choice per clone is visible only in `mesh.obj` (the cube, sphere and cone have different vertex counts), which holds the answer if someone reads it from there.
+- **Which child each clone uses** was read from `mesh.obj` on 2026-11-21: the exporter writes one
+  named object per clone, and the per-clone vertex counts and sizes confirm the names — cube 8
+  vertices (20 × 20 × 20), sphere 114 vertices (20 × 20 × 20), cone 81 vertices (20 × 200 × 20).
+  Iterate cycles Cone, Sphere, Cube; Random at seed 123456 gives Cube, Sphere, Cube, Sphere,
+  Sphere, Sphere; Sort shows the cone for all six clones. The clone-data call's per-clone
+  clone-index array still reads 0 for every clone and is not the child index, and no `child`
+  field was added to `samples.json` (existing golden cases are not edited).
 - **The clone positions of order-iterate, order-random and order-sort are identical** (same Linear layout); the modes differ only in which child each clone shows.
 - Grid forms other than Cubic hide clones through the visible flag; the list keeps all 125 entries, so a consumer must check `visible`.
 - Object-mode `mesh.obj` files include the source object (sphere or cube) as well as the clones.
