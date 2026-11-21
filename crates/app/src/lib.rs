@@ -6,6 +6,7 @@
 pub mod animate;
 pub mod coords;
 pub mod diagnostics;
+pub mod dynamics;
 pub mod material_commands;
 pub mod motion;
 pub mod param_edit;
@@ -40,6 +41,7 @@ pub fn default_registry() -> Result<Registry, RegistryError> {
     registry.install(&Primitives)?;
     registry.install(&Deformers)?;
     registry.install(&CloneToolset)?;
+    registry.install(&forge_dynamics::DynamicsToolset)?;
     registry.install(&FieldToolset)?;
     registry.install(&forge_nodes::NodesToolset)?;
     registry.install(&forge_rig::Rig)?;

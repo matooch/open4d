@@ -1,0 +1,22 @@
+[package]
+name = "forge-dynamics"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Rigid body dynamics on rapier, connectors, springs and soft bodies (docs/specs/DYNAMICS.md)."
+
+[dependencies]
+forge-core = { path = "../core" }
+forge-geometry = { path = "../geometry" }
+glam = "0.34"
+rapier3d-f64 = { version = "0.36", default-features = false, features = ["dim3", "f64", "enhanced-determinism", "std"] }
+thiserror = "2"
+
+[dev-dependencies]
+forge-parity-harness = { path = "../parity-harness" }
+forge-generators = { path = "../generators" }
+forge-clone-engine = { path = "../clone-engine" }
+toml = "1"
+
+[lints]
+workspace = true
