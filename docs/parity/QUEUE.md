@@ -41,26 +41,26 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O49 | Fields IV: modifier layers, vertex maps | [fields-4.md](fields-4.md) | `tests/golden/fields/` samples + meshes | done |
 | O42 | Shaders on a UV grid | [shaders.md](shaders.md) | `tests/golden/shaders/` samples | partial (17 of 19 cases; noise-perlin needs a Perlin type this build does not offer, layer-multiply needs a GUI-built layer stack — see the form) |
 | O27 | Animation II (tracks, tags) | [animation-2.md](animation-2.md) | `tests/golden/animation-2/` samples | done |
-| O38 | F-curves: tangents and behaviours | [fcurves.md](fcurves.md) | `tests/golden/keyframes/` samples | partial |
-| O53 | Animation III: more track types | [animation-3.md](animation-3.md) | `tests/golden/animation-3/` samples + meshes | partial |
-| O31 | Clone-toolset generators II | [clone-generators-2.md](clone-generators-2.md) | meshes + samples | partial (7 of 10 cases; Voronoi Fracture and Tracer could not be baked) |
-| O50 | Clone toolset III | [clone-toolset-3.md](clone-toolset-3.md) | cloner/, clone-spline/, tracer/, effector-f/, random-f/ | partial (44 of 49 rows observed; the 5 that need a human or a GUI step stay not observed: selection-tag, weight-tag, linear-offset-15, on-spline, on-spline-step — see the form) |
+| O38 | F-curves: tangents and behaviours | [fcurves.md](fcurves.md) | `tests/golden/keyframes/` samples | todo (4 follow-up cases; see the form's Follow-up section) — before: partial |
+| O53 | Animation III: more track types | [animation-3.md](animation-3.md) | `tests/golden/animation-3/` samples + meshes | todo (1 follow-up case; see the form's Follow-up section) — before: partial |
+| O31 | Clone-toolset generators II | [clone-generators-2.md](clone-generators-2.md) | meshes + samples | todo (1 follow-up case; see the form's Follow-up section) — before: partial (7 of 10 cases; Voronoi Fracture and Tracer could not be baked) |
+| O50 | Clone toolset III | [clone-toolset-3.md](clone-toolset-3.md) | cloner/, clone-spline/, tracer/, effector-f/, random-f/ | todo (3 follow-up cases; see the form's Follow-up section) — before: partial (44 of 49 rows observed; the 5 that need a human or a GUI step stay not observed: selection-tag, weight-tag, linear-offset-15, on-spline, on-spline-step — see the form) |
 | O32 | Volume builder and mesher | [volumes.md](volumes.md) | `tests/golden/volumes/` meshes | observed (10 of 12 cases; subtract/intersect not scriptable) |
 | O33 | Volumes II: filters, sources, VDB | [volumes-2.md](volumes-2.md) | `tests/golden/volumes/` meshes + .vdb | observed (11 of 13 cases; points-source and vdb-export not scriptable) |
-| O34 | Rigging I: joints and skinning | [rigging.md](rigging.md) | `tests/golden/rigging/` meshes | done |
-| O35 | Rigging II: IK | [ik.md](ik.md) | `tests/golden/ik/` samples + meshes | done |
+| O34 | Rigging I: joints and skinning | [rigging.md](rigging.md) | `tests/golden/rigging/` meshes | todo (5 follow-up cases; see the form's Follow-up section) — before: done |
+| O35 | Rigging II: IK | [ik.md](ik.md) | `tests/golden/ik/` samples + meshes | todo (2 follow-up cases; see the form's Follow-up section) — before: done |
 | O36 | Constraints | [constraints.md](constraints.md) | `tests/golden/constraints/` samples + meshes | done (7 of 9 cases; see form) |
 | O37 | Pose Morph | [pose-morph.md](pose-morph.md) | `tests/golden/pose-morph/` meshes | blocked (strength track not scriptable; see form) |
 | O54 | Tags II | [tags-2.md](tags-2.md) | `tests/golden/tags-2/` | done |
-| O28 | UV coordinates and projection | [uv-projection.md](uv-projection.md) | `tests/golden/uv/` meshes | done |
+| O28 | UV coordinates and projection | [uv-projection.md](uv-projection.md) | `tests/golden/uv/` meshes | todo (1 follow-up case; see the form's Follow-up section) — before: done |
 | O29 | Scene, camera, light, material, render defaults | [scene-defaults.md](scene-defaults.md) | form only | partial |
 | O30 | Render references | [render-reference.md](render-reference.md) | `tests/golden/render/` PNG + meshes | partial (12 of 14 cases: 8 of 10 baseline plus all 4 follow-ups after briefs 136/137 — light-units, light-units-200, area-soft-2, checker-plane. Spot and infinite still render a fully black frame from a script; the two black-render folders are no longer in the tree — see the form) |
 | O43 | Material renders | [material-renders.md](material-renders.md) | `tests/golden/render/` PNG + meshes | done |
-| O57 | Camera projection | [camera.md](camera.md) | `tests/golden/camera/` PNG + meshes | partial (4 of 9 cases: focal-18, film-offset, ortho-front, ortho-top. default / focal-100 / aspect-square render an empty frame because the calibration plane is not in view at those lenses; sensor has no preset list; the Physical renderer cannot be selected from a script — see the form) |
+| O57 | Camera projection | [camera.md](camera.md) | `tests/golden/camera/` PNG + meshes | todo (5 follow-up cases; see the form's Follow-up section) — before: partial (4 of 9 cases: focal-18, film-offset, ortho-front, ortho-top. default / focal-100 / aspect-square render an empty frame because the calibration plane is not in view at those lenses; sensor has no preset list; the Physical renderer cannot be selected from a script — see the form) |
 | O44 | Exchange references (FBX, glTF, Alembic, STL, PLY) | [exchange.md](exchange.md) | `tests/golden/exchange/` | done (morph not observed) |
-| O39 | Dynamics: rigid bodies | [dynamics.md](dynamics.md) | `tests/golden/dynamics/` samples + meshes | partial (8 of 9 cases; gravity-half not observed because the scene gravity is not reachable from a script and the body tag has no gravity parameter - see the form) |
+| O39 | Dynamics: rigid bodies | [dynamics.md](dynamics.md) | `tests/golden/dynamics/` samples + meshes | todo (4 follow-up cases; see the form's Follow-up section) — before: partial (8 of 9 cases; gravity-half not observed because the scene gravity is not reachable from a script and the body tag has no gravity parameter - see the form) |
 | O40 | Particles and forces | [particles.md](particles.md) | `tests/golden/particles/` samples + meshes | blocked (0 of 10 cases: the emitter exposes no particle list to a script, so no position, velocity or age can be read - see the form) |
-| O41 | Soft bodies and connectors | [soft-bodies.md](soft-bodies.md) | `tests/golden/soft-bodies/` samples + meshes | done (6 of 6 cases; the ball-socket track is identical to the hinge one - see the form) |
+| O41 | Soft bodies and connectors | [soft-bodies.md](soft-bodies.md) | `tests/golden/soft-bodies/` samples + meshes | todo (4 follow-up cases; see the form's Follow-up section) — before: done (6 of 6 cases; the ball-socket track is identical to the hinge one - see the form) |
 | O10 | Selection and tool behaviour in the GUI | (form comes with batch 10) | form only | gui-only |
 | G1 | GUI session: layout and managers | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G1 | answers in GUI-SESSIONS.md | gui-only |
 | G2 | GUI session: shortcuts and navigation | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G2 | answers in GUI-SESSIONS.md | gui-only |
