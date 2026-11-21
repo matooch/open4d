@@ -32,6 +32,7 @@ pub mod splines;
 mod subdivision;
 pub mod text_spline;
 pub mod tracer;
+mod turtle;
 pub mod uv;
 
 pub use boole::{boole, boole_objects, inputs_of as boole_inputs_of};
