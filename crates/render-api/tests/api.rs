@@ -87,8 +87,9 @@ fn camera_film_offset_moves_the_principal_point() {
     );
     let (f, c) = cam.pixel_frame(320, 240).unwrap();
     assert_eq!(f, 320.0);
-    assert_eq!(c, [240.0, 120.0 - 32.0]);
-    let (_, d) = cam.ray(240.0, 88.0, 320, 240);
+    // x is a fraction of the width (0.25 * 320), y of the height (0.1 * 240): `film-offset-y`.
+    assert_eq!(c, [240.0, 120.0 - 24.0]);
+    let (_, d) = cam.ray(240.0, 96.0, 320, 240);
     assert!((d - DVec3::Z).length() < 1e-12);
 }
 
