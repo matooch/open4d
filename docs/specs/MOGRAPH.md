@@ -157,7 +157,7 @@ Limit: a cloner makes at most `MAX_CLONES = 1 000 000` clones; more is `Unsuppor
    nothing (`grid-sphere-form`: 33 cubes, 264 vertices).
 4. `Reset Coordinates` on (default): the prototype's own local transform is ignored, so clones sit
    exactly at the clone matrices. Off: the prototype's local matrix is applied first, then the clone
-   matrix (**parity-pending**: only the default was observed).
+   matrix (`reset-coords-off-2`, matches).
 5. The cloner's own deformer children deform the expanded mesh as for any generator.
 6. `instance_mode` (Instance, Render Instance, Multi-Instance) and `viewport_mode`, `display`,
    `fix_texture`, `animation_mode`, `uv_orientation` are stored and shown by the viewport/renderer
@@ -360,13 +360,17 @@ as the label (`Grid Array`, `Linear`); the test maps it to the id.
   clone 4: (0, 177.829, -82.923)), i.e. a chain `(Rx(10°) · T(P))^i` for the position and an extra `10°` per clone for the
   orientation. Hypotheses tried: (1) orientation `R·t + Step·t` (30° per clone, fails); (2) the chain with the step
   rotation only (orientation 10°, fails); (3) the chain angle taken from R (20°, fails the positions). The description
-  says the step rotation is "H" 10° but the file stores it in the second (P) slot, so the observation should be redone
-  with the step rotation read back.
+  says the step rotation is "H" 10° but the file stores it in the second (P) slot: bad data. The redo
+  `linear-rstep-2` (step rotation in H, read back `[10, 0, 0]`) **matches** with our R + Step Rotation rule (C4), so the
+  rule needs no change; the old folder stays pinned.
 
-`UNSUPPORTED` (1): `reset-coords-off` (observation needs redoing: the child cube's position (0, 50, 0) and rotation are only in
-the description, not in `case.toml`, and the y range 36.34..63.66 of the baked mesh needs a turn about X or Z, not H). Its
-reading, parity-pending: with Reset Coordinates off the clone matrices stay the identity and the
-child keeps its own transform (3 identical cubes).
+`UNSUPPORTED` (1): `reset-coords-off` (superseded: its child position (0, 50, 0) and rotation are only in the
+description). Its redo `reset-coords-off-2` records the child transform in `[params.child]` (position (0, 50, 0),
+`rotation_deg` (30, 0, 0) = H, scale 1) and **matches**: with Reset Coordinates off the clone matrices stay the identity
+(three clones) and the child's own transform is baked into the prototype (x/z turned by H 30° about Y, y 40..60);
+the earlier "turn about X or Z" worry was a misreading of the missing transform. `order-iterate-2` (the three children's
+settings recorded) matches like `order-iterate`. Matched cases: 37 (34 + `linear-rstep-2`, `order-iterate-2`,
+`reset-coords-off-2`).
 
 Not run here (pinned by count in the test, 54 effector cases and 13 others of the 101 cloner cases): the cases with
 an effector (`[params.effector]` or `effector_count > 0`: briefs 068+), 8 Object-mode cases
