@@ -143,7 +143,7 @@ fn s1_is_deterministic() {
     );
 }
 
-/// The two unfinished outputs are stubs today. When this test fails, the stub is gone:
+/// The unfinished output is a stub today. When this test fails, the stub is gone:
 /// fill in the matching ignored test below and delete the stub assertion here.
 #[test]
 fn s1_pending_outputs_are_still_stubs() {
@@ -165,11 +165,6 @@ fn s1_pending_outputs_are_still_stubs() {
         "glTF export now exists (brief 164): enable s1_gltf_export {out}"
     );
     assert!(!gltf.exists());
-    let (code, out) = json_run(&["render"]);
-    assert_eq!(
-        code, 1,
-        "render now exists (briefs 136/139/146): enable s1_png_render {out}"
-    );
 }
 
 #[test]
@@ -190,9 +185,39 @@ fn s1_gltf_export() {
 }
 
 #[test]
-#[ignore = "pending briefs 136, 139, 146 (renderer, render settings, S8)"]
 fn s1_png_render() {
     // `forge render s1.forge --frame 30 --out s1.png`: the file starts with the PNG
     // signature, has the configured size and is not blank.
-    todo!("needs the renderer");
+    let d = dir("render");
+    let scene = build(&d);
+    let png = d.join("s1.png");
+    let (code, out) = json_run(&[
+        "render",
+        s(&scene),
+        "--frame",
+        "30",
+        "--out",
+        s(&png),
+        "--width",
+        "96",
+        "--height",
+        "72",
+        "--samples",
+        "2",
+    ]);
+    assert_eq!(code, 0, "{out}");
+    let bytes = std::fs::read(&png).unwrap();
+    assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n");
+    assert_eq!(u32::from_be_bytes(bytes[16..20].try_into().unwrap()), 96);
+    assert_eq!(u32::from_be_bytes(bytes[20..24].try_into().unwrap()), 72);
+    let lit = forge_image::decode(&bytes, &forge_image::Limits::default()).unwrap();
+    assert!(
+        lit.image
+            .data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .any(|p| p[0] > 0.01),
+        "not blank"
+    );
 }

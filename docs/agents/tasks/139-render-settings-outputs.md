@@ -1,6 +1,6 @@
 # 139 · Render settings, image sequences, formats, multipass/AOVs
 
-Status: waiting: O29 · Area: K · Depends on: 136, 130 · Observations: O29 · Touches: render-api, render-cpu
+Status: done · Area: K · Depends on: 136, 130 · Observations: O29 · Touches: render-api, render-cpu
 
 ## Goal
 Render settings object (size, frame range, output path with tokens, format) and AOVs.
@@ -25,9 +25,8 @@ Render settings object (size, frame range, output path with tokens, format) and 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: output settings object (`OutputSettings`: size, frame range current/all/manual, step, rate, path template with `{frame}`, `{frame:N}`, `{pass}`, `{name}`, format png/tif/jpg/hdr/exr, 8/16/32 bit, alpha, straight alpha, separate or multipart), frame list, path expansion, file writing (invalid format/depth pairings and multipart without exr are errors); AOVs (depth, normal, albedo, position, object id, material id, shadow, diffuse, specular, emission) in `forge-render-cpu`; scene adapter `forge-render-bridge` (triangulation, crease-angle normals, framing camera); `forge render` CLI renders one frame or an image sequence with passes, separate or as a multipart EXR. Tests: 13 api, 3 bridge, 4 CLI render tests, S1 PNG render acceptance (`s1_png_render`, un-ignored).
+- Rules: RENDER.md R3, R12. O29 defaults (320 x 240, 30 fps, current frame, step 1, 8 bit, no alpha, `Name0000.TIF`) are the `OutputSettings` defaults. No golden cases belong to this brief (O29 recorded no files).
+- Deviations: the scene has no camera or light objects, so the CLI frames the geometry itself and uses the default light; render settings are not stored in the scene file yet (command-line flags instead; follow-up with the document-hosted render settings). Layered PSD, stereo, regions from the CLI, fields and the render queue are not done.
+- Files: crates/render-api/src/files.rs, crates/render-bridge/**, apps/forge/src/render.rs, apps/forge/tests/render.rs, docs/specs/CLI.md, docs/manual/reference/cli.md.
+- Open questions: where the render settings live in the document (core agent), light and camera node types and their registration (icon table).

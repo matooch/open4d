@@ -1492,10 +1492,14 @@ dependencies = [
  "forge-command",
  "forge-core",
  "forge-generators",
+ "forge-image",
  "forge-io",
  "forge-mcp",
  "forge-parity-harness",
  "forge-plugin",
+ "forge-render-api",
+ "forge-render-bridge",
+ "forge-render-cpu",
  "forge-rpc",
  "forge-script",
  "serde_json",
@@ -1763,6 +1767,12 @@ dependencies = [
 [[package]]
 name = "forge-render-bridge"
 version = "0.1.0"
+dependencies = [
+ "forge-geometry",
+ "forge-material",
+ "forge-render-api",
+ "glam",
+]
 
 [[package]]
 name = "forge-render-cpu"
