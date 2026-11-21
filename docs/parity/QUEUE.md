@@ -54,7 +54,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O54 | Tags II | [tags-2.md](tags-2.md) | `tests/golden/tags-2/` | done |
 | O28 | UV coordinates and projection | [uv-projection.md](uv-projection.md) | `tests/golden/uv/` meshes | done |
 | O29 | Scene, camera, light, material, render defaults | [scene-defaults.md](scene-defaults.md) | form only | partial |
-| O30 | Render references | [render-reference.md](render-reference.md) | `tests/golden/render/` PNG + meshes | partial (8 of 10 cases; spot and infinite lights render a fully black frame from a script — see the form. The two uncommitted folders tests/golden/render/spot/ and /infinite/ must be deleted by hand) |
+| O30 | Render references | [render-reference.md](render-reference.md) | `tests/golden/render/` PNG + meshes | partial (12 of 14 cases: 8 of 10 baseline plus all 4 follow-ups after briefs 136/137 — light-units, light-units-200, area-soft-2, checker-plane. Spot and infinite still render a fully black frame from a script; the two black-render folders are no longer in the tree — see the form) |
 | O43 | Material renders | [material-renders.md](material-renders.md) | `tests/golden/render/` PNG + meshes | done |
 | O57 | Camera projection | [camera.md](camera.md) | `tests/golden/camera/` PNG + meshes | partial (4 of 9 cases: focal-18, film-offset, ortho-front, ortho-top. default / focal-100 / aspect-square render an empty frame because the calibration plane is not in view at those lenses; sensor has no preset list; the Physical renderer cannot be selected from a script — see the form) |
 | O44 | Exchange references (FBX, glTF, Alembic, STL, PLY) | [exchange.md](exchange.md) | `tests/golden/exchange/` | done (morph not observed) |
