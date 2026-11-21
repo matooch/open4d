@@ -109,9 +109,67 @@ reproduced to the 1e-3 of the file: no choice of the three parameters does it, s
 asserted at 1 cm (§7). `gravity-half` was not observed, so halving gravity is only tested for
 consistency with free fall (contact frame ∝ 1/√g), not for parity.
 
-## 3. Connectors and springs
+## 3. Connectors and springs (brief 117)
 
-(Brief 117; filled in with that brief.)
+Sources: O41 `hinge`, `ball-socket`, `spring` (`tests/golden/soft-bodies/`, docs/parity/soft-bodies.md)
+and its connector settings table.
+
+### 3.1 Connector (`forge.connector`)
+
+An object (Create menu) with its own transform. Observed: the connector's Type defaults to Hinge
+(10 options, of which Hinge, Cardan, Ball and Socket, Ragdoll, Slider, Twist Slider, Planar, Box,
+Wheel Suspension, Fixed were read); Object A and Object B are link slots; Ignore Collisions defaults
+on. Ours implements four types, as rapier joints:
+
+| id | joint | notes |
+|---|---|---|
+| `hinge` (default) | revolute about the connector's local **Z** axis | `angular_limit`, `limit_from`, `limit_to` (radians, bank direction: positive is clockwise about Z, as the Bank angle reads; limits are relative to the start pose) |
+| `ball_socket` | spherical | |
+| `slider` | prismatic along the connector's local **X** axis | |
+| `fixed` | fixed (start relative pose kept) | |
+
+Other types (Cardan, Ragdoll, Twist Slider, Planar, Box, Wheel Suspension) are not derived. The
+reference's attachment, axis-reference, region of influence, shape conservation, damping, cone,
+steering and suspension parameters are not simulated and are not descriptors.
+
+* Anchor: the connector's world position plus `offset` (in the connector's frame). **This is derived
+  from the observation**, not assumed: in `hinge` the right cube (start (26, 300, 0), the connector
+  at the default position (0, 0, 0)) stays 301 cm from the origin during all 90 frames (the radius
+  of every sampled position is 301.0 ± 0.5) and its Bank angle advances as the angle of that
+  pendulum; the left cube's centre (−26, 300, 0), where "Center of Mass" attachment suggests the
+  pivot, would give a radius of 52 cm. The axis being Z follows from the motion staying in the x-y
+  plane with only Bank changing; it is the connector's Z rather than the A object's X ("Reference
+  Axis A: X of Object" in the table) because the cubes are unrotated and the observed swing is about
+  Z. **Parity-pending** (one scene): which of the connector's axes the reference uses, and what its
+  attachment and reference axis options change.
+* Ends: an empty slot, or an object that is not a body (no tag), is a fixed point of the world at
+  that object's pose (the origin for an empty slot). A connector with both slots empty is skipped.
+  A joint between a body and itself is an error.
+* `ignore_collisions` (default on) turns contacts between the two linked bodies off.
+* `ball_socket` in the reference gives a hinge track bit for bit (observation note: the type value is
+  stored but does not reach its solver). Ours is a real spherical joint; in `ball-socket` (a planar
+  swing: nothing pushes the cube out of the plane) it gives the same track as the hinge to 1 cm, so
+  the case matches, but it is not independent evidence for the type.
+
+### 3.2 Spring (`forge.spring`)
+
+A separate object, as observed ("`spring` is its own object next to the Connector"). Type `linear`
+(the only one observed), Object A, Object B, rest length (default 100 cm, observed), stiffness
+(default 1.0, observed), damping (default 20 %, observed). A force pair on the two bodies' centres
+of mass, applied as an impulse each solver step:
+
+* `F = −(k · (L − L0) + c · v_rel)` along the line between the anchors, equal and opposite on the two
+  bodies (a static end does not move; a world end is a fixed point);
+* `k = stiffness · 100 s⁻² · m_eff`, `c = 2 · damping · √(k · m_eff)` (damping is the fraction of
+  critical damping), `m_eff` the dynamic body's mass (the reduced mass for two dynamic bodies).
+
+The 100 s⁻² per unit of stiffness is **fitted** (the reference does not say what its stiffness 1.0
+means): the observed settling height is 9.96 cm below the rest length, and `g / ω² = 9.96 cm` gives
+`ω² = 100 s⁻²` for stiffness 1.0 at the fitted gravity; the observed period (first peak at frame 10,
+trough at 19) agrees, and the observed amplitude ratio of 0.5 per half period matches a damping
+ratio of 0.2 (the log decrement of 0.2 is 0.64 per half period; observed 0.69). Mass-independent
+`ω²` is our design (the spring is stiffness per unit mass). **Parity-pending**: one stiffness and one
+damping value were observed.
 
 ## 4. Simulation
 
@@ -190,6 +248,15 @@ per-case `Thresholds`:
 | `tumble` | contact frame; rest y; rests flat (P and B each within 1° of a multiple of 90°) | ±1; 0.05 cm | rest x, z and heading H (`KNOWN_MISMATCH`: which face it lands on and how far it travels depend on the engine's contact order) |
 | `clones-fall` | clone 4 (centre): free fall frames 0..22 within 1 cm, contact frame ±1, rest y (15.0) 0.05 cm, upright within 1°; clone 0 (corner): free fall frames 0..22 within 1 cm, contact frame ±1; 9 bodies, the cloner itself none; write-back into the clone data | as above | clone 4 lateral drift (`KNOWN_MISMATCH`: the reference ends 1.87 cm from the start in x and z, ours 0); clone 0 end track (`KNOWN_MISMATCH`: the cube's centre is exactly over the plane's corner, the reference tips off and falls to y −2227.8, ours balances on the corner at 15.08) |
 | `gravity-half` | not observed (no golden data) | | `UNSUPPORTED` |
+
+O41 connector cases (`tests/golden/soft-bodies/`, test `crates/dynamics/tests/joints_parity.rs`):
+
+| case | asserted | tolerance | pinned |
+|---|---|---|---|
+| `hinge` | x, y of the right cube in every frame 0..90; Bank mod 360; the distance to the pivot | 7 cm (the worst frame differs by 6.6 cm of a 600 cm swing at about 150 cm per frame, a timing error of 0.04 frame: integration scheme); 3°; 301 ± 1.5 cm; z stays 0 within 0.5 cm | none |
+| `ball-socket` | the same as `hinge`, and ours hinge = ours ball-and-socket within 1 cm | as `hinge` | none |
+| `spring` | y of the dynamic cube in every frame 0..90; settle height; x, z and rotations stay 0; first peak at frame 10 ±1 | 3 cm (the worst frame is 2.6 cm of a 60 cm amplitude: the reference's first frame accelerates 25 % less than ours); 0.5 cm; 0.1 cm; 0.5° | none |
+| `soft-sphere-*` | brief 118 (§8) | | |
 
 Rotation tracks are compared modulo 360° (the reference reads B 360 at the impact frame, a
 decomposition flip).

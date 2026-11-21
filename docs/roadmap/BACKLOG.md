@@ -114,7 +114,7 @@ implementers can avoid collisions.
 | 114 | [S6 acceptance test and rigging docs](../agents/tasks/114-s6-rigging-acceptance.md) | H | 100–113 | ready | tests, docs |
 | 115 | [rapier integration: rigid body tag, shapes, scene settings, per-frame cache, scrubbing; compare_trajectory](../agents/tasks/115-rigid-bodies.md) | I | 050, 010 | done (parity-pending: scene gravity/steps are a fit; bounce and friction combine rules) | dynamics (new), parity-harness |
 | 116 | [Dynamics on clones](../agents/tasks/116-dynamics-on-clones.md) | I | 115, 065 | done (parity-pending: clone drift and edge balance are engine-specific) | dynamics, clone-engine |
-| 117 | [Connectors and springs](../agents/tasks/117-connectors-springs.md) | I | 115 | waiting: O41 | dynamics |
+| 117 | [Connectors and springs](../agents/tasks/117-connectors-springs.md) | I | 115 | done (parity-pending: connector axis choice, spring stiffness scale) | dynamics |
 | 118 | [Soft bodies (PBD)](../agents/tasks/118-soft-bodies.md) | I | 115 | waiting: O41 | dynamics |
 | 119 | [Particle emitter and particle data](../agents/tasks/119-particle-emitter.md) | I | 050 | waiting: O40 | dynamics |
 | 120 | [Forces: gravity, wind, attractor, deflector, friction, turbulence, rotation](../agents/tasks/120-forces.md) | I | 119, 115, 063 | waiting: O40 | dynamics |

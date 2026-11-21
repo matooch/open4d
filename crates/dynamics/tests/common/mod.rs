@@ -170,3 +170,12 @@ pub fn set(doc: &mut Document, id: NodeId, key: &str, v: Value) {
     doc.transact("set", move |tx| tx.set_param(id, &key, v))
         .unwrap();
 }
+
+/// Adds a connector of `kind` between `a` and `b` at the origin (the default position).
+pub fn add_connector(tx: &mut Tx, kind: &str, a: Option<NodeId>, b: Option<NodeId>) -> NodeId {
+    let c = tx.create(forge_dynamics::CONNECTOR, None, None).unwrap();
+    tx.set_param(c, "type", Value::Enum(kind.into())).unwrap();
+    tx.set_param(c, "object_a", Value::Link(a)).unwrap();
+    tx.set_param(c, "object_b", Value::Link(b)).unwrap();
+    c
+}

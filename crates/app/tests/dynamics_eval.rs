@@ -103,3 +103,41 @@ fn mesh_points(app: &App, cloner: NodeId) -> usize {
         .points
         .len()
 }
+
+#[test]
+fn connectors_and_springs_act_in_the_evaluation() {
+    let mut app = App::new_default();
+    let (left, right) = app
+        .doc
+        .transact("hinge", |tx| {
+            let mk = |tx: &mut forge_core::Tx, x: f64, dynamic: &str| {
+                let c = tx.create("forge.cube", None, None)?;
+                for a in ["size_x", "size_y", "size_z"] {
+                    tx.set_param(c, a, Value::Float(50.0))?;
+                }
+                tx.set_param(c, "transform.pos", Value::Vec3([x, 300.0, 0.0]))?;
+                let t = tx.attach_tag("forge.rigid_body", c, None)?;
+                tx.set_param(t, "dynamic", Value::Enum(dynamic.into()))?;
+                Ok::<_, forge_core::EditError>(c)
+            };
+            let left = mk(tx, -26.0, "off")?;
+            let right = mk(tx, 26.0, "on")?;
+            let c = tx.create("forge.connector", None, None)?;
+            tx.set_param(c, "object_a", Value::Link(Some(left)))?;
+            tx.set_param(c, "object_b", Value::Link(Some(right)))?;
+            Ok((left, right))
+        })
+        .unwrap();
+    let at = |n: NodeId, f: i64| {
+        app.eval
+            .get(app.doc.scene(), f)
+            .world_matrix(n)
+            .unwrap()
+            .w_axis
+    };
+    assert_eq!(at(left, 30).y, 300.0);
+    let p = at(right, 30);
+    let r = (p.x * p.x + p.y * p.y).sqrt();
+    assert!((r - 301.0).abs() < 1.5, "{r}");
+    assert!(p.y < 299.0, "swung down: {}", p.y);
+}

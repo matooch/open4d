@@ -9,6 +9,7 @@ use forge_geometry::PolyMesh;
 use glam::{DMat3, DMat4, DQuat, DVec3};
 use rapier3d_f64::prelude::*;
 
+use crate::joints::{JointKind, JointSpec, Links, OMEGA2_PER_STIFFNESS};
 use crate::settings::DynamicsSettings;
 
 /// Scene units (cm) to rapier units (m).
@@ -89,10 +90,25 @@ pub(crate) struct Live {
     pub scale: DVec3,
 }
 
+/// A spring between two rigid bodies, in rapier units.
+struct LiveSpring {
+    a: RigidBodyHandle,
+    b: RigidBodyHandle,
+    /// Anchors in the bodies' local frames (m).
+    local_a: Vector,
+    local_b: Vector,
+    rest: f64,
+    /// Spring constant per unit of effective mass, 1/s².
+    omega2: f64,
+    damping: f64,
+}
+
 /// One simulated world.
 pub struct Simulation {
     pub(crate) world: PhysicsWorld,
     pub(crate) bodies: Vec<Live>,
+    springs: Vec<LiveSpring>,
+    dt: f64,
     steps: u32,
     gravity_cm: f64,
 }
@@ -190,6 +206,16 @@ impl Simulation {
         fps: u32,
         specs: &[BodySpec],
     ) -> Result<Simulation, DynamicsError> {
+        Self::with_links(settings, fps, specs, &Links::default())
+    }
+
+    /// [`Simulation::new`] plus connectors and springs.
+    pub fn with_links(
+        settings: &DynamicsSettings,
+        fps: u32,
+        specs: &[BodySpec],
+        links: &Links,
+    ) -> Result<Simulation, DynamicsError> {
         let mut world = PhysicsWorld::default();
         let dt = settings.step_dt(fps);
         world.gravity = Vector::new(0.0, -settings.gravity * CM_TO_M, 0.0);
@@ -229,12 +255,148 @@ impl Simulation {
                 scale,
             });
         }
-        Ok(Simulation {
+        let mut sim = Simulation {
             world,
             bodies,
+            springs: Vec::new(),
+            dt,
             steps: settings.steps_per_frame,
             gravity_cm: settings.gravity,
-        })
+        };
+        sim.add_links(links)?;
+        Ok(sim)
+    }
+
+    /// The handle and the world pose of one end of a link: the body the key names, or a new
+    /// fixed body without a collider at the end's own pose.
+    fn end_body(&mut self, e: &crate::joints::End) -> (RigidBodyHandle, Pose) {
+        if let Some(k) = e.key
+            && let Some(b) = self.bodies.iter().find(|b| b.key == k)
+        {
+            return (b.handle, *self.world.bodies[b.handle].position());
+        }
+        let (t, q, _) = decompose(&e.world);
+        let pose = pose_of(t, q);
+        let handle = self
+            .world
+            .bodies
+            .insert(RigidBodyBuilder::fixed().pose(pose));
+        (handle, pose)
+    }
+
+    fn add_links(&mut self, links: &Links) -> Result<(), DynamicsError> {
+        for j in &links.joints {
+            self.add_joint(j)?;
+        }
+        for s in &links.springs {
+            let (a, _) = self.end_body(&s.a);
+            let (b, _) = self.end_body(&s.b);
+            let com = |h: RigidBodyHandle| self.world.bodies[h].local_center_of_mass();
+            // A world end has no mass: its anchor is its origin.
+            let (local_a, local_b) = (com(a), com(b));
+            self.springs.push(LiveSpring {
+                a,
+                b,
+                local_a,
+                local_b,
+                rest: s.rest_length * CM_TO_M,
+                omega2: s.stiffness * OMEGA2_PER_STIFFNESS,
+                damping: s.damping,
+            });
+        }
+        Ok(())
+    }
+
+    fn add_joint(&mut self, j: &JointSpec) -> Result<(), DynamicsError> {
+        let (a, pa) = self.end_body(&j.a);
+        let (b, pb) = self.end_body(&j.b);
+        if a == b {
+            return Err(DynamicsError::Joint(
+                "a joint needs two different ends".into(),
+            ));
+        }
+        let anchor = v(j.anchor * CM_TO_M);
+        let axis = v(j.axis);
+        let (l1, l2) = (
+            pa.inverse_transform_point(anchor),
+            pb.inverse_transform_point(anchor),
+        );
+        let (x1, x2) = (
+            pa.inverse_transform_vector(axis),
+            pb.inverse_transform_vector(axis),
+        );
+        let joint: GenericJoint = match j.kind {
+            JointKind::Hinge => {
+                let mut b = RevoluteJointBuilder::new(x1)
+                    .local_anchor1(l1)
+                    .local_anchor2(l2)
+                    .contacts_enabled(j.contacts);
+                if let Some(l) = j.limit {
+                    b = b.limits(l);
+                }
+                let mut joint = b.build();
+                joint.data.set_local_axis2(x2);
+                joint.into()
+            }
+            JointKind::BallSocket => SphericalJointBuilder::new()
+                .local_anchor1(l1)
+                .local_anchor2(l2)
+                .contacts_enabled(j.contacts)
+                .build()
+                .into(),
+            JointKind::Slider => {
+                let mut joint = PrismaticJointBuilder::new(x1)
+                    .local_anchor1(l1)
+                    .local_anchor2(l2)
+                    .contacts_enabled(j.contacts)
+                    .build();
+                joint.data.set_local_axis2(x2);
+                joint.into()
+            }
+            JointKind::Fixed => FixedJointBuilder::new()
+                .local_frame1(Pose::from_parts(l1, pa.rotation.inverse() * pb.rotation))
+                .local_frame2(Pose::from_translation(l2))
+                .contacts_enabled(j.contacts)
+                .build()
+                .into(),
+        };
+        self.world.impulse_joints.insert(a, b, joint, true);
+        Ok(())
+    }
+
+    /// Applies every spring's force over one solver step.
+    fn apply_springs(&mut self) {
+        for s in &self.springs {
+            let (ra, rb) = (&self.world.bodies[s.a], &self.world.bodies[s.b]);
+            let (pa, pb) = (
+                ra.position().transform_point(s.local_a),
+                rb.position().transform_point(s.local_b),
+            );
+            let d = pb - pa;
+            let len = d.length();
+            if len < 1e-9 {
+                continue;
+            }
+            let dir = d / len;
+            let vel =
+                |r: &RigidBody, p: Vector| r.linvel() + r.angvel().cross(p - r.center_of_mass());
+            let rel = (vel(rb, pb) - vel(ra, pa)).dot(dir);
+            let (ma, mb) = (ra.mass(), rb.mass());
+            let m_eff = match (ra.is_dynamic(), rb.is_dynamic()) {
+                (true, true) => ma * mb / (ma + mb),
+                (true, false) => ma,
+                (false, true) => mb,
+                (false, false) => continue,
+            };
+            let k = s.omega2 * m_eff;
+            let c = 2.0 * s.damping * (k * m_eff).sqrt();
+            // Force on b along `dir` (toward a when stretched).
+            let f = -(k * (len - s.rest) + c * rel);
+            let impulse = dir * (f * self.dt);
+            let (a, b) = (s.a, s.b);
+            self.world.bodies[b].apply_impulse_at_point(impulse, pb, true);
+            self.world.bodies[a].apply_impulse_at_point(-impulse, pa, true);
+        }
     }
 
     /// The bodies, in insertion order.
@@ -310,6 +472,7 @@ impl Simulation {
                     self.world.bodies[b.handle].set_next_kinematic_position(pose_of(t, q));
                 }
             }
+            self.apply_springs();
             self.world.step();
         }
     }

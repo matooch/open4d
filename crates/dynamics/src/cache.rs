@@ -33,15 +33,21 @@ impl DynamicsCache {
         let settings = DynamicsSettings::of_scene(scene);
         let mut specs = bodies_of_scene(scene, mesh_of);
         specs.extend(crate::clones::clone_bodies(scene));
-        Self::from_specs(scene, &settings, &specs)
+        Self::from_specs(
+            scene,
+            &settings,
+            &specs,
+            &crate::joints::links_of_scene(scene),
+        )
     }
 
     pub(crate) fn from_specs(
         scene: &Scene,
         settings: &DynamicsSettings,
         specs: &[crate::sim::BodySpec],
+        links: &crate::joints::Links,
     ) -> Result<DynamicsCache, DynamicsError> {
-        let sim = Simulation::new(settings, scene.settings().fps, specs)?;
+        let sim = Simulation::with_links(settings, scene.settings().fps, specs, links)?;
         let keys = sim.keys();
         let moving = sim
             .kinds()

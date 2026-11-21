@@ -9,8 +9,10 @@ use forge_core::{
 pub const RIGID_BODY: &str = "forge.rigid_body";
 /// The dynamics scene settings object (gravity, time scale, steps per frame).
 pub const SETTINGS: &str = "forge.dynamics_settings";
-/// The connector object (hinge, ball-socket, slider, fixed, spring).
+/// The connector object (hinge, ball-and-socket, slider, fixed).
 pub const CONNECTOR: &str = "forge.connector";
+/// The spring object (a linear force pair).
+pub const SPRING: &str = "forge.spring";
 
 const BIG: f64 = 1e18;
 
@@ -157,7 +159,7 @@ pub fn settings_type() -> NodeType {
         )
 }
 
-/// The connector object.
+/// The connector object: a joint between Object A and Object B at the connector's position.
 pub fn connector_type() -> NodeType {
     let both = [Category::Object, Category::Generator];
     NodeType::new(CONNECTOR, "Connector", Category::Object)
@@ -167,10 +169,9 @@ pub fn connector_type() -> NodeType {
             "hinge",
             &[
                 ("hinge", "Hinge"),
-                ("ball_socket", "Ball-and-Socket"),
+                ("ball_socket", "Ball and Socket"),
                 ("slider", "Slider"),
                 ("fixed", "Fixed"),
-                ("spring", "Spring"),
             ],
             "Connector",
         ))
@@ -193,18 +194,33 @@ pub fn connector_type() -> NodeType {
                 .unit(Unit::Angle)
                 .group("Connector"),
         )
+}
+
+/// The spring object: a force pair between Object A and Object B.
+pub fn spring_type() -> NodeType {
+    let both = [Category::Object, Category::Generator];
+    NodeType::new(SPRING, "Spring", Category::Object)
+        .param(en(
+            "type",
+            "Type",
+            "linear",
+            &[("linear", "Linear")],
+            "Spring",
+        ))
+        .param(ParamDesc::link("object_a", "Object A", &both).group("Spring"))
+        .param(ParamDesc::link("object_b", "Object B", &both).group("Spring"))
         .param(
-            ParamDesc::float("rest_length", "Rest Length", 0.0)
+            ParamDesc::float("rest_length", "Rest Length", 100.0)
                 .range(0.0, BIG)
                 .unit(Unit::Distance)
                 .group("Spring"),
         )
         .param(
-            ParamDesc::float("stiffness", "Stiffness", 100.0)
+            ParamDesc::float("stiffness", "Stiffness", 1.0)
                 .range(0.0, BIG)
                 .group("Spring"),
         )
-        .param(pct("spring_damping", "Damping", 0.2, "Spring"))
+        .param(pct("damping", "Damping", 0.2, "Spring"))
 }
 
 /// Installs the dynamics node types.
@@ -219,6 +235,7 @@ impl Plugin for DynamicsToolset {
         r.register(rigid_body_type())?;
         r.register(settings_type())?;
         r.register(connector_type())?;
+        r.register(spring_type())?;
         Ok(())
     }
 }
@@ -248,5 +265,12 @@ pub(crate) fn vec3(scene: &Scene, id: NodeId, key: &str) -> [f64; 3] {
     match scene.param(id, key) {
         Some(Value::Vec3(v)) => *v,
         _ => [0.0; 3],
+    }
+}
+
+pub(crate) fn link(scene: &Scene, id: NodeId, key: &str) -> Option<NodeId> {
+    match scene.param(id, key) {
+        Some(Value::Link(l)) => *l,
+        _ => None,
     }
 }
