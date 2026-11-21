@@ -67,17 +67,22 @@ it (O57 notes: writing the FOV changes the render and the displayed focal length
 changes neither). `focal_mm = sensor / (2 tan(fov/2))` (FOV 53.13 deg reads 36 mm, 90 deg 18 mm,
 20.4 deg 100 mm, O57). The vertical FOV is a readback: `2 atan(tan(fov/2) / aspect)` with the
 film aspect of the render settings (O29: 1280 x 720 reads 31.41727565803149 deg; test
-`fov_readbacks_match_o29`). The film offsets are fractions of the image width (RENDER.md R10).
+`fov_readbacks_match_o29`). The film offsets are fractions of the image width. **Sign (O57 `film-offset`)**: the parameters
+shift the frame, so a positive X moves the picture left; `CameraData` and the snapshot camera carry
+the principal-point shift, the negated parameters (RENDER.md R15). The Y sign is parity-pending.
+The thin lens of the render has radius `focal / (2 f-stop)` in millimetres converted to scene
+units (x 0.1) and the `focus_distance` (RENDER.md R15); it is used when the render settings turn
+depth of field on.
 
 **Projections.** `perspective` uses the lens above. The axis views `front`, `back`, `left`,
 `right`, `top`, `bottom` are orthographic and **ignore the node's rotation**: the camera looks
 along +Z (front), -Z (back), +X (left), -X (right), -Y (top, screen up = +Z) or +Y (bottom,
 screen up = -Z) from the node's position (O57 `ortho-top`: the case file records a rotation and
 the picture looks straight down; `ortho-front`, `ortho-top` fix Front and Top, the other four
-follow by symmetry and are **parity-pending**). `parallel` is orthographic along the node's own
+follow by symmetry and are **parity-pending**; brief 138 matches both exactly, RENDER.md R15). `parallel` is orthographic along the node's own
 axes. `military`, `frog`, `bird`, `gentleman`, `isometric`, `dimetric` are not modelled: they
 render as `parallel` and the render reports a warning. The orthographic width at zoom 1 is
-1000 units (O57 `ortho-front`: the 200 unit cube spans 64 of 320 px); other zoom values are
+1000 units (O57 `ortho-front`: exact at zero tolerance, RENDER.md R15); other zoom values are
 **parity-pending** (`width = 1000 / zoom`).
 
 **Rotation convention (finding).** The reference's camera heading sign is opposite the usual
@@ -199,7 +204,7 @@ Commands: `render.settings` (optional `width`, `height`, `samples`, `max_depth`,
 ## S8 Not done
 
 Stereoscopic, composition helpers, spherical camera, the DOF map and the physical camera's
-effects (depth of field, motion blur, lens distortion, vignetting; brief 138 does projection
-only), photometric and volumetric light parameters, object-shaped area lights, HDRI loading
+effects (motion blur, lens distortion, vignetting, bokeh shape; brief 138 added projection
+parity and a thin-lens depth of field, RENDER.md R15), photometric and volumetric light parameters, object-shaped area lights, HDRI loading
 (brief 133), an explicit "render camera" selection (the first camera is used), per-light shadow
 softness radius.

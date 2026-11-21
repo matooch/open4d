@@ -535,7 +535,8 @@ pub enum Lens {
     Perspective {
         focal_mm: f64,
         sensor_mm: f64,
-        /// Fractions of the image width, +x right, +y up.
+        /// Shift of the principal point in fractions of the image width, +x right, +y up (the
+        /// negated Film Offset parameters).
         film_offset: [f64; 2],
     },
     /// World width that spans the image width.
@@ -554,6 +555,9 @@ pub struct CameraData {
     pub sensor_mm: f64,
     pub zoom: f64,
     pub focus_distance: f64,
+    /// Radius of the thin lens in scene units (`focal / (2 f-stop)`, mm converted to cm), 0 for
+    /// orthographic projections (RENDER.md R15).
+    pub lens_radius: f64,
     pub near_clip: Option<f64>,
     pub far_clip: Option<f64>,
     pub f_stop: f64,
@@ -562,6 +566,16 @@ pub struct CameraData {
     pub show_cone: bool,
     /// Approximations made for this camera (a projection that is not modelled).
     pub notes: Vec<String>,
+}
+
+/// Scene units per millimetre: O29 lists every distance in centimetres, focal lengths and the
+/// film gate in millimetres.
+pub const MM_TO_SCENE: f64 = 0.1;
+
+/// Radius of the entrance pupil, in scene units, of a lens of `focal_mm` at `f_stop`
+/// (`diameter = focal / f-stop`).
+pub fn aperture_radius(focal_mm: f64, f_stop: f64) -> f64 {
+    focal_mm / (2.0 * f_stop) * MM_TO_SCENE
 }
 
 /// Focal length in mm that gives the horizontal field of view `fov` (radians) on `sensor`.
@@ -604,7 +618,10 @@ pub fn camera_data(scene: &Scene, id: NodeId) -> Option<CameraData> {
         Lens::Perspective {
             focal_mm: focal_from_fov(r.f("fov_horizontal"), sensor),
             sensor_mm: sensor,
-            film_offset: [r.f("film_offset_x"), r.f("film_offset_y")],
+            // the parameters shift the frame, the lens moves the principal point the other way
+            // (O57 `film-offset`: +20 % X moves the picture left by 20 % of the width; the Y sign
+            // follows by symmetry and is parity-pending)
+            film_offset: [-r.f("film_offset_x"), -r.f("film_offset_y")],
         }
     } else {
         Lens::Orthographic {
@@ -631,6 +648,10 @@ pub fn camera_data(scene: &Scene, id: NodeId) -> Option<CameraData> {
         sensor_mm: sensor,
         zoom,
         focus_distance: r.f("focus_distance"),
+        lens_radius: match lens {
+            Lens::Perspective { focal_mm, .. } => aperture_radius(focal_mm, r.f("f_stop")),
+            Lens::Orthographic { .. } => 0.0,
+        },
         near_clip: r.b("enable_near_clipping").then(|| r.f("near_clipping")),
         far_clip: r.b("enable_far_clipping").then(|| r.f("far_clipping")),
         f_stop: r.f("f_stop"),

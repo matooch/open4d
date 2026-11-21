@@ -1833,6 +1833,7 @@ dependencies = [
  "forge-material",
  "forge-parity-harness",
  "forge-render-api",
+ "forge-render-bridge",
  "forge-shaders",
  "glam 0.34.1",
  "rayon",

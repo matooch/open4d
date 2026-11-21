@@ -1857,6 +1857,7 @@ Render Settings. One undo step.
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `default_light` | boolean or null | no | Light a scene without lights with the default light. |
+| `depth_of_field` | boolean or null | no | Trace camera rays through the camera's thin lens (depth of field). |
 | `filter` | string or null | no | `box`, `triangle`, `gaussian` or `cubic`. |
 | `filter_width` | number or null | no | Full filter width in pixels. |
 | `height` | integer or null | no | Image height in pixels. |

@@ -201,7 +201,7 @@ forge rpc <method> [--params] [--port] [--token]
 Render an image or an image sequence with the CPU path tracer (docs/specs/RENDER.md)
 
 ```
-forge render <scene> --out [--width] [--height] [--samples] [--max-depth] [--seed] [--frame] [--start] [--end] [--step] [--format] [--depth] [--alpha] [--aov] [--multipart]
+forge render <scene> --out [--width] [--height] [--samples] [--max-depth] [--seed] [--frame] [--start] [--end] [--step] [--format] [--depth] [--alpha] [--aov] [--dof] [--multipart]
 ```
 
 | Argument | Required | Default | Description |
@@ -221,4 +221,5 @@ forge render <scene> --out [--width] [--height] [--samples] [--max-depth] [--see
 | `--depth` | no |  | Bits per channel: 8, 16 or 32 |
 | `--alpha` | no |  | Write the alpha channel |
 | `--aov` | no |  | Extra passes, comma separated: depth, normal, albedo, position, object_id, material_id, shadow, diffuse, specular, emission, or `all` |
+| `--dof` | no |  | Depth of field through the camera's thin lens (default: the scene's stored render settings, else off) |
 | `--multipart` | no |  | One multipart EXR file with a layer per pass |

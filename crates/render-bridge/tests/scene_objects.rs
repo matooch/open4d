@@ -63,10 +63,11 @@ fn the_camera_object_gives_the_pixel_mapping_of_the_formula() {
     else {
         panic!()
     };
-    assert!((focal_mm - 18.0).abs() < 1e-9 && sensor_mm == 36.0 && film_offset == [0.2, 0.0]);
-    // 320 x 240: f_px = 320 * 18 / 36 = 160, principal point shifted right by 0.2 * 320
+    assert!((focal_mm - 18.0).abs() < 1e-9 && sensor_mm == 36.0 && film_offset == [-0.2, 0.0]);
+    // 320 x 240: f_px = 320 * 18 / 36 = 160; Film Offset X +20 % moves the picture left (O57
+    // film-offset): the principal point sits 0.2 * 320 = 64 px left of the centre
     let (f, p) = snap.camera.pixel_frame(320, 240).unwrap();
-    assert!((f - 160.0).abs() < 1e-9 && (p[0] - 224.0).abs() < 1e-9 && (p[1] - 120.0).abs() < 1e-9);
+    assert!((f - 160.0).abs() < 1e-9 && (p[0] - 96.0).abs() < 1e-9 && (p[1] - 120.0).abs() < 1e-9);
     // the centre pixel looks along +Z from (0, 0, -600)
     let (o, dir) = snap.camera.ray(p[0], p[1], 320, 240);
     assert_eq!(o, DVec3::new(0.0, 0.0, -600.0));

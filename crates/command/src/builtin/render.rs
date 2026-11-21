@@ -33,6 +33,8 @@ struct SettingsArgs {
     filter: Option<String>,
     /// Full filter width in pixels.
     filter_width: Option<f64>,
+    /// Trace camera rays through the camera's thin lens (depth of field).
+    depth_of_field: Option<bool>,
     /// true: remove the stored settings (renders use the caller's defaults again).
     reset: Option<bool>,
 }
@@ -43,7 +45,7 @@ fn json_of(c: Option<&RenderConfig>) -> Value {
         Some(c) => json!({"stored": true, "width": c.width, "height": c.height,
             "samples": c.samples, "max_depth": c.max_depth, "seed": c.seed,
             "default_light": c.default_light, "filter": c.filter.id(),
-            "filter_width": c.filter_width}),
+            "filter_width": c.filter_width, "depth_of_field": c.depth_of_field}),
     }
 }
 
@@ -55,7 +57,8 @@ fn settings(ctx: &mut dyn CommandContext, a: SettingsArgs) -> Result<Value, Comm
         || a.seed.is_some()
         || a.default_light.is_some()
         || a.filter.is_some()
-        || a.filter_width.is_some();
+        || a.filter_width.is_some()
+        || a.depth_of_field.is_some();
     if a.reset == Some(true) {
         if touched {
             return Err(CommandError::InvalidArgs(
@@ -78,6 +81,7 @@ fn settings(ctx: &mut dyn CommandContext, a: SettingsArgs) -> Result<Value, Comm
         c.seed = a.seed.unwrap_or(c.seed);
         c.default_light = a.default_light.unwrap_or(c.default_light);
         c.filter_width = a.filter_width.unwrap_or(c.filter_width);
+        c.depth_of_field = a.depth_of_field.unwrap_or(c.depth_of_field);
         if let Some(f) = &a.filter {
             c.filter = RenderFilter::parse(f).ok_or_else(|| {
                 CommandError::InvalidArgs(format!(

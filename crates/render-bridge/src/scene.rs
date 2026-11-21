@@ -12,8 +12,9 @@ use forge_generators::scene_objects::{
 };
 use forge_material::{Material, compile};
 use forge_render_api::{
-    AreaShape, Background, Camera, Environment, Falloff, Instance, Light, LightKind, Lighting,
-    MaterialData, MeshData, PixelFilter, Projection, RenderSettings, ShadowMode, Snapshot,
+    Aperture, AreaShape, Background, Camera, Environment, Falloff, Instance, Light, LightKind,
+    Lighting, MaterialData, MeshData, PixelFilter, Projection, RenderSettings, ShadowMode,
+    Snapshot,
 };
 
 /// What [`apply_scene_objects`] did.
@@ -43,7 +44,15 @@ pub fn camera_from_data(c: &CameraData) -> Camera {
         },
         Lens::Orthographic { width } => Projection::Orthographic { width },
     };
-    Camera::new(c.world, projection)
+    let camera = Camera::new(c.world, projection);
+    if c.lens_radius > 0.0 {
+        camera.with_aperture(Aperture {
+            radius: c.lens_radius,
+            focus_distance: c.focus_distance.max(1e-6),
+        })
+    } else {
+        camera
+    }
 }
 
 /// The snapshot light of a light object; `Err` names why it cannot be rendered.
@@ -228,6 +237,7 @@ pub fn settings_from_config(c: &RenderConfig, base: RenderSettings) -> RenderSet
             RenderFilter::Cubic => PixelFilter::Cubic,
         },
         filter_width: c.filter_width,
+        depth_of_field: c.depth_of_field,
         ..base
     }
 }

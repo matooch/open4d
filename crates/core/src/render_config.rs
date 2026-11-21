@@ -48,6 +48,10 @@ pub struct RenderConfig {
     pub filter: RenderFilter,
     /// Full support width of the filter in pixels.
     pub filter_width: f64,
+    /// Trace camera rays through the camera's thin lens (RENDER.md R15). A pure addition to the
+    /// stored form: files written before it read as `false`.
+    #[serde(default)]
+    pub depth_of_field: bool,
 }
 
 impl Default for RenderConfig {
@@ -62,6 +66,7 @@ impl Default for RenderConfig {
             default_light: true,
             filter: RenderFilter::Cubic,
             filter_width: 2.0,
+            depth_of_field: false,
         }
     }
 }

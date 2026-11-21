@@ -59,6 +59,10 @@ pub struct RenderArgs {
     /// shadow, diffuse, specular, emission, or `all`.
     #[arg(long)]
     pub aov: Option<String>,
+    /// Depth of field through the camera's thin lens (default: the scene's stored render
+    /// settings, else off).
+    #[arg(long)]
+    pub dof: bool,
     /// One multipart EXR file with a layer per pass.
     #[arg(long)]
     pub multipart: bool,
@@ -147,6 +151,7 @@ pub fn render(a: &RenderArgs) -> Outcome {
         max_depth: a.max_depth.unwrap_or(base.max_depth),
         seed: a.seed.unwrap_or(base.seed),
         aovs,
+        depth_of_field: a.dof || base.depth_of_field,
         ..base
     };
     settings.validate().map_err(|e| user(e.to_string()))?;

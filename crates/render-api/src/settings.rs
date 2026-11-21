@@ -30,6 +30,9 @@ pub struct RenderSettings {
     /// `[x0, y0, x1, y1]`, x1/y1 exclusive.
     pub region: Option<[u32; 4]>,
     pub threads: Option<usize>,
+    /// Trace camera rays through the camera's thin lens (RENDER.md R15). Off by default: a
+    /// camera is then a pinhole and the image is sharp everywhere.
+    pub depth_of_field: bool,
 }
 
 impl Default for RenderSettings {
@@ -48,6 +51,7 @@ impl Default for RenderSettings {
             clamp: 0.0,
             region: None,
             threads: None,
+            depth_of_field: false,
         }
     }
 }
