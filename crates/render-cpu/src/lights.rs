@@ -372,7 +372,138 @@ pub fn has_env(l: &Lighting) -> bool {
     !matches!(l, Lighting::None)
 }
 
-pub fn sample_env(l: &Lighting, rng: &mut Rng) -> LightSample {
+/// Importance sampling of a lat-long environment image (RENDER.md R16): a piecewise constant
+/// density over the pixels proportional to `luminance * sin(theta)`, sampled through the marginal
+/// distribution of the rows and the conditional distribution inside a row.
+#[derive(Debug, Clone)]
+pub struct EnvDist {
+    width: usize,
+    height: usize,
+    rotation: f64,
+    /// Cumulative row weights, `height + 1` entries from 0 to 1.
+    marginal: Vec<f64>,
+    /// Cumulative pixel weights of each row, `height * (width + 1)` entries, each row 0 to 1.
+    conditional: Vec<f64>,
+    /// Probability of each pixel (`weight / total`).
+    prob: Vec<f64>,
+}
+
+impl EnvDist {
+    /// `None` unless the lighting is an image with some light in it.
+    pub fn build(l: &Lighting) -> Option<EnvDist> {
+        let Lighting::Image {
+            image, rotation, ..
+        } = l
+        else {
+            return None;
+        };
+        let (w, h) = (image.width as usize, image.height as usize);
+        let mut weight = vec![0.0f64; w * h];
+        for y in 0..h {
+            let sin_t = (PI * (y as f64 + 0.5) / h as f64).sin();
+            for x in 0..w {
+                let p = image.pixel(x as u32, y as u32);
+                let lum = 0.2126 * p[0] as f64 + 0.7152 * p[1] as f64 + 0.0722 * p[2] as f64;
+                weight[y * w + x] = if lum.is_finite() {
+                    lum.max(0.0) * sin_t
+                } else {
+                    0.0
+                };
+            }
+        }
+        let total: f64 = weight.iter().sum();
+        if total.is_nan() || total <= 0.0 {
+            return None;
+        }
+        let mut marginal = vec![0.0; h + 1];
+        let mut conditional = vec![0.0; h * (w + 1)];
+        for y in 0..h {
+            let row: f64 = weight[y * w..(y + 1) * w].iter().sum();
+            marginal[y + 1] = marginal[y] + row / total;
+            let mut acc = 0.0;
+            for x in 0..w {
+                acc += if row > 0.0 {
+                    weight[y * w + x] / row
+                } else {
+                    0.0
+                };
+                conditional[y * (w + 1) + x + 1] = acc;
+            }
+            // exact end points against rounding
+            conditional[y * (w + 1) + w] = 1.0;
+        }
+        marginal[h] = 1.0;
+        Some(EnvDist {
+            width: w,
+            height: h,
+            rotation: *rotation,
+            marginal,
+            conditional,
+            prob: weight.iter().map(|x| x / total).collect(),
+        })
+    }
+
+    fn find(cdf: &[f64], u: f64) -> usize {
+        // largest i with cdf[i] <= u, within 0..cdf.len() - 1
+        let i = cdf.partition_point(|c| *c <= u).saturating_sub(1);
+        i.min(cdf.len() - 2)
+    }
+
+    /// A direction and its solid angle density for the uniform numbers `u`.
+    pub fn sample(&self, u: (f64, f64)) -> (DVec3, f64) {
+        let y = Self::find(&self.marginal, u.0);
+        let row = &self.conditional[y * (self.width + 1)..(y + 1) * (self.width + 1)];
+        let x = Self::find(row, u.1);
+        // jitter inside the pixel with the remainders of the uniform numbers
+        let (fy, fx) = (
+            ((u.0 - self.marginal[y]) / (self.marginal[y + 1] - self.marginal[y]).max(1e-300))
+                .clamp(0.0, 1.0),
+            ((u.1 - row[x]) / (row[x + 1] - row[x]).max(1e-300)).clamp(0.0, 1.0),
+        );
+        let (uu, vv) = (
+            (x as f64 + fx) / self.width as f64,
+            (y as f64 + fy) / self.height as f64,
+        );
+        let theta = PI * vv;
+        let az = uu * 2.0 * PI + self.rotation;
+        let st = theta.sin();
+        let d = DVec3::new(st * az.sin(), theta.cos(), st * az.cos());
+        (d, self.pdf(d))
+    }
+
+    /// Solid angle density of a direction.
+    pub fn pdf(&self, d: DVec3) -> f64 {
+        let phi = d.x.atan2(d.z) - self.rotation;
+        let u = (phi / (2.0 * PI)).rem_euclid(1.0);
+        let y = d.y.clamp(-1.0, 1.0);
+        let v = y.acos() / PI;
+        let x = ((u * self.width as f64) as usize).min(self.width - 1);
+        let r = ((v * self.height as f64) as usize).min(self.height - 1);
+        let sin_t = (1.0 - y * y).sqrt();
+        if sin_t < 1e-9 {
+            return 0.0;
+        }
+        self.prob[r * self.width + x] * (self.width * self.height) as f64 / (2.0 * PI * PI * sin_t)
+    }
+}
+
+/// Solid angle density with which [`sample_env`] picks `d`.
+pub fn env_pdf(dist: Option<&EnvDist>, d: DVec3) -> f64 {
+    dist.map_or(INV_4PI, |e| e.pdf(d))
+}
+
+pub fn sample_env(l: &Lighting, dist: Option<&EnvDist>, rng: &mut Rng) -> LightSample {
+    if let Some(e) = dist {
+        let (wi, pdf) = e.sample(rng.f2());
+        if pdf > 0.0 {
+            return LightSample {
+                wi,
+                dist: f64::INFINITY,
+                weight: env_radiance(l, wi) / pdf,
+                pdf,
+            };
+        }
+    }
     let wi = uniform_sphere(rng.f2());
     LightSample {
         wi,

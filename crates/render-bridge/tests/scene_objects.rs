@@ -167,3 +167,73 @@ fn stored_settings_become_render_settings() {
     assert_eq!(s.filter, forge_render_api::PixelFilter::Cubic);
     assert!(s.validate().is_ok());
 }
+
+#[test]
+fn an_environment_image_becomes_image_lighting() {
+    use forge_image::{AlphaMode, BitDepth, EncodeOptions, Format, Image};
+    let dir = std::env::temp_dir().join(format!("forge-bridge-hdri-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("sky.hdr");
+    let mut data = Vec::new();
+    for _ in 0..8 * 4 {
+        data.extend_from_slice(&[2.0, 2.0, 2.0, 1.0]);
+    }
+    let img = Image {
+        width: 8,
+        height: 4,
+        data,
+        alpha: AlphaMode::Straight,
+    };
+    let opts = EncodeOptions {
+        depth: BitDepth::F32,
+        ..EncodeOptions::default()
+    };
+    std::fs::write(
+        &path,
+        forge_image::encode(&img, Format::Hdr, &opts).unwrap(),
+    )
+    .unwrap();
+
+    let mut d = doc();
+    let e = create(&mut d, "forge.environment");
+    set(
+        &mut d,
+        e,
+        "image",
+        Value::String(path.to_string_lossy().into_owned()),
+    );
+    set(&mut d, e, "brightness", Value::Float(0.5));
+    set(&mut d, e, "visible_in_background", Value::Bool(true));
+    let mut snap = Snapshot::default();
+    let a = apply_scene_objects(&mut snap, d.scene());
+    assert!(a.warnings.is_empty(), "{:?}", a.warnings);
+    let Lighting::Image {
+        image, intensity, ..
+    } = &snap.environment.lighting
+    else {
+        panic!("{:?}", snap.environment.lighting)
+    };
+    assert_eq!((image.width, image.height, *intensity), (8, 4, 0.5));
+    assert!(
+        (image.pixel(3, 2)[0] - 2.0).abs() < 0.05,
+        "{:?}",
+        image.pixel(3, 2)
+    );
+    assert_eq!(snap.environment.background, Background::Environment);
+
+    // a missing file warns and keeps the uniform colour
+    set(
+        &mut d,
+        e,
+        "image",
+        Value::String(dir.join("nope.hdr").to_string_lossy().into_owned()),
+    );
+    let mut snap = Snapshot::default();
+    let a = apply_scene_objects(&mut snap, d.scene());
+    assert_eq!(a.warnings.len(), 1, "{:?}", a.warnings);
+    assert!(matches!(
+        snap.environment.lighting,
+        Lighting::Constant { .. }
+    ));
+    std::fs::remove_dir_all(&dir).ok();
+}

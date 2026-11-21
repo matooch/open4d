@@ -117,6 +117,19 @@ fn flat_material(name: &str, color: [f64; 3]) -> MaterialData {
     MaterialData::new(name, compile(&m))
 }
 
+/// Reads a lat-long environment image (Radiance HDR, OpenEXR or an LDR format) as linear RGB.
+/// The path is used as stored: the scene loader resolves relative paths against the scene file.
+pub fn load_environment_image(path: &str) -> Result<forge_image::Image, String> {
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let img = forge_image::decode(&bytes, &forge_image::Limits::default())
+        .map_err(|e| e.to_string())?
+        .image;
+    if img.width < 2 || img.height < 2 {
+        return Err("the image must be at least 2 x 2 pixels".into());
+    }
+    Ok(img)
+}
+
 /// Adds the scene's camera, lights, environment, sky and floors to `snap`.
 pub fn apply_scene_objects(snap: &mut Snapshot, scene: &Scene) -> Applied {
     let mut objs = scene_objects(scene);
@@ -176,10 +189,19 @@ pub fn apply_scene_objects(snap: &mut Snapshot, scene: &Scene) -> Applied {
             env.background = Background::Environment;
         }
         if !e.image.is_empty() {
-            out.warnings.push(format!(
-                "environment image {:?} is not loaded yet: using the colour",
-                e.image
-            ));
+            match load_environment_image(&e.image) {
+                Ok(image) => {
+                    env.lighting = Lighting::Image {
+                        image: std::sync::Arc::new(image),
+                        rotation: e.image_rotation,
+                        intensity: e.brightness,
+                    };
+                }
+                Err(msg) => out.warnings.push(format!(
+                    "environment image {:?}: {msg}; using the colour",
+                    e.image
+                )),
+            }
         }
         if objs.environments.len() > 1 || !objs.skies.is_empty() {
             out.warnings

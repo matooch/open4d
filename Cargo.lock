@@ -1817,6 +1817,7 @@ dependencies = [
  "forge-core",
  "forge-generators",
  "forge-geometry",
+ "forge-image",
  "forge-material",
  "forge-render-api",
  "glam 0.34.1",

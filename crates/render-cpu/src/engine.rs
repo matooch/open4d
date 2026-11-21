@@ -188,6 +188,7 @@ impl RenderEngine for CpuEngine {
             scene: &scene,
             lights: &lights,
             settings,
+            env: crate::lights::EnvDist::build(&snapshot.environment.lighting),
         };
         let (w, h) = (settings.width, settings.height);
         let [rx0, ry0, rx1, ry1] = settings.region.unwrap_or([0, 0, w, h]);

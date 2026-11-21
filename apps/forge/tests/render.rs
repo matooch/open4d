@@ -336,3 +336,30 @@ fn stored_render_settings_are_the_defaults_and_flags_override_them() {
     let img = decode(&out3);
     assert_eq!((img.width, img.height), (320, 240));
 }
+
+#[test]
+fn sky_and_floor_objects_light_and_fill_the_background() {
+    let d = dir("sky");
+    let scene = cube_scene(&d);
+    // no sky: the background is black, the cube is lit by the head light
+    let before = d.join("before.png");
+    render_small(&scene, &before, &["--width", "32", "--height", "24"]);
+    let lit_before = lit_pixels(&decode(&before));
+    cmd(&scene, "object.create", json!({"type": "forge.sky"}));
+    let after = d.join("after.png");
+    let r = render_small(&scene, &after, &["--width", "32", "--height", "24"]);
+    assert_eq!(r["warnings"], json!([]), "{r}");
+    // the visible sky fills the background
+    let lit_after = lit_pixels(&decode(&after));
+    assert!(lit_after > lit_before + 200, "{lit_before} -> {lit_after}");
+    // a floor under the cube adds geometry: it is hit by rays (object ids start after meshes)
+    cmd(&scene, "object.create", json!({"type": "forge.floor"}));
+    let floored = d.join("floor.png");
+    let r = render_small(&scene, &floored, &["--width", "32", "--height", "24"]);
+    assert_eq!(r["ok"], true);
+    assert_ne!(
+        std::fs::read(&after).unwrap(),
+        std::fs::read(&floored).unwrap(),
+        "the floor changes the picture"
+    );
+}

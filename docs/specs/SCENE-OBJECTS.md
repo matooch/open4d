@@ -142,8 +142,11 @@ O29 observed no such objects; these are ours and carry no parity claim.
 
 - `forge.environment`: `color` white and `brightness` 100 % (the defaults of the material's
   Environment group, O29 section 4), `visible_in_background` false, `image` (HDRI file path,
-  empty = uniform colour; **loading is brief 133**, until then the render warns and uses the
-  colour), `image_rotation` 0. Lighting: `Lighting::Constant { color, intensity: brightness }`.
+  empty = uniform colour; Radiance HDR, OpenEXR or an LDR file, lat-long, loaded by the render
+  bridge (`load_environment_image`, the scene loader resolves a relative path against the scene
+  file); an unreadable file warns and keeps the uniform colour), `image_rotation` 0. Lighting: `Lighting::Constant { color, intensity: brightness }`, or with an image
+  `Lighting::Image { image, rotation: image_rotation, intensity: brightness }` (the colour
+  applies to the uniform case only), importance sampled by the CPU tracer (RENDER.md R16).
 - `forge.sky`: `zenith_color`, `horizon_color`, `ground_color`, `brightness` 100 %,
   `visible_in_background` true. Lighting: `Lighting::Sky` (R8).
 - `forge.floor`: `color` 0.8 grey (the default object colour of O29 section 1), `extent`
@@ -205,6 +208,5 @@ Commands: `render.settings` (optional `width`, `height`, `samples`, `max_depth`,
 
 Stereoscopic, composition helpers, spherical camera, the DOF map and the physical camera's
 effects (motion blur, lens distortion, vignetting, bokeh shape; brief 138 added projection
-parity and a thin-lens depth of field, RENDER.md R15), photometric and volumetric light parameters, object-shaped area lights, HDRI loading
-(brief 133), an explicit "render camera" selection (the first camera is used), per-light shadow
+parity and a thin-lens depth of field, RENDER.md R15), photometric and volumetric light parameters, object-shaped area lights, an explicit "render camera" selection (the first camera is used), per-light shadow
 softness radius.

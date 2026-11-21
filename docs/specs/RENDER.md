@@ -354,6 +354,31 @@ shutter angle/offset semantics, none of which is observed; `shutter_speed`, `shu
 `shutter_offset` are stored on the camera object (SCENE-OBJECTS.md S2) and ignored. Lens
 distortion, vignetting and chromatic aberration are likewise stored and not rendered.
 
+## R16 Environment images (brief 133)
+
+`Lighting::Image` is a lat-long image: pixel `(x, y)` of a `w x h` image covers
+`u = x / w`, `v = y / h` with azimuth `phi = u * 2 pi + rotation` about +Y (`d = (sin t sin phi,
+cos t, sin t cos phi)`) and polar angle `t = v * pi` from +Y (nearest pixel, radiance
+`pixel * intensity`). The scene object feeds it from an HDR/EXR file (SCENE-OBJECTS.md S4).
+
+**Importance sampling.** The tracer builds one `EnvDist` per render: a piecewise constant density
+over the pixels proportional to `luminance * sin(t)` (Rec. 709 weights), sampled through the
+cumulative row weights and then the cumulative pixel weights of the row, with the point inside the
+pixel taken from the remainders of the two uniform numbers. Its solid angle density is
+`p_pixel * w * h / (2 pi^2 sin t)`. Next-event estimation draws from it and the MIS weight of a
+BSDF-sampled ray that escapes uses the same density (`env_pdf`), so the estimator stays unbiased;
+constant and sky lighting still sample the sphere uniformly. An image with no light in it
+(all black) falls back to uniform sampling.
+Tests (`crates/render-cpu/tests/environment.rs`): the density integrates to 1 over the sphere
+and each sample reports the density of its own direction; a white sphere in a constant image
+shows 1 (furnace); **a sphere under a dim sky image with a small sun 330 times brighter renders at
+64 spp within 32.8 dB of a 4096 spp render** (the goal was 30 dB; with the uniform sampling it was
+15.8 dB, measured by switching the distribution off once).
+
+Not done: importance sampling by the BSDF at the same time as the image (the MIS pairing is
+there, but the BSDF lobe is not importance sampled against the environment), an HDRI mip chain for
+filtered background display, sun/sky models other than the gradient of `forge.sky`.
+
 ## R13 Not done / follow-ups
 
 The material hosted in the document (brief 194), object-shaped area lights, falloff `Steps`, Sobol sampling,
