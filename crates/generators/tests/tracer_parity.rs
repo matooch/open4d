@@ -30,7 +30,7 @@ fn to_mesh(m: &forge_geometry::PolyMesh) -> Mesh {
     })
 }
 
-/// The Turtle tab of `[params.mospline]` (`turtle-2`) set on the generator.
+/// The Turtle tab of the case's spline-generator table (`turtle-2`) set on the generator.
 fn set_turtle(
     tx: &mut forge_core::Tx,
     gen_: NodeId,
@@ -129,7 +129,10 @@ fn build(
                     _ => "simple",
                 };
                 tx.set_param(gen_, "mode", Value::Enum(mode.into()))?;
-                if let Some(toml::Value::Table(t)) = params.get("mospline") {
+                if let Some(t) = params
+                    .values()
+                    .find_map(|v| v.as_table().filter(|t| t.contains_key("premise")))
+                {
                     set_turtle(tx, gen_, t)?;
                 }
                 if mode == "spline" {
