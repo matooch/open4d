@@ -32,12 +32,12 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O17 | Spline primitives II | [splines-2.md](splines-2.md) | `tests/golden/splines-2/` meshes | partial |
 | O18 | Primitives III | [primitives-3.md](primitives-3.md) | `tests/golden/<object>/` meshes | done |
 | O58 | Modeling tools III (020/021 follow-ups) | [modeling-tools-3.md](modeling-tools-3.md) | `tests/golden/modeling-tools/` meshes | partial |
-| O20 | Generators III | [generators-3.md](generators-3.md) | `tests/golden/<generator>/` meshes | partial |
+| O20 | Generators III | [generators-3.md](generators-3.md) | done (baseline 59 of 59; all 32 follow-up rows resolved — 26 observed, 6 with recorded verdicts in their rows — see the form) |
 | O19 | Deformers III | [deformers-3.md](deformers-3.md) | `tests/golden/<deformer>/` meshes | partial |
-| O45 | Deformers IV | [deformers-4.md](deformers-4.md) | `tests/golden/<deformer>/` meshes | partial |
+| O45 | Deformers IV | [deformers-4.md](deformers-4.md) | partial (31 follow-up rows observed earlier; the outstanding 27 carry their recorded not-observed or needs-a-human verdicts in the table — see the form) |
 | O46 | Spline tools and editable splines | [spline-tools.md](spline-tools.md) | `tests/golden/spline-tools/` meshes | partial |
 | O56 | Caps and bevel tab | [caps-bevel.md](caps-bevel.md) | `tests/golden/caps-bevel/` meshes | done |
-| O48 | Text spline | [text.md](text.md) | `tests/golden/text/` meshes | partial |
+| O48 | Text spline | [text.md](text.md) | partial (follow-up rows resolved 2026-11-21: dv-a, dv-o, dv-word and dv-two-lines need a human font pick — GUI session G1 or G4; the other follow-up rows observed — see the form) |
 | O49 | Fields IV: modifier layers, vertex maps | [fields-4.md](fields-4.md) | `tests/golden/fields/` samples + meshes | done |
 | O42 | Shaders on a UV grid | [shaders.md](shaders.md) | `tests/golden/shaders/` samples | partial (17 of 19 cases; noise-perlin needs a Perlin type this build does not offer, layer-multiply needs a GUI-built layer stack — see the form) |
 | O27 | Animation II (tracks, tags) | [animation-2.md](animation-2.md) | `tests/golden/animation-2/` samples | done |
@@ -60,7 +60,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O44 | Exchange references (FBX, glTF, Alembic, STL, PLY) | [exchange.md](exchange.md) | `tests/golden/exchange/` | done (morph not observed) |
 | O39 | Dynamics: rigid bodies | [dynamics.md](dynamics.md) | done (12 of 13 cases: 8 baseline plus the 4 follow-ups — bounce-combine-0, bounce-combine-50, clones-fall-2, collision-noise-0 observed 2026-11-21; gravity-half still not observed — scene gravity not reachable from a script) |
 | O40 | Particles and forces | [particles.md](particles.md) | `tests/golden/particles/` samples + meshes | blocked (0 of 10 cases: the emitter exposes no particle list to a script, so no position, velocity or age can be read - see the form) |
-| O41 | Soft bodies and connectors | [soft-bodies.md](soft-bodies.md) | `tests/golden/soft-bodies/` samples + meshes | todo (4 follow-up cases; see the form's Follow-up section) — before: done (6 of 6 cases; the ball-socket track is identical to the hinge one - see the form) |
+| O41 | Soft bodies and connectors | [soft-bodies.md](soft-bodies.md) | done (8 of 10 cases observed, the other 2 not observed with reasons in their rows — spring-stiff-2 and hinge-offset need creation commands that could not be resolved safely; see the form) |
 | O10 | Selection and tool behaviour in the GUI | (form comes with batch 10) | form only | gui-only |
 | G1 | GUI session: layout and managers | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G1 | answers in GUI-SESSIONS.md | gui-only |
 | G2 | GUI session: shortcuts and navigation | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G2 | answers in GUI-SESSIONS.md | gui-only |

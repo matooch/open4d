@@ -1,6 +1,6 @@
 # Soft bodies and connectors — observation (O41)
 
-Status: observed, 6 of 6 cases · App version: R25 25.010 · OS: macOS · Observer: Hermes observer, scripted unattended run · Date: 2026-11-20
+Status: observed, 8 of 10 cases (spring-stiff-2 and hinge-offset not observed with reasons in their rows) · App version: R25 25.010 · OS: macOS · Observer: Hermes observer, scripted unattended run · Date: 2026-11-20
 Method: as [dynamics.md](dynamics.md) (O39): frame-stepped, global transforms per frame as
 track samples. For soft bodies, export `mesh.obj` at frames 15, 30 and 60 as `mesh.obj`,
 `mesh-f30.obj` and `mesh-f60.obj`; `case.toml` names the extra meshes in
@@ -68,12 +68,12 @@ Record the soft body settings table and the connector settings table once.
 
 ## Follow-up cases (planner, after briefs 117/118)
 
-| Case | Setup | Record |
-|---|---|---|
-| soft-sphere-pressure-2 | redo `soft-sphere-pressure`: set Pressure 100 and **read it back from the tag** before simulating; store it in `case.toml` | meshes at 15/30/60 as before |
-| soft-sphere-samples | `soft-sphere-drop` | per frame 0–60: the sphere's centre (mean of its points) and its lowest point's y, as `samples.json` tracks |
-| spring-stiff-2 | the `spring` case with Stiffness 2 and Damping 20 % | the same track |
-| hinge-offset | the `hinge` case with the connector at (100, 0, 0) | the same tracks |
+| Case | Setup | Record | Result |
+|---|---|---|---|
+| soft-sphere-pressure-2 | redo `soft-sphere-pressure`: set Pressure 100 and **read it back from the tag** before simulating; store it in `case.toml` | meshes at 15/30/60 as before | observed: Pressure read back as 100 from the tag before simulating and stored in `case.toml` (`pressure_readback`); meshes at 15, 30 and 60 (mesh.obj, mesh-f30.obj, mesh-f60.obj); the sphere lands at y 34.085033 at frame 60, the same as `soft-sphere-pressure` (34.085) |
+| soft-sphere-samples | `soft-sphere-drop` | per frame 0–60: the sphere's centre (mean of its points) and its lowest point's y, as `samples.json` tracks | observed: 61 frames, centre (mean of the sphere points) and lowest point y per frame — centre y 200.0 at frame 0, 77.728272 at 15, 35.30991 at 30, 34.085033 at 60 (matches the drop case end exactly); lowest y 150.0 at 0, 27.728272 at 15, -15.85786 at 60. Note: written as `samples-centre_x/y/z.json` and `samples-lowest_y.json` in the harness track format — this checker accepts only the track, field and clones kinds with one param per track file, so one `samples.json` of several tracks cannot validate |
+| spring-stiff-2 | the `spring` case with Stiffness 2 and Damping 20 % | the same track | not observed: the Spring object creation command appears in no safe source — object constants on the scripting module, plugin-registry sweeps over the dynamics, Maxon and object id ranges, the app resources, workspace dumps and logs; refused to guess ids |
+| hinge-offset | the `hinge` case with the connector at (100, 0, 0) | the same tracks | not observed: the Connector creation command could not be resolved safely — the one candidate object constant was verified in an empty document to create the Connect generator, not the dynamics connector; refused to guess ids |
 
 ## Notes
 TODO
