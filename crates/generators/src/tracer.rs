@@ -13,6 +13,7 @@ pub const TYPE: &str = "forge.tracer";
 
 pub(crate) fn node_type() -> NodeType {
     let t = NodeType::new(TYPE, "Tracer", Category::Generator)
+        .menu_path("Generator", 0)
         .param(ParamDesc::enumeration(
             "tracing_mode",
             "Tracing mode",

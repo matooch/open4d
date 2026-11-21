@@ -14,6 +14,7 @@ pub(crate) fn node_type() -> NodeType {
     };
     let segs = |id: &str, label: &str| ParamDesc::int(id, label, 1).range(1, 1000);
     NodeType::new("forge.cube", "Cube", Category::Generator)
+        .menu_path("Object", 0)
         .param(size("size_x", "Size X"))
         .param(size("size_y", "Size Y"))
         .param(size("size_z", "Size Z"))

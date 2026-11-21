@@ -80,6 +80,7 @@ const PROJECTIONS: [(&str, &str); 14] = [
 pub fn camera_type() -> NodeType {
     let (o, p, d) = ("Object", "Physical", "Details");
     NodeType::new(CAMERA, "Camera", Category::Object)
+        .menu_path("Camera", 0)
         .param(
             ParamDesc::enumeration("projection", "Projection", "perspective", &PROJECTIONS)
                 .group(o),
@@ -270,6 +271,7 @@ const FALLOFFS: [(&str, &str); 5] = [
 pub fn light_type() -> NodeType {
     let (g, d, s) = ("General", "Details", "Shadow");
     NodeType::new(LIGHT, "Light", Category::Object)
+        .menu_path("Light", 0)
         .param(ParamDesc::color("color", "Color", [1.0; 3]).group(g))
         .param(flag("use_temperature", "Use Temperature", false, g))
         .param(

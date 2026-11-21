@@ -8,6 +8,7 @@ use crate::Params;
 
 pub(crate) fn node_type() -> NodeType {
     NodeType::new("forge.plane", "Plane", Category::Generator)
+        .menu_path("Object", 0)
         .param(
             ParamDesc::float("width", "Width", 400.0)
                 .range(0.0, f64::MAX)

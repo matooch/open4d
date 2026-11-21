@@ -15,6 +15,7 @@ use crate::{BuildError, Params};
 
 pub(crate) fn node_type() -> NodeType {
     NodeType::new("forge.figure", "Figure", Category::Generator)
+        .menu_path("Object", 0)
         .param(distance("height", "Height", 180.0))
         .param(count("segments", "Segments", 14, 4))
 }

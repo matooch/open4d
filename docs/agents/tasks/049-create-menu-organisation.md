@@ -15,8 +15,8 @@ The Create menu groups and orders object types like the reference: Object, Splin
 - `NodeType` gains `menu_path` and `menu_order` (registry metadata). Icons come from 148.
 
 ## Done when
-- [ ] UI.md updated; a UI test checks the menu structure.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] UI.md updated; a UI test checks the menu structure.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -26,9 +26,23 @@ The Create menu groups and orders object types like the reference: Object, Splin
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+
+Status: done
+
+Added `menu_path: Option<String>` and `menu_order: i32` to `NodeType` with a
+`menu_path(path, order)` builder. Updated primitive, spline primitive, generator,
+volume and scene-object registrations to set their menu paths. `create_menu` now
+returns groups by `menu_path` in the reference order (Object, Spline, Generator,
+Deformer, Field, Volume, Camera, Light, Tag), sorting entries by `menu_order` then
+label. Categories without an explicit path derive a default group (Deformer, Field,
+Tag). The Clone toolset and Scene (Environment/Floor/Sky) submenus remain separate.
+
+Updated `crates/ui/tests/commands.rs` with `create_menu_is_grouped_like_the_reference`,
+and adjusted existing tests in `editing.rs` and `scene_overlay.rs` to the new group
+labels. Updated `docs/specs/UI.md` §16.2 and appended a row to
+`docs/parity/STATUS.md`. BACKLOG.md row 049 set to `done`.
+
+Parity: own design until GUI session G1 is answered; grouping and wording marked
+parity-pending.
+
+Co-Authored-By: kimi-k2.7-code <kimi-k2.7-code@nousresearch.com>

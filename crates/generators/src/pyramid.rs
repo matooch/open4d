@@ -15,6 +15,7 @@ pub(crate) fn node_type() -> NodeType {
             .unit(Unit::Distance)
     };
     NodeType::new("forge.pyramid", "Pyramid", Category::Generator)
+        .menu_path("Object", 0)
         .param(size("size_x", "Size X"))
         .param(size("size_y", "Size Y"))
         .param(size("size_z", "Size Z"))

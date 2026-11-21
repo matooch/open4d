@@ -39,6 +39,7 @@ pub fn cloner_type() -> NodeType {
     const GRID: &str = "Grid Array";
     const HONEY: &str = "Honeycomb";
     NodeType::new(CLONER, "Cloner", Category::Generator)
+        .menu_path("Generator", 0)
         // Common, Object tab.
         .param(en(
             "mode",

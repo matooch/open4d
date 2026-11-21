@@ -12,6 +12,7 @@ pub const TYPE: &str = "forge.boole";
 
 pub(crate) fn node_type() -> NodeType {
     NodeType::new(TYPE, "Boole", Category::Generator)
+        .menu_path("Generator", 0)
         .param(ParamDesc::enumeration(
             "mode",
             "Boolean Type",

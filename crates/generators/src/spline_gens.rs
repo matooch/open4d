@@ -131,6 +131,7 @@ fn bevel_params(prefix: &str) -> Vec<ParamDesc> {
 pub(crate) fn extrude_type() -> NodeType {
     caps(
         NodeType::new(EXTRUDE, "Extrude", Category::Generator)
+            .menu_path("Generator", 0)
             .param(ParamDesc::enumeration(
                 "direction",
                 "Direction",
@@ -158,6 +159,7 @@ pub(crate) fn extrude_type() -> NodeType {
 pub(crate) fn lathe_type() -> NodeType {
     caps(
         NodeType::new(LATHE, "Lathe", Category::Generator)
+            .menu_path("Generator", 0)
             .param(ParamDesc::float("angle", "Angle", std::f64::consts::TAU).unit(Unit::Angle))
             .param(ParamDesc::int("subdivision", "Subdivision", 32).range(1, 4000))
             .param(ParamDesc::float("movement", "Movement", 0.0).unit(Unit::Distance))
@@ -173,6 +175,7 @@ pub(crate) fn lathe_type() -> NodeType {
 pub(crate) fn loft_type() -> NodeType {
     caps(
         NodeType::new(LOFT, "Loft", Category::Generator)
+            .menu_path("Generator", 0)
             .param(ParamDesc::int("mesh_subdivision_u", "Mesh subdivision U", 16).range(2, 4000))
             .param(ParamDesc::int("mesh_subdivision_v", "Mesh subdivision V", 4).range(2, 4000))
             .param(ParamDesc::bool("organic_form", "Organic form", false))
@@ -196,6 +199,7 @@ pub(crate) fn loft_type() -> NodeType {
 pub(crate) fn sweep_type() -> NodeType {
     caps(
         NodeType::new(SWEEP, "Sweep", Category::Generator)
+            .menu_path("Generator", 0)
             .param(
                 ParamDesc::float("end_scale", "End scale", 100.0)
                     .range(0.0, f64::MAX)

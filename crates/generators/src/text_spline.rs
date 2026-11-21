@@ -22,6 +22,7 @@ fn distance(id: &str, label: &str, default: f64) -> ParamDesc {
 pub(crate) fn node_type() -> NodeType {
     common(
         NodeType::new(TYPE, "Text", Category::Generator)
+            .menu_path("Spline", 0)
             .param(ParamDesc::string("text", "Text", "Text"))
             .param(ParamDesc::string("font", "Font", forge_text::DEFAULT_FONT))
             .param(ParamDesc::enumeration(

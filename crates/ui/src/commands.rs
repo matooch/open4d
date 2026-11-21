@@ -5,7 +5,7 @@ use forge_command::{
     CameraSet, CommandContext, GizmoModeArg, GizmoSpaceArg, LayoutArg, LightingArg, ModeArg,
     NodeSelection, PaneArg, SelectExtra, SelectOp, ShadingMode, Timeline, UiRequest, ViewArg,
 };
-use forge_core::{Category, Document, NodeId, Registry};
+use forge_core::{Category, Document, NodeId, NodeType, Registry};
 use forge_viewport::gizmo::{GizmoMode, Space as GizmoSpace};
 use forge_viewport::render::Shading;
 use serde_json::Value;
@@ -313,27 +313,70 @@ impl CommandContext for EditorState {
     }
 }
 
-/// Placeable categories in `Category` order (the scene objects have their own submenu,
-/// [`scene_menu`]), each with `(type id, label)` sorted by label.
-pub fn create_menu(registry: &Registry) -> Vec<(Category, Vec<(String, String)>)> {
-    let mut out: Vec<(Category, Vec<(String, String)>)> = Vec::new();
+/// Create-menu groups, each with `(type id, label)` sorted by `menu_order` then label.
+/// Groups are returned in the reference order: Object, Spline, Generator, Deformer, Field,
+/// Volume, Camera, Light, Tag. The Clone toolset is added by the UI separately.
+pub fn create_menu(registry: &Registry) -> Vec<(String, Vec<(String, String)>)> {
+    use std::collections::BTreeMap;
+
+    let group_of = |t: &NodeType| -> String {
+        t.menu_path.clone().unwrap_or_else(|| match t.category {
+            Category::Deformer => "Deformer".into(),
+            Category::Effector | Category::Field => "Field".into(),
+            Category::Tag => "Tag".into(),
+            Category::Object => "Object".into(),
+            _ => "Generator".into(),
+        })
+    };
+
+    let group_rank = |g: &str| -> i32 {
+        match g {
+            "Object" => 0,
+            "Spline" => 1,
+            "Generator" => 2,
+            "Deformer" => 3,
+            "Field" => 4,
+            "Volume" => 6,
+            "Camera" => 7,
+            "Light" => 8,
+            "Tag" => 9,
+            _ => 100,
+        }
+    };
+
+    let mut groups: BTreeMap<String, Vec<(i32, String, String)>> = BTreeMap::new();
     for t in registry.types() {
         if !(t.category.is_hierarchy() || t.category == Category::Tag)
             || !t.in_create_menu
-            || SCENE_TYPES.contains(&t.id.as_str())
+            || ENV_TYPES.contains(&t.id.as_str())
         {
             continue;
         }
-        let item = (t.id.clone(), t.label.clone());
-        match out.iter_mut().find(|(c, _)| *c == t.category) {
-            Some((_, items)) => items.push(item),
-            None => out.push((t.category, vec![item])),
-        }
+        let group = group_of(t);
+        groups
+            .entry(group)
+            .or_default()
+            .push((t.menu_order, t.id.clone(), t.label.clone()));
     }
-    out.sort_by_key(|(c, _)| *c);
-    for (_, items) in &mut out {
-        items.sort_by(|a, b| a.1.cmp(&b.1));
-    }
+
+    let mut out: Vec<(String, Vec<(String, String)>)> = groups
+        .into_iter()
+        .map(|(name, mut items)| {
+            items.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.2.cmp(&b.2)));
+            (
+                name,
+                items
+                    .into_iter()
+                    .map(|(_, id, label)| (id, label))
+                    .collect(),
+            )
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        group_rank(&a.0)
+            .cmp(&group_rank(&b.0))
+            .then_with(|| a.0.cmp(&b.0))
+    });
     out
 }
 
@@ -375,6 +418,10 @@ pub fn clone_toolset_menu(registry: &Registry) -> Vec<ToolsetEntry> {
 
 /// The types the Create > Scene submenu lists instead of their category's submenu
 /// (docs/specs/SCENE-OBJECTS.md S1).
+pub const ENV_TYPES: [&str; 3] = ["forge.environment", "forge.floor", "forge.sky"];
+
+/// The types the Create > Scene submenu lists instead of their category's submenu
+/// (docs/specs/SCENE-OBJECTS.md S1).
 pub const SCENE_TYPES: [&str; 5] = [
     "forge.camera",
     "forge.light",
@@ -383,10 +430,10 @@ pub const SCENE_TYPES: [&str; 5] = [
     "forge.sky",
 ];
 
-/// The Create > Scene submenu: Camera, Light, Environment, Floor and Sky, for the ones the
-/// registry has.
+/// The Create > Scene submenu: Environment, Floor and Sky, for the ones the
+/// registry has. Camera and Light have their own Create-menu groups.
 pub fn scene_menu(registry: &Registry) -> Vec<ToolsetEntry> {
-    SCENE_TYPES
+    ENV_TYPES
         .iter()
         .filter_map(|id| registry.get(id))
         .map(|t| ToolsetEntry {
@@ -427,16 +474,6 @@ pub fn character_menu(registry: &Registry) -> Vec<ToolsetEntry> {
     out
 }
 
-pub fn category_label(c: Category) -> &'static str {
-    match c {
-        Category::Object => "Object",
-        Category::Generator => "Generator",
-        Category::Deformer => "Deformer",
-        Category::Effector => "Effector",
-        Category::Field => "Field",
-        Category::Tag => "Tag",
-        Category::Material => "Material",
-        Category::Shader => "Shader",
-        Category::RenderEngine => "Render engine",
-    }
+pub fn group_label(name: &str) -> &str {
+    name
 }

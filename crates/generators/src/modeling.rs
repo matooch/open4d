@@ -21,6 +21,7 @@ fn distance(id: &str, label: &str, default: f64) -> ParamDesc {
 
 pub(crate) fn symmetry_type() -> NodeType {
     NodeType::new(SYMMETRY, "Symmetry", Category::Generator)
+        .menu_path("Generator", 0)
         .param(ParamDesc::enumeration(
             "mirror_plane",
             "Mirror plane",
@@ -46,6 +47,7 @@ pub(crate) fn symmetry_type() -> NodeType {
 
 pub(crate) fn array_type() -> NodeType {
     NodeType::new(ARRAY, "Array", Category::Generator)
+        .menu_path("Generator", 0)
         .param(distance("radius", "Radius", 250.0))
         .param(ParamDesc::int("copies", "Copies", 7).range(1, 1000))
         .param(ParamDesc::float("amplitude", "Amplitude", 0.0).unit(Unit::Distance))
@@ -56,6 +58,7 @@ pub(crate) fn array_type() -> NodeType {
 
 pub(crate) fn connect_type() -> NodeType {
     NodeType::new(CONNECT, "Connect", Category::Generator)
+        .menu_path("Generator", 0)
         .param(ParamDesc::bool("weld", "Weld", true))
         .param(distance("tolerance", "Tolerance", 0.1))
         .param(ParamDesc::enumeration(
@@ -76,6 +79,7 @@ pub(crate) fn connect_type() -> NodeType {
 
 pub(crate) fn instance_type() -> NodeType {
     NodeType::new(INSTANCE, "Instance", Category::Generator)
+        .menu_path("Generator", 0)
         .param(ParamDesc::link("reference", "Reference object", &[]))
         .param(ParamDesc::enumeration(
             "instance_mode",
