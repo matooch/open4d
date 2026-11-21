@@ -216,9 +216,9 @@ fn soft_sphere_centre_and_lowest_point_per_frame() {
     // unmodelled contact wobble); ours stays within 0.5 cm of the axis.
     let drift = |t: &[f64]| t.iter().fold(0.0f64, |a, v| a.max(v.abs()));
     assert!(drift(&cx) > 1.0 && drift(&cz) > 1.0 && drift(&cx) < 3.5 && drift(&cz) < 3.5);
-    for n in 0..=60 {
+    for (n, p) in f.iter().enumerate() {
         assert!(
-            mean(&f[n], 0).abs() < 0.5 && mean(&f[n], 2).abs() < 0.5,
+            mean(p, 0).abs() < 0.5 && mean(p, 2).abs() < 0.5,
             "frame {n}"
         );
     }
