@@ -322,7 +322,7 @@ pub fn create_menu(registry: &Registry) -> Vec<(String, Vec<(String, String)>)> 
     let group_of = |t: &NodeType| -> String {
         t.menu_path.clone().unwrap_or_else(|| match t.category {
             Category::Deformer => "Deformer".into(),
-            Category::Effector | Category::Field => "Field".into(),
+            Category::Field => "Field".into(),
             Category::Tag => "Tag".into(),
             Category::Object => "Object".into(),
             _ => "Generator".into(),
@@ -348,6 +348,7 @@ pub fn create_menu(registry: &Registry) -> Vec<(String, Vec<(String, String)>)> 
     for t in registry.types() {
         if !(t.category.is_hierarchy() || t.category == Category::Tag)
             || !t.in_create_menu
+            || t.category == Category::Effector
             || ENV_TYPES.contains(&t.id.as_str())
         {
             continue;
@@ -420,8 +421,8 @@ pub fn clone_toolset_menu(registry: &Registry) -> Vec<ToolsetEntry> {
 /// (docs/specs/SCENE-OBJECTS.md S1).
 pub const ENV_TYPES: [&str; 3] = ["forge.environment", "forge.floor", "forge.sky"];
 
-/// The types the Create > Scene submenu lists instead of their category's submenu
-/// (docs/specs/SCENE-OBJECTS.md S1).
+/// All scene-object type ids (docs/specs/SCENE-OBJECTS.md S1). Camera and Light have
+/// their own Create-menu groups; the rest are in the Scene submenu via [`ENV_TYPES`].
 pub const SCENE_TYPES: [&str; 5] = [
     "forge.camera",
     "forge.light",
@@ -472,8 +473,4 @@ pub fn character_menu(registry: &Registry) -> Vec<ToolsetEntry> {
         });
     }
     out
-}
-
-pub fn group_label(name: &str) -> &str {
-    name
 }

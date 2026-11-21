@@ -29,6 +29,8 @@ The Create menu groups and orders object types like the reference: Object, Splin
 
 Status: done
 
+Gate: all passed, 2413 tests (sh scripts/gate.sh).
+
 Added `menu_path: Option<String>` and `menu_order: i32` to `NodeType` with a
 `menu_path(path, order)` builder. Updated primitive, spline primitive, generator,
 volume and scene-object registrations to set their menu paths. `create_menu` now

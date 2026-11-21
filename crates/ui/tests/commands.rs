@@ -179,3 +179,26 @@ fn create_menu_is_grouped_like_the_reference() {
         assert_eq!(labels, sorted, "{group} not sorted by label");
     }
 }
+
+#[test]
+fn create_menu_does_not_list_effectors() {
+    let registry = Arc::new(forge_app::default_registry().unwrap());
+    let menu = create_menu(registry.as_ref());
+    let effector_ids: Vec<_> = registry
+        .types()
+        .filter(|t| t.category == forge_core::Category::Effector && t.in_create_menu)
+        .map(|t| t.id.clone())
+        .collect();
+    assert!(
+        !effector_ids.is_empty(),
+        "registry should have effectors to check"
+    );
+    for (group, items) in &menu {
+        for id in &effector_ids {
+            assert!(
+                !items.iter().any(|(tid, _)| tid == id),
+                "effector {id} should not appear in create_menu group {group}"
+            );
+        }
+    }
+}
