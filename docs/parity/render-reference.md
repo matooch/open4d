@@ -36,8 +36,8 @@ is 320 x 240 at 72 dpi, and every render took 0.04–0.06 s.
 | cube-plane | default cube at y 100 on a default plane | none | 7553 bytes, 290 colours; cube peak 163/255 |
 | omni | the same | one Omni light at (300, 400, −300), defaults | 10 367 bytes, 592 colours; cube peak 138/255 — dimmer than the default light |
 | omni-shadow | the same | the same, Shadow Raytraced (Hard) | 10 401 bytes, 600 colours; the extra colours against `omni` are the hard shadow edge on the plane and the cube |
-| spot | the same | one Spot light at (0, 500, 0) pointing down (rotation P −90°) | not observed: every render with this light is a single black colour (76 800 pixels, 720 bytes), at the form's rotation and at P +90 and P 0 alike, and with the intensity raised to 5. The scripted path lights nothing with a Spot light, although Omni and Area lights do light the same scene |
-| infinite | the same | one Infinite light, rotation P −45°, H 30° | not observed: the same fully black image (720 bytes, one colour), at the form's rotation and with the sign flipped |
+| spot | the same | one Spot light at (0, 500, 0) pointing down (rotation P −90°) | not observed: render black with the light pointing (0, -1, 0). The light reads back as a Spot at (0, 500, 0), rotation H 0 / P -90 / B 0, intensity 100 %, and its +Z axis in world space is (0.000, -1.000, 0.000), i.e. straight down at the cube. A 320 x 240 render of the default scene with it returns success and every sampled pixel is (0, 0, 0), one colour. No image committed. |
+| infinite | the same | one Infinite light, rotation P −45°, H 30° | not observed: the light type cannot be set to Infinite from a script in this build. Writing the description's Type row to the Infinite slot reads back through the parameter table as "Square Spot" every time (three attempts, by label and by index), so no infinite light could be placed and no direction was measured. No image committed. |
 | area-soft | the same | one Area light at (300, 400, −300), shadow Area | 7150 bytes, 184 colours; the brightest surface reads 230/255, so the Area light is much stronger than the Omni at the same place |
 | material-red | default sphere | none. A Standard material with Color (1, 0, 0) and the reflectance at its default | 7798 bytes, 4167 colours; the sphere's brightest pixel is (213, 0, 0) and the falloff to the terminator is smooth. The material's reflectance was switched off, see Notes |
 | material-matte | default sphere | none. A Standard material with Color (0.8, 0.8, 0.8) and the reflectance layer removed or set to 0 | 7396 bytes, 895 colours — byte-identical to `sphere-default-light`, so the new material's default colour is (0.8, 0.8, 0.8) and this case documents the default rather than a change |
@@ -87,3 +87,13 @@ Every case: also store the camera's rotation as read back, in H, P, B order, und
 - `material-matte` cannot be distinguished from `sphere-default-light`: the default
   material's colour is (0.8, 0.8, 0.8) and its reflectance contributes nothing visible under
   the default light.
+
+### Light read-back, 2026-11-20
+
+The spot light was rebuilt exactly as this section asks and read back before rendering: type Spot, position
+(0, 500, 0), rotation H 0 / P -90 / B 0, intensity 100 %, +Z axis in world space (0.000, -1.000, 0.000). The
+render is still a single black colour, so the case stays not observed with that direction recorded.
+
+The infinite light could not be placed at all: the light object's Type row accepts the write and reads back
+as "Square Spot" whatever slot is written, by label or by index, so this build offers no scripted route to
+an Infinite light. That is the reason the case is unobserved, not the render.
