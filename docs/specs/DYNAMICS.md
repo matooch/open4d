@@ -260,3 +260,87 @@ O41 connector cases (`tests/golden/soft-bodies/`, test `crates/dynamics/tests/jo
 
 Rotation tracks are compared modulo 360° (the reference reads B 360 at the impact frame, a
 decomposition flip).
+
+## 8. Soft bodies (brief 118)
+
+Sources: O41 `soft-sphere-drop`, `-stiff`, `-pressure` (docs/parity/soft-bodies.md, its soft body
+settings table) at level C. The observation has no per-frame samples for these cases: only the
+exported meshes at frames 15, 30 and 60 (`mesh.obj`, `mesh-f30.obj`, `mesh-f60.obj`; the plane's 121
+points come last) and the sphere origin at frame 60 (`y_end` 34.085, stiff 35.16).
+
+### 8.1 Which objects, which parameters
+
+An object whose enabled rigid body tag is `dynamic = on` and has `soft_body = polygons` ("Made of
+Polygons/Lines") is a soft body: it is **not** a rapier body, its mesh points are the particles
+(`build::soft_of_scene`, world space, document order). Tag parameters used (observed defaults in
+brackets; fractions, 1.0 is 100 %): `keep_shape` (on), `structural` (1.0), `structural_damping`
+(0.2), `shear` (0.5), `shear_damping` (0.2), `flexion` (0.5), `flexion_damping` (0.2), `friction`
+(0.9), `bounce` (0.05), `linear_damping` (0.05). Not simulated: Pressure (§8.5), the elastic limits,
+rest length, volume, stiffness and the other soft body block fields of the reference, Made of Clones.
+
+### 8.2 Solver (`soft.rs`)
+
+Position based dynamics, own code. Unit-mass particles; each solver step (the settings' step
+length, §2): gravity and linear damping on the velocity, a predicted position, `ITERATIONS` = 8
+rounds of distance constraints and collisions, then the velocity from the position change.
+Constraints, all built from the polygons:
+
+* **structural**: every polygon edge;
+* **shear**: both diagonals of every quad with four distinct corners;
+* **flexion**: for every pair of polygons sharing an edge, the two far corners (the vertex two
+  places along the polygon from the edge's start), kept at their start distance.
+
+A constraint of stiffness `s` removes the share `s / (1 + s)` of its error per iteration (0 gives 0,
+1 gives one half, 10 gives 0.91): own design, so that Structural 1000 % (observed) is visibly
+stiffer than 100 % without being a different solver. **Keep Soft Body Shape** pulls every particle
+`KEEP_SHAPE = 0.15` of the way to its shape-matching goal per step (rest shape, rotation from the
+iterated polar extraction of Müller et al. 2016). Damping: the velocity along each constraint and
+relative to the body's mean velocity decays at `damping · 150 s⁻¹` (`DAMPING_RATE`). The constants
+`KEEP_SHAPE`, `DAMPING_RATE` and the stiffness law are **fitted by hand** so that the observed
+sphere lands without bouncing and keeps its shape within 10 %; they are not read from the reference
+(**parity-pending**). Free fall uses semi-implicit Euler: over `n` steps it falls `(1 + 1/n)` times
+the exact distance (2 cm of the 125.6 cm in the first 15 frames).
+
+### 8.3 Collisions and the pinned mismatch
+
+Soft particles collide with every rapier collider (static and dynamic rigid bodies, in their
+current pose) one way: a ray from the old to the predicted position finds a surface it crossed (a
+zero-thickness plane cannot be tunnelled), a point query finds a solid it sank into; the particle
+is put `MARGIN` = 0.5 cm outside. Contact: the normal velocity becomes the restitution
+(`bounce`), the tangential velocity is multiplied by `1 − friction`. Soft bodies do not push rigid
+bodies.
+
+**Known mismatch (pinned)**: the reference's soft sphere sinks through the plane: the lowest point
+is at y −15.4 (frame 30) and −21.2 cm (frame 60) for the default, −15.0 / −15.9 cm for Structural
+1000 %, and the whole body keeps falling slowly (centre 35.1 → 33.7 cm). Ours rests on the plane, 0.5
+cm above it, with a 7 % sag. We do not reproduce a body that passes through a collider.
+
+### 8.4 Write-back
+
+`DynamicsCache::soft_at(frame)` gives the particles per frame (world space, cm; stepped from the
+start frame like everything else: jumping straight to a frame gives the same shape as stepping
+there, unlike the reference, which leaves a soft body rigid when a frame is jumped to). The app
+(`Evaluated::get`) writes them, in the object's own space, into the hidden `soft_points` list of
+the object's tag; `forge_generators::evaluate` replaces the object's points with that list when it
+has one entry per point (after the deformers). The object's transform does not move.
+
+### 8.5 Pressure: stored, not simulated
+
+Observed: with Pressure 100 the frames are identical to the default's to the last digit (the value
+"is stored but changes nothing visible"). Ours stores `pressure` and does not simulate it, so that
+case matches; the area design's pressure constraint is not implemented because the observation
+shows no effect. Note for the observer: the pressure case's `case.toml` table reads Pressure 0 (its
+body table equals the default case's), so the 100 may never have taken effect; the identical frames
+would then say nothing about pressure.
+
+### 8.6 Parity (O41 soft cases, `crates/dynamics/tests/soft_parity.rs`)
+
+| case | asserted | tolerance | pinned |
+|---|---|---|---|
+| `soft-sphere-drop` | frame 15: centre height 74.44 and the undeformed 100 cm extents; frames 15, 30, 60: every extent of ours and of the reference within 10 % of 100 cm (reference 99.3 to 104.4 cm); the fall is strictly downward | 5 cm (semi-implicit Euler over-falls 2 cm); 0.5 cm; 10 % | the resting height: the reference sinks to y −21.2 cm, ours rests at +0.5 cm (`KNOWN_MISMATCH`) |
+| `soft-sphere-stiff` | stiffer deforms less: in the reference at frames 30 and 60 (0.37 vs 0.65 cm and 0.69 vs 4.37 cm off 100 cm), in ours over the landing (peak squash 18 vs 22 cm of height); extents within 10 % at frame 60 | as above | the sinking: −15.9 cm (reference) vs +0.5 cm |
+| `soft-sphere-pressure` | frames identical to the default with Pressure 100 (ours: not simulated), and the reference's three meshes are identical to the default case's | exact | none (see §8.5 for the doubt about the data) |
+
+Bounce ("level C: rest shape, bounce") cannot be compared: the reference shows no rebound at the
+three recorded frames and its contact is not a contact; ours lands without a bounce at the 5 % tag
+value (frame 30 on the plane).

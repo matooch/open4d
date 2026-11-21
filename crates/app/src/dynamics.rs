@@ -45,5 +45,6 @@ impl DynamicsState {
         };
         let poses = cache.moving_at(frame);
         working.apply_params(apply::overrides(working, &poses));
+        working.apply_params(apply::soft_overrides(working, &cache.soft_at(frame)));
     }
 }

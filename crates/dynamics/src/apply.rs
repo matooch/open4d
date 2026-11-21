@@ -80,3 +80,27 @@ fn clone_overrides(
         (cloner, "dynamics_rot".to_string(), Value::Vec3List(rot)),
     ]
 }
+
+/// The `soft_points` overrides of soft bodies: their simulated particles (world space, cm) in
+/// the object's own space, on the object's rigid body tag. Apply with `Scene::apply_params`.
+pub fn soft_overrides(
+    scene: &Scene,
+    soft: &BTreeMap<BodyKey, Vec<DVec3>>,
+) -> Vec<(NodeId, String, Value)> {
+    let mut out = Vec::new();
+    for (key, points) in soft {
+        let BodyKey::Node(id) = key else { continue };
+        let (Some(tag), Some(world)) =
+            (crate::build::body_tag(scene, *id), scene.world_matrix(*id))
+        else {
+            continue;
+        };
+        let inverse = world.inverse();
+        let local = points
+            .iter()
+            .map(|p| inverse.transform_point3(*p).to_array())
+            .collect();
+        out.push((tag, "soft_points".to_string(), Value::Vec3List(local)));
+    }
+    out
+}

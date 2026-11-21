@@ -8,6 +8,7 @@ pub mod joints;
 pub mod nodes;
 pub mod settings;
 pub mod sim;
+pub mod soft;
 
 pub use cache::DynamicsCache;
 pub use nodes::{

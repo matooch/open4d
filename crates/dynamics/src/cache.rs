@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use forge_core::Scene;
-use glam::DMat4;
+use glam::{DMat4, DVec3};
 
 use crate::build::bodies_of_scene;
 use crate::settings::DynamicsSettings;
@@ -21,6 +21,8 @@ pub struct DynamicsCache {
     keys: Vec<BodyKey>,
     moving: Vec<bool>,
     frames: Vec<Vec<DMat4>>,
+    soft_keys: Vec<BodyKey>,
+    soft_frames: Vec<Vec<Vec<DVec3>>>,
     enabled: bool,
 }
 
@@ -33,11 +35,13 @@ impl DynamicsCache {
         let settings = DynamicsSettings::of_scene(scene);
         let mut specs = bodies_of_scene(scene, mesh_of);
         specs.extend(crate::clones::clone_bodies(scene));
+        let softs = crate::build::soft_of_scene(scene, mesh_of);
         Self::from_specs(
             scene,
             &settings,
             &specs,
             &crate::joints::links_of_scene(scene),
+            &softs,
         )
     }
 
@@ -46,8 +50,9 @@ impl DynamicsCache {
         settings: &DynamicsSettings,
         specs: &[crate::sim::BodySpec],
         links: &crate::joints::Links,
+        softs: &[crate::soft::SoftSpec],
     ) -> Result<DynamicsCache, DynamicsError> {
-        let sim = Simulation::with_links(settings, scene.settings().fps, specs, links)?;
+        let sim = Simulation::with_soft(settings, scene.settings().fps, specs, links, softs)?;
         let keys = sim.keys();
         let moving = sim
             .kinds()
@@ -55,12 +60,16 @@ impl DynamicsCache {
             .map(|k| *k == BodyKind::Dynamic)
             .collect();
         let first = sim.poses();
+        let sim_soft_keys = sim.soft_keys();
+        let sim_soft = sim.soft_points();
         Ok(DynamicsCache {
             sim,
             start: scene.settings().start,
             keys,
             moving,
             frames: vec![first],
+            soft_keys: sim_soft_keys,
+            soft_frames: vec![sim_soft],
             enabled: settings.enabled,
         })
     }
@@ -84,11 +93,23 @@ impl DynamicsCache {
                 self.sim.step_frame();
             }
             self.frames.push(self.sim.poses());
+            self.soft_frames.push(self.sim.soft_points());
         }
         self.keys
             .iter()
             .copied()
             .zip(self.frames[index].iter().copied())
+            .collect()
+    }
+
+    /// The particles (world space, cm) of every soft body at `frame`, simulating up to it first.
+    pub fn soft_at(&mut self, frame: i64) -> BTreeMap<BodyKey, Vec<DVec3>> {
+        let _ = self.at(frame);
+        let index = (frame - self.start).max(0) as usize;
+        self.soft_keys
+            .iter()
+            .copied()
+            .zip(self.soft_frames[index].iter().cloned())
             .collect()
     }
 

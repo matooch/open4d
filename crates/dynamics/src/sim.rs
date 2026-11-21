@@ -11,6 +11,7 @@ use rapier3d_f64::prelude::*;
 
 use crate::joints::{JointKind, JointSpec, Links, OMEGA2_PER_STIFFNESS};
 use crate::settings::DynamicsSettings;
+use crate::soft::{SoftBody, SoftSpec};
 
 /// Scene units (cm) to rapier units (m).
 pub const CM_TO_M: f64 = 0.01;
@@ -108,6 +109,7 @@ pub struct Simulation {
     pub(crate) world: PhysicsWorld,
     pub(crate) bodies: Vec<Live>,
     springs: Vec<LiveSpring>,
+    softs: Vec<SoftBody>,
     dt: f64,
     steps: u32,
     gravity_cm: f64,
@@ -216,6 +218,17 @@ impl Simulation {
         specs: &[BodySpec],
         links: &Links,
     ) -> Result<Simulation, DynamicsError> {
+        Self::with_soft(settings, fps, specs, links, &[])
+    }
+
+    /// [`Simulation::with_links`] plus soft bodies (docs/specs/DYNAMICS.md §8).
+    pub fn with_soft(
+        settings: &DynamicsSettings,
+        fps: u32,
+        specs: &[BodySpec],
+        links: &Links,
+        softs: &[SoftSpec],
+    ) -> Result<Simulation, DynamicsError> {
         let mut world = PhysicsWorld::default();
         let dt = settings.step_dt(fps);
         world.gravity = Vector::new(0.0, -settings.gravity * CM_TO_M, 0.0);
@@ -259,6 +272,7 @@ impl Simulation {
             world,
             bodies,
             springs: Vec::new(),
+            softs: softs.iter().map(SoftBody::new).collect(),
             dt,
             steps: settings.steps_per_frame,
             gravity_cm: settings.gravity,
@@ -404,6 +418,16 @@ impl Simulation {
         self.bodies.iter().map(|b| b.key).collect()
     }
 
+    /// The soft bodies' keys, in insertion order.
+    pub fn soft_keys(&self) -> Vec<BodyKey> {
+        self.softs.iter().map(|s| s.key).collect()
+    }
+
+    /// The particles (world space, cm) of every soft body, in insertion order.
+    pub fn soft_points(&self) -> Vec<Vec<DVec3>> {
+        self.softs.iter().map(|s| s.points().to_vec()).collect()
+    }
+
     /// The kind of every body, in insertion order.
     pub fn kinds(&self) -> Vec<BodyKind> {
         self.bodies.iter().map(|b| b.kind).collect()
@@ -474,6 +498,9 @@ impl Simulation {
             }
             self.apply_springs();
             self.world.step();
+            for soft in &mut self.softs {
+                soft.step(self.dt, self.gravity_cm, &self.world);
+            }
         }
     }
 }

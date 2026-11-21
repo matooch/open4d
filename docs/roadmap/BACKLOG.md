@@ -115,7 +115,7 @@ implementers can avoid collisions.
 | 115 | [rapier integration: rigid body tag, shapes, scene settings, per-frame cache, scrubbing; compare_trajectory](../agents/tasks/115-rigid-bodies.md) | I | 050, 010 | done (parity-pending: scene gravity/steps are a fit; bounce and friction combine rules) | dynamics (new), parity-harness |
 | 116 | [Dynamics on clones](../agents/tasks/116-dynamics-on-clones.md) | I | 115, 065 | done (parity-pending: clone drift and edge balance are engine-specific) | dynamics, clone-engine |
 | 117 | [Connectors and springs](../agents/tasks/117-connectors-springs.md) | I | 115 | done (parity-pending: connector axis choice, spring stiffness scale) | dynamics |
-| 118 | [Soft bodies (PBD)](../agents/tasks/118-soft-bodies.md) | I | 115 | waiting: O41 | dynamics |
+| 118 | [Soft bodies (PBD)](../agents/tasks/118-soft-bodies.md) | I | 115 | done (resting height pinned: the reference sinks through the plane; constants parity-pending) | dynamics |
 | 119 | [Particle emitter and particle data](../agents/tasks/119-particle-emitter.md) | I | 050 | waiting: O40 | dynamics |
 | 120 | [Forces: gravity, wind, attractor, deflector, friction, turbulence, rotation](../agents/tasks/120-forces.md) | I | 119, 115, 063 | waiting: O40 | dynamics |
 | 121 | [Particles in the clone toolset and volumes](../agents/tasks/121-particles-in-clones-volumes.md) | I | 119, 076, 081 | ready | dynamics, clone-engine, volume |
@@ -130,7 +130,7 @@ implementers can avoid collisions.
 | 130 | [Image IO, texture cache, colour management](../agents/tasks/130-image-io-colour.md) | J | – | done | image (new) |
 | 131 | [Material manager UI with preview renders](../agents/tasks/131-material-manager.md) | J | 123, 136 | ready | ui |
 | 132 | [Viewport material display (PBR preview, textures)](../agents/tasks/132-viewport-materials.md) | J | 123, 143 | ready | viewport |
-| 133 | [Environment: sky, HDRI, background, floor](../agents/tasks/133-environment.md) | J | 130, 137 | ready | render-api, generators |
+| 133 | [Environment: sky, HDRI, background, floor](../agents/tasks/133-environment.md) | J | 130, 137 | done (HDRI loading, importance sampling: 32.8 dB at 64 spp vs 4096; sky, background and floor objects; no O29 observation of these objects, own design) | render-api, generators |
 | 134 | [Material exchange mapping (glTF PBR to node material)](../agents/tasks/134-material-exchange-mapping.md) | J | 124, 164 | ready | io, material |
 | 135 | [Render API: snapshot, settings, outputs, AOV model, progress; harness compare_image](../agents/tasks/135-render-api.md) | K | 123 | done | render-api, parity-harness |
 | 136 | [CPU path tracer core (BVH, instancing, BSDFs from the IR, MIS)](../agents/tasks/136-cpu-path-tracer.md) | K | 135 | done | render-cpu |

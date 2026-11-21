@@ -137,6 +137,9 @@ pub fn rigid_body_type() -> NodeType {
                 .range(0.0, BIG)
                 .group(SOFT),
         )
+        // Written by the dynamics evaluation (DYNAMICS.md §8.4): the soft body's points in the
+        // object's own space; empty when there is no simulation.
+        .param(ParamDesc::vec3_list("soft_points", "Simulated Points"))
 }
 
 /// The scene-level settings object. Without one in the scene the defaults apply.

@@ -141,3 +141,35 @@ fn connectors_and_springs_act_in_the_evaluation() {
     assert!((r - 301.0).abs() < 1.5, "{r}");
     assert!(p.y < 299.0, "swung down: {}", p.y);
 }
+
+#[test]
+fn a_soft_body_mesh_follows_the_simulation() {
+    let mut app = App::new_default();
+    let sphere = app
+        .doc
+        .transact("soft", |tx| {
+            let plane = tx.create("forge.plane", None, None)?;
+            let t = tx.attach_tag("forge.rigid_body", plane, None)?;
+            tx.set_param(t, "dynamic", Value::Enum("off".into()))?;
+            let s = tx.create("forge.sphere", None, None)?;
+            tx.set_param(s, "radius", Value::Float(50.0))?;
+            tx.set_param(s, "transform.pos", Value::Vec3([0.0, 200.0, 0.0]))?;
+            let t = tx.attach_tag("forge.rigid_body", s, None)?;
+            tx.set_param(t, "soft_body", Value::Enum("polygons".into()))?;
+            Ok(s)
+        })
+        .unwrap();
+    let lowest = |frame: i64| {
+        let scene = app.eval.get(app.doc.scene(), frame);
+        let mesh = forge_generators::evaluate(&scene, sphere, &Default::default())
+            .unwrap()
+            .unwrap();
+        // The mesh is in the object's own space; the object stays at y 200.
+        mesh.points
+            .iter()
+            .map(|p| p.y + 200.0)
+            .fold(f64::MAX, f64::min)
+    };
+    assert!((lowest(0) - 150.0).abs() < 1e-9);
+    assert!((lowest(60) - 0.5).abs() < 0.3, "{}", lowest(60));
+}

@@ -7,6 +7,13 @@ use glam::DVec3;
 use crate::nodes::{self, RIGID_BODY};
 use crate::sim::{BodyKey, BodyKind, BodySpec, MassSpec, ShapeKind};
 
+/// True when the tag makes its object a soft body (Soft Body: Made of Polygons/Lines on a
+/// dynamic body).
+pub fn is_soft(scene: &Scene, tag: NodeId) -> bool {
+    nodes::choice(scene, tag, "soft_body") == "polygons"
+        && kind_of(scene, tag) == Some(BodyKind::Dynamic)
+}
+
 /// The first enabled rigid body tag of `host`.
 pub fn body_tag(scene: &Scene, host: NodeId) -> Option<NodeId> {
     scene
@@ -111,6 +118,9 @@ pub fn bodies_of_scene(
         let Some(kind) = kind_of(scene, tag) else {
             continue;
         };
+        if is_soft(scene, tag) {
+            continue; // simulated by the soft body solver (soft_of_scene)
+        }
         let Some(mesh) = mesh_of(id) else { continue };
         let Some(world) = scene.world_matrix(id) else {
             continue;
@@ -123,6 +133,49 @@ pub fn bodies_of_scene(
             spec.shape = ShapeKind::Sphere;
         }
         out.push(spec);
+    }
+    out
+}
+
+/// The soft bodies of the scene in document order: every object whose tag is a dynamic soft
+/// body, with its evaluated mesh placed in world space.
+pub fn soft_of_scene(
+    scene: &Scene,
+    mesh_of: &dyn Fn(NodeId) -> Option<PolyMesh>,
+) -> Vec<crate::soft::SoftSpec> {
+    let mut out = Vec::new();
+    for id in objects_in_order(scene) {
+        let Some(tag) = body_tag(scene, id) else {
+            continue;
+        };
+        if !is_soft(scene, tag) || crate::clones::is_cloner(scene, id) {
+            continue;
+        }
+        let (Some(mesh), Some(world)) = (mesh_of(id), scene.world_matrix(id)) else {
+            continue;
+        };
+        let f = |k: &str| nodes::float(scene, tag, k);
+        out.push(crate::soft::SoftSpec {
+            key: BodyKey::Node(id),
+            points: mesh
+                .points
+                .iter()
+                .map(|p| world.transform_point3(*p))
+                .collect(),
+            polys: mesh.polys,
+            params: crate::soft::SoftParams {
+                structural: f("structural"),
+                structural_damping: f("structural_damping"),
+                shear: f("shear"),
+                shear_damping: f("shear_damping"),
+                flexion: f("flexion"),
+                flexion_damping: f("flexion_damping"),
+                keep_shape: nodes::boolean(scene, tag, "keep_shape"),
+                friction: f("friction"),
+                bounce: f("bounce"),
+                linear_damping: f("linear_damping"),
+            },
+        });
     }
     out
 }
