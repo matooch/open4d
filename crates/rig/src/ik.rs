@@ -47,7 +47,9 @@ pub fn hinge(c: DVec3, root: DVec3, root_z: DVec3, pole: Option<DVec3>, twist: f
         }
     }
     let h = h.unwrap_or_else(|| {
-        let z = root_z - c * root_z.dot(c);
+        // Opposite to the root's Z axis: the O35 rig's joints rest aligned with the world axes
+        // (`rest-orientation`) and the recorded solved frames have z = -Z (RIG.md §10).
+        let z = -(root_z - c * root_z.dot(c));
         if z.length() > 1e-9 {
             z.normalize()
         } else {

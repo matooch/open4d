@@ -14,23 +14,12 @@ use forge_rig::{Rig, tools};
 use glam::DVec3;
 
 /// Cases not derived (RIG.md §8).
-const UNSUPPORTED: &[&str] = &["rigging/j2-bend-dq"];
+const UNSUPPORTED: &[&str] = &["rigging/j2-bend-dq", "rigging/j2-bend-90-blended"];
 
-/// Frames of the skinned-arm case whose recorded bounding box carries the app's own noise.
-const KNOWN_MISMATCH_FRAMES: &[i32] = &[15, 30];
-
-/// Cases we build but that differ, pinned so a fix shows up (RIG.md §8).
-const KNOWN_MISMATCH: &[&str] = &[
-    "rigging/j2-bend-45",
-    "rigging/j2-bend-90",
-    "rigging/j1-twist-90",
-    "rigging/j2-scale",
-];
-
-/// The reference's own numeric noise in the posed cases (RIG.md §8): a pinned case must stay
-/// inside this envelope, so a real error (a wrong rule moves points by units) still fails.
-/// This is a guard on the pins, not a parity tolerance.
-const NOISE_ENVELOPE: f64 = 2e-3;
+/// Frames of the skinned-arm case whose recorded bounding box is off by 2e-4: the animated
+/// angle at frame 15 carries the reference's animation noise (RIG.md §8). The static 45 degree
+/// mesh (`j2-bend-45`) matches exactly, so the skin is not the cause.
+const KNOWN_MISMATCH_FRAMES: &[i32] = &[15];
 
 pub fn registry() -> Arc<Registry> {
     let mut reg = Registry::with_builtins();
@@ -62,11 +51,16 @@ pub struct Rig3 {
     pub skin: NodeId,
 }
 
-/// J1 weight = clamp(-y/150), J3 weight = clamp(y/150), J2 = 1 - J1 - J3 (O34).
+/// The weights the reference stores for the O34 rig (RIG.md §3, `weights-readback`): with
+/// `s = (y + 150) / 150` the position along the chain, `J1 = clamp(1 - s)`, `J3 = clamp(s - 1)`,
+/// `J2 = 1 - J1 - J3`, and **each weight stored as `round(w * 65535) / 65535`** (round half up,
+/// every weight on its own, so the stored sum can be 1.0000153 at y = +-75).
 fn explicit_linear(y: f64) -> [f64; 3] {
-    let j1 = (-y / 150.0).clamp(0.0, 1.0);
-    let j3 = (y / 150.0).clamp(0.0, 1.0);
-    [j1, 1.0 - j1 - j3, j3]
+    let s = (y + 150.0) / 150.0;
+    let j1 = (1.0 - s).clamp(0.0, 1.0);
+    let j3 = (s - 1.0).clamp(0.0, 1.0);
+    let q = |w: f64| (w * 65535.0 + 0.5).floor() / 65535.0;
+    [q(j1), q(1.0 - j1 - j3), q(j3)]
 }
 
 pub fn build_rig(reg: &Arc<Registry>, positions: &[DVec3], names: &[String]) -> Rig3 {
@@ -95,6 +89,9 @@ pub fn build_rig_with(
             let tag = tx.attach_tag(forge_rig::WEIGHT_TAG, cyl, None)?;
             tx.set_param(tag, "joints", Value::LinkList(joints.clone()))?;
             let skin = tx.create(forge_rig::SKIN, Some(cyl), None)?;
+            // The reference does not normalise: at y = +-75 the stored weights sum to
+            // 1.0000153 and the posed points carry that factor (`j2-bend-90-points`).
+            tx.set_param(skin, "normalise", Value::Bool(false))?;
             Ok((cyl, joints, tag, skin))
         })
         .unwrap();
@@ -130,7 +127,7 @@ pub enum Pose {
 
 /// `none`, `J2 rotation B 45 deg`, `J2 scale (1, 1.5, 1)` (the `pose` strings of O34).
 pub fn parse_pose(s: &str) -> Pose {
-    if s == "none" {
+    if s == "none" || s.starts_with("bind pose") {
         return Pose::None;
     }
     let joint = s[1..2].parse::<usize>().unwrap() - 1;
@@ -200,6 +197,7 @@ fn rigging_matches_the_reference() {
     let reg = registry();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
     let mut matched = Vec::new();
+    let mut readouts = Vec::new();
     let mut unsupported = BTreeSet::new();
     for case in discover_cases(&root).unwrap() {
         if case.feature != "rigging" {
@@ -226,19 +224,26 @@ fn rigging_matches_the_reference() {
             .iter()
             .map(|n| n.as_str().unwrap().to_string())
             .collect();
-        // The exact rule must agree with the triples the case recorded, to the 4 decimals
-        // they were recorded with.
-        let recorded: Vec<Vec<f64>> = p["weights"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|r| r.as_array().unwrap().iter().map(num).collect())
-            .collect();
-        assert_eq!(recorded.len(), 106);
-        // The skin uses the exact rule: the 4-decimal copy is worse (3.9e-3 against 9e-4).
-        let mut rig = build_rig(&reg, &positions, &names);
-        let exact = &rig;
-        let exact_w = forge_rig::weights::read_weights(exact.doc.scene(), exact.tag);
+        // The recorded triples: the explicit-linear rule must agree with them to the 4 decimals
+        // they were recorded with (full precision cases: below); other rules use them as given.
+        let recorded: Vec<Vec<f64>> = p
+            .get("weights")
+            .map(|w| {
+                w.as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|r| r.as_array().unwrap().iter().map(num).collect())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let rule = p["weights_rule"].as_str().unwrap();
+        let mut rig = if rule == "explicit-linear" {
+            build_rig(&reg, &positions, &names)
+        } else {
+            assert_eq!(recorded.len(), 106, "{key}");
+            build_rig_with(&reg, &positions, &names, Some(recorded.clone()))
+        };
+        let exact_w = forge_rig::weights::read_weights(rig.doc.scene(), rig.tag);
         for (i, row) in recorded.iter().enumerate() {
             for (slot, w) in row.iter().enumerate() {
                 let ours = exact_w
@@ -253,22 +258,20 @@ fn rigging_matches_the_reference() {
             }
         }
         apply_pose(&mut rig, &parse_pose(p["pose"].as_str().unwrap()));
+        // Cases that read values instead of a mesh: the weights, the posed points.
+        let sample_files = case.samples().unwrap();
+        if case.expected_mesh().unwrap().is_none() {
+            if !sample_files.is_empty() {
+                check_readouts(&key, &rig, &sample_files);
+                readouts.push(key);
+            } else {
+                println!("{key}: form only, nothing to compare");
+            }
+            continue;
+        }
         let ours = skinned_export(rig.doc.scene(), rig.cylinder);
         let expected = export_weld(&case.expected_mesh().unwrap().unwrap());
         let r = compare_meshes(&expected, &ours, &m.tolerance);
-        if KNOWN_MISMATCH.contains(&key.as_str()) {
-            assert!(
-                !r.passed(),
-                "{key} matches now: remove it from KNOWN_MISMATCH"
-            );
-            let worst = r.max_position_error.expect("same vertex count");
-            assert!(
-                worst < NOISE_ENVELOPE,
-                "{key}: error {worst:e} left the envelope"
-            );
-            println!("{key}: known mismatch, max error {worst:e}");
-            continue;
-        }
         assert!(
             r.passed(),
             "{key}: {:?} (max error {:?})",
@@ -280,8 +283,74 @@ fn rigging_matches_the_reference() {
     println!("matched exactly: {}", matched.join(", "));
     let want: BTreeSet<String> = UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
-    assert_eq!(matched, ["rigging/bind-pose"]);
-    assert_eq!(KNOWN_MISMATCH.len(), 4);
+    assert_eq!(
+        matched,
+        [
+            "rigging/bind-pose",
+            "rigging/j1-twist-90",
+            "rigging/j2-bend-45",
+            "rigging/j2-bend-90",
+            "rigging/j2-bend-90-single",
+            "rigging/j2-scale"
+        ]
+    );
+    assert_eq!(
+        readouts,
+        ["rigging/j2-bend-90-points", "rigging/weights-readback"]
+    );
+}
+
+/// Full-precision readouts (`weights-readback`: `weight_j1..3` per point index;
+/// `j2-bend-90-points` and `-single`: `x`, `y`, `z` of the posed points per point index), compared at
+/// the sample files' own tolerance.
+fn check_readouts(key: &str, rig: &Rig3, files: &[(String, forge_parity_harness::Samples)]) {
+    use forge_parity_harness::{Samples, compare_samples};
+    let mesh = evaluate(rig.doc.scene(), rig.cylinder, &EvalCtx::default())
+        .unwrap()
+        .unwrap();
+    let w = forge_rig::weights::read_weights(rig.doc.scene(), rig.tag);
+    for (name, expected) in files {
+        let Samples::Track {
+            param,
+            fps,
+            tolerance,
+            samples,
+        } = expected
+        else {
+            panic!("{key}/{name}: not a track");
+        };
+        let value = |i: usize| -> f64 {
+            match param.as_str() {
+                "x" => mesh.points[i].x,
+                "y" => mesh.points[i].y,
+                "z" => mesh.points[i].z,
+                p if p.starts_with("weight_j") => {
+                    let slot = p["weight_j".len()..].parse::<u32>().unwrap() - 1;
+                    w.get(i as u32)
+                        .iter()
+                        .find(|(s, _)| *s == slot)
+                        .map_or(0.0, |(_, w)| *w)
+                }
+                other => panic!("{key}/{name}: unknown readout {other}"),
+            }
+        };
+        let ours = Samples::Track {
+            param: param.clone(),
+            fps: *fps,
+            tolerance: *tolerance,
+            samples: samples
+                .iter()
+                .map(|(f, _)| (*f, value(*f as usize)))
+                .collect(),
+        };
+        let r = compare_samples(expected, &ours);
+        assert!(
+            r.passed(),
+            "{key}/{name}: {:?} (max error {})",
+            r.failures,
+            r.max_error
+        );
+    }
 }
 
 /// exchange/skinned-arm: the frame-0 export is the bind pose; J2 is keyed B 0 deg at frame 0
@@ -332,8 +401,8 @@ fn skinned_arm_animation_matches_the_reference() {
             .max((hi - whi).abs().max_element());
         println!("frame {frame}: bbox error {err:e}");
         if KNOWN_MISMATCH_FRAMES.contains(&frame) {
-            // the sample carries 4e-4 of the app's own noise (RIG.md §8): pinned
             assert!(err > tol, "frame {frame} matches now: unpin it");
+            assert!(err < 5e-4, "frame {frame}: error {err:e} left the envelope");
         } else {
             assert!(
                 err <= tol,
@@ -357,8 +426,7 @@ fn skinned_arm_animation_matches_the_reference() {
                 &ours,
                 &forge_parity_harness::Tolerance::default(),
             );
-            let worst = r.max_position_error.expect("same vertex count");
-            assert!(worst < NOISE_ENVELOPE, "frame {frame} vs {c}: {worst:e}");
+            assert!(r.passed(), "frame {frame} vs {c}: {:?}", r.failures);
         }
     }
     let bind_mesh = {

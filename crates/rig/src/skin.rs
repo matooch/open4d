@@ -68,7 +68,9 @@ pub fn effective_weights(row: &[(u32, f64)], s: &SkinSettings) -> Vec<(u32, f64)
     row
 }
 
-/// Skins `points` in place: `p' = Σ w_j · K_j · p`. `k[j]` is `K_j`.
+/// Skins `points` in place: `p' = Σ w_j · K_j · p`. `k[j]` is `K_j`. With `normalise` off the
+/// linear skin is `p' = p + Σ w_j · (K_j · p − p)`: the weights are used as stored (a sum
+/// above or below 1 scales the displacement, the reference's behaviour, RIG.md §3).
 pub fn skin_points(points: &mut [DVec3], weights: &WeightMap, k: &[DMat4], s: &SkinSettings) {
     let dual: Vec<DualQuat> = if s.kind == SkinType::DualQuaternion {
         k.iter().map(DualQuat::from_matrix).collect()
@@ -85,6 +87,9 @@ pub fn skin_points(points: &mut [DVec3], weights: &WeightMap, k: &[DMat4], s: &S
             continue;
         }
         *p = match s.kind {
+            SkinType::Linear if !s.normalise => row.iter().fold(*p, |acc, (slot, w)| {
+                acc + (k[*slot as usize].transform_point3(*p) - *p) * *w
+            }),
             SkinType::Linear => row.iter().fold(DVec3::ZERO, |acc, (slot, w)| {
                 acc + k[*slot as usize].transform_point3(*p) * *w
             }),
