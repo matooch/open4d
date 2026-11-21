@@ -43,6 +43,9 @@ pub struct SceneFile {
     time: TimeConfig,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     layers: Vec<Layer>,
+    /// Render settings (a pure addition to version 12: absent = none stored).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    render: Option<crate::RenderConfig>,
     /// The material list with the shader trees as children (version 12, CORE.md section 2.1).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     materials: Vec<NodeRecord>,
@@ -383,6 +386,7 @@ pub fn save_with(scene: &Scene, opts: &SaveOptions) -> Vec<u8> {
         settings: scene.settings(),
         time: scene.time().clone(),
         layers: scene.layers().as_slice().to_vec(),
+        render: scene.render_config().cloned(),
         materials,
         roots,
     };
@@ -507,6 +511,15 @@ fn load_inner(
             .report
             .warnings
             .push(format!("scene time: {e}; reset to the defaults")),
+    }
+    if let Some(c) = file.render {
+        match c.check() {
+            Ok(()) => loader.scene.init_render(Some(c)),
+            Err(e) => loader
+                .report
+                .warnings
+                .push(format!("render settings: {e}; dropped")),
+        }
     }
     loader.layers(file.layers);
     let next = loader.seen.last().map_or(1, |id| id.0 + 1);
@@ -1056,6 +1069,7 @@ mod tests {
             settings: SceneSettings::default(),
             time: TimeConfig::default(),
             layers: Vec::new(),
+            render: None,
             materials: Vec::new(),
             roots: Vec::new(),
         };

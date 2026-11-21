@@ -69,6 +69,29 @@ impl CloneData {
         self.child.push(0);
     }
 
+    /// Replaces the translation and the rotation of every clone with a simulated pose: `pos` and
+    /// `rot` (H, P, B in radians) hold one entry per clone, in cloner space; each clone keeps its
+    /// own scale. Does nothing unless both lists have one entry per clone.
+    pub fn apply_poses(&mut self, pos: &[[f64; 3]], rot: &[[f64; 3]]) {
+        let n = self.matrices.len();
+        if pos.len() != n || rot.len() != n {
+            return;
+        }
+        for (i, m) in self.matrices.iter_mut().enumerate() {
+            let scale = DVec3::new(
+                m.x_axis.truncate().length(),
+                m.y_axis.truncate().length(),
+                m.z_axis.truncate().length(),
+            );
+            *m = forge_core::transform::Transform {
+                pos: DVec3::from_array(pos[i]),
+                rot: DVec3::from_array(rot[i]),
+                scale,
+            }
+            .matrix();
+        }
+    }
+
     /// Number of clones with the visible flag on.
     pub fn visible_count(&self) -> usize {
         self.visible.iter().filter(|v| **v).count()
@@ -88,5 +111,24 @@ impl CloneData {
         ]
         .iter()
         .all(|l| *l == n)
+    }
+}
+
+#[cfg(test)]
+mod pose_tests {
+    use super::*;
+
+    #[test]
+    fn simulated_poses_replace_position_and_rotation_but_keep_scale() {
+        let mut d = CloneData::default();
+        let m = DMat4::from_scale(DVec3::new(2.0, 3.0, 4.0));
+        d.push(CloneItem::at(m, DVec3::ZERO));
+        d.apply_poses(&[[1.0, 2.0, 3.0]], &[[0.0; 3]]);
+        assert_eq!(d.matrices[0].w_axis.truncate(), DVec3::new(1.0, 2.0, 3.0));
+        assert!((d.matrices[0].y_axis.truncate().length() - 3.0).abs() < 1e-12);
+        // A list of the wrong length is ignored.
+        let before = d.matrices[0];
+        d.apply_poses(&[], &[]);
+        assert_eq!(d.matrices[0], before);
     }
 }

@@ -3,8 +3,8 @@
 use forge_render_api::{Background, RenderSettings, Snapshot};
 use glam::DVec3;
 
-use crate::lights::{PLight, env_radiance, has_env, sample_env};
-use crate::sampling::{INV_4PI, Rng, lum, power_heuristic};
+use crate::lights::{EnvDist, PLight, env_pdf, env_radiance, has_env, sample_env};
+use crate::sampling::{Rng, lum, power_heuristic};
 use crate::scene::Scene;
 use crate::surface::{Lobe, Surface, fresnel, refract};
 
@@ -13,6 +13,8 @@ pub struct Ctx<'a> {
     pub scene: &'a Scene,
     pub lights: &'a [PLight],
     pub settings: &'a RenderSettings,
+    /// Importance sampling of an environment image, if the lighting is one.
+    pub env: Option<EnvDist>,
 }
 
 /// First-hit data and the light split of one camera sample.
@@ -118,7 +120,7 @@ pub fn trace_path(cx: &Ctx, mut o: DVec3, mut d: DVec3, rng: &mut Rng) -> Sample
                 let w = if prev_delta {
                     1.0
                 } else {
-                    power_heuristic(prev_pdf, INV_4PI)
+                    power_heuristic(prev_pdf, env_pdf(cx.env.as_ref(), d))
                 };
                 s.add(throughput * le * w, depth, target_of(cat), clamp);
             }
@@ -216,7 +218,7 @@ pub fn trace_path(cx: &Ctx, mut o: DVec3, mut d: DVec3, rng: &mut Rng) -> Sample
             }
         }
         if has_env(env) {
-            let ls = sample_env(env, rng);
+            let ls = sample_env(env, cx.env.as_ref(), rng);
             let info = crate::lights::ShadowInfo {
                 cast: true,
                 density: 1.0,

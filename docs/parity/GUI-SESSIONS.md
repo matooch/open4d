@@ -143,5 +143,22 @@ You can also do a sitting **with an observer session's help**:
   (screenshot plus what the shape looks like in words).
 
 
+## G9 · Leftovers the scripted observer could not do
+
+Each item names the form row it fills. Record the result in that form, as usual.
+
+1. **O25 Bridge, Close Polygon Hole, Stitch and Sew** (modeling-tools-2.md): run each once in the
+   GUI on the form's setup and export the mesh. The scripted tool returned false in four variants.
+2. **O26 Loop and Ring selection** (selection-ops.md): select with the interactive Loop and Ring
+   tools on the form's cube and save the selection the observer's way.
+3. **O30 `spot` and `infinite`** (render-reference.md): build both in the GUI and render to the
+   Picture Viewer. A scripted render of the spot comes out black even with the light read back
+   pointing down, and a script cannot set the light Type to Infinite (it reads back Square Spot).
+4. **O40 particles** (particles.md): the emitter's particles can't be read by script. In the GUI,
+   step to frames 10 and 30 and record the particle count and the positions of the first five
+   particles shown by the particle info readout, or say there is no such readout.
+5. **O32/O33** `subtract`, `intersect`, `points-source` and `vdb-export` (volumes.md, volumes-2.md):
+   these need a dialog or a GUI-only mode.
+
 ## Answers
 (The owner fills this in, per session, with the date.)

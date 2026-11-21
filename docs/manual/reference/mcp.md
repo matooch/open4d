@@ -185,6 +185,8 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `marker_set_color` | Set Marker Color. Undoable editing command. Runs command `marker.set_color`. |
 | `marker_list` | List Markers. Not an undoable edit. Runs command `marker.list`. |
 | `marker_jump` | Jump to Marker. Not an undoable edit. Runs command `marker.jump`. |
+| `render_settings` | Render Settings. Undoable editing command. Runs command `render.settings`. |
+| `view_look_through_camera` | Look Through Camera. Not an undoable edit. Runs command `view.look_through_camera`. |
 | `key_move` | Move Keys. Undoable editing command. Runs command `key.move`. |
 | `key_scale` | Scale Keys. Undoable editing command. Runs command `key.scale`. |
 | `key_delete` | Delete Selected Keys. Undoable editing command. Runs command `key.delete`. |

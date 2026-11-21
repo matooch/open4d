@@ -2,6 +2,13 @@
 //! Spec: docs/specs/RENDER.md R1, R12 (the scene has no camera or light objects yet, so the
 //! adapter frames the geometry itself and the engine adds its default light).
 
+mod scene;
+
+pub use scene::{
+    Applied, apply_scene_objects, camera_from_data, light_from_data, settings_from_config,
+    settings_from_scene,
+};
+
 use forge_geometry::PolyMesh;
 use forge_geometry::triangulate::triangulate_poly;
 use forge_material::{Material, compile};

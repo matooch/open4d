@@ -66,6 +66,7 @@ fn build_instances(
         return Ok(None);
     }
     clones.assign_children(protos.len(), settings.clones_mode, settings.clones_seed);
+    apply_dynamics(values, &mut clones);
     Ok(Some(ClonerInstances {
         prototypes: protos,
         clones,
@@ -165,6 +166,16 @@ pub fn expand(protos: &[PolyMesh], clones: &CloneData, parallel: bool) -> PolyMe
     out
 }
 
+/// Applies the simulated poses the dynamics evaluation wrote into the cloner's
+/// `dynamics_pos` / `dynamics_rot` lists (docs/specs/DYNAMICS.md §6).
+fn apply_dynamics(values: &BTreeMap<String, Value>, clones: &mut CloneData) {
+    if let (Some(Value::Vec3List(pos)), Some(Value::Vec3List(rot))) =
+        (values.get("dynamics_pos"), values.get("dynamics_rot"))
+    {
+        clones.apply_poses(pos, rot);
+    }
+}
+
 /// The clone data of the cloner `id` (for consumers such as the viewport and effectors).
 pub fn clone_data(
     scene: &Scene,
@@ -182,6 +193,7 @@ pub fn clone_data(
         settings.clones_mode,
         settings.clones_seed,
     );
+    apply_dynamics(&node.params, &mut clones);
     Ok(Some(clones))
 }
 

@@ -9,7 +9,7 @@ pub mod output;
 pub mod settings;
 pub mod snapshot;
 
-pub use camera::{Camera, Projection};
+pub use camera::{Aperture, Camera, Projection};
 pub use engine::{Control, RenderEngine, RenderError, RenderEvent};
 pub use files::{
     FrameRange, Multipass, OutputFormat, OutputSettings, expand_path, frames, write_output,

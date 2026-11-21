@@ -34,6 +34,8 @@ pub enum EditError {
     Track(#[from] TrackError),
     #[error("invalid scene settings: {0}")]
     Settings(String),
+    #[error("invalid render settings: {0}")]
+    Render(String),
     #[error("invalid time settings: {0}")]
     Time(String),
     #[error("layer {0} does not exist")]
@@ -73,6 +75,7 @@ enum Edit {
     SetSettings(SceneSettings),
     SetTime(TimeConfig),
     SetLayers(Layers),
+    SetRender(Option<crate::RenderConfig>),
 }
 
 /// Applies `edit` (already validated) and returns its inverse.
@@ -119,6 +122,7 @@ fn apply(scene: &mut Scene, edit: Edit) -> Edit {
         Edit::SetSettings(settings) => Edit::SetSettings(scene.replace_settings(settings)),
         Edit::SetTime(time) => Edit::SetTime(scene.replace_time(time)),
         Edit::SetLayers(layers) => Edit::SetLayers(scene.replace_layers(layers)),
+        Edit::SetRender(render) => Edit::SetRender(scene.replace_render(render)),
     }
 }
 
@@ -564,6 +568,18 @@ impl Tx<'_> {
         time.sort_markers();
         self.push(Edit::SetSettings(settings));
         self.push(Edit::SetTime(time));
+        Ok(())
+    }
+
+    /// Sets or clears the document's render settings (SCENE-OBJECTS.md S6).
+    pub fn set_render_config(
+        &mut self,
+        config: Option<crate::RenderConfig>,
+    ) -> Result<(), EditError> {
+        if let Some(c) = &config {
+            c.check().map_err(EditError::Render)?;
+        }
+        self.push(Edit::SetRender(config));
         Ok(())
     }
 
