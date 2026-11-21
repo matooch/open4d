@@ -307,8 +307,8 @@ Teeth rows are not modelled (the values are stored as given, no clamping).
 **Extrude Direction Auto (for brief 044).** The default Cycloid is the only export that
 extrudes to −z. All 22 exports fit "−z exactly when the spline, closed by its chord, has a
 negative signed area in its plane" (cycloid −29431; every other flat spline positive, the
-Formula zero and +z). The O17 test applies that guess; **parity-pending** (one negative case,
-only the XY plane).
+Formula zero and +z). The O17/O48 spline tests now leave Direction at Auto and rely on this
+rule (verified for the XY plane; other planes are **parity-pending**).
 
 ## 7. Extrude (`forge.extrude`)
 

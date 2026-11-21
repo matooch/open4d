@@ -189,7 +189,7 @@ implementers can avoid collisions.
 | 190 | [Viewport splines: drawing, points, handles and dragging](../agents/tasks/190-viewport-splines.md) | E | 028, 143 | done | viewport, ui, command |
 | 191 | [R25 Helix Bézier construction (sampling parity)](../agents/tasks/191-helix-sampling.md) | B | 028, 042 | done | generators |
 | 192 | [Volume and rig nodes in the editor: evaluation hook, commands, display](../agents/tasks/192-volume-rig-integration.md) | F, H | 081, 083, 100, 101, 112, 084 | done | generators, app, command, ui, viewport, volume, rig |
-| 193 | [Parity tests use Extrude's Auto direction](../agents/tasks/193-extrude-tests-use-auto.md) | C | 044, 045 | ready | generators (tests) |
+| 193 | [Parity tests use Extrude's Auto direction](../agents/tasks/193-extrude-tests-use-auto.md) | C | 044, 045 | done | generators (tests) |
 | 194 | [Materials and shaders in the document: hosting, links, Generate UVW command](../agents/tasks/194-material-hosting.md) | J | 123, 125, 127 | done | core, material, shaders, app, command, ui, io |
 | 195 | [Grow Selection: Use Edge option for polygons](../agents/tasks/195-grow-use-edge.md) | B | 023 | ready | geometry, command |
 | 196 | [OBJ texture coordinates (vt) import and export](../agents/tasks/196-obj-uvs.md) | M | 004, 128 | ready | io |
