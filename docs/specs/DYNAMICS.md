@@ -143,7 +143,26 @@ work). Editing the scene bumps the revision and so restarts the simulation.
 
 ## 6. Dynamics on clones
 
-(Brief 116; filled in with that brief.)
+A cloner that carries an enabled rigid body tag does not become one body: **each visible clone is
+a body** (`clones::clone_bodies`), keyed `BodyKey::Clone { cloner, index }` with the clone's index
+in the cloner's clone data, in cloner order then clone order. Hidden clones take no part and keep
+their generated matrix. The tag's kind, shape, material and velocities apply to every clone.
+
+* Start pose: cloner world matrix × clone matrix (clone data from `cloner_instances`, effectors
+  included). Shape: the clone's prototype mesh (child transform baked unless Reset Coordinates),
+  scaled by the clone matrix's scale.
+* Write back: the app (`Evaluated::get`) writes the simulated poses, in cloner space, into the
+  cloner's hidden parameters `dynamics_pos` and `dynamics_rot` (lists of vec3, one entry per clone;
+  rotation H, P, B in radians). `CloneData::apply_poses` reads them when both have one entry per
+  clone: it replaces each clone's translation and rotation and keeps its scale, so the expanded
+  geometry, the instancing display and effectors that read clone data all see the fallen clones.
+  Clones that are not simulated (hidden, or a static tag) keep the generated pose in the lists.
+  The lists are never saved by a simulation: the evaluation writes them into the evaluated copy
+  of the scene only.
+* The cloner object itself keeps its transform (observed: global y 300.000 at frames 0 and 90).
+* The cache is keyed by clone index; a change of the clone count (any edit) rebuilds it (§5).
+* Ours, not observed: effectors still apply to the generated start pose; per-clone forces and
+  clones that appear later (Blend/Time effectors) are not simulated.
 
 ## 7. Parity: rigid bodies (brief 115)
 
@@ -169,7 +188,7 @@ per-case `Thresholds`:
 | `stack` | every cube stays within 0.25 cm vertically and 0.3 cm sideways of its start and within 1° of upright | reference drift ≤ 0.045 / 0.12 cm; ours is larger because our contacts are softer (0.17 cm sink) | – |
 | `slope-sphere` | x at frame 30; final x and final y | ±10 % | positions per frame (the rolling friction model differs) |
 | `tumble` | contact frame; rest y; rests flat (P and B each within 1° of a multiple of 90°) | ±1; 0.05 cm | rest x, z and heading H (`KNOWN_MISMATCH`: which face it lands on and how far it travels depend on the engine's contact order) |
-| `clones-fall` | §6 | | |
+| `clones-fall` | clone 4 (centre): free fall frames 0..22 within 1 cm, contact frame ±1, rest y (15.0) 0.05 cm, upright within 1°; clone 0 (corner): free fall frames 0..22 within 1 cm, contact frame ±1; 9 bodies, the cloner itself none; write-back into the clone data | as above | clone 4 lateral drift (`KNOWN_MISMATCH`: the reference ends 1.87 cm from the start in x and z, ours 0); clone 0 end track (`KNOWN_MISMATCH`: the cube's centre is exactly over the plane's corner, the reference tips off and falls to y −2227.8, ours balances on the corner at 15.08) |
 | `gravity-half` | not observed (no golden data) | | `UNSUPPORTED` |
 
 Rotation tracks are compared modulo 360° (the reference reads B 360 at the impact frame, a

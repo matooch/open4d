@@ -102,6 +102,9 @@ pub fn bodies_of_scene(
 ) -> Vec<BodySpec> {
     let mut out = Vec::new();
     for id in objects_in_order(scene) {
+        if crate::clones::is_cloner(scene, id) {
+            continue; // its clones are the bodies (clones.rs)
+        }
         let Some(tag) = body_tag(scene, id) else {
             continue;
         };

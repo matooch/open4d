@@ -399,6 +399,11 @@ pub fn cloner_type() -> NodeType {
             ],
             TR,
         ))
+        // Written by the dynamics evaluation (docs/specs/DYNAMICS.md §6): one simulated
+        // position and rotation (H, P, B in radians) per clone, in cloner space. Empty, or of
+        // another length than the clone count, means "no simulation".
+        .param(ParamDesc::vec3_list("dynamics_pos", "Simulated Positions"))
+        .param(ParamDesc::vec3_list("dynamics_rot", "Simulated Rotations"))
 }
 
 /// The clone toolset plugin: registers the cloner (and, in later briefs, the effectors).
