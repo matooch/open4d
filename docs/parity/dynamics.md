@@ -96,6 +96,18 @@ carry the same tag type; the one on the plane is the collider, the one on a movi
 | clones-fall | a cloner (Grid 3×1×3, size 200) of cubes (size 30) at y 300, with a dynamic body tag on the cloner (per-clone bodies) | clone positions: the clones kind per frame is too large, so sample only clones 0 and 4 as objects `clone0`, `clone4`, using the clone matrices at each frame | The cloner itself stays at (0, 300, 0) (global y 300.000 at frame 0 and at frame 90) while the clones are simulated as individual bodies. Clone 4, the centre clone, starts at (0, 300, 0) and lands at (1.871842, 15.002187, 1.870218). Clone 0, the corner clone starting at (-200, 300, -200) on the plane edge, falls past the plane: y -2227.771714 at frame 90. Frames 0-90, 30 fps. |
 | gravity-half | drop-cube, scene gravity at half the default | cube | not observed: the scene gravity is not reachable from a script (see the Settings table) and the body tag has no gravity parameter, so half the default cannot be set. |
 
+## Follow-up cases (planner, after briefs 115/116)
+
+| Case | Setup | Record |
+|---|---|---|
+| bounce-combine-0 | `drop-cube`, but the plane's Bounce 0 % (cube default) | the same tracks as `drop-cube` |
+| bounce-combine-50 | the same with the plane's Bounce 50 % | the same |
+| clones-fall-2 | `clones-fall`, but the cloner moved by (13, 0, 7) so no clone sits exactly on the plane's edge | the same tracks as `clones-fall` |
+| collision-noise-0 | `clones-fall` with the tag's Collision Noise 0 | the centre clone's tracks |
+
+Also read the scene's dynamics settings in the GUI if a script cannot (gravity, steps per frame)
+and note them under GUI session G9.
+
 ## Notes
 
 Started, not finished (unattended window, 2026-11-20). What is now known from the probes:

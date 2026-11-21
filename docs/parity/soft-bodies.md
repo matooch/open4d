@@ -66,6 +66,15 @@ Record the soft body settings table and the connector settings table once.
 | spring | a static cube at y 300 and a dynamic cube at y 150 linked by a Spring object, default stiffness | Spring type reads Linear at its default, rest length 100, stiffness 1.0, damping 20 %, and its Object A / Object B slots take the two cubes from the script. The dynamic cube starts at y 150, swings up to y 210.470 at frame 10 and then oscillates 179.740 / 195.040 / 187.580 / 191.130 / 189.480 / 190.230 / 189.910, settling at 190.037 at frame 90. x, z and all rotations stay 0. Stepped one frame at a time. |
 | ball-socket | as hinge, with a Ball and Socket connector | Connector Type set to Ball and Socket and read back as such, Object A = Left and Object B = Right filled from the script. The track is bit-identical to the hinge case, frame for frame: the right cube ends at (-299.510, -35.899, 0.000) with H 0.0 / P 0.0 / B 258.208 deg at frame 90. Either the extra rotational freedom is not exercised in this planar setup or the type change does not reach the solver; recorded as observed and flagged here for the owner, not adjusted. |
 
+## Follow-up cases (planner, after briefs 117/118)
+
+| Case | Setup | Record |
+|---|---|---|
+| soft-sphere-pressure-2 | redo `soft-sphere-pressure`: set Pressure 100 and **read it back from the tag** before simulating; store it in `case.toml` | meshes at 15/30/60 as before |
+| soft-sphere-samples | `soft-sphere-drop` | per frame 0–60: the sphere's centre (mean of its points) and its lowest point's y, as `samples.json` tracks |
+| spring-stiff-2 | the `spring` case with Stiffness 2 and Damping 20 % | the same track |
+| hinge-offset | the `hinge` case with the connector at (100, 0, 0) | the same tracks |
+
 ## Notes
 TODO
 
