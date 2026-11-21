@@ -24,9 +24,9 @@ Unblocks: G/088, 096.
 
 ## Follow-up (planner, after brief 088)
 
-| Case | Redo as | What was missing |
-|---|---|---|
-| generator-param | generator-param-2 | `case.toml` must hold the cube (size, segments) and every Bend setting (size, mode, strength/angle, limits), not only the animated parameter |
+| Case | Redo as | What was missing | Result |
+|---|---|---|---|
+| generator-param | generator-param-2 | `case.toml` must hold the cube (size, segments) and every Bend setting (size, mode, strength/angle, limits), not only the animated parameter  not observed: three attempts failed — the record command (12410) creates no track on the deformer parameter, and a hand-built track (CTrack + CKey + InsertKey, as the window-6 generator used) leaves only ONE key on the curve (both insertions collapse to a single key at frame 0 with value 0), so the Strength parameter never follows (reads 0 at every frame, the cube stays unbent) and an enriched `case.toml` would have shipped wrong samples; the original `generator-param` case is untouched |
 
 ## Notes
 
@@ -82,3 +82,11 @@ has a `case.toml` (`feature = "animation-3"`, `observation = "docs/parity/animat
   the only tracks the record command created were the object's position/scale/rotation tracks
   with zero keys. No PLA track can be reached from the bridge (a point-animation data type exists in the interface but no
   point-animation parameter is exposed), so no frame-15 mesh was written.
+
+### generator-param-2 attempt, 2026-11-21
+
+- The cube/Bend setup itself reproduced fine (size 200, segments 8 x 8 x 8, Bend defaults
+  size 250, alignment Y+, mode Limited), but no working key path was found in three attempts:
+  the record command writes no track for the Strength parameter, and hand-built keys collapse
+  to one key at frame 0 (curve count 1), so evaluation stays 0 and the exported cube is
+  undeformed. Not shipped, per the "never invent" rule; the original case still stands.
