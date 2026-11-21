@@ -163,18 +163,24 @@ cases match to the 1e-4 tolerance: `user-tangent-steep`, `user-tangent-flat`,
   extension of §1.4.3. Matches.
 - `after-repeat`, `after-offset`, `after-oscillate`, `before-repeat` match since §1.9 (the
   behaviour is read from the case description: `case.toml` has no field for it).
-- **UNSUPPORTED** `linear-to-spline`: the `case.toml` has no `interpolation_by_key`; the
-  Linear first key is stated only in the description, so the test cannot build the track. Observation
-  needs redoing: add `interpolation_by_key = ["linear", "spline", "spline"]`.
-- **KNOWN_MISMATCH** `broken`: the read-back right tangent of key 30 is (10, 40) but the
-  samples after frame 30 (99.674 at 31, 50.0001 at 45) are those of the automatic flat right
-  tangent, while the left side (−10, −20) is evaluated as read back (42.5001 at 15). With the
-  right tangent as read the curve overshoots (103.4 at 31). Hypotheses tried: (1) both
-  read-back tangents as stored (overshoot, fails); (2) right side automatic, left as read
-  (matches every sample to tie noise, but no rule in the data selects it: the read-back right
-  tangent (10, 40) is not a display tangent, and the case holds no break or auto flags); (3) value clamp on the right segment (needs the clamp flag, which the
-  data does not carry). The read-back is not a trustworthy description of the evaluated key,
-  so this case needs the flags observed too.
+- `linear-to-spline-2` (redo of `linear-to-spline`, `case.toml` records
+  `interpolation_by_key = ["Linear", "Spline", "Spline"]`): matches. The old `linear-to-spline` stays
+  **UNSUPPORTED** (its `case.toml` has no per-key interpolation; the redo supersedes it).
+  The redo files hold the value of the rounded whole frame at the half-frame rows (14.5 reads 50.0
+  = frame 15, 29.5 reads 100 = frame 30); the test reads those rows at the rounded frame
+  (`WHOLE_FRAME_SAMPLING`: `linear-to-spline-2`, `broken-2`; the original recordings sampled the true
+  fractional time).
+- **Broken tangents** (`broken`, `broken-2`; read-back of `broken-2` equals what was set: left
+  (−10, −20), right (10, 40), auto 0, break 1, so the read-back is trustworthy and the evaluated curve
+  still follows the automatic right side: 65 would be the value at frame 45 with the stored right handle,
+  the samples read 50.0001). Rule (parity-pending, two cases, same numbers): **a user handle whose end
+  value lies outside the value range of its own segment overshoots and is evaluated as the automatic
+  tangent of that side**. Key 30 right handle ends at 100 + 40 = 140, outside [0, 100] of the segment
+  to key 60 (automatic, flat); the left handle ends at 80, inside [0, 100] (used as stored, 42.5001 at 15).
+  No other O38 case has a handle end outside its segment's range, so all of them stay as stored.
+  Both `broken` and `broken-2` match; the `KNOWN_MISMATCH` pin is removed. The rule is applied in the
+  read-back path (`value_at_exact` with user tangents); the stored-tangent model of §1.5b keeps
+  evaluating `User` handles as stored (nothing observed for the editing path).
 
 ### 1.5b Tangent model, presets, speed (brief 089)
 Data: `Track::tangents` (empty = every key automatic, else one `KeyTangent` per key) with
@@ -184,7 +190,7 @@ on the left, `dv` value offset), evaluated exactly as stored whether or not `wei
 (§1.5a: the curve depends only on the stored handle end). `broken` and `weighted` are editing
 flags. The legacy `value_at_exact(track, user, t)` read-back path classifies each side as Auto or
 User with the §1.5a rules and then uses the same evaluator, so all twelve O38 cases keep their
-result (`keyframes_parity`: 34 of 36 match, `broken` pinned, `linear-to-spline` unsupported).
+result (`keyframes_parity`: 39 of 40 match, `linear-to-spline` unsupported).
 Presets (`forge_anim::tangent`, own design, the observations fix only evaluation):
 - `ease`: both handles flat (`dv = 0`), a third of the adjacent span long; `ease_in` / `ease_out`
   flatten one side only.
@@ -199,7 +205,7 @@ Presets (`forge_anim::tangent`, own design, the observations fix only evaluation
 - **Speed**: `speed_at(track, t)` is `dv/dt`: 0 for Step and outside the keys, the chord slope for
   Linear, `(dy/ds) / (dx/ds)` at the solved curve parameter for a spline segment (an ease peaks at
   1.5 times the mean speed). Used by the speed graph (brief 092).
-- **Not observed / not done**: the `broken` case (§1.5a) stays pinned; `track.set_behavior` and
+- **Not observed / not done**: `track.set_behavior` and
   `key.set_tangent` registry commands are not added (they are brief 090/091's UI work).
 
 ### 1.6 Animated scenes (`forge-anim::scene_at`)
@@ -289,8 +295,12 @@ or `Oscillate`. They are applied by remapping the (already resolved) time into t
   @ 60). **Oscillate** plays odd cycles backwards, `first + (1 - frac) * span` (0 @ 60, 100 @ 90).
 - Before: with `x = (first - t) / span`: **Repeat** reads `last - frac * span` where `frac` is the
   fractional part of `x`, and at an exact boundary the value of `last` (`before-repeat` frame 0 =
-  100, frame 5 = 7.4074 = frame 35). **OffsetRepeat** and **Oscillate** before the first key
-  mirror the after rules (parity-pending, not observed).
+  100, frame 5 = 7.4074 = frame 35). **OffsetRepeat** before the first key reads the same point as Repeat, shifted by `-(floor(x) + 1) * delta`
+  (`before-offset`, keys 0 -> 0, 30 -> 100: -50 at frame -15, -100 at -30, -200 at -60; a cycle boundary
+  reads the end of the cycle, shifted one delta further: the curve is continuous there). **Oscillate** before
+  the first key mirrors the after rule (`before-oscillate`: 50 at -15, 100 at -30, 0 at -60). Both match
+  the observation (`before_behavior` is a `case.toml` field since the follow-up; the description is the
+  fallback for older cases).
 - **Continue**: carries on with the slope of the end key's inner handle (the last key's left
   handle after; the first key's right handle before). The end handles of automatic keys are flat,
   so `after-continue` equals Constant (matches).
@@ -615,8 +625,8 @@ crates/ui/tests/motion_view.rs (commands, screenshot).
 
 ## 3. Parity status
 
-30 of 36 cases (38 sample files) match within 1·10⁻⁴ (§1.5a adds the O38 cases); `UNSUPPORTED`: 5
-(four track behaviours, `linear-to-spline`), `KNOWN_MISMATCH`: 1 (`broken`).
+39 of 40 cases (41 sample files) match within 1·10⁻⁴ (§1.5a adds the O38 cases and their redos);
+`UNSUPPORTED`: 1 (`linear-to-spline`, superseded by `linear-to-spline-2`), `KNOWN_MISMATCH`: 0.
 
 **Parity-pending / not observed**: stored tangents and tangent modes (the reference
 reads them back, `tangents.json`, but their labels and the clamp option were not read; the
