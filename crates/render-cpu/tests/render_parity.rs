@@ -25,13 +25,26 @@ const UNSUPPORTED: &[(&str, &str)] = &[(
 const KNOWN_MISMATCH: &[(&str, &str)] = &[
     (
         "area-soft",
-        "the case file records light_type Infinite (rotation 0, travelling along +Z) although the form says Area: the plane stays dark in our render",
+        "the case file records light_type Infinite, but area-soft-2 shows the light was an Area \
+         (Rectangle) light: its render is byte-identical. Our Area light lights the plane \
+         differently (see area-soft-2)",
+    ),
+    (
+        "area-soft-2",
+        "Area light (Rectangle, read back before rendering) at (300, 400, -300) aimed at the origin: \
+         1500 px of the silhouette differ; the reference's area-light orientation or size rule is \
+         not derived yet (RENDER.md, lights)",
     ),
     (
         "mat-checker-uv",
         "the black squares are 0 in the reference, so its luminance silhouette is not the object's; the pattern grid is the same size but its phase differs (see the pattern test)",
     ),
     ("mat-checker-cubic", "as mat-checker-uv"),
+    (
+        "checker-plane",
+        "as mat-checker-uv: the reference's black squares are 0, so its luminance silhouette \
+         loses edge pixels (1 px differs); the pattern phase is checked by the pattern test",
+    ),
 ];
 
 /// Cases the form lists but whose renders were not observed (black): the folders must stay absent
