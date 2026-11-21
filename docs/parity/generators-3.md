@@ -1,6 +1,6 @@
 # Generators III — observation (O20)
 
-Status: partial (batch-02 follow-ups collected; full validation blocked); original baseline 59 of 59 cases · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-04
+Status: partial (baseline 59 of 59; the follow-up table is now complete: 26 rows observed earlier, 6 carry their recorded not-observed or needs-a-human verdicts; full validation blocked) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-04
 Method: scripted ([agents/OBSERVER.md](../agents/OBSERVER.md)). Level A. Inputs are made
 through their menu commands and placed as the generator's children in the order given.
 - Export the generator to `tests/golden/<feature>/<case>/mesh.obj`.
@@ -122,11 +122,11 @@ Brief 043 matched every case above except the strict point and face numbering of
 `boole/r25-*` cases (BOOLE.md §5a, parity-pending), and Loop on non-quad input. These cases
 separate the hypotheses it could not; run them like the cases above, R25 defaults. The `sweep/` and `lathe/` rows come from brief 042 (helix route, banking frame, 2-Rail profile, Lathe scaling); the `atom-array/` and `spline-mask/` rows from brief 041 (oblique edges, modes, axis, caps); the `instance/` and `connect/` rows for brief 046. Null display shapes are viewport-only: record them in GUI session G8 (shape, radius, aspect, orientation) instead of exporting a mesh.
 
-| Case (folder) | Generator | Children | Changed from default |
-|---|---|---|---|
+| Case (folder) | Generator | Children | Changed from default | Result |
+|---|---|---|---|---|
 | boole/r25-union-shift-x | Boole | two default cubes, the second at (50, 0, 0) | Boolean Type A union B |
 | boole/r25-a_minus_b-shift-x | Boole | the same | Boolean Type A subtract B |
-| boole/r25-union-inside | Boole | a default cube and a second cube of size 100 at (0, 0, 0) | Boolean Type A union B |
+| boole/r25-union-inside | Boole | a default cube and a second cube of size 100 at (0, 0, 0) | Boolean Type A union B | not observed: scripted evaluation left the generator output identical to the unmodified input after a sequential evaluation retry; needs an interactive export (recorded by the batch run) |
 | boole/r25-a_minus_b-inside | Boole | the same | Boolean Type A subtract B |
 | boole/r25-union-uneven | Boole | two default cubes, the second at (30, 50, 70) | Boolean Type A union B |
 | boole/r25-a_minus_b-uneven | Boole | the same | Boolean Type A subtract B |
@@ -150,12 +150,12 @@ separate the hypotheses it could not; run them like the cases above, R25 default
 | spline-mask/cap | Spline Mask | the two circles of `spline-mask/union` | Create Cap on |
 | spline-mask/rect-circle | Spline Mask | a default Rectangle and a default Circle at x 100 | Mode Union |
 | instance/render-instance | Instance | a default cube as reference | Instance Mode Render Instance |
-| instance/multi-instance | Instance | a default cube as reference | Instance Mode Multi-Instance |
+| instance/multi-instance | Instance | a default cube as reference | Instance Mode Multi-Instance | needs a human: the bridge connection dropped while the case ran, no result or mesh was produced and unsafe retries were withheld — owner to investigate (recorded by the batch run) |
 | connect/tolerance-in | Connect | two default cubes, the second at x 200.5 (gap 0.5) | Weld on, Tolerance 1 |
-| connect/tolerance-out | Connect | the same | Weld on, Tolerance 0.25 |
-| connect/phong-off | Connect | a default sphere and a default cube at x 300 | Weld on; Phong mode Off (one case per Phong mode; export normals or record the Phong break readback) |
-| connect/phong-average | Connect | the same | Phong mode Average |
-| connect/phong-hard | Connect | the same | Phong mode Hard |
+| connect/tolerance-out | Connect | the same | Weld on, Tolerance 0.25 | not observed: scripted evaluation left the generator output identical to the unmodified input after a sequential evaluation retry; needs an interactive export (recorded by the batch run) |
+| connect/phong-off | Connect | a default sphere and a default cube at x 300 | Weld on; Phong mode Off (one case per Phong mode; export normals or record the Phong break readback) | not observed: this build offers no Phong mode Off — the dropdown reads Manual, Average, Lowest, Highest, As Breaks; no replacement assumed (recorded by the batch run) |
+| connect/phong-average | Connect | the same | Phong mode Average | not observed: scripted evaluation left the generator output identical to the unmodified input after a sequential evaluation retry; needs an interactive export (recorded by the batch run) |
+| connect/phong-hard | Connect | the same | Phong mode Hard | not observed: this build offers no Phong mode Hard — the dropdown reads Manual, Average, Lowest, Highest, As Breaks; no replacement assumed (recorded by the batch run) |
 
 ## Notes
 

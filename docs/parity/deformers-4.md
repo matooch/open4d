@@ -1,6 +1,6 @@
 # Deformers IV — observation (O45)
 
-Status: partial (batch-02 follow-ups collected; full validation blocked) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-04
+Status: partial (batch-02 follow-ups collected: 31 rows observed, the outstanding 27 carry their recorded not-observed or needs-a-human verdicts in the table, full validation blocked) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-04
 Method: as [deformers-2.md](deformers-2.md) (O9). Unless a row says otherwise:
 - the input is a cube with size_y 400 and segments 4/8/4;
 - the deformer is the cube's child;
@@ -271,24 +271,24 @@ to the case frame (Jiggle, Collision), confirm in the viewport that the cube def
 File > Export with the usual export settings. Write `frame` and `fps` into every case.toml. If a
 case still exports undeformed, say so in its row and move on.
 
-| Case (folder) | Deformer | Setup / changes |
-|---|---|---|
-| mesh-deformer/cage-redo | Mesh | as `mesh-deformer/cage`, exported interactively |
-| mesh-deformer/cage-up | Mesh | the cage's top-front point moved by (0, 100, 0) |
-| mesh-deformer/cage-scale | Mesh | the whole cage scaled 150 % after Initialize |
-| surface/defaults-redo | Surface | as `surface/defaults`, exported interactively |
-| surface/tilted | Surface | the surface plane rotated P 30° after Initialize |
-| camera-deformer/grid-redo | Camera | as `camera-deformer/grid`; record the edited grid point's index as the app shows it |
-| camera-deformer/aimed | Camera | camera aimed at the cube from (0, 0, −1000); two grid points moved |
-| collision/sphere-redo | Collision | as `collision/sphere`, played to the case frame |
-| collision/cube-outside | Collision | a cube collider, Solver Outside, Strength 50 % |
-| jiggle/plane-frames | Jiggle | a 4 × 4 plane moving +x 300 over frames 0–10; export frames 1–8 |
-| jiggle/stiffness-100 | Jiggle | the same, Stiffness 100 %, frame 5 |
-| jiggle/drag | Jiggle | the same, Drag 0 % and 100 % (two cases), frame 5 |
-| jiggle/gravity | Jiggle | the same, Gravity (0, −981, 0), frame 5 |
-| delta-mush/iterations | Delta Mush | Iterations 0 and 1 (two cases), bent pose initialised before the bend |
-| correction/uv | Correction | Mapping UV |
-| correction/normals | Correction | Mapping Normals |
+| Case (folder) | Deformer | Setup / changes | Result |
+|---|---|---|---|
+| mesh-deformer/cage-redo | Mesh | as `mesh-deformer/cage`, exported interactively | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
+| mesh-deformer/cage-up | Mesh | the cage's top-front point moved by (0, 100, 0) | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
+| mesh-deformer/cage-scale | Mesh | the whole cage scaled 150 % after Initialize | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
+| surface/defaults-redo | Surface | as `surface/defaults`, exported interactively | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
+| surface/tilted | Surface | the surface plane rotated P 30° after Initialize | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
+| camera-deformer/grid-redo | Camera | as `camera-deformer/grid`; record the edited grid point's index as the app shows it | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
+| camera-deformer/aimed | Camera | camera aimed at the cube from (0, 0, −1000); two grid points moved | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
+| collision/sphere-redo | Collision | as `collision/sphere`, played to the case frame | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
+| collision/cube-outside | Collision | a cube collider, Solver Outside, Strength 50 % | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
+| jiggle/plane-frames | Jiggle | a 4 × 4 plane moving +x 300 over frames 0–10; export frames 1–8 | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
+| jiggle/stiffness-100 | Jiggle | the same, Stiffness 100 %, frame 5 | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
+| jiggle/drag | Jiggle | the same, Drag 0 % and 100 % (two cases), frame 5 | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
+| jiggle/gravity | Jiggle | the same, Gravity (0, −981, 0), frame 5 | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
+| delta-mush/iterations | Delta Mush | Iterations 0 and 1 (two cases), bent pose initialised before the bend | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
+| correction/uv | Correction | Mapping UV | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
+| correction/normals | Correction | Mapping Normals | needs a human: needs the GUI: follow-up form explicitly requires interactive initialization, viewport confirmation, or timeline playback/export for this solver/correction family. No scripted output claimed. (recorded by the batch run) |
 | melt/no-random-s0 | Melt | Radial and Vertical Randomness 0 %, Strength 0 % (scripted export is fine: Melt has no cache) |
 | melt/no-random-s10 | Melt | the same, Strength 10 % |
 | melt/no-random-s50 | Melt | the same, Strength 50 % |
@@ -310,17 +310,17 @@ case still exports undeformed, say so in its row and move on.
 | ffd/point-x | FFD | the lattice point at +x middle moved by (50, 0, 0) |
 | ffd/point-z | FFD | the lattice point at +z middle moved by (0, 0, 50) |
 | ffd/grid-2 | FFD | 2 × 2 × 2 grid points, one corner moved by (50, 50, 50) |
-| ffd/grid-small | FFD | Grid Size (150, 150, 150), the middle top point moved by (0, 50, 0) |
-| spline-wrap/box | Spline Wrap | as `spline-wrap/defaults` and `spline-wrap/arc`, exported interactively so the deformer has a real bounding box (two cases) |
-| spline-wrap/axis-y | Spline Wrap | as `spline-wrap/arc`, Axis +Y (one case each for +Z and −X) |
-| spline-wrap/keep-length | Spline Wrap | as `spline-wrap/arc`, Keep Length on |
-| spline-wrap/clamp | Spline Wrap | as `spline-wrap/arc`, Clamp on |
-| spline-wrap/strength-50 | Spline Wrap | as `spline-wrap/arc`, Strength 50 % |
-| spline-wrap/offset-25 | Spline Wrap | as `spline-wrap/arc`, Offset 25 % |
-| spline-wrap/from-25-to-75 | Spline Wrap | as `spline-wrap/arc`, From 25 %, To 75 % |
-| spline-wrap/banking-45 | Spline Wrap | as `spline-wrap/defaults` (Helix), Banking 45° |
-| spline-wrap/up-vector | Spline Wrap | as `spline-wrap/defaults`, Up Vector (1, 0, 0) |
-| spline-wrap/closed | Spline Wrap | a default Circle as the spline |
+| ffd/grid-small | FFD | Grid Size (150, 150, 150), the middle top point moved by (0, 50, 0) | not observed: needs interactive export: scripted evaluation left it undeformed after sequential evaluation retry (recorded by the batch run) |
+| spline-wrap/box | Spline Wrap | as `spline-wrap/defaults` and `spline-wrap/arc`, exported interactively so the deformer has a real bounding box (two cases) | needs a human: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding. (recorded by the batch run) |
+| spline-wrap/axis-y | Spline Wrap | as `spline-wrap/arc`, Axis +Y (one case each for +Z and −X) | needs a human: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding. (recorded by the batch run) |
+| spline-wrap/keep-length | Spline Wrap | as `spline-wrap/arc`, Keep Length on | needs a human: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding. (recorded by the batch run) |
+| spline-wrap/clamp | Spline Wrap | as `spline-wrap/arc`, Clamp on | needs a human: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding. (recorded by the batch run) |
+| spline-wrap/strength-50 | Spline Wrap | as `spline-wrap/arc`, Strength 50 % | needs a human: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding. (recorded by the batch run) |
+| spline-wrap/offset-25 | Spline Wrap | as `spline-wrap/arc`, Offset 25 % | needs a human: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding. (recorded by the batch run) |
+| spline-wrap/from-25-to-75 | Spline Wrap | as `spline-wrap/arc`, From 25 %, To 75 % | needs a human: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding. (recorded by the batch run) |
+| spline-wrap/banking-45 | Spline Wrap | as `spline-wrap/defaults` (Helix), Banking 45° | needs a human: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding. (recorded by the batch run) |
+| spline-wrap/up-vector | Spline Wrap | as `spline-wrap/defaults`, Up Vector (1, 0, 0) | needs a human: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding. (recorded by the batch run) |
+| spline-wrap/closed | Spline Wrap | a default Circle as the spline | needs a human: needs the GUI: follow-up form explicitly requires interactive export with a real evaluated bounding box; no scripted mesh claimed. All variants named in this row remain outstanding. (recorded by the batch run) |
 | spline-deformer/lines | Spline | original and modifier: straight 2-point Linear splines along x, the modifier 100 higher |
 | spline-deformer/modifier-moved | Spline | as `spline-deformer/defaults`, the modifier spline translated (0, 50, 0) instead of rotated |
 | spline-deformer/radius-60 | Spline | as `spline-deformer/lines`, Radius 60 |

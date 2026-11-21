@@ -1,6 +1,6 @@
 # Text spline — observation (O48)
 
-Status: observed (9 of 9 cases; font family not scriptable on R25, see Notes) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-04
+Status: observed (the dv- follow-up rows need a human font pick, GUI session G1 or G4; the other follow-up rows are observed on disk) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-11-04
 Method: as [splines-2.md](splines-2.md), followed as planned: a Text spline under an Extrude
 with Offset 20 and caps off, exported to `tests/golden/text/<case>/mesh.obj`. Scripted
 ([agents/OBSERVER.md](../agents/OBSERVER.md)). Level B, font-dependent — see Notes for how
@@ -56,17 +56,17 @@ DejaVu project) in the font picker, confirm it reshapes the text, then export th
 cases above. If the picker cannot reshape the text either, say so in the Notes and skip the
 `dv-` rows.
 
-| Case | Text | Changes | Mesh |
-|---|---|---|---|
-| dv-a | A | Font DejaVu Sans | extruded as above |
-| dv-o | O | Font DejaVu Sans | extruded as above |
-| dv-word | Forge | Font DejaVu Sans | extruded as above |
-| dv-two-lines | A (newline) A | Font DejaVu Sans | extruded as above |
-| align-right | AB | Align Right | extruded as above |
-| vspacing | A (newline) A | Vertical Spacing 50 | extruded as above |
-| kerning | AV | – (default kerning) | extruded as above |
-| height-negative | A | Height −200 | extruded as above |
-| separate-letters | AB | Separate Letters on (record the object tree) | extruded as above |
+| Case | Text | Changes | Mesh | | Result |
+|---|---|---|---|---|
+| dv-a | A | Font DejaVu Sans | extruded as above | needs a human: the dv- rows need DejaVu Sans picked in the font picker (GUI session G1 or G4), skipped in this unattended run |
+| dv-o | O | Font DejaVu Sans | extruded as above | needs a human: the dv- rows need DejaVu Sans picked in the font picker (GUI session G1 or G4), skipped in this unattended run |
+| dv-word | Forge | Font DejaVu Sans | extruded as above | needs a human: the dv- rows need DejaVu Sans picked in the font picker (GUI session G1 or G4), skipped in this unattended run |
+| dv-two-lines | A (newline) A | Font DejaVu Sans | extruded as above | needs a human: the dv- rows need DejaVu Sans picked in the font picker (GUI session G1 or G4), skipped in this unattended run |
+| align-right | AB | Align Right | extruded as above | observed: tests/golden/text/align-right/ holds the exported mesh |
+| vspacing | A (newline) A | Vertical Spacing 50 | extruded as above | observed: tests/golden/text/vspacing/ holds the exported mesh |
+| kerning | AV | – (default kerning) | extruded as above | observed: tests/golden/text/kerning/ holds the exported mesh |
+| height-negative | A | Height −200 | extruded as above | observed: tests/golden/text/height-negative/ holds the exported mesh |
+| separate-letters | AB | Separate Letters on (record the object tree) | extruded as above | observed: tests/golden/text/separate-letters/ holds the exported mesh |
 
 ## Notes
 
