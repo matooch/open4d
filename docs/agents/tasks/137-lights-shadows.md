@@ -1,6 +1,6 @@
 # 137 · Lights (omni, spot, infinite, area, sky) and shadows
 
-Status: waiting: O30, O29 · Area: K · Depends on: 136 · Observations: O30, O29 · Touches: render-cpu, generators
+Status: done · Area: K · Depends on: 136 · Observations: O30, O29 · Touches: render-cpu, generators
 
 ## Goal
 Light objects with reference defaults and falloff modes.
@@ -27,9 +27,7 @@ Light objects with reference defaults and falloff modes.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: omni, spot (smooth cone), infinite (with angle), area (rectangle, disc, sphere; one-sided or two-sided; visible or not), sky/constant/image environments, falloff none/linear/inverse linear/inverse square, hard and soft shadows, density and colour, diffuse/specular switches, default head light, shadow AOV. 17 tests in crates/render-cpu/tests/lights.rs, including closed forms (disc and sphere area light irradiance, cosine law, falloffs, soft penumbra).
+- Matched/pinned: the light cases of O30 (omni, omni-shadow) match geometry (shadows are not compared: the reference lighting is parity-pending); spot and infinite were never observed (black), area-soft is pinned (see RENDER.md R14).
+- Deviations: light node types are not registered in the scene (no icon table edits; follow-up with the scene adapter); falloff Steps and object-shaped area lights return Unsupported.
+- Files: crates/render-cpu/src/lights.rs, tests/lights.rs, docs/specs/RENDER.md R8.

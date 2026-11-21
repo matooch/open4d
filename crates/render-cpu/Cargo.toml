@@ -3,6 +3,23 @@ name = "forge-render-cpu"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Deterministic multi-threaded CPU path tracer (docs/specs/RENDER.md)."
+
+[dependencies]
+forge-image = { path = "../image" }
+forge-material = { path = "../material" }
+forge-render-api = { path = "../render-api" }
+glam = "0.34"
+rayon = "1"
+
+[dev-dependencies]
+forge-core = { path = "../core" }
+forge-image = { path = "../image" }
+forge-generators = { path = "../generators" }
+forge-geometry = { path = "../geometry" }
+forge-parity-harness = { path = "../parity-harness" }
+forge-shaders = { path = "../shaders" }
+toml = "1"
 
 [lints]
 workspace = true

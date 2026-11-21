@@ -36,7 +36,8 @@ tests hold a thin adapter from the golden OBJ files. Materials come from
 
 `width`, `height` (pixels, >= 1), `samples` per pixel (>= 1), `max_depth` (path vertices,
 default 5), `seed` (u64, default 1), `tile` (pixels, default 32), `filter` (`Box`, `Triangle`,
-`Gaussian`) and `filter_width` (pixels, default 1 for box), `aovs` (the requested extra passes),
+`Gaussian`, `Cubic` = the cubic B-spline) and `filter_width` (pixels, the full support width,
+default 1; the reference's render settings record a Cubic filter of width 2), `aovs` (the requested extra passes),
 `default_light` (default true, R11), `clamp` (maximum value of one sample's contribution after
 the first bounce, 0 = off), `region` (optional sub-rectangle; pixels outside stay transparent
 black), `threads` (None = all). `validate()` returns `RenderError::Settings` for zero sizes,
@@ -45,8 +46,9 @@ zero samples, a region outside the image or a non-positive filter width.
 ## R3 Outputs and the AOV model
 
 `RenderOutput { width, height, beauty: Image, aovs: BTreeMap<Aov, Image>, stats }`. Every
-image is `forge_image::Image` (linear RGBA f32, straight alpha). Beauty alpha is the coverage of
-the pixel by geometry (0 over the background colour, 1 inside).
+image is `forge_image::Image` (linear RGBA f32). Beauty is **premultiplied**: alpha is the coverage of
+the pixel by geometry and the colour includes the background (so a black background gives
+the usual premultiplied image); the AOV images are straight with alpha = coverage.
 
 `Aov` (ordered): `Depth` (distance along the camera ray to the first hit, in R, 0 where
 nothing is hit), `Normal` (world-space shading normal, RGB = XYZ, facing the viewer),
@@ -132,8 +134,8 @@ shading normal, view direction) and evaluates the compiled `ShadingGraph`:
 - **Emission** (`luminance`): `eval(emission)`, one-sided on the shading normal side facing the
   viewer, added to the path when hit (it lights other surfaces only through BSDF sampling).
 - **Bump**: central differences of the mean of the bump texture over two tangent directions of
-  the triangle (step `1e-3 * scale`), `n' = normalize(n - 20 * strength * (dh/du t1 + dh/dv t2))`
-  with a unit scale `k = 1`; the exact scale is **parity-pending** (O43 `mat-bump-noise` records
+  the triangle (step `1e-3 * scale`), `n' = normalize(n - strength * scale * (dh/dt1 t1 + dh/dt2 t2))`
+  with `scale` the scene bounds diagonal; the exact scale is **parity-pending** (O43 `mat-bump-noise` records
   only a picture).
 - **Ignored with a documented reason** (the channel is compiled but has no render rule yet):
   `normal` map, `alpha`, `displacement`, `fog`, `environment` (material), `glow`, `diffusion`.
@@ -194,10 +196,14 @@ width `sensor_mm` spans the image width: the pixel focal length is `f_px = width
 sensor_mm`; the principal point is the image centre shifted by `film_offset` (fractions of the
 image width, +x right, +y up). Pixel `(px, py)` (row 0 at the top, pixel centres at +0.5) maps to
 the camera-space direction `((px - cx) / f_px, -(py - cy) / f_px, 1)`.
-`Camera::from_hpb(position, [h, p, b], projection)`: `R = Rh * Rp * Rb` with, in this
-left-handed system, `Rh` turning +Z toward +X, `Rp` turning +Z toward +Y (positive pitch looks
-up, so the observed camera `P -15 deg` looks down), `Rb` turning +X toward +Y. Only the pitch
-sign is observed (O30); heading and bank signs are **parity-pending**.
+`Camera::from_hpb(position, [h, p, b], projection)`: `R = Rh * Rp * Rb`, each factor the transpose
+of the usual right-handed rotation (what the observed left-handed reference does): `Rh` turns +Z
+toward -X, so a heading of -15 deg looks to the right (O30: the objects sit left of the image
+centre), `Rp` turns +Z toward +Y (positive pitch looks up) and `Rb` turns +X toward -Y. Only
+the heading sign is observed (O30); pitch and bank follow from the same convention and are
+**parity-pending**. The case files' `camera_rotation_deg = [-15, 0, 0]` is therefore
+`[heading, pitch, bank]`: the form's prose calls it "P -15 deg", which the pictures contradict
+(with pitch -15 and heading 0 the cube would be centred horizontally; see R14).
 
 ## R11 Default light
 
@@ -235,6 +241,51 @@ CLI: `forge render <scene> --out <path> [--width W] [--height H] [--samples N] [
 --start A --end B --step S] [--aov depth,normal,...] [--multipart] [--seed N]` (docs/specs/CLI.md).
 The CLI builds the snapshot from the scene's evaluated meshes with a default material, the default
 light and a camera that frames the scene bounds (the scene has no camera or light objects yet).
+
+## R14 Parity with O30 / O43 (level C)
+
+Source: `tests/golden/render` (19 folders, 320 x 240, `render.png` + `mesh.obj`),
+`docs/parity/render-reference.md`, `docs/parity/material-renders.md`. Test:
+`crates/render-cpu/tests/render_parity.rs`. Only geometry is compared. The test adapter builds the
+snapshot from the case file: the OBJ groups whose name the case lists as an object (the mat-*
+OBJs also hold a plane that the case file does not list and the pictures do not show), the
+lights, a Standard material built with `Material::from_values` (checker, fresnel and noise
+shaders from `forge-shaders`), the camera `[heading, pitch, bank]` at 36 mm equivalent focal
+length. A sphere with `render_perfect` is rebuilt as a 96-segment sphere with the UV layout of
+UV.md U2 (the OBJ is its 16-segment editor tessellation, 1.1 px inside the true silhouette); texture
+tag projections other than UVW use `generate_uvw`.
+
+Findings:
+
+- **Camera.** With the documented camera (36 mm over a 36 mm gate, centred, heading -15 deg) every
+  non-black silhouette lands within 1 px. A pitch of -15 deg with heading 0 (the form's wording)
+  cannot be fitted: it needs a principal point at (71, 210) and a 5 % anisotropy. The cube of
+  `cube-default-light` is symmetric about x = 70, as heading -15 deg predicts.
+- **Silhouette definition.** The reference applies a Cubic filter of width 2, so bright edges are
+  surrounded by a halo of up to two pixels at a few percent. The reference silhouette is therefore
+  "any channel above 0.05 linear" (the largest value that keeps the dark edges, the smallest that
+  cuts the halo); ours is `alpha >= 0.5` (half coverage) rendered with the same filter, 16 samples.
+- **Result**: 15 of 19 cases match with 0 pixels beyond 1 px: cube-default-light, cube-plane,
+  sphere-default-light, omni, omni-shadow, material-matte, material-red, mat-default,
+  mat-red-matte, mat-glossy, mat-rough, mat-transparent, mat-luminance, mat-fresnel,
+  mat-bump-noise.
+- **KNOWN_MISMATCH** (builds, differs; asserted): `area-soft` (the case file says
+  `light_type = "Infinite"` with rotation 0 while the form says Area light: the +Z-travelling
+  light leaves the plane dark, 1500 px; observation needs checking), `mat-checker-uv` and
+  `mat-checker-cubic` (the reference's black squares are exactly 0, so its luminance silhouette
+  is not the object's, 557 / 130 px; and the pattern, compared through the albedo AOV, has the
+  same grid size but a different phase or orientation: 2778 / 1059 px. Hypotheses tried: shader
+  colour order inverted (worse), projection defaults. Open: the checker's UV origin and
+  orientation on the reference sphere).
+- **UNSUPPORTED**: `mat-metal` (silhouette not observable: only 725 px of the light's reflection
+  are above black).
+- **Not observed**: `spot` and `infinite` (black renders, the folders were never committed): the
+  test asserts the folders stay absent; "observation needs redoing".
+- **Brightness is not asserted.** The PSNR after exposure normalisation is 13 to 29 dB (printed by
+  the test): the reference's shading (whole spheres lit frontally although the Area light stands at
+  (300, 400, -300), brightest pixel 188/255 under the default light) does not follow the light
+  objects the forms describe, so the lighting model is **parity-pending** until the default light
+  and the light units are observed.
 
 ## R13 Not done / follow-ups
 

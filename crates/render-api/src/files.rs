@@ -210,12 +210,23 @@ pub fn expand_path(
 
 fn prepare_colour(img: &Image, settings: &OutputSettings) -> Image {
     let mut im = img.clone();
+    let premult = im.alpha == AlphaMode::Premultiplied;
     im.alpha = AlphaMode::Straight;
     if !settings.alpha {
+        // Composited over the background colour: the colour is kept, the alpha dropped.
         for p in im.data.as_chunks_mut::<4>().0.iter_mut() {
             p[3] = 1.0;
         }
-    } else if !settings.straight_alpha {
+    } else if settings.straight_alpha && premult {
+        for p in im.data.as_chunks_mut::<4>().0.iter_mut() {
+            let a = p[3];
+            if a > 0.0 {
+                p[0] /= a;
+                p[1] /= a;
+                p[2] /= a;
+            }
+        }
+    } else if !settings.straight_alpha && !premult {
         for p in im.data.as_chunks_mut::<4>().0.iter_mut() {
             let a = p[3];
             p[0] *= a;

@@ -93,14 +93,14 @@ fn camera_film_offset_moves_the_principal_point() {
 }
 
 #[test]
-fn heading_turns_toward_x() {
+fn heading_turns_toward_minus_x() {
     let cam = Camera::from_hpb(
         DVec3::ZERO,
         [90.0f64.to_radians(), 0.0, 0.0],
         Projection::Orthographic { width: 100.0 },
     );
     let (_, d) = cam.ray(0.0, 0.0, 10, 10);
-    assert!((d - DVec3::X).length() < 1e-12, "{d:?}");
+    assert!((d + DVec3::X).length() < 1e-12, "{d:?}");
 }
 
 #[test]

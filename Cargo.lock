@@ -1767,6 +1767,19 @@ version = "0.1.0"
 [[package]]
 name = "forge-render-cpu"
 version = "0.1.0"
+dependencies = [
+ "forge-core",
+ "forge-generators",
+ "forge-geometry",
+ "forge-image",
+ "forge-material",
+ "forge-parity-harness",
+ "forge-render-api",
+ "forge-shaders",
+ "glam",
+ "rayon",
+ "toml",
+]
 
 [[package]]
 name = "forge-render-gpu"

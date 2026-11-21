@@ -14,7 +14,9 @@ pub use engine::{Control, RenderEngine, RenderError, RenderEvent};
 pub use files::{
     FrameRange, Multipass, OutputFormat, OutputSettings, expand_path, frames, write_output,
 };
-pub use light::{AreaShape, Environment, Falloff, Light, LightKind, Lighting, ShadowMode};
+pub use light::{
+    AreaShape, Background, Environment, Falloff, Light, LightKind, Lighting, ShadowMode,
+};
 pub use output::{Aov, RenderOutput, RenderStats};
 pub use settings::{PixelFilter, RenderSettings};
 pub use snapshot::{Instance, MaterialData, MeshData, Snapshot};

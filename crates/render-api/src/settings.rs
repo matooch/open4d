@@ -3,11 +3,15 @@
 use crate::engine::RenderError;
 use crate::output::Aov;
 
+/// Pixel reconstruction filters; `filter_width` is the full support width in pixels.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PixelFilter {
     Box,
     Triangle,
+    /// Truncated at the support, standard deviation `filter_width / 4`.
     Gaussian,
+    /// The cubic B-spline.
+    Cubic,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -30,7 +30,7 @@ impl Camera {
         }
     }
 
-    /// Position and heading/pitch/bank in radians (R10 conventions).
+    /// Position and heading/pitch/bank in radians (R10 conventions, see [`hpb_matrix`]).
     pub fn from_hpb(position: DVec3, hpb: [f64; 3], projection: Projection) -> Camera {
         Camera::new(hpb_matrix(position, hpb), projection)
     }
@@ -103,15 +103,18 @@ impl Camera {
     }
 }
 
-/// `R = Rh * Rp * Rb`, left-handed: `Rh` turns +Z toward +X, `Rp` turns +Z toward +Y,
-/// `Rb` turns +X toward +Y.
+/// `R = Rh * Rp * Rb`. Each factor is the transpose of the usual right-handed rotation, which is
+/// what the observed reference does in its left-handed system: `Rh` turns +Z toward -X (a
+/// heading of -15 deg looks to the right, O30), `Rp` turns +Z toward +Y (positive pitch looks
+/// up) and `Rb` turns +X toward -Y. Only the heading sign is observed; pitch and bank follow
+/// from it and are **parity-pending**.
 pub fn hpb_matrix(position: DVec3, hpb: [f64; 3]) -> DMat4 {
     let (sh, ch) = hpb[0].sin_cos();
     let (sp, cp) = hpb[1].sin_cos();
     let (sb, cb) = hpb[2].sin_cos();
     // Columns are the images of X, Y, Z.
-    let rh = glam::DMat3::from_cols(DVec3::new(ch, 0.0, -sh), DVec3::Y, DVec3::new(sh, 0.0, ch));
+    let rh = glam::DMat3::from_cols(DVec3::new(ch, 0.0, sh), DVec3::Y, DVec3::new(-sh, 0.0, ch));
     let rp = glam::DMat3::from_cols(DVec3::X, DVec3::new(0.0, cp, -sp), DVec3::new(0.0, sp, cp));
-    let rb = glam::DMat3::from_cols(DVec3::new(cb, sb, 0.0), DVec3::new(-sb, cb, 0.0), DVec3::Z);
+    let rb = glam::DMat3::from_cols(DVec3::new(cb, -sb, 0.0), DVec3::new(sb, cb, 0.0), DVec3::Z);
     DMat4::from_mat3_translation(rh * rp * rb, position)
 }
