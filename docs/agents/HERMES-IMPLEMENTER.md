@@ -25,8 +25,17 @@ Work only on briefs in the queue below, top to bottom, skipping ones whose Statu
 ### Queue (the planner edits this list)
 
 1. [193](tasks/193-extrude-tests-use-auto.md) · Parity tests use Extrude's Auto direction (tests only; small)
-2. [049](tasks/049-create-menu-organisation.md) · Create menu organisation (own design: every rule
+2. [195](tasks/195-grow-use-edge.md) · Grow Selection: Use Edge option for polygons (small; one golden case decides it)
+3. [196](tasks/196-obj-uvs.md) · OBJ texture coordinates import and export (medium; public format, round-trip tests)
+4. [049](tasks/049-create-menu-organisation.md) · Create menu organisation (own design: every rule
    parity-pending until GUI session G1)
+
+**Handing a brief back.** When a brief's branch is pushed, add one line to
+`/Users/bigman/forge-implementer/log.md`: `<brief> <branch> <done|blocked> <one-line result>`. The
+owner passes it to the planner, who reviews the branch (diff, gate, rules), then either opens the PR
+or writes what to fix in the brief's `## Review (planner)` section on `main`. Before you start the
+next brief, check whether the previous one got a Review section; if so, fix that first on the same
+branch and push again.
 
 When the queue is done, write `QUEUE FINISHED` to `/Users/bigman/forge-implementer/log.md` and stop.
 
