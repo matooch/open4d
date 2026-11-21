@@ -97,3 +97,26 @@ projection set on the texture tag, then Generate UVW Coordinates). `forge_materi
 - **Unsupported** (`ProjectionError::Unsupported`): Spatial, UVW Mapping (identity, no data),
   Shrink Wrapping, Camera Mapping, a Frontal projection without a camera, (a non-default tag
   `rotation` or `position` is implemented but was not observed: **parity-pending**).
+
+## U6 UVW tag and the `uv.generate` command (brief 194)
+
+Level C command around the U4 maths (own design, parity-pending except the projections U4 shows).
+
+- **UVW tag** `forge.uvw` (`Category::Tag`, registered by forge-material): `uvw` (hidden FloatList,
+  two values `u, v` per polygon corner, polygons in order, corners in polygon order), the same
+  numbering as `CornerUvs::corners` flattened. Evaluation of UVs for rendering reads it first and
+  falls back to the primitive layout (U2).
+- **`uv.generate`** (`object?`, `tag?`, `camera?`): for a polygon object (default the active node) it
+  takes the texture tag `tag` (default the first `forge.tag.texture` of the object), builds
+  `TagSpace { position, rotation, size }` from the tag params, picks the projection from
+  `projection` (`Projection::from_id`), runs `generate_uvw` on the stored mesh with the object's
+  world matrix, and writes the result to the object's UVW tag, creating it when missing. One undo
+  step "Generate UVW". Result `{tag, corners}`. A tag whose `selection` names a polygon selection
+  restricts the polygons it rewrites; the others keep their old UVs (zero when there were none).
+  Frontal needs `camera` (`position`, `rotation_deg`, optional `aspect`, default 16 / 9) because
+  the document has no camera node yet; without it the command fails with the `Unsupported` text of
+  `Projection::from_id`. Spatial, UVW Mapping, Shrink Wrapping and Camera Mapping fail the same way.
+- Checks: `crates/app/tests/material_commands.rs` runs the command on the sphere of the `proj-*`
+  cases and compares per corner with the golden `mesh.obj` (the same 6 exact cases within 1e-5 and
+  `proj-frontal` pinned as known mismatch with the same bounds as U4). It also checks that the command
+  writes one tag, reuses it and records no step when the result is unchanged.

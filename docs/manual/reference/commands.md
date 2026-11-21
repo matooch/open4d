@@ -2,7 +2,7 @@
 
 # Command reference
 
-188 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+193 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -193,6 +193,11 @@
 | [`vertexmap.create`](#vertexmapcreate) | Create Vertex Map | yes | `vertexmap_create` |
 | [`vertexmap.set`](#vertexmapset) | Set Vertex Map Weights | yes | `vertexmap_set` |
 | [`restriction.set`](#restrictionset) | Restrict Deformer | yes | `restriction_set` |
+| [`material.create`](#materialcreate) | Create Material | yes | `material_create` |
+| [`material.delete`](#materialdelete) | Delete Material | yes | `material_delete` |
+| [`material.assign`](#materialassign) | Assign Material | yes | `material_assign` |
+| [`shader.set`](#shaderset) | Set Shader | yes | `shader_set` |
+| [`uv.generate`](#uvgenerate) | Generate UVW | yes | `uv_generate` |
 | [`plugin.list`](#pluginlist) | List Plugins | no | `plugin_list` |
 
 ## `object`
@@ -2399,6 +2404,75 @@ Restrict Deformer. One undo step.
 | `invert` | boolean or null | no |  |
 
 Example: `forge cmd scene.forge restriction.set --args '{"selection":"Vertex Map"}'`
+
+
+## `material`
+
+### `material.create`
+
+Create Material. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `index` | integer or null | no | Position in the material list (default: the end). |
+| `name` | string or null | no |  |
+| `type` | string or null | no | Material type (default `forge.material.standard`). |
+
+Example: `forge cmd scene.forge material.create --args '{}'`
+
+### `material.delete`
+
+Delete Material. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `materials` | array of integer | yes |  |
+
+Example: `forge cmd scene.forge material.delete --args '{"materials":[1]}'`
+
+### `material.assign`
+
+Assign Material. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `material` | integer | yes |  |
+| `nodes` | array of integer or null | no | Objects (default: the selection). |
+| `projection` | string or null | no | Projection of the new tags (a texture tag `projection` id). |
+
+Example: `forge cmd scene.forge material.assign --args '{"material":1}'`
+
+
+## `shader`
+
+### `shader.set`
+
+Set Shader. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `channel` | string or null | no | A slot: a channel name (`color`, `bump`, ...) or a slot param id. |
+| `material` | integer or null | no | With `channel`: the material. |
+| `params` | object or null | no | Parameters of the new shader, JSON by the shader type's units. |
+| `parent` | integer or null | no | Instead of a slot: a shader that takes the new one as an input. |
+| `type` | string or null | no | A `forge.shader.*` type; null removes the shader of the slot. |
+
+Example: `forge cmd scene.forge shader.set --args '{"channel":"color","material":1,"type":"forge.shader.gradient"}'`
+
+
+## `uv`
+
+### `uv.generate`
+
+Generate UVW. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `camera` | object \| null | no |  |
+| `object` | integer or null | no | A polygon object (default: the active node). |
+| `tag` | integer or null | no | A texture tag of the object (default: its first). |
+
+Example: `forge cmd scene.forge uv.generate --args '{}'`
 
 
 ## `plugin`

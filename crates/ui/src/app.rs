@@ -1084,6 +1084,11 @@ impl Editor {
                     self.run(c);
                 }
             }
+            Panel::Materials => {
+                for c in crate::material_manager::material_manager_ui(ui, &mut self.state) {
+                    self.run(c);
+                }
+            }
             Panel::WeightManager => {
                 for c in crate::weight_manager::weight_manager_ui(ui, &mut self.state) {
                     self.run(c);

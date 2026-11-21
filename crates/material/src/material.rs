@@ -2,9 +2,15 @@
 
 use std::collections::BTreeMap;
 
-use forge_core::{Node, Value};
+use forge_core::{Node, NodeId, Value};
 
 use crate::params::standard_type;
+
+/// The texture name of a hosted shader: what a material built from a node asks the sampler for
+/// (MATERIAL.md M6).
+pub fn shader_name(id: NodeId) -> String {
+    format!("#{}", id.0)
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Material {
@@ -39,8 +45,16 @@ impl Material {
         m
     }
 
+    /// A hosted material: texture slot links become the names `#<shader id>`
+    /// ([`shader_name`]), an empty slot stays empty.
     pub fn from_node(node: &Node) -> Material {
-        Material::from_values(&node.params)
+        let mut params = node.params.clone();
+        for v in params.values_mut() {
+            if let Value::Link(l) = v {
+                *v = Value::String(l.map(shader_name).unwrap_or_default());
+            }
+        }
+        Material::from_values(&params)
     }
 
     pub fn set(&mut self, id: &str, v: Value) {

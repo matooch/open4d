@@ -178,6 +178,11 @@ touch history.
 | `vertexmap.create` | `object?`, `name?`, `value?`, `weights?` | `{tag}` | yes |
 | `vertexmap.set` | `tag`, `weights` or `points` + `value` | `{count}` | yes |
 | `restriction.set` | `deformer?`, `selection` (tag name), `invert?` | `{tag}` | yes |
+| `material.create` | `type?` (default `forge.material.standard`), `name?`, `index?` | `{material}` | yes |
+| `material.delete` | `materials` (ids) | `{deleted}` | yes |
+| `material.assign` | `material`, `nodes?` (selection), `projection?` | `{tags}` | yes |
+| `shader.set` | `type` (`forge.shader.*`, null removes), then `material` + `channel` (a slot such as `color`, or a slot param id) or `parent` (a shader); `params?` (JSON by the shader type's units) | `{shader}` | yes |
+| `uv.generate` | `object?`, `tag?`, `camera?` (UV.md U6) | `{tag, corners}` | yes |
 | `graph.add_node` | `tag`, `type`, `values?`, `pos?` (NODES.md §6) | `{node}` | yes |
 | `graph.remove` | `tag`, `node?`, `nodes?` | `{removed_links}` | yes |
 | `graph.connect` | `tag`, `from_node`, `from_port`, `to_node`, `to_port`, `release_node?`, `release_port?` (type and cycle checked) | `{replaced}` | yes |

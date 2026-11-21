@@ -18,7 +18,7 @@ Crate `forge-shaders` (`crates/shaders`) depends on `forge-material` (the `Shade
 - `build(type_id, &Values, &Inputs) -> Result<Shader, ShaderError>` builds from a parameter map over
   the type's defaults. `Inputs` carries the child shaders (Layer, Colorizer, Filter, Fusion,
   Normalizer) and the decoded image (Bitmap). `ShadersPlugin` registers 17 `forge.shader.*`
-  types (`Category::Shader`, not placeable in a scene yet, MATERIAL.md M1).
+  types (`Category::Shader`, hosted below materials: S11).
 - **Colour parameters are sRGB-encoded display values and are decoded to linear** (IEC 61966-2-1)
   when built. Evidence `tiles`: colour 0.5 samples as 0.21404 in all three channels; 0 and 1 are
   fixed points, so the black-to-white defaults are unaffected.
@@ -107,6 +107,19 @@ Brick (`brick`: the observed pattern is noise-perturbed, one case, not derived),
 shader (needs a field at the sample point), Layer lists with per-layer modes (data only through
 the GUI), the noise types of S3, Tiles patterns of S4, MIP / blur (`blur_offset`, `blur_scale`
 are accepted and ignored).
+
+## S11 Hosted shaders (brief 194)
+
+Shaders are document nodes below a material (CORE.md section 2.1, MATERIAL.md M6): a node's params
+are the `Values` of `build`, its children (in order) are `Inputs::shaders`.
+`forge_shaders::build_node(scene, id, images) -> Result<Shader, ShaderError>` builds one tree
+(`images(path)` returns the decoded image of a Bitmap's `file` param; `no_images` refuses); a node
+that is not a shader type, an unregistered type or a tree deeper than 32 levels is an error.
+`ShaderSet::from_material(scene, material, images)` builds the shader every slot link of the material
+points at, keyed `#<node id>` (`forge_material::shader_name`); a slot whose tree fails to build
+(for example an `Unsupported` noise type) is left out and the set reports it, so that slot samples
+white. The shader types are registered with `Category::Shader` and created with
+`Tx::create_shader`; `ShadersPlugin` is otherwise unchanged. Tests: `crates/shaders/tests/hosting.rs`.
 
 ## S10 Parity summary
 

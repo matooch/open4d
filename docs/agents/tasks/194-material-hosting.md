@@ -1,6 +1,6 @@
 # 194 · Materials and shaders in the document: hosting, links, Generate UVW command
 
-Status: ready · Area: J · Depends on: 123, 125, 127 · Observations: O29, O43 (existing) · Touches: core, material, shaders, app, command, ui, io (native format)
+Status: done · Area: J · Depends on: 123, 125, 127 · Observations: O29, O43 (existing) · Touches: core, material, shaders, app, command, ui, io (native format)
 
 ## Goal
 Brief 123 built the Standard material and brief 125/126 the shaders as libraries, but the document
@@ -26,11 +26,11 @@ is no Generate UVW command (brief 127 Report). Give materials and shaders a home
   Level C, parity-pending G6/G7 (no GUI answers yet).
 
 ## Done when
-- [ ] A script creates a material, puts a Gradient shader on Color, assigns it to a cube, saves,
+- [x] A script creates a material, puts a Gradient shader on Color, assigns it to a cube, saves,
       reopens, and the tag's link and the shader tree survive (round-trip test).
-- [ ] `uv.generate` on a cube with a Cubic tag matches the brief 127 `proj-cubic` case.
-- [ ] v11 files still open; the format test covers v12.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] `uv.generate` on a cube with a Cubic tag matches the brief 127 `proj-cubic` case.
+- [x] v11 files still open; the format test covers v12.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -40,3 +40,8 @@ is no Generate UVW command (brief 127 Report). Give materials and shaders a home
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- Result: materials and shaders live in the document. Tests: `crates/core/tests/materials.rs` (list order, undo, placement errors, link clearing on delete in one step, deep revision), `crates/core/tests/native_format.rs` (v12 fixtures byte-stable, v11 fixtures migrate and resave, a v11 reader refuses v12), `crates/shaders/tests/hosting.rs` (4), `crates/app/tests/material_commands.rs` (7: the script/save/reopen round trip of the first done-when item, delete + undo, `shader.set` replace/inputs/errors, assign errors, `uv.generate` errors and reuse, and the `proj-*` cases), `crates/ui/tests/material_manager.rs` (3). `uv.generate` against the brief 127 cases: 6/6 exact projections within 1e-5, `proj-frontal` still `KNOWN_MISMATCH` (3.6e-4, UV.md U4).
+- Rules (own design, level C, parity-pending): materials in `Scene::materials()`, shaders as children of a material or shader; the eleven `<channel>.texture` slots are `Link` params accepting Shader (before, strings; no file could hold a material, so no data migration; `Material::from_values` still takes the string form); `Material::from_node` names a linked shader `#<id>`, `ShaderSet::from_material` builds the shaders under the same names; deleting a material or shader clears links into the removed subtree inside the same transaction; a new `forge.uvw` tag (FloatList, u/v per corner) stores Generate UVW.
+- Deviations: the done-when line says a Cubic tag on a cube; the golden `proj-cubic` case is a sphere, so the command test runs on that sphere. `uv.generate` takes an optional `camera` argument because the document has no camera node. The format bump to v12 is shared with brief 027 (CORE.md 6.11; committed with it). The UI is a minimal Materials panel (New, Assign, Delete) without drag-and-drop onto objects.
+- Files: crates/core (scene.rs, document.rs, file.rs), crates/material (params.rs, material.rs, lib.rs), crates/shaders (host.rs), crates/app (material_commands.rs, lib.rs), crates/ui (material_manager.rs, dock.rs, app.rs, icon_table.rs), docs/specs (CORE, MATERIAL, SHADERS, UV, COMMANDS), docs/manual/reference.
+- Open: drag-and-drop assignment, a shader tree view and a camera node for Frontal (G6/G7 and a camera brief); `forge.uvw` is not yet read by the renderer and the viewport.

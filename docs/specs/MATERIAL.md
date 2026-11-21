@@ -22,12 +22,10 @@ crate holds the shading IR. It depends on `forge-core` only.
   Reflection / Specular channels) are **not** registered; the O29 rows "Layer Setup" and
   "Project Scale" are not scalar and are not registered either.
 - `forge.tag.texture` (`Category::Tag`): the texture tag (M4).
-- Materials and shaders are not scene-hierarchy nodes yet (`Document::create` refuses
-  `Category::Material`, CORE.md section 2; brief 124 or a core brief adds the slot). Until then
-  a material is built from its parameter map with `Material::new()` / `Material::from_values`,
-  and the tag's `material` link and every `<channel>.texture` string are the hooks the
-  hosting brief fills in (a texture slot holds the name of a shader in the document's shader
-  list, empty = none).
+- Materials and shaders are hosted in the document since brief 194 (CORE.md section 2.1, M6): a
+  material is an entry of the material list, its shaders are its children, the texture tag's
+  `material` link and every texture slot are links. A material can still be built from a parameter
+  map in code with `Material::new()` / `Material::from_values`.
 
 ## M2 Standard material parameters (from O29 section 4)
 
@@ -100,9 +98,41 @@ O28 notes "Spherical is the default"), `cylindrical`, `flat`, `cubic`, `frontal`
 `size` (100,100,100) (the tag's own transform with its Size, O28: the projection space, UV.md U4). Projection maths is
 in UV.md.
 
+## M6 Hosting in the document (brief 194)
+
+Level C (own design, no observation): the reference's Material manager is not observed (GUI
+sessions G6/G7 pending), so every rule here is **parity-pending**.
+
+- **Where.** `Scene::materials()` lists the document's materials in manager order; a shader tree
+  hangs below its material (CORE.md section 2.1). `forge.material.standard` is created by
+  `Tx::create_material`.
+- **Texture slots are links.** The eleven slot params (`color.texture`, `diffusion.texture`,
+  `luminance.texture`, `transparency.texture`, `environment.texture`, `bump.texture`,
+  `normal.texture`, `alpha.texture`, `displacement.texture`, `reflectance.spec.color_texture`,
+  `reflectance.spec.mask_texture`) are `Link` params accepting `Category::Shader`; the link names the
+  root of that slot's shader tree, a child of the material (or deeper, below another shader). Before
+  brief 194 they were strings (a shader name); no scene file ever held a material node (CORE.md
+  section 6.11), so nothing is migrated. In code the string form is still read: `Material::from_values`
+  accepts `Value::String(name)` and the IR then samples `ShaderSet` by that name.
+- **Reading a hosted material.** `Material::from_node(node)` turns a link `Some(id)` into the
+  texture name `#<id>` (`forge_material::shader_name(id)`); `forge_shaders::ShaderSet::from_material
+  (scene, material, images)` builds every linked shader tree (SHADERS.md S11) under the same names,
+  so `compile(&Material::from_node(..))` and the set plug together.
+- **Texture tag.** Its `material` link (accepts Material) resolves to a list entry. Deleting the
+  material clears the link in the same undo step (CORE.md section 2.1).
+- **Commands** (COMMANDS.md section 6): `material.create`, `material.delete`, `material.assign`
+  (adds a texture tag per object), `shader.set` (a shader of a type on a channel or as the input of a
+  shader; replaces what the slot held), `uv.generate` (UV.md U6).
+- **UI.** The Materials panel (`Panel::Materials`, opened from the Window menu) lists
+  `Scene::materials()` with the icon colour swatch and the name; New runs `material.create`, a row's
+  Assign button runs `material.assign` for the selected objects, Delete runs `material.delete`.
+  Dragging a row onto an object, renaming in place, a shader tree view and a material preview are
+  not done (GUI sessions G6/G7 have no answers yet); edit parameters in the Attributes panel
+  through `param.set` / `shader.set`. Level C.
+
 ## M5 Unsupported / parity-pending
 
-- No scene hosting of material or shader nodes (M1), no node materials (brief 124), no
+- No node materials (brief 124), no
   Layer Setup (a list of reflectance layers: only the default layer is modelled).
 - O43 render parity: not tested (level C needs a renderer); the IR is checked structurally.
 - All IR shading rules are **parity-pending**: they follow the published models.

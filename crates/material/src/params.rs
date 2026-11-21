@@ -4,6 +4,8 @@ use forge_core::{Category, NodeType, ParamDesc, Plugin, Registry, RegistryError,
 
 pub const MATERIAL: &str = "forge.material.standard";
 pub const TEXTURE_TAG: &str = "forge.tag.texture";
+/// The UVW tag: corner UVs written by Generate UVW (UV.md U5).
+pub const UVW_TAG: &str = "forge.uvw";
 
 const MIX: &[(&str, &str)] = &[
     ("normal", "Normal"),
@@ -21,6 +23,10 @@ impl B {
     fn add(&mut self, d: ParamDesc) {
         let d = d.group(self.group);
         self.ty.params.push(d);
+    }
+    /// A texture slot: a link to the root of the slot's shader tree (MATERIAL.md M6).
+    fn slot(&mut self, id: &str, label: &str) {
+        self.add(ParamDesc::link(id, label, &[Category::Shader]));
     }
     fn on(&mut self, id: &str, label: &str, v: bool) {
         self.add(ParamDesc::bool(id, label, v));
@@ -53,7 +59,7 @@ impl B {
         self.add(ParamDesc::enumeration(id, label, d, o));
     }
     fn tex(&mut self, p: &str, mode_default: &str) {
-        self.add(ParamDesc::string(&format!("{p}.texture"), "Texture", ""));
+        self.slot(&format!("{p}.texture"), "Texture");
         self.en(&format!("{p}.mix_mode"), "Mix Mode", mode_default, MIX);
         self.pct(
             &format!("{p}.mix_strength"),
@@ -281,11 +287,7 @@ pub fn standard_type() -> NodeType {
         0.0,
         10000.0,
     );
-    b.add(ParamDesc::string(
-        "reflectance.spec.color_texture",
-        "Layer Color Texture",
-        "",
-    ));
+    b.slot("reflectance.spec.color_texture", "Layer Color Texture");
     b.en(
         "reflectance.spec.color_mix_mode",
         "Layer Color Mix Mode",
@@ -311,11 +313,7 @@ pub fn standard_type() -> NodeType {
         "Layer Mask Color",
         [1.0, 1.0, 1.0],
     );
-    b.add(ParamDesc::string(
-        "reflectance.spec.mask_texture",
-        "Layer Mask Texture",
-        "",
-    ));
+    b.slot("reflectance.spec.mask_texture", "Layer Mask Texture");
     b.en(
         "reflectance.spec.mask_mix_mode",
         "Layer Mask Mix Mode",
@@ -355,7 +353,7 @@ pub fn standard_type() -> NodeType {
         1_000_000.0,
     );
     b.on("bump.mip_falloff", "MIP Falloff", true);
-    b.add(ParamDesc::string("bump.texture", "Texture", ""));
+    b.slot("bump.texture", "Texture");
     b.group = "Normal";
     b.pct("normal.strength", "Strength", 100.0, 0.0, 100000.0);
     b.en(
@@ -372,7 +370,7 @@ pub fn standard_type() -> NodeType {
     b.on("normal.flip_y", "Flip Y (Green)", false);
     b.on("normal.flip_z", "Flip Z (Blue)", false);
     b.on("normal.swap_yz", "Swap Y & Z (Y up)", false);
-    b.add(ParamDesc::string("normal.texture", "Texture", ""));
+    b.slot("normal.texture", "Texture");
     b.group = "Alpha";
     b.col("alpha.color", "Alpha Color", [0.0, 0.0, 0.0]);
     b.col("alpha.delta", "Alpha Delta", [0.5, 0.5, 0.5]);
@@ -380,7 +378,7 @@ pub fn standard_type() -> NodeType {
     b.on("alpha.soft", "Soft", true);
     b.on("alpha.image_alpha", "Image Alpha", true);
     b.on("alpha.premultiplied", "Pre-multiplied", false);
-    b.add(ParamDesc::string("alpha.texture", "Texture", ""));
+    b.slot("alpha.texture", "Texture");
     b.group = "Glow";
     b.col("glow.color", "Glow Color", [1.0, 1.0, 1.0]);
     b.pct("glow.brightness", "Glow Brightness", 100.0, 0.0, 100.0);
@@ -412,7 +410,7 @@ pub fn standard_type() -> NodeType {
             ("rgb_world", "RGB (XYZ World)"),
         ],
     );
-    b.add(ParamDesc::string("displacement.texture", "Texture", ""));
+    b.slot("displacement.texture", "Texture");
     b.on("displacement.subpoly", "Sub Polygon Displacement", false);
     b.int(
         "displacement.subdivision_level",
@@ -603,6 +601,12 @@ pub fn texture_tag_type() -> NodeType {
     b.ty
 }
 
+/// The UVW tag (UV.md U5): `uvw` holds `u, v` per polygon corner.
+pub fn uvw_tag_type() -> NodeType {
+    NodeType::new(UVW_TAG, "UVW", Category::Tag)
+        .param(ParamDesc::float_list("uvw", "UVW").range(-1e12, 1e12))
+}
+
 /// Registers the material node types.
 pub struct MaterialPlugin;
 
@@ -612,6 +616,7 @@ impl Plugin for MaterialPlugin {
     }
     fn register(&self, registry: &mut Registry) -> Result<(), RegistryError> {
         registry.register(standard_type())?;
-        registry.register(texture_tag_type())
+        registry.register(texture_tag_type())?;
+        registry.register(uvw_tag_type())
     }
 }

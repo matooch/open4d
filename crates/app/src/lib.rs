@@ -6,6 +6,7 @@
 pub mod animate;
 pub mod coords;
 pub mod diagnostics;
+pub mod material_commands;
 pub mod motion;
 pub mod param_edit;
 pub mod query;
@@ -58,6 +59,7 @@ pub fn default_command_registry() -> CommandRegistry {
     rig_commands::register(&mut commands).expect("joint.* ids are unique");
     weight_commands::register(&mut commands).expect("weights.* ids are unique");
     tag_commands::register(&mut commands).expect("tag command ids are unique");
+    material_commands::register(&mut commands).expect("material command ids are unique");
     commands
 }
 
