@@ -19,6 +19,7 @@ use crate::attributes::{Gesture, Widget, attribute_rows_multi};
 use crate::clone_overlay::{OverlayOptions, selected_cloner_marks};
 use crate::commands::{
     CHARACTER_TYPES, category_label, character_menu, clone_toolset_menu, create_menu, execute,
+    scene_menu,
 };
 use crate::component_edit::{
     ComponentDrag, component_coords, component_transform_args, pivot_world,
@@ -801,6 +802,14 @@ impl Editor {
                 ui.menu_button("Clone toolset", |ui| {
                     let entries = clone_toolset_menu(self.state.doc.scene().registry());
                     for entry in entries {
+                        if ui.button(&entry.label).clicked() {
+                            self.run((entry.command, entry.args));
+                            ui.close();
+                        }
+                    }
+                });
+                ui.menu_button("Scene", |ui| {
+                    for entry in scene_menu(self.state.doc.scene().registry()) {
                         if ui.button(&entry.label).clicked() {
                             self.run((entry.command, entry.args));
                             ui.close();

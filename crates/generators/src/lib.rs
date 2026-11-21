@@ -20,6 +20,7 @@ mod polygon;
 mod polygon_prim;
 mod pyramid;
 mod round;
+pub mod scene_objects;
 mod solids;
 mod sphere;
 mod spline_gens;
@@ -117,6 +118,9 @@ impl Plugin for Primitives {
         r.register(clone_spline::node_type())?;
         r.register(boole::node_type())?;
         r.register(polygon::selection_tag_type())?;
+        for t in scene_objects::node_types() {
+            r.register(t)?;
+        }
         r.register(polygon::node_type())
     }
 }
@@ -221,8 +225,29 @@ pub fn evaluate(scene: &Scene, id: NodeId, ctx: &EvalCtx) -> Result<Option<PolyM
         for d in deformer_children(scene, id) {
             forge_modifiers::apply_deformer_resolved(scene, d, id, mesh, ctx, &resolve);
         }
+        apply_soft_points(scene, id, mesh);
     }
     Ok(mesh)
+}
+
+/// A soft body's simulated points (docs/specs/DYNAMICS.md §8.4): the dynamics evaluation writes
+/// them into the hidden `soft_points` list of the object's rigid body tag. They replace the
+/// points when there is one per point of the mesh.
+fn apply_soft_points(scene: &Scene, id: NodeId, mesh: &mut PolyMesh) {
+    let Some(node) = scene.node(id) else {
+        return;
+    };
+    for tag in node.tags.iter().filter_map(|t| scene.node(*t)) {
+        if tag.type_id == "forge.rigid_body"
+            && let Some(Value::Vec3List(points)) = tag.params.get("soft_points")
+            && points.len() == mesh.points.len()
+        {
+            for (p, q) in mesh.points.iter_mut().zip(points) {
+                *p = glam::DVec3::from_array(*q);
+            }
+            return;
+        }
+    }
 }
 
 thread_local! {

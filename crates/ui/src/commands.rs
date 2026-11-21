@@ -313,11 +313,15 @@ impl CommandContext for EditorState {
     }
 }
 
-/// Placeable categories in `Category` order, each with `(type id, label)` sorted by label.
+/// Placeable categories in `Category` order (the scene objects have their own submenu,
+/// [`scene_menu`]), each with `(type id, label)` sorted by label.
 pub fn create_menu(registry: &Registry) -> Vec<(Category, Vec<(String, String)>)> {
     let mut out: Vec<(Category, Vec<(String, String)>)> = Vec::new();
     for t in registry.types() {
-        if !(t.category.is_hierarchy() || t.category == Category::Tag) || !t.in_create_menu {
+        if !(t.category.is_hierarchy() || t.category == Category::Tag)
+            || !t.in_create_menu
+            || SCENE_TYPES.contains(&t.id.as_str())
+        {
             continue;
         }
         let item = (t.id.clone(), t.label.clone());
@@ -367,6 +371,30 @@ pub fn clone_toolset_menu(registry: &Registry) -> Vec<ToolsetEntry> {
         out.extend(types.into_iter().map(|t| create(&t.id, &t.label)));
     }
     out
+}
+
+/// The types the Create > Scene submenu lists instead of their category's submenu
+/// (docs/specs/SCENE-OBJECTS.md S1).
+pub const SCENE_TYPES: [&str; 5] = [
+    "forge.camera",
+    "forge.light",
+    "forge.environment",
+    "forge.floor",
+    "forge.sky",
+];
+
+/// The Create > Scene submenu: Camera, Light, Environment, Floor and Sky, for the ones the
+/// registry has.
+pub fn scene_menu(registry: &Registry) -> Vec<ToolsetEntry> {
+    SCENE_TYPES
+        .iter()
+        .filter_map(|id| registry.get(id))
+        .map(|t| ToolsetEntry {
+            label: t.label.clone(),
+            command: "object.create",
+            args: serde_json::json!({"type": t.id}),
+        })
+        .collect()
 }
 
 /// The types the Create > Character submenu lists instead of their category's submenu.

@@ -15,11 +15,22 @@ pub enum Projection {
     Orthographic { width: f64 },
 }
 
+/// A thin lens for depth of field (RENDER.md R15): rays start on a disc of `radius` (scene units)
+/// in the camera's XY plane and meet at the plane `focus_distance` ahead of the camera. Only
+/// perspective cameras use it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Aperture {
+    pub radius: f64,
+    pub focus_distance: f64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera {
     /// Camera to world, column-major. The camera looks along local +Z.
     pub transform: [f64; 16],
     pub projection: Projection,
+    /// The lens, used when the render settings ask for depth of field. `None`: a pinhole.
+    pub aperture: Option<Aperture>,
 }
 
 impl Camera {
@@ -27,7 +38,14 @@ impl Camera {
         Camera {
             transform: transform.to_cols_array(),
             projection,
+            aperture: None,
         }
+    }
+
+    /// The same camera with a thin lens.
+    pub fn with_aperture(mut self, aperture: Aperture) -> Camera {
+        self.aperture = Some(aperture);
+        self
     }
 
     /// Position and heading/pitch/bank in radians (R10 conventions, see [`hpb_matrix`]).
@@ -77,6 +95,34 @@ impl Camera {
         }
     }
 
+    /// Like [`Camera::ray`] through the thin lens: the origin is the point `u` (two numbers in
+    /// `[0, 1)`) of the aperture disc (concentric mapping), the direction aims at the point of
+    /// the focus plane that the pinhole ray through `(px, py)` hits. Without an aperture, or for
+    /// an orthographic camera, this is [`Camera::ray`].
+    pub fn ray_lens(
+        &self,
+        px: f64,
+        py: f64,
+        width: u32,
+        height: u32,
+        u: (f64, f64),
+    ) -> (DVec3, DVec3) {
+        let (Some(ap), Projection::Perspective { .. }) = (self.aperture, self.projection) else {
+            return self.ray(px, py, width, height);
+        };
+        let (f, c) = self.pixel_frame(width, height).unwrap_or((1.0, [0.0; 2]));
+        let d = DVec3::new((px - c[0]) / f, -(py - c[1]) / f, 1.0);
+        // the pinhole ray reaches z = focus_distance at d * focus_distance
+        let focus = d * ap.focus_distance;
+        let (lx, ly) = concentric_disc(u);
+        let origin = DVec3::new(lx * ap.radius, ly * ap.radius, 0.0);
+        let m = self.matrix();
+        (
+            m.transform_point3(origin),
+            m.transform_vector3((focus - origin).normalize()),
+        )
+    }
+
     /// World-space ray through the continuous pixel position `(px, py)` (row 0 at the top).
     /// The direction has unit length.
     pub fn ray(&self, px: f64, py: f64, width: u32, height: u32) -> (DVec3, DVec3) {
@@ -101,6 +147,23 @@ impl Camera {
             }
         }
     }
+}
+
+/// Shirley-Chiu concentric map of the unit square to the unit disc.
+pub fn concentric_disc(u: (f64, f64)) -> (f64, f64) {
+    let (a, b) = (2.0 * u.0 - 1.0, 2.0 * u.1 - 1.0);
+    if a == 0.0 && b == 0.0 {
+        return (0.0, 0.0);
+    }
+    let (r, th) = if a.abs() > b.abs() {
+        (a, std::f64::consts::FRAC_PI_4 * (b / a))
+    } else {
+        (
+            b,
+            std::f64::consts::FRAC_PI_2 - std::f64::consts::FRAC_PI_4 * (a / b),
+        )
+    };
+    (r * th.cos(), r * th.sin())
 }
 
 /// `R = Rh * Rp * Rb`. Each factor is the transpose of the usual right-handed rotation, which is

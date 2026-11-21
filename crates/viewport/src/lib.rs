@@ -16,5 +16,6 @@ pub mod panes;
 pub mod picking;
 pub mod render;
 pub mod rig;
+pub mod scene_view;
 pub mod snap;
 pub mod volume;

@@ -17,9 +17,13 @@ use serde_json::json;
 /// Cases whose command we do not run, with the reason. Empty: all observed cases run.
 const UNSUPPORTED: &[(&str, &str)] = &[];
 /// Cases that run but differ. Empty.
-const KNOWN_MISMATCH: &[(&str, &str)] = &[];
+const KNOWN_MISMATCH: &[(&str, &str)] = &[(
+    "grow-poly",
+    "Grow Selection with Use Edge on grows polygons only across shared edges (the case gives 5 \
+     polygons); select.grow grows across shared points (9). Needs a use_edge option, EDITABLE.md 2.5",
+)];
 /// The observed cases (the other O26 rows have no output).
-const OBSERVED: usize = 8;
+const OBSERVED: usize = 10;
 
 fn cases() -> Vec<GoldenCase> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
@@ -118,6 +122,17 @@ fn run_case(case: &GoldenCase) -> Result<(), String> {
     let name = p["command"].as_str().unwrap();
     let (mode, cmd, args) = match name {
         "Shrink Selection" => (EditMode::Polys, "select.shrink", json!({})),
+        // O26 follow-up cases: the mode is the one whose start set is filled.
+        "Grow Selection" => {
+            let mode = if !start_points.is_empty() {
+                EditMode::Points
+            } else if !start_edges.is_empty() {
+                EditMode::Edges
+            } else {
+                EditMode::Polys
+            };
+            (mode, "select.grow", json!({}))
+        }
         "Invert" => (EditMode::Polys, "select.invert", json!({})),
         "Select Connected" => (EditMode::Polys, "select.connected", json!({})),
         "Convert Selection" => {

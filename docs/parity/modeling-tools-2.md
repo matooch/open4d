@@ -90,3 +90,30 @@ No new O25 golden case was created. The remaining rows were reviewed literally a
 - `array-command`: not observed: needs the GUI: form requires dialog-label mapping before faithful scripted replay.
 
 These outstanding cases are not complete. No existing fixture was changed. Full golden check exit 1: unrelated pre-existing fields/restrict-bend duplicate table at line 7. Cleanroom exit 0. End-job commit/push blocked by required full validation.
+
+### What a later window learned about the eight open rows (2026-11-20)
+
+- The menu entry that opens a dialog is not proof that the operation is closed to a script: in the
+  selection job next door, Grow Selection turned out to have a scriptable command behind its dialog.
+  For this form the same map now exists in plain words:
+  - Bridge, Close Polygon Hole and Stitch and Sew are tools whose settings are passed as a container
+    of element and object indices, plus one flag block each (hole, n-gons, triangulate, subdivide).
+    None of that was tried with a filled container, so these three rows are the first to retry.
+  - Knife's loop mode takes the edge the loop travels around, a cut offset along it, and a
+    keep-the-cut-selected switch. Tried with a vertical side edge and offset 0.5 on a plain cube: the
+    call returns true and the mesh stays at 8 points and 6 polygons, so the start edge or the offset
+    is not what the dialog would use. A quarter-height cut was not attempted.
+  - Dissolve has no command of its own in this build, so the menu entry is the only route and the row
+    stays a GUI item.
+  - Array likewise has no command: its fields must be read from the GUI before the row can be written.
+- Grow Selection, from the same family, is now recorded in the selection form, which is where the
+  evidence for "a dialog does not always mean a dead end" lives.
+
+### Close Polygon Hole, tried again 2026-11-20
+
+The tool returns false from a script in every container variant tried, and the mesh stays at 8 points
+and 5 polygons: with the four border edges of the hole selected in edge mode and the hole edge given
+in the container, with the polygon next to the hole selected and its index given, with the quad
+polytype, and with the n-gon polytype and nothing selected. Deleting the top polygon itself works
+(the cube goes to 5 polygons). The row stays not observed; the dialog entry remains the only working
+route found.

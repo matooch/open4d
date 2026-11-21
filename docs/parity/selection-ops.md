@@ -1,6 +1,6 @@
 # Selection commands — observation (O26)
 
-Status: partial (6 of 11 baseline cases observed; 2 additional variants observed) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-10-29
+Status: partial (8 of 11 baseline cases observed; 2 additional variants observed) · App version: Cinema 4D R25 (version number 25010) · OS: macOS (Darwin 25.6.0) · Observer: observer session (MCP) · Date: 2026-10-29
 Method: scripted. Unblocks: batch 11 (loop, ring, grow, shrink, convert).
 
 Every case:
@@ -49,11 +49,18 @@ ending in `…`. If only the dialog version exists, skip the case with that reas
 Observed (6): shrink-poly, convert-poly-to-point, convert-point-to-poly, convert-edge-to-poly,
 select-connected, invert-poly. Every case wrote `mesh.obj`, `selection.json`, `case.toml`.
 
-Not observed (5), no output written:
-- loop-edge, loop-poly, ring-edge: interactive tools, need the GUI (O10 territory).
-- grow-poly, grow-point: the only menu entry is "Grow Selection…", which opens a dialog (it crashed the app in the previous attempt). TODO: needs a human at the GUI.
+Not observed (3), no output written:
+- loop-edge, loop-poly, ring-edge: interactive tools, need the GUI (O10 territory). The Loop and Ring
+  modeling commands do accept an edge container, but they return false and leave the selection as it
+  was, from a script with the edge already selected.
+- grow-poly and grow-point were resolved on 2026-11-20: the menu entry "Grow Selection…" opens a
+  dialog, but the separate modeling command behind it runs from a script with a Use Edge container,
+  and both cases are now recorded above.
 
 Results, as read back after the command:
+- grow-poly: the middle front polygon (5) grows to five polygons, the selected one plus its four edge
+  neighbours (1, 4, 5, 6, 9).
+- grow-point: the middle front point (12) grows to five points (7, 11, 12, 13, 17).
 - shrink-poly: the 16 front polygons shrink to the 4 middle ones (5, 6, 9, 10).
 - invert-poly: the 4 top polygons (16-19) invert to the other 20; no points or edges selected.
 - convert-poly-to-point: the 4 top polygons give the 9 top points (2, 5, 8, 11, 14, 17, 20, 23, 24). The source polygons stay selected.

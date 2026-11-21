@@ -44,6 +44,19 @@ the app then displays the equivalent focal length — 0.927295 rad reads "36 mm"
 | aspect-square | render size 240 × 240 | not observed: the 240 × 240 frame is a single black colour (666 bytes, 57 600 pixels), the same empty view as `default` |
 | dof | Physical renderer (if available) with f-stop 1.4 and focus distance 600 | not observed: the render settings' Renderer offers Standard, Physical and Viewport Renderer, but setting it to Physical fails with "parameter set failed", so the Physical renderer cannot be switched on from a script here. F-Stop 1.4 and Focus Distance 600 do take (both read back) and are recorded, but with the Standard renderer they change nothing |
 
+## Follow-up (planner, after brief 138)
+
+The black `default`, `focal-100` and `aspect-square` renders are correct: their case files hold
+camera rotation (H 45, P −19.45, B 0), which points the camera away from the scene. The form asks
+for a default camera. Redo them as `default-2`, `focal-100-2`, `aspect-square-2` with the camera
+rotation left at (0, 0, 0), read back before rendering and stored as `camera_rotation_deg`.
+Also new:
+
+| Case | Camera |
+|---|---|
+| film-offset-y | as `film-offset`, but Film Offset Y 20 % instead of X |
+| ortho-zoom-2 | as `ortho-front`, Zoom 2 |
+
 ## Notes
 
 - The camera's focal length has no editable parameter. Setting Zoom does nothing (0.5 and

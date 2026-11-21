@@ -242,3 +242,124 @@ fn usage_errors_are_exit_1_and_write_nothing() {
     let (code, _) = json_run(&["render", s(&d.join("missing.forge")), "--out", s(&out)]);
     assert_eq!(code, 2);
 }
+
+fn cmd(scene: &str, name: &str, args: Value) -> Value {
+    let args = args.to_string();
+    let (code, out) = json_run(&["cmd", scene, name, "--args", &args, "--save"]);
+    assert_eq!(code, 0, "{name}: {out}");
+    out
+}
+
+fn render_small(scene: &str, out: &Path, extra: &[&str]) -> Value {
+    let mut a = vec!["render", scene, "--out", s(out), "--samples", "4"];
+    a.extend_from_slice(extra);
+    let (code, r) = json_run(&a);
+    assert_eq!(code, 0, "{r}");
+    r
+}
+
+#[test]
+fn a_scene_camera_replaces_the_framing_camera() {
+    let d = dir("camera");
+    let scene = cube_scene(&d); // node 1: a cube of 200 units at the origin
+    // fallback: the framing camera finds the cube
+    let base = d.join("base.png");
+    render_small(&scene, &base, &["--width", "64", "--height", "48"]);
+    let lit = lit_pixels(&decode(&base));
+    assert!(lit > 100);
+    // a camera 600 units back looks at it: a 36 mm lens sees 600 units wide at 600 units,
+    // so the 200 unit cube covers a third of the width
+    let created = cmd(&scene, "object.create", json!({"type": "forge.camera"}));
+    let cam = created["result"]["node"].as_u64().unwrap_or(2);
+    cmd(
+        &scene,
+        "param.set",
+        json!({"node": cam, "param": "transform.pos", "value": [0.0, 0.0, -600.0]}),
+    );
+    let seen = d.join("seen.png");
+    render_small(&scene, &seen, &["--width", "64", "--height", "48"]);
+    let img = decode(&seen);
+    let lit_seen = lit_pixels(&img);
+    assert!(
+        lit_seen > 100 && lit_seen != lit,
+        "{lit_seen} lit px through the camera, {lit} framed"
+    );
+    // turned around (heading 180) the camera sees nothing
+    cmd(
+        &scene,
+        "param.set",
+        json!({"node": cam, "param": "transform.rot", "value": [180.0, 0.0, 0.0]}),
+    );
+    let away = d.join("away.png");
+    render_small(&scene, &away, &["--width", "64", "--height", "48"]);
+    assert_eq!(lit_pixels(&decode(&away)), 0);
+}
+
+#[test]
+fn lights_in_the_scene_replace_the_default_light() {
+    let d = dir("light");
+    let scene = cube_scene(&d);
+    cmd(&scene, "object.create", json!({"type": "forge.light"}));
+    let created = d.join("l.png");
+    let r = render_small(&scene, &created, &["--width", "32", "--height", "24"]);
+    assert_eq!(r["warnings"], json!([]), "{r}");
+    // an omni light at the origin sits inside the cube: the outside is dark, so no head light
+    // was added
+    assert_eq!(lit_pixels(&decode(&created)), 0);
+}
+
+#[test]
+fn stored_render_settings_are_the_defaults_and_flags_override_them() {
+    let d = dir("settings");
+    let scene = cube_scene(&d);
+    cmd(
+        &scene,
+        "render.settings",
+        json!({"width": 40, "height": 30, "samples": 2}),
+    );
+    let out = d.join("s.png");
+    let (code, r) = json_run(&["render", &scene, "--out", s(&out)]);
+    assert_eq!(code, 0, "{r}");
+    let img = decode(&out);
+    assert_eq!((img.width, img.height), (40, 30));
+    let out2 = d.join("s2.png");
+    let r = render_small(&scene, &out2, &["--width", "24"]);
+    assert_eq!(
+        (r["width"].as_u64(), r["height"].as_u64()),
+        (Some(24), Some(30))
+    );
+    // a scene without stored settings keeps the old defaults
+    let plain = cube_scene(&dir("settings-plain"));
+    let out3 = d.join("s3.png");
+    let (code, _) = json_run(&["render", &plain, "--out", s(&out3), "--samples", "2"]);
+    assert_eq!(code, 0);
+    let img = decode(&out3);
+    assert_eq!((img.width, img.height), (320, 240));
+}
+
+#[test]
+fn sky_and_floor_objects_light_and_fill_the_background() {
+    let d = dir("sky");
+    let scene = cube_scene(&d);
+    // no sky: the background is black, the cube is lit by the head light
+    let before = d.join("before.png");
+    render_small(&scene, &before, &["--width", "32", "--height", "24"]);
+    let lit_before = lit_pixels(&decode(&before));
+    cmd(&scene, "object.create", json!({"type": "forge.sky"}));
+    let after = d.join("after.png");
+    let r = render_small(&scene, &after, &["--width", "32", "--height", "24"]);
+    assert_eq!(r["warnings"], json!([]), "{r}");
+    // the visible sky fills the background
+    let lit_after = lit_pixels(&decode(&after));
+    assert!(lit_after > lit_before + 200, "{lit_before} -> {lit_after}");
+    // a floor under the cube adds geometry: it is hit by rays (object ids start after meshes)
+    cmd(&scene, "object.create", json!({"type": "forge.floor"}));
+    let floored = d.join("floor.png");
+    let r = render_small(&scene, &floored, &["--width", "32", "--height", "24"]);
+    assert_eq!(r["ok"], true);
+    assert_ne!(
+        std::fs::read(&after).unwrap(),
+        std::fs::read(&floored).unwrap(),
+        "the floor changes the picture"
+    );
+}

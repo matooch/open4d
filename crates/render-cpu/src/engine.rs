@@ -109,12 +109,14 @@ fn render_pixel(cx: &Ctx, x: u32, y: u32, wanted: &[Aov]) -> ([f32; 4], Vec<[f32
             (sy + 0.5 + i as f64 * 0.569_840_290_998_053_2).fract(),
         );
         let (ox, oy) = filter_offset(st.filter, st.filter_width, u, &mut rng);
-        let (o, d) = cx.snap.camera.ray(
-            x as f64 + 0.5 + ox,
-            y as f64 + 0.5 + oy,
-            st.width,
-            st.height,
-        );
+        let (px, py) = (x as f64 + 0.5 + ox, y as f64 + 0.5 + oy);
+        let (o, d) = if st.depth_of_field && cx.snap.camera.aperture.is_some() {
+            // only a lens render draws from the stream here, so pinhole renders are unchanged
+            let lens = rng.f2();
+            cx.snap.camera.ray_lens(px, py, st.width, st.height, lens)
+        } else {
+            cx.snap.camera.ray(px, py, st.width, st.height)
+        };
         let s = trace_path(cx, o, d, &mut rng);
         if !s.rgb.is_finite() {
             continue;
@@ -186,6 +188,7 @@ impl RenderEngine for CpuEngine {
             scene: &scene,
             lights: &lights,
             settings,
+            env: crate::lights::EnvDist::build(&snapshot.environment.lighting),
         };
         let (w, h) = (settings.width, settings.height);
         let [rx0, ry0, rx1, ry1] = settings.region.unwrap_or([0, 0, w, h]);

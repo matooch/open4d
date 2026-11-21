@@ -9,6 +9,7 @@ pub mod file;
 pub mod layers;
 mod param;
 mod registry;
+pub mod render_config;
 mod scene;
 pub mod smoothing;
 pub mod tags;
@@ -27,6 +28,7 @@ pub use param::{
     Value,
 };
 pub use registry::{Category, NodeEvaluator, NodeType, Plugin, Registry, RegistryError};
+pub use render_config::{RenderConfig, RenderFilter};
 pub use scene::{Node, NodeId, Scene, SceneSettings};
 pub use time::{Marker, PlayMode, TimeConfig, TimeDisplay};
 pub use track::{

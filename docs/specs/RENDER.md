@@ -201,7 +201,14 @@ of the usual right-handed rotation (what the observed left-handed reference does
 toward -X, so a heading of -15 deg looks to the right (O30: the objects sit left of the image
 centre), `Rp` turns +Z toward +Y (positive pitch looks up) and `Rb` turns +X toward -Y. Only
 the heading sign is observed (O30); pitch and bank follow from the same convention and are
-**parity-pending**. The case files' `camera_rotation_deg = [-15, 0, 0]` is therefore
+**parity-pending**.
+
+**Finding (brief 047): the reference's camera heading sign is opposite the usual right-handed
+one.** The node transform of every object is `Ry(-h) Rx(-p) Rz(-b)` (TRANSFORM.md), which is
+exactly `hpb_matrix`, so a camera *object* needs no conversion: its world matrix is the
+camera-to-world matrix (SCENE-OBJECTS.md S2, test
+`heading_sign_is_the_references_not_the_right_handed_one`). Do not "fix" the sign when adding
+look-at helpers or exporters: a heading of -15 degrees must look to the right. The case files' `camera_rotation_deg = [-15, 0, 0]` is therefore
 `[heading, pitch, bank]`: the form's prose calls it "P -15 deg", which the pictures contradict
 (with pitch -15 and heading 0 the cube would be centred horizontally; see R14).
 
@@ -239,8 +246,12 @@ a layer per pass: beauty as `R G B A`, depth as `Z`, vector passes as `R G B`, i
 
 CLI: `forge render <scene> --out <path> [--width W] [--height H] [--samples N] [--frame N |
 --start A --end B --step S] [--aov depth,normal,...] [--multipart] [--seed N]` (docs/specs/CLI.md).
-The CLI builds the snapshot from the scene's evaluated meshes with a default material, the default
-light and a camera that frames the scene bounds (the scene has no camera or light objects yet).
+The CLI builds the snapshot from the scene's evaluated meshes with a default material and a
+camera that frames the scene bounds; since brief 047 the scene's camera, light, environment, sky and
+floor objects are applied on top (SCENE-OBJECTS.md S5: the first camera replaces the framing
+camera, light objects replace the default light, the fallbacks are unchanged when the scene has
+none) and the scene's stored render settings (S6) are the defaults of `--width`, `--height`,
+`--samples`, `--max-depth` and `--seed`, which override them.
 
 ## R14 Parity with O30 / O43 (level C)
 
@@ -287,8 +298,88 @@ Findings:
   objects the forms describe, so the lighting model is **parity-pending** until the default light
   and the light units are observed.
 
+## R15 Camera parity with O57 and the thin lens (brief 138)
+
+Source: `tests/golden/camera` (4 observed cases of 320 x 240, `render.png` + `mesh.obj`),
+`docs/parity/camera.md` (O57), `docs/parity/scene-defaults.md` section 2 (O29). Test:
+`crates/render-cpu/tests/camera_parity.rs`. Each case's camera table fills a `forge.camera`
+object (SCENE-OBJECTS.md S2); the bridge (`apply_scene_objects`) turns it into the snapshot
+camera; the scene is the OBJ of the case (a horizontal plane at y = 0 and a 200 unit cube
+standing on it at z -200..0; the plane is edge-on from the camera heights used, so in the
+perspective cases the visible shape is the cube). Compared like R14: silhouette within 1 px
+(reference: any channel above 0.05; ours: coverage >= 0.5, Cubic filter of width 2, 16 samples).
+
+Result: **4 of 4 exact** (0 pixels beyond 1 px): `focal-18`, `film-offset`, `ortho-front`,
+`ortho-top`. Rules and the case that proves each:
+
+- Lens from the horizontal FOV: `focal = sensor / (2 tan(fov/2))`, pixel focal `w * focal /
+  sensor` (`focal-18`: 90 deg, `film-offset`: 53.13 deg).
+- The camera rotation `[45, -19.45, 0]` of the case files is real: the camera looks left and down
+  and the scene appears at the upper right (the heading sign of R10; `focal-18`, `film-offset`).
+  The empty frames of the unobserved cases (`default`, `focal-100`, `aspect-square`) are this
+  rotation, not a wrong plane placement as the form's notes guessed: at 36 mm and 100 mm the scene
+  lies outside the frame (every cube corner projects beyond x = 345 px at 36 mm, and the lens
+  narrows further at 100 mm). Those cases are correct black pictures, not an observation problem; their
+  folders stay absent because black frames carry no information.
+- **Film Offset X +20 % moves the picture left** by 20 % of the image width (64 px at 320 px):
+  the lens's principal point sits at `w/2 - offset * w`. The parameters shift the frame, the
+  lens moves the principal point the opposite way (`film-offset`: the cube's lower-left corner
+  lands at x = 281 px, which is only true for a principal point at 96 px). The Y sign follows by
+  symmetry (+Y moves the picture down) and is **parity-pending**.
+- Axis projections (`Front`, `Top`) are orthographic, ignore the camera's rotation and the
+  orthographic width is **1000 units** at zoom 1 (`ortho-front`: IoU 1.0000 at zero tolerance
+  with 1000, 0.9624 at 1016, 0.9385 at 1024; `ortho-top`: within 1 px at 1000. Its silhouette is
+  one pixel smaller on two sides than a full plane at zero tolerance because the checker's
+  black squares sit on the plane's edge, so it cannot fix the scale better than 1.6 %). The
+  width at other zoom values and aspect ratios is **parity-pending** (`1000 / zoom`; the
+  `aspect-square` case was not observed).
+
+**Thin lens (depth of field), own design.** `Camera::aperture = Some(Aperture { radius,
+focus_distance })` and `RenderSettings::depth_of_field` (default false; stored as
+`RenderConfig::depth_of_field`, `forge render --dof`, command `render.settings`). When on, the
+camera ray of a sample starts at a point of the lens disc (concentric map of one `f2()` draw of the
+pixel stream; pinhole renders draw nothing, so their pixels are unchanged) and aims at the point
+where the pinhole ray crosses the plane `focus_distance` ahead. The scene object gives
+`radius = focal_mm / (2 f-stop) * 0.1` (focal lengths are millimetres, scene units centimetres)
+and the focus distance parameter. Orthographic cameras ignore the lens. Test `camera_lens.rs`:
+the lens rays of a pixel meet on the focus plane, and the blur matches the circle of confusion:
+a sphere of radius r at distance z with focus F and lens radius a has per-axis standard deviation
+`sqrt(r^2 + c^2) / 2 * f_px / z` with `c = a |F - z| / F` (within 6 %, four distances).
+The reference's Physical renderer could not be switched on by script (`dof` case: "parameter
+set failed"), so DOF has **no parity data**: bokeh shape (blades, bias, anisotropy), the
+f-stop/exposure coupling and the Standard renderer's DOF map are not modelled.
+
+**Not done: motion blur.** It needs the snapshot at two times (shutter open and close) and the
+shutter angle/offset semantics, none of which is observed; `shutter_speed`, `shutter_angle` and
+`shutter_offset` are stored on the camera object (SCENE-OBJECTS.md S2) and ignored. Lens
+distortion, vignetting and chromatic aberration are likewise stored and not rendered.
+
+## R16 Environment images (brief 133)
+
+`Lighting::Image` is a lat-long image: pixel `(x, y)` of a `w x h` image covers
+`u = x / w`, `v = y / h` with azimuth `phi = u * 2 pi + rotation` about +Y (`d = (sin t sin phi,
+cos t, sin t cos phi)`) and polar angle `t = v * pi` from +Y (nearest pixel, radiance
+`pixel * intensity`). The scene object feeds it from an HDR/EXR file (SCENE-OBJECTS.md S4).
+
+**Importance sampling.** The tracer builds one `EnvDist` per render: a piecewise constant density
+over the pixels proportional to `luminance * sin(t)` (Rec. 709 weights), sampled through the
+cumulative row weights and then the cumulative pixel weights of the row, with the point inside the
+pixel taken from the remainders of the two uniform numbers. Its solid angle density is
+`p_pixel * w * h / (2 pi^2 sin t)`. Next-event estimation draws from it and the MIS weight of a
+BSDF-sampled ray that escapes uses the same density (`env_pdf`), so the estimator stays unbiased;
+constant and sky lighting still sample the sphere uniformly. An image with no light in it
+(all black) falls back to uniform sampling.
+Tests (`crates/render-cpu/tests/environment.rs`): the density integrates to 1 over the sphere
+and each sample reports the density of its own direction; a white sphere in a constant image
+shows 1 (furnace); **a sphere under a dim sky image with a small sun 330 times brighter renders at
+64 spp within 32.8 dB of a 4096 spp render** (the goal was 30 dB; with the uniform sampling it was
+15.8 dB, measured by switching the distribution off once).
+
+Not done: importance sampling by the BSDF at the same time as the image (the MIS pairing is
+there, but the BSDF lobe is not importance sampled against the environment), an HDRI mip chain for
+filtered background display, sun/sky models other than the gradient of `forge.sky`.
+
 ## R13 Not done / follow-ups
 
-Light and camera scene objects (node types and their registration, icon table), the material
-hosted in the document (brief 194), object-shaped area lights, falloff `Steps`, Sobol sampling,
-adaptive sampling, denoising, volumetrics, depth of field and motion blur (138).
+The material hosted in the document (brief 194), object-shaped area lights, falloff `Steps`, Sobol sampling,
+adaptive sampling, denoising, volumetrics, motion blur and the camera's lens effects (R15).

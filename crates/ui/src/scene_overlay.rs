@@ -34,6 +34,8 @@ pub struct SceneOverlay {
     pub weights: Vec<WeightMarkers>,
     /// World-space lines of the volume boxes.
     pub volume: Vec<DrawLine>,
+    /// World-space gizmos of camera, light and floor objects (SCENE-OBJECTS.md S7).
+    pub objects: Vec<DrawLine>,
 }
 
 fn enum_param<'a>(scene: &'a Scene, id: NodeId, key: &str) -> &'a str {
@@ -102,6 +104,7 @@ impl SceneOverlay {
                 joint_style(enum_param(scene, *id, "display_joint")),
             ));
         }
+        out.objects = object_lines(scene, selected);
         for joint in selected.iter().filter(|j| is_joint(scene, **j)) {
             out.weights
                 .extend(weight_markers(scene, &nodes, *joint, ctx));
@@ -119,8 +122,87 @@ impl SceneOverlay {
             out.extend(weight_overlay(&w.points, &w.weights, true, cam, size));
         }
         out.extend(self.volume.iter().copied());
+        out.extend(self.objects.iter().copied());
         out
     }
+}
+
+/// Size of the omni and infinite light gizmos, in scene units.
+const LIGHT_GIZMO_RADIUS: f64 = 15.0;
+/// Depth of the camera frustum and length of the spot and infinite light gizmos.
+const GIZMO_DEPTH: f64 = 100.0;
+/// Half size and cell count of the floor gizmo grid.
+const FLOOR_HALF: f64 = 1000.0;
+const FLOOR_CELLS: usize = 10;
+
+/// The gizmo lines of the scene's cameras, lights and floors that the editor shows.
+fn object_lines(scene: &Scene, selected: &BTreeSet<NodeId>) -> Vec<DrawLine> {
+    use forge_generators::scene_objects::{AreaKind, Lens as ObjLens, LightShape, scene_objects};
+    use forge_viewport::scene_view::{
+        Lens, LightGizmo, OBJECT_COLOR, camera_lines, floor_lines, light_lines,
+    };
+    let objs = scene_objects(scene);
+    let aspect = scene
+        .render_config()
+        .map_or(16.0 / 9.0, |c| f64::from(c.width) / f64::from(c.height));
+    let shown = |id: NodeId| forge_core::visibility::editor_visible(scene, id);
+    let mut out = Vec::new();
+    for c in objs.cameras.iter().filter(|c| shown(c.node)) {
+        let lens = match c.lens {
+            ObjLens::Perspective {
+                focal_mm,
+                sensor_mm,
+                ..
+            } => Lens::Perspective {
+                focal_mm,
+                sensor_mm,
+            },
+            ObjLens::Orthographic { width } => Lens::Orthographic { width },
+        };
+        if c.show_cone {
+            out.extend(camera_lines(
+                c.world,
+                lens,
+                aspect,
+                GIZMO_DEPTH,
+                selected.contains(&c.node),
+            ));
+        }
+    }
+    for l in objs.lights.iter().filter(|l| shown(l.node)) {
+        let shape = match l.shape {
+            LightShape::Omni => LightGizmo::Omni {
+                radius: LIGHT_GIZMO_RADIUS,
+            },
+            LightShape::Spot => LightGizmo::Spot {
+                outer: l.outer.max(1e-3),
+                length: GIZMO_DEPTH,
+            },
+            LightShape::Infinite => LightGizmo::Infinite {
+                radius: LIGHT_GIZMO_RADIUS,
+                length: GIZMO_DEPTH,
+            },
+            LightShape::Area => match l.area {
+                AreaKind::Disc { radius } => LightGizmo::AreaDisc { radius },
+                AreaKind::Sphere { radius } => LightGizmo::AreaSphere { radius },
+                AreaKind::Rectangle { width, height } => LightGizmo::AreaRect { width, height },
+                AreaKind::Unsupported(_) => LightGizmo::AreaRect {
+                    width: LIGHT_GIZMO_RADIUS * 2.0,
+                    height: LIGHT_GIZMO_RADIUS * 2.0,
+                },
+            },
+        };
+        out.extend(light_lines(l.world, shape, selected.contains(&l.node)));
+    }
+    for f in objs.floors.iter().filter(|f| shown(f.node)) {
+        out.extend(floor_lines(
+            f.world,
+            f.extent.min(FLOOR_HALF),
+            FLOOR_CELLS,
+            OBJECT_COLOR,
+        ));
+    }
+    out
 }
 
 /// The weights of `joint` on every object whose weight tag lists it.

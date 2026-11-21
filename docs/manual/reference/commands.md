@@ -2,7 +2,7 @@
 
 # Command reference
 
-193 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+195 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -132,6 +132,8 @@
 | [`marker.set_color`](#markerset_color) | Set Marker Color | yes | `marker_set_color` |
 | [`marker.list`](#markerlist) | List Markers | no | `marker_list` |
 | [`marker.jump`](#markerjump) | Jump to Marker | no | `marker_jump` |
+| [`render.settings`](#rendersettings) | Render Settings | yes | `render_settings` |
+| [`view.look_through_camera`](#viewlook_through_camera) | Look Through Camera | no | `view_look_through_camera` |
 | [`key.move`](#keymove) | Move Keys | yes | `key_move` |
 | [`key.scale`](#keyscale) | Scale Keys | yes | `key_scale` |
 | [`key.delete`](#keydelete) | Delete Selected Keys | yes | `key_delete` |
@@ -604,6 +606,17 @@ Expand / Collapse. Not an undoable edit.
 | `node` | integer | yes |  |
 
 Example: `forge cmd scene.forge view.toggle_expanded --args '{"node":1}'`
+
+### `view.look_through_camera`
+
+Look Through Camera. Not an undoable edit.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `aspect` | number or null | no | Viewport width / height (default: the render settings' aspect, else 16:9). |
+| `node` | integer or null | no | A camera object (default: the selected camera, else the first camera of the scene). |
+
+Example: `forge cmd scene.forge view.look_through_camera --args '{"node":2}'`
 
 
 ## `edit`
@@ -1833,6 +1846,28 @@ Jump to Marker. Not an undoable edit.
 | `forward` | boolean | yes | true: next key, false: previous key. |
 
 Example: `forge cmd scene.forge marker.jump --args '{"forward":true}'`
+
+
+## `render`
+
+### `render.settings`
+
+Render Settings. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `default_light` | boolean or null | no | Light a scene without lights with the default light. |
+| `depth_of_field` | boolean or null | no | Trace camera rays through the camera's thin lens (depth of field). |
+| `filter` | string or null | no | `box`, `triangle`, `gaussian` or `cubic`. |
+| `filter_width` | number or null | no | Full filter width in pixels. |
+| `height` | integer or null | no | Image height in pixels. |
+| `max_depth` | integer or null | no | Maximum path vertices. |
+| `reset` | boolean or null | no | true: remove the stored settings (renders use the caller's defaults again). |
+| `samples` | integer or null | no | Samples per pixel. |
+| `seed` | integer or null | no | Sampling seed. |
+| `width` | integer or null | no | Image width in pixels. |
+
+Example: `forge cmd scene.forge render.settings --args '{"height":360,"samples":32,"width":640}'`
 
 
 ## `track`

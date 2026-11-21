@@ -62,6 +62,8 @@ pub struct AnimEdit<'a> {
 #[derive(Default)]
 pub struct Evaluated {
     cache: RefCell<Option<Cached>>,
+    /// The dynamics simulation of the current scene revision (docs/specs/DYNAMICS.md §5.1).
+    dynamics: RefCell<crate::dynamics::DynamicsState>,
 }
 
 struct Cached {
@@ -90,7 +92,10 @@ impl Evaluated {
             Some(c) if c.key.0 == key.0 && c.key.1 == key.1 => c.inputs,
             _ => schedule::animation_inputs(scene),
         };
-        let animated = schedule::animate(scene, &inputs.0, &inputs.1, inputs.2, time);
+        let mut animated = schedule::animate(scene, &inputs.0, &inputs.1, inputs.2, time);
+        self.dynamics
+            .borrow_mut()
+            .apply(scene, frame, &mut animated.scene);
         let evaluated = Arc::new(animated.scene);
         *cache = Some(Cached {
             key,

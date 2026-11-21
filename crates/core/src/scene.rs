@@ -131,6 +131,8 @@ pub struct Scene {
     settings: SceneSettings,
     time: TimeConfig,
     layers: Layers,
+    /// Render settings; `None` = the document stores none (RENDER.md R2, SCENE-OBJECTS.md S6).
+    render: Option<crate::RenderConfig>,
 }
 
 impl Scene {
@@ -145,6 +147,7 @@ impl Scene {
             settings: SceneSettings::default(),
             time: TimeConfig::default(),
             layers: Layers::default(),
+            render: None,
         }
     }
 
@@ -156,6 +159,11 @@ impl Scene {
     /// Preview range, playback mode, display format and markers (ANIM.md §2.9).
     pub fn time(&self) -> &TimeConfig {
         &self.time
+    }
+
+    /// The stored render settings, if the document has any.
+    pub fn render_config(&self) -> Option<&crate::RenderConfig> {
+        self.render.as_ref()
     }
 
     /// The layer table (docs/specs/CORE.md §7).
@@ -381,6 +389,20 @@ impl Scene {
     pub(crate) fn replace_time(&mut self, time: TimeConfig) -> TimeConfig {
         self.revision += 1;
         std::mem::replace(&mut self.time, time)
+    }
+
+    /// Replaces the render settings (already validated), raises the revision.
+    pub(crate) fn replace_render(
+        &mut self,
+        render: Option<crate::RenderConfig>,
+    ) -> Option<crate::RenderConfig> {
+        self.revision += 1;
+        std::mem::replace(&mut self.render, render)
+    }
+
+    /// Sets the render settings of a freshly loaded scene without touching the revision.
+    pub(crate) fn init_render(&mut self, render: Option<crate::RenderConfig>) {
+        self.render = render;
     }
 
     /// Replaces the layer table (already validated), raises the revision.

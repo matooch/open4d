@@ -18,6 +18,7 @@ forge-image = { path = "../image" }
 forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }
 forge-parity-harness = { path = "../parity-harness" }
+forge-render-bridge = { path = "../render-bridge" }
 forge-shaders = { path = "../shaders" }
 toml = "1"
 

@@ -11,10 +11,15 @@ use serde::Deserialize;
 
 pub mod image;
 pub mod samples;
+pub mod trajectory;
 pub mod volume;
 pub use image::{CompareOptions, ImageBuf, ImageError, ImageReport, compare_image};
 pub use samples::{
     Samples, SamplesReport, compare_samples, parse_samples, samples_info, validate_samples,
+};
+pub use trajectory::{
+    Thresholds, TrajectoryReport, compare_trajectory, first_contact_frame, rebound_height,
+    track_values,
 };
 pub use volume::{VolumeMeshReport, compare_volume_mesh};
 
