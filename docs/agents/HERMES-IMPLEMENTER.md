@@ -24,11 +24,12 @@ Work only on briefs in the queue below, top to bottom, skipping ones whose Statu
 
 ### Queue (the planner edits this list)
 
-Done: 193, 195, 196, 049 (merged after planner review).
+Done: 193, 195, 196, 049, 110, 106, 164 (merged after planner review).
 
-1. [110](tasks/110-user-data.md) · User data on any node (medium; O54 user-data notes)
-2. [106](tasks/106-expression-tags.md) · Tags: Target, Align to Spline, Vibrate, Look at Camera, Protection, … (medium; O54/O27 data)
-3. [164](tasks/164-gltf.md) · glTF import/export (large; read the planner scope note in the brief: no morph targets)
+1. 164 follow-up (on hermes/164-gltf): import GLB skin weights unchanged with the skin's
+   `normalise` off and re-check the two pinned skinned-arm poses (one hypothesis; see the review).
+2. [168](tasks/168-usd.md) · USD `.usda` import/export (medium-large; public text format, round-trip tests)
+3. [167](tasks/167-alembic.md) · Alembic (Ogawa) import/export (large; O44 has an ABC export)
 
 **Handing a brief back.** When a brief's branch is pushed, add one line to
 `/Users/bigman/forge-implementer/log.md`: `<brief> <branch> <done|blocked> <one-line result>`. The
