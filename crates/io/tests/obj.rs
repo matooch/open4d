@@ -1,6 +1,8 @@
 //! docs/specs/IO.md §1: the OBJ writer and reader.
 
-use forge_geometry::PolyMesh;
+use forge_core::{Document, Registry};
+use forge_generators::{Primitives, uv::build_with_uvs};
+use forge_geometry::{CornerUvs, PolyMesh};
 use forge_io::obj::{ObjObject, ReadOptions, WriteOptions, read, write};
 use glam::{DMat4, DVec3};
 
@@ -13,6 +15,7 @@ fn object(name: &str, points: &[[f64; 3]], polys: &[&[u32]]) -> ObjObject {
         },
         world: DMat4::IDENTITY,
         smoothing_angle: Some(40f64.to_radians()),
+        uvs: None,
     }
 }
 
@@ -220,16 +223,25 @@ o A\nf 1 2 3\no B\nf 6 5 4\n";
 }
 
 #[test]
-fn flip_z_negates_z_and_reverses_winding() {
-    let text = "v 1 2 3\nv 4 5 -6\nv 7 8 9\nv 0 0 0\nf 1 2 3 4\n";
+fn flip_z_negates_z_and_reverses_winding_and_uvs() {
+    let text =
+        "v 1 2 3\nv 4 5 -6\nv 7 8 9\nv 0 0 0\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nf 1/1 2/2 3/3 4/4\n";
     let o = read(text, &ReadOptions { flip_z: true }).unwrap();
     assert_eq!(o[0].mesh.points[0], DVec3::new(1.0, 2.0, -3.0));
     assert_eq!(o[0].mesh.points[1], DVec3::new(4.0, 5.0, 6.0));
     assert_eq!(o[0].mesh.points[3].z, 0.0);
     assert_eq!(o[0].mesh.polys, vec![vec![3, 2, 1, 0]]);
+    assert_eq!(
+        o[0].uvs.as_ref().unwrap().corners,
+        vec![vec![[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]]]
+    );
     let plain = read(text, &ReadOptions::default()).unwrap();
     assert_eq!(plain[0].mesh.polys, vec![vec![0, 1, 2, 3]]);
     assert_eq!(plain[0].mesh.points[0].z, 3.0);
+    assert_eq!(
+        plain[0].uvs.as_ref().unwrap().corners,
+        vec![vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]]
+    );
 }
 
 #[test]
@@ -256,4 +268,147 @@ fn empty_input_gives_no_objects() {
             .unwrap()
             .is_empty()
     );
+}
+
+fn object_with_uvs(name: &str, points: &[[f64; 3]], polys: &[&[u32]], uvs: CornerUvs) -> ObjObject {
+    ObjObject {
+        name: name.to_string(),
+        mesh: PolyMesh {
+            points: points.iter().map(|p| DVec3::from_array(*p)).collect(),
+            polys: polys.iter().map(|p| p.to_vec()).collect(),
+        },
+        world: DMat4::IDENTITY,
+        smoothing_angle: Some(40f64.to_radians()),
+        uvs: Some(uvs),
+    }
+}
+
+#[test]
+fn round_trip_preserves_uvs() {
+    let uvs = CornerUvs {
+        corners: vec![vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]],
+    };
+    let obj = object_with_uvs(
+        "Quad",
+        &[
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ],
+        &[&[0, 1, 2, 3]],
+        uvs.clone(),
+    );
+    for normals in [true, false] {
+        let text = write(
+            std::slice::from_ref(&obj),
+            &WriteOptions {
+                normals,
+                weld: false,
+            },
+        );
+        assert!(text.contains("vt 0 0"));
+        assert!(text.contains("vt 1 1"));
+        let back = read(&text, &ReadOptions::default()).unwrap();
+        assert_eq!(back.len(), 1);
+        assert_eq!(back[0].uvs.as_ref().unwrap().corners, uvs.corners);
+    }
+}
+
+#[test]
+fn import_hand_written_uv_forms_and_negative_indices() {
+    let text = "v 0 0 0
+v 1 0 0
+v 1 1 0
+v 0 1 0
+vt 0 0
+vt 1 0
+vt 1 1
+vt 0 1
+vn 0 0 1
+f 1/1/1 2/2/1 3/3/1 4/4/1
+f -4/-4/-1 -3/-3/-1 -2/-2/-1 -1/-1/-1
+";
+    let o = read(text, &ReadOptions::default()).unwrap();
+    assert_eq!(o.len(), 1);
+    let uvs = o[0].uvs.as_ref().unwrap();
+    assert_eq!(uvs.corners.len(), 2);
+    assert_eq!(
+        uvs.corners[0],
+        vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+    );
+    assert_eq!(
+        uvs.corners[1],
+        vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+    );
+}
+
+#[test]
+fn partial_uv_indices_give_no_uvs() {
+    let text = "v 0 0 0
+v 1 0 0
+v 1 1 0
+vt 0 0
+vt 1 0
+f 1/1 2/2 3
+";
+    let o = read(text, &ReadOptions::default()).unwrap();
+    assert_eq!(o.len(), 1);
+    assert!(o[0].uvs.is_none());
+}
+
+#[test]
+fn no_uv_output_matches_no_uv_export() {
+    let obj = object(
+        "Tri",
+        &[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        &[&[0, 1, 2]],
+    );
+    let text = write(&[obj], &WriteOptions::default());
+    assert!(!text.contains("vt "));
+    assert!(
+        text.lines()
+            .any(|l| l.starts_with("f ") && l.contains("//"))
+    );
+}
+
+#[test]
+fn primitive_uvs_round_trip_through_obj() {
+    let mut reg = Registry::with_builtins();
+    reg.install(&Primitives).unwrap();
+    let reg = std::sync::Arc::new(reg);
+    for ty in [
+        "forge.plane",
+        "forge.cube",
+        "forge.sphere",
+        "forge.cylinder",
+        "forge.cone",
+        "forge.disc",
+        "forge.torus",
+        "forge.tube",
+        "forge.capsule",
+        "forge.pyramid",
+    ] {
+        let mut doc = Document::new(reg.clone());
+        let id = doc
+            .transact("create", |tx| tx.create(ty, None, None))
+            .unwrap();
+        let values = doc.scene().node(id).unwrap().params.clone();
+        let (mesh, uvs) = build_with_uvs(ty, &values).unwrap();
+        let Some(uvs) = uvs else {
+            continue; // options with unsupported UV layouts
+        };
+        let obj = ObjObject {
+            name: ty.to_string(),
+            mesh,
+            world: DMat4::IDENTITY,
+            smoothing_angle: Some(40f64.to_radians()),
+            uvs: Some(uvs.clone()),
+        };
+        let text = write(&[obj], &WriteOptions::default());
+        let back = read(&text, &ReadOptions::default()).unwrap();
+        assert_eq!(back.len(), 1, "{ty}");
+        let got = back[0].uvs.as_ref().expect("{ty}: uvs lost");
+        assert_eq!(got.corners, uvs.corners, "{ty}: UV corners differ");
+    }
 }
