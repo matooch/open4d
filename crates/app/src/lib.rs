@@ -15,6 +15,7 @@ pub mod rig_commands;
 pub mod schedule;
 pub mod select;
 pub mod tag_commands;
+pub mod user_data_commands;
 pub mod weight_commands;
 
 use std::sync::Arc;
@@ -61,6 +62,7 @@ pub fn default_command_registry() -> CommandRegistry {
     rig_commands::register(&mut commands).expect("joint.* ids are unique");
     weight_commands::register(&mut commands).expect("weights.* ids are unique");
     tag_commands::register(&mut commands).expect("tag command ids are unique");
+    user_data_commands::register(&mut commands).expect("user_data command ids are unique");
     material_commands::register(&mut commands).expect("material command ids are unique");
     commands
 }
