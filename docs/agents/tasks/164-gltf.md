@@ -12,6 +12,15 @@ glTF 2.0 import and export.
 
 ## Design decisions (planner)
 - `gltf` crate; `ImportScene` IR; unit conversion cm ↔ m; handedness conversion (left-handed Y-up ↔ right-handed).
+- **Scope now (planner, 2026-11-22):** meshes with UVs (CornerUvs, brief 196), hierarchy and
+  transforms, materials through the hosted material list (brief 194, Standard material ↔ glTF
+  PBR metallic-roughness, base colour and roughness only), node TRS animation (tracks, brief 088)
+  and skins (brief 101, joints + weights + inverse bind matrices). **Out of scope:** morph
+  targets, because pose morph (brief 107) is blocked on O37; return `Unsupported` for them and
+  note it in IO.md.
+- Parity data: O44 `tests/golden/exchange/` (the skinned arm and its GLB export). Compare the
+  imported mesh and the frame-15/30 poses to the existing exchange cases with the existing
+  tolerances; round-trip our own export → import exactly.
 
 ## Done when
 - [ ] O44 glTF cases: geometry within 1e-4 of the OBJ golden; round trip.

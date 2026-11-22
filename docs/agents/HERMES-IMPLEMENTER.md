@@ -24,11 +24,11 @@ Work only on briefs in the queue below, top to bottom, skipping ones whose Statu
 
 ### Queue (the planner edits this list)
 
-1. [193](tasks/193-extrude-tests-use-auto.md) · Parity tests use Extrude's Auto direction (tests only; small)
-2. [195](tasks/195-grow-use-edge.md) · Grow Selection: Use Edge option for polygons (small; one golden case decides it)
-3. [196](tasks/196-obj-uvs.md) · OBJ texture coordinates import and export (medium; public format, round-trip tests)
-4. [049](tasks/049-create-menu-organisation.md) · Create menu organisation (own design: every rule
-   parity-pending until GUI session G1)
+Done: 193, 195, 196, 049 (merged after planner review).
+
+1. [110](tasks/110-user-data.md) · User data on any node (medium; O54 user-data notes)
+2. [106](tasks/106-expression-tags.md) · Tags: Target, Align to Spline, Vibrate, Look at Camera, Protection, … (medium; O54/O27 data)
+3. [164](tasks/164-gltf.md) · glTF import/export (large; read the planner scope note in the brief: no morph targets)
 
 **Handing a brief back.** When a brief's branch is pushed, add one line to
 `/Users/bigman/forge-implementer/log.md`: `<brief> <branch> <done|blocked> <one-line result>`. The
