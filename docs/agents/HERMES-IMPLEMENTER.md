@@ -69,7 +69,11 @@ When the queue is done, write `QUEUE FINISHED` to `/Users/bigman/forge-implement
    After that, pin the case (KNOWN_MISMATCH / UNSUPPORTED with the reason, per IMPLEMENTER.md §5) or,
    if the brief cannot be finished, set its Status to `blocked: <reason>` in the brief and BACKLOG,
    commit, push and move to the next brief.
-5. Finish: `cargo fmt --all`, then `sh scripts/gate.sh` until it prints `GATE: all passed`; fill
+5. Before finishing, check for observed data the brief must use: every observation the brief's
+   header names (`Observations: O..`) has a form in `docs/parity/` and usually golden cases in
+   `tests/golden/<feature>/`. A brief whose cases exist but are not read by a parity test is not
+   done. Say in the Report which cases you read and their result.
+6. Finish: `cargo fmt --all`, then `sh scripts/gate.sh` until it prints `GATE: all passed`; fill
    the brief's Report; set BACKLOG to `done`; commit; push the branch; add one line to
    `/Users/bigman/forge-implementer/log.md` (brief, branch, result).
 
