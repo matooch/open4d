@@ -40,7 +40,9 @@ with an empty list. Added `user_data.add` command supporting float, int, bool, v
 and string kinds; updated `param.edit` and the attribute panel to resolve user data.
 
 Tests: core user-data create/set/save/load/animation/undo, app command API, UI attribute
-panel row. No parity cases for this feature; STATUS.md unchanged.
+panel row, and the O54 golden case `tests/golden/tags-2/user-data` (1/1 exact: float
+"amount" descriptor with default 1.0 and range 0..10, link "target" pointing at the cube,
+both values read back; exported cube mesh matches `mesh.obj`). STATUS.md updated.
 
 Files changed: crates/core/src/{scene.rs,document.rs,file.rs,param.rs,registry.rs,
 user_data.rs,lib.rs}, crates/core/tests/{user_data.rs,native_format.rs}, crates/core/tests/
