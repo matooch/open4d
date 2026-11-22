@@ -5,12 +5,15 @@
 use std::collections::BTreeMap;
 
 use forge_clone_engine::{
-    CLONER, CloneData, CloneError, apply_effectors, generate, settings_from_params,
+    CLONER, CloneData, CloneError, Mode, Settings, apply_effectors, generate, settings_from_params,
+    with_transform,
 };
 use forge_core::{EvalCtx, NodeId, Scene, Value};
 use forge_geometry::PolyMesh;
 
 use crate::{BuildError, evaluate, evaluate_geometry};
+
+mod object;
 
 pub(crate) const TYPE: &str = CLONER;
 
@@ -19,6 +22,21 @@ fn map_error(e: CloneError) -> BuildError {
         CloneError::Unsupported(what) => BuildError::Unsupported(what),
         CloneError::TooMany => BuildError::Unsupported("more than 1000000 clones"),
     }
+}
+
+fn placements(
+    scene: &Scene,
+    id: NodeId,
+    settings: &Settings,
+    ctx: &EvalCtx,
+) -> Result<CloneData, BuildError> {
+    if settings.mode == Mode::Object {
+        return Ok(with_transform(
+            object::placements(scene, id, ctx)?,
+            &settings.transform,
+        ));
+    }
+    generate(settings, ctx).map_err(map_error)
 }
 
 /// The prototypes of a cloner: its children with geometry, in child order (C3.1).
@@ -47,7 +65,7 @@ fn build_instances(
     ctx: &EvalCtx,
 ) -> Result<Option<ClonerInstances>, BuildError> {
     let settings = settings_from_params(values);
-    let mut clones = generate(&settings, ctx).map_err(map_error)?;
+    let mut clones = placements(scene, id, &settings, ctx)?;
     apply_effectors(scene, id, &mut clones, ctx).map_err(map_error)?;
     let mut protos = Vec::new();
     for child in prototypes_of(scene, id) {
@@ -186,7 +204,7 @@ pub fn clone_data(
         return Ok(None);
     };
     let settings = settings_from_params(&node.params);
-    let mut clones = generate(&settings, ctx).map_err(map_error)?;
+    let mut clones = placements(scene, id, &settings, ctx)?;
     apply_effectors(scene, id, &mut clones, ctx).map_err(map_error)?;
     clones.assign_children(
         prototypes_of(scene, id).len(),

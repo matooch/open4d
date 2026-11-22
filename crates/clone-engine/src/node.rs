@@ -67,6 +67,43 @@ pub fn cloner_type() -> NodeType {
             OBJ,
         ))
         .param(
+            ParamDesc::link("object", "Object", &[Category::Object, Category::Generator])
+                .group(OBJ),
+        )
+        .param(en(
+            "distribution",
+            "Distribution",
+            "surface",
+            &[
+                ("vertex", "Vertex"),
+                ("edge", "Edge"),
+                ("polygon_center", "Polygon Center"),
+                ("surface", "Surface"),
+                ("volume", "Volume"),
+                ("axis", "Axis"),
+            ],
+            OBJ,
+        ))
+        .param(
+            ParamDesc::int("object_count", "Count", 20)
+                .range(1, MAX_CLONES as i64)
+                .group(OBJ),
+        )
+        .param(
+            ParamDesc::int("object_seed", "Seed", 1_234_567)
+                .range(0, SEED_MAX)
+                .group(OBJ),
+        )
+        .param(ParamDesc::bool("align_clone", "Align Clone", true).group(OBJ))
+        .param(en(
+            "up_vector",
+            "Up Vector",
+            "none",
+            &[("none", "None"), ("x", "X"), ("y", "Y"), ("z", "Z")],
+            OBJ,
+        ))
+        .param(ParamDesc::string("selection", "Selection", "").group(OBJ))
+        .param(
             ParamDesc::int("clones_seed", "Seed", 123_456)
                 .range(0, SEED_MAX)
                 .group(OBJ),
