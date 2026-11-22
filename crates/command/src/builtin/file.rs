@@ -3,7 +3,6 @@
 use forge_core::{Document, NodeId, file};
 use forge_core::{ParamDesc, ParamKind};
 use forge_io::formats::{self, FormatInfo, IoError};
-use forge_io::import_into;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
@@ -440,12 +439,12 @@ fn import_file(
     let options = formats::resolve_options(&descs, options).map_err(bad_option)?;
     let objects = std::fs::read(path)
         .map_err(|e| e.to_string())
-        .and_then(|bytes| formats::read_bytes(id, &bytes, &options).map_err(|e| e.to_string()))
+        .and_then(|bytes| formats::read_scene(id, &bytes, &options).map_err(|e| e.to_string()))
         .map_err(|e| CommandError::Failed(format!("Import failed: {e}")))?;
     let label = format!("Import {}", short_label(info));
     let ids = ctx
         .doc_mut()
-        .transact(&label, |tx| import_into(tx, &objects))
+        .transact(&label, |tx| objects.apply(tx))
         .map_err(|e| CommandError::Failed(format!("Import failed: {e}")))?;
     let Some((first, rest)) = ids.split_first() else {
         return Err(CommandError::failed("Import: no polygons found"));
@@ -480,14 +479,19 @@ fn export_file(
     })?;
     let options = formats::resolve_options(&descs, options).map_err(bad_option)?;
     let roots: Vec<NodeId> = ctx.selection().nodes.iter().copied().collect();
-    let scene = ctx.evaluated_scene();
-    let (bytes, count) =
-        formats::export_bytes(id, &scene, selected.then_some(&roots[..]), &options).map_err(
-            |e| match e {
-                IoError::NothingToExport => CommandError::failed("Nothing to export"),
-                other => CommandError::Failed(format!("Export failed: {other}")),
-            },
-        )?;
+    formats::validate_export_path(id, path).map_err(bad_option)?;
+    let evaluated;
+    let scene = if formats::preserves_animation(id) {
+        ctx.doc().scene()
+    } else {
+        evaluated = ctx.evaluated_scene();
+        &evaluated
+    };
+    let (bytes, count) = formats::export_bytes(id, scene, selected.then_some(&roots[..]), &options)
+        .map_err(|e| match e {
+            IoError::NothingToExport => CommandError::failed("Nothing to export"),
+            other => CommandError::Failed(format!("Export failed: {other}")),
+        })?;
     std::fs::write(path, bytes).map_err(|e| CommandError::Failed(format!("Export failed: {e}")))?;
     ctx.set_status(String::new());
     Ok(json!({"objects": count, "format": id}))

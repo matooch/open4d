@@ -147,7 +147,7 @@ fn options_apply_and_bad_ones_fail_before_writing() {
         "--out",
         s(&out),
         "--format",
-        "gltf",
+        "fbx",
     ]);
     assert_eq!(code, 1);
     assert!(
@@ -156,6 +156,30 @@ fn options_apply_and_bad_ones_fail_before_writing() {
             .unwrap()
             .contains("supported: obj")
     );
+}
+
+#[test]
+fn convert_round_trips_a_binary_gltf_scene() {
+    let d = dir("gltf");
+    let source = d.join("model.forge");
+    scene(&source, "forge.cube");
+    let glb_dir = d.join("binary");
+    let (code, result) = json_run(&[
+        "convert",
+        s(&source),
+        "--out",
+        s(&glb_dir),
+        "--format",
+        "gltf",
+    ]);
+    assert_eq!(code, 0, "{result}");
+    let glb = glb_dir.join("model.glb");
+    assert!(std::fs::read(&glb).unwrap().starts_with(b"glTF"));
+    let native = d.join("native");
+    let (code, result) = json_run(&["convert", s(&glb), "--out", s(&native), "--format", "forge"]);
+    assert_eq!(code, 0, "{result}");
+    assert_eq!(result["files"][0]["nodes"], 1);
+    assert_eq!(names(&native), ["model.forge"]);
 }
 
 #[test]
