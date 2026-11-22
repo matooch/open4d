@@ -117,9 +117,6 @@ fn run_case(case: &GoldenCase) -> Result<(), String> {
     let flag = |k: &str| settings.get(k).and_then(|v| v.as_bool()).unwrap_or(false);
     let (mode, cmd, args) = match tool {
         "grow" => {
-            if flag("use_edge") {
-                return Err("Use Edge is not implemented".into());
-            }
             let mode = if !points.is_empty() {
                 EditMode::Points
             } else if !edges.is_empty() {
@@ -127,7 +124,8 @@ fn run_case(case: &GoldenCase) -> Result<(), String> {
             } else {
                 EditMode::Polys
             };
-            (mode, "select.grow", json!({}))
+            let use_edge = flag("use_edge");
+            (mode, "select.grow", json!({"use_edge": use_edge}))
         }
         "select_connected" => (EditMode::Polys, "select.connected", json!({})),
         _ => {

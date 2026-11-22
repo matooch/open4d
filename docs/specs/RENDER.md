@@ -194,7 +194,7 @@ Tiles (`settings.tile`) are rendered in parallel with rayon and assembled in til
 sensor_mm, film_offset: [f64; 2] }` or `Projection::Orthographic { width }`. The film gate
 width `sensor_mm` spans the image width: the pixel focal length is `f_px = width_px * focal_mm /
 sensor_mm`; the principal point is the image centre shifted by `film_offset` (fractions of the
-image width, +x right, +y up). Pixel `(px, py)` (row 0 at the top, pixel centres at +0.5) maps to
+image width in x, of the image height in y; +x right, +y up). Pixel `(px, py)` (row 0 at the top, pixel centres at +0.5) maps to
 the camera-space direction `((px - cx) / f_px, -(py - cy) / f_px, 1)`.
 `Camera::from_hpb(position, [h, p, b], projection)`: `R = Rh * Rp * Rb`, each factor the transpose
 of the usual right-handed rotation (what the observed left-handed reference does): `Rh` turns +Z
@@ -310,7 +310,15 @@ perspective cases the visible shape is the cube). Compared like R14: silhouette 
 (reference: any channel above 0.05; ours: coverage >= 0.5, Cubic filter of width 2, 16 samples).
 
 Result: **4 of 4 exact** (0 pixels beyond 1 px): `focal-18`, `film-offset`, `ortho-front`,
-`ortho-top`. Rules and the case that proves each:
+`ortho-top`; plus the four **calibration-scene** follow-ups `default-2`, `aspect-square-2`,
+`film-offset-y`, `ortho-zoom-2` (rotation (0, 0, 0), a checker plane P 90 and a white cube) compared
+one-sided (`ortho-zoom-2` is `KNOWN_MISMATCH`, below): the checker's black cells are zero in the reference picture, indistinguishable from the
+background, so its silhouette is not the geometry. The test requires every lit reference pixel to lie
+within 1 px of a pixel we touch (coverage above 0.05, the reference's own threshold) and the lit bounding
+boxes to agree within 1 px (`default-2` (53, 13)-(267, 227), `aspect-square-2` (40, 40)-(200, 200)); our
+coverage of the black cells is not checked. The checker itself is not reproduced (the reference's period-16 px
+ramp 0, 0.63, 1, 0.83 at 240 px is blurred; ours is binary). `focal-100-2` is not observed (one white
+colour). Rules and the case that proves each:
 
 - Lens from the horizontal FOV: `focal = sensor / (2 tan(fov/2))`, pixel focal `w * focal /
   sensor` (`focal-18`: 90 deg, `film-offset`: 53.13 deg).
@@ -324,15 +332,23 @@ Result: **4 of 4 exact** (0 pixels beyond 1 px): `focal-18`, `film-offset`, `ort
 - **Film Offset X +20 % moves the picture left** by 20 % of the image width (64 px at 320 px):
   the lens's principal point sits at `w/2 - offset * w`. The parameters shift the frame, the
   lens moves the principal point the opposite way (`film-offset`: the cube's lower-left corner
-  lands at x = 281 px, which is only true for a principal point at 96 px). The Y sign follows by
-  symmetry (+Y moves the picture down) and is **parity-pending**.
+  lands at x = 281 px, which is only true for a principal point at 96 px). **Film Offset Y +20 %
+  moves the picture up by 20 % of the image height** (`film-offset-y`: 48 px at 240 px, the lit
+  rows span 0..179 instead of 13..227): the Y parameter is not negated and scales with the height
+  (at 4:3 a width-based reading would also give 48 px: only the height form is natural for the
+  film gate; parity-pending for other aspect ratios). The earlier guess (down, by width) was wrong.
 - Axis projections (`Front`, `Top`) are orthographic, ignore the camera's rotation and the
   orthographic width is **1000 units** at zoom 1 (`ortho-front`: IoU 1.0000 at zero tolerance
   with 1000, 0.9624 at 1016, 0.9385 at 1024; `ortho-top`: within 1 px at 1000. Its silhouette is
   one pixel smaller on two sides than a full plane at zero tolerance because the checker's
   black squares sit on the plane's edge, so it cannot fix the scale better than 1.6 %). The
-  width at other zoom values and aspect ratios is **parity-pending** (`1000 / zoom`; the
-  `aspect-square` case was not observed).
+  width at other zoom values is **not** `1000 / zoom`: `ortho-zoom-2` (Zoom 2) shows the plane
+  at 35.0..285.6 px (250.6 px for 400 units) and the white cube 125.3 px wide for 200 units, i.e. a width of
+  about 510.8 units where `1000 / zoom` gives 500 (plane 31..288 px, 7 px too wide): pinned
+  `KNOWN_MISMATCH` (three readings tried: `1000 / zoom`, `1024 / zoom` = 512, which fits this case within
+  0.6 px but breaks `ortho-front` (IoU 0.9385 at zero tolerance), and a power law `zoom^-0.97`; a third zoom
+  value is needed). `aspect-square-2` (240 x 240) matches with the horizontal FOV kept, so the aspect ratio does
+  not change the horizontal field.
 
 **Thin lens (depth of field), own design.** `Camera::aperture = Some(Aperture { radius,
 focus_distance })` and `RenderSettings::depth_of_field` (default false; stored as

@@ -87,8 +87,7 @@ fn offset_of(case: &GoldenCase) -> f64 {
 }
 
 /// The extrude (caps off) of the Text spline a case describes, with the case's own table
-/// edited by `edit`. The direction is the guess of `spline_tools_parity.rs`: negative Z when
-/// the loops' signed areas add up clockwise (brief 044 owns the real Auto rule).
+/// edited by `edit`. Direction defaults to Auto (brief 044).
 fn extrude(
     table: &toml::map::Map<String, toml::Value>,
     offset: f64,
@@ -108,16 +107,8 @@ fn extrude(
         .unwrap();
     let values = doc.scene().node(child).unwrap().params.clone();
     let curve = build_curve(TYPE, &values)?;
-    let total: f64 = curve
-        .loops()
-        .iter()
-        .map(|l| area(&l.iter().map(|p| p.to_array()).collect::<Vec<_>>()))
-        .sum();
-    let sign = if total < 0.0 { -1.0 } else { 1.0 };
     doc.transact("direction", |tx| {
-        tx.set_param(ex, "direction", Value::Enum("custom".into()))?;
-        tx.set_param(ex, "offset", Value::Float(offset))?;
-        tx.set_param(ex, "movement", Value::Vec3([0.0, 0.0, sign]))
+        tx.set_param(ex, "offset", Value::Float(offset))
     })
     .unwrap();
     let mesh = evaluate(doc.scene(), ex, &EvalCtx::default())?.expect("geometry");

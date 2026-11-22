@@ -34,7 +34,8 @@ const OUT_OF_SCOPE_ORDER: &[&str] = &["nested"];
 /// by 20 degrees about X (R alone; our R + Step Rotation rule gives 30) while the clone positions
 /// follow a chain whose step vector turns by 10 degrees per clone (50 * (cos 10k, -sin 10k) added
 /// for k = 1..i). The description calls the step rotation "H" but the file stores it in the
-/// second (P) slot: needs a re-observation (clone-toolset spec C4).
+/// second (P) slot: bad data, settled by the redo `linear-rstep-2` (H slot), which matches
+/// (clone-toolset spec C4). The old folder stays and stays pinned.
 ///
 /// `honey-var`: the structure is derived (one shift per interior line, ends fixed, C9) but the
 /// reference's random sequence is not reproducible, so the shifts differ.
@@ -44,12 +45,12 @@ const OUT_OF_SCOPE_ORDER: &[&str] = &["nested"];
 /// cube, sphere, cube, sphere, sphere, sphere, ours another valid draw.
 const KNOWN_MISMATCH: &[&str] = &["honey-var", "linear-rstep", "order-random"];
 
-/// Cases that cannot be rebuilt from their `case.toml`, with the reason (C10).
+/// Cases that cannot be rebuilt from their `case.toml`, with the reason (C10). The only one,
+/// `reset-coords-off`, was redone as `reset-coords-off-2` (child transform in `case.toml`).
 const UNSUPPORTED: &[(&str, &str)] = &[(
     "reset-coords-off",
-    "observation needs redoing: the child cube's position (0, 50, 0) and rotation are only in \
-     the description, not in case.toml, and the rotation axis is unclear (y range 36.34..63.66 \
-     needs a turn about X or Z, not H)",
+    "superseded by reset-coords-off-2: the child cube's position (0, 50, 0) and rotation are only \
+     in the description, not in case.toml",
 )];
 
 type Table = toml::map::Map<String, toml::Value>;
@@ -349,6 +350,36 @@ fn build(
     .unwrap()
 }
 
+/// The child's own transform from `[params.child]` (`position`, `rotation_deg` in H, P, B
+/// order, `scale`), set on the first child when the case records it (`reset-coords-off-2`).
+fn apply_child_transform(doc: &mut Document, cloner: NodeId, params: &Params) {
+    let Some(toml::Value::Table(child)) = params.get("child") else {
+        return;
+    };
+    let vec3 = |key: &str| -> Option<[f64; 3]> {
+        let a = child.get(key)?.as_array()?;
+        let f = |i: usize| {
+            a[i].as_float()
+                .or_else(|| a[i].as_integer().map(|n| n as f64))
+        };
+        Some([f(0)?, f(1)?, f(2)?])
+    };
+    let id = doc.scene().node(cloner).unwrap().children[0];
+    doc.transact("child transform", |tx: &mut Tx| {
+        if let Some(p) = vec3("position") {
+            tx.set_param(id, transform::POS, Value::Vec3(p))?;
+        }
+        if let Some(r) = vec3("rotation_deg") {
+            tx.set_param(id, transform::ROT, Value::Vec3(r.map(f64::to_radians)))?;
+        }
+        if let Some(s) = vec3("scale") {
+            tx.set_param(id, transform::SCALE, Value::Vec3(s))?;
+        }
+        Ok(())
+    })
+    .unwrap();
+}
+
 #[test]
 fn cloner_modes_match_the_reference() {
     let reg = registry();
@@ -388,6 +419,7 @@ fn cloner_modes_match_the_reference() {
             .collect();
         let mut doc = Document::new(reg.clone());
         let cloner = build(&mut doc, &reg, &mode, &case.name, &table);
+        apply_child_transform(&mut doc, cloner, &params);
 
         // Level B: the clone data.
         let data = clone_data(doc.scene(), cloner, &ctx).unwrap().unwrap();
@@ -442,7 +474,7 @@ fn cloner_modes_match_the_reference() {
         mismatched,
         KNOWN_MISMATCH.iter().map(|s| s.to_string()).collect()
     );
-    assert_eq!(matched.len(), 34, "{matched:?}");
+    assert_eq!(matched.len(), 37, "{matched:?}");
     assert_eq!(unsupported.len(), UNSUPPORTED.len());
     assert_eq!(effects.len(), 54, "{effects:?}");
     assert_eq!(skipped.len(), 9, "{skipped:?}");

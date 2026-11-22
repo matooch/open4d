@@ -1,0 +1,47 @@
+feature = "cloner"
+observation = "docs/parity/clone-toolset-3.md"
+description = "Linear cloner, count 3, child cube moved to (0, 50, 0) and rotated H 30\u00b0, Reset Coordinates off"
+mesh = "mesh.obj"
+
+[params]
+mode = "Linear"
+clones_mode = "Iterate"
+reset_coordinates = false
+fix_texture = "Off"
+instance_mode = "Instance"
+viewport_mode = "Object"
+count = 3
+offset = 0
+linear_mode = "Per Step"
+amount_percent = 100.0
+transform_position = [0.0, 0.0, 0.0]
+transform_scale_percent = [100.0, 100.0, 100.0]
+transform_rotation_deg = [0.0, 0.0, 0.0]
+step_mode = "Single Value"
+step_size_percent = 100.0
+step_rotation_deg = [0.0, 0.0, 0.0]
+display = "None"
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+color = [1.0, 1.0, 1.0]
+weight_percent = 0.0
+animation_mode = "Play"
+effector_count = 0
+
+[params.child]
+position = [0.0, 50.0, 0.0]
+rotation_deg = [30.0, 0.0, 0.0]
+scale = [1.0, 1.0, 1.0]
+size = [20.0, 20.0, 20.0]
+segments_x = 1
+segments_y = 1
+segments_z = 1
+separate_surfaces = false
+fillet = false
+fillet_radius = 3.0
+fillet_subdivision = 3
+
+[import]
+scale = 1.0
+flip_z = false

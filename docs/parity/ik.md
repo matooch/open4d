@@ -1,6 +1,6 @@
 # Rigging II: IK — observation (O35)
 
-Status: observed · App version: Cinema 4D 2025.1.0 (25.010) · OS: macOS 26.7.2 (25G332, arm64) · Observer: Hermes · Date: 2026-11-20
+Status: observed (11 of 11 cases: 9 baseline plus 2 follow-ups after brief 104, 2026-11-21) · App version: Cinema 4D 2025.1.0 (25.010) · OS: macOS 26.7.2 (25G332, arm64) · Observer: Hermes · Date: 2026-11-20
 Method: scripted. Unblocks: H/104. Level B.
 
 ## Setup
@@ -94,10 +94,10 @@ Use `feature = "ik"`.
 
 ## Follow-up cases (planner, after brief 104)
 
-| Case | Setup | Record |
-|---|---|---|
-| rest-orientation | the chain as built, no IK tag | every joint's local and global rotation (H, P, B) and its axes, written in the row and in `case.toml` |
-| four-joints-2 | the `four-joints` chain, but J2 pre-rotated B 30° before the IK tag is added | joint global positions and axes, as in `four-joints` |
+| Case | Setup | Record | Result |
+|---|---|---|---|
+| rest-orientation | the chain as built, no IK tag | every joint's local and global rotation (H, P, B) and its axes, written in the row and in `case.toml` | observed: no IK tag and no goal; every joint read back from the app — J1 at (0, 0, 0), J2 at (0, 100, 0), J3 at (0, 200, 0); local rotation H 0 / P 0 / B 0 and global rotation (−0.0, 0.0, 0.0) (the negative zero is what the app reports) for all three, global axes (1, 0, 0), (0, 1, 0), (0, 0, 1) — the rest chain is exactly aligned with the world axes. The per-joint readbacks are in `case.toml` under `params.j1` … `params.j3`; `samples.json` (kind `clones`) and `mesh.obj` per the form output. `golden info`: 24 vertices, 18 faces (4-gons 18), size (10, 210, 10), centre (0, 100, 0), normals 6, uvs 4 |
+| four-joints-2 | the `four-joints` chain, but J2 pre-rotated B 30° before the IK tag is added | joint global positions and axes, as in `four-joints` | observed: J2 pre-rotated B 30° before the tag was added; once the default solver runs, J2 local rotation reads back H −0.0 / P 0 / B 74.385659 — the solver replaces the seed. Joint global positions: J1 (0, 0, 0), J2 (−32.390436, 94.608983, −0.000001), J3 (50.008785, 151.269095, 0), J4 (150.000736, 150.000329, 0), so the tip lands within 0.001 of the goal (150, 150, 0) with the tag threshold 0.01. The seed picks the opposite elbow from `four-joints`, whose J2 is (99.867606, −5.14406, 0) and J3 (180.044056, 54.619949, 0). Global axes for all four joints are in `samples.json` (kind `clones`) and in `case.toml`. `golden info`: 32 vertices, 24 faces (4-gons 24), size (194.407175, 162.682102, 10.000001), centre (57.860185, 74.99108, −0.0000005), normals 20, uvs 4 |
 
 ## Notes
 
@@ -120,3 +120,14 @@ Use `feature = "ik"`.
   24 vertices / 18 quads for 3 joints, 32 / 24 for 4.
 - Goal and pole Nuls come from the Null command (5140); the IK tag is `MakeTag(1019561)`,
   tip `tag[2000]`, goal `tag[2001]`, pole `tag[2005]`.
+
+### Follow-up read-back, 2026-11-21 (brief 104)
+
+- Reading chosen for `rest-orientation`: "the chain as built" is the form's 3-joint chain with the
+  size-10 cube children every case uses for export, and "no IK tag" also leaves out the goal Null,
+  since the goal belongs to the IK setup the row excludes.
+- Global rotations were read with the app's matrix-to-rotation helper, so no rotation was derived by
+  hand; the axes come straight from the global matrices.
+- The pre-rotation of `four-joints-2` only seeds the solver: J2 reads 74.385659° of bank after the
+  solve, not the 30° that was set, and the chain folds the other way while the tip still reaches the
+  goal within the default threshold. The 30° is recorded in `case.toml` as `j2_pre_rotation_bank_deg`.

@@ -100,8 +100,8 @@ input set, using edge ids from `PolyMesh::edges()`):
 | `edges_to_points(mesh, edges)` | edge endpoints |
 | `grow_points(mesh, points)` | adds edge-neighbours of selected points |
 | `shrink_points(mesh, points)` | keeps points whose edge-neighbours are all selected |
-| `grow_polys(mesh, polys)` | adds polygons sharing an **edge** with a selected one |
-| `shrink_polys(mesh, polys)` | keeps polygons whose edge-neighbours are all selected |
+| `grow_polys(mesh, polys, use_edge)` | `use_edge`: polygons sharing an **edge** with a selected one; `!use_edge`: polygons sharing any point |
+| `shrink_polys(mesh, polys, use_edge)` | same neighbour rule, keep polygons whose neighbours are all selected |
 
 Grow/shrink rules are **parity-pending**.
 

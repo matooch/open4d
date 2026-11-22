@@ -263,6 +263,24 @@ struct SelectNodesArgs {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+struct GrowArgs {
+    /// Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3).
+    nodes: Option<Vec<u64>>,
+    /// For polygons: grow only across shared edges (default false, O58 `sel-grow-poly`).
+    use_edge: Option<bool>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ShrinkArgs {
+    /// Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3).
+    nodes: Option<Vec<u64>>,
+    /// For polygons: shrink using shared-edge neighbours (default false, O58 `sel-grow-poly`).
+    use_edge: Option<bool>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct ConvertArgs {
     /// Polygon objects to work on; the component targets when absent (EDITABLE.md §6.3).
     nodes: Option<Vec<u64>>,
@@ -618,15 +636,31 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
         ($id:literal, $label:literal, $op:expr) => {
             r.register_fn(
                 spec($id, $label, true, || json!({})),
-                |c, a: SelectNodesArgs| select(c, $op, a.nodes),
+                |c, a: SelectNodesArgs| select(c, $op, false, a.nodes),
             )?;
         };
     }
     select_op!("select.all", "Select All", SelectOp::All);
     select_op!("select.none", "Deselect All", SelectOp::None);
     select_op!("select.invert", "Invert Selection", SelectOp::Invert);
-    select_op!("select.grow", "Grow Selection", SelectOp::Grow);
-    select_op!("select.shrink", "Shrink Selection", SelectOp::Shrink);
+    r.register_fn(
+        spec(
+            "select.grow",
+            "Grow Selection",
+            true,
+            || json!({"use_edge": false}),
+        ),
+        |c, a: GrowArgs| select(c, SelectOp::Grow, a.use_edge.unwrap_or(false), a.nodes),
+    )?;
+    r.register_fn(
+        spec(
+            "select.shrink",
+            "Shrink Selection",
+            true,
+            || json!({"use_edge": false}),
+        ),
+        |c, a: ShrinkArgs| select(c, SelectOp::Shrink, a.use_edge.unwrap_or(false), a.nodes),
+    )?;
     r.register_fn(
         spec("select.connected", "Select Connected", true, || json!({})),
         |c, a: SelectNodesArgs| select_extra(c, SelectExtra::Connected, a.nodes),
@@ -998,10 +1032,11 @@ fn node_ids(nodes: Option<Vec<u64>>) -> Option<Vec<NodeId>> {
 fn select(
     ctx: &mut dyn CommandContext,
     op: SelectOp,
+    use_edge: bool,
     nodes: Option<Vec<u64>>,
 ) -> Result<Value, CommandError> {
     let nodes = node_ids(nodes);
-    ctx.select_components(op, nodes.as_deref())
+    ctx.select_components(op, use_edge, nodes.as_deref())
         .map_err(CommandError::Failed)?;
     Ok(Value::Null)
 }

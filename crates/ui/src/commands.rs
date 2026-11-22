@@ -136,8 +136,13 @@ impl CommandContext for EditorState {
         self.app.set_status(text);
     }
 
-    fn select_components(&mut self, op: SelectOp, nodes: Option<&[NodeId]>) -> Result<(), String> {
-        self.app.select_components(op, nodes)
+    fn select_components(
+        &mut self,
+        op: SelectOp,
+        use_edge: bool,
+        nodes: Option<&[NodeId]>,
+    ) -> Result<(), String> {
+        self.app.select_components(op, use_edge, nodes)
     }
 
     fn select_extra(&mut self, cmd: SelectExtra, nodes: Option<&[NodeId]>) -> Result<(), String> {

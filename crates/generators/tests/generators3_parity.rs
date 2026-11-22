@@ -8,7 +8,7 @@ mod common;
 
 use common::{Table, apply, resolved_params};
 use forge_core::{Document, EvalCtx, Registry, Value};
-use forge_generators::{BuildError, Primitives, evaluate, spline_mask};
+use forge_generators::{BuildError, Primitives, evaluate};
 use forge_parity_harness::{GoldenCase, Mesh, compare_meshes, discover_cases, export_weld};
 
 const FEATURES: &[&str] = &["atom-array", "spline-mask"];
@@ -40,40 +40,6 @@ fn type_of(t: &Table) -> String {
     format!("forge.{}", t["type"].as_str().unwrap())
 }
 
-/// The sign of Extrude Direction Auto: the guess of the spline tests (signed area of all
-/// loops, a zero total follows the first loop), in the plane frame (u, v) of the mask Axis
-/// (`zy`: u = z, v = y).
-fn auto_sign(curve: &forge_generators::splines::Curve, zy: bool) -> f64 {
-    let areas: Vec<f64> = curve
-        .loops()
-        .iter()
-        .map(|ring| {
-            (0..ring.len())
-                .map(|i| {
-                    let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
-                    let (a, b) = if zy {
-                        (
-                            glam::DVec3::new(a.z, a.y, a.x),
-                            glam::DVec3::new(b.z, b.y, b.x),
-                        )
-                    } else {
-                        (a, b)
-                    };
-                    a.x * b.y - b.x * a.y
-                })
-                .sum()
-        })
-        .collect();
-    let total: f64 = areas.iter().sum();
-    let scale: f64 = areas.iter().map(|a| a.abs()).sum();
-    let area = if total.abs() < 1e-9 * scale {
-        areas[0]
-    } else {
-        total
-    };
-    if area < 0.0 { -1.0 } else { 1.0 }
-}
-
 fn build(case: &GoldenCase) -> Result<Mesh, BuildError> {
     let reg = registry();
     let m = case.manifest().unwrap();
@@ -101,7 +67,7 @@ fn build(case: &GoldenCase) -> Result<Mesh, BuildError> {
         extrude = None;
     }
     let mut doc = Document::new(reg.clone());
-    let (root, generator) = doc
+    let root = doc
         .transact("case", |tx| {
             let root = match extrude {
                 Some(_) => tx.create("forge.extrude", None, None)?,
@@ -118,23 +84,12 @@ fn build(case: &GoldenCase) -> Result<Mesh, BuildError> {
                 let child = tx.create(&ty, Some(generator), None)?;
                 apply(tx, &reg, child, &ty, t);
             }
-            Ok((root, generator))
+            Ok(root)
         })
         .unwrap();
     if let Some((offset, caps)) = extrude {
-        let curve = spline_mask::curve_of(doc.scene(), generator)?.expect("mask curve");
-        let zy = own.get("axis").and_then(|v| v.as_str()) == Some("ZY (Along X)");
-        let sign = auto_sign(&curve, zy);
         doc.transact("extrude", |tx| {
-            // the plane normal is u x v: +z for XY, -x for ZY
-            let movement = if zy {
-                [-sign, 0.0, 0.0]
-            } else {
-                [0.0, 0.0, sign]
-            };
-            tx.set_param(root, "direction", Value::Enum("custom".into()))?;
             tx.set_param(root, "offset", Value::Float(offset))?;
-            tx.set_param(root, "movement", Value::Vec3(movement))?;
             if !caps {
                 for cap in ["cap_start", "cap_end"] {
                     tx.set_param(root, cap, Value::Enum("none".into()))?;

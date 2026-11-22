@@ -252,34 +252,6 @@ fn extrude_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
     })
 }
 
-/// Extrude Direction Auto (brief 044 owns the real rule), the guess of `spline_sampling.rs`
-/// extended to several loops: negative Z when the loops' signed areas add up to a clockwise
-/// total (`outline`, `or`, `intersect`; a total of zero follows the first loop).
-fn auto_sign(doc: &Document, id: forge_core::NodeId) -> f64 {
-    let (data, ty, sampling) = editable_spline::settings_of(doc.scene(), id).unwrap();
-    let areas: Vec<f64> = data
-        .curve(ty, sampling)
-        .loops()
-        .iter()
-        .map(|ring| {
-            (0..ring.len())
-                .map(|i| {
-                    let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
-                    a.x * b.y - b.x * a.y
-                })
-                .sum()
-        })
-        .collect();
-    let total: f64 = areas.iter().sum();
-    let scale: f64 = areas.iter().map(|a| a.abs()).sum();
-    let area = if total.abs() < 1e-9 * scale {
-        areas[0]
-    } else {
-        total
-    };
-    if area < 0.0 { -1.0 } else { 1.0 }
-}
-
 fn float(t: &toml::map::Map<String, toml::Value>, key: &str) -> f64 {
     t[key]
         .as_float()
@@ -393,11 +365,8 @@ fn tool_of(case: &GoldenCase) -> Result<Mesh, BuildError> {
             Ok(ex)
         })
         .unwrap();
-    let sign = auto_sign(&doc, result);
     doc.transact("direction", |tx| {
-        tx.set_param(ex, "direction", Value::Enum("custom".into()))?;
-        tx.set_param(ex, "offset", Value::Float(offset))?;
-        tx.set_param(ex, "movement", Value::Vec3([0.0, 0.0, sign]))
+        tx.set_param(ex, "offset", Value::Float(offset))
     })
     .unwrap();
     let mesh = evaluate(doc.scene(), ex, &EvalCtx::default())?.expect("geometry");

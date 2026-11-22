@@ -1,6 +1,6 @@
 # Camera projection — observation (O57)
 
-Status: partial (4 of 9 cases; 4 render an empty frame, 1 is not scriptable — see Notes) · App version: Cinema 4D 2025.1.0 (25.010) · OS: macOS 26.7.2 (25G332, arm64) · Observer: Hermes · Date: 2026-11-20
+Status: partial (8 of 14 cases: focal-18, film-offset, ortho-front, ortho-top, default-2, aspect-square-2, film-offset-y, ortho-zoom-2; focal-100-2 renders one white colour, sensor has no preset list, the Physical renderer cannot be selected from a script, default / focal-100 / aspect-square are superseded by the -2 redos — see the form) · App version: Cinema 4D 2025.1.0 (25.010) · OS: macOS 26.7.2 (25G332, arm64) · Observer: Hermes · Date: 2026-11-20, follow-ups 2026-11-21
 Method: as [render-reference.md](render-reference.md) (O30): Standard renderer, 320 × 240.
 
 **Calibration scene:** a default plane rotated P 90° (facing the camera) at z 0, carrying a
@@ -52,10 +52,13 @@ for a default camera. Redo them as `default-2`, `focal-100-2`, `aspect-square-2`
 rotation left at (0, 0, 0), read back before rendering and stored as `camera_rotation_deg`.
 Also new:
 
-| Case | Camera |
-|---|---|
-| film-offset-y | as `film-offset`, but Film Offset Y 20 % instead of X |
-| ortho-zoom-2 | as `ortho-front`, Zoom 2 |
+| Case | Camera | Result |
+|---|---|---|
+| default-2 | the calibration scene, camera at (0, 0, −600), rotation left at (0, 0, 0), read back before rendering and stored as `camera_rotation_deg` | observed: rotation reads (0, 0, 0) before rendering, camera axis (0, 0, 1); `render.png` 7993 bytes, 243 distinct colours, mean 121.98, peak 255, 38 073 of 76 800 pixels black — black bars outside the plane, the checker ring around the cube's white face. `golden info`: 129 vertices, 106 faces, size (400.000006, 400.000006, 200), centre (0.000003, 0.000003, −100), normals 10, uvs 123 |
+| focal-100-2 | the same, focal length 100 mm (horizontal field of view 0.356186 rad) | not observed: the frame is one white colour (255 on every sampled pixel) — at 100 mm the cube's white face fills the whole frame, so the checker cannot appear; rotation reads (0, 0, 0) as asked. A single-colour file is not committed, so the case folder was removed |
+| aspect-square-2 | the same, render size 240 × 240 | observed: rotation reads (0, 0, 0); `render.png` 2689 bytes, 120 distinct colours, mean 93.41, peak 255, 34 693 of 57 600 pixels black — square frame with the same checker ring and white centre. `golden info`: 129 vertices, 106 faces, size (400.000006, 400.000006, 200), centre (0.000003, 0.000003, −100), normals 10, uvs 123 |
+| film-offset-y | as `film-offset`, but Film Offset Y 20 % instead of X | observed: Film Offset Y reads 20 % (X 0 %), rotation (0, 0, 0); `render.png` 6571 bytes, 209 distinct colours, mean 106.47, peak 255, 43 380 of 76 800 pixels black — the checker and the white cube sit above a solid black band along the bottom, so the Y offset shifts the frame. `golden info`: 129 vertices, 106 faces, size (400.000006, 400.000006, 200), centre (0.000003, 0.000003, −100), normals 10, uvs 123 |
+| ortho-zoom-2 | as `ortho-front`, Zoom 2 | observed: projection reads Front, Zoom 2, rotation (0, 0, 0); `render.png` 9339 bytes, 329 distinct colours, mean 132.40, peak 255, 33 701 of 76 800 pixels black — flat orthographic checker ring around the white centre. `golden info`: 129 vertices, 106 faces, size (400.000006, 400.000006, 200), centre (0.000003, 0.000003, −100), normals 10, uvs 123 |
 
 ## Notes
 
@@ -81,3 +84,28 @@ Also new:
   channel on, with the Checkerboard shader in the Luminance slot and both frequencies at 10.
   Where the plane is in frame, that renders as two flat levels (orthographic Front) exactly
   as the form expects lighting not to matter.
+
+### Follow-up read-back, 2026-11-21 (brief 138)
+
+- Two separate problems were behind the black frames. The camera rotation the brief names
+  (45, −19.45, 0) points away from the scene, and on top of that the old probe rotated the
+  calibration plane by its first rotation component, which is heading, so the plane lay flat at
+  the camera's own height and could not appear at all. The form's "plane rotated P 90° (facing the
+  camera)" is the pitch component: the follow-up cases read plane rotation (0, 90, 0) with the face
+  along −Z, and every one of them shows the checker. The four committed cases keep their flat plane
+  (existing golden cases are not edited); re-checking their PNGs on 2026-11-21, each is about 90 %
+  black with one grey corner shape where the scene lies relative to that rotation — no checker
+  fills them, so their Result cells overstate what the files show.
+- The menu camera arrives at rotation (45, −19.45, 0), matching the app's current perspective view;
+  that is what all four committed case files hold. The five follow-up cases set (0, 0, 0) and read
+  it back before rendering. `film-offset-y` and `ortho-zoom-2` keep every other value from their
+  named cases (Film Offset X 0 % / default zoom) — that is the reading of "as film-offset / as
+  ortho-front" used here, since brief 138 defines the default camera rotation as (0, 0, 0).
+- A new texture tag reads Projection Spherical, which turns the checker into radial wedges around
+  the image centre (first attempt). Each follow-up case sets the tag to UVW Mapping, recorded in
+  `case.toml` as `params.texture_tag`, which shows the plane's own square checker, as the level-C
+  check "checker corners within 1 px" expects.
+- The cube carries a plain white material with only its Luminance channel on, as the calibration
+  scene describes, so it reads as a white square against the checker; at 100 mm that white face
+  covers the frame, which is why `focal-100-2` stays not observed (single-colour file, not
+  committed).

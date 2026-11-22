@@ -1,0 +1,9 @@
+feature = "keyframes"
+observation = "docs/parity/fcurves.md"
+description = "position X, keys 0 -> 0 and 30 -> 100, track Before behaviour Oscillate"
+
+[params]
+param = "pos_x"
+keys = [[0, 0], [30, 100]]
+before_behavior = "Oscillate"
+after_behavior = "Constant"

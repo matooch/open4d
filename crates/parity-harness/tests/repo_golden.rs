@@ -26,5 +26,8 @@ fn all_repo_golden_cases_are_valid() {
 fn cases_without_output_are_pinned() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let cases = discover_cases(&repo.join("tests/golden")).unwrap();
-    assert_eq!(cases_without_output(&cases), ["make-editable/spline"]);
+    assert_eq!(
+        cases_without_output(&cases),
+        ["make-editable/spline", "rigging/j2-bend-90-matrix"]
+    );
 }

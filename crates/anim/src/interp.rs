@@ -138,12 +138,13 @@ fn eval_track(track: &Track, tangs: &[Resolved], t: f64) -> f64 {
             }
             Behavior::Repeat | Behavior::OffsetRepeat | Behavior::Oscillate => {
                 // Backwards from the first key: the value at a cycle boundary is the end of
-                // the cycle, `last` (`before-repeat` frame 0). Offset and oscillate before
-                // the first key were not observed (parity-pending, mirrored from after).
+                // the cycle, `last` (`before-repeat` frame 0), and Offset Repeat shifts it down
+                // by one delta per cycle passed plus one (`before-offset`: -100 at frame -30,
+                // -200 at -60, -50 at -15 for keys 0 -> 0, 30 -> 100). Oscillate: `before-oscillate`.
                 let x = (first.time - t) / span;
                 let r = x - x.floor();
-                let whole = if r == 0.0 { x - 1.0 } else { x.floor() + 1.0 };
-                let back = if r == 0.0 { 0.0 } else { r };
+                let whole = x.floor() + 1.0;
+                let back = r;
                 let (u, shift) = match track.before {
                     Behavior::Repeat => (last.time - back * span, 0.0),
                     Behavior::OffsetRepeat => (last.time - back * span, -whole * delta),
@@ -389,7 +390,18 @@ fn resolve_legacy(keys: &[Key], user: &[Option<UserTangent>]) -> Vec<Resolved> {
             let t = tangent(keys, i);
             let (ll, rl) = (-u.left.0, u.right.0);
             let side = |len: f64, dv: f64, auto_len: f64, auto_dv: f64, s: i32| {
-                if is_automatic(len, dv, auto_len, auto_dv, keys, i, s) {
+                // The neighbour this side's handle points to: a handle end outside the value
+                // range of its segment overshoots and is evaluated automatically
+                // (ANIM.md §1.5a, `broken` / `broken-2`; parity-pending).
+                let neighbour =
+                    if s < 0 { i.checked_sub(1) } else { Some(i + 1) }.and_then(|j| keys.get(j));
+                let overshoots = neighbour.is_some_and(|n| {
+                    let end = keys[i].value + dv;
+                    let (lo, hi) = (n.value.min(keys[i].value), n.value.max(keys[i].value));
+                    let eps = 1e-9 * hi.abs().max(lo.abs()).max(1.0);
+                    end < lo - eps || end > hi + eps
+                });
+                if overshoots || is_automatic(len, dv, auto_len, auto_dv, keys, i, s) {
                     forge_core::Handle::default()
                 } else {
                     forge_core::Handle {

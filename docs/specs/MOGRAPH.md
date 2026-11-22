@@ -157,7 +157,7 @@ Limit: a cloner makes at most `MAX_CLONES = 1 000 000` clones; more is `Unsuppor
    nothing (`grid-sphere-form`: 33 cubes, 264 vertices).
 4. `Reset Coordinates` on (default): the prototype's own local transform is ignored, so clones sit
    exactly at the clone matrices. Off: the prototype's local matrix is applied first, then the clone
-   matrix (**parity-pending**: only the default was observed).
+   matrix (`reset-coords-off-2`, matches).
 5. The cloner's own deformer children deform the expanded mesh as for any generator.
 6. `instance_mode` (Instance, Render Instance, Multi-Instance) and `viewport_mode`, `display`,
    `fix_texture`, `animation_mode`, `uv_orientation` are stored and shown by the viewport/renderer
@@ -360,13 +360,17 @@ as the label (`Grid Array`, `Linear`); the test maps it to the id.
   clone 4: (0, 177.829, -82.923)), i.e. a chain `(Rx(10°) · T(P))^i` for the position and an extra `10°` per clone for the
   orientation. Hypotheses tried: (1) orientation `R·t + Step·t` (30° per clone, fails); (2) the chain with the step
   rotation only (orientation 10°, fails); (3) the chain angle taken from R (20°, fails the positions). The description
-  says the step rotation is "H" 10° but the file stores it in the second (P) slot, so the observation should be redone
-  with the step rotation read back.
+  says the step rotation is "H" 10° but the file stores it in the second (P) slot: bad data. The redo
+  `linear-rstep-2` (step rotation in H, read back `[10, 0, 0]`) **matches** with our R + Step Rotation rule (C4), so the
+  rule needs no change; the old folder stays pinned.
 
-`UNSUPPORTED` (1): `reset-coords-off` (observation needs redoing: the child cube's position (0, 50, 0) and rotation are only in
-the description, not in `case.toml`, and the y range 36.34..63.66 of the baked mesh needs a turn about X or Z, not H). Its
-reading, parity-pending: with Reset Coordinates off the clone matrices stay the identity and the
-child keeps its own transform (3 identical cubes).
+`UNSUPPORTED` (1): `reset-coords-off` (superseded: its child position (0, 50, 0) and rotation are only in the
+description). Its redo `reset-coords-off-2` records the child transform in `[params.child]` (position (0, 50, 0),
+`rotation_deg` (30, 0, 0) = H, scale 1) and **matches**: with Reset Coordinates off the clone matrices stay the identity
+(three clones) and the child's own transform is baked into the prototype (x/z turned by H 30° about Y, y 40..60);
+the earlier "turn about X or Z" worry was a misreading of the missing transform. `order-iterate-2` (the three children's
+settings recorded) matches like `order-iterate`. Matched cases: 37 (34 + `linear-rstep-2`, `order-iterate-2`,
+`reset-coords-off-2`).
 
 Not run here (pinned by count in the test, 54 effector cases and 13 others of the 101 cloner cases): the cases with
 an effector (`[params.effector]` or `effector_count > 0`: briefs 068+), 8 Object-mode cases
@@ -1006,9 +1010,46 @@ Rules:
 - **Spline** (`clone-spline/spline-mode`): an open polyline through the sampled points of the source spline (its own
   Intermediate Points setting); a closed source repeats its first point at the end, so the default circle gives 37 points
   and the Extrude 36 quads with no caps (the doubled point welds in the export).
-- **Turtle** is `Unsupported`: the case `clone-spline/turtle` shows a branching 3D plant (16 chains, step lengths 10, 9, 8.1 =
-  x 0.9 per generation, five branches 72 degrees apart around Y) but the default premise, rules, angle and length values of the
-  mode were not recorded. Data that would settle it: the Turtle parameter table with its default strings.
+- **Turtle** (L-system, `clone-spline/turtle-2`, `clone-spline/turtle`; sources: the full Turtle tab of `turtle-2`
+  `[params.mospline]`, public Lindenmayer-system / turtle-graphics literature for the symbol meanings; the
+  observations fix what is marked *derived*). Extra params: `premise` (`^(90)FFFA`), `rules` (lines `X=string`,
+  default `A=!"[B]///[B]///[B]///B` and `B=&FTFTFTA`, the `"` being a plain character), `growth` (iterations, 5),
+  `default_angle` (28 degrees), `default_movement` (10), `tropism` (100 %), `move_multiplier` (90 %),
+  `scale_multiplier` (90 %), `randomness` (0 %), `seed`.
+  1. **Grammar.** The string is rewritten `growth` times; every character with a rule is replaced by the rule's
+     string at once (no rule: unchanged). Rule lines are `X=string`, one per line, one predecessor character; the first
+     line for a character wins. Context rules (`X<Y>Z=`), stochastic rules and `randomness > 0` are `Unsupported`; so is
+     a result longer than 2 000 000 characters. Letters other than `F` and `f` (`A`, `B`, ...) are placeholders: they
+     draw nothing and only exist for the rules. Derived (`turtle-2`: 4 iterations give the drawn tree, 5 draw the same,
+     so `growth` as the iteration count is parity-pending between 4 and 5).
+  2. **Symbols.** `F` moves forward by the current movement and draws; `f` moves without drawing (and ends the
+     chain); `+` / `-` turn left / right about the up axis, `&` / `^` pitch down / up about the left axis, `/` / `\` roll
+     right / left about the heading, `|` turns 180 degrees about the up axis. An angle symbol is followed by an optional
+     `(x)` with the angle in **degrees** (`^(90)`), else the default angle (28 degrees) is used. `F(x)` / `f(x)` move `x`.
+     `[` pushes and `]` pops the turtle state (position, frame, movement, scale, chain). `"` multiplies the movement by
+     the move multiplier (**derived**: steps 10, 9, 8.1 = 10 x 0.9^k after one and two `"`), `!` multiplies the scale
+     (width, no geometry; parity-pending), `T` applies the tropism (below). Any other character is `Unsupported`
+     (including `(` after a symbol that takes no value). Angle units: input degrees, internal radians.
+  3. **Frame.** The turtle starts at the origin with heading +Z, up +Y (as Simple mode runs along +Z); `^(90)` makes the
+     heading +Y (the trunk of `turtle-2` rises along Y). Heading `H`, up `U`, `L = U x H`. `&` by `a` is the
+     right-handed rotation of the frame about `L` by `+a` (`H' = cos a H - sin a U`: the first branch of `turtle-2`
+     leans 28 degrees from vertical towards +Z), `+` rotates about `U` by `+a`, `/` rotates about `H` by `+a`
+     (`U' = cos a U + sin a (H x U)`: each `///` turns the next branch by 84 degrees, azimuth 90, 6, -78, -162
+     degrees about Y). `\`, `-` and `^` use `-a`. The angle multiplier of the tab does not scale the angle here:
+     the deeper `&` in `turtle-2` still tilt by 28 degrees (parity-pending).
+  4. **Tropism `T`** (**derived**, `turtle-2`: four successive bends fit `k = 0.2000`): the heading becomes
+     `normalize(H + k * (0, -1, 0))` with `k = 0.2 * tropism / 100`, and the frame is carried along by the shortest
+     rotation from the old to the new heading. The 0.2 is parity-pending (only the default tropism 100 % was seen).
+  5. **Chains.** The result is a list of open polylines (the generator's spline has one segment run per chain,
+     Tracer-style: the first chain is the main curve and the rest `extra`). A chain starts at the turtle's position at
+     its first `F` (so the tree shares branch points) and every further `F` appends the new position. `[` ends the
+     current chain for the new state (the first `F` inside the bracket starts a new chain at the branch point), `]`
+     restores the chain that was current at the `[`, which later `F` extend (the trunk and its last `B` are one
+     chain). Chains are listed in creation order (the trunk first, each branch before its own sub-branches).
+     `turtle-2`: 16 chains, 79 points, 63 segments.
+  Result: `turtle-2` and `turtle` (defaults) both match the Extrude of this spline within the case tolerance
+  (the two reference meshes differ from each other by float noise up to 4.5e-4). `Unsupported` otherwise: context / stochastic rules, randomness,
+  unknown symbols, `grow_*` flags other than on, `generation_mode` other than Vertex.
 
 ## T2. Evaluation context
 
@@ -1026,7 +1067,8 @@ Test `crates/generators/tests/tracer_parity.rs`: Extrude (defaults) over the reb
 |---|---|
 | `clone-spline/simple` | exact |
 | `clone-spline/spline-mode` | exact |
-| `clone-spline/turtle` | `UNSUPPORTED` (S1) |
+| `clone-spline/turtle` | exact (S1 Turtle, node defaults) |
+| `clone-spline/turtle-2` | exact (S1 Turtle, the recorded settings set from `[params.mospline]`) |
 | `tracer/vertices` | `KNOWN_MISMATCH`: counts, face lists and the 8 x 30 chains match; positions differ by up to 5.2e-4 |
 | `tracer/interval` | `KNOWN_MISMATCH`: counts and faces match; positions differ by up to 9.8e-4 |
 

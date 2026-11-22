@@ -8,12 +8,17 @@ use forge_parity_harness::{GoldenCase, Samples, compare_samples, discover_cases}
 
 /// Observed cases whose options are not derived.
 /// `linear-to-spline` has no machine-readable per-key interpolation (docs/specs/ANIM.md
-/// §1.5a). The behaviour cases are evaluated since §1.9.
+/// §1.5a); its redo `linear-to-spline-2` is evaluated.
 const UNSUPPORTED: &[&str] = &["keyframes/linear-to-spline"];
 
 /// Cases we evaluate but that differ, pinned so a fix shows up.
-/// `broken`: the read-back right tangent is not what is evaluated (ANIM.md §1.5a).
-const KNOWN_MISMATCH: &[&str] = &["keyframes/broken"];
+const KNOWN_MISMATCH: &[&str] = &[];
+
+/// Follow-up (redo) recordings whose half-frame samples (14.5, 29.5) hold the value of the
+/// rounded whole frame (15, 30): in `linear-to-spline-2` and `broken-2` the two rows equal
+/// their whole-frame neighbours to every digit, while the original recordings read the true
+/// fractional time. A property of how the follow-up was sampled (ANIM.md §1.5a).
+const WHOLE_FRAME_SAMPLING: &[&str] = &["keyframes/linear-to-spline-2", "keyframes/broken-2"];
 
 /// Observation whose samples are taken at the exact frame time (ANIM.md §1.5a).
 const EXACT_TIME_OBSERVATION: &str = "docs/parity/fcurves.md";
@@ -47,13 +52,26 @@ fn number(v: &toml::Value) -> f64 {
 
 /// The behaviour a case description states: "after-behaviour Offset Repeat",
 /// "before-behaviour Repeat" (`case.toml` has no field for it; ANIM.md §1.9).
-fn behaviour(description: &str, side: &str) -> Behavior {
+fn behaviour(
+    params: &std::collections::BTreeMap<String, toml::Value>,
+    description: &str,
+    side: &str,
+) -> Behavior {
+    if let Some(name) = params
+        .get(&format!("{side}_behavior"))
+        .and_then(|v| v.as_str())
+    {
+        return behaviour_named(name);
+    }
     let marker = format!("{side}-behaviour ");
     let Some(at) = description.find(&marker) else {
         return Behavior::Constant;
     };
     let rest = &description[at + marker.len()..];
-    let name = rest.split(',').next().unwrap_or("").trim();
+    behaviour_named(rest.split(',').next().unwrap_or("").trim())
+}
+
+fn behaviour_named(name: &str) -> Behavior {
     match name {
         "Repeat" => Behavior::Repeat,
         "Offset Repeat" => Behavior::OffsetRepeat,
@@ -65,7 +83,7 @@ fn behaviour(description: &str, side: &str) -> Behavior {
 }
 
 fn interp(name: &str) -> Interp {
-    match name {
+    match name.to_lowercase().as_str() {
         "spline" => Interp::Spline,
         "linear" => Interp::Linear,
         "step" => Interp::Step,
@@ -102,8 +120,8 @@ fn track_of(case: &GoldenCase, fps: f64, angle: bool) -> Track {
             })
             .collect(),
     );
-    track.before = behaviour(&description, "before");
-    track.after = behaviour(&description, "after");
+    track.before = behaviour(&params, &description, "before");
+    track.after = behaviour(&params, &description, "after");
     track
 }
 
@@ -120,6 +138,7 @@ fn evaluate(case: &GoldenCase, expected: &Samples) -> Samples {
     };
     let angle = param.starts_with("rot_");
     let track = track_of(case, *fps, angle);
+    let whole = WHOLE_FRAME_SAMPLING.contains(&format!("{}/{}", case.feature, case.name).as_str());
     let exact = case.manifest().unwrap().observation == EXACT_TIME_OBSERVATION;
     let user = if exact && !angle {
         user_tangents(case, *fps, &track)
@@ -133,7 +152,8 @@ fn evaluate(case: &GoldenCase, expected: &Samples) -> Samples {
         samples: samples
             .iter()
             .map(|(frame, _)| {
-                let t = frame / fps;
+                let read = if whole { (frame + 0.5).floor() } else { *frame };
+                let t = read / fps;
                 let v = if exact {
                     value_at_exact(&track, &user, t)
                 } else {
@@ -188,7 +208,7 @@ fn keyframes_match_the_reference() {
     assert_eq!(mismatched, expected_mismatch, "mismatching cases");
     let expected_unsupported: Vec<String> = UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, expected_unsupported);
-    assert_eq!(matched.len() + mismatched.len() + unsupported.len(), 36);
+    assert_eq!(matched.len() + mismatched.len() + unsupported.len(), 40);
     // the UNSUPPORTED case is not evaluated.
-    assert_eq!(files, 37);
+    assert_eq!(files, 41);
 }

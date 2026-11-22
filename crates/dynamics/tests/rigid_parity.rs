@@ -142,6 +142,47 @@ fn drop_bounce() {
     assert!(!compare_trajectory(&ey, &oy, &rest).passed());
 }
 
+/// `bounce-combine-0` / `-50` and `drop-cube` (plane Bounce 0, 50, 100 % under a cube with the
+/// default 5 %): the reference rebounds to 25.72 / 27.29 / 29.34 cm (rest 25). Spec §1.5: none of
+/// the engine's four combine rules gives that rebound, so it is pinned; the contact frame and the
+/// rest height are asserted.
+#[test]
+fn bounce_combine_sweep() {
+    let mut peaks = Vec::new();
+    for (case, plane_bounce, ref_peak) in [
+        ("bounce-combine-0", 0.0, 25.72472),
+        ("bounce-combine-50", 0.5, 27.28798),
+        ("drop-cube", 1.0, 29.337369),
+    ] {
+        let mut plane = Obj::plane();
+        plane.bounce = plane_bounce;
+        let b = build(&[plane, cube_from_case(case, "cube", [0.0, 300.0, 0.0])]);
+        let sim = simulate(&b, 90);
+        let (ey, oy) = (
+            track("dynamics", case, "cube", "pos_y"),
+            column(&sim[&b.ids["cube"]], 1),
+        );
+        let th = Thresholds {
+            rest_position: Some(REST_TOL),
+            first_contact_frames: Some(1.0),
+            ..Default::default()
+        };
+        let rep = compare_trajectory(&ey, &oy, &th);
+        assert!(rep.passed(), "{case}: {:?}", rep.failures());
+        let after_contact = |v: &[f64]| v[25..].iter().cloned().fold(f64::MIN, f64::max);
+        // The reference data: the rebound grows with the plane's Bounce.
+        assert!((after_contact(&ey) - ref_peak).abs() < 1e-3, "{case}");
+        peaks.push((after_contact(&ey), after_contact(&oy)));
+    }
+    assert!(peaks[0].0 < peaks[1].0 && peaks[1].0 < peaks[2].0);
+    // Pinned (KNOWN_MISMATCH): our product rule shows no rebound at any of the three (peak within
+    // 0.05 cm of the rest height), the reference's rises 0.7, 2.3 and 4.3 cm.
+    for (r, o) in peaks {
+        assert!(r > 25.7, "reference {r}");
+        assert!(o < 25.05, "ours rebounds now: remove the pin ({o})");
+    }
+}
+
 fn slide(case: &str) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
     let b = build(&[Obj::plane(), cube_from_case(case, "cube", [0.0, 25.0, 0.0])]);
     let sim = simulate(&b, 90);

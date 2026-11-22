@@ -12,7 +12,13 @@ use glam::DVec3;
 
 /// Cases we build but that differ from the recorded matrices by more than their tolerance
 /// (RIG.md §10, "Observation caveats" and "Known mismatch").
-const KNOWN_MISMATCH: &[&str] = &["reach-near", "reach-side", "reach-straight", "four-joints"];
+const KNOWN_MISMATCH: &[&str] = &[
+    "reach-near",
+    "reach-side",
+    "reach-straight",
+    "four-joints",
+    "four-joints-2",
+];
 
 /// The reference stops at its own 0.01 threshold: residuals of the noisy cases stay below this
 /// (a guard on the pins, not a parity tolerance).
@@ -30,9 +36,17 @@ struct Chain {
     tag: NodeId,
 }
 
-/// A chain of `n` joints along +Y with `spacing`, every joint rotated H = 180 deg (the
-/// recorded frames imply local x = -X, z = -Z), goal Null, optional pole Null, IK tag on J1.
-fn build(n: usize, spacing: f64, goal: DVec3, pole: Option<DVec3>, twist_deg: f64) -> Chain {
+/// A chain of `n` joints along +Y with `spacing`, every joint at rest orientation (aligned with
+/// the world axes: `rest-orientation`), goal Null, optional pole Null, IK tag on J1. `j2_bank`
+/// pre-rotates J2 about its Z (the seed of `four-joints-2`), in degrees.
+fn build(
+    n: usize,
+    spacing: f64,
+    goal: DVec3,
+    pole: Option<DVec3>,
+    twist_deg: f64,
+    j2_bank: f64,
+) -> Chain {
     let mut doc = Document::new(registry());
     let (joints, tag) = doc
         .transact("chain", |tx| {
@@ -40,9 +54,12 @@ fn build(n: usize, spacing: f64, goal: DVec3, pole: Option<DVec3>, twist_deg: f6
             for i in 0..n {
                 let j = tx.create(JOINT, joints.last().copied(), None)?;
                 let (pos, rot) = if i == 0 {
-                    ([0.0; 3], [std::f64::consts::PI, 0.0, 0.0])
+                    ([0.0; 3], [0.0; 3])
                 } else {
-                    ([0.0, spacing, 0.0], [0.0; 3])
+                    (
+                        [0.0, spacing, 0.0],
+                        [0.0, 0.0, if i == 1 { j2_bank.to_radians() } else { 0.0 }],
+                    )
                 };
                 tx.set_param(j, "transform.pos", Value::Vec3(pos))?;
                 tx.set_param(j, "transform.rot", Value::Vec3(rot))?;
@@ -85,14 +102,23 @@ fn ik_cases() {
         seen += 1;
         let m = case.manifest().unwrap();
         let p = &m.params;
+        // `rest-orientation` has no IK tag and no goal: the chain as built.
+        let rest_only = !p.contains_key("goal_position");
+        let goal = p.get("goal_position").map_or(DVec3::Z, vec3);
         let chain = build(
-            p["joints"].as_integer().unwrap() as usize,
-            num(&p["spacing"]),
-            vec3(&p["goal_position"]),
+            p.get("joints")
+                .map_or(3, |j| j.as_integer().unwrap() as usize),
+            p.get("spacing").map_or(100.0, num),
+            goal,
             p.get("pole_position").map(vec3),
             p.get("twist_degrees").map_or(0.0, num),
+            p.get("j2_pre_rotation_bank_deg").map_or(0.0, num),
         );
-        let scene = forge_rig::tags::apply_rig_tags(chain.doc.scene().clone());
+        let scene = if rest_only {
+            chain.doc.scene().clone()
+        } else {
+            forge_rig::tags::apply_rig_tags(chain.doc.scene().clone())
+        };
         let samples = case.samples().unwrap();
         let Samples::Clones { tolerance, clones } = &samples[0].1 else {
             panic!("clones expected");
@@ -110,13 +136,13 @@ fn ik_cases() {
             }
         }
         let tip = scene.world_matrix(*chain.joints.last().unwrap()).unwrap();
-        let tip_err = (tip.w_axis.truncate() - vec3(&p["goal_position"])).length();
+        let tip_err = (tip.w_axis.truncate() - goal).length();
         println!("{}: error {err:e}, tip to goal {tip_err:e}", case.name);
         if KNOWN_MISMATCH.contains(&case.name.as_str()) {
             assert!(err > *tolerance, "{} matches now: unpin it", case.name);
             // the tip still reaches the goal and the chain stays a chain
             assert!(tip_err < 0.02, "{}: tip off by {tip_err}", case.name);
-            if case.name != "four-joints" {
+            if !case.name.starts_with("four-joints") {
                 assert!(err <= NOISE_ENVELOPE, "{}: {err}", case.name);
             }
             pinned.push(case.name.clone());
@@ -128,7 +154,7 @@ fn ik_cases() {
             );
         }
     }
-    assert_eq!(seen, 9);
+    assert_eq!(seen, 11);
     let mut want: Vec<String> = KNOWN_MISMATCH.iter().map(|s| s.to_string()).collect();
     want.sort();
     pinned.sort();
@@ -137,7 +163,7 @@ fn ik_cases() {
 
 #[test]
 fn out_of_reach_is_straight_and_chain_keeps_length() {
-    let c = build(3, 100.0, DVec3::new(300.0, 300.0, 0.0), None, 0.0);
+    let c = build(3, 100.0, DVec3::new(300.0, 300.0, 0.0), None, 0.0, 0.0);
     let s = forge_rig::tags::apply_rig_tags(c.doc.scene().clone());
     let tip = s.world_matrix(c.joints[2]).unwrap().w_axis.truncate();
     assert!((tip.length() - 200.0).abs() < 1e-9);
@@ -146,7 +172,7 @@ fn out_of_reach_is_straight_and_chain_keeps_length() {
 
 #[test]
 fn bone_lengths_are_preserved_for_long_chains() {
-    let c = build(5, 50.0, DVec3::new(80.0, 120.0, 30.0), None, 0.0);
+    let c = build(5, 50.0, DVec3::new(80.0, 120.0, 30.0), None, 0.0, 0.0);
     let s = forge_rig::tags::apply_rig_tags(c.doc.scene().clone());
     let pos: Vec<DVec3> = c
         .joints
@@ -161,7 +187,7 @@ fn bone_lengths_are_preserved_for_long_chains() {
 
 #[test]
 fn disabled_or_unlinked_tags_write_nothing() {
-    let mut c = build(3, 100.0, DVec3::new(100.0, 100.0, 0.0), None, 0.0);
+    let mut c = build(3, 100.0, DVec3::new(100.0, 100.0, 0.0), None, 0.0, 0.0);
     let before = c.doc.scene().clone();
     c.doc
         .transact("off", |tx| {
@@ -181,7 +207,20 @@ fn disabled_or_unlinked_tags_write_nothing() {
 
 #[test]
 fn fk_blend_halfway_mixes_the_rotations() {
-    let mut c = build(3, 100.0, DVec3::new(100.0, 100.0, 0.0), None, 0.0);
+    // A pole at (-100, 100, 0) gives the bend plane normal z = -Z, the recorded frames.
+    let pole = Some(DVec3::new(-100.0, 100.0, 0.0));
+    let mut c = build(3, 100.0, DVec3::new(100.0, 100.0, 0.0), pole, 0.0, 0.0);
+    // The solved frames of O35 are the rest frames turned H = 180 deg (x = -X, z = -Z): start
+    // the FK pose there so the halfway blend is a plain turn about Z.
+    c.doc
+        .transact("flip", |tx| {
+            tx.set_param(
+                c.joints[0],
+                "transform.rot",
+                Value::Vec3([std::f64::consts::PI, 0.0, 0.0]),
+            )
+        })
+        .unwrap();
     c.doc
         .transact("fk", |tx| tx.set_param(c.tag, "ik_fk", Value::Float(1.0)))
         .unwrap();

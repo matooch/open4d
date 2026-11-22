@@ -1,6 +1,6 @@
 # Rigging I: joints and skinning — observation (O34)
 
-Status: observed · App version: 25.010 · OS: macOS 26.7.2 (25G332) · Observer: Hermes (deepseek-v4.1-flash:1017) · Date: 2026-11-19
+Status: observed (5 of 5 follow-up cases after brief 101, recorded 2026-11-21) · App version: 25.010 · OS: macOS 26.7.2 (25G332) · Observer: Hermes (deepseek-v4.1-flash:1017) · Date: 2026-11-19
 Method: scripted. Unblocks: H/100, 101, 103. Skinning with **explicit** weights is level A.
 
 ## Setup
@@ -105,13 +105,13 @@ The Skin deformer matches `bind-pose` exactly, but the four posed cases differ f
 4e-4 to 1.5e-3 with identical topology (RIG.md §8). These cases tell apart weight storage, joint-matrix
 precision and export rounding. Same rig and weights as above unless a row says otherwise.
 
-| Case | Setup | Record |
-|---|---|---|
-| weights-readback | the rig as bound, no pose | Read back every point's three weights through the weight tag's per-point read, at full precision (no rounding). `samples.json` kind `track`, param `weight_j1` / `weight_j2` / `weight_j3`, frame = point index |
-| j2-bend-90-points | J2 rotation B 90° | Read the deformed point positions straight from the evaluated object (the deform cache), at full precision, not through OBJ. `samples.json` kind `track`, params `x` / `y` / `z`, frame = point index |
-| j2-bend-90-matrix | J2 rotation B 90° | Read J2's global matrix (offset and the three axes) at full precision, and its rotation as shown in the Coordinates manager. Write all twelve numbers in the row |
-| j2-bend-90-single | J2 rotation B 90°, but every point weighted 100 % to J2 (weights (0, 1, 0)) | `mesh.obj` and the same full-precision point readout as `j2-bend-90-points`. With one joint per point there is no blending, so any difference is matrix or export precision |
-| j2-bend-90-blended | J2 rotation B 90°, Skin Type = Blended (Blend left at its default) | `mesh.obj` |
+| Case | Setup | Record | Result |
+|---|---|---|---|
+| weights-readback | the rig as bound, no pose | Read back every point's three weights through the weight tag's per-point read, at full precision (no rounding). `samples.json` kind `track`, param `weight_j1` / `weight_j2` / `weight_j3`, frame = point index | observed: 106 points, three weights each at full precision, one file per parameter (`samples-weight_j1.json`, `samples-weight_j2.json`, `samples-weight_j3.json`, frame = point index); first point (1, 0, 0), point 52 = (0, 0.166674296177615, 0.833325703822385), last point (0, 0, 1), which rounds to the spot checks in the Notes |
+| j2-bend-90-points | J2 rotation B 90° | Read the deformed point positions straight from the evaluated object (the deform cache), at full precision, not through OBJ. `samples.json` kind `track`, params `x` / `y` / `z`, frame = point index | observed: 106 positions read from the evaluated deform cache at full precision in `samples-x.json` / `samples-y.json` / `samples-z.json` (frame = point index); maximum deviation from the bind pose 169.99999996, posed bbox (−47.50042, −150, −20) … (150, 20, 20), identical to the bbox recorded for `j2-bend-90` |
+| j2-bend-90-matrix | J2 rotation B 90° | Read J2's global matrix (offset and the three axes) at full precision, and its rotation as shown in the Coordinates manager. Write all twelve numbers in the row | observed: J2 global matrix at full precision = offset (0.0, 0.0, 0.0), axis 1 (6.123233995736766e-17, −1.0, 0.0), axis 2 (1.0, 6.123233995736766e-17, 0.0), axis 3 (0.0, 0.0, 1.0) — all twelve numbers also stored in `case.toml`; the object rotation reads back H 0, P 0, B 90 degrees as the Coordinates manager shows it |
+| j2-bend-90-single | J2 rotation B 90°, but every point weighted 100 % to J2 (weights (0, 1, 0)) | `mesh.obj` and the same full-precision point readout as `j2-bend-90-points`. With one joint per point there is no blending, so any difference is matrix or export precision | observed: every point weighted (0, 1, 0) to J2, so the arm turns rigidly about the origin: posed bbox (−150, −20, −20) … (150, 20, 20), maximum deviation from the bind pose 169.99999996; positions at full precision in `samples-x/y/z.json`. `golden info`: 106 vertices, 112 faces (3-gons 16, 4-gons 96), size (300, 40, 40), centre (0, 0, 0), normals 27, uvs 121 |
+| j2-bend-90-blended | J2 rotation B 90°, Skin Type = Blended (Blend left at its default) | `mesh.obj` | observed: the Skin Type row read back Blended before rendering (its cycle is Linear, Spherical, Blended); posed bbox (−57.337782, −150, −20) … (150, 20.000001, 20), which differs from the Linear pose, so Blended blends the two joints differently. `golden info`: 106 vertices, 112 faces (3-gons 16, 4-gons 96), size (207.337782, 170.000001, 40), centre (46.331109, −64.9999995, 0), normals 114, uvs 121 |
 
 ## Notes
 - Each case is a fresh document: cylinder through its menu command (radius 20, height 300, height
@@ -134,3 +134,16 @@ precision and export rounding. Same rig and weights as above unless a row says o
 - Exports are the app’s own OBJ with the calibrated settings used by the other forms (no unit or axis
   conversion), written straight into the case folder.
 
+### Follow-up read-back, 2026-11-21 (brief 101)
+
+- Each three-value readout is written as one file per parameter (`samples-weight_j1.json` … and
+  `samples-x.json` / `samples-y.json` / `samples-z.json`), the layout the dynamics cases already
+  use, because the samples validator wants exactly one parameter per samples file (a combined
+  `samples.json` with three parameter names is rejected: "param: expected a string").
+- The five new case files carry the full `weights` array instead of the sibling files' weight
+  hash; the hash's exact serialisation was not observable, so no hash was invented.
+- Cross-checks against the committed cases: the read-back weights reproduce the spot checks in the
+  Notes above (point 52 = (0, 0.1667, 0.8333) at four decimals), and the posed bounding box of
+  `j2-bend-90-points` matches the `j2-bend-90` bbox exactly, so the rebuild is the same rig.
+- The Skin deformer's type row reads Linear by default; Blended and Spherical are the other two
+  entries in its cycle.

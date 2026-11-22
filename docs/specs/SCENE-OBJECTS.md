@@ -67,9 +67,9 @@ it (O57 notes: writing the FOV changes the render and the displayed focal length
 changes neither). `focal_mm = sensor / (2 tan(fov/2))` (FOV 53.13 deg reads 36 mm, 90 deg 18 mm,
 20.4 deg 100 mm, O57). The vertical FOV is a readback: `2 atan(tan(fov/2) / aspect)` with the
 film aspect of the render settings (O29: 1280 x 720 reads 31.41727565803149 deg; test
-`fov_readbacks_match_o29`). The film offsets are fractions of the image width. **Sign (O57 `film-offset`)**: the parameters
-shift the frame, so a positive X moves the picture left; `CameraData` and the snapshot camera carry
-the principal-point shift, the negated parameters (RENDER.md R15). The Y sign is parity-pending.
+`fov_readbacks_match_o29`). The film offset X is a fraction of the image width, Y of the image height. **Sign (O57 `film-offset`,
+`film-offset-y`)**: the parameters shift the frame, so a positive X moves the picture left and a positive Y moves
+it up; `CameraData` and the snapshot camera carry the principal-point shift: minus X, plus Y (RENDER.md R15).
 The thin lens of the render has radius `focal / (2 f-stop)` in millimetres converted to scene
 units (x 0.1) and the `focus_distance` (RENDER.md R15); it is used when the render settings turn
 depth of field on.

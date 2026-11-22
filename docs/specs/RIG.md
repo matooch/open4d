@@ -104,13 +104,23 @@ Linear blend skinning, per point `p`, in the object's local space (the deformer 
 with `O` the object's world matrix now, `J_j` the joint's world matrix now and `B_j` its stored
 bind pose. Weights are first reduced to the `max_influences` largest (ties: lower slot) and, if
 `normalise`, scaled to sum 1; a point whose weights sum to 0 stays where it is.
+**Without `normalise`** the linear skin is `p' = p + Σ_j w_j · (K_j · p − p)` (the weights are used as
+stored: a sum above or below 1 scales the displacement and the rest of the weight keeps the point at
+its bind position). This is what the reference does (`weights-readback`: the stored weights of the
+rings at y = ±75 sum to 1.0000153, and `j2-bend-90-points` shows the posed points carrying that factor,
+7e-4 off the normalised result); the parity tests set `normalise` off. The default stays on (own design).
 Rule evidence: O34 `bind-pose` (K_j = identity), `j2-bend-45`, `j2-bend-90`, `j1-twist-90`,
 `j2-scale`; exchange `skinned-arm` frame 0 (bind) and its posed bounding boxes (§8).
 
-Weights in the golden data: the `weights` array is rounded to 4 decimals (0.8333); the
-reference used the exact rule (O34: J1 = clamp(−y/150, 0, 1), J3 = clamp(y/150, 0, 1),
-J2 = 1 − J1 − J3). The test builds the exact rule from the bind-pose y of each point and checks
-it against the recorded triples within 5e-5.
+Weights in the golden data: the `weights` array of the O34 cases is rounded to 4 decimals (0.8333);
+`weights-readback` holds them at full precision (tolerance 1e-6) and fixes the rule. With
+`s = (y + 150) / 150` (the position along the chain in bone lengths): J1 = clamp(1 − s, 0, 1),
+J3 = clamp(s − 1, 0, 1), J2 = 1 − J1 − J3, **each weight stored on its own as
+`floor(w · 65535 + 0.5) / 65535`** (k/65535, round half up; the half cases follow the
+floating-point error of `s`, so 5/6 · 65535 = 54612.5 rounds up at y = −125 and down at y = +125,
+and at y = ±75 both J1/J3 and J2 round 32767.5 up: the stored sum is 65536/65535). All 106
+points agree to 1e-12 with this rule. The test builds it from the bind-pose y of each point;
+the 4-decimal copies are checked within 5e-5.
 
 Dual quaternion option (own, not parity-tested): each `K_j` becomes a unit dual quaternion
 from its normalised rotation columns and translation (scale and shear are dropped), blended with
@@ -199,40 +209,32 @@ selected joint, the weight squares of the objects whose weight tag lists it.
 ## 8. Parity cases and what is pinned
 
 Test: `crates/rig/tests/rigging_parity.rs` (tolerance from the case manifest: 1e-4 on exported
-positions after `export_weld`, same face lists). 1 of 5 O34 mesh cases is exact; the other
-four are pinned, plus one unsupported.
+positions after `export_weld`, same face lists; the readouts at their own 1e-6). Six of the O34
+mesh cases are exact, two readouts are exact, two are unsupported, one is form only.
 
 | Case | Result |
 |---|---|
-| `rigging/bind-pose` | exact (max error 4e-7): the skin at the bind pose returns the unbound cylinder |
-| `rigging/j2-bend-45` | KNOWN_MISMATCH, max error 9.0e-4; topology and face lists identical |
-| `rigging/j2-bend-90` | KNOWN_MISMATCH, max error 1.45e-3 |
-| `rigging/j1-twist-90` | KNOWN_MISMATCH, max error 4.3e-4 |
-| `rigging/j2-scale` | KNOWN_MISMATCH, max error 5.7e-4 |
-| `rigging/j2-bend-dq` | UNSUPPORTED: the case was observed with the Spherical skin type; its rule is not derived (no formula was fitted) |
+| `rigging/bind-pose` | exact (max error 4e-7) |
+| `rigging/j2-bend-45`, `j2-bend-90`, `j1-twist-90`, `j2-scale` | **exact** (were `KNOWN_MISMATCH` with 4.3e-4 to 1.5e-3; unpinned) |
+| `rigging/j2-bend-90-single` | exact: every point weighted (0, 1, 0), the arm turns rigidly |
+| `rigging/weights-readback` | exact at 1e-6: 106 x 3 weights |
+| `rigging/j2-bend-90-points` | exact at 1e-6: the 106 posed points read from the deform cache |
+| `rigging/j2-bend-90-matrix` | form only (J2 global matrix and rotation H 0, P 0, B 90): no mesh, no samples; pinned in `repo_golden` |
+| `rigging/j2-bend-dq` | UNSUPPORTED: Spherical skin type, no formula fitted |
+| `rigging/j2-bend-90-blended` | UNSUPPORTED: Blended skin type (posed bbox (−57.34, −150, −20)..(150, 20, 20) differs from Linear's), no formula fitted |
 
-Why the four are pinned and not wrong: the rule (§3) puts every point where the expected
-mesh has it up to an error of at most 1.5e-3 on coordinates of size 150, with the identical
-topology; a wrong rule (rotation sign, bone offset, scale propagation) would be off by
-units. The residual is the reference's own numeric noise, three measurements:
-1. The twist case moves every vertex by an exact quarter turn about the chain axis, so the
-   only error is the reference's: the expected mesh itself has `-0.000305 .. 20.000305` where
-   the exact value is `0 .. 20`, i.e. an angle error of about 1.5e-5 rad (4.3e-4 at radius 20 to
-   150).
-2. Solving the bend-90 mesh for the effective weight of each point (`p' = p + w (Rp - p)`) gives
-   the exact rule plus multiples of 2^-17 = 7.6e-6 (y = -125: 0.166659 vs 0.166667; y = 75:
-   1.000015), the size of 1/65535 rounding. Quantising the weights to k/65535 and applying them
-   as `p + Σ w_j (K_j p - p)` halves the error (bend-45 3.6e-4, bend-90 6.9e-4, scale 1.9e-4)
-   but the twist stays at 4.3e-4, so no scheme reached 1e-4. Using the recorded 4-decimal
-   weights instead is worse (3.9e-3).
-3. `bind-pose` is exact, so the bind matrices are right.
-Pins are guarded by `NOISE_ENVELOPE = 2e-3` (a regression of the rule leaves it) and by the
-assertion that the case still fails the strict comparison. They are not a tolerance.
+What settled the four old pins (they were attributed to the reference's numeric noise before the
+follow-up readouts): (1) the stored weights are k/65535 with the half cases rounding by floating-point
+error, not by a plain `round` of the exact rule (only the y = ±75 rings differ: the previous quantised
+attempt gave 0.499992 for J2 there where the reference stores 0.500008); (2) the skin does not
+normalise those rows; (3) with both, the posed points of `j2-bend-90-points` agree to 1e-6 and every
+mesh case to 1e-4. The twist case had no such rows; it matches because the exact rule now agrees at
+the stored precision too.
 
 The `weights` triples in `case.toml` are 4-decimal copies; the test builds the exact rule from the
 point heights and requires it to agree with the recorded values within 5e-5.
 
-Exchange `skinned-arm` (`crates/rig/tests/rigging_parity.rs`, second test): the rig of O34 with
+Exchange `skinned-arm` (frame 15's bbox stays 2.07e-4 off, pinned in the test as the animated angle's noise: the static 45 degree mesh matches exactly) (`crates/rig/tests/rigging_parity.rs`, second test): the rig of O34 with
 J2 keyed B 0 at frame 0 and 90 at frame 30 (linear, `forge_anim::scene_at`).
 - frame 0 mesh equals `mesh.obj` (the bind pose): exact; bbox sample exact.
 - frame 30 bbox sample: error 4.2e-4; frame 15: 4.0e-4. Pinned as `KNOWN_MISMATCH_FRAMES`
@@ -327,8 +329,10 @@ from the FK world positions):
 
 1. **Bend plane (hinge `h`)**. With a pole object at `Q`: `q = (Q-P)` minus its part along `c`,
    `h = normalize(q × c)`; the elbow goes to the side opposite the pole (`pole-x`, `pole-z`).
-   Without a pole: `h` = the root joint's current world Z axis minus its part along `c`,
-   normalised (`reach-bend`, `reach-side`). A degenerate input (pole on the chord, Z along the
+   Without a pole: `h` = **minus** the root joint's current world Z axis minus its part along `c`,
+   normalised (`reach-bend`, `reach-side`). The O35 joints rest aligned with the world axes
+   (`rest-orientation`: H 0 / P 0 / B 0, axes identity) and the recorded solved frames have `z = -Z`,
+   `x = -X` for a chain along Y, hence the minus; earlier text assumed a rest H = 180. A degenerate input (pole on the chord, Z along the
    chord) falls back to the root Z, then to any axis perpendicular to `c`. **Twist** rotates `h`
    about `c` by `-twist` (`twist`: 45 deg).
 2. **Positions, two bones**. `d = |G-P|` clamped to `[|L1-L2|, L1+L2]` (the chain never
@@ -351,8 +355,8 @@ from the FK world positions):
 Observation caveats. The reference stops at its 0.01 threshold, so its numbers carry residuals
 up to 0.04 (`reach-straight`, J2 x = 0.043; `reach-side` tip off by 0.003; `reach-near` 5e-4).
 They are outside the recorded tolerance 1e-4, so those cases are pinned (section 13).
-Rest orientation of the O35 joints is not recorded; the harness gives every joint `H = 180°`
-(local x = -X, z = -Z), which reproduces the recorded frames of the straight chain.
+Rest orientation of the O35 joints is the identity (`rest-orientation`, exact at 1e-4); the solved
+frames are the rest frames turned 180° about Y (x = -X, z = -Z), which rule 1 and 4 reproduce.
 Parity-pending: bone axes other than Y, the IK/FK blend, strength, pole with a twisted root.
 
 **Known mismatch `four-joints`**: our FABRIK gives `J2 (-0.9, 100, 0)`, `J3 (55.5, 182.6, 0)`;
@@ -360,6 +364,16 @@ the reference `J2 (99.87, -5.14, 0)`, `J3 (180.04, 54.62, 0)` (bone directions a
 107.5°). CCD (tip to root and root to tip), a Jacobian pseudo-inverse and FABRIK from the straight
 chain were tried; none reproduces it. The tip reaches the goal in both; only the redundancy
 resolution differs. More data would settle it (the same chain from a different start pose).
+
+**Known mismatch `four-joints-2`** (the same chain with J2 pre-rotated B 30° before the tag; after the solve
+J2 reads B 74.385659): the reference gives J2 (−32.390, 94.609), J3 (50.009, 151.269), tip (150.0007, 150.0003)
+(bone angles 108.9°, 34.5°, −0.7°); our FABRIK from that seed picks another elbow (error 33). Hypotheses
+(budget three, after the pinned `four-joints`): (1) CCD tip to root, (2) CCD root to tip: both land far
+away (J1 at 83° and 114°); (3) a **Jacobian-transpose flow** (`dθ = g · Jᵀ e`, g small, stop at the 0.01 /
+1e-3 residual) reproduces `four-joints-2` to 0.01 (J2 (−32.383, 94.611), J3 (50.009, 151.28); the discrete step
+and the stop test of the reference would be needed for 1e-4) but, from the straight `four-joints` seed, it
+ends on the other side (J1 at 100.7°) where the reference goes to −2.9°. Not adopted: it explains one of two
+cases. Both stay pinned; the tip reaches the goal in both.
 
 ## 11. Constraint tag (brief 105)
 
@@ -428,15 +442,15 @@ until a dynamics stage exists. Layers with expressions off skip all three tag ki
 
 ## 13. Parity cases and what is pinned (briefs 104, 105, 111)
 
-IK (`crates/rig/tests/ik_parity.rs`, 9 cases, level B, every joint's position and three axes
+IK (`crates/rig/tests/ik_parity.rs`, 11 cases, level B, every joint's position and three axes
 within the recorded 1e-4):
 
-- exact: `reach-bend`, `reach-far`, `pole-x`, `pole-z`, `twist` (worst 5.9e-5, the reference's own residual);
+- exact: `reach-bend`, `reach-far`, `pole-x`, `pole-z`, `twist` (worst 5.9e-5, the reference's own residual) and `rest-orientation` (no tag: the chain as built, axes identity);
 - `KNOWN_MISMATCH`, noise of the reference's 0.01 threshold (the rule matches, the recorded
   numbers carry its residual; our result is exact): `reach-straight` (4.3e-2), `reach-side`
   (3.6e-3), `reach-near` (5.4e-4); the test requires the error to stay below 0.06 and the tip to
   reach the goal;
-- `KNOWN_MISMATCH`, rule not derived: `four-joints` (section 10), the tip reaches the goal.
+- `KNOWN_MISMATCH`, rule not derived: `four-joints`, `four-joints-2` (section 10), the tip reaches the goal.
 
 Constraints (`crates/rig/tests/constraints_parity.rs`, 7 cases, six tracks each, 31 frames):
 all 7 exact within 1e-4 when the driver is the curve the reference recorded (`psr-all`'s

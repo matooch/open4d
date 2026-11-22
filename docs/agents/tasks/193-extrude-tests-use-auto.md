@@ -25,9 +25,9 @@ what the golden data checks.
   `KNOWN_MISMATCH` with the reason "Auto direction differs: <what you found>".
 
 ## Done when
-- [ ] No parity test computes an extrude sign itself; `grep -rn auto_sign crates/generators/tests` is empty.
-- [ ] Every case still passes, or is pinned with the reason above.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] No parity test computes an extrude sign itself; `grep -rn auto_sign crates/generators/tests` is empty.
+- [x] Every case still passes, or is pinned with the reason above.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -37,3 +37,14 @@ what the golden data checks.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+
+Status: done
+
+Removed the `auto_sign` helpers and custom-direction wiring from `generators3_parity`,
+`spline_tools_parity`, and `text_parity`. The Extrude node now uses its default `Auto`
+direction for every case that did not explicitly set a custom direction. All previously
+passing cases still pass (1 generators3, 6 spline_tools, 15 text). Updated
+`docs/specs/GENERATORS2.md` to note that the O17/O48 spline tests now verify the Auto rule
+for the XY plane. `scripts/gate.sh` prints `GATE: all passed`.
+
+Co-Authored-By: kimi-k2.7-code <kimi-k2.7-code@nousresearch.com>

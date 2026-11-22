@@ -65,10 +65,10 @@ tangent angles, lock tangent lengths, weighted tangent, and so on.
 
 Redo these two cases as new case folders (keep the old ones):
 
-| Case | Redo as | What was missing |
-|---|---|---|
-| linear-to-spline | linear-to-spline-2 | `case.toml` must record each key's interpolation (e.g. `interpolation_by_key = ["Linear", "Spline"]`), not only the description |
-| broken | broken-2 | The read-back right tangent (10, 40) does not match the sampled curve, which follows the automatic flat tangent. Set the broken tangent, **read it back after setting**, evaluate the samples, and record both. If they still disagree, say so in the row |
+| Case | Redo as | What was missing | Result |
+|---|---|---|---|
+| linear-to-spline | linear-to-spline-2 | `case.toml` must record each key's interpolation (e.g. `interpolation_by_key = ["Linear", "Spline"]`), not only the description | observed (as `linear-to-spline-2`): `case.toml` records `interpolation_by_key = ["Linear", "Spline", "Spline"]`, read back from each key after the change; `samples.json` holds the original 93-frame layout with value 50.0 at frame 15 and 59.94073137353951 at frame 45; the old folder is untouched |
+| broken | broken-2 | The read-back right tangent (10, 40) does not match the sampled curve, which follows the automatic flat tangent. Set the broken tangent, **read it back after setting**, evaluate the samples, and record both. If they still disagree, say so in the row | observed (as `broken-2`): Auto Tangents set off and Break Tangents on for key 30, then left tangent (−10 frames, −20) and right tangent (10 frames, 40); read back after setting: auto 0, break 1, left (−10.0, −20.0), right (10.0, 40.0) — the read-back matches what was set, but the evaluated curve still follows the automatic flat tangent: 42.500129 at frame 15 and 50.000143 at frame 45, the same values as the original `broken`, so read-back and samples STILL disagree, which is what the row asks to state. `tangents.json` holds the read-back, `case.toml` both flags and all four tangent numbers |
 
 ## Follow-up: record behaviours as fields (planner, after brief 093)
 
@@ -76,10 +76,10 @@ For every case that sets a before/after behaviour, `case.toml` must hold it as f
 `before_behavior = "Constant"` and `after_behavior = "Repeat"` under `[params]`, not only in the
 description. Add the fields to new cases. Also observe the two behaviours never seen:
 
-| Case | Setup | Record |
-|---|---|---|
-| before-offset | keys 0 → 0 and 30 → 100, Before = Offset Repeat | `samples.json` frames −60 … 30 step 5 |
-| before-oscillate | the same, Before = Oscillate | the same |
+| Case | Setup | Record | Result |
+|---|---|---|---|
+| before-offset | keys 0 → 0 and 30 → 100, Before = Offset Repeat | `samples.json` frames −60 … 30 step 5 | observed: the position-X track Before row reads back 4 = Offset Repeat (After stays 1 = Constant); `samples.json` covers frames −60 … 30 step 5 (19 samples): −200 at −60, −100 at −30, −49.999857 at −15, 0 at the first key, 50.000143 at 15, 100 at 30 — the rise repeats backwards unchanged. `case.toml` holds `before_behavior` and `after_behavior` |
+| before-oscillate | the same, Before = Oscillate | the same | observed: Before reads back 5 = Oscillate (After 1 = Constant); the same 19 samples: 0 at −60, 100 at −30, 50.000143 at −15, 0 at 0, 50.000143 at 15, 100 at 30 — the segment mirrors backwards, so frame −30 repeats frame 30. `case.toml` holds `before_behavior` and `after_behavior` |
 
 ## Notes
 
@@ -109,3 +109,16 @@ Exact-boundary behaviour, worth knowing for the solver: with Repeat and Oscillat
 frame that falls exactly on a cycle boundary is taken from the end of the cycle, not the start
 (frame 90 in after-repeat = 100, not 0; frame 0 in before-repeat = 100).
 
+### Follow-up read-back, 2026-11-21
+
+- Both redo rows keep their original folders, as the section asks; nothing in the old cases changed.
+- `broken-2` confirms the disagreement the row anticipated: the tangent numbers read back exactly as
+  set (Auto Tangents off, Break Tangents on, left (−10, −20), right (10, 40)) while the evaluated
+  curve keeps the automatic flat shape (42.500129 at frame 15, 50.000143 at frame 45 — the original
+  case's values), so in this build the stored tangent and the rendered curve disagree.
+- The behaviour rows live on the position-X track; Before reads 4 = Offset Repeat and 5 = Oscillate
+  from the row's own value list, After reads 1 = Constant by default. The first attempt recorded
+  `after_behavior` as null because the track value was read through the object getter; re-reading
+  through the track's own container fixed it, and the files were rewritten before committing.
+- The redos keep the original 93-frame sample layout (frames 0–90 plus 14.5 and 29.5); the two
+  behaviour cases use exactly −60 … 30 step 5 (19 frames) as their rows ask.

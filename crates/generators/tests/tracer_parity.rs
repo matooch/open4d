@@ -14,10 +14,7 @@ use forge_parity_harness::{Mesh, compare_meshes, discover_cases, export_weld};
 /// 10.001106 in `interval` and 10.000106 in `vertices`, so no single rule is within 1e-4 of both.
 const KNOWN_MISMATCH: &[&str] = &["interval", "vertices"];
 /// Cases whose options have no derived rules (spec S2).
-const UNSUPPORTED: &[(&str, &str)] = &[(
-    "turtle",
-    "the default premise, rules, angles and lengths of Turtle mode were not recorded",
-)];
+const UNSUPPORTED: &[(&str, &str)] = &[];
 
 fn registry() -> Arc<Registry> {
     let mut reg = Registry::with_builtins();
@@ -31,6 +28,56 @@ fn to_mesh(m: &forge_geometry::PolyMesh) -> Mesh {
         positions: m.points.iter().map(|p| p.to_array()).collect(),
         faces: m.polys.clone(),
     })
+}
+
+/// The Turtle tab of the case's spline-generator table (`turtle-2`) set on the generator.
+fn set_turtle(
+    tx: &mut forge_core::Tx,
+    gen_: NodeId,
+    t: &toml::map::Map<String, toml::Value>,
+) -> Result<(), forge_core::EditError> {
+    let num = |k: &str| {
+        t[k].as_float()
+            .or(t[k].as_integer().map(|i| i as f64))
+            .unwrap()
+    };
+    tx.set_param(
+        gen_,
+        "premise",
+        Value::String(t["premise"].as_str().unwrap().into()),
+    )?;
+    tx.set_param(
+        gen_,
+        "rules",
+        Value::String(t["rules"].as_str().unwrap().into()),
+    )?;
+    tx.set_param(gen_, "growth", Value::Int(num("growth") as i64))?;
+    tx.set_param(
+        gen_,
+        "default_angle",
+        Value::Float(num("default_angle_deg").to_radians()),
+    )?;
+    tx.set_param(
+        gen_,
+        "default_movement",
+        Value::Float(num("default_movement")),
+    )?;
+    tx.set_param(
+        gen_,
+        "tropism",
+        Value::Float(num("tropism_percent") / 100.0),
+    )?;
+    tx.set_param(
+        gen_,
+        "move_multiplier",
+        Value::Float(num("move_multiplier_percent") / 100.0),
+    )?;
+    tx.set_param(
+        gen_,
+        "randomness",
+        Value::Float(num("randomness_percent") / 100.0),
+    )?;
+    Ok(())
 }
 
 /// An Extrude (defaults) over the case's spline generator.
@@ -82,6 +129,12 @@ fn build(
                     _ => "simple",
                 };
                 tx.set_param(gen_, "mode", Value::Enum(mode.into()))?;
+                if let Some(t) = params
+                    .values()
+                    .find_map(|v| v.as_table().filter(|t| t.contains_key("premise")))
+                {
+                    set_turtle(tx, gen_, t)?;
+                }
                 if mode == "spline" {
                     let circle = tx.create("forge.circle_spline", None, None)?;
                     tx.set_param(gen_, "source", Value::Link(Some(circle)))?;
@@ -145,7 +198,7 @@ fn tracer_and_clone_spline_cases_match_the_reference() {
     println!("matched {matched:?}");
     assert_eq!(unsupported.len(), UNSUPPORTED.len());
     assert_eq!(mismatched.len(), KNOWN_MISMATCH.len());
-    assert_eq!(matched.len(), 2, "{matched:?}");
+    assert_eq!(matched.len(), 4, "{matched:?}");
 }
 
 #[test]
