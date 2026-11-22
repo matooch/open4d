@@ -170,6 +170,44 @@ fn value_of(scene: &Scene, id: NodeId, desc: &forge_core::ParamDesc) -> Value {
         .unwrap_or_else(|| desc.default.clone())
 }
 
+fn push_row(
+    scene: &Scene,
+    id: NodeId,
+    desc: &forge_core::ParamDesc,
+    others: &[NodeId],
+    groups: &mut Vec<(String, Vec<AttrRow>)>,
+) {
+    let value = value_of(scene, id, desc);
+    let mut mixed_axes = [false; 3];
+    for o in others {
+        match (&value, scene.param(*o, &desc.id).unwrap_or(&desc.default)) {
+            (Value::Vec3(a), Value::Vec3(b)) => {
+                for k in 0..3 {
+                    mixed_axes[k] |= a[k] != b[k];
+                }
+            }
+            (a, b) => mixed_axes[0] |= a != b,
+        }
+    }
+    let mixed = mixed_axes.iter().any(|m| *m);
+    let mixed_axes = if matches!(value, Value::Vec3(_)) {
+        mixed_axes
+    } else {
+        [mixed; 3]
+    };
+    let row = AttrRow {
+        param: desc.id.clone(),
+        label: desc.label.clone(),
+        widget: widget(&desc.kind, desc.ui.unit),
+        value,
+        mixed,
+        mixed_axes,
+        step: desc.ui.step,
+        animatable: desc.animatable,
+    };
+    push(groups, &desc.ui.group, row);
+}
+
 /// The attribute view of several objects at once (multi-edit). The first id is the active
 /// object: its type decides the rows and its values are shown. Only parameters every other
 /// object's type also has, with the same kind, are listed; `mixed` marks rows whose values
@@ -196,33 +234,20 @@ pub fn attribute_rows_multi(scene: &Scene, ids: &[NodeId]) -> Option<AttributeVi
                 if !common {
                     continue;
                 }
-                let value = value_of(scene, id, desc);
-                let mut mixed_axes = [false; 3];
-                for o in &others {
-                    match (&value, scene.param(*o, &desc.id).unwrap_or(&desc.default)) {
-                        (Value::Vec3(a), Value::Vec3(b)) => {
-                            for k in 0..3 {
-                                mixed_axes[k] |= a[k] != b[k];
-                            }
-                        }
-                        (a, b) => mixed_axes[0] |= a != b,
-                    }
+                push_row(scene, id, desc, &others, &mut groups);
+            }
+            for desc in node.user_data.iter().filter(|d| !d.ui.hidden) {
+                let common = others.iter().all(|o| {
+                    scene.node(*o).is_some_and(|n| {
+                        n.user_data
+                            .iter()
+                            .any(|d| d.id == desc.id && d.kind == desc.kind)
+                    })
+                });
+                if !common {
+                    continue;
                 }
-                let mixed = mixed_axes.iter().any(|m| *m);
-                if !matches!(value, Value::Vec3(_)) {
-                    mixed_axes = [mixed; 3];
-                }
-                let row = AttrRow {
-                    param: desc.id.clone(),
-                    label: desc.label.clone(),
-                    widget: widget(&desc.kind, desc.ui.unit),
-                    value,
-                    mixed,
-                    mixed_axes,
-                    step: desc.ui.step,
-                    animatable: desc.animatable,
-                };
-                push(&mut groups, &desc.ui.group, row);
+                push_row(scene, id, desc, &others, &mut groups);
             }
         }
         None => {

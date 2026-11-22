@@ -613,6 +613,7 @@ pub(crate) const ICON_MAP: &[(&str, &str)] = &[
     ("ui.scale", "scale"),
     ("ui.theme", "theme"),
     ("ui.workspace", "workspace"),
+    ("user_data.add", "param"),
     ("uv.generate", "tag_texture"),
     ("vertexmap.create", "weight"),
     ("vertexmap.set", "weight"),
