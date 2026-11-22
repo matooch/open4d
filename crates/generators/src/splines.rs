@@ -127,6 +127,7 @@ pub(crate) fn distance(id: &str, label: &str, default: f64) -> ParamDesc {
 pub(crate) fn circle_type() -> NodeType {
     common(
         NodeType::new(CIRCLE, "Circle", Category::Generator)
+            .menu_path("Spline", 0)
             .param(ParamDesc::bool("ellipse", "Ellipse", false))
             .param(ParamDesc::bool("ring", "Ring", false))
             .param(distance("radius", "Radius", 200.0))
@@ -139,6 +140,7 @@ pub(crate) fn circle_type() -> NodeType {
 pub(crate) fn rectangle_type() -> NodeType {
     common(
         NodeType::new(RECTANGLE, "Rectangle", Category::Generator)
+            .menu_path("Spline", 0)
             .param(distance("width", "Width", 400.0))
             .param(distance("height", "Height", 400.0))
             .param(ParamDesc::bool("rounding", "Rounding", false))
@@ -150,6 +152,7 @@ pub(crate) fn rectangle_type() -> NodeType {
 pub(crate) fn helix_type() -> NodeType {
     common(
         NodeType::new(HELIX, "Helix", Category::Generator)
+            .menu_path("Spline", 0)
             .param(distance("start_radius", "Start radius", 200.0))
             .param(ParamDesc::float("start_angle", "Start angle", 0.0).unit(Unit::Angle))
             .param(distance("end_radius", "End radius", 200.0))

@@ -17,6 +17,7 @@ pub(crate) fn node_type() -> NodeType {
             .unit(Unit::Distance)
     };
     NodeType::new(TYPE, "Atom Array", Category::Generator)
+        .menu_path("Generator", 0)
         .param(radius("cylinder_radius", "Cylinder Radius", 2.0))
         .param(radius("sphere_radius", "Sphere Radius", 5.0))
         .param(ParamDesc::int("subdivisions", "Subdivisions", 8).range(3, 1000))

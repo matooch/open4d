@@ -18,8 +18,7 @@ use crate::animate::{AnimEdit, KeyState, key_frames, key_states};
 use crate::attributes::{Gesture, Widget, attribute_rows_multi};
 use crate::clone_overlay::{OverlayOptions, selected_cloner_marks};
 use crate::commands::{
-    CHARACTER_TYPES, category_label, character_menu, clone_toolset_menu, create_menu, execute,
-    scene_menu,
+    CHARACTER_TYPES, character_menu, clone_toolset_menu, create_menu, execute, scene_menu,
 };
 use crate::component_edit::{
     ComponentDrag, component_coords, component_transform_args, pivot_world,
@@ -828,9 +827,9 @@ impl Editor {
                 // a long category (Generator) is taller than a small window: scroll it
                 let max_height = (ui.ctx().content_rect().height() - 48.0).max(120.0);
                 for (cat, items) in create_menu(self.state.doc.scene().registry()) {
-                    ui.menu_button(category_label(cat), |ui| {
+                    ui.menu_button(&cat, |ui| {
                         egui::ScrollArea::vertical()
-                            .id_salt(("create_menu", category_label(cat)))
+                            .id_salt(("create_menu", &cat))
                             .max_height(max_height)
                             .show(ui, |ui| {
                                 for (type_id, label) in items {

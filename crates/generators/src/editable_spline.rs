@@ -150,6 +150,7 @@ pub(crate) fn node_type() -> NodeType {
         .collect();
     add_params(
         NodeType::new(TYPE, "Spline", Category::Generator)
+            .menu_path("Spline", 0)
             .param(ParamDesc::vec3_list("points", "Points"))
             .param(ParamDesc::vec3_list("left", "Left tangents"))
             .param(ParamDesc::vec3_list("right", "Right tangents"))

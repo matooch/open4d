@@ -10,6 +10,7 @@ use crate::{BuildError, Params, platonic};
 
 pub(crate) fn node_type() -> NodeType {
     NodeType::new("forge.sphere", "Sphere", Category::Generator)
+        .menu_path("Object", 0)
         .param(
             ParamDesc::float("radius", "Radius", 100.0)
                 .range(0.0, f64::MAX)

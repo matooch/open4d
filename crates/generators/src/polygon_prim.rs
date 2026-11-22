@@ -11,6 +11,7 @@ use crate::{BuildError, Params};
 
 pub(crate) fn node_type() -> NodeType {
     NodeType::new("forge.polygon_prim", "Polygon", Category::Generator)
+        .menu_path("Object", 0)
         .param(distance("width", "Width", 100.0))
         .param(distance("height", "Height", 100.0))
         .param(count("segments", "Segments", 1, 1))

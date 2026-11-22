@@ -40,6 +40,7 @@ const SHARED: &[&str] = &[
 /// The Fracture node type. Its children are the inputs and are consumed.
 pub fn fracture_type() -> NodeType {
     let mut ty = NodeType::new(FRACTURE, "Fracture", forge_core::Category::Generator)
+        .menu_path("Generator", 0)
         .consuming_children()
         .param(
             ParamDesc::enumeration(

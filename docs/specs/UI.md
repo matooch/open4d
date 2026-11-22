@@ -114,9 +114,12 @@ FrameAll = `view.frame_all`).
   set (EDITABLE.md §2.5); one "Select" transaction for a component set.
 - `FrameAll`: fits the visible geometry (§6.1); with no geometry resets the camera to default.
 
-`create_menu(registry) -> Vec<(Category, Vec<(type_id, label)>)>`: placeable
-categories only (hierarchy + Tag), in `Category` order, types sorted by label; types
-with `in_create_menu == false` (the polygon object) are left out.
+`create_menu(registry) -> Vec<(String, Vec<(type_id, label)>)>`: placeable
+node types (hierarchy + Tag) whose `in_create_menu` is true, grouped by
+`NodeType::menu_path` and ordered by `NodeType::menu_order`, then label.
+Groups follow the reference order: Object, Spline, Generator, Deformer, Field,
+Volume, Camera, Light, Tag. The Clone toolset remains a separate submenu (see below).
+Types with `in_create_menu == false` (the polygon object) are left out.
 
 Key bindings (**parity-pending**, ours; now data in the key map, §14, these are its defaults): Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo,
 Ctrl+A select all, Ctrl+Shift+A deselect all (Cmd on macOS),
@@ -665,8 +668,13 @@ optional `target` (`param`, `node`) for the latter. One undo step per click.
 The Create menu starts with a **Clone toolset** submenu (`clone_toolset_menu`, pure): the
 cloner, **Cloner from Selection**, every registered effector type, every registered field
 type, in that order, taken from the registry (so a new effector or field type appears with
-no UI change). The usual per-category submenus stay. Each per-category submenu scrolls when it is taller than the window (its height is capped
-at the window height minus 48 px), so every entry stays reachable by pointer (S3, `s3_chair`).
+no UI change). The remaining submenus are driven by `create_menu` and grouped by
+`NodeType::menu_path`: Object, Spline, Generator, Deformer, Field, Volume, Camera, Light,
+Tag. Each submenu scrolls when it is taller than the window (its height is capped at the
+window height minus 48 px), so every entry stays reachable by pointer (S3, `s3_chair`).
+
+The exact grouping and wording are **parity-pending G1** until the reference app's Create
+menu is observed.
 
 `Cloner from Selection` runs `object.create_cloner` (COMMANDS.md §6): the selected objects
 become children of a new cloner placed where the first selected object was, and the cloner

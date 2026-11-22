@@ -138,17 +138,24 @@ fn invalid_edits_change_nothing() {
 fn create_menu_lists_placeable_types() {
     let st = state();
     let menu = create_menu(st.doc.scene().registry());
-    let cats: Vec<Category> = menu.iter().map(|(c, _)| *c).collect();
+    let cats: Vec<&str> = menu.iter().map(|(c, _)| c.as_str()).collect();
     assert_eq!(
         cats,
         [
-            Category::Object,
-            Category::Generator,
-            Category::Deformer,
-            Category::Tag
+            "Object",
+            "Spline",
+            "Generator",
+            "Deformer",
+            "Camera",
+            "Light",
+            "Tag"
         ]
     );
-    assert_eq!(menu[0].1, [("forge.null".to_string(), "Null".to_string())]);
+    assert_eq!(menu[0].0, "Object");
+    assert!(
+        menu[0].1.iter().any(|(id, _)| id == "forge.null"),
+        "Null should be in Object"
+    );
 }
 
 #[test]

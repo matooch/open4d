@@ -13,6 +13,7 @@ pub const TYPE: &str = "forge.clone_spline";
 
 pub(crate) fn node_type() -> NodeType {
     let t = NodeType::new(TYPE, "Clone Spline", Category::Generator)
+        .menu_path("Generator", 0)
         .param(ParamDesc::enumeration(
             "mode",
             "Mode",
