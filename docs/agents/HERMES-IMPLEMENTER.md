@@ -38,7 +38,12 @@ or writes what to fix in the brief's `## Review (planner)` section on `main`. Be
 next brief, check whether the previous one got a Review section; if so, fix that first on the same
 branch and push again.
 
-When the queue is done, write `QUEUE FINISHED` to `/Users/bigman/forge-implementer/log.md` and stop.
+When the queue is done (or you must stop): make sure `git status --short` is empty, then for
+every `hermes/*` branch of this run run `git fetch -q origin` and
+`git log --oneline origin/<branch>..<branch>`; it must print nothing, otherwise push that branch
+and check again. Then write `QUEUE FINISHED` to `/Users/bigman/forge-implementer/log.md`, with
+one line per brief: `<brief> <branch> <short SHA on origin> <done|blocked> <result, gate>`, and
+stop. Never write `QUEUE FINISHED` while a branch has unpushed commits.
 
 ## 3. How to work with a small context
 
