@@ -487,3 +487,24 @@ fn base_step_follows_hint_kind_and_unit() {
     assert_eq!(scrub::base_step(Unit::Distance, false, Some(0.5)), 0.5);
     assert_eq!(scrub::base_step(Unit::Distance, false, Some(-1.0)), 0.01);
 }
+
+#[test]
+fn user_data_rows_appear_in_the_attribute_panel() {
+    let mut s = state();
+    let a = make(&mut s, "am.thing");
+    execute(
+        &mut s,
+        "user_data.add",
+        json!({"node": a.0, "name": "Amount", "kind": "float", "default": 2.5}),
+    )
+    .unwrap();
+    let view = attribute_rows_multi(s.doc.scene(), &[a]).unwrap();
+    let row = view
+        .groups
+        .iter()
+        .flat_map(|(_, rows)| rows.iter())
+        .find(|r| r.param == "user_data.0")
+        .unwrap();
+    assert_eq!(row.label, "Amount");
+    assert_eq!(row.value, Value::Float(2.5));
+}

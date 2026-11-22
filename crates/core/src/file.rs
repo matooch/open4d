@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::layers::{self, Layer, Layers};
 use crate::{
-    Category, LinkRow, MeshData, Node, NodeId, Registry, Scene, SceneSettings, TimeConfig, Track,
-    Value, parse_track_target,
+    Category, LinkRow, MeshData, Node, NodeId, ParamDesc, Registry, Scene, SceneSettings,
+    TimeConfig, Track, Value, parse_track_target,
 };
 
 pub const FORMAT: &str = "forge3d-scene";
@@ -19,8 +19,8 @@ pub const FORMAT: &str = "forge3d-scene";
 /// `object.*` params and adds the chunk section and file reference params, version 7 the
 /// time configuration (markers, preview range, playback mode), version 8 the expression
 /// tag and its graph parameter (brief 108), version 9 the layer table and the hidden
-/// `object.layer` param (brief 158). Version 10 (brief 189) marks the list-valued parameter kinds (`Vec3List`, CORE.md section 6.9). Version 11 (brief 059) adds `LinkRows`, the field lists with per-row blend mode, strength and enable box (CORE.md section 6.10). Version 12 (briefs 027, 194) adds `Value::FloatList` (vertex maps, chunk kind 3) and the document's material list with the shader trees below it (CORE.md sections 2.1 and 6.11). Older files still load, through [`MIGRATIONS`].
-pub const VERSION: u32 = 12;
+/// `object.layer` param (brief 158). Version 10 (brief 189) marks the list-valued parameter kinds (`Vec3List`, CORE.md section 6.9). Version 11 (brief 059) adds `LinkRows`, the field lists with per-row blend mode, strength and enable box (CORE.md section 6.10). Version 12 (briefs 027, 194) adds `Value::FloatList` (vertex maps, chunk kind 3) and the document's material list with the shader trees below it (CORE.md sections 2.1 and 6.11). Version 13 (brief 110) adds per-node user-data parameter descriptors. Older files still load, through [`MIGRATIONS`].
+pub const VERSION: u32 = 13;
 
 /// A value whose binary payload is at least this many bytes is written as a chunk by
 /// [`save_with`] (CORE.md §6.2): 42 mesh points or 256 indices.
@@ -69,6 +69,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migrate_9_to_10,
     migrate_10_to_11,
     migrate_11_to_12,
+    migrate_12_to_13,
 ];
 
 /// Version 2 added `Value::Mesh`: additive, nothing to rewrite.
@@ -178,6 +179,12 @@ fn migrate_11_to_12(_: &mut SceneFile) -> Vec<String> {
     Vec::new()
 }
 
+/// Version 13 (brief 110) adds per-node user-data parameter descriptors. A missing field
+/// reads as empty, so nothing needs rewriting.
+fn migrate_12_to_13(_: &mut SceneFile) -> Vec<String> {
+    Vec::new()
+}
+
 /// Version 10 stored a field row's strength on the field node under this param.
 const LEGACY_LAYER_STRENGTH: &str = "layer_strength";
 /// The version 10 param id of every field list.
@@ -244,6 +251,8 @@ struct NodeRecord {
     type_id: String,
     name: String,
     params: BTreeMap<String, StoredValue>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    user_data: Vec<ParamDesc>,
     #[serde(default)]
     tracks: BTreeMap<String, Track>,
     tags: Vec<NodeRecord>,
@@ -367,6 +376,7 @@ pub fn save_with(scene: &Scene, opts: &SaveOptions) -> Vec<u8> {
                 type_id: n.type_id.clone(),
                 name: n.name.clone(),
                 params,
+                user_data: n.user_data.clone(),
                 tracks: n.tracks.clone(),
                 tags: n.tags.iter().map(|t| self.record(*t)).collect(),
                 children: n.children.iter().map(|c| self.record(*c)).collect(),
@@ -541,17 +551,25 @@ pub struct ExternalRef {
 pub fn external_refs(scene: &Scene) -> Vec<ExternalRef> {
     fn walk(scene: &Scene, id: NodeId, out: &mut Vec<ExternalRef>) {
         let Some(n) = scene.node(id) else { return };
-        if let Some(ty) = scene.registry().get(&n.type_id) {
-            for desc in ty.params.iter().filter(|d| d.ui.file_ref) {
-                if let Some(Value::String(s)) = n.params.get(&desc.id)
-                    && !s.is_empty()
-                {
-                    out.push(ExternalRef {
-                        node: id,
-                        param: desc.id.clone(),
-                        path: s.clone(),
-                    });
-                }
+        let type_params: Vec<&ParamDesc> = scene
+            .registry()
+            .get(&n.type_id)
+            .map(|t| t.params.iter().collect())
+            .unwrap_or_default();
+        for desc in type_params
+            .iter()
+            .copied()
+            .chain(&n.user_data)
+            .filter(|d| d.ui.file_ref)
+        {
+            if let Some(Value::String(s)) = n.params.get(&desc.id)
+                && !s.is_empty()
+            {
+                out.push(ExternalRef {
+                    node: id,
+                    param: desc.id.clone(),
+                    path: s.clone(),
+                });
             }
         }
         for t in &n.tags {
@@ -969,7 +987,7 @@ impl Loader<'_> {
                 }
                 let mut stored = raw;
                 let mut params = BTreeMap::new();
-                for desc in &ty.params {
+                for desc in ty.params.iter().chain(&r.user_data) {
                     let value = match stored.remove(&desc.id) {
                         None => desc.default.clone(),
                         Some(v) => match desc.validate(v.clone()) {
@@ -1001,9 +1019,15 @@ impl Loader<'_> {
         for (key, track) in r.tracks {
             let verdict = match &ty {
                 None => Ok(()),
-                Some(ty) => parse_track_target(&key, |p| ty.find_param(p))
-                    .map(|_| ())
-                    .and_then(|()| track.validate()),
+                Some(ty) => {
+                    let find = |p: &str| {
+                        ty.find_param(p)
+                            .or_else(|| r.user_data.iter().find(|d| d.id == p))
+                    };
+                    parse_track_target(&key, find)
+                        .map(|_| ())
+                        .and_then(|()| track.validate())
+                }
             };
             match verdict {
                 Ok(()) => {
@@ -1024,6 +1048,7 @@ impl Loader<'_> {
             type_id: r.type_id,
             name: r.name,
             params,
+            user_data: r.user_data,
             parent,
             children: r.children.iter().map(|c| c.id).collect(),
             tags: r.tags.iter().map(|t| t.id).collect(),

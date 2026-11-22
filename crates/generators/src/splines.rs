@@ -61,7 +61,7 @@ impl Curve {
             + seg[3] * (t * t * t)
     }
 
-    pub(crate) fn tangent(seg: &[DVec3; 4], t: f64) -> DVec3 {
+    pub fn tangent(seg: &[DVec3; 4], t: f64) -> DVec3 {
         let u = 1.0 - t;
         (seg[1] - seg[0]) * (3.0 * u * u)
             + (seg[2] - seg[1]) * (6.0 * u * t)
@@ -520,6 +520,18 @@ pub(crate) fn placed_curve_at(
     };
     let m = scene.local_transform(id).expect("node exists").matrix();
     Ok(Some(curve.transformed(&m)))
+}
+
+/// The curve of a spline node in world space. `None` if the node is missing, not a spline,
+/// or its curve cannot be built.
+pub fn world_curve(scene: &Scene, id: NodeId) -> Option<Curve> {
+    let node = scene.node(id)?;
+    if !is_spline(&node.type_id) {
+        return None;
+    }
+    let curve = build_curve(&node.type_id, &node.params).ok()?;
+    let m = scene.world_matrix(id)?;
+    Some(curve.transformed(&m))
 }
 
 /// The sampled loops of a spline node in its own space, each with whether it is closed: what the

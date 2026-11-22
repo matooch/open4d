@@ -13,7 +13,7 @@ use glam::DMat4;
 
 use crate::layers::Layers;
 use crate::transform::Transform;
-use crate::{EditError, NodeType, Registry, TimeConfig, Track, Value};
+use crate::{EditError, NodeType, ParamDesc, Registry, TimeConfig, Track, Value};
 
 /// Highest revision handed out by [`Scene::with_params`] in this process.
 static LAST_UNIQUE_REV: AtomicU64 = AtomicU64::new(0);
@@ -34,6 +34,8 @@ pub struct Node {
     pub type_id: String,
     pub name: String,
     pub params: BTreeMap<String, Value>,
+    /// Extra parameter descriptors defined on this node only (user data; brief 110).
+    pub user_data: Vec<ParamDesc>,
     /// Hierarchy parent; `None` for roots and tags.
     pub parent: Option<NodeId>,
     pub children: Vec<NodeId>,
@@ -202,6 +204,16 @@ impl Scene {
         self.node(id)?.params.get(param)
     }
 
+    /// The descriptor of a parameter on a node, searching the node's type params first,
+    /// then its per-node user data (brief 110). Returns `None` for missing nodes, unknown
+    /// types, or params that are neither declared by the type nor added as user data.
+    pub fn param_desc(&self, id: NodeId, param: &str) -> Option<&ParamDesc> {
+        let node = self.node(id)?;
+        self.node_type(id)
+            .and_then(|t| t.find_param(param))
+            .or_else(|| node.user_data.iter().find(|d| d.id == param))
+    }
+
     /// Number of nodes, tags included.
     /// The scene's revision counter; any edit raises it.
     pub fn revision(&self) -> u64 {
@@ -346,12 +358,11 @@ impl Scene {
 
     fn check_override(&self, id: NodeId, param: &str, value: Value) -> Result<Value, EditError> {
         let node = self.node(id).ok_or(EditError::UnknownNode(id))?;
-        let ty = self
-            .registry
+        self.registry
             .get(&node.type_id)
             .ok_or_else(|| EditError::UnknownType(node.type_id.clone()))?;
-        let desc = ty
-            .find_param(param)
+        let desc = self
+            .param_desc(id, param)
             .ok_or_else(|| EditError::UnknownParam(param.to_string()))?;
         Ok(desc.validate(value)?)
     }

@@ -9,12 +9,14 @@ pub mod diagnostics;
 pub mod dynamics;
 pub mod material_commands;
 pub mod motion;
+pub mod motion_tags;
 pub mod param_edit;
 pub mod query;
 pub mod rig_commands;
 pub mod schedule;
 pub mod select;
 pub mod tag_commands;
+pub mod user_data_commands;
 pub mod weight_commands;
 
 use std::sync::Arc;
@@ -45,6 +47,9 @@ pub fn default_registry() -> Result<Registry, RegistryError> {
     registry.install(&FieldToolset)?;
     registry.install(&forge_nodes::NodesToolset)?;
     registry.install(&forge_rig::Rig)?;
+    for ty in motion_tags::tag_types() {
+        registry.register(ty)?;
+    }
     registry.install(&forge_volume::VolumePlugin)?;
     registry.install(&forge_material::MaterialPlugin)?;
     registry.install(&forge_shaders::ShadersPlugin)?;
@@ -61,6 +66,7 @@ pub fn default_command_registry() -> CommandRegistry {
     rig_commands::register(&mut commands).expect("joint.* ids are unique");
     weight_commands::register(&mut commands).expect("weights.* ids are unique");
     tag_commands::register(&mut commands).expect("tag command ids are unique");
+    user_data_commands::register(&mut commands).expect("user_data command ids are unique");
     material_commands::register(&mut commands).expect("material command ids are unique");
     commands
 }
@@ -252,8 +258,16 @@ impl App {
         frame: i64,
         options: &Options,
     ) -> Result<usize, AppError> {
-        let scene = self.eval.get(self.doc.scene(), frame);
-        let (bytes, count) = export_bytes(format, &scene, roots, options).map_err(|e| match e {
+        forge_io::formats::validate_export_path(format, path)
+            .map_err(|e| AppError::Io(e.to_string()))?;
+        let evaluated;
+        let scene = if forge_io::formats::preserves_animation(format) {
+            self.doc.scene()
+        } else {
+            evaluated = self.eval.get(self.doc.scene(), frame);
+            &evaluated
+        };
+        let (bytes, count) = export_bytes(format, scene, roots, options).map_err(|e| match e {
             IoError::NothingToExport => AppError::NothingToExport,
             other => AppError::Io(other.to_string()),
         })?;

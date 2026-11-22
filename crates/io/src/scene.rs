@@ -14,7 +14,11 @@ const UVW_TAG: &str = "forge.uvw";
 const UVW_PARAM: &str = "uvw";
 
 /// Corner UVs stored on a polygon object's UVW tag, if any.
-fn node_uvs(scene: &Scene, id: NodeId, mesh: &forge_geometry::PolyMesh) -> Option<CornerUvs> {
+pub(crate) fn node_uvs(
+    scene: &Scene,
+    id: NodeId,
+    mesh: &forge_geometry::PolyMesh,
+) -> Option<CornerUvs> {
     let tag = scene
         .node(id)?
         .tags

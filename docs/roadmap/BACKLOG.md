@@ -103,11 +103,11 @@ implementers can avoid collisions.
 | 103 | [Auto weights (bone heat)](../agents/tasks/103-auto-weights.md) | H | 101 | done (parity-pending: no reference auto-weight data, O34 case not observed; level C checked against the nearest bone, RIG.md §4) | rig |
 | 104 | [IK tag: 2-bone, chain, pole, twist, IK/FK blend](../agents/tasks/104-ik.md) | H | 100 | done | rig |
 | 105 | [Constraint tag: PSR, Aim, Parent, Clamp](../agents/tasks/105-constraints.md) | H | 100 | done | rig |
-| 106 | [Tags: Target, Align to Spline, Vibrate, Look at Camera, Protection, Display, Compositing](../agents/tasks/106-expression-tags.md) | H | 088 | ready | core, rig |
+| 106 | [Tags: Target, Align to Spline, Vibrate, Look at Camera, Protection, Display, Compositing](../agents/tasks/106-expression-tags.md) | H | 088 | done | core, rig |
 | 107 | [Pose Morph tag](../agents/tasks/107-pose-morph.md) | H | 088 | waiting: O37 | rig |
 | 108 | [Node expression engine forge-nodes](../agents/tasks/108-forge-nodes.md) | H | 016 | done | nodes (new) |
 | 109 | [Node expression editor UI](../agents/tasks/109-node-editor-ui.md) | H | 108, 150 | done (parity-pending G6; follow-up: node materials reuse the canvas, brief 124) | ui, nodes |
-| 110 | [User data on any node](../agents/tasks/110-user-data.md) | H | 011, 150 | ready | core, ui |
+| 110 | [User data on any node](../agents/tasks/110-user-data.md) | H | 011, 150 | done | core, ui |
 | 111 | [Evaluation order: tag priorities, expressions before generators](../agents/tasks/111-evaluation-order.md) | H | 104, 105, 108 | done | core |
 | 112 | [Weight and joint display modes in the viewport](../agents/tasks/112-rig-display.md) | H | 101, 143 | done (parity-pending: own design; draw lists and ramp as pure code, weight overlay as markers; VIEWPORT.md §13) | viewport |
 | 113 | [Rig mirroring (joints and weights, left/right naming)](../agents/tasks/113-rig-mirroring.md) | H | 101 | done (own design: no observation; symmetric-deformation unit test, RIG.md §5) | rig |
@@ -161,7 +161,7 @@ implementers can avoid collisions.
 | 161 | [HiDPI, IME, themes, keyboard navigation](../agents/tasks/161-hidpi-ime-themes.md) | L | 147 | done | ui |
 | 162 | [S3 acceptance test and UI docs](../agents/tasks/162-s3-ui-acceptance.md) | L | 147–153 | done (parity-pending G1/G2/G4) | tests, docs |
 | 163 | [Native format: migrations, binary encoding, external references](../agents/tasks/163-native-format.md) | M | – | done (format version 6; follow-up: a file-path param on the first texture/cache node, compression wrapper) | core, io |
-| 164 | [glTF import/export (meshes, hierarchy, materials, animation, skins, morphs)](../agents/tasks/164-gltf.md) | M | 088, 101, 107 | ready | io |
+| 164 | [glTF import/export (meshes, hierarchy, materials, animation, skins, morphs)](../agents/tasks/164-gltf.md) | M | 088, 101, 107 | done | io |
 | 165 | [FBX import (ufbx)](../agents/tasks/165-fbx-import.md) | M | 088, 101 | ready | io |
 | 166 | [FBX export (ASCII 7.4)](../agents/tasks/166-fbx-export.md) | M | 165 | ready | io |
 | 167 | [Alembic (Ogawa) import/export](../agents/tasks/167-alembic.md) | M | 088 | ready | io |

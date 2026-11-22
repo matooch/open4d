@@ -1059,8 +1059,28 @@ fn transform_set(ctx: &mut dyn CommandContext, a: TransformArgs) -> Result<Value
         ));
     }
     let id = NodeId(a.node);
+    let scene = ctx.doc().scene();
+    let pos = a.pos.and_then(|mut pos| {
+        if let Some(Param::Vec3(old)) = scene.param(id, POS) {
+            for (i, axis) in ["transform.pos.x", "transform.pos.y", "transform.pos.z"]
+                .into_iter()
+                .enumerate()
+            {
+                if forge_rig::is_protection_locked(scene, id, axis) {
+                    pos[i] = old[i];
+                }
+            }
+            if pos == *old {
+                return None;
+            }
+        }
+        Some(pos)
+    });
+    if pos.is_none() && a.rot.is_none() && a.scale.is_none() {
+        return Ok(Value::Null);
+    }
     ctx.doc_mut().transact("Set Transform", |tx| {
-        if let Some(v) = a.pos {
+        if let Some(v) = pos {
             tx.set_param(id, POS, Param::Vec3(v))?;
         }
         if let Some(v) = a.rot {

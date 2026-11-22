@@ -89,13 +89,13 @@ impl LinkRow {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EnumOption {
     pub id: String,
     pub label: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ParamKind {
     Bool,
     Int {
@@ -140,7 +140,7 @@ pub enum ParamKind {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Unit {
     #[default]
     None,
@@ -151,7 +151,7 @@ pub enum Unit {
 }
 
 /// Presentation only; never affects validation.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct UiHint {
     pub group: String,
     pub unit: Unit,
@@ -164,7 +164,7 @@ pub struct UiHint {
     pub file_ref: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ParamDesc {
     /// Stable serialization key.
     pub id: String,

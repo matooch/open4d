@@ -2,7 +2,7 @@
 
 # Command reference
 
-195 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+196 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -195,6 +195,7 @@
 | [`vertexmap.create`](#vertexmapcreate) | Create Vertex Map | yes | `vertexmap_create` |
 | [`vertexmap.set`](#vertexmapset) | Set Vertex Map Weights | yes | `vertexmap_set` |
 | [`restriction.set`](#restrictionset) | Restrict Deformer | yes | `restriction_set` |
+| [`user_data.add`](#user_dataadd) | Add User Data | yes | `user_data_add` |
 | [`material.create`](#materialcreate) | Create Material | yes | `material_create` |
 | [`material.delete`](#materialdelete) | Delete Material | yes | `material_delete` |
 | [`material.assign`](#materialassign) | Assign Material | yes | `material_assign` |
@@ -2441,6 +2442,25 @@ Restrict Deformer. One undo step.
 | `invert` | boolean or null | no |  |
 
 Example: `forge cmd scene.forge restriction.set --args '{"selection":"Vertex Map"}'`
+
+
+## `user_data`
+
+### `user_data.add`
+
+Add User Data. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | Node to receive the user-data field. |
+| `name` | string | yes | User-visible name (label) of the field. |
+| `kind` | string | yes | Parameter kind: float, int, bool, vec3, link, string. |
+| `accepts` | array of string or null | no | For link kinds: accepted target categories (default any). Default: `null`. |
+| `default` | any | no | Default value. For vec3 use `[x, y, z]`; for link use a node id or `null`; for bool use `true`/`false`; for string use a string; for int/float use a number. Default: `null`. |
+| `max` | number or null | no | Hard maximum (int/float/vec3 only). Default: `null`. |
+| `min` | number or null | no | Hard minimum (int/float/vec3 only). Default: `null`. |
+
+Example: `forge cmd scene.forge user_data.add --args '{"default":1.0,"kind":"float","max":10.0,"min":0.0,"name":"amount","node":1}'`
 
 
 ## `material`

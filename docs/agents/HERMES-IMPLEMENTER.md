@@ -24,11 +24,12 @@ Work only on briefs in the queue below, top to bottom, skipping ones whose Statu
 
 ### Queue (the planner edits this list)
 
-Done: 193, 195, 196, 049 (merged after planner review).
+Done: 193, 195, 196, 049, 110, 106, 164 (merged after planner review).
 
-1. [110](tasks/110-user-data.md) · User data on any node (medium; O54 user-data notes)
-2. [106](tasks/106-expression-tags.md) · Tags: Target, Align to Spline, Vibrate, Look at Camera, Protection, … (medium; O54/O27 data)
-3. [164](tasks/164-gltf.md) · glTF import/export (large; read the planner scope note in the brief: no morph targets)
+1. 164 follow-up (on hermes/164-gltf): import GLB skin weights unchanged with the skin's
+   `normalise` off and re-check the two pinned skinned-arm poses (one hypothesis; see the review).
+2. [168](tasks/168-usd.md) · USD `.usda` import/export (medium-large; public text format, round-trip tests)
+3. [167](tasks/167-alembic.md) · Alembic (Ogawa) import/export (large; O44 has an ABC export)
 
 **Handing a brief back.** When a brief's branch is pushed, add one line to
 `/Users/bigman/forge-implementer/log.md`: `<brief> <branch> <done|blocked> <one-line result>`. The
@@ -69,7 +70,11 @@ When the queue is done, write `QUEUE FINISHED` to `/Users/bigman/forge-implement
    After that, pin the case (KNOWN_MISMATCH / UNSUPPORTED with the reason, per IMPLEMENTER.md §5) or,
    if the brief cannot be finished, set its Status to `blocked: <reason>` in the brief and BACKLOG,
    commit, push and move to the next brief.
-5. Finish: `cargo fmt --all`, then `sh scripts/gate.sh` until it prints `GATE: all passed`; fill
+5. Before finishing, check for observed data the brief must use: every observation the brief's
+   header names (`Observations: O..`) has a form in `docs/parity/` and usually golden cases in
+   `tests/golden/<feature>/`. A brief whose cases exist but are not read by a parity test is not
+   done. Say in the Report which cases you read and their result.
+6. Finish: `cargo fmt --all`, then `sh scripts/gate.sh` until it prints `GATE: all passed`; fill
    the brief's Report; set BACKLOG to `done`; commit; push the branch; add one line to
    `/Users/bigman/forge-implementer/log.md` (brief, branch, result).
 

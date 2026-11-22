@@ -476,13 +476,15 @@ fn spline_solve(keys: &[Key], user: &[Resolved], i: usize, t: f64) -> ([f64; 4],
     // `x(s) = span·s − 3·d·s(1−s)(1−2s)` moves the tie below or above `t` by their error
     // `d` (`fps-24`, `dense-quarter`: 1 s span, shorter handle, ties below the centre go
     // up and above it go down; `four-keys`: longer handle, the other way round). A tie
-    // that is exact on the grid too (the centre of a symmetric curve) goes up.
+    // that is exact on the grid too (the centre of a symmetric curve) goes up,
+    // except for a segment with both handles collapsed (RIG.md §13).
+    let collapsed = ra == 0.0 && lb == 0.0;
     let tie = 1e-12 * (b.time - a.time);
     let (mut lo, mut hi) = (0.0f64, 1.0f64);
     for _ in 0..BISECTION_STEPS {
         let mid = 0.5 * (lo + hi);
         let x = bezier(xs, mid);
-        let up = if (x - t).abs() <= tie {
+        let up = if !collapsed && (x - t).abs() <= tie {
             let xg = bezier(grid_xs, mid);
             if (xg - t).abs() <= tie { true } else { xg < t }
         } else {

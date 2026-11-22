@@ -55,11 +55,7 @@ fn edit(ctx: &mut dyn CommandContext, a: ParamEditArgs) -> Result<Value, Command
     let mut targets: Vec<(NodeId, Param)> = Vec::new();
     for id in &ids {
         let scene = ctx.doc().scene();
-        let Some(desc) = scene
-            .node_type(*id)
-            .and_then(|t| t.find_param(&a.param))
-            .cloned()
-        else {
+        let Some(desc) = scene.param_desc(*id, &a.param).cloned() else {
             continue;
         };
         match &reference {

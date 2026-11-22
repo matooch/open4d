@@ -141,7 +141,7 @@ fn every_old_version_has_a_fixture_that_loads_and_migrates() {
 }
 
 #[test]
-fn version_12_fixtures_are_current_and_byte_stable() {
+fn version_13_fixtures_are_current_and_byte_stable() {
     // The current fixtures pin the on-disk format: change them only with a version bump.
     let (text_scene, bin_scene) = (fixture_scene_v12(false), fixture_scene_v12(true));
     let opts = SaveOptions::default();
@@ -149,13 +149,13 @@ fn version_12_fixtures_are_current_and_byte_stable() {
     let bin = file::save_with(&bin_scene, &opts);
     if std::env::var_os("FORGE_WRITE_FIXTURES").is_some() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-        std::fs::write(dir.join("scene-v12.forge"), &text).unwrap();
-        std::fs::write(dir.join("scene-v12-chunked.forge"), &bin).unwrap();
+        std::fs::write(dir.join("scene-v13.forge"), &text).unwrap();
+        std::fs::write(dir.join("scene-v13-chunked.forge"), &bin).unwrap();
     }
-    assert_eq!(text, fixture("scene-v12.forge"), "text fixture drifted");
+    assert_eq!(text, fixture("scene-v13.forge"), "text fixture drifted");
     assert_eq!(
         bin,
-        fixture("scene-v12-chunked.forge"),
+        fixture("scene-v13-chunked.forge"),
         "chunk fixture drifted"
     );
     assert!(!contains(&text, b"%%FORGE-CHUNKS"));
@@ -192,6 +192,23 @@ fn version_11_fixtures_still_load_and_migrate_to_current_without_materials() {
         assert_eq!(file::save(&again), text, "{name}");
         // the step is pure: the scene is the one the v11 build wrote
         assert!(scene.param(NodeId(3), "fields").is_some(), "{name}");
+    }
+}
+
+#[test]
+fn version_12_fixtures_still_load_and_migrate_to_current() {
+    // Written by the build of format version 12 (before brief 110); never regenerate.
+    for name in ["scene-v12.forge", "scene-v12-chunked.forge"] {
+        let bytes = fixture(name);
+        assert!(contains(&bytes, b"version: 12,"), "{name}");
+        let (scene, report) = file::load_bytes(registry(), &bytes).unwrap();
+        assert!(report.warnings.is_empty(), "{name}: {:?}", report.warnings);
+        let text = file::save(&scene);
+        assert!(text.contains(&format!("version: {VERSION}")), "{text}");
+        assert!(!text.contains("version: 12"), "{text}");
+        let (again, report) = file::load(registry(), &text).unwrap();
+        assert!(report.warnings.is_empty());
+        assert_eq!(file::save(&again), text, "{name}");
     }
 }
 
@@ -285,25 +302,25 @@ fn a_version_10_reader_refuses_version_11_files() {
 }
 
 #[test]
-fn a_version_11_reader_refuses_version_12_files() {
-    for name in ["scene-v12.forge", "scene-v12-chunked.forge"] {
+fn a_version_12_reader_refuses_version_13_files() {
+    for name in ["scene-v13.forge", "scene-v13-chunked.forge"] {
         let bytes = fixture(name);
-        assert!(contains(&bytes, b"version: 12,"), "{name}");
+        assert!(contains(&bytes, b"version: 13,"), "{name}");
         assert_eq!(
-            file::load_as_reader(registry(), &bytes, 11).err(),
-            Some(LoadError::UnsupportedVersion(12)),
+            file::load_as_reader(registry(), &bytes, 12).err(),
+            Some(LoadError::UnsupportedVersion(13)),
             "{name}"
         );
         assert!(
-            file::load_as_reader(registry(), &bytes, 12).is_ok(),
+            file::load_as_reader(registry(), &bytes, 13).is_ok(),
             "{name}"
         );
     }
-    // a file this build wrote today is a version 12 file, so an 11 reader refuses it too
+    // a file this build wrote today is a version 13 file, so a 12 reader refuses it too
     let saved = file::save(&fixture_scene(false));
     assert_eq!(
-        file::load_as_reader(registry(), saved.as_bytes(), 11).err(),
-        Some(LoadError::UnsupportedVersion(12))
+        file::load_as_reader(registry(), saved.as_bytes(), 12).err(),
+        Some(LoadError::UnsupportedVersion(13))
     );
 }
 
