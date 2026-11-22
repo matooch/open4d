@@ -155,14 +155,13 @@ the scene (not an undoable edit), exactly like `forge_anim::scene_at`.
 
 **Evaluation order** (area H, CORE.md §5a): for one frame, `forge-app` produces the evaluated scene as
 
-1. animation tracks: `scene_at(scene, t)`;
-2. expression tags: `apply_expressions(evaluated, t)`, in document order;
+1. animation tracks: exact-time overrides at `t`;
+2. expression, rig and motion tags: in priority order (RIG.md §12);
 3. generators and deformers, which read the evaluated scene's parameters (they run when a
    consumer asks for geometry, after the two steps above).
 
 So an expression overrides an animated value of the same parameter, and a generator always sees
-the expression's output. Priorities between expression tags and the other tag kinds (constraints, IK)
-are brief 111; until then expression tags run in document order and before everything else.
+the expression's output. Document order breaks priority ties.
 
 ## 6. Commands
 

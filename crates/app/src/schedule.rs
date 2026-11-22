@@ -73,9 +73,8 @@ pub struct Animated {
 }
 
 /// Stage 1 and 2 of a pass: the tracks of `track_ids` at `time` (seconds), then the
-/// expression tags `tag_ids` in order (docs/specs/NODES.md section 5). Equal to
-/// `apply_expressions(scene_at(scene, time), time)` when the ids are the scene's tracks and
-/// tags, but only the nodes written to are copied: the rest stays shared with `scene`.
+/// expression tags `tag_ids` in order (docs/specs/NODES.md section 5). Track values are
+/// sampled at exact document time. Only the nodes written to are copied.
 pub fn animate(
     scene: &Scene,
     track_ids: &[NodeId],
@@ -86,7 +85,7 @@ pub fn animate(
     let mut working = scene.clone();
     let mut touched: Vec<(NodeId, String)> = Vec::new();
     if !track_ids.is_empty() {
-        let overrides = forge_anim::overrides(scene, track_ids, time);
+        let overrides = forge_anim::overrides_exact(scene, track_ids, time);
         touched.extend(overrides.iter().map(|(i, p, _)| (*i, p.clone())));
         working.apply_params(overrides);
     }
@@ -96,6 +95,15 @@ pub fn animate(
         for tag in forge_rig::tags::run_order(scene, tag_ids) {
             if forge_rig::tags::is_rig_tag(&working, tag) {
                 touched.extend(forge_rig::tags::apply_tag(&mut working, tag));
+                continue;
+            }
+            if crate::motion_tags::TAGS
+                .contains(&working.node(tag).map(|n| n.type_id.as_str()).unwrap_or(""))
+            {
+                let writes = crate::motion_tags::evaluate_tag(&working, tag, time);
+                let touched_here: Vec<_> = writes.iter().map(|(n, p, _)| (*n, p.clone())).collect();
+                working.apply_params(writes);
+                touched.extend(touched_here);
                 continue;
             }
             let run = forge_nodes::apply_expressions_in(
@@ -279,7 +287,7 @@ pub fn draw_output(scene: &Scene, id: NodeId, ctx: &EvalCtx) -> NodeOutput {
     node_output(scene, id, ctx)
 }
 
-/// Expression, IK and constraint tags in document order (the tags of the tag stage).
+/// Expression, IK, constraint and motion tags in document order (the tags of the tag stage).
 pub fn animation_tag_ids(scene: &Scene) -> Vec<NodeId> {
     forge_rig::tags::document_tags(
         scene,
@@ -287,6 +295,13 @@ pub fn animation_tag_ids(scene: &Scene) -> Vec<NodeId> {
             forge_nodes::TAG,
             forge_rig::IK_TAG,
             forge_rig::CONSTRAINT_TAG,
+            crate::motion_tags::TARGET_TAG,
+            crate::motion_tags::ALIGN_TAG,
+            crate::motion_tags::VIBRATE_TAG,
+            crate::motion_tags::LOOK_TAG,
+            crate::motion_tags::PROTECTION_TAG,
+            crate::motion_tags::DISPLAY_TAG,
+            crate::motion_tags::COMPOSITING_TAG,
         ],
     )
 }
@@ -296,7 +311,8 @@ fn expression_tags_enabled(scene: &Scene, ids: &[NodeId]) -> bool {
         scene.node(*id).is_some_and(|n| {
             (n.type_id == forge_nodes::TAG
                 || n.type_id == forge_rig::IK_TAG
-                || n.type_id == forge_rig::CONSTRAINT_TAG)
+                || n.type_id == forge_rig::CONSTRAINT_TAG
+                || crate::motion_tags::TAGS.contains(&n.type_id.as_str()))
                 && !matches!(
                     n.params.get("enabled"),
                     Some(forge_core::Value::Bool(false))

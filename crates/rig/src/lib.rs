@@ -22,6 +22,65 @@ pub use joint::{Axis, JOINT};
 pub use skin::{SKIN, apply_skin};
 pub use weights::{WEIGHT_TAG, WeightMap};
 
+/// Node type id of the Protection tag.
+pub const PROTECTION_TAG: &str = "forge.protection_tag";
+
+/// True if `id` has an enabled Protection tag that locks `param`.
+/// Recognised params: `transform.pos.x/y/z`.
+pub fn is_protection_locked(
+    scene: &forge_core::Scene,
+    id: forge_core::NodeId,
+    param: &str,
+) -> bool {
+    let node = match scene.node(id) {
+        Some(n) => n,
+        None => return false,
+    };
+    for tag in &node.tags {
+        if !scene
+            .node(*tag)
+            .is_some_and(|n| n.type_id == PROTECTION_TAG)
+        {
+            continue;
+        }
+        if matches!(
+            scene.param(*tag, "enabled"),
+            Some(forge_core::Value::Bool(false))
+        ) {
+            continue;
+        }
+        if !matches!(scene.param(*tag, "position"), Some(forge_core::Value::Enum(s)) if s == "lock")
+        {
+            continue;
+        }
+        let axis_locked = match param {
+            "transform.pos.x" => {
+                matches!(
+                    scene.param(*tag, "pos_x"),
+                    Some(forge_core::Value::Bool(true))
+                )
+            }
+            "transform.pos.y" => {
+                matches!(
+                    scene.param(*tag, "pos_y"),
+                    Some(forge_core::Value::Bool(true))
+                )
+            }
+            "transform.pos.z" => {
+                matches!(
+                    scene.param(*tag, "pos_z"),
+                    Some(forge_core::Value::Bool(true))
+                )
+            }
+            _ => false,
+        };
+        if axis_locked {
+            return true;
+        }
+    }
+    false
+}
+
 /// Registers the rig node types: joint, weight tag, skin deformer.
 pub struct Rig;
 

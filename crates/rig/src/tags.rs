@@ -14,7 +14,7 @@ pub const GROUPS: [(&str, &str); 5] = [
 ];
 
 /// The two params every ordered tag has.
-pub(crate) fn priority_params() -> [ParamDesc; 2] {
+pub fn priority_params() -> [ParamDesc; 2] {
     [
         ParamDesc::enumeration("priority_group", "Priority group", "expression", &GROUPS),
         ParamDesc::int("priority", "Priority", 0).range(-1000, 1000),

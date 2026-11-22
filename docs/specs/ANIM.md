@@ -251,7 +251,8 @@ Key values stay `f64`; the target decides how a value is read (this replaces the
   `TangentMode::Chord` (§1.5a gives the tangent model; `Key::new` stays `Auto`, as O2/O12/O16/O38
   keys ease). The handle grid follows seconds, not frames: the same frame span gives the same
   curve at 24 and at 30 fps (`tie-span-24`, `tie-span-30`).
-  Sampling is at exact frame times (like §1.5a), so `value_at_exact`.
+  Sampling is at exact frame times (like §1.5a), so `value_at_exact`. The app's ordered
+  tag stage likewise uses exact-time track overrides for the O27 motion tags (RIG.md §13).
 - **Bool, enum and link tracks are not observable** in the reference as scripted (`bool-track`,
   `enum-track`, `link-track` not observed in O53: the parameter keeps its base value). They are
   implemented as steps by design (parity-pending, no golden data).

@@ -332,9 +332,8 @@ node, and the mutating primitives (`Scene::apply_params`, the document edits) co
 on write (`Arc::make_mut`). `forge_app::schedule::animate` builds the evaluated scene as
 `scene.clone()` plus the track overrides plus the tags' writes, so a frame copies only the
 animated nodes and the nodes tags write to; every other node is the same allocation as in
-the document (tested with pointer equality). `animate` equals
-`apply_expressions(scene_at(scene, t), t)` (the tests compare the schedulers against the old
-`Evaluated` path bit for bit, and `Evaluated` itself now goes through `animate`).
+ the document (tested with pointer equality). `animate` applies track overrides at exact
+ document time and then runs the ordered tag stage. `Evaluated` also goes through `animate`.
 
 **Parallelism.** The units of work are the drawn nodes (enabled, editor-visible,
 not consumed by a parent generator) that are dirty or have no result yet. Each is a pure
