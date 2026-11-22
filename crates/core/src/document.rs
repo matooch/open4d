@@ -6,8 +6,8 @@ use std::sync::Arc;
 use crate::layers::{self, Layer, LayerId, Layers};
 use crate::scene::{Slot, SlotOwner, Subtree};
 use crate::{
-    Category, Key, NodeId, ParamError, ParamKind, Registry, Scene, SceneSettings, TimeConfig,
-    Track, TrackError, Value, parse_track_target,
+    Category, Key, NodeId, ParamDesc, ParamError, ParamKind, Registry, Scene, SceneSettings,
+    TimeConfig, Track, TrackError, Value, parse_track_target,
 };
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -76,6 +76,15 @@ enum Edit {
     SetTime(TimeConfig),
     SetLayers(Layers),
     SetRender(Option<crate::RenderConfig>),
+    /// Append a user-data descriptor to a node and set its value to the default.
+    AddUserData {
+        id: NodeId,
+        desc: ParamDesc,
+    },
+    /// Remove the last user-data descriptor (inverse of AddUserData).
+    RemoveLastUserData {
+        id: NodeId,
+    },
 }
 
 /// Applies `edit` (already validated) and returns its inverse.
@@ -123,6 +132,24 @@ fn apply(scene: &mut Scene, edit: Edit) -> Edit {
         Edit::SetTime(time) => Edit::SetTime(scene.replace_time(time)),
         Edit::SetLayers(layers) => Edit::SetLayers(scene.replace_layers(layers)),
         Edit::SetRender(render) => Edit::SetRender(scene.replace_render(render)),
+        Edit::AddUserData { id, desc } => {
+            let n = scene.node_mut(id).expect("validated node");
+            n.user_data.push(desc.clone());
+            n.params.insert(desc.id.clone(), desc.default.clone());
+            scene.stamp(id);
+            Edit::RemoveLastUserData { id }
+        }
+        Edit::RemoveLastUserData { id } => {
+            let n = scene.node_mut(id).expect("validated node");
+            let desc = n.user_data.pop().expect("validated user data");
+            n.params.remove(&desc.id);
+            n.tracks.remove(&desc.id);
+            for suffix in ["x", "y", "z"] {
+                n.tracks.remove(&format!("{}.{suffix}", desc.id));
+            }
+            scene.stamp(id);
+            Edit::AddUserData { id, desc }
+        }
     }
 }
 
@@ -222,6 +249,7 @@ impl Tx<'_> {
             type_id: ty.id.clone(),
             name: ty.label.clone(),
             params,
+            user_data: Vec::new(),
             parent: None,
             children: Vec::new(),
             tags: Vec::new(),
@@ -416,13 +444,13 @@ impl Tx<'_> {
 
     pub fn set_param(&mut self, id: NodeId, param: &str, value: Value) -> Result<(), EditError> {
         let node = self.require(id)?;
-        let ty = self
-            .scene
+        self.scene
             .registry()
             .get(&node.type_id)
             .ok_or_else(|| EditError::UnknownType(node.type_id.clone()))?;
-        let desc = ty
-            .find_param(param)
+        let desc = self
+            .scene
+            .param_desc(id, param)
             .ok_or_else(|| EditError::UnknownParam(param.to_string()))?;
         let value = desc.validate(value)?;
         if param == layers::LAYER {
@@ -499,12 +527,11 @@ impl Tx<'_> {
     ) -> Result<(), EditError> {
         let node = self.require(id)?;
         if let Some(t) = &track {
-            let ty = self
-                .scene
+            self.scene
                 .registry()
                 .get(&node.type_id)
                 .ok_or_else(|| EditError::UnknownType(node.type_id.clone()))?;
-            parse_track_target(key, |p| ty.find_param(p))?;
+            parse_track_target(key, |p| self.scene.param_desc(id, p))?;
             t.validate()?;
         }
         self.push(Edit::SetTrack {
@@ -512,6 +539,29 @@ impl Tx<'_> {
             key: key.to_string(),
             track,
         });
+        Ok(())
+    }
+
+    /// Adds a user-data descriptor to a node. The descriptor's id is replaced by the
+    /// reserved `user_data.N` form (brief 110); its label and kind are kept. The node's
+    /// params get the descriptor's default value, validated against the kind.
+    pub fn add_user_data(&mut self, id: NodeId, desc: ParamDesc) -> Result<(), EditError> {
+        self.require(id)?;
+        let node = self.scene.node(id).ok_or(EditError::UnknownNode(id))?;
+        self.scene
+            .registry()
+            .get(&node.type_id)
+            .ok_or_else(|| EditError::UnknownType(node.type_id.clone()))?;
+        let index = node.user_data.len();
+        let desc = crate::user_data::descriptor(index, desc);
+        if self.scene.param_desc(id, &desc.id).is_some() {
+            return Err(EditError::InvalidLink(format!(
+                "parameter id {:?} already exists on node {}",
+                desc.id, id
+            )));
+        }
+        desc.validate(desc.default.clone())?;
+        self.push(Edit::AddUserData { id, desc });
         Ok(())
     }
 

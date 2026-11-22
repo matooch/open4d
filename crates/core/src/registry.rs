@@ -3,9 +3,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{EvalCtx, MeshData, NodeId, ParamDesc, ParamKind, Scene, transform};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Category {
     Object,
     Generator,
@@ -189,7 +191,9 @@ impl Registry {
             return Err(RegistryError::DuplicateType(ty.id));
         }
         if let Some(p) = ty.params.iter().find(|p| {
-            p.id.starts_with(transform::PREFIX) || p.id.starts_with(crate::visibility::PREFIX)
+            p.id.starts_with(transform::PREFIX)
+                || p.id.starts_with(crate::visibility::PREFIX)
+                || p.id.starts_with(crate::user_data::PREFIX)
         }) {
             return Err(RegistryError::ReservedParam {
                 type_id: ty.id.clone(),

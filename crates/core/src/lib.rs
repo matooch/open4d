@@ -16,6 +16,7 @@ pub mod tags;
 pub mod time;
 mod track;
 pub mod transform;
+pub mod user_data;
 pub mod visibility;
 
 pub use cache::EvalCache;

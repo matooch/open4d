@@ -171,6 +171,25 @@ File: the `materials` array of the native file (section 6.11).
 - Links to nodes that no longer exist read as dangling; deleting a node never
   rewrites other nodes' links (keeps undo trivial).
 
+### 3.1 User data (brief 110)
+
+Any node may carry extra per-node parameter descriptors: `Node.user_data: Vec<ParamDesc>`.
+- The parameter ids use the reserved prefix `user_data.`, so they cannot collide with
+  a type's declared parameters. Type registration rejects any parameter whose id starts
+  with `user_data.`.
+- Supported kinds for user data: `Float`, `Int`, `Bool`, `Vec3`, `Link`, `String` (the
+  same `ParamDesc` builders work; other kinds are allowed by the data model but not
+  exposed by the command API).
+- `Scene::param_desc(id, param)` searches the node's type parameters first, then its
+  user data, so `Tx::set_param`, `Tx::set_track`, `Scene::with_params` and the attribute
+  panel all treat user-data parameters like declared ones.
+- `Tx::add_user_data(id, desc)` appends a descriptor, assigns it the id `user_data.N`
+  where `N` is the current length of the node's user-data list, validates the default
+  against the kind, and stores the default value in the node's params. Undo removes the
+  last descriptor and its value (and any tracks on it).
+- User-data parameters are written in the native scene file as part of the node record
+  (file version 13) and survive load, save and animation tracks.
+
 ## 4. Edits, transactions, undo (`document`)
 
 All mutation goes through `Document { scene, history }`:
@@ -503,6 +522,7 @@ the same logical scene.
 | 8 -> 9, 9 -> 10 | layers, list kinds (§6.8, §6.9) | nothing |
 | 10 -> 11 | list rows (§6.10) | `fields` link lists become rows, `layer_strength` is removed |
 | 11 -> 12 | float lists, material list (§6.11) | nothing (both are new) |
+| 12 -> 13 | user data (§3.1) | nothing (a missing `user_data` reads as empty) |
 
 Missing params of known types take their defaults on load (§6), so params added by later
 builds need no step.
@@ -627,6 +647,16 @@ reject a version 12 file with `UnsupportedVersion(12)`. Fixtures: `scene-v12*.fo
 holder with a float list, a material with a two-level shader tree and a link from material to
 shader) pin the current bytes; `scene-v11*.forge` stay as the version 11 build wrote them and
 `native_format.rs` checks that they load, migrate and resave as version 12.
+
+### 6.12 Version 13: user data (brief 110)
+
+Adds `user_data: [ParamDesc, ..]` to every node record. The descriptors are written inline; their
+values are stored in the node's `params` map under the auto-assigned `user_data.N` ids and are
+validated on load like type parameters. A missing `user_data` field reads as an empty list, so
+migration 12 -> 13 is the identity. Older builds reject a version 13 file with `UnsupportedVersion(13)`.
+Fixtures: `scene-v13*.forge` (the same logical scene as the v12 fixtures) pin the current bytes;
+`scene-v12*.forge` stay as the version 12 build wrote them and `native_format.rs` checks that they
+load, migrate and resave as version 13.
 
 ## 7. Layers (`layers`; brief 158)
 
