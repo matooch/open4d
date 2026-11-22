@@ -50,6 +50,7 @@ pub struct Volume {
 fn builder_type() -> NodeType {
     let range = |id: &str, label: &str| ParamDesc::int(id, label, 2).range(1, i64::from(i32::MAX));
     NodeType::new(BUILDER, "Volume Builder", Category::Generator)
+        .menu_path("Volume", 0)
         .consuming_children()
         .param(
             ParamDesc::float("voxel_size", "Voxel Size", 10.0)
@@ -108,6 +109,7 @@ fn builder_type() -> NodeType {
 
 fn filter_type() -> NodeType {
     NodeType::new(FILTER, "Volume Filter", Category::Generator)
+        .menu_path("Volume", 0)
         .param(ParamDesc::enumeration(
             "kind",
             "Type",
@@ -138,6 +140,7 @@ fn filter_type() -> NodeType {
 
 fn mesher_type() -> NodeType {
     NodeType::new(MESHER, "Volume Mesher", Category::Generator)
+        .menu_path("Volume", 0)
         .consuming_children()
         .param(
             ParamDesc::float("surface_threshold", "Surface Threshold", 0.01)

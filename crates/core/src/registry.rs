@@ -40,6 +40,11 @@ pub struct NodeType {
     pub params: Vec<ParamDesc>,
     /// Whether the UI's Create menu offers this type (docs/specs/CORE.md §2).
     pub in_create_menu: bool,
+    /// Create-menu group path (e.g. "Object", "Spline"). None means the group is derived
+    /// from the category.
+    pub menu_path: Option<String>,
+    /// Sort order within the Create-menu group. Lower values come first.
+    pub menu_order: i32,
     /// Whether the children of a node of this type are its inputs and are consumed
     /// (docs/specs/CORE.md §2, brief 048). Not saved in files.
     pub consumes_children: bool,
@@ -53,8 +58,17 @@ impl NodeType {
             category,
             params: Vec::new(),
             in_create_menu: true,
+            menu_path: None,
+            menu_order: 0,
             consumes_children: false,
         }
+    }
+
+    /// Sets the Create-menu group and order.
+    pub fn menu_path(mut self, path: &str, order: i32) -> NodeType {
+        self.menu_path = Some(path.to_string());
+        self.menu_order = order;
+        self
     }
 
     /// Keeps the type out of the Create menu.

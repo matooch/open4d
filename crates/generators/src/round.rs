@@ -29,6 +29,7 @@ fn with_slice(mut t: NodeType) -> NodeType {
 pub(crate) fn cylinder_type() -> NodeType {
     with_slice(
         NodeType::new("forge.cylinder", "Cylinder", Category::Generator)
+            .menu_path("Object", 0)
             .param(distance("radius", "Radius", 50.0))
             .param(distance("height", "Height", 200.0))
             .param(count("height_segments", "Height segments", 4, 1))
@@ -45,6 +46,7 @@ pub(crate) fn cylinder_type() -> NodeType {
 pub(crate) fn cone_type() -> NodeType {
     with_slice(
         NodeType::new("forge.cone", "Cone", Category::Generator)
+            .menu_path("Object", 0)
             .param(distance("top_radius", "Top radius", 0.0))
             .param(distance("bottom_radius", "Bottom radius", 100.0))
             .param(distance("height", "Height", 200.0))
@@ -73,6 +75,7 @@ pub(crate) fn cone_type() -> NodeType {
 
 pub(crate) fn disc_type() -> NodeType {
     NodeType::new("forge.disc", "Disc", Category::Generator)
+        .menu_path("Object", 0)
         .param(distance("inner_radius", "Inner radius", 0.0))
         .param(distance("outer_radius", "Outer radius", 100.0))
         .param(count("disc_segments", "Disc segments", 1, 1))
@@ -86,6 +89,7 @@ pub(crate) fn disc_type() -> NodeType {
 pub(crate) fn torus_type() -> NodeType {
     with_slice(
         NodeType::new("forge.torus", "Torus", Category::Generator)
+            .menu_path("Object", 0)
             .param(distance("ring_radius", "Ring radius", 100.0))
             .param(count("ring_segments", "Ring segments", 32, 3))
             .param(distance("pipe_radius", "Pipe radius", 50.0))
@@ -97,6 +101,7 @@ pub(crate) fn torus_type() -> NodeType {
 pub(crate) fn tube_type() -> NodeType {
     with_slice(
         NodeType::new("forge.tube", "Tube", Category::Generator)
+            .menu_path("Object", 0)
             .param(distance("inner_radius", "Inner radius", 50.0))
             .param(distance("outer_radius", "Outer radius", 100.0))
             .param(count("rotation_segments", "Rotation segments", 16, 3))
@@ -113,6 +118,7 @@ pub(crate) fn tube_type() -> NodeType {
 pub(crate) fn capsule_type() -> NodeType {
     with_slice(
         NodeType::new("forge.capsule", "Capsule", Category::Generator)
+            .menu_path("Object", 0)
             .param(distance("radius", "Radius", 50.0))
             .param(distance("height", "Height", 200.0))
             .param(count("height_segments", "Height segments", 4, 1))

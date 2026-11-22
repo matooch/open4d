@@ -46,7 +46,7 @@ implementers can avoid collisions.
 | 046 | [Null display, Instance render modes, Connect weld options](../agents/tasks/046-null-instance-connect-options.md) | C | – | waiting: G8 (O20 follow-ups are in) | generators, viewport |
 | 047 | [Camera, Light, Environment, Floor and Sky as scene objects](../agents/tasks/047-scene-objects-camera-light.md) | C | – | done (camera and light defaults equal O29 for all 9 light types; Environment/Floor/Sky are our design; stereo, composition helpers, volumetric light params not yet; render bridge and `forge render` use the scene objects; render settings stored in v12) | generators, core, viewport |
 | 048 | [Generators as clone and volume inputs (consumed-input rules)](../agents/tasks/048-generators-in-clone-volume-contexts.md) | C | 065, 081 | done | generators |
-| 049 | [Create menu organisation](../agents/tasks/049-create-menu-organisation.md) | C | 148 | ready | ui, core |
+| 049 | [Create menu organisation](../agents/tasks/049-create-menu-organisation.md) | C | 148 | done | ui, core |
 | 050 | [Bend 3-axis gating fix + EvalCtx through evaluation](../agents/tasks/050-bend-gating-evalctx.md) | D | – | done | modifiers, generators, core |
 | 051 | [Squash & Stretch and Wrap deformers](../agents/tasks/051-squash-stretch-wrap.md) | D | 050 | done (11/11 level A; Center, Aspect, Smooth, Movement, Scale Z, Tension parity-pending, see MODIFIERS.md §7) | modifiers |
 | 052 | [Expression library; FFD, Formula and Melt deformers](../agents/tasks/052-expr-ffd-formula-melt.md) | D | 050, 063 | done (5 exact + 2 statistical of 7; Melt values parity-pending, see MODIFIERS.md §16-19) | expr (new), modifiers |
@@ -192,5 +192,5 @@ implementers can avoid collisions.
 | 193 | [Parity tests use Extrude's Auto direction](../agents/tasks/193-extrude-tests-use-auto.md) | C | 044, 045 | done | generators (tests) |
 | 194 | [Materials and shaders in the document: hosting, links, Generate UVW command](../agents/tasks/194-material-hosting.md) | J | 123, 125, 127 | done | core, material, shaders, app, command, ui, io |
 | 195 | [Grow Selection: Use Edge option for polygons](../agents/tasks/195-grow-use-edge.md) | B | 023 | done | geometry, command |
-| 196 | [OBJ texture coordinates (vt) import and export](../agents/tasks/196-obj-uvs.md) | M | 004, 128 | ready | io |
+| 196 | [OBJ texture coordinates (vt) import and export](../agents/tasks/196-obj-uvs.md) | M | 004, 128 | done | io |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |

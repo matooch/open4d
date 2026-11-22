@@ -43,7 +43,9 @@ fn count(id: &str, label: &str, default: i64, min: i64) -> ParamDesc {
 }
 
 pub(crate) fn node_type(type_id: &str) -> Option<NodeType> {
-    let node = |id: &str, label: &str| NodeType::new(id, label, Category::Generator);
+    let node = |id: &str, label: &str| {
+        NodeType::new(id, label, Category::Generator).menu_path("Spline", 0)
+    };
     let adaptive = Interpolation::Adaptive;
     Some(match type_id {
         ARC => common(

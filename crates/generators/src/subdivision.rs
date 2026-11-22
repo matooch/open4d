@@ -13,6 +13,7 @@ pub const TYPE: &str = "forge.subdivision";
 
 pub(crate) fn node_type() -> NodeType {
     NodeType::new(TYPE, "Subdivision", Category::Generator)
+        .menu_path("Generator", 0)
         .param(ParamDesc::int("level_view", "Viewport level", 2).range(0, 6))
         .param(ParamDesc::int("level_render", "Render level", 2).range(0, 6))
         .param(ParamDesc::enumeration(

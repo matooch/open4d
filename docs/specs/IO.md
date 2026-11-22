@@ -49,17 +49,27 @@ faces, no materials, no UVs).
   with `Weighting::Angle` and the object's smoothing angle (`None`: angle 0, so only
   polygons of equal normal share a corner normal). One `vn` per corner, deduplicated:
   a normal equal (bitwise) to an earlier one in the file reuses its index. Faces are
-  written `f v//vn v//vn ...`. With normals off, faces are `f v v v ...`. The reference
-  writes `v/vt/vn`; we have no UVs yet, so the `vt` part is empty.
+  written `f v//vn v//vn ...` when the mesh has no UVs and `f v/vt/vn ...` when it has
+  UVs. With normals off, faces are `f v v v ...` or `f v/vt v/vt ...`. A mesh keeps its
+  corner order and its first corner.
+- **Texture coordinates** (default on when present). A polygon object with a UVW tag
+  (`forge.uvw`, `uvw` parameter as a flat `FloatList` of `u, v` pairs) exports its
+  per-corner UVs. One `vt u v` line is written per distinct UV, kept in first-seen order
+  and deduplicated exactly (bitwise equality). The face corner is `v/vt/vn` with normals
+  on, `v/vt` with normals off. Objects without UVs write no `vt` lines, so their output
+  is byte-identical to a no-UV export.
 - A polygon keeps its corner order and its first corner (the harness compares face
   lists exactly).
 
 ### 1.3 Reader: `read(text: &str, opts: &ReadOptions) -> Result<Vec<ObjObject>, ObjError>`
-- `v x y z [w]`: a point (w ignored). `f` corners: `i`, `i/t`, `i//n`, `i/t/n`;
-  1-based; negative means relative to the number of `v` lines read so far. `vn`, `vt`
-  and every other statement (`s`, `usemtl`, `mtllib`, `l`, `p`, ...) and comments are
-  ignored without error. Lines may end in `\r\n`, and `\` at the end of a line joins
-  the next line.
+- `v x y z [w]`: a point (w ignored). `vt u v [w]`: a texture coordinate (w ignored).
+  `f` corners: `i`, `i/t`, `i//n`, `i/t/n`; 1-based; negative means relative to the
+  number of `v`/`vt` lines read so far. `vn` and every other statement (`s`, `usemtl`,
+  `mtllib`, `l`, `p`, ...) and comments are ignored without error. Lines may end in
+  `\r\n`, and `\` at the end of a line joins the next line.
+- UVs are read when **every** corner of **every** face of an object has a `vt` index;
+  otherwise the object has no UVs. The imported UVs are stored on a `forge.uvw` tag
+  (`uvw` parameter as a flat `FloatList`).
 - Errors (with the line): a number that does not parse or is not finite, a face with
   fewer than 3 corners, an index of 0 or out of range.
 - `o <name>` and `g <name>` start a new object. If the current object has no `v` and no

@@ -3,8 +3,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write as _;
 
-use forge_geometry::PolyMesh;
 use forge_geometry::normals::{Weighting, corner_normals};
+use forge_geometry::{CornerUvs, PolyMesh};
 use glam::{DMat4, DVec3};
 
 /// One named mesh. `mesh` is in the object's space, `world` takes it to world space.
@@ -15,6 +15,8 @@ pub struct ObjObject {
     pub world: DMat4,
     /// Smoothing angle in radians for the written corner normals; `None` is faceted.
     pub smoothing_angle: Option<f64>,
+    /// Per-corner texture coordinates, parallel to `mesh.polys`.
+    pub uvs: Option<CornerUvs>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,12 +64,19 @@ fn key(v: DVec3) -> [u64; 3] {
     [bits(v.x), bits(v.y), bits(v.z)]
 }
 
+fn uv_key(uv: [f64; 2]) -> [u64; 2] {
+    let bits = |x: f64| if x == 0.0 { 0 } else { x.to_bits() };
+    [bits(uv[0]), bits(uv[1])]
+}
+
 pub fn write(objects: &[ObjObject], opts: &WriteOptions) -> String {
     let mut out = String::from("# Forge3D OBJ export\n");
     let mut points: HashMap<[u64; 3], usize> = HashMap::new();
     let mut point_count = 0usize;
     let mut normals: HashMap<[u64; 3], usize> = HashMap::new();
     let mut normal_count = 0usize;
+    let mut uvs: HashMap<[u64; 2], usize> = HashMap::new();
+    let mut uv_count = 0usize;
     for obj in objects {
         let name: String = obj
             .name
@@ -97,7 +106,7 @@ pub fn write(objects: &[ObjObject], opts: &WriteOptions) -> String {
         }
         let corner = if opts.normals {
             let m = PolyMesh {
-                points: world,
+                points: world.clone(),
                 polys: obj.mesh.polys.clone(),
             };
             let per_corner =
@@ -119,13 +128,51 @@ pub fn write(objects: &[ObjObject], opts: &WriteOptions) -> String {
         } else {
             Vec::new()
         };
+        let uv_index: Option<Vec<Vec<usize>>> = obj.uvs.as_ref().and_then(|obj_uvs| {
+            if !obj_uvs.matches(&obj.mesh) {
+                return None;
+            }
+            Some(
+                obj_uvs
+                    .corners
+                    .iter()
+                    .map(|face| {
+                        face.iter()
+                            .map(|uv| {
+                                *uvs.entry(uv_key(*uv)).or_insert_with(|| {
+                                    let _ = writeln!(out, "vt {} {}", num(uv[0]), num(uv[1]));
+                                    uv_count += 1;
+                                    uv_count - 1
+                                })
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect(),
+            )
+        });
         for (f, poly) in obj.mesh.polys.iter().enumerate() {
             out.push('f');
             for (c, &v) in poly.iter().enumerate() {
-                if opts.normals {
-                    let _ = write!(out, " {}//{}", index[v as usize] + 1, corner[f][c] + 1);
+                let vi = index[v as usize] + 1;
+                let ti = uv_index.as_ref().map(|u| u[f][c] + 1);
+                let ni = if opts.normals {
+                    Some(corner[f][c] + 1)
                 } else {
-                    let _ = write!(out, " {}", index[v as usize] + 1);
+                    None
+                };
+                match (ti, ni) {
+                    (Some(t), Some(n)) => {
+                        let _ = write!(out, " {}/{}/{}", vi, t, n);
+                    }
+                    (Some(t), None) => {
+                        let _ = write!(out, " {}/{}", vi, t);
+                    }
+                    (None, Some(n)) => {
+                        let _ = write!(out, " {}//{}", vi, n);
+                    }
+                    (None, None) => {
+                        let _ = write!(out, " {}", vi);
+                    }
                 }
             }
             out.push('\n');
@@ -140,6 +187,7 @@ struct Pending {
     declared_from: usize,
     declared_to: usize,
     faces: Vec<Vec<usize>>,
+    face_uvs: Vec<Vec<Option<usize>>>,
 }
 
 impl Pending {
@@ -149,6 +197,7 @@ impl Pending {
             declared_from,
             declared_to: declared_from,
             faces: Vec::new(),
+            face_uvs: Vec::new(),
         }
     }
 
@@ -157,7 +206,7 @@ impl Pending {
     }
 
     /// Points: declared inside the object plus used by its faces, ascending, re-indexed.
-    fn finish(self, global: &[DVec3], flip_z: bool) -> Option<ObjObject> {
+    fn finish(self, global: &[DVec3], uvs: &[[f64; 2]], flip_z: bool) -> Option<ObjObject> {
         if self.faces.is_empty() {
             return None;
         }
@@ -174,6 +223,18 @@ impl Pending {
             .iter()
             .map(|f| f.iter().map(|g| local[g]).collect())
             .collect();
+        let mut corner_uvs: Option<CornerUvs> =
+            if self.face_uvs.iter().flatten().any(|u| u.is_none()) {
+                None
+            } else {
+                Some(CornerUvs {
+                    corners: self
+                        .face_uvs
+                        .iter()
+                        .map(|face| face.iter().map(|u| uvs[u.unwrap()]).collect())
+                        .collect(),
+                })
+            };
         if flip_z {
             for p in &mut points {
                 p.z = -p.z;
@@ -181,12 +242,18 @@ impl Pending {
             for poly in &mut polys {
                 poly.reverse();
             }
+            if let Some(uvs) = corner_uvs.as_mut() {
+                for face in &mut uvs.corners {
+                    face.reverse();
+                }
+            }
         }
         Some(ObjObject {
             name: self.name,
             mesh: PolyMesh { points, polys },
             world: DMat4::IDENTITY,
             smoothing_angle: Some(DEFAULT_SMOOTHING_DEG.to_radians()),
+            uvs: corner_uvs,
         })
     }
 }
@@ -217,6 +284,7 @@ fn logical_lines(text: &str) -> Vec<(usize, String)> {
 
 pub fn read(text: &str, opts: &ReadOptions) -> Result<Vec<ObjObject>, ObjError> {
     let mut global: Vec<DVec3> = Vec::new();
+    let mut uvs: Vec<[f64; 2]> = Vec::new();
     let mut done: Vec<Pending> = Vec::new();
     let mut current: Option<Pending> = None;
     for (line, content) in logical_lines(text) {
@@ -242,10 +310,28 @@ pub fn read(text: &str, opts: &ReadOptions) -> Result<Vec<ObjObject>, ObjError> 
                 let cur = current.get_or_insert_with(|| Pending::new("Object", global.len() - 1));
                 cur.declared_to = global.len();
             }
+            "vt" => {
+                let c: Vec<&str> = words.collect();
+                if c.len() < 2 {
+                    return Err(err("a texture coordinate needs u v".into()));
+                }
+                let mut uv = [0.0; 2];
+                for (slot, s) in uv.iter_mut().zip(&c) {
+                    *slot = s
+                        .parse::<f64>()
+                        .ok()
+                        .filter(|x| x.is_finite())
+                        .ok_or_else(|| err(format!("bad texture coordinate {s:?}")))?;
+                }
+                uvs.push(uv);
+            }
             "f" => {
                 let mut face = Vec::new();
+                let mut face_uvs = Vec::new();
                 for tok in words {
-                    let first = tok.split('/').next().unwrap_or("");
+                    let mut parts = tok.split('/');
+                    let first = parts.next().unwrap_or("");
+                    let tex = parts.next();
                     let i: i64 = first
                         .parse()
                         .map_err(|_| err(format!("bad face index {tok:?}")))?;
@@ -259,14 +345,34 @@ pub fn read(text: &str, opts: &ReadOptions) -> Result<Vec<ObjObject>, ObjError> 
                         return Err(err(format!("face index {i} out of range ({n} points)")));
                     }
                     face.push(g as usize);
+                    let uv = match tex {
+                        None | Some("") => None,
+                        Some(s) => {
+                            let j: i64 = s
+                                .parse()
+                                .map_err(|_| err(format!("bad texture index {tok:?}")))?;
+                            let m = uvs.len() as i64;
+                            let idx = match j {
+                                0 => return Err(err("texture index 0".into())),
+                                j if j > 0 => j - 1,
+                                j => m + j,
+                            };
+                            if idx < 0 || idx >= m {
+                                return Err(err(format!(
+                                    "texture index {j} out of range ({m} coords)"
+                                )));
+                            }
+                            Some(idx as usize)
+                        }
+                    };
+                    face_uvs.push(uv);
                 }
                 if face.len() < 3 {
                     return Err(err("a face needs at least 3 corners".into()));
                 }
-                current
-                    .get_or_insert_with(|| Pending::new("Object", global.len()))
-                    .faces
-                    .push(face);
+                let cur = current.get_or_insert_with(|| Pending::new("Object", global.len()));
+                cur.faces.push(face);
+                cur.face_uvs.push(face_uvs);
             }
             "o" | "g" => {
                 let rest = content.trim_start()[word.len()..].trim();
@@ -285,6 +391,6 @@ pub fn read(text: &str, opts: &ReadOptions) -> Result<Vec<ObjObject>, ObjError> 
     done.extend(current);
     Ok(done
         .into_iter()
-        .filter_map(|p| p.finish(&global, opts.flip_z))
+        .filter_map(|p| p.finish(&global, &uvs, opts.flip_z))
         .collect())
 }

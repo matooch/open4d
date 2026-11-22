@@ -16,6 +16,7 @@ pub const TYPE: &str = "forge.spline_mask";
 
 pub(crate) fn node_type() -> NodeType {
     NodeType::new(TYPE, "Spline Mask", Category::Generator)
+        .menu_path("Generator", 0)
         .param(ParamDesc::enumeration(
             "mode",
             "Mode",

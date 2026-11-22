@@ -23,6 +23,7 @@ fn percent(id: &str, label: &str, default: f64) -> ParamDesc {
 
 pub(crate) fn node_type() -> NodeType {
     NodeType::new("forge.landscape", "Landscape", Category::Generator)
+        .menu_path("Object", 0)
         .param(distance("size_x", "Size X", 600.0))
         .param(distance("size_y", "Size Y", 100.0))
         .param(distance("size_z", "Size Z", 600.0))

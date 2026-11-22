@@ -15,6 +15,7 @@ const CAP_ARC: f64 = PI / 8.0;
 
 pub(crate) fn node_type() -> NodeType {
     let mut t = NodeType::new("forge.oil_tank", "Oil Tank", Category::Generator)
+        .menu_path("Object", 0)
         .param(distance("radius", "Radius", 100.0))
         .param(distance("height", "Height", 200.0))
         .param(count("height_segments", "Height segments", 4, 1))

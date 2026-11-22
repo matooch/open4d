@@ -181,7 +181,7 @@ fn model_a_chair_save_reopen_and_export() {
 
     // 1. A primitive from the Create menu: half of the seat, centred on x = 100 so that the
     //    symmetry plane (x = 0) runs along its inner side.
-    menu(&mut h, &["Create", "Generator", "Cube"]);
+    menu(&mut h, &["Create", "Object", "Cube"]);
     let seat = st(&h).selection.active.expect("the new cube is selected");
     assert_eq!(st(&h).doc.scene().node(seat).unwrap().type_id, "forge.cube");
     for (param, v) in [("size_x", 200.0), ("size_y", 40.0), ("size_z", 200.0)] {

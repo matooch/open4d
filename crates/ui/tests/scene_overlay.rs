@@ -202,16 +202,13 @@ fn the_create_menu_lists_volume_and_character_entries() {
     use forge_ui::commands::{CHARACTER_TYPES, character_menu, create_menu};
     let reg = forge_app::default_registry().unwrap();
     let menu = create_menu(&reg);
-    let generators = menu
-        .iter()
-        .find(|(c, _)| *c == forge_core::Category::Generator)
-        .unwrap();
+    let volumes = menu.iter().find(|(c, _)| c == "Volume").unwrap();
     for t in [
         "forge.volume_builder",
         "forge.volume_mesher",
         "forge.volume_filter",
     ] {
-        assert!(generators.1.iter().any(|(id, _)| id == t), "{t}");
+        assert!(volumes.1.iter().any(|(id, _)| id == t), "{t}");
     }
     let character = character_menu(&reg);
     let labels: Vec<&str> = character.iter().map(|e| e.label.as_str()).collect();

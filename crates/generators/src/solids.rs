@@ -13,6 +13,7 @@ use crate::{BuildError, Params};
 
 pub(crate) fn node_type() -> NodeType {
     NodeType::new("forge.platonic", "Platonic", Category::Generator)
+        .menu_path("Object", 0)
         .param(distance("radius", "Radius", 100.0))
         .param(count("segments", "Segments", 1, 1))
         .param(ParamDesc::enumeration(

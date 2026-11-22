@@ -10,13 +10,13 @@ use glam::DVec3;
 use serde_json::json;
 
 #[test]
-fn the_create_menu_lists_the_five_scene_objects() {
+fn the_create_scene_submenu_lists_environment_floor_and_sky() {
     let st = state();
     let labels: Vec<String> = scene_menu(st.doc.scene().registry())
         .into_iter()
         .map(|e| e.label)
         .collect();
-    assert_eq!(labels, ["Camera", "Light", "Environment", "Floor", "Sky"]);
+    assert_eq!(labels, ["Environment", "Floor", "Sky"]);
     for t in SCENE_TYPES {
         assert!(st.doc.scene().registry().get(t).is_some(), "{t}");
     }
