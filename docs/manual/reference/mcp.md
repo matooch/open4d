@@ -248,6 +248,7 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `vertexmap_create` | Create Vertex Map. Undoable editing command. Runs command `vertexmap.create`. |
 | `vertexmap_set` | Set Vertex Map Weights. Undoable editing command. Runs command `vertexmap.set`. |
 | `restriction_set` | Restrict Deformer. Undoable editing command. Runs command `restriction.set`. |
+| `user_data_add` | Add User Data. Undoable editing command. Runs command `user_data.add`. |
 | `material_create` | Create Material. Undoable editing command. Runs command `material.create`. |
 | `material_delete` | Delete Material. Undoable editing command. Runs command `material.delete`. |
 | `material_assign` | Assign Material. Undoable editing command. Runs command `material.assign`. |
