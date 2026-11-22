@@ -2,12 +2,12 @@
 
 use std::collections::BTreeMap;
 
-use forge_core::{NodeId, ParamDesc, ParamKind, Scene, Value};
+use forge_core::{EditError, NodeId, ParamDesc, ParamKind, Scene, Tx, Value};
 use serde_json::Map;
 
 use crate::export_scene;
 use crate::obj::{self, ObjObject, ReadOptions, WriteOptions};
-use crate::{ply, stl};
+use crate::{gltf, ply, stl};
 
 /// One exchange format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,6 +39,13 @@ const FORMATS: &[FormatInfo] = &[
         id: "ply",
         label: "PLY",
         extensions: &["ply"],
+        import: true,
+        export: true,
+    },
+    FormatInfo {
+        id: "gltf",
+        label: "glTF 2.0",
+        extensions: &["glb", "gltf"],
         import: true,
         export: true,
     },
@@ -86,6 +93,7 @@ pub fn import_options(id: &str) -> Option<Vec<ParamDesc>> {
     match id {
         "obj" => Some(vec![ParamDesc::bool("flip_z", "Flip Z", false)]),
         "stl" | "ply" => Some(vec![scale_option()]),
+        "gltf" => Some(vec![scale_option_with(100.0)]),
         _ => None,
     }
 }
@@ -101,13 +109,25 @@ pub fn export_options(id: &str) -> Option<Vec<ParamDesc>> {
             ParamDesc::bool("binary", "Binary", true),
             scale_option(),
         ]),
+        "gltf" => Some(vec![scale_option_with(0.01)]),
         _ => None,
     }
 }
 
 /// The multiplier of every coordinate of STL and PLY (IO.md §4).
 fn scale_option() -> ParamDesc {
-    ParamDesc::float("scale", "Scale", 1.0).range(1e-9, 1e9)
+    scale_option_with(1.0)
+}
+
+fn scale_option_with(default: f64) -> ParamDesc {
+    ParamDesc::float("scale", "Scale", default).range(1e-9, 1e9)
+}
+
+fn scale_from(options: &Options, fallback: f64) -> f64 {
+    match options.get("scale") {
+        Some(Value::Float(scale)) => *scale,
+        _ => fallback,
+    }
 }
 
 /// The defaults of a descriptor list.
@@ -233,6 +253,10 @@ pub fn export_bytes(
     if !info.export {
         return Err(IoError::Unsupported(id.to_string(), "export"));
     }
+    if id == "gltf" {
+        return gltf::write(scene, roots, scale_from(options, 0.01))
+            .map_err(|e| IoError::Parse(e.to_string()));
+    }
     let objects = export_scene(scene, roots);
     if objects.is_empty() {
         return Err(IoError::NothingToExport);
@@ -267,4 +291,49 @@ pub fn read_bytes(id: &str, bytes: &[u8], options: &Options) -> Result<Vec<ObjOb
         "ply" => ply::read(bytes, &ply_read_options(options)).map_err(|e| parse(&e)),
         _ => Err(IoError::Unsupported(id.to_string(), "import")),
     }
+}
+
+/// A decoded scene before it is added to the document.
+pub enum Import {
+    Flat(Vec<ObjObject>),
+    Gltf(gltf::ImportScene),
+}
+
+impl Import {
+    pub fn apply(&self, tx: &mut Tx<'_>) -> Result<Vec<NodeId>, EditError> {
+        match self {
+            Self::Flat(objects) => crate::import_into(tx, objects),
+            Self::Gltf(scene) => scene.apply(tx),
+        }
+    }
+}
+
+pub fn read_scene(id: &str, bytes: &[u8], options: &Options) -> Result<Import, IoError> {
+    if id == "gltf" {
+        gltf::read(bytes, scale_from(options, 100.0))
+            .map(Import::Gltf)
+            .map_err(|e| IoError::Parse(e.to_string()))
+    } else {
+        read_bytes(id, bytes, options).map(Import::Flat)
+    }
+}
+
+/// The animated format preserves authored local transforms and the unposed bind mesh.
+pub fn preserves_animation(id: &str) -> bool {
+    id == "gltf"
+}
+
+/// GLB output must not be labelled as a JSON `.gltf` file.
+pub fn validate_export_path(id: &str, path: &str) -> Result<(), IoError> {
+    if id == "gltf"
+        && std::path::Path::new(path)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("gltf"))
+    {
+        return Err(IoError::Unsupported(
+            id.into(),
+            "write JSON glTF (use .glb)",
+        ));
+    }
+    Ok(())
 }

@@ -9,7 +9,12 @@ description = "File formats: Wavefront OBJ import and export (docs/specs/IO.md).
 forge-core = { path = "../core" }
 forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }
+forge-material = { path = "../material" }
+forge-rig = { path = "../rig" }
+forge-anim = { path = "../anim" }
+base64 = "0.22"
 glam = "0.34"
+gltf = { version = "1.4", default-features = false, features = ["names", "utils"] }
 serde_json = "1"
 thiserror = "2"
 

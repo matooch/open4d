@@ -303,4 +303,34 @@ list property that is not a face list, a file shorter than its header declares. 
 `crates/io/tests/exchange_stl_ply.rs`: for the six `exchange` cases the golden `scene.stl` equals our binary STL of the case's `mesh.obj` geometry
 (triangle count, vertices and normals within `1e-3`, exact corner order), a read of the golden file gives back the OBJ's point set (within `1e-3`) and
 polygons as triangles; round trips (`write` then `read` for STL binary, STL ASCII, PLY ASCII, PLY binary: points and polygons); the readers' error cases; the
-scene entry points (`export_bytes` of a cube scene, `read_bytes`), format table and option defaults. Level B (INFRA.md).
+ scene entry points (`export_bytes` of a cube scene, `read_bytes`), format table and option defaults. Level B (INFRA.md).
+
+## 5. glTF 2.0 (brief 164)
+
+Sources: [glTF 2.0 specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html)
+and [O44](../parity/exchange.md). `forge_io::gltf` parses GLB or self-contained glTF
+into an `ImportScene` before applying any edits. Write binary GLB and keep node
+hierarchy, per-corner UVs, base colour and roughness, TRS animation, and linear skins.
+Camera, light, texture and morph exchange is outside this brief; reject morph targets
+explicitly. External resources are not fetched by the byte reader.
+Use `file.import`/`file.export` or `forge convert` with format `gltf`. Import accepts
+`.glb` and `.gltf`, export writes `.glb`; both expose a positive `scale` option.
+
+- Positions and translations scale by 100 on import and 0.01 on export (metres to/from
+  centimetres). Reflect Z, reverse triangle winding and conjugate rotations and
+  inverse bind matrices by the axis change. Apply the unit conversion to bind
+  translations too. O44 writes centimetre-valued GLBs, so parity imports use scale 1.
+- Keep triangles (glTF has no polygons); split vertices for corner UVs when writing
+  and recover UVs as corner values when reading. Reflect V between Forge and glTF
+  UV origins. Mesh primitives with different materials remain separate.
+- Key translation, quaternion rotation and scale at the glTF time in seconds;
+  STEP holds, LINEAR is linear for position/scale and slerp for rotation. Unsupported
+  interpolation is reported instead of silently changing the motion. Export bakes
+  Forge spline and Euler rotation tracks at document frames and keeps source key times.
+- Convert skin joint slots and inverse bind matrices to a weight tag and skin deformer.
+  Export the host's bind mesh, not the evaluated skin mesh. The O44 arm GLB is static;
+  restore its manifest's J2 keys when comparing the recorded f15/f30 poses.
+  **Known mismatch:** O44's separately posed bounds differ at f15 and f30 by at most
+  `4.2e-4`; its GLB has rows summing to about `0.9999847` and no authored animation.
+  The reader uses normalized linear skinning and does not reconstruct authoring-only
+  weights or interpolation. The independent GLB round trip retains both poses within `1e-4`.
