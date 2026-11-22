@@ -22,6 +22,7 @@ forge-nodes = { path = "../nodes" }
 forge-platform = { path = "../platform" }
 forge-rig = { path = "../rig" }
 forge-material = { path = "../material" }
+forge-noise = { path = "../noise" }
 forge-shaders = { path = "../shaders" }
 forge-volume = { path = "../volume" }
 glam = "0.34"

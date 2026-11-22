@@ -1,6 +1,6 @@
 # 106 · Tags: Target, Align to Spline, Vibrate, Look at Camera, Protection, Display, Compositing
 
-Status: waiting: O27, O54 · Area: H · Depends on: 088 · Observations: O27, O54 · Touches: core, rig
+Status: done · Area: H · Depends on: 088 · Observations: O27, O54 · Touches: core, rig
 
 ## Goal
 The common expression and display tags.
@@ -16,8 +16,8 @@ The common expression and display tags.
 - Display/Compositing affect only viewport/render; O54 says whether OBJ export changes.
 
 ## Done when
-- [ ] O27/O54 tag cases pass.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] O27/O54 tag cases pass.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -27,9 +27,20 @@ The common expression and display tags.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- **Result:** 7/8 exact, 8/8 passing. `vibrate-tag` checks repeatability, bounded offsets
+  and nontrivial movement instead of the exact reference noise. No unsupported recorded cases.
+  Three app tests also check relative pulses, parented path placement and partial position locks.
+- **Rules:** `target-tag` uses exact-time eased keys and aims +Z with zero bank.
+  Both `align-to-spline` cases use collapsed-handle keys and a 50-chord-per-cubic length
+  table; tangential orientation uses the cubic derivative. Worst error across those
+  three cases is below `1e-12`. O54 pins camera aim and lock behavior plus unchanged OBJ
+  output for Display and Compositing.
+- **Placement:** the app registers and evaluates the tags, so the rig crate need not depend
+  on generators. The rig crate exposes position locks to the transform command.
+- **Files:** `crates/app/src/motion_tags.rs`, the app scheduler and registry,
+  `crates/app/tests/motion_tags_parity.rs`, spline sampling, animation evaluation,
+  the transform command, rig lock queries and editor icon mappings.
+- **Follow-up:** viewport Display and render Compositing effects are not implemented;
+  observe those directly along with non-default cameras, paths and unobserved tag options.
+- **Gate:** 2431 Rust tests passed, 0 failed; 38 Python tests passed; cleanroom OK;
+  golden check OK (1117 cases). `cargo-deny` was not installed. `GATE: all passed`.

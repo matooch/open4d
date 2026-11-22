@@ -14,4 +14,4 @@ pub use interp::{
     value_at, value_at_exact,
 };
 pub use rotation::{euler_filter, quaternion_rotation_at};
-pub use scene_at::{overrides, scene_at, track_nodes};
+pub use scene_at::{overrides, overrides_exact, scene_at, track_nodes};

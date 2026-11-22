@@ -432,15 +432,47 @@ and constraints is checked by unit tests, O36 recorded no combined case (the
 `ik-then-constraint` row was not run, see [constraints.md](../parity/constraints.md)).
 Code: `crates/rig/src/tags.rs`; hook: `forge_app::schedule::animate` (CORE.md section 5a).
 
-Every expression, IK and constraint tag has `priority_group` (`initial`, `animation`,
+Every expression, IK, constraint and motion tag has `priority_group` (`initial`, `animation`,
 `expression`, `dynamics`, `generators`, in this order) and `priority` (integer, default 0).
 Expression tags have the implicit `expression`, 0. Tags run sorted by (group, number, document
 order); document order is an object, its tags, then its children. Each tag sees the writes of
 the tags before it and of the tracks. All of this happens before any generator or deformer
 is evaluated, so the `dynamics` and `generators` groups only order tags among themselves
-until a dynamics stage exists. Layers with expressions off skip all three tag kinds.
+until a dynamics stage exists. Layers with expressions off skip these tag evaluations.
 
-## 13. Parity cases and what is pinned (briefs 104, 105, 111)
+## 13. Motion and display tags (brief 106)
+
+Sources: [O27](../parity/animation-2.md) and [O54](../parity/tags-2.md). The app registers
+these tags and runs them after animation in the ordered tag stage (§12). Tag evaluation
+uses exact document time for tracks, including fractional frames.
+
+- **Target**: `target` links an object. Aim the host's +Z at its evaluated world position,
+  with bank zero; only rotation changes (`target-tag`). This case uses the automatic
+  eased position keys, not linear keys.
+- **Align to Spline**: `spline` links the path, `position` is a fraction (0–1, default 0),
+  and `tangential` (default off) also aims +Z along the analytical tangent. Measure the
+  path with 50 equal-parameter chords per cubic, invert accumulated length by linear
+  interpolation, then evaluate the cubic. Cap the fraction at `0.9999`. For an almost
+  vertical aim, use zero heading and signed 90° pitch. The two recorded Circle cases
+  support these rules; other path types are parity-pending. Their position keys have
+  collapsed handles in both time and value. Invert time with 19 bisections; at the exact
+  midpoint take the lower interval, as in the recorded three-second track.
+- **Vibrate**: the seed, amplitude and frequency drive deterministic bounded noise.
+  O27 is a statistical check, not a match of the reference noise sequence.
+  Own design, parity-pending: relative offsets add to evaluated position and rotation
+  and multiply evaluated scale; Regular Pulse substitutes a sine at the set frequency.
+- **Look at Camera**: the first scene camera supplies the aim direction. O54's manifest
+  and OBJ pin heading 161.565051°, pitch and bank zero; multiple cameras are parity-pending.
+- **Protection**: enabled position locks stop direct `transform.set` edits on the locked
+  axes, preserving the existing values (O54).
+- **Display / Compositing**: descriptor-backed settings do not change exported geometry,
+  including when `seen_by_camera` is off (O54). The tags are stored but their viewport
+  and render effects are not implemented by this brief.
+
+For a parented host, convert world positions and aim vectors through the inverse parent
+matrix before writing local coordinates (TRANSFORM.md; parity-pending for O27/O54).
+
+## 14. IK, constraint and ordering parity (briefs 104, 105, 111)
 
 IK (`crates/rig/tests/ik_parity.rs`, 11 cases, level B, every joint's position and three axes
 within the recorded 1e-4):

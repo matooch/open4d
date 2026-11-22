@@ -9,6 +9,7 @@ pub mod diagnostics;
 pub mod dynamics;
 pub mod material_commands;
 pub mod motion;
+pub mod motion_tags;
 pub mod param_edit;
 pub mod query;
 pub mod rig_commands;
@@ -45,6 +46,9 @@ pub fn default_registry() -> Result<Registry, RegistryError> {
     registry.install(&FieldToolset)?;
     registry.install(&forge_nodes::NodesToolset)?;
     registry.install(&forge_rig::Rig)?;
+    for ty in motion_tags::tag_types() {
+        registry.register(ty)?;
+    }
     registry.install(&forge_volume::VolumePlugin)?;
     registry.install(&forge_material::MaterialPlugin)?;
     registry.install(&forge_shaders::ShadersPlugin)?;

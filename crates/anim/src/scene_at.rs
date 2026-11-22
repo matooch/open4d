@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use forge_core::{MeshData, NodeId, ParamKind, Scene, TrackTarget, Value, parse_track_target};
 
-use crate::{int_at, points_at, step_at, value_at};
+use crate::{int_at, points_at, step_at, value_at, value_at_exact};
 
 /// A copy of `scene` whose animated parameters hold their values at `time` (seconds).
 /// Vec3 components without a track keep the stored value. Tracks that no longer address
@@ -27,6 +27,27 @@ pub fn track_nodes(scene: &Scene) -> Vec<NodeId> {
 /// [`scene_at`] applies them; `scene` holds the stored values. Applying them to a copy of
 /// `scene` with `Scene::apply_params` is exactly `scene_at` when `ids` is [`track_nodes`].
 pub fn overrides(scene: &Scene, ids: &[NodeId], time: f64) -> Vec<(NodeId, String, Value)> {
+    overrides_at(scene, ids, time, false)
+}
+
+/// Track overrides at the given document time without rounding to milliseconds.
+pub fn overrides_exact(scene: &Scene, ids: &[NodeId], time: f64) -> Vec<(NodeId, String, Value)> {
+    overrides_at(scene, ids, time, true)
+}
+
+fn overrides_at(
+    scene: &Scene,
+    ids: &[NodeId],
+    time: f64,
+    exact: bool,
+) -> Vec<(NodeId, String, Value)> {
+    let scalar = |track: &forge_core::Track| {
+        if exact {
+            value_at_exact(track, &[], time)
+        } else {
+            value_at(track, time)
+        }
+    };
     let mut out: Vec<(NodeId, String, Value)> = Vec::new();
     for &id in ids {
         let Some(node) = scene.node(id) else { continue };
@@ -50,8 +71,8 @@ pub fn overrides(scene: &Scene, ids: &[NodeId], time: f64) -> Vec<(NodeId, Strin
                     .or_else(|| scene.param(id, p).cloned())
             };
             match target {
-                TrackTarget::Float(p) => out.push((id, p, Value::Float(value_at(track, time)))),
-                TrackTarget::Int(p) => out.push((id, p, Value::Int(int_at(track, time, false)))),
+                TrackTarget::Float(p) => out.push((id, p, Value::Float(scalar(track)))),
+                TrackTarget::Int(p) => out.push((id, p, Value::Int(int_at(track, time, exact)))),
                 TrackTarget::Bool(p) => {
                     out.push((id, p, Value::Bool(step_at(track, time) >= 0.5)));
                 }
@@ -85,13 +106,13 @@ pub fn overrides(scene: &Scene, ids: &[NodeId], time: f64) -> Vec<(NodeId, Strin
                             out.push((id, p, Value::Vec3(r.into())));
                         }
                     } else if let Some(Value::Vec3(mut c)) = base(&out, &p) {
-                        c[axis] = value_at(track, time);
+                        c[axis] = scalar(track);
                         out.push((id, p, Value::Vec3(c)));
                     }
                 }
                 TrackTarget::Channel(p, axis) => {
                     if let Some(Value::Color(mut c)) = base(&out, &p) {
-                        c[axis] = value_at(track, time).max(0.0);
+                        c[axis] = scalar(track).max(0.0);
                         out.push((id, p, Value::Color(c)));
                     }
                 }

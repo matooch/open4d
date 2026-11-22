@@ -187,6 +187,41 @@ const LENGTH_PIECES: usize = 50;
 /// samples of [`sample`]; a sweep pairs its rail with its path through them (§10a).
 pub fn uniform_params(curve: &Curve, number: usize) -> Vec<f64> {
     let n_seg = curve.segments.len();
+    let table = length_table(curve);
+    let total = *table.last().expect("table starts with 0");
+    let steps = n_seg * (number + 1);
+    let count = if curve.closed { steps } else { steps + 1 };
+    (0..count)
+        .map(|k| {
+            // The open end falls a ten-thousandth of the length short (and a little more per
+            // segment); the steps before it lag by 1e-7 of their length.
+            let target = if k == steps {
+                total * (1.0 - UNIFORM_END_SHORTFALL) - UNIFORM_END_EXTRA * n_seg as f64 * total
+            } else if curve.closed {
+                total * k as f64 / steps as f64
+            } else {
+                total * k as f64 / steps as f64 * (1.0 - UNIFORM_OPEN_LAG)
+            };
+            parameter_at_length(&table, target)
+        })
+        .collect()
+}
+
+/// Global parameter for a fraction of a spline's measured length, using the same
+/// polyline as Uniform sampling but without its endpoint and spacing corrections.
+pub fn arc_length_parameter(curve: &Curve, fraction: f64) -> Option<f64> {
+    if curve.segments.is_empty() {
+        return None;
+    }
+    let table = length_table(curve);
+    let total = *table.last()?;
+    Some(parameter_at_length(
+        &table,
+        total * fraction.clamp(0.0, 1.0),
+    ))
+}
+
+fn length_table(curve: &Curve) -> Vec<f64> {
     let mut table = vec![0.0];
     for seg in &curve.segments {
         let mut prev = seg[0];
@@ -197,34 +232,21 @@ pub fn uniform_params(curve: &Curve, number: usize) -> Vec<f64> {
             prev = q;
         }
     }
-    let total = *table.last().expect("table starts with 0");
-    let steps = n_seg * (number + 1);
-    let count = if curve.closed { steps } else { steps + 1 };
-    (0..count)
-        .map(|k| {
-            // the open end falls a ten-thousandth of the length short (and a little more per
-            // segment); the steps before it lag by 1e-7 of their length
-            let target = if k == steps {
-                total * (1.0 - UNIFORM_END_SHORTFALL) - UNIFORM_END_EXTRA * n_seg as f64 * total
-            } else if curve.closed {
-                total * k as f64 / steps as f64
-            } else {
-                total * k as f64 / steps as f64 * (1.0 - UNIFORM_OPEN_LAG)
-            };
-            let hi = table
-                .partition_point(|l| *l < target)
-                .clamp(1, n_seg * LENGTH_PIECES);
-            let (l0, l1) = (table[hi - 1], table[hi]);
-            let f = if l1 > l0 {
-                (target - l0) / (l1 - l0)
-            } else {
-                0.0
-            };
-            let piece = hi - 1;
-            (piece / LENGTH_PIECES) as f64
-                + ((piece % LENGTH_PIECES) as f64 + f) / LENGTH_PIECES as f64
-        })
-        .collect()
+    table
+}
+
+fn parameter_at_length(table: &[f64], target: f64) -> f64 {
+    let hi = table
+        .partition_point(|l| *l < target)
+        .clamp(1, table.len() - 1);
+    let (l0, l1) = (table[hi - 1], table[hi]);
+    let f = if l1 > l0 {
+        (target - l0) / (l1 - l0)
+    } else {
+        0.0
+    };
+    let piece = hi - 1;
+    (piece / LENGTH_PIECES) as f64 + ((piece % LENGTH_PIECES) as f64 + f) / LENGTH_PIECES as f64
 }
 
 /// Interior sample parameters of one curved segment.
