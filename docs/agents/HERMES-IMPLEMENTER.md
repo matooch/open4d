@@ -26,10 +26,23 @@ Work only on briefs in the queue below, top to bottom, skipping ones whose Statu
 
 Done: 193, 195, 196, 049, 110, 106, 164 (merged after planner review).
 
+Overnight queue (2026-11-22). Work top to bottom. A brief's own `Status:` line may still say
+`waiting: Oxx`; **the BACKLOG row is authoritative** (those observations are in). If a brief turns
+out blocked, mark it `blocked: <reason>` in the brief and BACKLOG, push, and go on to the next.
+
 1. 164 follow-up (on hermes/164-gltf): import GLB skin weights unchanged with the skin's
    `normalise` off and re-check the two pinned skinned-arm poses (one hypothesis; see the review).
-2. [168](tasks/168-usd.md) · USD `.usda` import/export (medium-large; public text format, round-trip tests)
-3. [167](tasks/167-alembic.md) · Alembic (Ogawa) import/export (large; O44 has an ABC export)
+2. [168](tasks/168-usd.md) · USD `.usda` import/export (public text format; round-trip tests)
+3. [066](tasks/066-cloner-object-mode.md) · Cloner Object mode: distributions, seeds, selections (O21 golden cases)
+4. [071](tasks/071-shader-spline-pushapart-etc.md) · Shader, Spline, Push Apart, Inheritance, Volume, Group effectors (O22 golden cases)
+5. [062](tasks/062-vertex-maps-from-fields.md) · Vertex maps from fields; restriction (O49 golden cases)
+6. [078](tasks/078-clone-tags-cache.md) · Clone selection and weight tags, clone cache (O50)
+7. [077](tasks/077-instance-over-time.md) · Instance-over-time generator (O50)
+8. [075](tasks/075-clone-text.md) · Clone-toolset Text (O31, O48)
+9. [092](tasks/092-speed-graph.md) · Speed graph mode (own design, parity-pending G5)
+10. [097](tasks/097-keyframe-indicators.md) · Keyframe indicators on every parameter (own design, G4)
+11. [122](tasks/122-dynamics-bake-ui.md) · Bake to keys and cache tags; dynamics UI
+12. [167](tasks/167-alembic.md) · Alembic (Ogawa) import/export (O44 has an ABC export)
 
 **Handing a brief back.** When a brief's branch is pushed, add one line to
 `/Users/bigman/forge-implementer/log.md`: `<brief> <branch> <done|blocked> <one-line result>`. The
@@ -38,7 +51,12 @@ or writes what to fix in the brief's `## Review (planner)` section on `main`. Be
 next brief, check whether the previous one got a Review section; if so, fix that first on the same
 branch and push again.
 
-When the queue is done, write `QUEUE FINISHED` to `/Users/bigman/forge-implementer/log.md` and stop.
+When the queue is done (or you must stop): make sure `git status --short` is empty, then for
+every `hermes/*` branch of this run run `git fetch -q origin` and
+`git log --oneline origin/<branch>..<branch>`; it must print nothing, otherwise push that branch
+and check again. Then write `QUEUE FINISHED` to `/Users/bigman/forge-implementer/log.md`, with
+one line per brief: `<brief> <branch> <short SHA on origin> <done|blocked> <result, gate>`, and
+stop. Never write `QUEUE FINISHED` while a branch has unpushed commits.
 
 ## 3. How to work with a small context
 
