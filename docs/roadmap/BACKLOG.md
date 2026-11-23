@@ -164,7 +164,7 @@ implementers can avoid collisions.
 | 164 | [glTF import/export (meshes, hierarchy, materials, animation, skins, morphs)](../agents/tasks/164-gltf.md) | M | 088, 101, 107 | done | io |
 | 165 | [FBX import (ufbx)](../agents/tasks/165-fbx-import.md) | M | 088, 101 | ready | io |
 | 166 | [FBX export (ASCII 7.4)](../agents/tasks/166-fbx-export.md) | M | 165 | ready | io |
-| 167 | [Alembic (Ogawa) import/export](../agents/tasks/167-alembic.md) | M | 088 | ready | io |
+| 167 | [Alembic (Ogawa) import/export](../agents/tasks/167-alembic.md) | M | 088 | done | io |
 | 168 | [USD .usda import/export](../agents/tasks/168-usd.md) | M | 123 | ready (rescoped: own design, round trip; no reference USD) | io |
 | 169 | [STL and PLY](../agents/tasks/169-stl-ply.md) | M | – | done (parity-pending: PLY not observed) | io |
 | 170 | [Camera, light and material exchange across formats](../agents/tasks/170-camera-light-material-exchange.md) | M | 047, 134 | ready | io |
