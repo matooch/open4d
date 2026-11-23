@@ -298,6 +298,23 @@ Findings:
   objects the forms describe, so the lighting model is **parity-pending** until the default light
   and the light units are observed.
 
+### R14a Render parity inventory (brief 145)
+
+Sources: [O30](../parity/render-reference.md), [O43](../parity/material-renders.md)
+and [O57](../parity/camera.md). The CPU render tests share one measurement path
+for exposure-normalised PSNR and the existing silhouette rules. A case's explicit
+`[tolerance].psnr` is its minimum PSNR in dB; a missing setting is diagnostic only
+(none of these captures records a PSNR floor). Do not use the mesh manifest's default
+PSNR as if it were an observed limit.
+
+All 23 `render` and 8 `camera` archives are rendered and measured. The silhouette
+gates remain zero disagreements beyond one pixel, or the one-sided coverage and
+bounding-box check for O57 calibration frames. Compared at these gates: 17 render
+cases and 7 camera cases pass. The existing `area-soft`, `area-soft-2`,
+`mat-checker-uv`, `mat-checker-cubic`, `checker-plane` and `ortho-zoom-2` pins
+remain; `mat-metal` reports tone only because the reflection does not bound the
+object. Unavailable captures stay separately listed and are not counted as passes.
+
 ## R15 Camera parity with O57 and the thin lens (brief 138)
 
 Source: `tests/golden/camera` (4 observed cases of 320 x 240, `render.png` + `mesh.obj`),

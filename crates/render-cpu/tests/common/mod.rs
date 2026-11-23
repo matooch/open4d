@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 pub mod golden;
+pub mod image_parity;
 
 use std::collections::BTreeMap;
 
