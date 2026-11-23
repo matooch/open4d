@@ -918,6 +918,36 @@ modes and Unsupported, the Delay modes, frame 0 identity, determinism). The Dela
 
 ## E25. Open data that would settle the pending rules
 
+### Additional effectors (brief 071)
+
+Source: [O22](../parity/effectors-3.md); Group has no O22 recording. Effectors run
+in link order; child effectors of an enabled Group run at its slot in document order.
+
+- **Shader:** `shader` links a hosted Noise shader. Sample deterministic noise in clone
+  UV/time, remap via minimum/maximum, optionally invert and use the scalar as the Plain
+  position/rotation/scale weight. Effector Color uses the sampled gray. The renderer
+  shader dependency cannot be inverted through generators; other graphs are unsupported.
+- **Spline:** `spline`, optional `rail`, `mode` (Step/Falloff/Relative), `start`, `end`,
+  and `offset`. Step spaces clones by `i/n`; an empty field in Falloff maps to the end.
+  Interpolate the Uniform intermediate points when present; otherwise evaluate the cubic
+  at the sampled arc-length parameter. Mix position and orient +Z along the local
+  chord or tangent. Explicit up or rail stabilizes the frame; automatic roll is pending.
+- **Push Apart:** `radius` 100, `iterations` 10. Accumulate overlapping pairs' equal
+  and opposite offsets in stable index order, then apply the density-normalized sum.
+  Hide preserves count and indices but hides later overlapping clones. Only Push
+  Apart and Hide are supported.
+- **Inheritance:** a linked cloner supplies transforms by index if `morph_motion_object`
+  is on. The observed Direct case with Morph off does not change transforms.
+- **Volume:** sample the linked closed polygon volume at each clone before applying
+  the shared transform and field weights. The boundary is outside, as in `volume`.
+
+`inheritance` and `volume` match O22 exactly. Known mismatches: `shader-noise`
+uses Forge's deterministic basis, not the observed noise/color sequence;
+`spline-helix` and `spline-helix-segment` match position at the recorded tolerance
+but not the complete orientation; `push-apart` and `push-apart-iterations`
+improve separation while preserving the centroid and frames but do not match
+the observed displacement magnitudes.
+
 - Step: a changed spline (e.g. ease), Step Gap 1 and 2, Count 1; Position with Absolute Transform Mode.
 - Formula: `t - Project Time` 2 at frame 10 (is `t` multiplied or added?), Frequency 2, a formula using `px` and `falloff`
   with a Spherical field, Rotation on with R.H 90 degrees, Formula `id` to check 0-based.
