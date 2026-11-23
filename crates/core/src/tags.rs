@@ -18,6 +18,19 @@ pub const VERTEX_MAP: &str = "forge.vertex_map";
 /// Limits the deformer it sits on to a stored selection or a vertex map of the deformed object.
 pub const RESTRICTION: &str = "forge.restriction";
 
+/// Shared row labels for field lists, including those hosted on built-in tags.
+pub const FIELD_BLEND_OPTIONS: [(&str, &str); 9] = [
+    ("normal", "Normal"),
+    ("max", "Max"),
+    ("min", "Min"),
+    ("add", "Add"),
+    ("subtract", "Subtract"),
+    ("multiply", "Multiply"),
+    ("overlay", "Overlay"),
+    ("screen", "Screen"),
+    ("clip", "Clip"),
+];
+
 /// The element kind a selection tag stores.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelectionKind {
@@ -61,6 +74,13 @@ pub(crate) fn vertex_map_type() -> NodeType {
     NodeType::new(VERTEX_MAP, "Vertex Map", Category::Tag)
         .param(ParamDesc::bool("enabled", "Enable", true))
         .param(ParamDesc::color("color", "Color", [1.0, 1.0, 1.0]))
+        .param(ParamDesc::bool("use_fields", "Use Fields", false))
+        .param(ParamDesc::link_rows(
+            "fields",
+            "Fields",
+            &[Category::Field],
+            &FIELD_BLEND_OPTIONS,
+        ))
         .param(ParamDesc::float_list("weights", "Weights").range(0.0, 1.0))
 }
 
@@ -107,6 +127,16 @@ pub fn named_point_weights(
     name: &str,
     point_count: usize,
 ) -> Option<Vec<f64>> {
+    named_point_weights_with(scene, host, name, point_count, |_| None)
+}
+
+fn named_point_weights_with(
+    scene: &Scene,
+    host: NodeId,
+    name: &str,
+    point_count: usize,
+    mut resolve_live: impl FnMut(NodeId) -> Option<Vec<f64>>,
+) -> Option<Vec<f64>> {
     for t in &scene.node(host)?.tags {
         let n = scene.node(*t)?;
         if n.name != name {
@@ -123,6 +153,9 @@ pub fn named_point_weights(
                 return Some(w);
             }
             VERTEX_MAP if !matches!(n.params.get("enabled"), Some(Value::Bool(false))) => {
+                if let Some(live) = resolve_live(*t) {
+                    return Some(live);
+                }
                 let stored = vertex_map_weights(scene, *t).unwrap_or(&[]);
                 return Some(
                     (0..point_count)
@@ -146,6 +179,18 @@ pub fn restriction_weights(
     target: NodeId,
     point_count: usize,
 ) -> Option<Vec<f64>> {
+    restriction_weights_with(scene, deformer, target, point_count, |_| None)
+}
+
+/// Resolve a live vertex map if the consumer has the points and field evaluator;
+/// otherwise use the stored restriction data.
+pub fn restriction_weights_with(
+    scene: &Scene,
+    deformer: NodeId,
+    target: NodeId,
+    point_count: usize,
+    resolve_live: impl FnMut(NodeId) -> Option<Vec<f64>>,
+) -> Option<Vec<f64>> {
     let tag = scene
         .node(deformer)?
         .tags
@@ -160,7 +205,7 @@ pub fn restriction_weights(
     if name.is_empty() {
         return None;
     }
-    let mut w = named_point_weights(scene, target, name, point_count)?;
+    let mut w = named_point_weights_with(scene, target, name, point_count, resolve_live)?;
     if matches!(tag.params.get("invert"), Some(Value::Bool(true))) {
         for x in &mut w {
             *x = 1.0 - *x;

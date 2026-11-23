@@ -1,6 +1,6 @@
 # 062 · Vertex maps from fields; restriction
 
-Status: waiting: O49 · Area: D · Depends on: 027, 059 · Observations: O49 · Touches: fields, modifiers
+Status: done · Area: D · Depends on: 027, 059 · Observations: O49 · Touches: fields, modifiers
 
 ## Goal
 A vertex map tag can be filled from a field list, and restriction uses it (the O49 vmap cases).
@@ -14,8 +14,8 @@ A vertex map tag can be filled from a field list, and restriction uses it (the O
 - The vertex map tag gets a fields list. Weights are evaluated per frame (or frozen). Restriction multiplies the deformer weights.
 
 ## Done when
-- [ ] FIELDS.md §vertex maps; the cases match.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] FIELDS.md §vertex maps; the cases match.
+- [x] The gate passes and BACKLOG.md is updated.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -25,9 +25,15 @@ A vertex map tag can be filled from a field list, and restriction uses it (the O
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- 2/2 O49 cases match: `vmap-from-field` weights and base mesh, and `restrict-bend`
+  deformed mesh. The app test reads the manifests and the recorded outputs.
+- Maps sample field rows in world space at input points. Restriction applies the
+  live or stored weight to the displacement; the test moves a live field and
+  verifies that a frozen map is unaffected. O49 `restrict-bend` uses both Bend
+  values as stored radians; the displacement slope and full mesh distinguish that
+  from displayed degrees. FIELDS.md documents the rule.
+- Core owns the descriptor and name lookup. The fields crate resolves live weights;
+  both modifier entry points use them. No golden data or tolerances changed.
+- Gate: `2452 tests passed, 0 failed`; `GATE: all passed`, including licenses.
+  A prior run saw the unrelated graph test `a_shared_node_runs_once_per_evaluation`
+  report 2 instead of 1; it passed on rerun without changes to that test.

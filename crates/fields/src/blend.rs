@@ -22,18 +22,7 @@ pub enum BlendMode {
     Clip,
 }
 
-/// `(id, label)` of every blend mode: the options of a field list row, Normal first.
-pub const BLEND_OPTIONS: [(&str, &str); 9] = [
-    ("normal", "Normal"),
-    ("max", "Max"),
-    ("min", "Min"),
-    ("add", "Add"),
-    ("subtract", "Subtract"),
-    ("multiply", "Multiply"),
-    ("overlay", "Overlay"),
-    ("screen", "Screen"),
-    ("clip", "Clip"),
-];
+pub use forge_core::tags::FIELD_BLEND_OPTIONS as BLEND_OPTIONS;
 
 impl BlendMode {
     const ALL: [BlendMode; 9] = [
