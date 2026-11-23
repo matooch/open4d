@@ -4,6 +4,7 @@
 //! and no GPU. The editor and every automation front end build on it.
 
 pub mod animate;
+mod clone_commands;
 pub mod coords;
 pub mod diagnostics;
 pub mod dynamics;
@@ -68,6 +69,7 @@ pub fn default_command_registry() -> CommandRegistry {
     tag_commands::register(&mut commands).expect("tag command ids are unique");
     user_data_commands::register(&mut commands).expect("user_data command ids are unique");
     material_commands::register(&mut commands).expect("material command ids are unique");
+    clone_commands::register(&mut commands).expect("clone command ids are unique");
     commands
 }
 

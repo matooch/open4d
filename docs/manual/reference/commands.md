@@ -2,7 +2,7 @@
 
 # Command reference
 
-196 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+197 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -201,6 +201,7 @@
 | [`material.assign`](#materialassign) | Assign Material | yes | `material_assign` |
 | [`shader.set`](#shaderset) | Set Shader | yes | `shader_set` |
 | [`uv.generate`](#uvgenerate) | Generate UVW | yes | `uv_generate` |
+| [`cloner.bake`](#clonerbake) | Bake Clone Cache | yes | `cloner_bake` |
 | [`plugin.list`](#pluginlist) | List Plugins | no | `plugin_list` |
 
 ## `object`
@@ -2530,6 +2531,21 @@ Generate UVW. One undo step.
 | `tag` | integer or null | no | A texture tag of the object (default: its first). |
 
 Example: `forge cmd scene.forge uv.generate --args '{}'`
+
+
+## `cloner`
+
+### `cloner.bake`
+
+Bake Clone Cache. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | Cloner node ID. |
+| `start` | integer | yes | First frame to bake (inclusive). |
+| `end` | integer | yes | Last frame to bake (inclusive). |
+
+Example: `forge cmd scene.forge cloner.bake --args '{"end":30,"node":1,"start":0}'`
 
 
 ## `plugin`

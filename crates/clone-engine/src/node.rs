@@ -465,6 +465,9 @@ impl Plugin for CloneToolset {
             r.register(ty)?;
         }
         r.register(crate::matrix::matrix_type())?;
+        r.register(crate::tags::selection_type())?;
+        r.register(crate::tags::weight_type())?;
+        r.register(crate::cache::node_type())?;
         r.register(crate::fracture::fracture_type())
     }
 }

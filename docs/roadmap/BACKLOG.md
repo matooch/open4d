@@ -75,7 +75,7 @@ implementers can avoid collisions.
 | 075 | [Clone-toolset Text](../agents/tasks/075-clone-text.md) | E | 039, 065 | ready | clone-engine, generators |
 | 076 | [Tracer and the clone-toolset spline generator](../agents/tasks/076-tracer-spline-generator.md) | E | 065, 028 | done (Turtle unsupported; tracer positions within 1e-3) | clone-engine, generators |
 | 077 | [Instance-over-time generator](../agents/tasks/077-instance-over-time.md) | E | 065, 088 | ready | clone-engine, anim |
-| 078 | [Clone selection and weight tags, clone cache](../agents/tasks/078-clone-tags-cache.md) | E | 065, 027 | ready | clone-engine |
+| 078 | [Clone selection and weight tags, clone cache](../agents/tasks/078-clone-tags-cache.md) | E | 065, 027 | done (parity-pending: O50 tag and cache captures) | clone-engine |
 | 079 | [Clone UI: effector lists, clone display, GPU instancing hookup](../agents/tasks/079-clone-ui.md) | E | 065, 144 | done (parity-pending G4) | ui, viewport |
 | 080 | [forge-volume: sparse grid, mesh/spline/points to SDF, CSG; harness compare_volume_mesh](../agents/tasks/080-forge-volume-grid-sdf.md) | F | – | done | volume (new), parity-harness |
 | 081 | [Volume Builder node (object list, modes, SDF/fog, voxel size, hierarchy)](../agents/tasks/081-volume-builder.md) | F | 080 | done (parity-pending: spline radius factor, fog density, subtract/intersect not observed) | volume, plugin |
