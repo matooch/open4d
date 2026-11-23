@@ -1,4 +1,4 @@
-//! Alembic Ogawa transforms and fixed-topology mesh caches (IO.md §6).
+//! Alembic Ogawa transforms and fixed-topology mesh caches (IO.md §7).
 
 mod ogawa;
 mod read;

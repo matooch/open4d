@@ -1,4 +1,4 @@
-//! O44 Alembic imports and independent authored round trips (IO.md §6).
+//! O44 Alembic imports and independent authored round trips (IO.md §7).
 
 use std::{path::Path, sync::Arc};
 

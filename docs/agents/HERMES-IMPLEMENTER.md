@@ -24,22 +24,10 @@ Work only on briefs in the queue below, top to bottom, skipping ones whose Statu
 
 ### Queue (the planner edits this list)
 
-Done: 193, 195, 196, 049, 110, 106, 164 (+ follow-up), 066 (merged after planner review).
+Done: 193, 195, 196, 049, 110, 106, 164 (+ follow-up), 066, 168, 071, 062, 078, 077, 075, 092,
+097, 122, 167 (merged after planner review).
 
-Overnight queue (2026-11-22). Work top to bottom. A brief's own `Status:` line may still say
-`waiting: Oxx`; **the BACKLOG row is authoritative** (those observations are in). If a brief turns
-out blocked, mark it `blocked: <reason>` in the brief and BACKLOG, push, and go on to the next.
-
-1. [168](tasks/168-usd.md) · USD `.usda` import/export, **rescoped**: own design from the public USD docs, round trips, parity-pending (read the planner note in the brief)
-2. [071](tasks/071-shader-spline-pushapart-etc.md) · Shader, Spline, Push Apart, Inheritance, Volume, Group effectors (O22 golden cases)
-3. [062](tasks/062-vertex-maps-from-fields.md) · Vertex maps from fields; restriction (O49 golden cases)
-4. [078](tasks/078-clone-tags-cache.md) · Clone selection and weight tags, clone cache (O50)
-5. [077](tasks/077-instance-over-time.md) · Instance-over-time generator (O50)
-6. [075](tasks/075-clone-text.md) · Clone-toolset Text (O31, O48)
-7. [092](tasks/092-speed-graph.md) · Speed graph mode (own design, parity-pending G5)
-8. [097](tasks/097-keyframe-indicators.md) · Keyframe indicators on every parameter (own design, G4)
-9. [122](tasks/122-dynamics-bake-ui.md) · Bake to keys and cache tags; dynamics UI
-10. [167](tasks/167-alembic.md) · Alembic (Ogawa) import/export (O44 has an ABC export)
+The queue is empty until the planner adds the next briefs.
 
 **Handing a brief back.** When a brief's branch is pushed, add one line to
 `/Users/bigman/forge-implementer/log.md`: `<brief> <branch> <done|blocked> <one-line result>`. The
