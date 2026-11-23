@@ -419,7 +419,20 @@ exactly the value of `random-defaults` at its sample point (0, 0, 0). So Space N
 (our `q = 0`, F6). The noise values are not reproducible (F6), so the test checks, statistically, that the reference is constant, that
 ours is constant and that each equals its own Space Field value at the origin.
 
-### Vertex maps (`vmap-from-field`, `restrict-bend`)
-A Vertex Map tag whose field list holds one Linear field (Y+, Length 200) on a 4/8/4 cube of height 400, and a Bend (strength 90)
-restricted to that map. Vertex maps and the Restriction tag do not exist yet: both cases are listed as pending and skipped by the
-field parity test (`restrict-bend` carries a mesh, `vmap-from-field` a `track` file with the weight per point index).
+### Vertex maps from fields (brief 062)
+
+Source: [O49](../parity/fields-4.md), `vmap-from-field` and `restrict-bend`.
+Vertex Map's `use_fields` (bool, off) enables `fields` (ordered field list, empty).
+Sample the list in world space at each input point, using the current evaluation
+time, then clamp to `[0,1]`. No sample buffer is written during live evaluation.
+With fields off, read stored `weights`; a consumer can freeze a sampled buffer by
+writing it to `weights` and turning `use_fields` off.
+
+A Restriction tag names the source object's point selection or vertex map. The
+deformer reads live maps at its input points, or stored maps by index. For both,
+the restriction mixes input and deformed positions by the map weight, multiplying
+the effect of any weighting already applied by the deformer (EDITABLE.md §7.4).
+`restrict-bend` records the frozen form; `vmap-from-field` records live readback.
+The `restrict-bend` export uses stored Bend strength and angle `90` radians, not displayed
+degrees: the horizontal displacement ratio is `tan(90 radians)`, and the full mesh
+matches using both values as radians with the default box.

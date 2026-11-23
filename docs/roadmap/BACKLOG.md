@@ -59,7 +59,7 @@ implementers can avoid collisions.
 | 059 | [Field lists: layers, blend modes, groups, Formula and Shader fields](../agents/tasks/059-field-lists.md) | D | 057, 052 | done (16/17 exact; Shader field Unsupported until 125; native format 11, see FIELDS.md F7) | fields |
 | 060 | [Field modifier layers: Freeze, Decay, Delay, Remap, Curve, Colorize, Step](../agents/tasks/060-field-modifier-layers.md) | D | 059 | done (parity-pending: Step, Decay, Delay, Freeze pinned, FIELDS.md F8) | fields |
 | 061 | [Deformer falloff through field lists (all deformers)](../agents/tasks/061-deformer-falloff.md) | D | 057 | done (9/9 O24 cases at level A; object off the origin and weights outside 0..1 parity-pending, see MODIFIERS.md §10) | modifiers, fields |
-| 062 | [Vertex maps from fields; restriction](../agents/tasks/062-vertex-maps-from-fields.md) | D | 027, 059 | ready | fields, modifiers |
+| 062 | [Vertex maps from fields; restriction](../agents/tasks/062-vertex-maps-from-fields.md) | D | 027, 059 | in-progress (hermes) | fields, modifiers |
 | 063 | [Noise library `forge-noise`](../agents/tasks/063-noise-library.md) | D | – | done (parity-pending O42) | noise (new) |
 | 064 | [Field list widget and field display](../agents/tasks/064-field-list-widget.md) | D | 059, 150 | done (parity-pending G4: looks, columns) | ui, viewport |
 | 065 | [Clone data, cloner node, Linear / Radial / Grid / Honeycomb modes, instance modes](../agents/tasks/065-cloner-core-modes.md) | E | 050 | done (19/19 samples and meshes; rules parity-pending, see MOGRAPH.md C11) | clone-engine, plugin |
