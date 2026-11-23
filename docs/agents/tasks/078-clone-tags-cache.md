@@ -1,6 +1,6 @@
 # 078 · Clone selection and weight tags, clone cache
 
-Status: waiting: O50 · Area: E · Depends on: 065, 027 · Observations: O50 · Touches: clone-engine
+Status: done (parity-pending: O50 tag and cache captures) · Area: E · Depends on: 065, 027 · Observations: O50 · Touches: clone-engine
 
 ## Goal
 Tags that restrict effectors to selected clones, store per-clone weights, and bake clone data.
@@ -16,8 +16,9 @@ Tags that restrict effectors to selected clones, store per-clone weights, and ba
 - Cache: bake CloneData per frame into the document (binary blob in the native file, 163).
 
 ## Done when
-- [ ] O50 tag cases pass; a baked cache plays back identically.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [ ] O50 tag cases pass (pending: usable reference scenes).
+- [x] A baked cache plays back identically.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -26,10 +27,21 @@ Tags that restrict effectors to selected clones, store per-clone weights, and ba
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- **Parity pending:** O50 lists `cloner/selection-tag` and `cloner/weight-tag` as not
+  observed. The tags read back correctly in the probe but had no effect; neither has
+  a golden fixture. No reference cache capture exists either. No parity is claimed.
+- **Native coverage:** tests assert host-local selection, empty and unresolved masks,
+  selected and weighted Plain displacements, undo/redo, cached viewport instances and
+  geometry, native binary file round trip, rebaking, and all `CloneData` channels
+  across frames with different sample counts.
+- **Design:** the three tags are registry nodes. `cloner.bake` samples the animated
+  scene and stores a versioned `FloatList` using the existing native chunk format.
+  The bake is exposed through the command registry, not a dedicated editor panel.
+- **Follow-up:** capture GUI-built selection/weight tag scenes and a before/after
+  bake sample. On integration with 071, keep selection masking around the expanded
+  effector dispatcher and keep initial weight seeding in Delay replay.
+- **Files:** MOGRAPH §O5; clone-engine `tags`, `cache`, `effector`, and Plain;
+  generator `cloner`; app `clone_commands`, scheduler, and `clone_tags_cache` tests;
+  UI icon mappings and generated command reference.
+- **Gate:** `GATE: 2453 tests passed, 0 failed`; `GATE: all passed`.

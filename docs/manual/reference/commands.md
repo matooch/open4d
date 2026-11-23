@@ -2,7 +2,7 @@
 
 # Command reference
 
-196 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+201 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -139,6 +139,7 @@
 | [`key.delete`](#keydelete) | Delete Selected Keys | yes | `key_delete` |
 | [`key.set_interp`](#keyset_interp) | Set Key Interpolation | yes | `key_set_interp` |
 | [`key.set_tangent`](#keyset_tangent) | Set Key Tangent | yes | `key_set_tangent` |
+| [`key.set_speed`](#keyset_speed) | Set Key Speed | yes | `key_set_speed` |
 | [`key.paste`](#keypaste) | Paste Keys | yes | `key_paste` |
 | [`track.set_behavior`](#trackset_behavior) | Track Behavior | yes | `track_set_behavior` |
 | [`key.euler_filter`](#keyeuler_filter) | Euler Filter | yes | `key_euler_filter` |
@@ -172,6 +173,9 @@
 | [`browser.open_recent`](#browseropen_recent) | Open Recent | no | `browser_open_recent` |
 | [`browser.clear_recent`](#browserclear_recent) | Clear Recent Files | no | `browser_clear_recent` |
 | [`param.edit`](#paramedit) | Edit Parameter | yes | `param_edit` |
+| [`key.set_parameter`](#keyset_parameter) | Set Parameter Key | yes | `key_set_parameter` |
+| [`dynamics.bake`](#dynamicsbake) | Bake Dynamics | yes | `dynamics_bake` |
+| [`dynamics.settings`](#dynamicssettings) | Set Dynamics Settings | yes | `dynamics_settings` |
 | [`transform.edit`](#transformedit) | Set Coordinates | yes | `transform_edit` |
 | [`graph.add_node`](#graphadd_node) | Add Graph Node | yes | `graph_add_node` |
 | [`graph.remove`](#graphremove) | Remove Graph Node | yes | `graph_remove` |
@@ -201,6 +205,7 @@
 | [`material.assign`](#materialassign) | Assign Material | yes | `material_assign` |
 | [`shader.set`](#shaderset) | Set Shader | yes | `shader_set` |
 | [`uv.generate`](#uvgenerate) | Generate UVW | yes | `uv_generate` |
+| [`cloner.bake`](#clonerbake) | Bake Clone Cache | yes | `cloner_bake` |
 | [`plugin.list`](#pluginlist) | List Plugins | no | `plugin_list` |
 
 ## `object`
@@ -1628,6 +1633,20 @@ Set Key Tangent. One undo step.
 
 Example: `forge cmd scene.forge key.set_tangent --args '{"frame":10.0,"node":1,"preset":"ease","track":"transform.pos.x"}'`
 
+### `key.set_speed`
+
+Set Key Speed. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes |  |
+| `track` | string | yes |  |
+| `frame` | number | yes |  |
+| `side` | string | yes | Spline segment side: `left` (incoming) or `right` (outgoing). |
+| `speed` | number | yes | Signed target speed in display units per second. |
+
+Example: `forge cmd scene.forge key.set_speed --args '{"frame":10.0,"node":1,"side":"right","speed":20.0,"track":"transform.pos.x"}'`
+
 ### `key.paste`
 
 Paste Keys. One undo step.
@@ -1647,6 +1666,19 @@ Euler Filter. One undo step.
 | `node` | integer | yes |  |
 
 Example: `forge cmd scene.forge key.euler_filter --args '{"node":1}'`
+
+### `key.set_parameter`
+
+Set Parameter Key. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes |  |
+| `param` | string | yes | Parameter id, without a vector or colour component suffix. |
+| `frame` | integer | yes |  |
+| `value` | any | yes | Full parameter value in display units, as for `param.set`. |
+
+Example: `forge cmd scene.forge key.set_parameter --args '{"frame":10,"node":1,"param":"transform.pos","value":[0,10,0]}'`
 
 
 ## `timeline`
@@ -2186,6 +2218,35 @@ No arguments.
 Example: `forge cmd scene.forge browser.clear_recent --args '{}'`
 
 
+## `dynamics`
+
+### `dynamics.bake`
+
+Bake Dynamics. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer | yes | Dynamic objects to bake. |
+| `start` | integer | yes | First frame to record (inclusive). |
+| `end` | integer | yes | Final frame to record (inclusive). |
+| `mode` | `"keys"` \| `"cache"` | yes |  |
+
+Example: `forge cmd scene.forge dynamics.bake --args '{"end":30,"mode":"cache","nodes":[1],"start":0}'`
+
+### `dynamics.settings`
+
+Set Dynamics Settings. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean or null | no |  |
+| `gravity` | number or null | no | Downward acceleration in cm/s². |
+| `steps_per_frame` | integer or null | no |  |
+| `time_scale` | number or null | no |  |
+
+Example: `forge cmd scene.forge dynamics.settings --args '{"gravity":981,"steps_per_frame":4}'`
+
+
 ## `graph`
 
 ### `graph.add_node`
@@ -2530,6 +2591,21 @@ Generate UVW. One undo step.
 | `tag` | integer or null | no | A texture tag of the object (default: its first). |
 
 Example: `forge cmd scene.forge uv.generate --args '{}'`
+
+
+## `cloner`
+
+### `cloner.bake`
+
+Bake Clone Cache. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes | Cloner node ID. |
+| `start` | integer | yes | First frame to bake (inclusive). |
+| `end` | integer | yes | Last frame to bake (inclusive). |
+
+Example: `forge cmd scene.forge cloner.bake --args '{"end":30,"node":1,"start":0}'`
 
 
 ## `plugin`

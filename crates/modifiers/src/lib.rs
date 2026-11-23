@@ -722,7 +722,7 @@ pub fn apply_deformer(
     points: &mut [DVec3],
     ctx: &EvalCtx,
 ) {
-    restricted(scene, deformer, target, points, |points| {
+    restricted(scene, deformer, target, points, ctx, |points| {
         apply_deformer_raw(scene, deformer, target, points, ctx)
     });
 }
@@ -735,9 +735,10 @@ fn restricted(
     deformer: NodeId,
     target: NodeId,
     points: &mut [DVec3],
+    ctx: &EvalCtx,
     run: impl FnOnce(&mut [DVec3]),
 ) {
-    let weights = forge_core::tags::restriction_weights(scene, deformer, target, points.len());
+    let weights = forge_fields::restriction_weights(scene, deformer, target, points, ctx);
     let Some(weights) = weights else {
         return run(points);
     };
@@ -942,7 +943,7 @@ pub fn apply_deformer_resolved(
     resolve: Resolver,
 ) {
     let count = mesh.points.len();
-    let weights = forge_core::tags::restriction_weights(scene, deformer, target, count);
+    let weights = forge_fields::restriction_weights(scene, deformer, target, &mesh.points, ctx);
     let Some(weights) = weights else {
         return apply_deformer_unrestricted(scene, deformer, target, mesh, ctx, resolve);
     };

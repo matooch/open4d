@@ -7,6 +7,7 @@
 mod data;
 mod delay;
 mod effector;
+pub mod extended;
 mod formula;
 mod fracture;
 mod grid;
@@ -24,8 +25,12 @@ mod target;
 mod time;
 
 pub use data::{CloneData, CloneItem};
+pub mod cache;
+mod tags;
 pub use delay::{DELAY, Delay, DelayMode, WINDOW as DELAY_WINDOW, delay_type};
-pub use effector::{Effector, EffectorCtx, apply_effectors, effector_from_node};
+pub use effector::{
+    Effector, EffectorCtx, apply_effectors, apply_effectors_with, effector_from_node,
+};
 pub use formula::{DEFAULT_FORMULA, FORMULA, Formula, formula_type};
 pub use fracture::{
     FRACTURE, FractureMode, fracture_settings, fracture_type, fragment_clones, polygon_islands,
@@ -39,6 +44,7 @@ pub use random::{
 pub use rng::SplitMix64;
 pub use settings::*;
 pub use step::{STEP, Step, StepCurve, step_type};
+pub use tags::{CLONE_SELECTION, CLONE_WEIGHT};
 pub use target::{TARGET, Target, TargetMode, target_type};
 pub use time::{TIME, Time, time_type};
 

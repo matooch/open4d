@@ -31,22 +31,30 @@ impl Default for DynamicsSettings {
 }
 
 impl DynamicsSettings {
-    /// The first settings object in document order; defaults when there is none.
-    pub fn of_scene(scene: &Scene) -> DynamicsSettings {
+    /// The first settings object in document order.
+    pub fn node(scene: &Scene) -> Option<NodeId> {
         let mut stack: Vec<NodeId> = scene.roots().iter().rev().copied().collect();
         while let Some(id) = stack.pop() {
             let Some(n) = scene.node(id) else { continue };
             if n.type_id == SETTINGS {
-                return DynamicsSettings {
-                    enabled: nodes::boolean(scene, id, "enabled"),
-                    gravity: nodes::float(scene, id, "gravity"),
-                    time_scale: nodes::float(scene, id, "time_scale"),
-                    steps_per_frame: nodes::float(scene, id, "steps_per_frame").max(1.0) as u32,
-                };
+                return Some(id);
             }
             stack.extend(n.children.iter().rev());
         }
-        DynamicsSettings::default()
+        None
+    }
+
+    /// Settings on the first settings object, or defaults when there is none.
+    pub fn of_scene(scene: &Scene) -> DynamicsSettings {
+        let Some(id) = Self::node(scene) else {
+            return Self::default();
+        };
+        DynamicsSettings {
+            enabled: nodes::boolean(scene, id, "enabled"),
+            gravity: nodes::float(scene, id, "gravity"),
+            time_scale: nodes::float(scene, id, "time_scale"),
+            steps_per_frame: nodes::float(scene, id, "steps_per_frame").max(1.0) as u32,
+        }
     }
 
     /// Length of one solver step in seconds at `fps`.

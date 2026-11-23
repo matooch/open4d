@@ -192,6 +192,7 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `key_delete` | Delete Selected Keys. Undoable editing command. Runs command `key.delete`. |
 | `key_set_interp` | Set Key Interpolation. Undoable editing command. Runs command `key.set_interp`. |
 | `key_set_tangent` | Set Key Tangent. Undoable editing command. Runs command `key.set_tangent`. |
+| `key_set_speed` | Set Key Speed. Undoable editing command. Runs command `key.set_speed`. |
 | `key_paste` | Paste Keys. Undoable editing command. Runs command `key.paste`. |
 | `track_set_behavior` | Track Behavior. Undoable editing command. Runs command `track.set_behavior`. |
 | `key_euler_filter` | Euler Filter. Undoable editing command. Runs command `key.euler_filter`. |
@@ -225,6 +226,9 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `browser_open_recent` | Open Recent. Not an undoable edit. Runs command `browser.open_recent`. |
 | `browser_clear_recent` | Clear Recent Files. Not an undoable edit. Runs command `browser.clear_recent`. |
 | `param_edit` | Edit Parameter. Undoable editing command. Runs command `param.edit`. |
+| `key_set_parameter` | Set Parameter Key. Undoable editing command. Runs command `key.set_parameter`. |
+| `dynamics_bake` | Bake Dynamics. Undoable editing command. Runs command `dynamics.bake`. |
+| `dynamics_settings` | Set Dynamics Settings. Undoable editing command. Runs command `dynamics.settings`. |
 | `transform_edit` | Set Coordinates. Undoable editing command. Runs command `transform.edit`. |
 | `graph_add_node` | Add Graph Node. Undoable editing command. Runs command `graph.add_node`. |
 | `graph_remove` | Remove Graph Node. Undoable editing command. Runs command `graph.remove`. |
@@ -254,4 +258,5 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `material_assign` | Assign Material. Undoable editing command. Runs command `material.assign`. |
 | `shader_set` | Set Shader. Undoable editing command. Runs command `shader.set`. |
 | `uv_generate` | Generate UVW. Undoable editing command. Runs command `uv.generate`. |
+| `cloner_bake` | Bake Clone Cache. Undoable editing command. Runs command `cloner.bake`. |
 | `plugin_list` | List Plugins. Not an undoable edit. Runs command `plugin.list`. |

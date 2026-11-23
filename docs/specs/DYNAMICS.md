@@ -207,9 +207,40 @@ before the start returns the start pose.
 `Evaluated::get`): the scene animated to a frame gets the simulated position and rotation of every
 **dynamic** body written into its local transform (`apply::overrides`; the parent's world matrix is
 divided out, scale is untouched). Static and kinematic bodies and objects with an animated pose
-keep their evaluated transform. Kinematic bodies are not driven by the timeline in the app yet
-(`Simulation::step_frame_with` takes the targets; wiring the animated pose is brief 122's bake
-work). Editing the scene bumps the revision and so restarts the simulation.
+keep their evaluated transform. Editing the scene bumps the revision and restarts the simulation.
+
+### 5.2 Bake and settings (122)
+
+Own design from [area I](../roadmap/areas/I-dynamics.md) and
+[brief 122](../agents/tasks/122-dynamics-bake-ui.md); no reference parity is claimed.
+Headless and viewport evaluation both apply simulation after animation and expression tags.
+The simulator is built from the evaluated start scene. During each step, kinematic
+bodies take the next frame's animated world transform (including clone placement).
+
+`dynamics.bake {nodes, start, end, mode}` samples selected dynamic bodies at integer
+frames in an inclusive project range. Sampling starts from the project's start
+frame regardless of the player's scrub position, with existing caches on the
+targets bypassed. A bake is one undo step and does not move the timeline.
+
+- `keys`: rigid object transforms only. Replace the six local position/rotation
+  tracks with per-frame linear samples using the animation bake helper (093);
+  disable the baked object's rigid body and any old cache so simulation cannot
+  overwrite the keys. Scale and other tracks remain unchanged. Between-frame
+  interpolation is Euler, not a replay of solver substeps.
+- `cache`: attach or update a `forge.dynamics_cache` tag on each host. Store the
+  start frame, FPS, count and fixed-width data for rigid poses (`pos`, `rot`), clone
+  poses (arrays of `pos`, `rot`), or soft points (local XYZ). Data lives in the native
+  `FloatList` encoding (binary chunks above the native threshold). Cached outputs
+  override live outputs at their recorded frames/FPS even when dynamics is off.
+  Other frames, disabled tags or invalid cache data use live evaluation. Cache
+  playback does not drive live collisions. Changing sample counts while baking a
+  clone/soft cache is rejected.
+
+Bake limits are 10,000 frames simulated from the project start and 8 million stored
+numbers across targets. The **Dynamics Settings** window reads the first settings
+node (or defaults) and edits Enabled, Gravity, Time Scale, and Steps per Frame via
+`dynamics.settings`; it creates the node on first edit. The window can bake the
+selected bodies over an explicit frame range.
 
 ## 6. Dynamics on clones
 

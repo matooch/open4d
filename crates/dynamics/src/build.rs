@@ -14,7 +14,7 @@ pub fn is_soft(scene: &Scene, tag: NodeId) -> bool {
         && kind_of(scene, tag) == Some(BodyKind::Dynamic)
 }
 
-/// The first enabled rigid body tag of `host`.
+/// The first rigid body tag of `host`, including a disabled tag.
 pub fn body_tag(scene: &Scene, host: NodeId) -> Option<NodeId> {
     scene
         .node(host)?

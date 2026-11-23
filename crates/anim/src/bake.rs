@@ -49,7 +49,7 @@ pub fn bake_param(
     component: Option<usize>,
     times: &[f64],
 ) -> Option<Track> {
-    let mut keys = Vec::with_capacity(times.len());
+    let mut samples = Vec::with_capacity(times.len());
     for &t in times {
         let at = scene_at(scene, t);
         let v = match (at.param(id, param)?, component) {
@@ -58,8 +58,17 @@ pub fn bake_param(
             (Value::Vec3(c) | Value::Color(c), Some(a)) if a < 3 => c[a],
             _ => return None,
         };
-        keys.push(Key::new(t, v).with_interp(Interp::Linear));
+        samples.push((t, v));
     }
+    bake_samples(samples)
+}
+
+/// Encodes ordered evaluated samples as linear keys without altering their times.
+pub fn bake_samples(samples: impl IntoIterator<Item = (f64, f64)>) -> Option<Track> {
+    let mut keys: Vec<_> = samples
+        .into_iter()
+        .map(|(t, v)| Key::new(t, v).with_interp(Interp::Linear))
+        .collect();
     keys.dedup_by(|b, a| a.time == b.time);
     (!keys.is_empty()).then(|| Track::new(keys))
 }

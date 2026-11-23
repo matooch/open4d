@@ -1,6 +1,7 @@
 //! Dynamics: rigid bodies on rapier, connectors and springs, soft bodies (docs/specs/DYNAMICS.md).
 
 pub mod apply;
+pub mod archive;
 pub mod build;
 pub mod cache;
 pub mod clones;

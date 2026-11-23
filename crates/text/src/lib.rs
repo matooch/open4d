@@ -32,6 +32,14 @@ pub struct Contour {
     pub pieces: Vec<[Point; 4]>,
 }
 
+/// One positioned character, including its typographic advance interval.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Glyph {
+    pub character: char,
+    pub advance: [f64; 2],
+    pub contours: Vec<Contour>,
+}
+
 /// Horizontal alignment of every line (section 2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Align {
@@ -148,6 +156,15 @@ impl Font {
     /// The outlines of `text` (section 2), glyph by glyph, line by line, each glyph's
     /// contours in font order. Empty when nothing has an outline.
     pub fn layout(&self, text: &str, settings: &Layout) -> Vec<Contour> {
+        self.layout_glyphs(text, settings)
+            .into_iter()
+            .flatten()
+            .flat_map(|glyph| glyph.contours)
+            .collect()
+    }
+
+    /// The same layout with line/character boundaries and aligned pen positions retained.
+    pub fn layout_glyphs(&self, text: &str, settings: &Layout) -> Vec<Vec<Glyph>> {
         let Some(face) = self.face() else {
             return Vec::new();
         };
@@ -160,7 +177,7 @@ impl Font {
         let mut out = Vec::new();
         for (i, line) in text.replace("\r\n", "\n").split('\n').enumerate() {
             let base = -(i as f64) * step;
-            let mut line_contours: Vec<Contour> = Vec::new();
+            let mut glyphs = Vec::new();
             let mut pen = 0.0;
             for ch in line.chars() {
                 let id = charmap.map(ch).unwrap_or(GlyphId::NOTDEF);
@@ -169,27 +186,35 @@ impl Font {
                     let settings = DrawSettings::unhinted(Size::unscaled(), LocationRef::default());
                     glyph.draw(settings, &mut b).is_ok()
                 });
-                if drawn {
-                    line_contours.extend(outers_first(b.finish()));
-                }
-                let advance = advances.advance_width(id).map_or(0.0, f64::from);
-                pen += advance * u + settings.horizontal_spacing;
+                let advance = advances.advance_width(id).map_or(0.0, f64::from) * u;
+                glyphs.push(Glyph {
+                    character: ch,
+                    advance: [pen, pen + advance],
+                    contours: if drawn {
+                        outers_first(b.finish())
+                    } else {
+                        Vec::new()
+                    },
+                });
+                pen += advance + settings.horizontal_spacing;
             }
-            if let Some((min, max)) = ink_range(&line_contours) {
+            if let Some((min, max)) = ink_range(glyphs.iter().flat_map(|g| &g.contours)) {
                 let shift = match settings.align {
                     Align::Left => 0.0,
                     Align::Middle => -(min + max) / 2.0,
                     Align::Right => -max,
                 };
-                for c in &mut line_contours {
-                    for piece in &mut c.pieces {
-                        for p in piece.iter_mut() {
-                            p[0] += shift;
-                        }
-                    }
+                for glyph in &mut glyphs {
+                    glyph.advance = glyph.advance.map(|x| x + shift);
+                    glyph
+                        .contours
+                        .iter_mut()
+                        .flat_map(|c| &mut c.pieces)
+                        .flatten()
+                        .for_each(|p| p[0] += shift);
                 }
             }
-            out.extend(line_contours);
+            out.push(glyphs);
         }
         out
     }
@@ -235,9 +260,9 @@ fn outers_first(contours: Vec<Contour>) -> Vec<Contour> {
 }
 
 /// The x extent of the true curves (not their control polygons) of some contours.
-fn ink_range(contours: &[Contour]) -> Option<(f64, f64)> {
+fn ink_range<'a>(contours: impl IntoIterator<Item = &'a Contour>) -> Option<(f64, f64)> {
     let mut range: Option<(f64, f64)> = None;
-    for piece in contours.iter().flat_map(|c| &c.pieces) {
+    for piece in contours.into_iter().flat_map(|c| &c.pieces) {
         let x = [piece[0][0], piece[1][0], piece[2][0], piece[3][0]];
         let mut ts = vec![0.0, 1.0];
         ts.extend(derivative_roots(x));

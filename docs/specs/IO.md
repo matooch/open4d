@@ -175,7 +175,8 @@ The options themselves are the ones §1 already defines. Every action is a regis
 
 ### 3.1 Format table (`forge_io::formats`)
 `FormatInfo { id, label, extensions, import, export }`. `formats()` lists them in a fixed
-order: `obj`, "Wavefront OBJ", extensions `["obj"]`; then `stl` and `ply` (§4); all import and export.
+order: `obj`, "Wavefront OBJ", extensions `["obj"]`; `stl` and `ply` (§4);
+`gltf` (§5); and `abc` (§6). All import and export.
 `format_for_path(path)` matches the extension case-insensitively; `format_by_id(id)` matches
 the id exactly (lower case). New formats (area M briefs 164 to 171) add one entry, one pair of
 option lists and one reader/writer arm each.
@@ -334,3 +335,62 @@ Use `file.import`/`file.export` or `forge convert` with format `gltf`. Import ac
   `4.2e-4`; its GLB has rows summing to about `0.9999847` and no authored animation.
   The reader uses normalized linear skinning and does not reconstruct authoring-only
   weights or interpolation. The independent GLB round trip retains both poses within `1e-4`.
+
+## 6. ASCII USD (`usda`, brief 168)
+
+**Parity-pending:** O44 has no USD export. Layout follows the public OpenUSD
+[Mesh](https://openusd.org/release/api/class_usd_geom_mesh.html),
+[Xformable](https://openusd.org/release/api/class_usd_geom_xformable.html) and
+[UsdPreviewSurface](https://openusd.org/release/spec_usdpreviewsurface.html) schemas.
+
+- Read and write a single UTF-8 `#usda 1.0` layer through File Import/Export or the CLI.
+  Export Y-up, `metersPerUnit = 0.01`. Import Y-up, with centimetres as the USD fallback;
+  convert units from explicit stage metadata. Reflect Z and reverse winding for
+  right-handed meshes. Retain vertex and polygon order on a Forge round trip.
+- Author polygonal `Mesh` prims with `subdivisionScheme = "none"`, points, face
+  counts and indices, face-varying normals and `primvars:st` if present. Import
+  vertex/varying, uniform, constant or face-varying ST, optionally indexed, as
+  corner UVs. Authored normals are validated; Forge regenerates shading normals
+  because its polygon node has no authored-normal channel. If the scheme is omitted,
+  import the polygon cage; an explicitly requested subdivision scheme is unsupported.
+- Preserve `Xform` and mesh hierarchy. The supported transform stack is translate,
+  rotateXYZ and scale, in that order from least to most local (missing ops are
+  identity). Reflect the rotation basis and convert USD degrees to Forge HPB.
+  Use `timeCodesPerSecond` (or `framesPerSecond`, then 24) when reading; write
+  time in document frames. Import linear keys. Export keyed values at key times
+  and document frames; interpolation between baked samples need not match Forge
+  spline interpolation.
+- Bind meshes to an in-layer `Material` with a single `UsdPreviewSurface`, mapping
+  diffuse color and roughness to the hosted Standard material. No texture graph.
+  Scope prims organize material or geometry namespaces without adding transforms.
+- Binary USD, composition arcs, cameras, lights, skeletons, Z-up, arbitrary
+  transform stacks, and time-varying topology are outside this subset.
+## 7. Alembic Ogawa (`.abc`, brief 167)
+Sources: [O44](../parity/exchange.md), the public Alembic 1.8.9
+[Ogawa container](https://github.com/alembic/alembic/tree/1.8.9/lib/Alembic/Ogawa),
+[property and sampling layout](https://github.com/alembic/alembic/tree/1.8.9/lib/Alembic/AbcCoreOgawa),
+and [geometry schemas](https://github.com/alembic/alembic/tree/1.8.9/lib/Alembic/AbcGeom).
+Use `file.import` / `file.export` or `forge convert` with format `abc`.
+- Accept frozen little-endian Ogawa archives, version 1, with Alembic core layout
+  0. Checked lengths/pointers, sample limits and depth bounds reject malformed or
+  oversized archives. Use the archive's property time sampling (uniform, cyclic
+  or acyclic); sample runs can share storage.
+- Read Xform schema local operation stacks as native position, HPB rotation and
+  scale, with linearly baked tracks for changing samples. Import a shape below a
+  named Xform on that object when unambiguous. Parent inheritance is required;
+  shear, perspective matrices and changing inheritance cannot be authored as TRS.
+- Read and write PolyMesh n-gons, per-corner UVs, and time-sampled positions on
+  fixed topology. Indexed UVs are expanded on import. Mesh winding and corner
+  order are kept: the Y-up Alembic convention and Z reflection together match the
+  OBJ winding in O44. Reflect Z on points and conjugate local transforms by that
+  reflection. The `scale` option defaults to 1 (cm-valued O44 archives) and applies
+  to positions and translations.
+- Read/write a perspective camera's transform and static focal length, aperture
+  and focus. Unhandled object schemas are omitted or carried only as transforms.
+  No HDF5, SubD control schema, changing topology/UVs, skin weights,
+  light/material semantics, or animated lens properties are claimed.
+- Export samples authored animation and evaluated geometry at project integer
+  frames, not live dynamics or expression-tag state. Use the original hierarchy
+  or selected roots and their descendants; a detached root bakes its world
+  transform. Deterministically write standard Xform and PolyMesh properties and
+  native Ogawa blocks; reject topology changes instead of discarding later faces.

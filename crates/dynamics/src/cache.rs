@@ -20,6 +20,7 @@ pub struct DynamicsCache {
     start: i64,
     keys: Vec<BodyKey>,
     moving: Vec<bool>,
+    kinematic: Vec<BodyKey>,
     frames: Vec<Vec<DMat4>>,
     soft_keys: Vec<BodyKey>,
     soft_frames: Vec<Vec<Vec<DVec3>>>,
@@ -54,10 +55,12 @@ impl DynamicsCache {
     ) -> Result<DynamicsCache, DynamicsError> {
         let sim = Simulation::with_soft(settings, scene.settings().fps, specs, links, softs)?;
         let keys = sim.keys();
-        let moving = sim
-            .kinds()
+        let kinds = sim.kinds();
+        let moving = kinds.iter().map(|k| *k == BodyKind::Dynamic).collect();
+        let kinematic = keys
             .iter()
-            .map(|k| *k == BodyKind::Dynamic)
+            .zip(kinds)
+            .filter_map(|(key, kind)| (kind == BodyKind::Kinematic).then_some(*key))
             .collect();
         let first = sim.poses();
         let sim_soft_keys = sim.soft_keys();
@@ -67,6 +70,7 @@ impl DynamicsCache {
             start: scene.settings().start,
             keys,
             moving,
+            kinematic,
             frames: vec![first],
             soft_keys: sim_soft_keys,
             soft_frames: vec![sim_soft],
@@ -87,14 +91,8 @@ impl DynamicsCache {
     /// World matrices at `frame` (frames before the start give the start pose), simulating up
     /// to it first if needed.
     pub fn at(&mut self, frame: i64) -> BTreeMap<BodyKey, DMat4> {
-        let index = (frame - self.start).max(0) as usize;
-        while self.frames.len() <= index {
-            if self.enabled {
-                self.sim.step_frame();
-            }
-            self.frames.push(self.sim.poses());
-            self.soft_frames.push(self.sim.soft_points());
-        }
+        self.advance_with(frame, |_, _| BTreeMap::new());
+        let index = frame.saturating_sub(self.start).max(0) as usize;
         self.keys
             .iter()
             .copied()
@@ -102,10 +100,32 @@ impl DynamicsCache {
             .collect()
     }
 
+    /// Steps missing frames with the animated goals for each kinematic body.
+    pub fn advance_with(
+        &mut self,
+        frame: i64,
+        mut goals: impl FnMut(i64, &[BodyKey]) -> BTreeMap<BodyKey, DMat4>,
+    ) {
+        let index = frame.saturating_sub(self.start).max(0) as usize;
+        while self.frames.len() <= index {
+            if self.enabled {
+                if self.kinematic.is_empty() {
+                    self.sim.step_frame();
+                } else {
+                    let frame = self.start.saturating_add(self.frames.len() as i64);
+                    let targets = goals(frame, &self.kinematic);
+                    self.sim.step_frame_with(&|key| targets.get(&key).copied());
+                }
+            }
+            self.frames.push(self.sim.poses());
+            self.soft_frames.push(self.sim.soft_points());
+        }
+    }
+
     /// The particles (world space, cm) of every soft body at `frame`, simulating up to it first.
     pub fn soft_at(&mut self, frame: i64) -> BTreeMap<BodyKey, Vec<DVec3>> {
         let _ = self.at(frame);
-        let index = (frame - self.start).max(0) as usize;
+        let index = frame.saturating_sub(self.start).max(0) as usize;
         self.soft_keys
             .iter()
             .copied()

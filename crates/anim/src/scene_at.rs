@@ -51,15 +51,12 @@ fn overrides_at(
     let mut out: Vec<(NodeId, String, Value)> = Vec::new();
     for &id in ids {
         let Some(node) = scene.node(id) else { continue };
-        let Some(ty) = scene.node_type(id) else {
-            continue;
-        };
         // a layer with animation off keeps the stored values (CORE.md §7.4)
         if !forge_core::layers::animation_on(scene, id) {
             continue;
         }
         for (key, track) in &node.tracks {
-            let Ok(target) = parse_track_target(key, |p| ty.find_param(p)) else {
+            let Ok(target) = parse_track_target(key, |p| scene.param_desc(id, p)) else {
                 continue;
             };
             // the value an earlier component or channel of this node produced, else the stored one
@@ -78,7 +75,7 @@ fn overrides_at(
                 }
                 TrackTarget::Enum(p) => {
                     let index = step_at(track, time).max(0.0) as usize;
-                    let id_of = ty.find_param(&p).and_then(|d| match &d.kind {
+                    let id_of = scene.param_desc(id, &p).and_then(|d| match &d.kind {
                         ParamKind::Enum { options } => options.get(index).map(|o| o.id.clone()),
                         _ => None,
                     });

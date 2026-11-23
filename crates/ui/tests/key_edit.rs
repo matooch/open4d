@@ -7,11 +7,12 @@ mod common;
 use common::{create, state};
 use egui::{Event, Modifiers, PointerButton, Pos2, vec2};
 use egui_kittest::Harness;
-use forge_anim::value_at;
+use egui_kittest::kittest::Queryable;
+use forge_anim::{SpeedSide, speed_at_key, value_at};
 use forge_core::{Behavior, Interp, NodeId, TangentMode, Track};
 use forge_ui::commands::execute;
 use forge_ui::dopesheet::{dope_sheet_ui, sheet_state};
-use forge_ui::fcurve::{graph_state, value_graph_ui};
+use forge_ui::fcurve::{GraphMode, graph_state, set_graph_state, value_graph_ui};
 use forge_ui::fcurve_logic::{self as logic, KeyId, KeySelection, TimeView, ValueView};
 use forge_ui::state::EditorState;
 use serde_json::{Value, json};
@@ -524,4 +525,72 @@ fn value_graph_handle_drag_changes_the_curve_and_undo_restores_it() {
     assert!(after < before - 5.0, "curve dips: {before} -> {after}");
     h.state_mut().doc.undo();
     assert!((at(&h, 20.0) - before).abs() < 1e-9);
+}
+
+#[test]
+fn speed_graph_drag_writes_velocity_in_one_undo_step() {
+    let mut st = state();
+    let cube = create(&mut st, "forge.cube");
+    let path = "transform.pos.x";
+    set_key(&mut st, cube, path, 0, 0.0);
+    set_key(&mut st, cube, path, 30, 100.0);
+    st.selection.click(cube);
+    let mut h = Harness::builder()
+        .with_size([1000.0, 600.0])
+        .build_ui_state(
+            |ui, st: &mut EditorState| {
+                for (id, args) in value_graph_ui(ui, st) {
+                    execute(st, id, args).unwrap();
+                }
+            },
+            st,
+        );
+    h.run();
+    h.get_by_label("Speed (/s)").click();
+    h.run();
+    let mut g = graph_state(&h.ctx);
+    assert_eq!(g.mode, GraphMode::Speed);
+    g.selection.click(
+        KeyId {
+            node: cube.0,
+            track: path.into(),
+            frame: 30.0,
+        },
+        false,
+    );
+    set_graph_state(&h.ctx, g);
+    h.run();
+    let g = graph_state(&h.ctx);
+    let pos = g.speed_grip(g.canvas.unwrap(), 30.0, 0.0, SpeedSide::Left);
+    let old = track(h.state(), cube, path);
+    let n = undo_len(h.state());
+    drag(&mut h, pos, pos - vec2(0.0, (30.0 * g.vview.ppu) as f32));
+    assert_eq!(undo_len(h.state()), n + 1);
+    let edited = track(h.state(), cube, path);
+    assert_eq!(edited.keys, old.keys);
+    assert!((speed_at_key(&edited, 1, SpeedSide::Left).unwrap() - 30.0).abs() < 1e-6);
+    h.state_mut().doc.undo();
+    assert_eq!(track(h.state(), cube, path), old);
+}
+
+#[test]
+fn speed_command_uses_display_units_per_second() {
+    let mut st = state();
+    let cube = create(&mut st, "forge.cube");
+    let path = "transform.rot.x";
+    set_key(&mut st, cube, path, 0, 0.0);
+    set_key(&mut st, cube, path, 30, 90.0);
+    run(
+        &mut st,
+        "key.set_speed",
+        json!({"node": cube.0, "track": path, "frame": 30, "side": "left", "speed": 45}),
+    );
+    assert!(
+        (speed_at_key(&track(&st, cube, path), 1, SpeedSide::Left)
+            .unwrap()
+            .to_degrees()
+            - 45.0)
+            .abs()
+            < 1e-6
+    );
 }

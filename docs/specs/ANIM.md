@@ -208,6 +208,27 @@ Presets (`forge_anim::tangent`, own design, the observations fix only evaluation
 - **Not observed / not done**: `track.set_behavior` and
   `key.set_tangent` registry commands are not added (they are brief 090/091's UI work).
 
+### 1.5c Speed graph and edits (brief 092)
+
+Own design from [G5](../parity/GUI-SESSIONS.md#g5--timeline-dope-sheet-and-f-curves);
+UI and edit conventions are **parity-pending**. The F-curve's Speed mode shares
+tracks and key selection with Value mode, and plots the signed analytic derivative
+in display units per second (e.g. degrees/s). It has a separate vertical view;
+normalisation and value dragging are disabled in Speed mode. Discrete values and
+quaternion rotation tracks are not shown as scalar velocities.
+
+A selected key shows an incoming and/or outgoing grip where that side has a spline
+segment. The grip displays that side's derivative at the exact key, not a
+finite-difference estimate. Drag vertically or use `key.set_speed` with key frame,
+side (`left` / `right`), and target display units per second. The edit preserves the
+resolved horizontal handle length `dt` and sets vertical length `dv = speed × dt`.
+A zero-length handle acquires one third of the neighbouring span so the target is
+representable. An unbroken tangent updates both eligible sides to the same speed;
+a broken one leaves the other side alone. Key times/values and the weighted flag
+do not change. Linear and Step segments have no editable speed grip. An edit is
+one undo step. The Constant speed preset sets selected outgoing segments Linear;
+Ease keeps the existing flat spline-handle preset.
+
 ### 1.6 Animated scenes (`forge-anim::scene_at`)
 `scene_at(&Scene, time) -> Scene` copies the scene and sets every tracked parameter to
 `value_at(track, time)`. Float tracks set a Float, component tracks set one component of
@@ -441,6 +462,11 @@ Values go through the parameter's range clamp first (`ParamDesc::validate`), lik
   nothing to delete: no step.
 - Marker state of a parameter row: *keyed* when any of its tracks has a key on the
   current frame, *animated* when it has a track but no key here, otherwise none.
+- The Attributes panel handles an additional transient *changed* state (UI.md §12,
+  brief 097). `key.set_parameter {node, param, frame, value}` writes all track
+  channels for that descriptor in one step. A new Bool, Enum or Link key is Step;
+  other new keys are Spline. An existing key keeps its exact time, tangent and
+  interpolation. Menus delete and navigate only the active row's tracks.
 
 ### 2.6 Playback (`timeline::Timeline`)
 `Timeline { current, playing }` plus an anchor `(clock time, frame)` set when playing

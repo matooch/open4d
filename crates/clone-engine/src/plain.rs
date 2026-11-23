@@ -68,6 +68,7 @@ pub(crate) fn common_type(id: &str, name: &str, d: &CommonDefaults) -> NodeType 
         .param(ParamDesc::bool("enabled", "Enabled", true).group(EFF))
         .param(pct("strength", "Strength", 1.0, EFF))
         .param(ParamDesc::string("selection", "Selection", "").group(EFF))
+        .param(ParamDesc::bool("use_clone_weight", "Use Clone Weight", false).group(EFF))
         .param(
             ParamDesc::enumeration(
                 "deformation",
@@ -212,6 +213,7 @@ pub struct Plain {
     pub color_mode: ColorMode,
     pub color: [f64; 3],
     pub use_alpha_strength: bool,
+    pub use_clone_weight: bool,
     pub weight: f64,
     pub u: f64,
     pub v: f64,
@@ -239,6 +241,7 @@ impl Default for Plain {
             color_mode: ColorMode::FieldsColor,
             color: [1.0; 3],
             use_alpha_strength: false,
+            use_clone_weight: false,
             weight: 0.0,
             u: 0.0,
             v: 0.0,
@@ -310,6 +313,7 @@ pub(crate) fn settings_from_params(
         color_mode,
         color: p.color("color"),
         use_alpha_strength: p.bool("use_alpha_strength"),
+        use_clone_weight: p.bool("use_clone_weight"),
         weight: p.float("weight_transform"),
         u: p.float("u_transform"),
         v: p.float("v_transform"),
@@ -407,18 +411,30 @@ impl Plain {
         let effector_frame = frame(&(object_to_world.inverse() * self.world));
         let absolute = self.absolute_scale || self.mode == TransformMode::Absolute;
         for i in 0..data.len() {
+            let weight = if self.use_clone_weight {
+                data.weights[i].clamp(0.0, 1.0)
+            } else {
+                1.0
+            };
             let m = data.matrices[i];
             let at = m.w_axis.truncate();
             let world = object_to_world.transform_point3(at);
             let sample = falloff.sample(world, ctx.eval);
             let value = sample.value;
-            let w = weights(&ClonePoint {
+            let mut w = weights(&ClonePoint {
                 position: i,
                 index: data.index[i],
                 world,
                 uvw: data.uvw[i],
                 value,
             });
+            if weight == 0.0 {
+                continue;
+            }
+            w.pos *= weight;
+            w.rot *= weight;
+            w.scale *= weight;
+            w.scalar *= weight;
             let node_frame = frame(&m);
             let space = match self.space {
                 Space::Node => node_frame,
@@ -464,6 +480,7 @@ impl Plain {
             );
             // Colour (E6).
             let wc = (value
+                * weight
                 * if self.use_alpha_strength {
                     self.strength
                 } else {

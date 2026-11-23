@@ -14,7 +14,7 @@ use forge_viewport::render::Shading;
 use glam::DVec3;
 use serde_json::{Value as Json, json};
 
-use crate::animate::{AnimEdit, KeyState, key_frames, key_states};
+use crate::animate::{AnimEdit, key_frames};
 use crate::attributes::{Gesture, Widget, attribute_rows_multi};
 use crate::clone_overlay::{OverlayOptions, selected_cloner_marks};
 use crate::commands::{
@@ -121,6 +121,7 @@ pub struct Editor {
     name_edit: Option<(NodeId, String)>,
     /// The attribute manager tab shown (UI.md §12).
     attr_tab: String,
+    key_drafts: crate::key_indicator::Drafts,
     /// Counter for drag/typing gestures (each is one undo step).
     gesture_seq: u64,
     gesture: Option<u64>,
@@ -161,6 +162,7 @@ pub struct Editor {
     dialogs: Box<dyn Dialogs>,
     /// The import/export options window while open (docs/specs/UI.md §27).
     io_dialog: Option<IoDialog>,
+    dynamics_panel: crate::dynamics_panel::DynamicsPanel,
     sent_title: String,
     applied_prefs: Option<(ThemeKind, f32)>,
     /// Requests from the RPC server, run between frames (docs/specs/RPC.md §5).
@@ -219,6 +221,7 @@ impl Editor {
             palette: Palette::default(),
             name_edit: None,
             attr_tab: String::new(),
+            key_drafts: Default::default(),
             gesture_seq: 0,
             gesture: None,
             viewport_hot: false,
@@ -241,6 +244,7 @@ impl Editor {
             tool_drag: None,
             dialogs: Box::new(NativeDialogs),
             io_dialog: None,
+            dynamics_panel: Default::default(),
             sent_title: String::new(),
             applied_prefs: None,
             rpc: None,
@@ -542,6 +546,9 @@ impl Editor {
         self.keymap_editor.show(ui.ctx(), &mut self.state);
         self.save_layout_window(ui.ctx());
         self.io_dialog_window(ui.ctx());
+        for cmd in self.dynamics_panel.show(ui.ctx(), &self.state) {
+            self.run(cmd);
+        }
         let ctx = ui.ctx().clone();
         let registry = self.state.app.commands.clone();
         if let Some((id, args)) = self.palette.show(&ctx, &registry, &self.state.keys.map) {
@@ -876,6 +883,21 @@ impl Editor {
                     ui.close();
                 }
             });
+            if self
+                .state
+                .doc
+                .scene()
+                .registry()
+                .get("forge.dynamics_settings")
+                .is_some()
+            {
+                ui.menu_button("Dynamics", |ui| {
+                    if ui.button("Dynamics Settings").clicked() {
+                        self.dynamics_panel.open(&self.state.settings());
+                        ui.close();
+                    }
+                });
+            }
             ui.menu_button("View", |ui| {
                 for (shading, label) in SHADINGS {
                     if ui.radio(self.state.shading == shading, label).clicked() {
@@ -2517,6 +2539,7 @@ impl Editor {
             self.tool_ui(ui);
         }
         let Some(id) = self.state.selection.active else {
+            self.key_drafts.clear();
             ui.weak("Nothing selected");
             return;
         };
@@ -2535,7 +2558,13 @@ impl Editor {
             ui.weak("Nothing selected");
             return;
         };
-        let marks = key_states(&shown, id, self.state.timeline.current);
+        let can_draft = !self.state.autokey && ids.len() == 1;
+        self.key_drafts.refresh(
+            self.state.doc.scene().revision(),
+            id,
+            self.state.timeline.current,
+            can_draft,
+        );
         let theme = Theme::current(ui.ctx());
         let mut rename = None;
         ui.horizontal(|ui| {
@@ -2585,7 +2614,7 @@ impl Editor {
                                     .spacing([12.0, 4.0])
                                     .show(ui, |ui| {
                                         for row in rows {
-                                            self.attribute_row(ui, &shown, id, row, &marks);
+                                            self.attribute_row(ui, &shown, id, row, can_draft);
                                             ui.end_row();
                                         }
                                     });
@@ -2603,33 +2632,55 @@ impl Editor {
         scene: &forge_core::Scene,
         id: NodeId,
         row: &crate::attributes::AttrRow,
-        marks: &std::collections::BTreeMap<String, KeyState>,
+        can_draft: bool,
     ) {
+        use crate::key_indicator::{RowKeys, draft_value};
         use crate::widgets::{self, Cx, Phase};
-        let cx_label = if row.widget == Widget::Checkbox {
-            ui.make_persistent_id(("attr", id, &row.param))
-        } else {
-            // Brief 097 attaches the keyframe click and context menu to this slot's response.
-            ui.horizontal(|ui| {
-                if row.animatable
-                    && matches!(
-                        row.widget,
-                        Widget::FloatDrag { .. } | Widget::Vec3Drag { .. }
-                    )
-                {
-                    key_marker(ui, marks.get(&row.param).copied(), &row.label);
+        let keys = RowKeys::of(scene, id, &row.param, self.state.timeline.current);
+        let draft = self.key_drafts.values.get(&row.param).map(|value| {
+            let mut copy = row.clone();
+            copy.value = value.clone();
+            copy
+        });
+        let shown = draft.as_ref().unwrap_or(row);
+        let mut key_cmd = None;
+        let cx_label = ui
+            .horizontal(|ui| {
+                if let Some(keys) = &keys {
+                    key_cmd = keys.show(ui, &row.label, &shown.value, draft.is_some());
                 }
-                ui.label(&row.label)
+                if row.widget == Widget::Checkbox {
+                    // The checkbox keeps its own label in the value column.
+                    ui.make_persistent_id(("attr", id, &row.param))
+                } else {
+                    ui.label(&row.label).id
+                }
             })
-            .inner
-            .id
-        };
+            .inner;
+        if let Some(cmd) = key_cmd
+            && self.run(cmd)
+        {
+            self.key_drafts.values.remove(&row.param);
+        }
         let cx = Cx {
             scene,
             node: id,
             label: cx_label,
         };
-        if let Some(edit) = widgets::show(ui, &cx, row) {
+        if let Some(edit) = widgets::show(ui, &cx, shown) {
+            if can_draft
+                && keys.as_ref().is_some_and(|keys| keys.animated)
+                && let Some(desc) = scene.param_desc(id, &row.param)
+                && let Some(value) = draft_value(desc, &shown.value, &edit)
+            {
+                if value == row.value {
+                    self.key_drafts.values.remove(&row.param);
+                } else {
+                    self.key_drafts.values.insert(row.param.clone(), value);
+                }
+                ui.ctx().request_repaint();
+                return;
+            }
             let gesture = match edit.phase {
                 Phase::Commit => None,
                 Phase::Drag { started } => match self.gesture_for(started) {
@@ -2740,31 +2791,4 @@ impl Editor {
             self.run(c);
         }
     }
-}
-
-/// A diamond left of an animatable parameter: filled = key on this frame, outline =
-/// animated without a key here (ANIM.md §2.5). Drawn by us.
-fn key_marker(ui: &mut Ui, state: Option<KeyState>, name: &str) {
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), Sense::hover());
-    let Some(state) = state else { return };
-    let (text, fill) = match state {
-        KeyState::Keyed => ("keyed", Theme::current(ui.ctx()).accent),
-        KeyState::Animated => ("animated", egui::Color32::TRANSPARENT),
-    };
-    response.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::Role::Label, true, format!("{name} {text}"))
-    });
-    let c = rect.center();
-    let r = 4.5;
-    let points = vec![
-        egui::pos2(c.x, c.y - r),
-        egui::pos2(c.x + r, c.y),
-        egui::pos2(c.x, c.y + r),
-        egui::pos2(c.x - r, c.y),
-    ];
-    ui.painter().add(egui::Shape::convex_polygon(
-        points,
-        fill,
-        egui::Stroke::new(1.5, Theme::current(ui.ctx()).accent),
-    ));
 }

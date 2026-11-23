@@ -918,6 +918,36 @@ modes and Unsupported, the Delay modes, frame 0 identity, determinism). The Dela
 
 ## E25. Open data that would settle the pending rules
 
+### Additional effectors (brief 071)
+
+Source: [O22](../parity/effectors-3.md); Group has no O22 recording. Effectors run
+in link order; child effectors of an enabled Group run at its slot in document order.
+
+- **Shader:** `shader` links a hosted Noise shader. Sample deterministic noise in clone
+  UV/time, remap via minimum/maximum, optionally invert and use the scalar as the Plain
+  position/rotation/scale weight. Effector Color uses the sampled gray. The renderer
+  shader dependency cannot be inverted through generators; other graphs are unsupported.
+- **Spline:** `spline`, optional `rail`, `mode` (Step/Falloff/Relative), `start`, `end`,
+  and `offset`. Step spaces clones by `i/n`; an empty field in Falloff maps to the end.
+  Interpolate the Uniform intermediate points when present; otherwise evaluate the cubic
+  at the sampled arc-length parameter. Mix position and orient +Z along the local
+  chord or tangent. Explicit up or rail stabilizes the frame; automatic roll is pending.
+- **Push Apart:** `radius` 100, `iterations` 10. Accumulate overlapping pairs' equal
+  and opposite offsets in stable index order, then apply the density-normalized sum.
+  Hide preserves count and indices but hides later overlapping clones. Only Push
+  Apart and Hide are supported.
+- **Inheritance:** a linked cloner supplies transforms by index if `morph_motion_object`
+  is on. The observed Direct case with Morph off does not change transforms.
+- **Volume:** sample the linked closed polygon volume at each clone before applying
+  the shared transform and field weights. The boundary is outside, as in `volume`.
+
+`inheritance` and `volume` match O22 exactly. Known mismatches: `shader-noise`
+uses Forge's deterministic basis, not the observed noise/color sequence;
+`spline-helix` and `spline-helix-segment` match position at the recorded tolerance
+but not the complete orientation; `push-apart` and `push-apart-iterations`
+improve separation while preserving the centroid and frames but do not match
+the observed displacement magnitudes.
+
 - Step: a changed spline (e.g. ease), Step Gap 1 and 2, Count 1; Position with Absolute Transform Mode.
 - Formula: `t - Project Time` 2 at frame 10 (is `t` multiplied or added?), Frequency 2, a formula using `px` and `falloff`
   with a Spherical field, Rotation on with R.H 90 degrees, Formula `id` to check 0-based.
@@ -1185,3 +1215,56 @@ so the test `a_cloner_inside_a_cloner_matches_the_nested_mesh` builds it (Radial
 `cloner_parity.rs::cloner_modes_match_the_reference` now runs the four order cases (at level B and A): **3 of 4 exact**
 (`order-iterate`, `order-sort`, `blend-order`), `order-random` in `KNOWN_MISMATCH` (above). `nested` stays in the separate test.
 Unit test: `crates/clone-engine/tests/modes.rs::children_are_assigned_by_the_clones_mode`.
+
+## O5. Clone selection, weights, and cache (078)
+
+Source: [O50](../parity/clone-toolset-3.md), `cloner/selection-tag` and `cloner/weight-tag`,
+and the [078 design](../agents/tasks/078-clone-tags-cache.md). O50 did not capture either
+case; separate native tests exercise the intended behavior below, not reference parity.
+
+| Tag / parameter | Kind and default | Meaning |
+|---|---|---|
+| `forge.clone_selection` / `indices` | IndexList, empty | Zero-based clone indices. |
+| `forge.clone_weight` / `weights` | FloatList, empty, 0–1 | One weight per clone slot. |
+| `forge.clone_cache` / `enabled`, `frames` | Bool, true; FloatList, empty | Enable playback; hidden versioned frame buffer stored using native binary chunks at the normal chunk threshold. |
+| Plain-family / `use_clone_weight` | Bool, false | Multiply the effect by the incoming clone weight clamped to 0–1. Independent of Weight Transform, which writes the outgoing weight. |
+
+The first weight tag on a host overrides initial weights for the slots it supplies.
+Missing slots retain the generator weight; surplus slots are ignored. For an effector
+with a nonempty Selection name, the first matching clone selection tag on the host
+restricts the writes. Unset and unresolved names are unrestricted; an empty matching tag
+selects none. Effectors see the complete input so indexing and interactions don't change.
+Select the Cloner and use `object.create` with the tag type to attach it; use `param.set`
+with a JSON array to fill `indices` or `weights`.
+
+`cloner.bake {node, start, end}` samples the evaluated scene over an inclusive integer
+frame range and writes the
+Cloner's final clone data (all channels, including assigned child indices and poses) to
+its first cache tag in one undo step. It ignores that tag during sampling. Playback
+uses the nearest recorded frame at the baked FPS in place of live clone generation; disabled,
+out-of-range or invalid data falls back to live evaluation. Prototype meshes stay live;
+if cached child indices no longer fit the current prototype list, use live clone data.
+Bake rejects ranges longer than 10,000 frames and buffers larger than 8 million floats
+without changing the tag. Prototype geometry and Cloner world transforms are not baked.
+## I1. Instance Over Time (077)
+Source: [O50](../parity/clone-toolset-3.md), `instance-time/defaults`, and the
+[077 design](../agents/tasks/077-instance-over-time.md).
+| `forge.instance_time` parameter | Kind and default | Meaning |
+| `mode` | Enum: `object` (default), `trail` | Single linked instance or sampled copies of a child. |
+| `reference` | Link, empty | Prototype in Object mode; continues to draw independently. |
+| `start_frame`, `end_frame` | Int, 0 and 90; ±1,000,000 | Inclusive window for Trail mode. |
+| `step` | Int, 1; 1–100,000 | Frames between Trail copies. |
+Object mode shows one identity clone in generator-local space; prototype position
+and animation do not move it. The source provides local geometry at the current time.
+`instance-time/defaults` has no stored clone weights; the sample file represents the
+missing channel as `1`, so use a neutral weight of 1, not an observed weight.
+Trail mode is a Forge3D design, **parity-pending**. It consumes the first Object or
+Generator child and shows its current local geometry at the child's sampled world
+transforms. Start at `start_frame`, step forward to `min(end_frame, current_frame)`,
+and convert each sampled world transform into the generator's current local space.
+Sample only animation tracks of the child and its ancestors, at exact frame times;
+do not replay expression tags, dynamics, or historical geometry. Store each sample's
+time relative to evaluation time in its clone time channel. Normal frame evaluation
+caches the output. No source, cyclic reference, empty window or singular generator
+transform yields no geometry. Invalid time or FPS and more than 10,000 samples are
+unsupported.

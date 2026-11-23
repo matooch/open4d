@@ -210,15 +210,21 @@ pub fn uniform_params(curve: &Curve, number: usize) -> Vec<f64> {
 /// Global parameter for a fraction of a spline's measured length, using the same
 /// polyline as Uniform sampling but without its endpoint and spacing corrections.
 pub fn arc_length_parameter(curve: &Curve, fraction: f64) -> Option<f64> {
-    if curve.segments.is_empty() {
-        return None;
+    ArcLengths::new(curve).map(|t| t.parameter(fraction))
+}
+
+/// Reusable length measurement for many lookups on the same curve.
+pub(crate) struct ArcLengths(Vec<f64>);
+
+impl ArcLengths {
+    pub(crate) fn new(curve: &Curve) -> Option<Self> {
+        (!curve.segments.is_empty()).then(|| Self(length_table(curve)))
     }
-    let table = length_table(curve);
-    let total = *table.last()?;
-    Some(parameter_at_length(
-        &table,
-        total * fraction.clamp(0.0, 1.0),
-    ))
+
+    pub(crate) fn parameter(&self, fraction: f64) -> f64 {
+        let total = self.0.last().copied().unwrap_or(0.0);
+        parameter_at_length(&self.0, total * fraction.clamp(0.0, 1.0))
+    }
 }
 
 fn length_table(curve: &Curve) -> Vec<f64> {

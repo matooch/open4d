@@ -1,7 +1,9 @@
 //! Tangent presets and handle operations (docs/specs/ANIM.md section 1.5b). Own design:
 //! the O38 observations only fix how stored handles are evaluated.
 
-use forge_core::{Handle, Key, KeyTangent, TangentMode};
+use forge_core::{Handle, Key, KeyTangent, TangentMode, Track};
+
+use crate::{SpeedSide, interp::speed_handle_dt, speed_editable};
 
 /// A third of the span to the neighbour on `side` (-1 previous, 1 next), 0 past the ends.
 fn third(keys: &[Key], i: usize, side: i32) -> f64 {
@@ -98,4 +100,32 @@ pub fn set_right_handle(
         t.left = user(-llen, -slope * llen);
     }
     t
+}
+
+/// Sets a spline key's one-sided derivative in stored units per second.
+/// The opposite spline side follows for an unbroken key; non-spline sides stay untouched.
+pub fn set_speed(track: &Track, i: usize, side: SpeedSide, speed: f64) -> Option<KeyTangent> {
+    if !speed.is_finite() || !speed_editable(track, i, side) {
+        return None;
+    }
+    let mut tangent = track.tangents.get(i).copied().unwrap_or_default();
+    for candidate in [SpeedSide::Left, SpeedSide::Right] {
+        if !speed_editable(track, i, candidate) || (tangent.broken && candidate != side) {
+            continue;
+        }
+        let side = if candidate == SpeedSide::Left { -1 } else { 1 };
+        let mut dt = speed_handle_dt(track, i, candidate)?;
+        if dt == 0.0 {
+            dt = f64::from(side) * third(&track.keys, i, side);
+        }
+        let dv = speed * dt;
+        if !dv.is_finite() {
+            return None;
+        }
+        match candidate {
+            SpeedSide::Left => tangent.left = user(dt, dv),
+            SpeedSide::Right => tangent.right = user(dt, dv),
+        }
+    }
+    Some(tangent)
 }

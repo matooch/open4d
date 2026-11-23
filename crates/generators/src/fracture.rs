@@ -3,8 +3,9 @@
 
 use std::collections::BTreeMap;
 
+use crate::cloner::effects::apply_effectors;
 use forge_clone_engine::{
-    FRACTURE, FractureMode, apply_effectors, fracture_settings, fragment_clones, polygon_islands,
+    FRACTURE, FractureMode, fracture_settings, fragment_clones, polygon_islands,
 };
 use forge_core::{EvalCtx, NodeId, Scene, Value};
 use forge_geometry::PolyMesh;

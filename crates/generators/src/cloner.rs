@@ -5,15 +5,16 @@
 use std::collections::BTreeMap;
 
 use forge_clone_engine::{
-    CLONER, CloneData, CloneError, Mode, Settings, apply_effectors, generate, settings_from_params,
-    with_transform,
+    CLONER, CloneData, CloneError, Mode, Settings, generate, settings_from_params, with_transform,
 };
 use forge_core::{EvalCtx, NodeId, Scene, Value};
 use forge_geometry::PolyMesh;
 
 use crate::{BuildError, evaluate, evaluate_geometry};
 
+pub(crate) mod effects;
 mod object;
+use effects::apply_effectors;
 
 pub(crate) const TYPE: &str = CLONER;
 
@@ -65,8 +66,6 @@ fn build_instances(
     ctx: &EvalCtx,
 ) -> Result<Option<ClonerInstances>, BuildError> {
     let settings = settings_from_params(values);
-    let mut clones = placements(scene, id, &settings, ctx)?;
-    apply_effectors(scene, id, &mut clones, ctx).map_err(map_error)?;
     let mut protos = Vec::new();
     for child in prototypes_of(scene, id) {
         let Some(mut mesh) = evaluate(scene, child, ctx)? else {
@@ -83,8 +82,7 @@ fn build_instances(
     if protos.is_empty() {
         return Ok(None);
     }
-    clones.assign_children(protos.len(), settings.clones_mode, settings.clones_seed);
-    apply_dynamics(values, &mut clones);
+    let clones = evaluated_clones(scene, id, ctx, &settings, protos.len())?;
     Ok(Some(ClonerInstances {
         prototypes: protos,
         clones,
@@ -204,15 +202,26 @@ pub fn clone_data(
         return Ok(None);
     };
     let settings = settings_from_params(&node.params);
-    let mut clones = placements(scene, id, &settings, ctx)?;
+    evaluated_clones(scene, id, ctx, &settings, prototypes_of(scene, id).len()).map(Some)
+}
+
+fn evaluated_clones(
+    scene: &Scene,
+    id: NodeId,
+    ctx: &EvalCtx,
+    settings: &Settings,
+    children: usize,
+) -> Result<CloneData, BuildError> {
+    if let Some(cached) = forge_clone_engine::cache::read(scene, id, ctx)
+        && cached.child.iter().all(|i| (*i as usize) < children.max(1))
+    {
+        return Ok(cached);
+    }
+    let mut clones = placements(scene, id, settings, ctx)?;
     apply_effectors(scene, id, &mut clones, ctx).map_err(map_error)?;
-    clones.assign_children(
-        prototypes_of(scene, id).len(),
-        settings.clones_mode,
-        settings.clones_seed,
-    );
-    apply_dynamics(&node.params, &mut clones);
-    Ok(Some(clones))
+    clones.assign_children(children, settings.clones_mode, settings.clones_seed);
+    apply_dynamics(&scene.node(id).expect("cloner exists").params, &mut clones);
+    Ok(clones)
 }
 
 /// The matrices of a Matrix object (spec M1): the cloner's clone data with no prototypes, so
