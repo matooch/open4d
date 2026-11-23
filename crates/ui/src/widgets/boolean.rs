@@ -10,7 +10,6 @@ pub fn show(ui: &mut egui::Ui, _cx: &Cx, row: &AttrRow) -> Option<Edit> {
     let Value::Bool(v) = row.value else {
         return None;
     };
-    ui.label("");
     let mut b = v;
     ui.add(egui::Checkbox::new(&mut b, &row.label).indeterminate(row.mixed))
         .changed()

@@ -382,9 +382,20 @@ string is empty with a hint, a colour has a "mixed" note, a list shows the activ
 Other widgets show the active object's value. A set applies to all selected objects in one
 undo step; a vec3 component edit keeps each object's other components.
 
-Keyframe hook (097 does the feature): every animatable float/vec3 row has a 12 px marker slot
-left of its label (`key_marker`, filled = key here, hollow = animated, ANIM.md §2.5); 097
-attaches click and context menu to that slot. `AttrRow.animatable` mirrors the descriptor.
+Key indicators (097): every row whose descriptor supports key tracks has a 12 px
+button left of the label. A faint outline means no tracks, an accent outline means
+animated elsewhere, a filled accent means a key here, and a warning fill means an
+uncommitted edit. Click to add/update a key for the active object's row; the context
+menu also deletes the row's keys here and jumps to its previous/next keyed frame.
+Vector and colour rows key their three component tracks together. This is an own
+design based on [G4](../parity/GUI-SESSIONS.md#g4--attribute-manager-widgets-and-field-lists)
+and is **parity-pending**.
+
+With Auto-Key off and a single selected object, editing a row that already has tracks
+stages the value in the Attributes panel (not the document or viewport) until the key
+button commits it. Leaving the current frame or selection, changing Auto-Key, or
+editing the document discards the draft. Unanimated edits, multi-edits, scripted
+`param.edit`, and the Coordinates/gizmo path keep their existing behaviour.
 
 Not in this brief: lock/unlock, history back/forward, the field-list widget.
 

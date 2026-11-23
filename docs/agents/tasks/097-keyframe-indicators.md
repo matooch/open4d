@@ -1,6 +1,6 @@
 # 097 · Keyframe indicators on every parameter; key context menu
 
-Status: ready · Area: G · Depends on: 088, 150 · Observations: G4 · Touches: ui
+Status: done (parity-pending: G4) · Area: G · Depends on: 088, 150 · Observations: G4 · Touches: ui
 
 ## Goal
 Every animatable parameter shows a key indicator (none / animated / key on this frame / changed) and a context menu (add, delete, next/previous key).
@@ -14,8 +14,8 @@ Every animatable parameter shows a key indicator (none / animated / key on this 
 - Generic: derived from ParamDesc, no per-node code.
 
 ## Done when
-- [ ] egui_kittest: click the indicator to key, value change shows the "changed" state.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] egui_kittest: click the indicator to key, value change shows the "changed" state.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -24,10 +24,18 @@ Every animatable parameter shows a key indicator (none / animated / key on this 
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- **Native coverage:** indicator click, staged Bool edit, key update and single undo
+  step, row-only jump and deletion, and three-channel vector keying/undo. Both test
+  suites passed (22 animation tests, 19 Attribute Manager tests).
+- **Design:** marker and channels follow the descriptor's supported track kinds.
+  `key.set_parameter` preserves existing key time/interpolation and adds all row
+  channels in one step; user-data descriptors also resolve in animation evaluation.
+  When Auto-Key is off, single-object edits to animated Attributes rows are local
+  drafts until keyed. Scripted edits, multi-edit, and gizmo/Coordinates semantics
+  are unchanged.
+- **Files:** UI and ANIM specs; descriptor key command and reference; animation
+  descriptor lookup; Attributes marker, widgets, editor and kittest.
+- **Parity pending G4:** need real indicator state colours and controls; confirm
+  whether pending edits survive leaving the frame or are shown in the viewport.
+- **Gate:** `GATE: 2452 tests passed, 0 failed`; `GATE: all passed`.

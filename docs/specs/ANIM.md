@@ -462,6 +462,11 @@ Values go through the parameter's range clamp first (`ParamDesc::validate`), lik
   nothing to delete: no step.
 - Marker state of a parameter row: *keyed* when any of its tracks has a key on the
   current frame, *animated* when it has a track but no key here, otherwise none.
+- The Attributes panel handles an additional transient *changed* state (UI.md §12,
+  brief 097). `key.set_parameter {node, param, frame, value}` writes all track
+  channels for that descriptor in one step. A new Bool, Enum or Link key is Step;
+  other new keys are Spline. An existing key keeps its exact time, tangent and
+  interpolation. Menus delete and navigate only the active row's tracks.
 
 ### 2.6 Playback (`timeline::Timeline`)
 `Timeline { current, playing }` plus an anchor `(clock time, frame)` set when playing

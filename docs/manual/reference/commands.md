@@ -173,6 +173,7 @@
 | [`browser.open_recent`](#browseropen_recent) | Open Recent | no | `browser_open_recent` |
 | [`browser.clear_recent`](#browserclear_recent) | Clear Recent Files | no | `browser_clear_recent` |
 | [`param.edit`](#paramedit) | Edit Parameter | yes | `param_edit` |
+| [`key.set_parameter`](#keyset_parameter) | Set Parameter Key | yes | `key_set_parameter` |
 | [`transform.edit`](#transformedit) | Set Coordinates | yes | `transform_edit` |
 | [`graph.add_node`](#graphadd_node) | Add Graph Node | yes | `graph_add_node` |
 | [`graph.remove`](#graphremove) | Remove Graph Node | yes | `graph_remove` |
@@ -1663,6 +1664,19 @@ Euler Filter. One undo step.
 | `node` | integer | yes |  |
 
 Example: `forge cmd scene.forge key.euler_filter --args '{"node":1}'`
+
+### `key.set_parameter`
+
+Set Parameter Key. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes |  |
+| `param` | string | yes | Parameter id, without a vector or colour component suffix. |
+| `frame` | integer | yes |  |
+| `value` | any | yes | Full parameter value in display units, as for `param.set`. |
+
+Example: `forge cmd scene.forge key.set_parameter --args '{"frame":10,"node":1,"param":"transform.pos","value":[0,10,0]}'`
 
 
 ## `timeline`
