@@ -54,6 +54,27 @@ fn registry() -> Arc<forge_core::Registry> {
     Arc::new(default_registry().unwrap())
 }
 
+#[test]
+fn instance_trail_invalidates_on_frame_change_without_animation_tracks() {
+    let mut app = App::new_default();
+    let trail = app
+        .doc
+        .transact("Trail", |tx| {
+            let trail = tx.create("forge.instance_time", None, None)?;
+            tx.set_param(trail, "mode", Value::Enum("trail".into()))?;
+            tx.set_param(trail, "step", Value::Int(2))?;
+            tx.create("forge.cube", Some(trail), None)?;
+            Ok(trail)
+        })
+        .unwrap();
+    let zero = app.scheduled(0);
+    assert_eq!(zero.outputs[&trail].mesh.as_ref().unwrap().points.len(), 8);
+    let two = app.scheduled(2);
+    assert_eq!(two.outputs[&trail].mesh.as_ref().unwrap().points.len(), 16);
+    let repeat = app.scheduled(2);
+    assert!(Arc::ptr_eq(&two.outputs[&trail], &repeat.outputs[&trail]));
+}
+
 // --- the parity scene corpus ---------------------------------------------------------
 
 const PRIMITIVES: &[&str] = &[

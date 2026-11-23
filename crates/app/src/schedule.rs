@@ -48,6 +48,7 @@ impl Default for Rules {
                 forge_fields::reads_time,
                 forge_clone_engine::effector_reads_time,
                 forge_clone_engine::cache::reads_time,
+                forge_generators::instance_time::reads_time,
             ],
             tag_time_readers: vec![forge_nodes::tag_reads_time],
         }

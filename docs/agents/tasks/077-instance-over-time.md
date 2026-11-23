@@ -1,6 +1,6 @@
 # 077 · Instance-over-time generator
 
-Status: waiting: O50 · Area: E · Depends on: 065, 088 · Observations: O50 · Touches: clone-engine, anim
+Status: done (parity-pending: Trail mode) · Area: E · Depends on: 065, 088 · Observations: O50 · Touches: clone-engine, anim
 
 ## Goal
 A generator that leaves copies of its child along its animated path (step, start/end).
@@ -14,8 +14,8 @@ A generator that leaves copies of its child along its animated path (step, start
 - Sample the child world matrix at past frames (scene_at) every N frames; produce CloneData. Cache per frame.
 
 ## Done when
-- [ ] O50 cases match.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] O50 `instance-time/defaults` matches its clone sample and exported scene mesh.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -24,10 +24,20 @@ A generator that leaves copies of its child along its animated path (step, start
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- **Parity:** 1/1 exact. The test reads the `instance-time/defaults` manifest, clone
+  samples, and OBJ. The sole clone has an identity local matrix, and the linked
+  cube still exports at x=300. Mesh comparison checks ordered topology and positions
+  at the fixture tolerance. Neutral weight 1 represents the missing sample channel,
+  not a measured weight.
+- **Own design, parity-pending:** Trail samples its child's animated world transform
+  at spaced past frames and expands the current prototype. It does not replay older
+  geometry or dynamics. The scheduler reuses same-frame geometry and recomputes
+  on frame change even without animation tracks.
+- **Coverage:** O50 reconstruction, animated-ancestor and sub-frame Trail samples,
+  cyclic link termination, scheduler time invalidation and reuse.
+- **Files:** clone-toolset spec I1; generators `instance_time` and its integration
+  tests; app scheduler and UI icon registration.
+- **Follow-up:** capture multiple historical placements and non-default spacing to
+  compare Trail conventions.
+- **Gate:** `GATE: 2454 tests passed, 0 failed`; `GATE: all passed`.

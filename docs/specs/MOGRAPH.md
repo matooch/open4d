@@ -1246,3 +1246,25 @@ out-of-range or invalid data falls back to live evaluation. Prototype meshes sta
 if cached child indices no longer fit the current prototype list, use live clone data.
 Bake rejects ranges longer than 10,000 frames and buffers larger than 8 million floats
 without changing the tag. Prototype geometry and Cloner world transforms are not baked.
+## I1. Instance Over Time (077)
+Source: [O50](../parity/clone-toolset-3.md), `instance-time/defaults`, and the
+[077 design](../agents/tasks/077-instance-over-time.md).
+| `forge.instance_time` parameter | Kind and default | Meaning |
+| `mode` | Enum: `object` (default), `trail` | Single linked instance or sampled copies of a child. |
+| `reference` | Link, empty | Prototype in Object mode; continues to draw independently. |
+| `start_frame`, `end_frame` | Int, 0 and 90; ±1,000,000 | Inclusive window for Trail mode. |
+| `step` | Int, 1; 1–100,000 | Frames between Trail copies. |
+Object mode shows one identity clone in generator-local space; prototype position
+and animation do not move it. The source provides local geometry at the current time.
+`instance-time/defaults` has no stored clone weights; the sample file represents the
+missing channel as `1`, so use a neutral weight of 1, not an observed weight.
+Trail mode is a Forge3D design, **parity-pending**. It consumes the first Object or
+Generator child and shows its current local geometry at the child's sampled world
+transforms. Start at `start_frame`, step forward to `min(end_frame, current_frame)`,
+and convert each sampled world transform into the generator's current local space.
+Sample only animation tracks of the child and its ancestors, at exact frame times;
+do not replay expression tags, dynamics, or historical geometry. Store each sample's
+time relative to evaluation time in its clone time channel. Normal frame evaluation
+caches the output. No source, cyclic reference, empty window or singular generator
+transform yields no geometry. Invalid time or FPS and more than 10,000 samples are
+unsupported.
