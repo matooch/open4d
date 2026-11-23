@@ -1185,3 +1185,34 @@ so the test `a_cloner_inside_a_cloner_matches_the_nested_mesh` builds it (Radial
 `cloner_parity.rs::cloner_modes_match_the_reference` now runs the four order cases (at level B and A): **3 of 4 exact**
 (`order-iterate`, `order-sort`, `blend-order`), `order-random` in `KNOWN_MISMATCH` (above). `nested` stays in the separate test.
 Unit test: `crates/clone-engine/tests/modes.rs::children_are_assigned_by_the_clones_mode`.
+
+## O5. Clone selection, weights, and cache (078)
+
+Source: [O50](../parity/clone-toolset-3.md), `cloner/selection-tag` and `cloner/weight-tag`,
+and the [078 design](../agents/tasks/078-clone-tags-cache.md). O50 did not capture either
+case; separate native tests exercise the intended behavior below, not reference parity.
+
+| Tag / parameter | Kind and default | Meaning |
+|---|---|---|
+| `forge.clone_selection` / `indices` | IndexList, empty | Zero-based clone indices. |
+| `forge.clone_weight` / `weights` | FloatList, empty, 0–1 | One weight per clone slot. |
+| `forge.clone_cache` / `enabled`, `frames` | Bool, true; FloatList, empty | Enable playback; hidden versioned frame buffer stored using native binary chunks at the normal chunk threshold. |
+| Plain-family / `use_clone_weight` | Bool, false | Multiply the effect by the incoming clone weight clamped to 0–1. Independent of Weight Transform, which writes the outgoing weight. |
+
+The first weight tag on a host overrides initial weights for the slots it supplies.
+Missing slots retain the generator weight; surplus slots are ignored. For an effector
+with a nonempty Selection name, the first matching clone selection tag on the host
+restricts the writes. Unset and unresolved names are unrestricted; an empty matching tag
+selects none. Effectors see the complete input so indexing and interactions don't change.
+Select the Cloner and use `object.create` with the tag type to attach it; use `param.set`
+with a JSON array to fill `indices` or `weights`.
+
+`cloner.bake {node, start, end}` samples the evaluated scene over an inclusive integer
+frame range and writes the
+Cloner's final clone data (all channels, including assigned child indices and poses) to
+its first cache tag in one undo step. It ignores that tag during sampling. Playback
+uses the nearest recorded frame at the baked FPS in place of live clone generation; disabled,
+out-of-range or invalid data falls back to live evaluation. Prototype meshes stay live;
+if cached child indices no longer fit the current prototype list, use live clone data.
+Bake rejects ranges longer than 10,000 frames and buffers larger than 8 million floats
+without changing the tag. Prototype geometry and Cloner world transforms are not baked.

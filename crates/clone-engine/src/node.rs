@@ -462,6 +462,9 @@ impl Plugin for CloneToolset {
         r.register(crate::target::target_type())?;
         r.register(crate::delay::delay_type())?;
         r.register(crate::matrix::matrix_type())?;
+        r.register(crate::tags::selection_type())?;
+        r.register(crate::tags::weight_type())?;
+        r.register(crate::cache::node_type())?;
         r.register(crate::fracture::fracture_type())
     }
 }
