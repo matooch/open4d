@@ -6,5 +6,6 @@ pub mod obj;
 pub mod ply;
 mod scene;
 pub mod stl;
+pub mod usda;
 
 pub use scene::{export_scene, import_into};
