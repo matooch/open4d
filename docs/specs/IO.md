@@ -334,3 +334,33 @@ Use `file.import`/`file.export` or `forge convert` with format `gltf`. Import ac
   `4.2e-4`; its GLB has rows summing to about `0.9999847` and no authored animation.
   The reader uses normalized linear skinning and does not reconstruct authoring-only
   weights or interpolation. The independent GLB round trip retains both poses within `1e-4`.
+
+## 6. ASCII USD (`usda`, brief 168)
+
+**Parity-pending:** O44 has no USD export. Layout follows the public OpenUSD
+[Mesh](https://openusd.org/release/api/class_usd_geom_mesh.html),
+[Xformable](https://openusd.org/release/api/class_usd_geom_xformable.html) and
+[UsdPreviewSurface](https://openusd.org/release/spec_usdpreviewsurface.html) schemas.
+
+- Read and write a single UTF-8 `#usda 1.0` layer through File Import/Export or the CLI.
+  Export Y-up, `metersPerUnit = 0.01`. Import Y-up, with centimetres as the USD fallback;
+  convert units from explicit stage metadata. Reflect Z and reverse winding for
+  right-handed meshes. Retain vertex and polygon order on a Forge round trip.
+- Author polygonal `Mesh` prims with `subdivisionScheme = "none"`, points, face
+  counts and indices, face-varying normals and `primvars:st` if present. Import
+  vertex/varying, uniform, constant or face-varying ST, optionally indexed, as
+  corner UVs. Authored normals are validated; Forge regenerates shading normals
+  because its polygon node has no authored-normal channel. If the scheme is omitted,
+  import the polygon cage; an explicitly requested subdivision scheme is unsupported.
+- Preserve `Xform` and mesh hierarchy. The supported transform stack is translate,
+  rotateXYZ and scale, in that order from least to most local (missing ops are
+  identity). Reflect the rotation basis and convert USD degrees to Forge HPB.
+  Use `timeCodesPerSecond` (or `framesPerSecond`, then 24) when reading; write
+  time in document frames. Import linear keys. Export keyed values at key times
+  and document frames; interpolation between baked samples need not match Forge
+  spline interpolation.
+- Bind meshes to an in-layer `Material` with a single `UsdPreviewSurface`, mapping
+  diffuse color and roughness to the hosted Standard material. No texture graph.
+  Scope prims organize material or geometry namespaces without adding transforms.
+- Binary USD, composition arcs, cameras, lights, skeletons, Z-up, arbitrary
+  transform stacks, and time-varying topology are outside this subset.
