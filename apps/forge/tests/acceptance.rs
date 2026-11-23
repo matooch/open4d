@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
 use forge_parity_harness::{Tolerance, compare_meshes, parse_obj};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 fn dir(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("forge-s1-{}-{name}", std::process::id()));
@@ -65,6 +65,87 @@ fn export_at(scene: &Path, frame: &str, out: &Path) -> Value {
 fn max_x(path: &Path) -> f64 {
     let mesh = parse_obj(&std::fs::read_to_string(path).unwrap()).unwrap();
     mesh.positions.iter().map(|p| p[0]).fold(f64::MIN, f64::max)
+}
+
+#[test]
+fn s7_retime_edit_tangents_ease_speed_and_loop() {
+    let d = dir("s7");
+    let scene = d.join("s7.forge");
+    let (code, result) = json_run(&["new", s(&scene)]);
+    assert_eq!(code, 0, "{result}");
+    let cmd = |name: &str, args: Value| {
+        let (code, result) = json_run(&[
+            "cmd",
+            s(&scene),
+            name,
+            "--args",
+            &args.to_string(),
+            "--save",
+        ]);
+        assert_eq!(code, 0, "{name}: {result}");
+        result["result"].clone()
+    };
+    let id = cmd("object.create", json!({"type": "forge.cube"}))["node"]
+        .as_u64()
+        .unwrap();
+    let track = "transform.pos.x";
+    for (frame, value) in [(0, 0), (15, 60), (30, 120)] {
+        cmd(
+            "key.set",
+            json!({"node": id, "track": track, "frame": frame, "value": value}),
+        );
+    }
+    let keys: Vec<_> = [0, 15, 30]
+        .map(|frame| json!({"node": id, "track": track, "frame": frame}))
+        .into();
+    cmd(
+        "key.scale",
+        json!({"keys": keys, "pivot_frame": 0, "factor": 2}),
+    );
+    let at = |frame: i32| {
+        let export = d.join(format!("frame-{frame}.obj"));
+        export_at(&scene, &frame.to_string(), &export);
+        max_x(&export)
+    };
+    let origin = at(0);
+    assert!((at(30) - origin - 60.0).abs() < 1e-6);
+    assert!((at(60) - origin - 120.0).abs() < 1e-6);
+    let before = at(24);
+    cmd(
+        "key.set_tangent",
+        json!({
+            "node": id, "track": track, "frame": 30, "preset": "user", "broken": true, "weighted": true,
+            "left": {"dt_frames": -6, "dv": -12}, "right": {"dt_frames": 9, "dv": 30},
+        }),
+    );
+    let incoming = at(24);
+    let outgoing = at(33);
+    assert!(
+        (incoming - before).abs() > 0.1,
+        "value-graph edit should change the curve"
+    );
+    cmd(
+        "key.set_speed",
+        json!({"node": id, "track": track, "frame": 30, "side": "right", "speed": 0}),
+    );
+    assert!(
+        (at(24) - incoming).abs() < 1e-6,
+        "broken incoming handle should stay put"
+    );
+    assert!(
+        at(33) < outgoing - 0.1,
+        "zero outgoing speed should ease away from the middle key"
+    );
+    assert!((at(30) - origin - 60.0).abs() < 1e-6);
+    let first_cycle = at(15);
+    cmd(
+        "track.set_behavior",
+        json!({"node": id, "track": track, "after": "repeat"}),
+    );
+    assert!(
+        (at(75) - first_cycle).abs() < 1e-6,
+        "frame 75 should repeat frame 15"
+    );
 }
 
 #[test]
