@@ -347,6 +347,7 @@ pub(crate) const ICON_MAP: &[(&str, &str)] = &[
     ("forge.clone_cache", "file_save"),
     ("forge.clone_selection", "select_all"),
     ("forge.clone_spline", "clone_spline"),
+    ("forge.clone_text", "text"),
     ("forge.clone_weight", "weight"),
     ("forge.cloner", "cloner"),
     ("forge.cogwheel_spline", "cogwheel"),

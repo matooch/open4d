@@ -1649,6 +1649,7 @@ dependencies = [
  "forge-text",
  "glam 0.34.1",
  "rayon",
+ "spade",
  "thiserror 2.0.21",
  "toml",
 ]

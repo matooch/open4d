@@ -68,29 +68,13 @@ fn curve_of(c: &Contour, reverse: bool, sampling: Sampling) -> Curve {
 pub(crate) fn build_curve(values: &BTreeMap<String, Value>) -> Result<Curve, BuildError> {
     let ty = node_type();
     let p = Params { ty: &ty, values };
-    let height = p.float("height");
-    if height == 0.0 {
+    let layout = layout_settings(&p);
+    if layout.height == 0.0 {
         return Err(BuildError::Failed("the text height is 0".into()));
     }
-    let align = match p.enumeration("align").as_str() {
-        "middle" => Align::Middle,
-        "right" => Align::Right,
-        _ => Align::Left,
-    };
-    let layout = Layout {
-        height,
-        align,
-        horizontal_spacing: p.float("horizontal_spacing"),
-        vertical_spacing: p.float("vertical_spacing"),
-    };
     let contours = Font::resolve(&p.string("font")).layout(&p.string("text"), &layout);
-    let sampling = Sampling::from_params(&p);
-    let reverse = p.bool("reverse");
-    let mut curves = contours.iter().map(|c| curve_of(c, reverse, sampling));
-    let mut curve = curves
-        .next()
+    let mut curve = curve_from_contours(&contours, p.bool("reverse"), Sampling::from_params(&p))
         .ok_or_else(|| BuildError::Failed("the text has no outline".into()))?;
-    curve.extra = curves.collect();
     let plane = p.enumeration("plane");
     if plane != "xy" {
         let place = |c: &mut Curve| {
@@ -102,4 +86,29 @@ pub(crate) fn build_curve(values: &BTreeMap<String, Value>) -> Result<Curve, Bui
         curve.extra.iter_mut().for_each(place);
     }
     Ok(curve)
+}
+
+pub(crate) fn layout_settings(p: &Params<'_>) -> Layout {
+    let align = match p.enumeration("align").as_str() {
+        "middle" => Align::Middle,
+        "right" => Align::Right,
+        _ => Align::Left,
+    };
+    Layout {
+        height: p.float("height"),
+        align,
+        horizontal_spacing: p.float("horizontal_spacing"),
+        vertical_spacing: p.float("vertical_spacing"),
+    }
+}
+
+pub(crate) fn curve_from_contours(
+    contours: &[Contour],
+    reverse: bool,
+    sampling: Sampling,
+) -> Option<Curve> {
+    let mut curves = contours.iter().map(|c| curve_of(c, reverse, sampling));
+    let mut curve = curves.next()?;
+    curve.extra = curves.collect();
+    Some(curve)
 }
