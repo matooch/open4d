@@ -5,15 +5,16 @@
 use std::collections::BTreeMap;
 
 use forge_clone_engine::{
-    CLONER, CloneData, CloneError, Mode, Settings, apply_effectors, generate, settings_from_params,
-    with_transform,
+    CLONER, CloneData, CloneError, Mode, Settings, generate, settings_from_params, with_transform,
 };
 use forge_core::{EvalCtx, NodeId, Scene, Value};
 use forge_geometry::PolyMesh;
 
 use crate::{BuildError, evaluate, evaluate_geometry};
 
+pub(crate) mod effects;
 mod object;
+use effects::apply_effectors;
 
 pub(crate) const TYPE: &str = CLONER;
 

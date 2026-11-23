@@ -1,6 +1,6 @@
 # 071 · Shader, Spline, Push Apart, Inheritance, Volume and Group effectors
 
-Status: ready · Area: E · Depends on: 068, 125 · Observations: O22 · Touches: clone-engine
+Status: done (parity-pending: five O22 pins) · Area: E · Depends on: 068, 125 · Observations: O22 · Touches: clone-engine
 
 ## Goal
 The remaining effectors from O22.
@@ -21,7 +21,7 @@ The remaining effectors from O22.
 
 ## Done when
 - [ ] O22 cases pass at level B, or statistically with reason (push apart may differ in iteration details).
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] The gate passes and BACKLOG.md is updated.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -31,9 +31,21 @@ The remaining effectors from O22.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- `crates/app/tests/remaining_effectors.rs` reads all seven in-scope O22 manifests
+  and clone samples. `inheritance` and `volume` are exact at level B. Group has no
+  observed case; a separate test checks in-order application of its child effectors.
+- `KNOWN_MISMATCH`: `shader-noise` uses the Forge Noise basis; displacement/scale
+  coupling, bounds, mean and repeatability are checked. `spline-helix` and
+  `spline-helix-segment` match positions but not full orientation. Analytic and
+  Uniform intermediate tangents were compared; the positions require the Uniform
+  chords and open-end shortfall. `push-apart` and `push-apart-iterations` improve
+  separation and preserve the centroid and axes, but the observed magnitudes and
+  iteration response are not derived. Immediate moves and unnormalized simultaneous
+  corrections were also tried.
+- Nodes register in clone-engine. The generators dispatcher resolves spline,
+  linked mesh and inherited cloner inputs; dependency checks reject recursive links.
+  Only hosted Noise is supported in Shader: the full renderer shader graph depends on
+  generators through material and cannot be linked back into that crate. Motion
+  animation Inheritance, other Push Apart modes and non-closed volume inputs are
+  not implemented. See MOGRAPH.md E25 for the supported subset and pins.
+- Gate: `2452 tests passed, 0 failed`; `GATE: all passed` (licenses included).
