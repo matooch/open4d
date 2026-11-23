@@ -344,6 +344,7 @@ pub(crate) const ICON_MAP: &[(&str, &str)] = &[
     ("forge.circle_spline", "circle"),
     ("forge.cissoid_spline", "cissoid"),
     ("forge.clone_spline", "clone_spline"),
+    ("forge.clone_text", "text"),
     ("forge.cloner", "cloner"),
     ("forge.cogwheel_spline", "cogwheel"),
     ("forge.collision", "collision"),

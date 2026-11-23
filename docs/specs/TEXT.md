@@ -137,3 +137,37 @@ the reference (`defaults`). An all-straight contour (the letter `A`) gets only i
 `crates/generators/tests/text_parity.rs` (the invariants of §0 against the nine golden
 cases, with the Extrude pipeline) and the registry/Make Editable checks in
 `crates/generators/tests/text_spline.rs`. Glyph shapes are not compared.
+
+## 7. Clone Text (`forge.clone_text`, brief 075)
+
+Sources: [O31](../parity/clone-generators-2.md), `clone-text/defaults` and
+`clone-text/depth`; [O48](../parity/text.md) for the shared Text spline layout; and
+the [075 design](../agents/tasks/075-clone-text.md).
+
+Clone Text shares Text spline font, layout/alignment and Intermediate Points
+parameters (§1); it extrudes in **+Z**, unlike the Text spline's Auto extrusion.
+`depth` defaults to 20, `subdivision` to 1, and `start_cap` / `end_cap` to true.
+Caps triangulate the outline and leave the glyph counters open. Bevel and the
+reference's alternate cap meshes and shader-indexing modes are out of scope.
+We use [constrained Delaunay triangulation](https://docs.rs/spade/2.15.1/spade/struct.ConstrainedDelaunayTriangulation.html)
+for caps, discarding triangles outside the glyph ink by the even–odd fill rule.
+Crossing or touching contours that cannot retain each rim vertex are unsupported
+when a cap is enabled.
+
+`group` is `letters` (default), `words` or `lines`. Glyphs retain the font's pen
+positions and indices through alignment. The generator emits one clone for each
+nonempty group, in reading order; whitespace advances the pen but emits no clone,
+and splits words. The x pivot is half the group's typographic advance interval
+(the O31 `AB` first x = 65.478516, half the second glyph's pen start), y is the
+line's ink bbox midpoint (`Text`: `(143.457031 − 3.710938) / 2` for every letter),
+and z stays at the front plane (0 in both cases). Glyphs in a group retain their
+relative arrangement. Words/lines and whitespace conventions are **parity-pending**.
+
+Each group's mesh is local to its pivot; the `effectors` link list runs in order on
+the resulting clone data, whose child indices point to those group meshes (white,
+visible, zero weight by default). Delay history is unsupported for Clone Text.
+Blank text or zero height has no geometry. The bundled font changes advances,
+outlines and numeric pivots versus the unknown reference font. The O31 tests pin
+the font-dependent pivot mismatches at their original tolerance while checking
+counts, order, remaining clone channels and extrusion depth independently.
+The maximum absolute XY errors are 43.945312 (`defaults`) and 9.326172 (`depth`).

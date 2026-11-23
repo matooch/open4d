@@ -15,6 +15,7 @@ forge-modifiers = { path = "../modifiers" }
 forge-noise = { path = "../noise" }
 forge-text = { path = "../text" }
 glam = "0.34"
+spade = "2.15.1"
 thiserror = "2"
 
 [dev-dependencies]

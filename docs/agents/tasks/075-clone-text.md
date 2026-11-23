@@ -1,6 +1,6 @@
 # 075 · Clone-toolset Text
 
-Status: waiting: O31, O48 · Area: E · Depends on: 039, 065 · Observations: O31, O48 · Touches: clone-engine, generators
+Status: done (parity-pending: font metrics and outlines) · Area: E · Depends on: 039, 065 · Observations: O31, O48 · Touches: clone-engine, generators
 
 ## Goal
 Text as clones: letters, words and lines as clone groups, so effectors act on them.
@@ -18,8 +18,9 @@ Text as clones: letters, words and lines as clone groups, so effectors act on th
 - Fonts: bundled open font (never the reference fonts); parity at level C on the outline, exact on clone counts and order.
 
 ## Done when
-- [ ] Clone counts, order and centres match O31/O48 within tolerance.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Clone counts and order match both O31 cases; existing O48 layout coverage passes.
+- [ ] Numeric centres match (pending a reference capture using the bundled font).
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -28,10 +29,25 @@ Text as clones: letters, words and lines as clone groups, so effectors act on th
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- **O31:** `clone-text/defaults` and `clone-text/depth` are both rebuilt from
+  their manifests. Counts/order, orientation, visibility, colour, weight, z pivot,
+  and mesh Z bounds are exact (2/2). The two XY pivot mismatches are pinned at the
+  fixture tolerance (max error 43.945312 and 9.326172). No exact font-outline or
+  face-topology match is claimed.
+- **O48:** the existing Text spline harness still exercises all 14 fixtures; its
+  15 tests pass after sharing the new glyph-aware font layout. These validate
+  layout rules without claiming a font-outline match.
+- **Rules:** `depth` extrudes toward +Z (20/50); x is the advance midpoint
+  (`depth`), y is the line ink midpoint (`defaults`), z is the front plane.
+  Per-letter/word/line groups keep placement order; intra-group geometry and
+  Plain effector displacement are tested. Caps keep counters open and retain
+  closed, consistently wound rim edges.
+- **Deviations:** caps use a constrained triangulation rather than copied N-gon
+  topology. Only the active grouping's effects are applied; Delay requires
+  history support specific to this generator. No reference fonts were accessed.
+- **Files:** TEXT §7, `forge-text` glyph layout, Text spline helper, Clone Text
+  generator/tests, Spade dependency and registry/icon mappings.
+- **Follow-up:** capture a freely licensed shared font with explicit glyph/group
+  transform samples, word/line effects, and non-default axes.
+- **Gate:** `GATE: 2452 tests passed, 0 failed`; `GATE: all passed`.

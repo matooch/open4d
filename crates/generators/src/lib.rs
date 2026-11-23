@@ -5,6 +5,7 @@ pub mod atom_array;
 pub mod axis;
 mod boole;
 mod clone_spline;
+pub mod clone_text;
 mod cloner;
 mod cube;
 pub mod editable_spline;
@@ -117,6 +118,7 @@ impl Plugin for Primitives {
         r.register(spline_mask::node_type())?;
         r.register(tracer::node_type())?;
         r.register(clone_spline::node_type())?;
+        r.register(clone_text::node_type())?;
         r.register(boole::node_type())?;
         r.register(polygon::selection_tag_type())?;
         for t in scene_objects::node_types() {
@@ -306,6 +308,9 @@ pub(crate) fn evaluate_geometry(
     if node.type_id == cloner::TYPE {
         return cloner::evaluate_cloner(scene, id, &node.params, ctx);
     }
+    if node.type_id == clone_text::TYPE {
+        return clone_text::geometry(scene, id, ctx);
+    }
     if node.type_id == fracture::TYPE {
         return fracture::evaluate_fracture(scene, id, &node.params, ctx);
     }
@@ -398,6 +403,7 @@ fn produces_geometry(scene: &Scene, type_id: &str) -> bool {
         || type_id == subdivision::TYPE
         || type_id == boole::TYPE
         || type_id == cloner::TYPE
+        || type_id == clone_text::TYPE
         || type_id == fracture::TYPE
         || type_id == polygon::TYPE
         || type_id == modeling::INSTANCE
