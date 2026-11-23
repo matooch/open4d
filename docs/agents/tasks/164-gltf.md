@@ -53,3 +53,18 @@ glTF 2.0 import and export.
   the unattended run rules prohibit edits under `docs/parity/`.
 - **Gate:** `GATE: 2426 tests passed, 0 failed`; `cleanroom: ok`; `ok: 1117 cases`;
   `GATE: all passed`. `cargo-deny` was not installed.
+
+### Planner follow-up: GLB skin weight normalization
+
+Measured maximum absolute component error across both recorded bounding-box corners
+with the same imported weights and J2 keys:
+
+| Skin evaluation | f15 | f30 |
+|---|---:|---:|
+| `normalise = true` (current import) | `4.038936e-4` | `4.200000e-4` |
+| `normalise = false` (`p + Σ w(Kp − p)`) | `7.638114e-4` | `1.603737e-3` |
+
+Neither raw-weight pose meets `1e-4`, and both are farther from the reference.
+Import behavior and both known-mismatch pins are unchanged.
+Follow-up gate passed with `cargo-deny` 0.22.0 installed: advisories, bans, licenses
+and sources all OK.
