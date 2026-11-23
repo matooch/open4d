@@ -81,10 +81,38 @@ pub fn apply_effectors(
     data: &mut CloneData,
     eval: &EvalCtx,
 ) -> Result<(), CloneError> {
-    let list = match scene.param(cloner, "effectors") {
-        Some(Value::LinkList(l)) => l.clone(),
+    apply_effectors_with(scene, cloner, data, eval, &|_, _, _| Ok(false))
+}
+
+type Custom<'a> = dyn Fn(NodeId, &mut CloneData, &EffectorCtx) -> Result<bool, CloneError> + 'a;
+
+/// Run the effectors with a geometry-layer callback. Returning false delegates to
+/// the pure clone-engine effectors; replay uses the same dispatcher.
+pub fn apply_effectors_with(
+    scene: &Scene,
+    cloner: NodeId,
+    data: &mut CloneData,
+    eval: &EvalCtx,
+    custom: &Custom<'_>,
+) -> Result<(), CloneError> {
+    let links = match scene.param(cloner, "effectors") {
+        Some(Value::LinkList(l)) => l,
         _ => return Ok(()),
     };
+    let mut stack: Vec<_> = links.iter().copied().rev().collect();
+    let mut list = Vec::new();
+    while let Some(id) = stack.pop() {
+        let Some(node) = scene.node(id) else {
+            continue;
+        };
+        if node.type_id == crate::extended::GROUP {
+            if !matches!(scene.param(id, "enabled"), Some(Value::Bool(false))) {
+                stack.extend(node.children.iter().copied().rev());
+            }
+        } else {
+            list.push(id);
+        }
+    }
     if list
         .iter()
         .filter(|id| delay::is_delay(scene, **id))
@@ -100,12 +128,27 @@ pub fn apply_effectors(
     for (k, id) in list.iter().enumerate() {
         if delay::is_delay(scene, *id) {
             if let Some(d) = delay::from_node(scene, *id) {
-                let history = replay(scene, cloner, &list[..k], eval)?;
+                let history = replay(scene, cloner, &list[..k], eval, custom)?;
                 d.smooth(&history, data, &falloff_of(scene, *id)?, &ctx)?;
             }
-        } else if let Some(effector) = effector_from_node(scene, *id)? {
-            effector.apply(data, &falloff_of(scene, *id)?, &ctx)?;
+        } else {
+            dispatch(scene, *id, data, &ctx, custom)?;
         }
+    }
+    Ok(())
+}
+
+fn dispatch(
+    scene: &Scene,
+    id: NodeId,
+    data: &mut CloneData,
+    ctx: &EffectorCtx,
+    custom: &Custom<'_>,
+) -> Result<(), CloneError> {
+    if !custom(id, data, ctx)?
+        && let Some(effector) = effector_from_node(scene, id)?
+    {
+        effector.apply(data, &falloff_of(scene, id)?, ctx)?;
     }
     Ok(())
 }
@@ -117,6 +160,7 @@ fn replay(
     cloner: NodeId,
     before: &[NodeId],
     eval: &EvalCtx,
+    custom: &Custom<'_>,
 ) -> Result<Vec<CloneData>, CloneError> {
     if eval.fps <= 0.0 || !eval.time.is_finite() {
         return Ok(Vec::new());
@@ -139,9 +183,7 @@ fn replay(
             cloner_world: scene.world_matrix(cloner).unwrap_or(DMat4::IDENTITY),
         };
         for id in before {
-            if let Some(effector) = effector_from_node(scene, *id)? {
-                effector.apply(&mut data, &falloff_of(scene, *id)?, &ctx)?;
-            }
+            dispatch(scene, *id, &mut data, &ctx, custom)?;
         }
         out.push(data);
     }
