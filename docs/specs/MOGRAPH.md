@@ -1185,3 +1185,31 @@ so the test `a_cloner_inside_a_cloner_matches_the_nested_mesh` builds it (Radial
 `cloner_parity.rs::cloner_modes_match_the_reference` now runs the four order cases (at level B and A): **3 of 4 exact**
 (`order-iterate`, `order-sort`, `blend-order`), `order-random` in `KNOWN_MISMATCH` (above). `nested` stays in the separate test.
 Unit test: `crates/clone-engine/tests/modes.rs::children_are_assigned_by_the_clones_mode`.
+
+## I1. Instance Over Time (077)
+
+Source: [O50](../parity/clone-toolset-3.md), `instance-time/defaults`, and the
+[077 design](../agents/tasks/077-instance-over-time.md).
+
+| `forge.instance_time` parameter | Kind and default | Meaning |
+|---|---|---|
+| `mode` | Enum: `object` (default), `trail` | Single linked instance or sampled copies of a child. |
+| `reference` | Link, empty | Prototype in Object mode; continues to draw independently. |
+| `start_frame`, `end_frame` | Int, 0 and 90; ±1,000,000 | Inclusive window for Trail mode. |
+| `step` | Int, 1; 1–100,000 | Frames between Trail copies. |
+
+Object mode shows one identity clone in generator-local space; prototype position
+and animation do not move it. The source provides local geometry at the current time.
+`instance-time/defaults` has no stored clone weights; the sample file represents the
+missing channel as `1`, so use a neutral weight of 1, not an observed weight.
+
+Trail mode is a Forge3D design, **parity-pending**. It consumes the first Object or
+Generator child and shows its current local geometry at the child's sampled world
+transforms. Start at `start_frame`, step forward to `min(end_frame, current_frame)`,
+and convert each sampled world transform into the generator's current local space.
+Sample only animation tracks of the child and its ancestors, at exact frame times;
+do not replay expression tags, dynamics, or historical geometry. Store each sample's
+time relative to evaluation time in its clone time channel. Normal frame evaluation
+caches the output. No source, cyclic reference, empty window or singular generator
+transform yields no geometry. Invalid time or FPS and more than 10,000 samples are
+unsupported.

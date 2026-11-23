@@ -401,6 +401,7 @@ pub(crate) const ICON_MAP: &[(&str, &str)] = &[
     ("forge.helix_spline", "helix"),
     ("forge.ik_tag", "ik"),
     ("forge.instance", "instance"),
+    ("forge.instance_time", "instance"),
     ("forge.jiggle", "jiggle"),
     ("forge.joint", "joint"),
     ("forge.landscape", "landscape"),

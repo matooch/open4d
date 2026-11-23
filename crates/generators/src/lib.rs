@@ -10,6 +10,7 @@ mod cube;
 pub mod editable_spline;
 mod figure;
 mod fracture;
+pub mod instance_time;
 mod landscape;
 mod lathe;
 mod modeling;
@@ -116,6 +117,7 @@ impl Plugin for Primitives {
         r.register(atom_array::node_type())?;
         r.register(spline_mask::node_type())?;
         r.register(tracer::node_type())?;
+        r.register(instance_time::node_type())?;
         r.register(clone_spline::node_type())?;
         r.register(boole::node_type())?;
         r.register(polygon::selection_tag_type())?;
@@ -306,6 +308,9 @@ pub(crate) fn evaluate_geometry(
     if node.type_id == cloner::TYPE {
         return cloner::evaluate_cloner(scene, id, &node.params, ctx);
     }
+    if node.type_id == instance_time::TYPE {
+        return instance_time::geometry(scene, id, ctx);
+    }
     if node.type_id == fracture::TYPE {
         return fracture::evaluate_fracture(scene, id, &node.params, ctx);
     }
@@ -398,6 +403,7 @@ fn produces_geometry(scene: &Scene, type_id: &str) -> bool {
         || type_id == subdivision::TYPE
         || type_id == boole::TYPE
         || type_id == cloner::TYPE
+        || type_id == instance_time::TYPE
         || type_id == fracture::TYPE
         || type_id == polygon::TYPE
         || type_id == modeling::INSTANCE
@@ -450,6 +456,7 @@ pub fn is_consumed(scene: &Scene, id: NodeId) -> bool {
         subdivision::TYPE => input_of(scene, p.id) == Some(id),
         boole::TYPE => boole::inputs_of(scene, p.id).contains(&id),
         cloner::TYPE => cloner::prototypes_of(scene, p.id).contains(&id),
+        instance_time::TYPE => instance_time::trail_child(scene, p.id) == Some(id),
         t if modeling::input_count(t).is_some() => modeling::inputs_of(scene, p.id).contains(&id),
         spline_mask::TYPE => spline_mask::inputs_of(scene, p.id).contains(&id),
         t if spline_gens::spline_input_count(t).is_some() => {
