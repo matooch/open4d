@@ -175,7 +175,8 @@ The options themselves are the ones §1 already defines. Every action is a regis
 
 ### 3.1 Format table (`forge_io::formats`)
 `FormatInfo { id, label, extensions, import, export }`. `formats()` lists them in a fixed
-order: `obj`, "Wavefront OBJ", extensions `["obj"]`; then `stl` and `ply` (§4); all import and export.
+order: `obj`, "Wavefront OBJ", extensions `["obj"]`; `stl` and `ply` (§4);
+`gltf` (§5); and `abc` (§6). All import and export.
 `format_for_path(path)` matches the extension case-insensitively; `format_by_id(id)` matches
 the id exactly (lower case). New formats (area M briefs 164 to 171) add one entry, one pair of
 option lists and one reader/writer arm each.
@@ -364,3 +365,32 @@ Use `file.import`/`file.export` or `forge convert` with format `gltf`. Import ac
   Scope prims organize material or geometry namespaces without adding transforms.
 - Binary USD, composition arcs, cameras, lights, skeletons, Z-up, arbitrary
   transform stacks, and time-varying topology are outside this subset.
+## 7. Alembic Ogawa (`.abc`, brief 167)
+Sources: [O44](../parity/exchange.md), the public Alembic 1.8.9
+[Ogawa container](https://github.com/alembic/alembic/tree/1.8.9/lib/Alembic/Ogawa),
+[property and sampling layout](https://github.com/alembic/alembic/tree/1.8.9/lib/Alembic/AbcCoreOgawa),
+and [geometry schemas](https://github.com/alembic/alembic/tree/1.8.9/lib/Alembic/AbcGeom).
+Use `file.import` / `file.export` or `forge convert` with format `abc`.
+- Accept frozen little-endian Ogawa archives, version 1, with Alembic core layout
+  0. Checked lengths/pointers, sample limits and depth bounds reject malformed or
+  oversized archives. Use the archive's property time sampling (uniform, cyclic
+  or acyclic); sample runs can share storage.
+- Read Xform schema local operation stacks as native position, HPB rotation and
+  scale, with linearly baked tracks for changing samples. Import a shape below a
+  named Xform on that object when unambiguous. Parent inheritance is required;
+  shear, perspective matrices and changing inheritance cannot be authored as TRS.
+- Read and write PolyMesh n-gons, per-corner UVs, and time-sampled positions on
+  fixed topology. Indexed UVs are expanded on import. Mesh winding and corner
+  order are kept: the Y-up Alembic convention and Z reflection together match the
+  OBJ winding in O44. Reflect Z on points and conjugate local transforms by that
+  reflection. The `scale` option defaults to 1 (cm-valued O44 archives) and applies
+  to positions and translations.
+- Read/write a perspective camera's transform and static focal length, aperture
+  and focus. Unhandled object schemas are omitted or carried only as transforms.
+  No HDF5, SubD control schema, changing topology/UVs, skin weights,
+  light/material semantics, or animated lens properties are claimed.
+- Export samples authored animation and evaluated geometry at project integer
+  frames, not live dynamics or expression-tag state. Use the original hierarchy
+  or selected roots and their descendants; a detached root bakes its world
+  transform. Deterministically write standard Xform and PolyMesh properties and
+  native Ogawa blocks; reject topology changes instead of discarding later faces.
