@@ -1,11 +1,11 @@
 //! key.move, key.scale, key.delete, key.set_interp, key.set_tangent, key.paste,
-//! key.euler_filter, track.set_behavior: dope sheet and value graph edits
+//! key.set_speed, key.euler_filter, track.set_behavior: dope sheet and curve graph edits
 //! (docs/specs/ANIM.md section 2b). Keys are addressed as `{node, track, frame}`; every command
 //! is one undo step.
 
 use std::collections::BTreeMap;
 
-use forge_anim::{keyedit, tangent};
+use forge_anim::{SpeedSide, keyedit, tangent};
 use forge_core::{
     Behavior, Interp, KeyTangent, NodeId, Scene, TangentMode, Track, TrackTarget, Tx, Unit,
     parse_track_target,
@@ -89,6 +89,18 @@ struct TangentArgs {
     right: Option<HandleArgs>,
     broken: Option<bool>,
     weighted: Option<bool>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct SpeedArgs {
+    node: u64,
+    track: String,
+    frame: f64,
+    /// Spline segment side: `left` (incoming) or `right` (outgoing).
+    side: String,
+    /// Signed target speed in display units per second.
+    speed: f64,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -295,6 +307,51 @@ fn set_tangent(ctx: &mut dyn CommandContext, a: TangentArgs) -> Result<Value, Co
     })
 }
 
+fn set_speed(ctx: &mut dyn CommandContext, a: SpeedArgs) -> Result<Value, CommandError> {
+    let side = match a.side.as_str() {
+        "left" => SpeedSide::Left,
+        "right" => SpeedSide::Right,
+        _ => {
+            return Err(CommandError::InvalidArgs(
+                "side must be left or right".into(),
+            ));
+        }
+    };
+    if !a.speed.is_finite() {
+        return Err(CommandError::InvalidArgs("speed must be finite".into()));
+    }
+    let scene = ctx.doc().scene();
+    let ty = scene
+        .node_type(NodeId(a.node))
+        .ok_or_else(|| CommandError::failed("unknown node type"))?;
+    if !matches!(
+        parse_track_target(&a.track, |k| ty.find_param(k)),
+        Ok(TrackTarget::Float(_) | TrackTarget::Component(..) | TrackTarget::Channel(..))
+    ) {
+        return Err(CommandError::failed(
+            "speed editing needs a continuous scalar track",
+        ));
+    }
+    let key = KeyRef {
+        node: a.node,
+        track: a.track,
+        frame: a.frame,
+    };
+    edit_tracks(ctx, "Set Key Speed", &[key], |track, times, unit| {
+        if track.quaternion {
+            return None;
+        }
+        let i = track
+            .keys
+            .iter()
+            .position(|k| (k.time - times[0]).abs() < 1e-9)?;
+        let new = tangent::set_speed(track, i, side, stored(unit, a.speed))?;
+        let mut out = track.clone();
+        out.set_tangent(i, new);
+        Some(out)
+    })
+}
+
 pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
     r.register_fn(
         spec("key.move", "Move Keys", true, || {
@@ -352,6 +409,12 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
             || json!({"node": 1, "track": "transform.pos.x", "frame": 10.0, "preset": "ease"}),
         ),
         set_tangent,
+    )?;
+    r.register_fn(
+        spec("key.set_speed", "Set Key Speed", true, || {
+            json!({"node": 1, "track": "transform.pos.x", "frame": 10.0, "side": "right", "speed": 20.0})
+        }),
+        set_speed,
     )?;
     r.register_fn(
         spec("key.paste", "Paste Keys", true, || {

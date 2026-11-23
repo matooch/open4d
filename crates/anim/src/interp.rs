@@ -436,8 +436,14 @@ pub fn value_at_exact(track: &Track, user: &[Option<UserTangent>], time: f64) ->
     eval_track(track, &tangs, time)
 }
 
-/// The Bezier control values of segment `i` and the curve parameter solved for time `t`.
-fn spline_solve(keys: &[Key], user: &[Resolved], i: usize, t: f64) -> ([f64; 4], [f64; 4], f64) {
+struct SplineControls {
+    xs: [f64; 4],
+    ys: [f64; 4],
+    grid_xs: [f64; 4],
+    collapsed: bool,
+}
+
+fn spline_controls(keys: &[Key], user: &[Resolved], i: usize) -> SplineControls {
     let (a, b) = (keys[i], keys[i + 1]);
     let (ta, tb) = (tangent_with(keys, user, i), tangent_with(keys, user, i + 1));
     // In a segment with a user-edited handle, the automatic handles sit on the handle grid
@@ -470,6 +476,22 @@ fn spline_solve(keys: &[Key], user: &[Resolved], i: usize, t: f64) -> ([f64; 4],
         b.time - tb.grid_left,
         b.time,
     ];
+    SplineControls {
+        xs,
+        ys,
+        grid_xs,
+        collapsed: ra == 0.0 && lb == 0.0,
+    }
+}
+
+/// The Bezier control values of segment `i` and the curve parameter solved for time `t`.
+fn spline_solve(keys: &[Key], user: &[Resolved], i: usize, t: f64) -> ([f64; 4], [f64; 4], f64) {
+    let SplineControls {
+        xs,
+        ys,
+        grid_xs,
+        collapsed,
+    } = spline_controls(keys, user, i);
     // Bisection on the curve parameter; the answer is the middle of the final interval.
     // `x(mid) < t` goes up. When `x(mid)` equals `t` to rounding, the stored handles
     // decide: their lengths are on a grid of 4e-7 s, a hair off a third of the span, and
@@ -478,8 +500,7 @@ fn spline_solve(keys: &[Key], user: &[Resolved], i: usize, t: f64) -> ([f64; 4],
     // up and above it go down; `four-keys`: longer handle, the other way round). A tie
     // that is exact on the grid too (the centre of a symmetric curve) goes up,
     // except for a segment with both handles collapsed (RIG.md §13).
-    let collapsed = ra == 0.0 && lb == 0.0;
-    let tie = 1e-12 * (b.time - a.time);
+    let tie = 1e-12 * (xs[3] - xs[0]);
     let (mut lo, mut hi) = (0.0f64, 1.0f64);
     for _ in 0..BISECTION_STEPS {
         let mid = 0.5 * (lo + hi);
@@ -497,6 +518,68 @@ fn spline_solve(keys: &[Key], user: &[Resolved], i: usize, t: f64) -> ([f64; 4],
         }
     }
     (xs, ys, 0.5 * (lo + hi))
+}
+
+/// Which adjacent segment's one-sided derivative is requested at a key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpeedSide {
+    Left,
+    Right,
+}
+
+impl SpeedSide {
+    pub(crate) fn segment(self, track: &Track, key: usize) -> Option<usize> {
+        track.keys.get(key)?;
+        match self {
+            Self::Left => key.checked_sub(1),
+            Self::Right => (key + 1 < track.keys.len()).then_some(key),
+        }
+    }
+}
+
+/// True if the requested side of the key is backed by editable spline handles.
+pub fn speed_editable(track: &Track, key: usize, side: SpeedSide) -> bool {
+    side.segment(track, key)
+        .is_some_and(|i| track.keys[i].interp == Interp::Spline)
+}
+
+/// Signed horizontal handle length used by the actual polynomial, including its grid rules.
+pub(crate) fn speed_handle_dt(track: &Track, key: usize, side: SpeedSide) -> Option<f64> {
+    let i = side.segment(track, key)?;
+    let xs = spline_controls(&track.keys, &resolve(&track.tangents), i).xs;
+    Some(match side {
+        SpeedSide::Left => xs[2] - xs[3],
+        SpeedSide::Right => xs[1] - xs[0],
+    })
+}
+
+/// Analytic one-sided speed at an exact key, including the limit of a collapsed handle.
+/// `None` means there is no segment on that side. Undefined vertical slopes return zero.
+pub fn speed_at_key(track: &Track, key: usize, side: SpeedSide) -> Option<f64> {
+    let i = side.segment(track, key)?;
+    let a = track.keys[i];
+    let b = track.keys[i + 1];
+    match a.interp {
+        Interp::Step => Some(0.0),
+        Interp::Linear => Some((b.value - a.value) / (b.time - a.time)),
+        Interp::Spline => {
+            let SplineControls { mut xs, mut ys, .. } =
+                spline_controls(&track.keys, &resolve(&track.tangents), i);
+            if side == SpeedSide::Left {
+                xs.reverse();
+                ys.reverse();
+            }
+            for j in 1..4 {
+                let dx = xs[j] - xs[0];
+                let dy = ys[j] - ys[0];
+                if dx != 0.0 || dy != 0.0 {
+                    let v = dy / dx;
+                    return Some(if v.is_finite() { v } else { 0.0 });
+                }
+            }
+            Some(0.0)
+        }
+    }
 }
 
 fn spline_segment(keys: &[Key], user: &[Resolved], i: usize, t: f64) -> f64 {
