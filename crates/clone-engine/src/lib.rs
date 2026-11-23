@@ -81,7 +81,11 @@ pub fn generate(settings: &Settings, _ctx: &EvalCtx) -> Result<CloneData, CloneE
         Mode::Grid => grid::generate(&settings.grid)?,
         Mode::Honeycomb => honeycomb::generate(&settings.honeycomb)?,
     };
-    let t = &settings.transform;
+    Ok(with_transform(items, &settings.transform))
+}
+
+/// Apply the common Transform tab to placements evaluated by the scene geometry layer.
+pub fn with_transform(items: impl IntoIterator<Item = CloneItem>, t: &TransformTab) -> CloneData {
     let after = hpb(t.rotation) * DMat4::from_scale(t.scale);
     let before = DMat4::from_translation(t.position);
     let mut data = CloneData::default();
@@ -91,7 +95,7 @@ pub fn generate(settings: &Settings, _ctx: &EvalCtx) -> Result<CloneData, CloneE
         item.weight = t.weight;
         data.push(item);
     }
-    Ok(data)
+    data
 }
 
 impl CloneData {

@@ -6,8 +6,7 @@ use std::sync::Arc;
 use forge_clone_engine::CloneToolset;
 use forge_core::{Document, EvalCtx, NodeId, Registry, Value};
 use forge_generators::{
-    BuildError, EditableError, Primitives, clone_data, cloner_prototypes, evaluate, is_consumed,
-    make_editable,
+    EditableError, Primitives, clone_data, cloner_prototypes, evaluate, is_consumed, make_editable,
 };
 use forge_geometry::PolyMesh;
 
@@ -141,17 +140,18 @@ fn two_prototypes_alternate_in_child_order() {
 }
 
 #[test]
-fn object_mode_is_unsupported_until_brief_066() {
+fn object_mode_without_a_source_has_no_clones() {
     let mut d = doc();
     let (c, _) = linear_cube(&mut d);
     d.transact("m", |tx| {
         tx.set_param(c, "mode", Value::Enum("object".into()))
     })
     .unwrap();
-    assert!(matches!(
-        evaluate(d.scene(), c, &EvalCtx::default()),
-        Err(BuildError::Unsupported(_))
-    ));
+    let data = clone_data(d.scene(), c, &EvalCtx::default())
+        .unwrap()
+        .unwrap();
+    assert!(data.is_empty());
+    assert!(mesh(&d, c).unwrap().polys.is_empty());
 }
 
 #[test]

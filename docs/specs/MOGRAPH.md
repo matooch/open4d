@@ -136,8 +136,29 @@ The app swaps the two counts and the two sizes when Offset Direction changes (cl
 notes). That is a UI behaviour of the reference; our parameters are independent and the
 direction only changes which count/size is the line axis (C7).
 
-Object mode and its parameters (Object, Distribution, Selection, Seed, Count) are brief 066:
-`mode = object` is selectable but evaluating it is `BuildError::Unsupported("cloner object mode")`.
+**Object mode (brief 066, [O21](../parity/cloner-3.md)).** `object` links the source,
+`distribution` defaults to `surface`, `object_count` to 20, `object_seed` to 1234567,
+`align_clone` to true, `up_vector` to `none`, and `selection` to the empty tag name.
+Use source positions in cloner-local space. Axis uses the linked object's origin.
+Vertex uses point order and the uniform mean of incident unit normals. Edge uses
+unique edges in first polygon encounter order, their midpoints, the mean of the
+incident unit normals, and Y along the edge toward its first endpoint.
+Polygon Center uses face order and the unit face normal; a quad uses the mean of
+its corners, and a triangle uses `f64::from(0.333_f32) * (a+b+c)` (O21 sphere caps).
+The normal is the clone's Z axis. With alignment off, use identity axes.
+The named selection on the source filters matching point, edge or polygon
+indices before sampling. A name without a compatible tag produces no clones.
+**Known mismatches:** `object-vertex` and `object-polycenter` keep exact position and
+Z; the unconstrained roll differs at the sphere poles/rings and on the lower triangular
+caps. The fallback projects +Y for vertices and the first edge for triangle Y;
+the quad uses the last-to-first edge for X. Named Up Vector overrides that roll.
+
+Surface samples triangles in proportion to area, with uniform barycentric
+coordinates; Volume rejection-samples points inside the closed mesh's bounding box.
+SplitMix64 supplies seeded draws. O21 random cases are compared statistically
+(count, per-axis bounds within 45% of the recorded extent, means within 3.5 pooled
+standard errors, and variance within a factor of four), not by sample order.
+Volume on open meshes or with a polygon selection is unsupported.
 
 Limit: a cloner makes at most `MAX_CLONES = 1 000 000` clones; more is `Unsupported`.
 
@@ -374,7 +395,7 @@ settings recorded) matches like `order-iterate`. Matched cases: 37 (34 + `linear
 
 Not run here (pinned by count in the test, 54 effector cases and 13 others of the 101 cloner cases): the cases with
 an effector (`[params.effector]` or `effector_count > 0`: briefs 068+), 8 Object-mode cases
-(`object-*`: brief 066), `order-iterate`, `order-random`, `order-sort`, `blend-order` (several children and the
+(`object-*`: covered in `crates/generators/tests/cloner_object.rs`), `order-iterate`, `order-random`, `order-sort`, `blend-order` (several children and the
 Clones modes: brief 067) and `nested`. `nested` is covered by a separate test
 (`a_cloner_inside_a_cloner_matches_the_nested_mesh`): a Radial cloner (count 4) as the only
 prototype of a Linear cloner (count 3) expands with no extra code and matches the mesh; the case
@@ -937,8 +958,8 @@ Rules:
 - `matrix/defaults` (Grid, 40 x 1 x 40, size 10.5, per step): 1600 clones, first at (-204.75, 0, -204.75), x fastest, same as
   C6. `matrix/linear` (Linear, count 5, P (0, 50, 0)): clones at y = 0, 50, ... 200, as C4.
 
-Returns `BuildError::Unsupported`: `generate` = Particles (no particle system in the clone toolset), and Object mode
-(the cloner's Object mode is brief 066).
+Returns `BuildError::Unsupported`: `generate` = Particles (no particle system in the clone toolset), and
+Matrix Object mode. The mesh-based Cloner Object mode is evaluated separately (C2).
 
 **Parity-pending:** the per-mode default counts of the O31 table are mislabelled in the observation (the "Object" table shows
 count 5, the "Linear" one shows (40, 1, 40)); we keep the cloner's Linear default count (3) because `matrix/linear` sets
