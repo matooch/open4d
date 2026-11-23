@@ -162,6 +162,7 @@ pub struct Editor {
     dialogs: Box<dyn Dialogs>,
     /// The import/export options window while open (docs/specs/UI.md §27).
     io_dialog: Option<IoDialog>,
+    dynamics_panel: crate::dynamics_panel::DynamicsPanel,
     sent_title: String,
     applied_prefs: Option<(ThemeKind, f32)>,
     /// Requests from the RPC server, run between frames (docs/specs/RPC.md §5).
@@ -243,6 +244,7 @@ impl Editor {
             tool_drag: None,
             dialogs: Box::new(NativeDialogs),
             io_dialog: None,
+            dynamics_panel: Default::default(),
             sent_title: String::new(),
             applied_prefs: None,
             rpc: None,
@@ -544,6 +546,9 @@ impl Editor {
         self.keymap_editor.show(ui.ctx(), &mut self.state);
         self.save_layout_window(ui.ctx());
         self.io_dialog_window(ui.ctx());
+        for cmd in self.dynamics_panel.show(ui.ctx(), &self.state) {
+            self.run(cmd);
+        }
         let ctx = ui.ctx().clone();
         let registry = self.state.app.commands.clone();
         if let Some((id, args)) = self.palette.show(&ctx, &registry, &self.state.keys.map) {
@@ -878,6 +883,21 @@ impl Editor {
                     ui.close();
                 }
             });
+            if self
+                .state
+                .doc
+                .scene()
+                .registry()
+                .get("forge.dynamics_settings")
+                .is_some()
+            {
+                ui.menu_button("Dynamics", |ui| {
+                    if ui.button("Dynamics Settings").clicked() {
+                        self.dynamics_panel.open(&self.state.settings());
+                        ui.close();
+                    }
+                });
+            }
             ui.menu_button("View", |ui| {
                 for (shading, label) in SHADINGS {
                     if ui.radio(self.state.shading == shading, label).clicked() {

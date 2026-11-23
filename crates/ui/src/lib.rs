@@ -19,6 +19,7 @@ pub mod crash_notice;
 pub mod cutting;
 pub mod dock;
 pub mod dopesheet;
+mod dynamics_panel;
 pub mod fcurve;
 pub mod fcurve_logic;
 pub mod field_overlay;

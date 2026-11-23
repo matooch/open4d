@@ -9,11 +9,7 @@ use crate::build::{body_tag, kind_of, objects_in_order, spec_from_tag};
 use crate::sim::{BodyKey, BodySpec};
 
 fn ctx(scene: &Scene) -> EvalCtx {
-    EvalCtx {
-        time: 0.0,
-        fps: f64::from(scene.settings().fps),
-        seed: 0,
-    }
+    EvalCtx::at_frame(scene.settings().start, f64::from(scene.settings().fps))
 }
 
 /// True for a cloner node.

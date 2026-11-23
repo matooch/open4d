@@ -1,6 +1,6 @@
 # 122 · Bake to keys and cache tags; dynamics UI
 
-Status: ready · Area: I · Depends on: 115, 093 · Observations: – · Touches: dynamics, ui
+Status: done · Area: I · Depends on: 115, 093 · Observations: – · Touches: dynamics, ui
 
 ## Goal
 Bake simulations to keys or a cache tag; a scene dynamics settings panel.
@@ -12,8 +12,8 @@ Bake simulations to keys or a cache tag; a scene dynamics settings panel.
 - Bake uses 093. Cache tag stores per-frame transforms in the native file.
 
 ## Done when
-- [ ] Baked playback equals live simulation.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Baked playback equals live simulation at the recorded frames.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -22,10 +22,19 @@ Bake simulations to keys or a cache tag; a scene dynamics settings panel.
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- **Native coverage:** rigid key bake matches all 31 sampled local poses to 1e-9,
+  undo restores live dynamics, and native chunk round-trip replays rigid cache
+  poses in both headless and viewport evaluation with simulation disabled.
+  Cached cloner and soft-body meshes equal their pre-bake meshes.
+- **Evaluation:** the viewport scheduler and headless evaluator share the dynamics
+  stage. Worlds start from the animated start pose; a tracked kinematic lift pushes
+  a dynamic body in both evaluators.
+- **UI:** a simulation settings window creates no document node until edited;
+  selection can bake to keys or a cache tag. Settings and bake commands are undoable.
+- **Scope:** key bake replaces rigid position/rotation tracks. Cloner and soft
+  bodies use cache tags. Cache playback overrides output but does not feed live
+  collisions. No reference parity claimed.
+- **Files:** DYNAMICS §5.2, simulation/cache and app scheduler/commands, animation
+  sample bake helper, editor window and icons, generated command reference and tests.
+- **Gate:** `GATE: 2454 tests passed, 0 failed`; `GATE: all passed`.

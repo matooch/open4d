@@ -227,6 +227,8 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `browser_clear_recent` | Clear Recent Files. Not an undoable edit. Runs command `browser.clear_recent`. |
 | `param_edit` | Edit Parameter. Undoable editing command. Runs command `param.edit`. |
 | `key_set_parameter` | Set Parameter Key. Undoable editing command. Runs command `key.set_parameter`. |
+| `dynamics_bake` | Bake Dynamics. Undoable editing command. Runs command `dynamics.bake`. |
+| `dynamics_settings` | Set Dynamics Settings. Undoable editing command. Runs command `dynamics.settings`. |
 | `transform_edit` | Set Coordinates. Undoable editing command. Runs command `transform.edit`. |
 | `graph_add_node` | Add Graph Node. Undoable editing command. Runs command `graph.add_node`. |
 | `graph_remove` | Remove Graph Node. Undoable editing command. Runs command `graph.remove`. |

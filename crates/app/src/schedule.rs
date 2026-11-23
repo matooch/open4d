@@ -192,6 +192,7 @@ struct State {
     readers: BTreeSet<NodeId>,
     has_tracks: bool,
     has_tags: bool,
+    has_dynamics: bool,
     /// Every node (tags included) in ascending order; valid for `rev`.
     ids: Vec<NodeId>,
     /// Nodes that own tracks; valid for `rev`.
@@ -214,6 +215,7 @@ pub struct Scheduler {
     instancing: bool,
     generation: u64,
     state: Option<State>,
+    dynamics: crate::dynamics::DynamicsState,
 }
 
 impl Default for Scheduler {
@@ -342,6 +344,7 @@ impl Scheduler {
             instancing: false,
             generation: 0,
             state: None,
+            dynamics: Default::default(),
         }
     }
 
@@ -373,6 +376,7 @@ impl Scheduler {
     /// Forgets all results (after loading another document).
     pub fn clear(&mut self) {
         self.state = None;
+        self.dynamics = Default::default();
     }
 
     /// Nodes whose result may change with time: nodes with tracks, implicit time readers,
@@ -420,7 +424,8 @@ impl Scheduler {
             && !doc_changed
             && let Some(st) = &mut self.state
         {
-            let quiet = !time_changed || (!st.has_tracks && !st.has_tags && st.readers.is_empty());
+            let quiet = !time_changed
+                || (!st.has_tracks && !st.has_tags && !st.has_dynamics && st.readers.is_empty());
             if quiet {
                 // nothing in the scene can see the time
                 st.time = time;
@@ -459,8 +464,12 @@ impl Scheduler {
         // tracks and the nodes the tags write to are copied; the rest stays shared with
         // `scene`.
         let animated = animate(scene, &track_ids, &tag_ids, has_tags, time);
-        let (working, diagnostics, touched) =
+        let (mut working, diagnostics, mut touched) =
             (animated.scene, animated.diagnostics, animated.touched);
+        let has_dynamics = self.dynamics.active(scene);
+        if has_dynamics {
+            touched.extend(self.dynamics.apply(scene, frame, &mut working));
+        }
         let evaluated = Arc::new(working);
 
         // The seeds of the dirty set.
@@ -626,6 +635,7 @@ impl Scheduler {
             readers,
             has_tracks,
             has_tags,
+            has_dynamics,
             ids,
             track_ids,
             tag_ids,

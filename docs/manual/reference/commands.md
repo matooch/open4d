@@ -2,7 +2,7 @@
 
 # Command reference
 
-197 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+201 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -174,6 +174,8 @@
 | [`browser.clear_recent`](#browserclear_recent) | Clear Recent Files | no | `browser_clear_recent` |
 | [`param.edit`](#paramedit) | Edit Parameter | yes | `param_edit` |
 | [`key.set_parameter`](#keyset_parameter) | Set Parameter Key | yes | `key_set_parameter` |
+| [`dynamics.bake`](#dynamicsbake) | Bake Dynamics | yes | `dynamics_bake` |
+| [`dynamics.settings`](#dynamicssettings) | Set Dynamics Settings | yes | `dynamics_settings` |
 | [`transform.edit`](#transformedit) | Set Coordinates | yes | `transform_edit` |
 | [`graph.add_node`](#graphadd_node) | Add Graph Node | yes | `graph_add_node` |
 | [`graph.remove`](#graphremove) | Remove Graph Node | yes | `graph_remove` |
@@ -2214,6 +2216,35 @@ Clear Recent Files. Not an undoable edit.
 No arguments.
 
 Example: `forge cmd scene.forge browser.clear_recent --args '{}'`
+
+
+## `dynamics`
+
+### `dynamics.bake`
+
+Bake Dynamics. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `nodes` | array of integer | yes | Dynamic objects to bake. |
+| `start` | integer | yes | First frame to record (inclusive). |
+| `end` | integer | yes | Final frame to record (inclusive). |
+| `mode` | `"keys"` \| `"cache"` | yes |  |
+
+Example: `forge cmd scene.forge dynamics.bake --args '{"end":30,"mode":"cache","nodes":[1],"start":0}'`
+
+### `dynamics.settings`
+
+Set Dynamics Settings. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean or null | no |  |
+| `gravity` | number or null | no | Downward acceleration in cm/s². |
+| `steps_per_frame` | integer or null | no |  |
+| `time_scale` | number or null | no |  |
+
+Example: `forge cmd scene.forge dynamics.settings --args '{"gravity":981,"steps_per_frame":4}'`
 
 
 ## `graph`
