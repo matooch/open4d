@@ -27,7 +27,22 @@ Work only on briefs in the queue below, top to bottom, skipping ones whose Statu
 Done: 193, 195, 196, 049, 110, 106, 164 (+ follow-up), 066, 168, 071, 062, 078, 077, 075, 092,
 097, 122, 167 (merged after planner review).
 
-The queue is empty until the planner adds the next briefs.
+Run 3 queue (2026-11-23). **Stack the branches:** start each brief from the previous brief's
+branch, not from `origin/main`, unless the previous one is already merged into `main`
+(`git branch -r --contains <its last commit>` lists `origin/main`). That way the briefs of a run
+build on each other and the planner merges them without conflicts. Merge `origin/main` into your
+current branch at the start of each brief as well.
+
+1. [145](tasks/145-render-parity-tests.md) · Render parity tests against O30/O43/O57 (consolidate the existing render tests; no new rules invented)
+2. [099](tasks/099-s7-animation-acceptance.md) · S7 acceptance test and animation docs
+3. [132](tasks/132-viewport-materials.md) · Viewport material display (PBR preview, textures)
+4. [131](tasks/131-material-manager.md) · Material manager UI with preview renders
+5. [140](tasks/140-picture-viewer-queue.md) · Picture viewer and render queue
+6. [141](tasks/141-ipr.md) · IPR (interactive render)
+7. [124](tasks/124-node-material.md) · Node material graph + node editor UI (large)
+8. [134](tasks/134-material-exchange-mapping.md) · Material exchange mapping (glTF PBR ↔ node material)
+9. [129](tasks/129-uv-editor.md) · UV editor (view, transform, relax LSCM, pack, seams) (large)
+10. [155](tasks/155-preferences.md) · Preferences window and settings storage
 
 **Handing a brief back.** When a brief's branch is pushed, add one line to
 `/Users/bigman/forge-implementer/log.md`: `<brief> <branch> <done|blocked> <one-line result>`. The
