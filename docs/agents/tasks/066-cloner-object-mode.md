@@ -1,6 +1,6 @@
 # 066 · Object-mode distributions with seeds and selections
 
-Status: blocked: O21 vertex and lower cap roll · Area: E · Depends on: 065, 027 · Observations: O21 · Touches: clone-engine
+Status: done (parity-pending: aligned object-vertex and object-polycenter roll pinned) · Area: E · Depends on: 065, 027 · Observations: O21 · Touches: clone-engine
 
 ## Goal
 Cloner Object mode: vertex, edge, polygon centre, surface, volume and axis distributions, with selection restriction and seeds.
