@@ -1,6 +1,6 @@
 # 145 · Render parity tests against O30/O43/O57
 
-Status: waiting: O30, O43, O57 · Area: K · Depends on: 137, 138 · Observations: O30, O43, O57 · Touches: tests
+Status: done (parity-pending: existing silhouette and lighting gaps) · Area: K · Depends on: 137, 138 · Observations: O30, O43, O57 · Touches: tests
 
 ## Goal
 All reference render cases have automated PSNR/silhouette tests.
@@ -16,8 +16,8 @@ All reference render cases have automated PSNR/silhouette tests.
 - Per-case thresholds in case.toml.
 
 ## Done when
-- [ ] All cases pass or are listed with reasons.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] All cases pass or are listed with reasons.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -26,10 +26,19 @@ All reference render cases have automated PSNR/silhouette tests.
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- **31 captures measured:** 17/23 render silhouettes and 7/8 camera silhouettes
+  pass; 6 existing mismatches remain; `mat-metal` is tone-only. All 9 focused
+  tests pass, including the original checker-pattern pins and lens calibration.
+- **Pins:** `area-soft` and `area-soft-2` differ on the lit plane; `checker-plane`,
+  `mat-checker-uv` and `mat-checker-cubic` contain black cells mistaken for
+  background (both sphere patterns retain the independent phase pin).
+  `ortho-zoom-2` disagrees on width; `mat-metal` has only a small reflection,
+  not a measurable object boundary.
+- **PSNR:** the common comparator reports exposure-normalised PSNR for every
+  capture and enforces explicit `[tolerance].psnr`. None of the captures
+  supplies that field, so no undocumented floor was invented.
+- **Files:** RENDER §R14a and the CPU test suites' shared `image_parity` helper.
+- **Gate:** two parallel runs hit the unrelated existing graph test
+  `a_shared_node_runs_once_per_evaluation`. With `RUST_TEST_THREADS=1`, the
+  unchanged full suite passed all 2,482 tests and the gate printed `GATE: all passed`.
