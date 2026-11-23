@@ -24,6 +24,7 @@ use forge_core::{Category, EvalCtx, LinkRow, NodeId, Scene, Value};
 use glam::{DMat4, DVec3};
 
 pub use blend::{BLEND_OPTIONS, BlendMode};
+mod vertex_map;
 pub use capsule::{CAPSULE, Capsule, capsule_type};
 pub use cone::{CONE, Cone, cone_type};
 pub use cylinder::{CYLINDER, Cylinder, cylinder_type};
@@ -42,6 +43,7 @@ pub use remap::{Contour, Remap};
 pub use shader::{SHADER, shader_type};
 pub use shape::{Direction, Shape};
 pub use torus::{TORUS, Torus, torus_type};
+pub use vertex_map::{evaluate_vertex_map, restriction_weights};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum FieldError {

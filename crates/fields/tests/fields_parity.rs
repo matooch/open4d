@@ -37,8 +37,8 @@ fn in_scope(name: &str) -> bool {
         || name == "mirror-graph"
 }
 
-/// Cases whose feature is not implemented (FIELDS.md F8): listed, skipped, never failing.
-const PENDING: &[(&str, &str)] = &[
+/// Cases not covered by this field-grid test (FIELDS.md F8).
+const SKIPPED: &[(&str, &str)] = &[
     (
         "decay-frame20",
         "time layers: the committed samples are unreliable",
@@ -47,10 +47,13 @@ const PENDING: &[(&str, &str)] = &[
         "delay-frame20",
         "time layers: the committed samples are unreliable",
     ),
-    ("vmap-from-field", "Vertex Map tags do not exist yet"),
+    (
+        "vmap-from-field",
+        "covered by the app's vertex_map_fields test",
+    ),
     (
         "restrict-bend",
-        "Vertex Map and Restriction tags do not exist yet",
+        "covered by the app's vertex_map_fields test",
     ),
 ];
 
@@ -376,16 +379,16 @@ fn exact_field_types_match_the_reference() {
     let reg = registry();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden");
     let mut matched = BTreeSet::new();
+    let mut listed = 0;
     let mut skipped = 0;
-    let mut pending = 0;
     let mut unsupported = BTreeSet::new();
     let mut mismatched = BTreeSet::new();
     for case in discover_cases(&root).unwrap() {
         if case.feature != "fields" {
             continue;
         }
-        if PENDING.iter().any(|(n, _)| *n == case.name) {
-            pending += 1;
+        if SKIPPED.iter().any(|(n, _)| *n == case.name) {
+            listed += 1;
             continue;
         }
         if let Some((_, reason)) = UNSUPPORTED.iter().find(|(n, _)| *n == case.name) {
@@ -440,7 +443,7 @@ fn exact_field_types_match_the_reference() {
     assert_eq!(matched.len(), 58, "{matched:?}");
     // The 5 Random cases are statistical (below); shader-noise and mod-step are Unsupported.
     assert_eq!(skipped, 5);
-    assert_eq!(pending, PENDING.len());
+    assert_eq!(listed, SKIPPED.len());
     assert_eq!(
         unsupported,
         UNSUPPORTED.iter().map(|(n, _)| n.to_string()).collect()
