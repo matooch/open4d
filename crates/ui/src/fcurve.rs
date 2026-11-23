@@ -8,7 +8,8 @@
 use std::collections::BTreeSet;
 
 use egui::{Align2, FontId, Pos2, Rect, Sense, Stroke, Ui, vec2};
-use forge_core::{Interp, NodeId, Unit};
+use forge_anim::{SpeedSide, speed_at, speed_at_key, speed_editable};
+use forge_core::{Interp, NodeId, Track, TrackTarget, Unit, parse_track_target};
 use serde_json::json;
 
 use crate::fcurve_logic::{self as logic, KeyId, KeySelection, RowKind, TimeView, ValueView};
@@ -19,6 +20,14 @@ use crate::theme::Theme;
 pub const LIST_W: f32 = 170.0;
 const KEY_R: f32 = 4.5;
 const HANDLE_R: f32 = 4.0;
+const SPEED_GRIP_X: f32 = 12.0;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GraphMode {
+    #[default]
+    Value,
+    Speed,
+}
 
 #[derive(Clone, Copy, PartialEq)]
 enum DragKind {
@@ -35,6 +44,8 @@ pub struct ValueGraph {
     pub vview: ValueView,
     pub selection: KeySelection,
     pub normalised: bool,
+    pub mode: GraphMode,
+    alternate_vview: ValueView,
     hidden: BTreeSet<(u64, String)>,
     drag: Option<(DragKind, Pos2, Option<KeyId>)>,
     pub canvas: Option<Rect>,
@@ -62,6 +73,16 @@ impl ValueGraph {
             self.vview.to_y(value, canvas.top()),
         )
     }
+
+    /// Side-specific speed grip; it stays slightly clear of the key's time line.
+    pub fn speed_grip(&self, canvas: Rect, frame: f64, speed: f64, side: SpeedSide) -> Pos2 {
+        let x = if side == SpeedSide::Left {
+            -SPEED_GRIP_X
+        } else {
+            SPEED_GRIP_X
+        };
+        self.point(canvas, frame, speed) + vec2(x, 0.0)
+    }
 }
 
 /// A curve to draw: its track, unit and the display range of its keys.
@@ -72,7 +93,7 @@ struct Curve {
     range: (f64, f64),
 }
 
-fn curves(st: &EditorState, hidden: &BTreeSet<(u64, String)>) -> Vec<Curve> {
+fn curves(st: &EditorState, hidden: &BTreeSet<(u64, String)>, speed: bool) -> Vec<Curve> {
     let scene = st.doc.scene();
     let only: Vec<NodeId> = st.selection.nodes.iter().copied().collect();
     logic::rows(scene, &only)
@@ -87,6 +108,19 @@ fn curves(st: &EditorState, hidden: &BTreeSet<(u64, String)>) -> Vec<Curve> {
                 return None;
             }
             let t = scene.node(r.node)?.tracks.get(&track)?;
+            if speed
+                && (t.quaternion
+                    || !scene.node_type(r.node).is_some_and(|ty| {
+                        matches!(
+                            parse_track_target(&track, |p| ty.find_param(p)),
+                            Ok(TrackTarget::Float(_)
+                                | TrackTarget::Component(..)
+                                | TrackTarget::Channel(..))
+                        )
+                    }))
+            {
+                return None;
+            }
             let vals = t.keys.iter().map(|k| logic::display(unit, k.value));
             let lo = vals.clone().fold(f64::INFINITY, f64::min);
             let hi = vals.fold(f64::NEG_INFINITY, f64::max);
@@ -98,6 +132,12 @@ fn curves(st: &EditorState, hidden: &BTreeSet<(u64, String)>) -> Vec<Curve> {
             })
         })
         .collect()
+}
+
+fn key_speed(t: &Track, i: usize) -> f64 {
+    speed_at_key(t, i, SpeedSide::Right)
+        .or_else(|| speed_at_key(t, i, SpeedSide::Left))
+        .unwrap_or(0.0)
 }
 
 /// Normalised view: each curve's key range mapped to 0..100.
@@ -128,17 +168,36 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
     let theme = Theme::current(ui.ctx());
     let fps = f64::from(st.doc.scene().settings().fps);
     let current = st.timeline.current as f64;
-    let curves = curves(st, &g.hidden);
+    let mut curves = curves(st, &g.hidden, g.mode == GraphMode::Speed);
     let (mut frame_all, mut frame_sel) = (false, false);
 
     ui.horizontal_wrapped(|ui| {
+        let previous = g.mode;
+        ui.selectable_value(&mut g.mode, GraphMode::Value, "Value");
+        ui.selectable_value(&mut g.mode, GraphMode::Speed, "Speed (/s)");
+        let speed = g.mode == GraphMode::Speed;
+        if g.mode != previous {
+            std::mem::swap(&mut g.vview, &mut g.alternate_vview);
+            g.drag = None;
+            curves = self::curves(st, &g.hidden, speed);
+        }
         frame_all = ui.button("Frame all").clicked();
         frame_sel = ui.button("Frame selected").clicked();
         ui.checkbox(&mut g.tview.snap, "Snap");
-        ui.checkbox(&mut g.normalised, "Normalised");
+        ui.add_enabled(!speed, egui::Checkbox::new(&mut g.normalised, "Normalised"));
         ui.separator();
         let has = !g.selection.keys.is_empty();
-        for (label, preset) in [
+        if speed
+            && ui
+                .add_enabled(has, egui::Button::new("Constant speed"))
+                .clicked()
+        {
+            cmds.push((
+                "key.set_interp",
+                json!({"keys": g.selection.json(), "interp": "linear"}),
+            ));
+        }
+        let value_presets = [
             ("Auto", "auto"),
             ("Linear", "linear"),
             ("Ease", "ease"),
@@ -146,7 +205,17 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
             ("Ease out", "ease_out"),
             ("Zero angle", "zero_angle"),
             ("Zero length", "zero_length"),
-        ] {
+        ];
+        let speed_presets = [
+            ("Ease", "ease"),
+            ("Ease in", "ease_in"),
+            ("Ease out", "ease_out"),
+        ];
+        for &(label, preset) in if speed {
+            speed_presets.as_slice()
+        } else {
+            value_presets.as_slice()
+        } {
             if ui.add_enabled(has, egui::Button::new(label)).clicked() {
                 for k in &g.selection.keys {
                     cmds.push((
@@ -178,7 +247,7 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
             }
         }
         // numeric entry for one selected key
-        if let [k] = g.selection.keys.as_slice() {
+        if !speed && let [k] = g.selection.keys.as_slice() {
             let unit = unit_of(&curves, k);
             let value = st
                 .doc
@@ -215,13 +284,21 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
             }
         }
     });
+    let speed = g.mode == GraphMode::Speed;
+    let normalised = g.normalised && !speed;
 
     let avail = ui.available_rect_before_wrap();
     let (outer, resp) = ui.allocate_exact_size(
         vec2(avail.width(), avail.height().clamp(160.0, 420.0)),
         Sense::click_and_drag(),
     );
-    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, "Value graph"));
+    resp.widget_info(|| {
+        egui::WidgetInfo::labeled(
+            egui::Role::Label,
+            true,
+            if speed { "Speed graph" } else { "Value graph" },
+        )
+    });
     let canvas = Rect::from_min_max(Pos2::new(outer.left() + LIST_W, outer.top()), outer.max);
     let painter = ui.painter_at(outer);
     painter.rect_filled(outer, 0.0, theme.panel);
@@ -275,11 +352,12 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
     let to_screen = |c: &Curve, frame: f64, value: f64| {
         Pos2::new(
             g.tview.to_x(frame, canvas.left()),
-            g.vview.to_y(norm(c, value, g.normalised), canvas.top()),
+            g.vview.to_y(norm(c, value, normalised), canvas.top()),
         )
     };
-    let mut keys: Vec<(KeyId, [f32; 2], usize)> = Vec::new();
-    for (ci, c) in curves.iter().enumerate() {
+    let mut keys: Vec<(KeyId, [f32; 2])> = Vec::new();
+    let mut grips = Vec::new();
+    for c in &curves {
         let Some(t) = st
             .doc
             .scene()
@@ -293,17 +371,25 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
         let mut x = canvas.left();
         while x <= canvas.right() {
             let frame = g.tview.to_frame(x, canvas.left());
-            let v = logic::display(c.unit, forge_anim::value_at_exact(t, &[], frame / fps));
+            let v = logic::display(
+                c.unit,
+                if speed {
+                    speed_at(t, frame / fps)
+                } else {
+                    forge_anim::value_at_exact(t, &[], frame / fps)
+                },
+            );
             pts.push(Pos2::new(
                 x,
-                g.vview.to_y(norm(c, v, g.normalised), canvas.top()),
+                g.vview.to_y(norm(c, v, normalised), canvas.top()),
             ));
             x += 2.0;
         }
         painter.add(egui::Shape::line(pts, Stroke::new(1.5, color)));
         for (i, k) in t.keys.iter().enumerate() {
             let frame = k.time * fps;
-            let p = to_screen(c, frame, logic::display(c.unit, k.value));
+            let v = if speed { key_speed(t, i) } else { k.value };
+            let p = to_screen(c, frame, logic::display(c.unit, v));
             let id = KeyId {
                 node: c.node.0,
                 track: c.track.clone(),
@@ -316,9 +402,24 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
                 if selected { theme.accent } else { color },
                 Stroke::new(1.0, theme.window),
             );
-            if selected
+            if selected && speed {
+                for (side, s) in [(SpeedSide::Left, -1), (SpeedSide::Right, 1)] {
+                    if speed_editable(t, i, side)
+                        && let Some(v) = speed_at_key(t, i, side)
+                    {
+                        let v = logic::display(c.unit, v);
+                        let h = g.speed_grip(canvas, frame, v, side);
+                        painter.line_segment(
+                            [to_screen(c, frame, v), h],
+                            Stroke::new(1.0, theme.weak_text),
+                        );
+                        painter.circle_stroke(h, HANDLE_R, Stroke::new(1.0, theme.text));
+                        grips.push((id.clone(), s, h));
+                    }
+                }
+            } else if selected
                 && k.interp == Interp::Spline
-                && !g.normalised
+                && !normalised
                 && let Some((l, r)) = forge_anim::handles(t, i)
             {
                 {
@@ -330,58 +431,29 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
                             to_screen(c, frame + dt * fps, logic::display(c.unit, k.value + dv));
                         painter.line_segment([p, h], Stroke::new(1.0, theme.weak_text));
                         painter.circle_stroke(h, HANDLE_R, Stroke::new(1.0, theme.text));
+                        grips.push((id.clone(), side, h));
                     }
                 }
             }
-            keys.push((id, [p.x, p.y], ci));
+            keys.push((id, [p.x, p.y]));
         }
     }
 
     // interaction
     let mods = ui.input(|i| i.modifiers);
-    let handle_hit = |pos: Pos2, g: &ValueGraph| -> Option<(KeyId, i8)> {
-        if g.normalised {
-            return None;
-        }
-        for (id, _, ci) in &keys {
-            if !g.selection.contains(id) {
-                continue;
-            }
-            let c = &curves[*ci];
-            let t = st.doc.scene().node(c.node)?.tracks.get(&c.track)?;
-            let i = t
-                .keys
-                .iter()
-                .position(|k| (k.time * fps - id.frame).abs() < 1e-6)?;
-            if t.keys[i].interp != Interp::Spline {
-                continue;
-            }
-            let (l, r) = forge_anim::handles(t, i)?;
-            for (side, (dt, dv)) in [(-1i8, l), (1, r)] {
-                if (side < 0 && i == 0) || (side > 0 && i + 1 == t.keys.len()) {
-                    continue;
-                }
-                let h = g.point(
-                    canvas,
-                    id.frame + dt * fps,
-                    logic::display(c.unit, t.keys[i].value + dv),
-                );
-                if (h.x - pos.x).hypot(h.y - pos.y) <= HANDLE_R + 3.0 {
-                    return Some((id.clone(), side));
-                }
-            }
-        }
-        None
+    let handle_hit = |pos: Pos2| {
+        grips
+            .iter()
+            .find(|(_, _, h)| h.distance(pos) <= HANDLE_R + 3.0)
+            .map(|(id, side, _)| (id.clone(), *side))
     };
-    let key_hit = |pos: Pos2| {
-        let pts: Vec<(KeyId, [f32; 2])> = keys.iter().map(|(k, p, _)| (k.clone(), *p)).collect();
-        logic::hit_test(&pts, [pos.x, pos.y], KEY_R + 3.0).map(|i| pts[i].0.clone())
-    };
+    let key_hit =
+        |pos: Pos2| logic::hit_test(&keys, [pos.x, pos.y], KEY_R + 3.0).map(|i| keys[i].0.clone());
     if resp.drag_started_by(egui::PointerButton::Primary)
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && pos.x >= canvas.left()
     {
-        g.drag = Some(if let Some((id, side)) = handle_hit(pos, &g) {
+        g.drag = Some(if let Some((id, side)) = handle_hit(pos) {
             (DragKind::Handle(side), pos, Some(id))
         } else if let Some(id) = key_hit(pos) {
             if !g.selection.contains(&id) {
@@ -408,14 +480,12 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
         if resp.drag_stopped() {
             match kind {
                 DragKind::Box => {
-                    let pts: Vec<(KeyId, [f32; 2])> =
-                        keys.iter().map(|(k, p, _)| (k.clone(), *p)).collect();
-                    let sel = logic::box_select(&pts, [origin.x, origin.y], [now.x, now.y]);
+                    let sel = logic::box_select(&keys, [origin.x, origin.y], [now.x, now.y]);
                     g.selection.set(sel, mods.shift);
                 }
                 DragKind::Move => {
                     let df = logic::drag_frames(&g.tview, now.x - origin.x);
-                    let dv = if g.normalised {
+                    let dv = if normalised || speed {
                         0.0
                     } else {
                         -f64::from(now.y - origin.y) / g.vview.ppu
@@ -431,30 +501,45 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
                 }
                 DragKind::Handle(side) => {
                     if let Some(id) = handle_key {
-                        let c = curves
-                            .iter()
-                            .find(|c| c.node.0 == id.node && c.track == id.track);
-                        if let Some(c) = c {
-                            let frame = g.tview.to_frame(now.x, canvas.left());
-                            let value =
-                                denorm(c, g.vview.to_value(now.y, canvas.top()), g.normalised);
-                            let key_value = st
-                                .doc
-                                .scene()
-                                .node(c.node)
-                                .and_then(|n| n.tracks.get(&c.track))
-                                .and_then(|t| {
-                                    t.keys
-                                        .iter()
-                                        .find(|k| (k.time * fps - id.frame).abs() < 1e-6)
-                                        .map(|k| logic::display(c.unit, k.value))
-                                })
-                                .unwrap_or(0.0);
-                            let h = json!({"dt_frames": frame - id.frame, "dv": value - key_value});
-                            let mut a = json!({"node": id.node, "track": id.track,
+                        if speed {
+                            if now.y != origin.y
+                                && let Some((_, _, grip)) =
+                                    grips.iter().find(|(key, s, _)| key == &id && *s == side)
+                            {
+                                let value =
+                                    g.vview.to_value(grip.y + now.y - origin.y, canvas.top());
+                                cmds.push(("key.set_speed", json!({
+                                    "node": id.node, "track": id.track, "frame": id.frame,
+                                    "side": if side < 0 { "left" } else { "right" }, "speed": value,
+                                })));
+                            }
+                        } else {
+                            let c = curves
+                                .iter()
+                                .find(|c| c.node.0 == id.node && c.track == id.track);
+                            if let Some(c) = c {
+                                let frame = g.tview.to_frame(now.x, canvas.left());
+                                let value =
+                                    denorm(c, g.vview.to_value(now.y, canvas.top()), normalised);
+                                let key_value = st
+                                    .doc
+                                    .scene()
+                                    .node(c.node)
+                                    .and_then(|n| n.tracks.get(&c.track))
+                                    .and_then(|t| {
+                                        t.keys
+                                            .iter()
+                                            .find(|k| (k.time * fps - id.frame).abs() < 1e-6)
+                                            .map(|k| logic::display(c.unit, k.value))
+                                    })
+                                    .unwrap_or(0.0);
+                                let h =
+                                    json!({"dt_frames": frame - id.frame, "dv": value - key_value});
+                                let mut a = json!({"node": id.node, "track": id.track,
                                                "frame": id.frame, "preset": "user"});
-                            a[if side < 0 { "left" } else { "right" }] = h;
-                            cmds.push(("key.set_tangent", a));
+                                a[if side < 0 { "left" } else { "right" }] = h;
+                                cmds.push(("key.set_tangent", a));
+                            }
                         }
                     }
                 }
@@ -559,6 +644,7 @@ fn frame(
     canvas: Rect,
 ) {
     let fps = f64::from(st.doc.scene().settings().fps);
+    let speed = g.mode == GraphMode::Speed;
     let (mut f0, mut f1, mut v0, mut v1) = (
         f64::INFINITY,
         f64::NEG_INFINITY,
@@ -574,7 +660,8 @@ fn frame(
         else {
             continue;
         };
-        for k in &t.keys {
+        let mut time_range: Option<(f64, f64)> = None;
+        for (i, k) in t.keys.iter().enumerate() {
             let frame = k.time * fps;
             let id = KeyId {
                 node: c.node.0,
@@ -584,15 +671,38 @@ fn frame(
             if selected_only && !g.selection.contains(&id) {
                 continue;
             }
-            let v = norm(c, logic::display(c.unit, k.value), g.normalised);
             f0 = f0.min(frame);
             f1 = f1.max(frame);
-            v0 = v0.min(v);
-            v1 = v1.max(v);
+            if speed {
+                time_range = Some((time_range.map_or(k.time, |(lo, _)| lo), k.time));
+                for side in [SpeedSide::Left, SpeedSide::Right] {
+                    if let Some(v) = speed_at_key(t, i, side) {
+                        let v = logic::display(c.unit, v);
+                        v0 = v0.min(v);
+                        v1 = v1.max(v);
+                    }
+                }
+            } else {
+                let v = norm(c, logic::display(c.unit, k.value), g.normalised);
+                v0 = v0.min(v);
+                v1 = v1.max(v);
+            }
+        }
+        if let Some((lo, hi)) = time_range {
+            for s in 0..=128 {
+                let time = lo + (hi - lo) * f64::from(s) / 128.0;
+                let v = logic::display(c.unit, speed_at(t, time));
+                v0 = v0.min(v);
+                v1 = v1.max(v);
+            }
         }
     }
     if f0.is_finite() {
         g.tview.frame_range(f0, f1, canvas.width());
+        if speed && v1 - v0 < 1.0 {
+            v0 -= 0.5;
+            v1 += 0.5;
+        }
         g.vview.frame_range(v0, v1, canvas.height());
     }
 }

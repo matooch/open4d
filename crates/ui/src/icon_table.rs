@@ -516,6 +516,7 @@ pub(crate) const ICON_MAP: &[(&str, &str)] = &[
     ("key.scale", "scale"),
     ("key.set", "key"),
     ("key.set_interp", "key"),
+    ("key.set_speed", "key"),
     ("key.set_tangent", "key"),
     ("layer.assign", "layer"),
     ("layer.create", "layer"),

@@ -192,6 +192,7 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `key_delete` | Delete Selected Keys. Undoable editing command. Runs command `key.delete`. |
 | `key_set_interp` | Set Key Interpolation. Undoable editing command. Runs command `key.set_interp`. |
 | `key_set_tangent` | Set Key Tangent. Undoable editing command. Runs command `key.set_tangent`. |
+| `key_set_speed` | Set Key Speed. Undoable editing command. Runs command `key.set_speed`. |
 | `key_paste` | Paste Keys. Undoable editing command. Runs command `key.paste`. |
 | `track_set_behavior` | Track Behavior. Undoable editing command. Runs command `track.set_behavior`. |
 | `key_euler_filter` | Euler Filter. Undoable editing command. Runs command `key.euler_filter`. |

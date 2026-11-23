@@ -139,6 +139,7 @@
 | [`key.delete`](#keydelete) | Delete Selected Keys | yes | `key_delete` |
 | [`key.set_interp`](#keyset_interp) | Set Key Interpolation | yes | `key_set_interp` |
 | [`key.set_tangent`](#keyset_tangent) | Set Key Tangent | yes | `key_set_tangent` |
+| [`key.set_speed`](#keyset_speed) | Set Key Speed | yes | `key_set_speed` |
 | [`key.paste`](#keypaste) | Paste Keys | yes | `key_paste` |
 | [`track.set_behavior`](#trackset_behavior) | Track Behavior | yes | `track_set_behavior` |
 | [`key.euler_filter`](#keyeuler_filter) | Euler Filter | yes | `key_euler_filter` |
@@ -1628,6 +1629,20 @@ Set Key Tangent. One undo step.
 | `weighted` | boolean or null | no |  |
 
 Example: `forge cmd scene.forge key.set_tangent --args '{"frame":10.0,"node":1,"preset":"ease","track":"transform.pos.x"}'`
+
+### `key.set_speed`
+
+Set Key Speed. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `node` | integer | yes |  |
+| `track` | string | yes |  |
+| `frame` | number | yes |  |
+| `side` | string | yes | Spline segment side: `left` (incoming) or `right` (outgoing). |
+| `speed` | number | yes | Signed target speed in display units per second. |
+
+Example: `forge cmd scene.forge key.set_speed --args '{"frame":10.0,"node":1,"side":"right","speed":20.0,"track":"transform.pos.x"}'`
 
 ### `key.paste`
 

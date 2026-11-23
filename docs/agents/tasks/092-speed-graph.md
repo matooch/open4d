@@ -1,6 +1,6 @@
 # 092 · Speed graph mode and speed editing
 
-Status: ready · Area: G · Depends on: 091 · Observations: G5 · Touches: ui, anim
+Status: done (parity-pending: G5) · Area: G · Depends on: 091 · Observations: G5 · Touches: ui, anim
 
 ## Goal
 A speed (velocity) view of curves, with editing that maps back to tangents.
@@ -13,8 +13,8 @@ A speed (velocity) view of curves, with editing that maps back to tangents.
 - Speed = analytic dv/dt (089). Editing a speed handle scales the adjacent tangent lengths (own design, documented in ANIM.md).
 
 ## Done when
-- [ ] Unit test: editing speed at a key changes tangents so the new speed matches within 1e-6.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Unit test: editing speed at a key changes tangents so the new speed matches within 1e-6.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -23,10 +23,19 @@ A speed (velocity) view of curves, with editing that maps back to tangents.
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- **Native result:** signed speed mode plots the analytic derivative and edits each
+  spline-side speed through `key.set_speed`. Tests check exact endpoint speeds
+  within 1e-6, collapsed handles, broken/weighted handles, degrees per second, and
+  a real UI drag followed by a single undo.
+- **Edit design:** scale vertical handle length, preserving its resolved time
+  length; if collapsed, use one third of the adjacent span. Linked spline sides
+  receive the same speed. Key times and values remain unchanged.
+- **Files:** ANIM §1.5c; animation interpolation/tangent helpers and speed tests;
+  F-curve manager and UI tests; command, icon, and generated reference.
+- **Parity pending G5:** no speed-view capture is available. Observe the display
+  units, one-sided grip interactions, and what the reference does with broken
+  and weighted handles. Discrete/quaternion tracks are not treated as scalar speed.
+- **Gate note:** the first run hit the unrelated graph test
+  `a_shared_node_runs_once_per_evaluation` (2 vs 1); no graph changes were made.
+- **Final gate:** `GATE: 2454 tests passed, 0 failed`; `GATE: all passed`.
