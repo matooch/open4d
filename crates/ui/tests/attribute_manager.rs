@@ -91,6 +91,92 @@ fn undo(h: &mut Harness<'_, Editor>) {
     h.run();
 }
 
+fn key_menu(h: &mut Harness<'_, Editor>, marker: &str) {
+    let p = h.get_by_label(marker).rect().center();
+    h.hover_at(p);
+    h.run();
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: p,
+            button: egui::PointerButton::Secondary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run();
+    }
+}
+
+#[test]
+fn attribute_key_indicator_stages_a_change_then_keys_it_and_navigates_the_row() {
+    let mut st = state();
+    let id = make(&mut st, "am.thing");
+    let mut h = harness(st);
+    h.run();
+    let click = |h: &mut Harness<'_, Editor>, name| {
+        h.get_by_label(name).click();
+        h.run();
+    };
+    click(&mut h, "Flag unkeyed");
+    h.get_by_label("Flag keyed");
+    let n = undo_steps(&h);
+    click(&mut h, "Flag");
+    h.get_by_label("Flag changed");
+    assert_eq!(undo_steps(&h), n, "draft is not an undoable edit");
+    let key_value = |h: &Harness<'_, Editor>| {
+        h.state().state.doc.scene().node(id).unwrap().tracks["flag"].keys[0]
+    };
+    assert_eq!(key_value(&h).value, 0.0);
+    click(&mut h, "Flag changed");
+    assert_eq!(key_value(&h).value, 1.0);
+    assert_eq!(key_value(&h).interp, forge_core::Interp::Step);
+    assert_eq!(undo_steps(&h), n + 1);
+
+    let st = &mut h.state_mut().state;
+    execute(
+        st,
+        "key.set_parameter",
+        json!({"node": id.0, "param": "flag", "frame": 20, "value": false}),
+    )
+    .unwrap();
+    execute(
+        st,
+        "key.set",
+        json!({"node": id.0, "track": "angle", "frame": 10, "value": 10}),
+    )
+    .unwrap();
+    h.run();
+    key_menu(&mut h, "Flag keyed");
+    click(&mut h, "Next Key on Parameter");
+    assert_eq!(h.state().state.timeline.current, 20);
+    key_menu(&mut h, "Flag keyed");
+    click(&mut h, "Delete Key on Parameter");
+    h.get_by_label("Flag animated");
+    assert_eq!(
+        h.state().state.doc.scene().node(id).unwrap().tracks["flag"]
+            .keys
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn keying_a_vector_row_keys_every_component_in_one_step() {
+    let mut st = state();
+    let id = make(&mut st, "am.thing");
+    let mut h = harness(st);
+    h.run();
+    let n = undo_steps(&h);
+    h.get_by_label("Pos unkeyed").click();
+    h.run();
+    let node = h.state().state.doc.scene().node(id).unwrap();
+    for (axis, v) in [("x", 1.0), ("y", 2.0), ("z", 3.0)] {
+        assert_eq!(node.tracks[&format!("pos.{axis}")].keys[0].value, v);
+    }
+    assert_eq!(undo_steps(&h), n + 1);
+    undo(&mut h);
+    h.get_by_label("Pos unkeyed");
+}
+
 fn combo(h: &mut Harness<'_, Editor>, label: &str) {
     h.get_by_role_and_label(egui::accesskit::Role::ComboBox, label)
         .click();
