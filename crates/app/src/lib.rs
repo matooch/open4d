@@ -7,6 +7,7 @@ pub mod animate;
 pub mod coords;
 pub mod diagnostics;
 pub mod dynamics;
+mod dynamics_commands;
 pub mod material_commands;
 pub mod motion;
 pub mod motion_tags;
@@ -61,6 +62,7 @@ pub fn default_command_registry() -> CommandRegistry {
     let mut commands = CommandRegistry::new();
     register_editor_commands(&mut commands).expect("built-in command ids are unique");
     param_edit::register(&mut commands).expect("param.edit is unique");
+    dynamics_commands::register(&mut commands).expect("dynamics commands are unique");
     coords::register(&mut commands).expect("transform.edit is unique");
     forge_nodes::register_commands(&mut commands).expect("graph.* ids are unique");
     rig_commands::register(&mut commands).expect("joint.* ids are unique");

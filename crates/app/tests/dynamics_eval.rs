@@ -1,7 +1,8 @@
 //! Dynamics in the app's scene evaluation (docs/specs/DYNAMICS.md §5.1).
 
 use forge_app::App;
-use forge_core::{NodeId, Value};
+use forge_core::{Document, NodeId, Value, file};
+use serde_json::json;
 
 fn drop_scene(app: &mut App) -> (NodeId, NodeId) {
     app.doc
@@ -93,6 +94,15 @@ fn clones_fall_through_the_cloner_evaluation() {
         (y30 + 300.0).abs() < 1.0,
         "the clones fell to the plane: {y30}"
     );
+    let want = app.eval_mesh(cloner, 30).unwrap();
+    app.run(
+        "dynamics.bake",
+        json!({"nodes": [cloner.0], "start": 10, "end": 30, "mode": "cache"}),
+    )
+    .unwrap();
+    app.run("dynamics.settings", json!({"enabled": false}))
+        .unwrap();
+    assert_eq!(app.eval_mesh(cloner, 30).unwrap(), want);
 }
 
 fn mesh_points(app: &App, cloner: NodeId) -> usize {
@@ -172,4 +182,134 @@ fn a_soft_body_mesh_follows_the_simulation() {
     };
     assert!((lowest(0) - 150.0).abs() < 1e-9);
     assert!((lowest(60) - 0.5).abs() < 0.3, "{}", lowest(60));
+    let want = app.eval_mesh(sphere, 60).unwrap();
+    app.run(
+        "dynamics.bake",
+        json!({"nodes": [sphere.0], "start": 50, "end": 60, "mode": "cache"}),
+    )
+    .unwrap();
+    app.run("dynamics.settings", json!({"enabled": false}))
+        .unwrap();
+    assert_eq!(app.eval_mesh(sphere, 60).unwrap(), want);
+}
+
+#[test]
+fn baking_keys_is_one_undo_step_and_replays_the_live_poses() {
+    let mut app = App::new_default();
+    let (_, cube) = drop_scene(&mut app);
+    let want: Vec<_> = (0..=30)
+        .map(|f| {
+            app.eval
+                .get(app.doc.scene(), f)
+                .local_transform(cube)
+                .unwrap()
+        })
+        .collect();
+    assert_ne!(want[0], want[30]);
+    let depth = app.doc.undo_depth();
+    app.run(
+        "dynamics.bake",
+        json!({"nodes": [cube.0], "start": 0, "end": 30, "mode": "keys"}),
+    )
+    .unwrap();
+    assert_eq!(app.doc.undo_depth(), depth + 1);
+    let scene = app.doc.scene();
+    assert_eq!(scene.node(cube).unwrap().tracks.len(), 6);
+    let body = forge_dynamics::build::body_tag(scene, cube).unwrap();
+    assert_eq!(forge_dynamics::build::kind_of(scene, body), None);
+    for (f, expected) in want.into_iter().enumerate().rev() {
+        let got = app.scheduled(f as i64).scene.local_transform(cube).unwrap();
+        assert!((got.pos - expected.pos).length() < 1e-9, "frame {f}");
+        assert!((got.rot - expected.rot).length() < 1e-9, "frame {f}");
+    }
+    assert!(app.doc.undo());
+    assert_eq!(
+        forge_dynamics::build::kind_of(app.doc.scene(), body),
+        Some(forge_dynamics::BodyKind::Dynamic)
+    );
+    assert!(app.doc.scene().node(cube).unwrap().tracks.is_empty());
+}
+
+#[test]
+fn binary_dynamics_tag_round_trips_and_overrides_disabled_simulation() {
+    let mut app = App::new_default();
+    let (_, cube) = drop_scene(&mut app);
+    let live: Vec<_> = (0..=30).map(|f| y(&app, cube, f)).collect();
+    app.run(
+        "dynamics.bake",
+        json!({"nodes": [cube.0], "start": 0, "end": 30, "mode": "cache"}),
+    )
+    .unwrap();
+    app.run("dynamics.settings", json!({"enabled": false}))
+        .unwrap();
+    let bytes = file::save_with(app.doc.scene(), &Default::default());
+    assert!(
+        bytes
+            .windows(b"%%FORGE-CHUNKS".len())
+            .any(|b| b == b"%%FORGE-CHUNKS")
+    );
+    let (loaded, _) = file::load_bytes(app.doc.scene().registry().clone(), &bytes).unwrap();
+    app.doc = Document::from_scene(loaded);
+    for frame in [30, 0, 15, 7] {
+        assert_eq!(y(&app, cube, frame), live[frame as usize]);
+        assert_eq!(
+            app.scheduled_draw(frame)
+                .scene
+                .world_matrix(cube)
+                .unwrap()
+                .w_axis
+                .y,
+            live[frame as usize]
+        );
+    }
+    assert_eq!(
+        y(&app, cube, 31),
+        live[0],
+        "outside the cache range uses live state"
+    );
+}
+
+#[test]
+fn animated_kinematic_collider_moves_dynamic_body_in_draw_and_headless_evaluation() {
+    let mut app = App::new_default();
+    let body = app
+        .doc
+        .transact("Kinematic lift", |tx| {
+            let lift = tx.create("forge.cube", None, None)?;
+            for (axis, size) in [("size_x", 200.0), ("size_y", 20.0), ("size_z", 200.0)] {
+                tx.set_param(lift, axis, Value::Float(size))?;
+            }
+            let tag = tx.attach_tag("forge.rigid_body", lift, None)?;
+            tx.set_param(tag, "dynamic", Value::Enum("kinematic".into()))?;
+            tx.set_track(
+                lift,
+                "transform.pos.y",
+                Some(forge_core::Track::new(vec![
+                    forge_core::Key::new(0.0, 0.0).with_interp(forge_core::Interp::Linear),
+                    forge_core::Key::new(1.0, 100.0),
+                ])),
+            )?;
+            let body = tx.create("forge.cube", None, None)?;
+            for axis in ["size_x", "size_y", "size_z"] {
+                tx.set_param(body, axis, Value::Float(20.0))?;
+            }
+            tx.set_param(body, "transform.pos", Value::Vec3([0.0, 21.0, 0.0]))?;
+            tx.attach_tag("forge.rigid_body", body, None)?;
+            Ok(body)
+        })
+        .unwrap();
+    let lifted = y(&app, body, 30);
+    assert!(
+        lifted > 110.0,
+        "expected collider to lift the body: {lifted}"
+    );
+    assert_eq!(
+        app.scheduled_draw(30)
+            .scene
+            .world_matrix(body)
+            .unwrap()
+            .w_axis
+            .y,
+        lifted
+    );
 }

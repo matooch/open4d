@@ -236,6 +236,7 @@ impl Plugin for DynamicsToolset {
 
     fn register(&self, r: &mut Registry) -> Result<(), RegistryError> {
         r.register(rigid_body_type())?;
+        r.register(crate::archive::node_type())?;
         r.register(settings_type())?;
         r.register(connector_type())?;
         r.register(spring_type())?;
