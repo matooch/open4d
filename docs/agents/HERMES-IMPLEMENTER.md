@@ -102,6 +102,18 @@ stop. Never write `QUEUE FINISHED` while a branch has unpushed commits.
    the brief's Report; set BACKLOG to `done`; commit; push the branch; add one line to
    `/Users/bigman/forge-implementer/log.md` (brief, branch, result).
 
+## 5a. Tests that cannot flake
+
+Two run-3 tests passed on the Mac and failed in CI. Write tests so speed and parallelism cannot
+change the result:
+- **Background work in UI tests** (renders, IPR, previews): after the action that starts it,
+  advance with `h.step()` in a polling loop with a deadline until the result is there; call
+  `h.run()` only once nothing is running. `run()` waits for a settled UI and fails when a job
+  keeps requesting repaints.
+- **No shared mutable globals between tests** (`static` counters, caches). Use per-test state;
+  if a global is unavoidable, hold one `static Mutex` in every test that touches it.
+- Run a new test file at least 5 times in a row before committing; any failure is a bug.
+
 ## 6. Never
 
 - Never edit `tests/golden/**` or `docs/parity/*.md`, never loosen a tolerance, never special-case a
