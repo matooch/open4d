@@ -1,15 +1,17 @@
 //! Shading IR to WGSL (docs/specs/REALTIME.md §1): one specialised `forge_surface`
 //! function per material, plus a cache keyed by the IR hash. Shader-node channels compile
-//! to the documented fallback until brief 207.
+//! through a [`TextureCodegen`] (docs/specs/REALTIME.md §2, implemented by the
+//! `forge-shaders` crate); without one they use the documented fallback colour.
 
-use std::collections::HashMap;
+use std::any::Any;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 use std::sync::Arc;
 
 use crate::ir::{DiffuseModel, IrNode, MixMode, ShadingGraph};
 
 /// Bumped whenever the emitted source changes; part of the cache key.
-pub const CODEGEN_VERSION: u32 = 1;
+pub const CODEGEN_VERSION: u32 = 2;
 
 /// The colour a shader-node (`Texture`) channel compiles to in part 1.
 pub const FALLBACK_COLOR: [f64; 3] = [0.8, 0.8, 0.8];
@@ -20,8 +22,80 @@ pub struct WgslMaterial {
     pub source: String,
     /// The cache key (codegen version plus the canonical IR).
     pub hash: u64,
-    /// Shader-node names that compiled to [`FALLBACK_COLOR`] (brief 207 replaces them).
+    /// Shader-node names that compiled to [`FALLBACK_COLOR`] (names the codegen could not port).
     pub fallbacks: Vec<String>,
+    /// Resources the module binds (bitmaps): entry `k` is bound at `@group(1) @binding(k)`.
+    pub resources: Vec<Arc<dyn Any + Send + Sync>>,
+}
+
+/// Collects the declarations a [`TextureCodegen`] adds to a module (REALTIME.md §2.1).
+#[derive(Default)]
+pub struct ModuleBuilder {
+    decls: String,
+    once: HashSet<String>,
+    funcs: HashMap<String, String>,
+    resources: Vec<Arc<dyn Any + Send + Sync>>,
+}
+
+impl ModuleBuilder {
+    /// Adds `source` unless a declaration with the same `key` was added before (the
+    /// per-family library functions are emitted once per module).
+    pub fn once(&mut self, key: &str, source: &str) {
+        if self.once.insert(key.to_string()) {
+            self.decls.push_str(source);
+            self.decls.push('\n');
+        }
+    }
+
+    /// Adds `fn <name>(<params>) -> <ret> { <body> }` once per distinct text and returns
+    /// the generated name.
+    pub fn function(&mut self, params: &str, ret: &str, body: &str) -> String {
+        let key = format!("{params}|{ret}|{body}");
+        if let Some(name) = self.funcs.get(&key) {
+            return name.clone();
+        }
+        let name = format!("forge_f{}", self.funcs.len());
+        let _ = writeln!(self.decls, "fn {name}({params}) -> {ret} {{\n{body}\n}}");
+        self.funcs.insert(key, name.clone());
+        name
+    }
+
+    /// Adds a module-scope declaration verbatim.
+    pub fn declare(&mut self, source: &str) {
+        self.decls.push_str(source);
+        self.decls.push('\n');
+    }
+
+    /// Registers a bound resource and returns its `@group(1)` binding index (the same
+    /// `Arc` always gets the same index).
+    pub fn resource(&mut self, r: Arc<dyn Any + Send + Sync>) -> u32 {
+        if let Some(i) = self.resources.iter().position(|x| Arc::ptr_eq(x, &r)) {
+            return i as u32;
+        }
+        self.resources.push(r);
+        (self.resources.len() - 1) as u32
+    }
+}
+
+/// Emits WGSL for the named shader nodes referenced by `IrNode::Texture` (REALTIME.md §2).
+pub trait TextureCodegen {
+    /// A hash of everything the code for `name` depends on (part of the cache key).
+    fn fingerprint(&self, name: &str) -> u64;
+    /// Adds the declarations for `name` to `module` and returns the WGSL expression of its
+    /// colour (a call of one of those functions with `ctx`), or `None` to use the fallback.
+    fn emit(&self, name: &str, module: &mut ModuleBuilder) -> Option<String>;
+}
+
+/// The part 1 behaviour: every shader node is the fallback colour.
+pub struct NoShaders;
+
+impl TextureCodegen for NoShaders {
+    fn fingerprint(&self, _: &str) -> u64 {
+        0
+    }
+    fn emit(&self, _: &str, _: &mut ModuleBuilder) -> Option<String> {
+        None
+    }
 }
 
 /// The material surface, mirroring [`crate::ir::Outputs`] (REALTIME.md §1.1).
@@ -32,6 +106,8 @@ struct ShadeCtx {
     normal: vec3<f32>,
     view: vec3<f32>,
     time: f32,
+    vertex_weight: f32,
+    ao: f32,
 };
 struct Surface {
     diffuse: vec4<f32>,
@@ -137,6 +213,11 @@ fn displacement_kind(kind: &str) -> u32 {
 
 /// The key of a graph: codegen version plus its canonical debug form.
 pub fn hash_graph(graph: &ShadingGraph) -> u64 {
+    hash_graph_with(graph, &NoShaders)
+}
+
+/// The key of a graph compiled with `lib`: also covers the code of every shader node.
+pub fn hash_graph_with(graph: &ShadingGraph, lib: &dyn TextureCodegen) -> u64 {
     let mut h = 0xcbf2_9ce4_8422_2325u64;
     let mut feed = |bytes: &[u8]| {
         for b in bytes {
@@ -146,17 +227,41 @@ pub fn hash_graph(graph: &ShadingGraph) -> u64 {
     };
     feed(&CODEGEN_VERSION.to_le_bytes());
     feed(format!("{graph:?}").as_bytes());
+    let mut seen = HashSet::new();
+    for node in &graph.nodes {
+        if let IrNode::Texture(name) = node
+            && seen.insert(name.as_str())
+        {
+            feed(&lib.fingerprint(name).to_le_bytes());
+        }
+    }
     h
 }
 
 /// Compiles the IR to a WGSL module.
 pub fn compile(graph: &ShadingGraph) -> WgslMaterial {
+    compile_with(graph, &NoShaders)
+}
+
+/// Compiles the IR to a WGSL module, porting shader nodes through `lib`.
+pub fn compile_with(graph: &ShadingGraph, lib: &dyn TextureCodegen) -> WgslMaterial {
     let mut out = String::from(SURFACE_WGSL);
+    let mut module = ModuleBuilder::default();
+    let mut exprs: HashMap<&str, Option<String>> = HashMap::new();
     let mut fallbacks = Vec::new();
     for (ix, node) in graph.nodes.iter().enumerate() {
         let (expr, fallback) = match node {
             IrNode::Color(c) => (vec3(*c), None),
-            IrNode::Texture(name) => (vec3(FALLBACK_COLOR), Some(name.clone())),
+            IrNode::Texture(name) => {
+                let e = exprs
+                    .entry(name.as_str())
+                    .or_insert_with(|| lib.emit(name, &mut module))
+                    .clone();
+                match e {
+                    Some(e) => (e, None),
+                    None => (vec3(FALLBACK_COLOR), Some(name.clone())),
+                }
+            }
             IrNode::Scale { input, factor } => (format!("ir{input}(ctx) * {}", f(*factor)), None),
             IrNode::Mix {
                 base,
@@ -350,10 +455,12 @@ pub fn compile(graph: &ShadingGraph) -> WgslMaterial {
         out.push_str("    s.diffusion_present = vec4<f32>(1.0, 0.0, 0.0, 0.0);\n");
     }
     out.push_str("    return s;\n}\n");
+    out.push_str(&module.decls);
     WgslMaterial {
         source: out,
-        hash: hash_graph(graph),
+        hash: hash_graph_with(graph, lib),
         fallbacks,
+        resources: module.resources,
     }
 }
 
@@ -372,11 +479,20 @@ impl ShaderCache {
     /// The module for `graph`, compiling it once per hash. The bool is true when a new
     /// module was compiled.
     pub fn module(&mut self, graph: &ShadingGraph) -> (Arc<WgslMaterial>, bool) {
-        let key = hash_graph(graph);
+        self.module_with(graph, &NoShaders)
+    }
+
+    /// Like [`ShaderCache::module`], with the shader nodes ported through `lib`.
+    pub fn module_with(
+        &mut self,
+        graph: &ShadingGraph,
+        lib: &dyn TextureCodegen,
+    ) -> (Arc<WgslMaterial>, bool) {
+        let key = hash_graph_with(graph, lib);
         if let Some(m) = self.modules.get(&key) {
             return (m.clone(), false);
         }
-        let m = Arc::new(compile(graph));
+        let m = Arc::new(compile_with(graph, lib));
         self.modules.insert(key, m.clone());
         self.compiles += 1;
         (m, true)

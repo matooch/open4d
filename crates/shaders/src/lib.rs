@@ -6,6 +6,8 @@ pub mod gradient;
 pub mod host;
 pub mod params;
 pub mod shader;
+pub mod wgsl;
+mod wgsl_noise;
 
 pub use blend::BlendMode;
 pub use build::{Inputs, ShaderError, Values, build};
