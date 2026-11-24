@@ -38,7 +38,8 @@ current branch at the start of each brief as well.
 2. [040](tasks/040-metaball.md) · Metaball generator (uses the volume mesher, 083)
 3. [054](tasks/054-smoothing-displacer-reduction-bevel.md) · Smoothing deformer, Displacer, Polygon Reduction, Bevel deformer
 4. [170](tasks/170-camera-light-material-exchange.md) · Camera, light and material exchange across glTF/USD/Alembic
-5. [197](tasks/197-shading-ir-wgsl.md) · R1: shading IR → WGSL codegen and shader cache (start of area R; read `docs/roadmap/areas/R-realtime.md` and D19 first)
+5. [197](tasks/197-shading-ir-wgsl.md) · R1 part 1: IR core → WGSL, shader cache, naga validation, CPU-vs-GPU harness (split 2026-11-24) (start of area R; read `docs/roadmap/areas/R-realtime.md` and D19 first)
+5b. [207](tasks/207-shader-nodes-wgsl.md) · R1 part 2: shader-node families → WGSL, harness over all nodes (waits only on 197, earlier in this queue)
 6. [142](tasks/142-gpu-path-tracer.md) · GPU compute path tracer (wgpu): the compute fallback that area R tiers 2–3 build on
 7. [198](tasks/198-realtime-raster.md) · R2: real-time raster PBR engine (`render-rt`); your M5 Pro is the Metal reference
 8. [199](tasks/199-realtime-post.md) · R3: post effects and the viewport "Render" mode
