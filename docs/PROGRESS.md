@@ -4,18 +4,18 @@ One page to check where the project stands. The planner updates it after every m
 Details live in the files linked at the bottom; when this page and those files disagree, the
 linked files win.
 
-**Last updated:** 2026-11-24, after FBX import/export (165, 166, planner subagent) and Hermes run 4 part 1 (146, 040).
+**Last updated:** 2026-11-24, after Hermes run 5 (054 with review fixes, 170) and the parity-debt pass (PR #48).
 
 ## At a glance
 
 | | Now |
 |---|---|
-| Implementation briefs | **175 of 196 done** (89 %) · 10 ready · 11 waiting |
+| Implementation briefs | **177 of 196 done** (90 %) · 8 ready · 11 waiting |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
-| Acceptance scenarios | S1, S2, S3, S7, S8 pass · S4, S5 queued · S6 blocked · S9 needs 170 + 171 · S10 needs a measurement |
+| Acceptance scenarios | S1, S2, S3, S7, S8 pass · S4, S5 queued · S6 blocked · S9 needs its test (171) · S10 needs a measurement |
 | Release | No release cut yet (v1.0 checklist is brief 185, last) |
-| Running now | Implementer run 5 (continues the run-4 queue from 054, see below) |
+| Next | Implementer run 6 continues from 197 (see below) |
 
 ## Acceptance scenarios (the "is it usable" test)
 
@@ -32,7 +32,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | S6 | Rigging: joints, auto weights, IK + pole, **pose morph**, playback | 🔴 blocked | Pose Morph (107) has no reference data: **owner decision** |
 | S7 | Animation polish: dope sheet, broken/weighted tangents, easing, loop | ✅ passes | – |
 | S8 | Look-dev: area light, DOF camera, node material, CPU render + AOVs | ✅ passes (146) | Cross-OS reference check confirmed by CI |
-| S9 | Import FBX / glTF / Alembic from the reference app, matches | 🟡 FBX import + export done (165, 166) | 170 (queued) then the S9 test, 171 |
+| S9 | Import FBX / glTF / Alembic from the reference app, matches | 🟡 FBX (165, 166) and camera exchange (170) done | The S9 test, 171 (ready) |
 | S10 | 1 M polygons + 10 k clones, ≥ 20 fps, 30-min fuzz without crash | 🟡 benchmarks exist (181) | A measured run on a real GPU (your M5 Pro / RTX 3090) |
 
 ## Areas
@@ -42,7 +42,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | A · Automation (CLI, RPC, MCP, scripting) | 9 / 9 | – |
 | B · Modeling tools, selections, splines | 18 / 18 | Interactive feel (GUI session G3) |
 | C · Primitives and generators | 16 / 17 | 046 Null/Instance display (waits on GUI session G8) |
-| D · Deformers and fields | 14 / 15 | 054 Smoothing, Displacer, Polygon Reduction, Bevel (run 4) |
+| D · Deformers and fields | 15 / 15 | Parity-pending: Bevel deformer rounding, Displacer UVW, Polygon Reduction positions |
 | E · Clone toolset (MoGraph) | 16 / 17 | 205 S4 acceptance (queued) |
 | F · Volumes | 8 / 9 | 206 S5 acceptance (queued) |
 | G · Animation | 13 / 13 | – |
@@ -51,24 +51,22 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | J · Materials, shaders, UVs | 13 / 13 | Hands-on checks in GUI session G7 |
 | K · Rendering and viewport | 11 / 12 | 142 GPU path tracer (queued) |
 | L · UI and UX | 16 / 16 | Hands-on checks in GUI sessions G1, G2, G4 |
-| M · File exchange | 10 / 12 | 170 (queued), 171 S9 tests |
+| M · File exchange | 11 / 12 | 171 S9 tests (ready) |
 | N · Platform, packaging, docs | 13 / 14 | 185 v1.0 release checklist (last) |
 | R · Real-time GPU renderer | 0 / 8 | 197, 198, 199 in run 4; then 200–204 (ray tracing on Vulkan + Metal) |
 
-## Running now: implementer run 5 (rest of the run-4 queue)
+## Next implementer run (rest of the run-4 queue)
 
 Queue and rules: [agents/HERMES-IMPLEMENTER.md](agents/HERMES-IMPLEMENTER.md) §2.
 
-Done in run 4: 146 S8, 040 Metaball.
+Done: 146 S8, 040 Metaball (run 4); 054 deformers, 170 camera exchange (run 5).
 
-1. 054 · Smoothing, Displacer, Polygon Reduction, Bevel deformers
-2. 170 · Camera, light and material exchange (glTF, USD, Alembic)
-3. 197 · R1: node materials → GPU shader code (start of the real-time renderer)
-4. 142 · GPU compute path tracer
-5. 198 · R2: real-time raster PBR
-6. 199 · R3: post effects and the viewport "Render" mode
-7. 205 · S4 acceptance
-8. 206 · S5 acceptance
+1. 197 · R1: node materials → GPU shader code (start of the real-time renderer)
+2. 142 · GPU compute path tracer
+3. 198 · R2: real-time raster PBR
+4. 199 · R3: post effects and the viewport "Render" mode
+5. 205 · S4 acceptance
+6. 206 · S5 acceptance
 
 ## Blocked: waiting on you (owner)
 

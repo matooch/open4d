@@ -309,12 +309,14 @@ fn glb_json(bytes: &[u8]) -> serde_json::Value {
 fn o44_camera_light_exports_the_camera_and_no_lights() {
     // The golden GLB has the camera at (0, 200, -600), P -15, and no lights or meshes.
     // Its header declares 472 bytes for a 464-byte file (the missing BIN chunk header,
-    // recorded in exchange.md); pad it so the reader can parse the reference defect.
-    let mut bytes = std::fs::read(fixture("camera-light", "scene.glb")).unwrap();
+    // recorded in exchange.md); the importer accepts it unmodified (IO.md §9).
+    let bytes = std::fs::read(fixture("camera-light", "scene.glb")).unwrap();
     let declared = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
-    if bytes.len() + 8 == declared {
-        bytes.extend_from_slice(&[0, 0, 0, 0, b'B', b'I', b'N', 0]);
-    }
+    assert_eq!(
+        declared,
+        bytes.len() + 8,
+        "the reference defect is still in the fixture"
+    );
     let app = import(&bytes, 1.0);
     let scene = app.doc.scene();
     assert_eq!(scene.roots().len(), 1);

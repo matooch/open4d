@@ -349,11 +349,32 @@ fn read_animation(
     Ok(())
 }
 
+/// Some exporters write a GLB without a BIN chunk but still count its 8-byte chunk header in
+/// the declared length (IO.md §9: the O44 `camera-light` file declares 472 bytes for 464).
+/// When the declared length is exactly 8 bytes longer than the file and the JSON chunk ends at
+/// the end of the file, returns a copy whose header declares the real length.
+fn repair_glb_length(bytes: &[u8]) -> Option<Vec<u8>> {
+    if bytes.len() < 20 || &bytes[..4] != b"glTF" {
+        return None;
+    }
+    let word = |i: usize| u32::from_le_bytes([bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]]);
+    let declared = word(8) as usize;
+    let json_end = 20usize.checked_add(word(12) as usize)?;
+    if declared != bytes.len() + 8 || json_end != bytes.len() {
+        return None;
+    }
+    let mut fixed = bytes.to_vec();
+    fixed[8..12].copy_from_slice(&u32::try_from(bytes.len()).ok()?.to_le_bytes());
+    Some(fixed)
+}
+
 /// Reads GLB or self-contained JSON glTF. `scale=100` converts metres to centimetres.
 pub fn read(bytes: &[u8], scale: f64) -> Result<ImportScene, Error> {
     if !scale.is_finite() || scale <= 0.0 {
         return Err(invalid("scale must be positive and finite"));
     }
+    let repaired = repair_glb_length(bytes);
+    let bytes = repaired.as_deref().unwrap_or(bytes);
     let file = gltf::Gltf::from_slice(bytes).map_err(|e| invalid(e.to_string()))?;
     let buffers = read_buffers(&file)?;
     let roots = file

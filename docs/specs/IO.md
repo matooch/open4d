@@ -650,8 +650,10 @@ format sections above. The reference's own per-format behaviour is the mapping:
   a file with cameras and no meshes (no BIN chunk), and uses the scene's stored render
   aspect else 16:9. The scene's default near clipping (enabled at 0) exports as 0.01.
 - The O44 golden `scene.glb` declares 472 bytes but is 464 (the missing BIN chunk header);
-  the test pads the reference bytes by that empty chunk header before reading. Our own
-  writer always declares the true length.
+  the importer accepts such a file as it is: when the declared length is exactly 8 bytes
+  more than the file and the JSON chunk ends at the end of the file, it reads the file with
+  its real length (users import files from that exporter; S9). Any other length mismatch is
+  still an error. Our own writer always declares the true length.
 - Checks (`crates/app/tests/gltf_exchange.rs` and `crates/io/tests/alembic.rs`): the
   camera-light scene imports the camera at (0, 200, -600) with a 53.13° horizontal field;
   our export has one perspective camera, translation (0, 200, 600), `yfov` 31.417°,
