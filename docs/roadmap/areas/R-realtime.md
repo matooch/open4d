@@ -85,7 +85,8 @@ numbers in the briefs' Reports.
 
 | # | Brief | Depends on |
 |---|---|---|
-| 197 | R1 · Shading IR → WGSL codegen, shader cache, codegen-vs-interpreter tests | 123, 125, 126 |
+| 197 | R1 part 1 · Shading IR core → WGSL codegen, shader cache, naga validation, codegen-vs-interpreter harness | 123 |
+| 207 | R1 part 2 · Shader-node families (125, 126) → WGSL, harness over every node | 197, 125, 126 |
 | 198 | R2 · Real-time raster PBR engine (`render-rt`): frame graph, deferred/clustered lights, shadow maps, IBL | 197, 133, 137 |
 | 199 | R3 · Post: SSAO, SSR, bloom, TAA, tone mapping; viewport "Render" mode | 198 |
 | 200 | R4 · GPU scene representation: acceleration structures for meshes and instances (clones), updated per frame, on Vulkan RT and Metal RT behind one `RtBackend`; compute-BVH fallback | 142, 198 |

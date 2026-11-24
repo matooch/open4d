@@ -10,7 +10,7 @@ linked files win.
 
 | | Now |
 |---|---|
-| Implementation briefs | **177 of 196 done** (90 %) · 8 ready · 11 waiting |
+| Implementation briefs | **177 of 197 done** (90 %) · 8 ready · 12 waiting |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
 | Acceptance scenarios | S1, S2, S3, S7, S8 pass · S4, S5 queued · S6 blocked · S9 needs its test (171) · S10 needs a measurement |
@@ -53,7 +53,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | L · UI and UX | 16 / 16 | Hands-on checks in GUI sessions G1, G2, G4 |
 | M · File exchange | 11 / 12 | 171 S9 tests (ready) |
 | N · Platform, packaging, docs | 13 / 14 | 185 v1.0 release checklist (last) |
-| R · Real-time GPU renderer | 0 / 8 | 197, 198, 199 in run 4; then 200–204 (ray tracing on Vulkan + Metal) |
+| R · Real-time GPU renderer | 0 / 9 | 197, 207, 198, 199 queued; then 200–204 (ray tracing on Vulkan + Metal) |
 
 ## Next implementer run (rest of the run-4 queue)
 
@@ -61,7 +61,8 @@ Queue and rules: [agents/HERMES-IMPLEMENTER.md](agents/HERMES-IMPLEMENTER.md) §
 
 Done: 146 S8, 040 Metaball (run 4); 054 deformers, 170 camera exchange (run 5).
 
-1. 197 · R1: node materials → GPU shader code (start of the real-time renderer)
+1. 197 · R1 part 1: shading IR → GPU shader code, cache (start of the real-time renderer)
+1b. 207 · R1 part 2: shader nodes (noise, gradients, tiles …) → GPU shader code
 2. 142 · GPU compute path tracer
 3. 198 · R2: real-time raster PBR
 4. 199 · R3: post effects and the viewport "Render" mode
