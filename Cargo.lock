@@ -1660,6 +1660,7 @@ version = "0.1.0"
 dependencies = [
  "forge-parity-harness",
  "glam 0.34.1",
+ "nalgebra-sparse",
  "thiserror 2.0.21",
 ]
 
@@ -2807,6 +2808,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "nalgebra-sparse"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8935b578b6a012f3667131452add895472f37c242d2844497daf7c49f6b8059"
+dependencies = [
+ "nalgebra",
+ "num-traits",
 ]
 
 [[package]]

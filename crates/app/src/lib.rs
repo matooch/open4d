@@ -21,6 +21,7 @@ pub mod schedule;
 pub mod select;
 pub mod tag_commands;
 pub mod user_data_commands;
+pub mod uv_commands;
 pub mod weight_commands;
 
 use std::sync::Arc;
@@ -74,6 +75,7 @@ pub fn default_command_registry() -> CommandRegistry {
     tag_commands::register(&mut commands).expect("tag command ids are unique");
     user_data_commands::register(&mut commands).expect("user_data command ids are unique");
     material_commands::register(&mut commands).expect("material command ids are unique");
+    uv_commands::register(&mut commands).expect("UV editor command ids are unique");
     clone_commands::register(&mut commands).expect("clone command ids are unique");
     commands
 }

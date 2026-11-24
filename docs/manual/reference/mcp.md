@@ -259,5 +259,9 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `material_assign` | Assign Material. Undoable editing command. Runs command `material.assign`. |
 | `shader_set` | Set Shader. Undoable editing command. Runs command `shader.set`. |
 | `uv_generate` | Generate UVW. Undoable editing command. Runs command `uv.generate`. |
+| `uv_relax` | Relax UVs. Undoable editing command. Runs command `uv.relax`. |
+| `uv_pack` | Pack UV Islands. Undoable editing command. Runs command `uv.pack`. |
+| `uv_seam` | Set UV Seam. Undoable editing command. Runs command `uv.seam`. |
+| `uv_transform` | Transform UVs. Undoable editing command. Runs command `uv.transform`. |
 | `cloner_bake` | Bake Clone Cache. Undoable editing command. Runs command `cloner.bake`. |
 | `plugin_list` | List Plugins. Not an undoable edit. Runs command `plugin.list`. |

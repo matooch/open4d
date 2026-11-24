@@ -116,6 +116,7 @@ pub struct Editor {
     material_previews: crate::material_manager::MaterialPreviews,
     picture_viewer: crate::picture_viewer::PictureViewer,
     interactive_render: crate::interactive_render::InteractiveRender,
+    uv_editor: crate::uv_editor::UvEditor,
     /// The key map editor window (UI.md §14.5).
     keymap_editor: KeyMapEditor,
     /// The command palette window (UI.md §18).
@@ -223,6 +224,7 @@ impl Editor {
             material_previews: crate::material_manager::MaterialPreviews::default(),
             picture_viewer: crate::picture_viewer::PictureViewer::default(),
             interactive_render: crate::interactive_render::InteractiveRender::default(),
+            uv_editor: crate::uv_editor::UvEditor::default(),
             keymap_editor: KeyMapEditor::default(),
             palette: Palette::default(),
             name_edit: None,
@@ -1148,6 +1150,11 @@ impl Editor {
                 self.state.doc.scene(),
                 self.state.timeline.current,
             ),
+            Panel::UvEditor => {
+                for cmd in self.uv_editor.show(ui, &self.state) {
+                    self.run(cmd);
+                }
+            }
             Panel::WeightManager => {
                 for c in crate::weight_manager::weight_manager_ui(ui, &mut self.state) {
                     self.run(c);

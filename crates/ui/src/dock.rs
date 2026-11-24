@@ -55,11 +55,12 @@ pub enum Panel {
     Materials,
     PictureViewer,
     InteractiveRender,
+    UvEditor,
 }
 
 impl Panel {
     /// Every panel, in Window menu order.
-    pub const ALL: [Panel; 19] = [
+    pub const ALL: [Panel; 20] = [
         Panel::CommandBar,
         Panel::ToolPalette,
         Panel::Viewport,
@@ -79,6 +80,7 @@ impl Panel {
         Panel::Materials,
         Panel::PictureViewer,
         Panel::InteractiveRender,
+        Panel::UvEditor,
     ];
 
     /// The panels `Dock::default()` opens; the others open from the Window menu.
@@ -113,6 +115,7 @@ impl Panel {
             Panel::Materials => "Materials",
             Panel::PictureViewer => "Picture Viewer",
             Panel::InteractiveRender => "Interactive Render",
+            Panel::UvEditor => "UV Editor",
         }
     }
 
@@ -135,6 +138,7 @@ impl Panel {
             Panel::Materials => Area::RightBottom,
             Panel::PictureViewer => Area::Center,
             Panel::InteractiveRender => Area::Center,
+            Panel::UvEditor => Area::Center,
             Panel::DopeSheet | Panel::ValueGraph => Area::Bottom,
         }
     }

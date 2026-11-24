@@ -605,6 +605,7 @@ pub fn texture_tag_type() -> NodeType {
 pub fn uvw_tag_type() -> NodeType {
     NodeType::new(UVW_TAG, "UVW", Category::Tag)
         .param(ParamDesc::float_list("uvw", "UVW").range(-1e12, 1e12))
+        .param(ParamDesc::index_list("seams", "UV Seams").hidden())
 }
 
 /// Registers the material node types.

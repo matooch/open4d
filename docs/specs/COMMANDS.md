@@ -184,6 +184,10 @@ touch history.
 | `material.set_graph` | `material`, `graph` (forge-nodes JSON string), `gesture?` | `{material}` | yes |
 | `shader.set` | `type` (`forge.shader.*`, null removes), then `material` + `channel` (a slot such as `color`, or a slot param id) or `parent` (a shader); `params?` (JSON by the shader type's units) | `{shader}` | yes |
 | `uv.generate` | `object?`, `tag?`, `camera?` (UV.md U6) | `{tag, corners}` | yes |
+| `uv.pack` | `object?`, `padding?` (UV.md U7) | `{tag, corners}` | yes |
+| `uv.relax` | `object?` (UV.md U7) | `{tag, corners}` | yes |
+| `uv.seam` | `object?`, `edge`, `marked` (UV.md U7) | `{tag, changed}` | yes |
+| `uv.transform` | `object?`, `corners`, `offset?`, `scale?`, `rotation_deg?`, `pivot?` | `{tag, corners}` | yes |
 | `graph.add_node` | `tag`, `type`, `values?`, `pos?` (NODES.md §6) | `{node}` | yes |
 | `graph.remove` | `tag`, `node?`, `nodes?` | `{removed_links}` | yes |
 | `graph.connect` | `tag`, `from_node`, `from_port`, `to_node`, `to_port`, `release_node?`, `release_port?` (type and cycle checked) | `{replaced}` | yes |
