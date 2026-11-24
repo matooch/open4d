@@ -4,12 +4,11 @@ use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use std::sync::{Arc, Mutex};
 
 use egui::{Color32, ColorImage, Context, TextureHandle, Ui};
-use forge_core::Scene;
+use forge_core::{RenderConfig, Scene};
 use forge_render_api::{Control, RenderEngine, RenderError, RenderEvent, RenderSettings};
-use forge_render_bridge::settings_from_scene;
 use forge_render_cpu::CpuEngine;
 
-use crate::picture_viewer::prepare_render;
+use crate::picture_viewer::{editor_render_settings, prepare_render};
 
 struct Capture {
     ticket: u64,
@@ -63,8 +62,8 @@ fn color(&[r, g, b, _]: &[f32; 4]) -> Color32 {
     egui::Rgba::from_rgb(r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0)).into()
 }
 
-fn preview_settings(scene: &Scene) -> RenderSettings {
-    let mut settings = settings_from_scene(scene, RenderSettings::default());
+fn preview_settings(scene: &Scene, defaults: Option<&RenderConfig>) -> RenderSettings {
+    let mut settings = editor_render_settings(scene, defaults);
     let extent = u64::from(settings.width.max(settings.height));
     if extent > 512 {
         let scale = |v| ((u64::from(v) * 512 + extent / 2) / extent).max(1) as u32;
@@ -81,9 +80,10 @@ type SharedSurface = Arc<Mutex<Surface>>;
 fn start(
     engine: Arc<dyn RenderEngine>,
     capture: Capture,
+    defaults: Option<&RenderConfig>,
     ctx: &Context,
 ) -> std::io::Result<(Worker, SharedSurface)> {
-    let mut settings = preview_settings(&capture.scene);
+    let mut settings = preview_settings(&capture.scene, defaults);
     let surface = Arc::new(Mutex::new(Surface {
         image: ColorImage::filled(
             [settings.width as usize, settings.height as usize],
@@ -150,6 +150,7 @@ fn start(
 
 pub struct InteractiveRender {
     engine: Arc<dyn RenderEngine>,
+    defaults: Option<RenderConfig>,
     submitted: Option<(Arc<Scene>, i64)>,
     ticket: u64,
     pending: Option<Capture>,
@@ -176,6 +177,7 @@ impl InteractiveRender {
     pub fn with_engine(engine: Arc<dyn RenderEngine>) -> Self {
         Self {
             engine,
+            defaults: None,
             submitted: None,
             ticket: 0,
             pending: None,
@@ -195,6 +197,13 @@ impl InteractiveRender {
         self.texture = None;
         if let Some(worker) = &self.worker {
             worker.control.cancel();
+        }
+    }
+
+    pub(crate) fn set_defaults(&mut self, defaults: Option<RenderConfig>) {
+        if self.defaults != defaults {
+            self.suspend();
+            self.defaults = defaults;
         }
     }
 
@@ -235,7 +244,7 @@ impl InteractiveRender {
         if self.worker.is_none()
             && let Some(capture) = self.pending.take()
         {
-            match start(self.engine.clone(), capture, ctx) {
+            match start(self.engine.clone(), capture, self.defaults.as_ref(), ctx) {
                 Ok((worker, surface)) => {
                     self.worker = Some(worker);
                     self.surface = Some(surface);

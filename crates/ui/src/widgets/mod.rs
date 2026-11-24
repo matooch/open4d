@@ -94,6 +94,7 @@ pub struct Cx<'a> {
     pub node: NodeId,
     /// The row label's widget id, so the editor is announced under the label.
     pub label: egui::Id,
+    pub distance: crate::prefs::DistanceUnit,
 }
 
 /// Draws the editor of `row`, whatever its kind.

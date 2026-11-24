@@ -13,19 +13,29 @@ pub fn show(ui: &mut egui::Ui, cx: &Cx, row: &AttrRow, unit: Unit) -> Option<Edi
         return None;
     };
     let mut d = to_display(unit, v);
+    let mut base = scrub::base_step(unit, false, row.step);
+    let suffix = unit_suffix(unit);
+    if unit == Unit::Distance {
+        d = cx.distance.to_display(d);
+        base = cx.distance.to_display(base);
+    }
     let (r, changed) = number::show(
         ui,
         &mut d,
         &NumberField {
-            base: scrub::base_step(unit, false, row.step),
+            base,
             prefix: String::new(),
-            suffix: unit_suffix(unit),
+            suffix,
             mixed: row.mixed,
             label: cx.label,
         },
     );
     changed.then(|| Edit {
-        value: json!(d),
+        value: json!(if unit == Unit::Distance {
+            cx.distance.to_centimetres(d)
+        } else {
+            d
+        }),
         component: None,
         target: None,
         create: None,

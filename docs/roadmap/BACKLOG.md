@@ -152,7 +152,7 @@ implementers can avoid collisions.
 | 152 | [Key map: defaults, customisation editor](../agents/tasks/152-key-map.md) | L | 011 | done (parity-pending G2) | ui |
 | 153 | [Viewport navigation parity (keys, mouse, frame commands, views)](../agents/tasks/153-viewport-navigation.md) | L | 152 | done (parity-pending G2) | viewport, ui |
 | 154 | [Content browser (own presets) and recent files](../agents/tasks/154-content-browser.md) | L | 163 | done (object presets only; materials kind waits for material nodes, area J) | ui |
-| 155 | [Preferences window and settings storage](../agents/tasks/155-preferences.md) | L | 175 | ready | ui |
+| 155 | [Preferences window and settings storage](../agents/tasks/155-preferences.md) | L | 175 | done | ui |
 | 156 | [Layout save/load and workspaces](../agents/tasks/156-layouts-workspaces.md) | L | 147 | done (parity-pending G1) | ui |
 | 157 | [HUD and viewport overlays](../agents/tasks/157-hud-overlays.md) | L | 143 | done (parity-pending G1/G8; follow-up: a scene render size for the safe frames) | viewport |
 | 158 | [Layer manager](../agents/tasks/158-layer-manager.md) | L | 149 | done (parity-pending G1/G8; follow-up: render bridge honours the render flag) | ui, core |

@@ -6,13 +6,15 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
 use egui::{ColorImage, Context, TextureHandle, Ui};
-use forge_core::Scene;
+use forge_core::{RenderConfig, Scene};
 use forge_geometry::triangulate::triangulate;
 use forge_image::{AlphaMode, Image};
 use forge_render_api::{
     Aov, Control, RenderEngine, RenderError, RenderEvent, RenderOutput, RenderSettings, Snapshot,
 };
-use forge_render_bridge::{apply_scene_objects, settings_from_scene, snapshot_from_polys};
+use forge_render_bridge::{
+    apply_scene_objects, settings_from_config, settings_from_scene, snapshot_from_polys,
+};
 use forge_render_cpu::CpuEngine;
 use glam::DMat4;
 
@@ -193,6 +195,7 @@ fn start(job: Job, ctx: &Context) -> std::io::Result<Running> {
 
 #[derive(Default)]
 pub struct PictureViewer {
+    defaults: Option<RenderConfig>,
     next_id: u64,
     waiting: VecDeque<Job>,
     running: Option<Running>,
@@ -216,6 +219,10 @@ impl Drop for PictureViewer {
 }
 
 impl PictureViewer {
+    pub(crate) fn set_defaults(&mut self, defaults: Option<RenderConfig>) {
+        self.defaults = defaults;
+    }
+
     pub fn history_len(&self) -> usize {
         self.history.len()
     }
@@ -233,7 +240,7 @@ impl PictureViewer {
     }
 
     fn queue(&mut self, scene: &Scene, frame: i64) {
-        let mut settings = settings_from_scene(scene, RenderSettings::default());
+        let mut settings = editor_render_settings(scene, self.defaults.as_ref());
         if self.all_passes {
             settings.aovs = Aov::ALL.to_vec();
         }
@@ -505,6 +512,19 @@ impl PictureViewer {
             }
         }
     }
+}
+
+pub(crate) fn editor_render_settings(
+    scene: &Scene,
+    defaults: Option<&RenderConfig>,
+) -> RenderSettings {
+    let base = RenderSettings::default();
+    if scene.render_config().is_none()
+        && let Some(config) = defaults
+    {
+        return settings_from_config(config, base);
+    }
+    settings_from_scene(scene, base)
 }
 
 fn data_rgb(aov: Aov, [r, g, b]: [f32; 3]) -> [f32; 3] {

@@ -117,6 +117,7 @@ pub struct Editor {
     picture_viewer: crate::picture_viewer::PictureViewer,
     interactive_render: crate::interactive_render::InteractiveRender,
     uv_editor: crate::uv_editor::UvEditor,
+    preferences_draft: Option<crate::prefs::UiPrefs>,
     /// The key map editor window (UI.md §14.5).
     keymap_editor: KeyMapEditor,
     /// The command palette window (UI.md §18).
@@ -225,6 +226,7 @@ impl Editor {
             picture_viewer: crate::picture_viewer::PictureViewer::default(),
             interactive_render: crate::interactive_render::InteractiveRender::default(),
             uv_editor: crate::uv_editor::UvEditor::default(),
+            preferences_draft: None,
             keymap_editor: KeyMapEditor::default(),
             palette: Palette::default(),
             name_edit: None,
@@ -389,6 +391,13 @@ impl Editor {
 
     /// Applies the theme and scale of the preferences when they changed (UI.md §24.3).
     fn apply_prefs(&mut self, ctx: &egui::Context) {
+        let defaults = self
+            .state
+            .prefs
+            .use_render_defaults
+            .then(|| self.state.prefs.render_defaults.clone());
+        self.picture_viewer.set_defaults(defaults.clone());
+        self.interactive_render.set_defaults(defaults);
         let wanted = (self.state.prefs.theme, self.state.prefs.scale);
         if self.applied_prefs == Some(wanted) {
             return;
@@ -398,6 +407,43 @@ impl Editor {
             ctx.set_zoom_factor(wanted.1);
         }
         self.applied_prefs = Some(wanted);
+    }
+
+    fn preferences_window(&mut self, ctx: &egui::Context) {
+        let Some(draft) = &mut self.preferences_draft else {
+            return;
+        };
+        let mut open = true;
+        let mut apply = false;
+        let mut cancel = false;
+        egui::Window::new("Preferences")
+            .open(&mut open)
+            .resizable(true)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical()
+                    .max_height(510.0)
+                    .show(ui, |ui| draft.form(ui));
+                ui.separator();
+                ui.horizontal(|ui| {
+                    apply = ui.button("Apply preferences").clicked();
+                    cancel = ui.button("Cancel").clicked();
+                });
+            });
+        if apply {
+            match draft.save_all() {
+                Ok(()) => {
+                    self.state.autosave.settings.enabled = draft.autosave.enabled;
+                    self.state.autosave.settings.interval_seconds = draft.autosave.interval_seconds;
+                    self.state.prefs = draft.clone();
+                    self.state.status = "Preferences saved".into();
+                    self.preferences_draft = None;
+                    ctx.request_repaint();
+                }
+                Err(e) => self.state.status = e,
+            }
+        } else if cancel || !open {
+            self.preferences_draft = None;
+        }
     }
 
     /// Runs a command; an error goes to the status bar. True if it succeeded.
@@ -564,6 +610,7 @@ impl Editor {
         self.keymap_editor.show(ui.ctx(), &mut self.state);
         self.save_layout_window(ui.ctx());
         self.io_dialog_window(ui.ctx());
+        self.preferences_window(ui.ctx());
         for cmd in self.dynamics_panel.show(ui.ctx(), &self.state) {
             self.run(cmd);
         }
@@ -726,6 +773,11 @@ impl Editor {
                 }
                 if ui.button("Current State to Object").clicked() {
                     self.run(cmd("mesh.current_state_to_object"));
+                    ui.close();
+                }
+                ui.separator();
+                if ui.button("Preferences").clicked() {
+                    self.preferences_draft = Some(self.state.prefs.clone());
                     ui.close();
                 }
                 ui.separator();
@@ -2325,6 +2377,11 @@ impl Editor {
             {
                 self.coord_draft.clear();
             }
+            ui.separator();
+            ui.weak(format!(
+                "Units: {}",
+                self.state.prefs.distance.suffix().trim()
+            ));
         });
         let eval_scene = self.state.evaluated();
         let (labels, values, mixed, degrees): (_, [Option<DVec3>; 3], Mixed, _) = match comp {
@@ -2356,6 +2413,12 @@ impl Editor {
             }
         };
         let axes = [["X", "Y", "Z"], ["H", "P", "B"], ["X", "Y", "Z"]];
+        let distance = self.state.prefs.distance;
+        let distance_row = [
+            true,
+            false,
+            comp.is_some() || self.coord_third == Third::Size,
+        ];
         let mut edit: Option<(usize, usize, f64, Gesture)> = None;
         egui::Grid::new(("coords", active))
             .num_columns(4)
@@ -2374,11 +2437,19 @@ impl Editor {
                         } else {
                             value[k]
                         };
-                        let mut shown = draft.unwrap_or(base);
+                        let canonical = draft.unwrap_or(base);
+                        let mut shown = if distance_row[row] {
+                            distance.to_display(canonical)
+                        } else {
+                            canonical
+                        };
                         let is_mixed = mixed[row][k] && draft.is_none();
                         let mut field = egui::DragValue::new(&mut shown)
                             .speed(0.1)
                             .prefix(format!("{} ", axes[row][k]));
+                        if distance_row[row] {
+                            field = field.speed(distance.to_display(0.1));
+                        }
                         if is_mixed {
                             field = field.custom_formatter(|_, _| "mixed".into());
                         }
@@ -2389,7 +2460,12 @@ impl Editor {
                             } else {
                                 Gesture::Commit
                             };
-                            edit = Some((row, k, shown, g));
+                            let value = if distance_row[row] {
+                                distance.to_centimetres(shown)
+                            } else {
+                                shown
+                            };
+                            edit = Some((row, k, value, g));
                         }
                     }
                     ui.end_row();
@@ -2720,6 +2796,7 @@ impl Editor {
             scene,
             node: id,
             label: cx_label,
+            distance: self.state.prefs.distance,
         };
         if let Some(edit) = widgets::show(ui, &cx, shown) {
             if can_draft
