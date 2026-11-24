@@ -193,7 +193,7 @@ implementers can avoid collisions.
 | 194 | [Materials and shaders in the document: hosting, links, Generate UVW command](../agents/tasks/194-material-hosting.md) | J | 123, 125, 127 | done | core, material, shaders, app, command, ui, io |
 | 195 | [Grow Selection: Use Edge option for polygons](../agents/tasks/195-grow-use-edge.md) | B | 023 | done | geometry, command |
 | 196 | [OBJ texture coordinates (vt) import and export](../agents/tasks/196-obj-uvs.md) | M | 004, 128 | done | io |
-| 197 | [Shading IR to WGSL codegen and shader cache (part 1: IR core)](../agents/tasks/197-shading-ir-wgsl.md) | R | 123 | ready | material, shaders |
+| 197 | [Shading IR to WGSL codegen and shader cache (part 1: IR core)](../agents/tasks/197-shading-ir-wgsl.md) | R | 123 | done | material, shaders |
 | 207 | [Shader nodes to WGSL, GPU comparison over all nodes (part 2)](../agents/tasks/207-shader-nodes-wgsl.md) | R | 197, 125, 126 | waiting: 197 | shaders, material |
 | 198 | [Real-time raster PBR engine (render-rt)](../agents/tasks/198-realtime-raster.md) | R | 197, 133, 137 | waiting: 197, 133, 137 | render-rt (new), viewport, render-api |
 | 199 | [Post effects and viewport Render mode](../agents/tasks/199-realtime-post.md) | R | 198 | waiting: 198 | render-rt, viewport, ui |

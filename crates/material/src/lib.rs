@@ -6,6 +6,7 @@ pub mod material;
 pub mod node_material;
 pub mod params;
 pub mod projection;
+pub mod wgsl;
 
 pub use ir::{
     Alpha, Bump, Diffuse, DiffuseModel, Displacement, Fog, IrNode, MixMode, NodeIx, NormalMap,
