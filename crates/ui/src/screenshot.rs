@@ -81,7 +81,7 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
     let palette = Palette::default();
     let items = upload_items(
         &mut GpuCache::default(),
-        &gpu.device,
+        (&gpu.device, &gpu.queue),
         &scene,
         scheduled_draw_items(&frame, &selected),
         None,

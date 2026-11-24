@@ -17,12 +17,15 @@ forge-platform = { path = "../platform" }
 forge-fields = { path = "../fields" }
 forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }
+forge-image = { path = "../image" }
 forge-io = { path = "../io" }
 forge-modeling = { path = "../modeling" }
+forge-material = { path = "../material" }
 forge-nodes = { path = "../nodes" }
 forge-rig = { path = "../rig" }
 forge-rpc = { path = "../rpc" }
 forge-script = { path = "../script" }
+forge-shaders = { path = "../shaders" }
 forge-viewport = { path = "../viewport" }
 forge-volume = { path = "../volume" }
 glam = "0.34"

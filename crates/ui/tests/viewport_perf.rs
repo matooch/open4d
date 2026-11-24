@@ -145,7 +145,7 @@ fn upload(
     let scene = st.doc.scene();
     upload_items(
         cache,
-        &gpu.device,
+        (&gpu.device, &gpu.queue),
         scene,
         scene_draw_items_at(scene, selected, &EvalCtx::default()),
         None,
@@ -224,4 +224,86 @@ fn the_upload_cache_reuploads_only_what_changed() {
     upload(&st, &gpu, &mut cache, &none);
     assert_eq!(cache.meshes.len(), 0);
     assert_eq!(cache.instances.len(), 1);
+}
+
+#[test]
+fn texture_tag_and_material_edits_refresh_the_affected_draw() {
+    use forge_ui::commands::execute;
+    use forge_viewport::render::{DrawMesh, Frame, Settings, Shading, render_to_rgba};
+    use serde_json::json;
+
+    let Some(gpu) = headless() else { return };
+    let mut st = state();
+    let (_, _, lone) = scene_with_cloner(&mut st);
+    let material = execute(&mut st, "material.create", json!({})).unwrap()["material"]
+        .as_u64()
+        .unwrap();
+    let tag = execute(
+        &mut st,
+        "material.assign",
+        json!({"nodes": [lone.0], "material": material}),
+    )
+    .unwrap()["tags"][0]
+        .as_u64()
+        .unwrap();
+    let mut cache = GpuCache::default();
+    let none = BTreeSet::new();
+    let cam = Camera {
+        target: DVec3::new(0.0, 0.0, -1500.0),
+        distance: 500.0,
+        ..Camera::default()
+    };
+    let center = |items: &[GpuItem]| {
+        let GpuItem::Mesh(mesh, color) = &items[1] else {
+            panic!("second draw is the cube")
+        };
+        let img = render_to_rgba(
+            &gpu,
+            64,
+            64,
+            &cam,
+            &Frame {
+                meshes: &[DrawMesh {
+                    mesh,
+                    color: *color,
+                }],
+                instanced: &[],
+                lines: &[],
+                grid: None,
+                gizmo: None,
+                settings: Settings {
+                    shading: Shading::Constant,
+                    ..Settings::default()
+                },
+            },
+        );
+        let p = (32 * 64 + 32) * 4;
+        [img[p], img[p + 1], img[p + 2]]
+    };
+    let a = upload(&st, &gpu, &mut cache, &none);
+    st.doc
+        .transact("make red", |tx| {
+            tx.set_param(
+                NodeId(material),
+                "color.color",
+                Value::Color([1.0, 0.0, 0.0]),
+            )
+        })
+        .unwrap();
+    let b = upload(&st, &gpu, &mut cache, &none);
+    assert_ne!(center(&a), center(&b));
+    let [r, g, blue] = center(&b);
+    assert!(r > 200 && g == 0 && blue == 0, "{r} {g} {blue}");
+    assert_eq!(counts(&cache), (2, 0, 1, 1), "the other draw was reused");
+    st.doc
+        .transact("remove tag", |tx| tx.delete(NodeId(tag)))
+        .unwrap();
+    let fallback = center(&upload(&st, &gpu, &mut cache, &none));
+    let palette = Palette::default().object.map(|v| (v * 255.0).round() as u8);
+    assert!(
+        fallback
+            .iter()
+            .zip(palette)
+            .all(|(a, b)| a.abs_diff(b) <= 1)
+    );
 }

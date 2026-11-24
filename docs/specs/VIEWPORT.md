@@ -754,3 +754,31 @@ box is `Preview::bounds` in the mesher's space, transformed by the mesher's worl
 with `box_lines` in `BOX_COLOR`. The `slice` display is shown as the box only (the slice
 samples are not part of the preview job; parity-pending). The coarse preview mesh is not drawn: the mesher's own
 mesh is drawn by the ordinary evaluation.
+
+## 15. Material preview (brief 132)
+
+Sources: [area J](../roadmap/areas/J-materials.md), [MATERIAL §M3](MATERIAL.md),
+[UV §U4–U5](UV.md), and the public WGSL specification (`dpdx`/`dpdy`, texture sampling).
+The last unrestricted linked Standard texture tag on the object supplies the preview.
+Use its stored corner UVs for UVW mapping and the existing projection math for supported
+non-camera projections; when neither is available, use cubic projection. A tag on a
+cloner applies to its prototypes using their local geometry; clone colour still tints
+the result. Tagged meshes use full detail because the LOD proxy does not carry corner
+UVs. Child-tag inheritance and polygon-restricted or layered tags are not previewed.
+
+Evaluate diffuse colour (or the reflectance colour for a metal without diffuse) through
+the material IR. Bake UV-dependent nodes and tangent-space normal maps into bounded
+repeating preview textures; keep constants at one texel. Missing colour textures fall
+back to white, missing normal textures to the geometric shading normal. The normal map
+honours strength and axis controls; derive its basis from world position and corner UV
+derivatives and leave degenerate mappings unchanged. Use diffuse roughness and the
+metal flag with an ambient/direct-light approximation, a roughness-dependent highlight
+and tinted metal reflectance; this is not the offline BRDF or a material parity claim.
+The existing palette path, hidden line, and component overlays still work. Selected
+objects retain a selection tint without hiding the material. Features requiring per-pixel
+world-space evaluation, camera projection, transparency, or lighting-dependent shader
+inputs are outside this preview.
+
+The native offscreen baseline samples interior pixels away from silhouette edges to
+check colour and UV orientation against a fixed chart, and verifies lighting changes
+under roughness, metal and normal map edits.

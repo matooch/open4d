@@ -33,6 +33,7 @@ pub mod layer_manager;
 pub mod layout;
 pub mod manipulate;
 pub mod material_manager;
+mod material_preview;
 pub mod motion_view;
 pub mod navigation;
 pub mod node_canvas;

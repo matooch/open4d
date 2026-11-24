@@ -5,16 +5,20 @@ struct Uniforms {
     base: vec4<f32>,
     selection: vec4<f32>,
     wire: vec4<f32>,
-    // unused (the lights are in group 1)
-    light: vec4<f32>,
+    // x: preview enabled, y: roughness, z: metal, w: normal strength
+    preview: vec4<f32>,
     // x: 1 = smooth normals, y: depth bias in NDC (toward the camera), z: 1 = unlit,
     // w: 1 = instanced draws multiply the base colour by the clone colour
     params: vec4<f32>,
     // x: half point size in pixels, y/z: NDC units per pixel (2/width, 2/height)
     point: vec4<f32>,
+    // xyz: world position of the eye; w: mix in the draw tint
+    eye: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
+@group(0) @binding(1) var preview_maps: texture_2d_array<f32>;
+@group(0) @binding(2) var preview_sampler: sampler;
 
 // Lights (docs/specs/VIEWPORT.md §8.1-§8.2)
 struct Light {
@@ -70,6 +74,7 @@ struct TriIn {
     @location(1) flat_n: vec3<f32>,
     @location(2) smooth_n: vec3<f32>,
     @location(3) selected: f32,
+    @location(8) uv: vec2<f32>,
 };
 
 struct TriOut {
@@ -78,6 +83,7 @@ struct TriOut {
     @location(1) @interpolate(flat) selected: f32,
     @location(2) wpos: vec3<f32>,
     @location(3) @interpolate(flat) tint: vec3<f32>,
+    @location(4) uv: vec2<f32>,
 };
 
 // Per-instance data of clones (docs/specs/VIEWPORT.md §10.1): rows of the affine matrix
@@ -120,6 +126,7 @@ fn vs_tri(v: TriIn) -> TriOut {
     o.n = select(v.flat_n, v.smooth_n, u.params.x > 0.5);
     o.selected = v.selected;
     o.tint = vec3<f32>(1.0);
+    o.uv = v.uv;
     return o;
 }
 
@@ -132,18 +139,57 @@ fn vs_tri_inst(v: TriIn, i: InstIn) -> TriOut {
     o.n = inst_normal(i, select(v.flat_n, v.smooth_n, u.params.x > 0.5));
     o.selected = v.selected;
     o.tint = mix(vec3<f32>(1.0), i.color.rgb, u.params.w);
+    o.uv = v.uv;
     return o;
+}
+
+fn preview_normal(i: TriOut, n: vec3<f32>) -> vec3<f32> {
+    let px = dpdx(i.wpos);
+    let py = dpdy(i.wpos);
+    let ux = dpdx(i.uv);
+    let uy = dpdy(i.uv);
+    let det = ux.x * uy.y - ux.y * uy.x;
+    let orient = sign(det);
+    let tangent = orient * (px * uy.y - py * ux.y);
+    let projected = tangent - dot(tangent, n) * n;
+    let bitangent = orient * (py * ux.x - px * uy.x);
+    if abs(det) < 1e-12 || length(projected) < 1e-12 || length(bitangent) < 1e-12 {
+        return n;
+    }
+    let t = normalize(projected);
+    let cross_nt = cross(n, t);
+    let b = cross_nt * sign(dot(cross_nt, bitangent));
+    // The baked neutral XY code is 128; decode it to exactly zero.
+    let sample = textureSampleLevel(preview_maps, preview_sampler, i.uv, 1, 0.0).rgb;
+    let map = (sample * 255.0 - 128.0) / 127.0;
+    let perturbed = (t * map.x + b * map.y) * u.preview.w + n * map.z;
+    return select(n, normalize(perturbed), length(perturbed) > 1e-8);
 }
 
 @fragment
 fn fs_tri(i: TriOut) -> @location(0) vec4<f32> {
     let len = length(i.n);
-    let n = select(vec3<f32>(0.0), i.n / len, len > 1e-8);
-    let base = select(u.base.rgb, u.selection.rgb, i.selected > 0.5) * i.tint;
+    var n = i.n / max(len, 1e-8);
+    let material = u.preview.x > 0.5;
+    var base = u.base.rgb;
+    var view = vec3<f32>(0.0);
+    if material {
+        let albedo = textureSampleLevel(preview_maps, preview_sampler, i.uv, 0, 0.0).rgb;
+        base = mix(albedo, u.base.rgb, 0.35 * u.eye.w);
+        let to_eye = u.eye.xyz - i.wpos;
+        view = to_eye / max(length(to_eye), 1e-8);
+        n = select(-n, n, dot(n, view) >= 0.0);
+        if u.preview.w > 0.0 {
+            n = preview_normal(i, n);
+        }
+    }
+    base = select(base, u.selection.rgb, i.selected > 0.5) * i.tint;
     if u.params.z > 0.5 {
         return vec4<f32>(base, 1.0);
     }
     var sum = vec3<f32>(0.0);
+    let metal = u.preview.z * select(1.0, 0.0, i.selected > 0.5);
+    let diffuse = base * (1.0 - metal);
     let count = i32(lit.info.x);
     for (var k = 0; k < count; k++) {
         let li = lit.lights[k];
@@ -161,9 +207,23 @@ fn fs_tri(i: TriOut) -> @location(0) vec4<f32> {
                 att = att * smoothstep(li.axis_cos.w, li.params.x, dot(-l, li.axis_cos.xyz));
             }
         }
-        sum += li.color.rgb * (att * abs(dot(n, l)) * shadow_factor(li, i.wpos));
+        if material {
+            let no_l = max(dot(n, l), 0.0);
+            let half = l + view;
+            let no_h = max(dot(n, half / max(length(half), 1e-8)), 0.0);
+            let gloss = 1.0 - u.preview.y;
+            let highlight = pow(no_h, mix(2.0, 128.0, gloss * gloss));
+            let fresnel = mix(vec3<f32>(0.04), base, metal);
+            let response = (diffuse + fresnel * highlight * mix(0.5, 2.0, gloss)) * no_l;
+            sum += li.color.rgb * (att * shadow_factor(li, i.wpos)) * response;
+        } else {
+            sum += li.color.rgb * (att * abs(dot(n, l)) * shadow_factor(li, i.wpos));
+        }
     }
-    return vec4<f32>(base * (vec3<f32>(lit.info.y) + sum), 1.0);
+    if !material {
+        return vec4<f32>(base * (vec3<f32>(lit.info.y) + sum), 1.0);
+    }
+    return vec4<f32>(base * lit.info.y * mix(1.0, 0.4, metal) + sum, 1.0);
 }
 
 struct EdgeIn {
