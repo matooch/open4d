@@ -4,13 +4,13 @@ One page to check where the project stands. The planner updates it after every m
 Details live in the files linked at the bottom; when this page and those files disagree, the
 linked files win.
 
-**Last updated:** 2026-11-24, after Hermes run 5 (054 with review fixes, 170) and the parity-debt pass (PR #48).
+**Last updated:** 2026-11-24, after S9 (171, PR #51) and Hermes run 7 (197 part 1).
 
 ## At a glance
 
 | | Now |
 |---|---|
-| Implementation briefs | **178 of 197 done** (90 %) · 7 ready · 12 waiting |
+| Implementation briefs | **179 of 197 done** (91 %) · 7 ready · 11 waiting |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
 | Acceptance scenarios | S1, S2, S3, S7, S8, S9 pass · S4, S5 queued · S6 blocked · S10 needs a measurement |
@@ -53,21 +53,23 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | L · UI and UX | 16 / 16 | Hands-on checks in GUI sessions G1, G2, G4 |
 | M · File exchange | 12 / 12 | Done: S9 passes (171). Open: glTF skin-pose KNOWN_MISMATCH, PLY/USD/morph not observed |
 | N · Platform, packaging, docs | 13 / 14 | 185 v1.0 release checklist (last) |
-| R · Real-time GPU renderer | 0 / 9 | 197, 207, 198, 199 queued; then 200–204 (ray tracing on Vulkan + Metal) |
+| R · Real-time GPU renderer | 1 / 9 | 197 done (IR → WGSL, cache, GPU harness on Metal); 207, 198, 199 queued; then 200–204 (ray tracing on Vulkan + Metal) |
 
 ## Next implementer run (rest of the run-4 queue)
 
 Queue and rules: [agents/HERMES-IMPLEMENTER.md](agents/HERMES-IMPLEMENTER.md) §2.
 
-Done: 146 S8, 040 Metaball (run 4); 054 deformers, 170 camera exchange (run 5); 171 S9 exchange acceptance.
+Done: 146 S8, 040 Metaball (run 4); 054 deformers, 170 camera exchange (run 5); 171 S9 exchange acceptance; 197 shading IR → WGSL (run 7).
 
-1. 197 · R1 part 1: shading IR → GPU shader code, cache (start of the real-time renderer)
-1b. 207 · R1 part 2: shader nodes (noise, gradients, tiles …) → GPU shader code
-2. 142 · GPU compute path tracer
-3. 198 · R2: real-time raster PBR
-4. 199 · R3: post effects and the viewport "Render" mode
-5. 205 · S4 acceptance
-6. 206 · S5 acceptance
+1. 205 · S4 acceptance
+2. 206 · S5 acceptance
+3. 142 · GPU compute path tracer
+4. 198 · R2: real-time raster PBR
+5. 199 · R3: post effects and the viewport "Render" mode
+
+Later, with a stronger model: 207 (shader nodes → GPU code) and 200–204 (ray tracing on Metal; Vulkan run pending on the RTX 3090).
+
+Overnight: `scripts/hermes-loop.sh docs/agents/prompts/implementer-opencode.txt` restarts the implementer in fresh sessions until the queue is done (HERMES-IMPLEMENTER.md §2b).
 
 ## Blocked: waiting on you (owner)
 

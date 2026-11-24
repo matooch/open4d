@@ -1,6 +1,6 @@
 # 207 · Shader nodes to WGSL and the GPU comparison over all nodes (part 2 of 197)
 
-Status: waiting: 197 · Area: R · Depends on: 197, 125, 126 · Observations: – (own design; shader values from O42 through the CPU shaders) · Touches: shaders, material
+Status: ready · Area: R · Depends on: 197, 125, 126 · Observations: – (own design; shader values from O42 through the CPU shaders) · Touches: shaders, material
 
 ## Goal
 Port every shader-node family of briefs 125/126 to WGSL so node materials look the same on the GPU as in the CPU path tracer: noise (all 17 kinds), gradients, tiles, layers, colorizer, fusion, filter, normalizer, vertex map, AO, bitmaps. Replaces part 1's constant fallbacks.
