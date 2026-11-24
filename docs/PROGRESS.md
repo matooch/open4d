@@ -67,6 +67,13 @@ Done: 146 S8, 040 Metaball (run 4); 054 deformers, 170 camera exchange (run 5); 
 4. 199 · R3: post effects and the viewport "Render" mode
 5. 205 · S4 acceptance
 6. 206 · S5 acceptance
+7. 200 · R4: acceleration structures, `RtBackend` (Metal now; Vulkan run pending on the RTX 3090)
+8. 201 · R5: hybrid ray-traced shadows, reflections, AO, GI
+9. 202 · R6: real-time path tracing with denoising
+10. 203 · R7: consistency tests against the CPU path tracer
+11. 204 · R8: performance targets
+
+Overnight: `scripts/hermes-loop.sh docs/agents/prompts/implementer-opencode.txt` restarts the implementer in fresh sessions until the queue is done (HERMES-IMPLEMENTER.md §2b).
 
 ## Blocked: waiting on you (owner)
 

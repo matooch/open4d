@@ -28,27 +28,33 @@ Done: 193, 195, 196, 049, 110, 106, 164 (+ follow-up), 066, 168, 071, 062, 078, 
 097, 122, 167, 145, 099, 132, 131, 140, 141, 124, 134, 129, 155, 146, 040, 054, 170, 197 (merged after planner review).
 Also done by the planner (not yours): 165, 166 (FBX import/export).
 
-Run 4 queue (2026-11-24). **Stack the branches:** start each brief from the previous brief's
-branch, not from `origin/main`, unless the previous one is already merged into `main`
-(`git branch -r --contains <its last commit>` lists `origin/main`). That way the briefs of a run
-build on each other and the planner merges them without conflicts. Merge `origin/main` into your
+Overnight queue (2026-11-24, from run 8). **Stack the branches:** start each brief from the
+previous brief's branch, not from `origin/main`, unless the previous one is already merged into
+`main` (`git branch -r --contains <its last commit>` lists `origin/main`). That way the briefs of a
+run build on each other and the planner merges them without conflicts. Merge `origin/main` into your
 current branch at the start of each brief as well.
 
-1. [146](tasks/146-s8-rendering-acceptance.md) · S8 acceptance test and rendering docs
-2. [040](tasks/040-metaball.md) · Metaball generator (uses the volume mesher, 083)
-3. [054](tasks/054-smoothing-displacer-reduction-bevel.md) · Smoothing deformer, Displacer, Polygon Reduction, Bevel deformer
-4. [170](tasks/170-camera-light-material-exchange.md) · Camera, light and material exchange across glTF/USD/Alembic
-5. [197](tasks/197-shading-ir-wgsl.md) · R1 part 1: IR core → WGSL, shader cache, naga validation, CPU-vs-GPU harness (split 2026-11-24) (start of area R; read `docs/roadmap/areas/R-realtime.md` and D19 first)
-5b. [207](tasks/207-shader-nodes-wgsl.md) · R1 part 2: shader-node families → WGSL, harness over all nodes (waits only on 197, earlier in this queue)
-6. [142](tasks/142-gpu-path-tracer.md) · GPU compute path tracer (wgpu): the compute fallback that area R tiers 2–3 build on
-7. [198](tasks/198-realtime-raster.md) · R2: real-time raster PBR engine (`render-rt`); your M5 Pro is the Metal reference
-8. [199](tasks/199-realtime-post.md) · R3: post effects and the viewport "Render" mode
-9. [205](tasks/205-s4-mograph-acceptance.md) · S4 acceptance: motion graphics through the CLI
-10. [206](tasks/206-s5-volume-acceptance.md) · S5 acceptance: volumes through the CLI
+Already done from earlier runs: 146, 040, 054, 170, 197.
 
-198 and 199 show `waiting` in BACKLOG only on briefs earlier in this queue (197, 198); on a
-stacked branch those are done, so start them in order. GPU tests run on the Mac's Metal adapter
-(M5 Pro); keep them skippable without an adapter so CI stays green.
+1. [207](tasks/207-shader-nodes-wgsl.md) · R1 part 2: shader-node families → WGSL, harness over all nodes. Large exact port: if it does not fit, finish whole families (noise first), keep the rest on the documented fallback, write what is left in the Report as `in-progress`, push, and go on with 142 (the planner splits the rest off).
+2. [142](tasks/142-gpu-path-tracer.md) · GPU compute path tracer (wgpu): the compute fallback that area R tiers 2–3 build on
+3. [198](tasks/198-realtime-raster.md) · R2: real-time raster PBR engine (`render-rt`); the M5 Pro is the Metal reference
+4. [199](tasks/199-realtime-post.md) · R3: post effects and the viewport "Render" mode
+5. [205](tasks/205-s4-mograph-acceptance.md) · S4 acceptance: motion graphics through the CLI
+6. [206](tasks/206-s5-volume-acceptance.md) · S5 acceptance: volumes through the CLI
+7. [200](tasks/200-gpu-scene-rt.md) · R4: acceleration structures, `RtBackend`, compute fallback
+8. [201](tasks/201-hybrid-rt.md) · R5: hybrid ray-traced shadows, reflections, AO, GI
+9. [202](tasks/202-realtime-pathtrace.md) · R6: real-time path tracing with denoising
+10. [203](tasks/203-rt-consistency.md) · R7: consistency tests of every tier against the CPU path tracer
+11. [204](tasks/204-rt-performance.md) · R8: performance targets and benchmarks
+
+Briefs 198–204 show `waiting` in BACKLOG only on briefs earlier in this queue; on a stacked branch
+those are done, so start them in order. GPU tests run on the Mac's Metal adapter (M5 Pro); keep them
+skippable without an adapter so CI stays green, and share one device per test file behind a lock
+(§5a). **Vulkan ray tracing (RTX 3090) is not on this machine:** implement the Metal path and the
+compute fallback, write the Vulkan code behind the same `RtBackend` trait so it compiles everywhere,
+and record "Vulkan RT run pending on the owner's RTX 3090" in the Report as `parity-pending`. That
+is `done`, not `blocked`.
 
 **Handing a brief back.** When a brief's branch is pushed, add one line to
 `/Users/bigman/forge-implementer/log.md`: `<brief> <branch> <done|blocked> <one-line result>`. The
@@ -63,6 +69,18 @@ every `hermes/*` branch of this run run `git fetch -q origin` and
 and check again. Then write `QUEUE FINISHED` to `/Users/bigman/forge-implementer/log.md`, with
 one line per brief: `<brief> <branch> <short SHA on origin> <done|blocked> <result, gate>`, and
 stop. Never write `QUEUE FINISHED` while a branch has unpushed commits.
+
+## 2b. Overnight: one session after another
+
+The owner may run you in a loop (`scripts/hermes-loop.sh`): when a session ends, a fresh one starts
+with the same prompt and resumes from `state.json`. So:
+- When your context is getting full, finish the step you are on, commit, push, update
+  `state.json` (brief, branch, next step) and `notes.md`, and end the session. Do not start a
+  large new step you cannot finish; never leave uncommitted work.
+- Write `QUEUE FINISHED` (with the push check above) only when every brief in the queue is done or
+  blocked. Write `QUEUE PAUSED: <reason>` when you must stop for a reason a fresh session cannot fix
+  (disk full after cleaning, a push that keeps failing, a planner decision needed); the loop stops
+  on either line.
 
 ## 3. How to work with a small context
 
