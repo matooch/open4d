@@ -131,7 +131,7 @@ implementers can avoid collisions.
 | 131 | [Material manager UI with preview renders](../agents/tasks/131-material-manager.md) | J | 123, 136 | done (parity-pending: G7) | ui |
 | 132 | [Viewport material display (PBR preview, textures)](../agents/tasks/132-viewport-materials.md) | J | 123, 143 | done | viewport |
 | 133 | [Environment: sky, HDRI, background, floor](../agents/tasks/133-environment.md) | J | 130, 137 | done (HDRI loading, importance sampling: 32.8 dB at 64 spp vs 4096; sky, background and floor objects; no O29 observation of these objects, own design) | render-api, generators |
-| 134 | [Material exchange mapping (glTF PBR to node material)](../agents/tasks/134-material-exchange-mapping.md) | J | 124, 164 | ready | io, material |
+| 134 | [Material exchange mapping (glTF PBR to node material)](../agents/tasks/134-material-exchange-mapping.md) | J | 124, 164 | done | io, material |
 | 135 | [Render API: snapshot, settings, outputs, AOV model, progress; harness compare_image](../agents/tasks/135-render-api.md) | K | 123 | done | render-api, parity-harness |
 | 136 | [CPU path tracer core (BVH, instancing, BSDFs from the IR, MIS)](../agents/tasks/136-cpu-path-tracer.md) | K | 135 | done | render-cpu |
 | 137 | [Lights (omni, spot, infinite, area, sky) and shadows](../agents/tasks/137-lights-shadows.md) | K | 136 | done (light node types not registered; parity: silhouettes 15/19) | render-cpu, generators |

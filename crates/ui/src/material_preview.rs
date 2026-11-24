@@ -13,7 +13,10 @@ use forge_viewport::material_preview::PreviewMaterial;
 use glam::{DMat4, DVec3};
 
 pub(crate) fn load_image(path: &str) -> Option<Arc<forge_image::Image>> {
-    let bytes = std::fs::read(path).ok()?;
+    let bytes = match forge_io::gltf::decode_embedded_image(path).ok()? {
+        Some((_, bytes)) => bytes,
+        None => std::fs::read(path).ok()?,
+    };
     let decoded = forge_image::decode(&bytes, &forge_image::Limits::default()).ok()?;
     Some(Arc::new(decoded.image))
 }

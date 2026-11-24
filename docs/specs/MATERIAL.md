@@ -180,6 +180,31 @@ records one undoable edit (continuous canvas gestures merge).
 The `graph.*` expression command handlers live in `forge-app`; `forge-nodes` is
 shared by both graph kinds without depending on the command/I/O layer.
 
+## M9 glTF metallic–roughness mapping (brief 134)
+
+Source: [glTF 2.0 core material model](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#materials)
+and [IO §5](IO.md). Import named materials as node materials; export the evaluated
+Surface inputs, not the renderer's approximation:
+
+| glTF field | Surface input |
+|---|---|
+| `baseColorFactor` RGBA | `base_color` RGB plus `alpha` |
+| `metallicFactor`, `roughnessFactor` | `metallic`, `roughness` |
+| `emissiveFactor` | `emission` |
+| `alphaMode`, `alphaCutoff`, `doubleSided` | `alpha_mode`, `alpha_cutoff`, `double_sided` |
+| `baseColorTexture`, `metallicRoughnessTexture` | `base_texture`, `metallic_roughness_texture` |
+| `normalTexture`, `scale` | `normal_texture`, `normal_strength` |
+| `occlusionTexture`, `strength` | `occlusion_texture`, `occlusion_strength` |
+| `emissiveTexture` | `emissive_texture` |
+
+Use glTF defaults on import. Paths/URIs stay verbatim; embed PNG/JPEG payloads from
+data URIs or GLB image buffer views in the exported GLB. Only TEXCOORD_0 is
+supported; reject other texture coordinate sets. Sampler overrides and extensions are
+not mapped. Standard export retains its colour and roughness mapping, and maps the
+metal flag to 0/1. The IR still has a binary metal flag; alpha mode, face sidedness,
+occlusion and the packed metallic/roughness map are retained for exchange, not
+reproduced by native shading. Numeric round trips use glTF's `f32` precision.
+
 ## M5 Unsupported / parity-pending
 
 - No Layer Setup (reflectance layers: only the default layer is modelled).

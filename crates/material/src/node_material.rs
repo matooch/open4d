@@ -4,7 +4,9 @@ use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 use forge_core::{Category, Node, NodeType, ParamDesc, Value};
-use forge_nodes::{EvalEnv, Graph, GraphError, NodeDef, NodeRegistry, PortType, PortValue};
+use forge_nodes::{
+    EvalEnv, Evaluation, Graph, GraphError, GraphNodeId, NodeDef, NodeRegistry, PortType, PortValue,
+};
 
 use crate::{MATERIAL, Material, MixMode, ShadingGraph, compile, mix};
 
@@ -16,15 +18,62 @@ pub const SCALAR: &str = "material.scalar";
 pub const TEXTURE: &str = "material.texture";
 pub const MIX: &str = "material.mix";
 
-const PORTS: [&str; 7] = [
-    "base_color",
-    "base_texture",
-    "roughness",
-    "metallic",
-    "normal_texture",
-    "normal_strength",
-    "emission",
-];
+// Keep Surface descriptors, defaults, and graph-to-value conversion in one table.
+macro_rules! surface {
+    ($($field:ident: $ty:ty = $default:expr => $port:ident),+ $(,)?) => {
+        const PORTS: &[&str] = &[$(stringify!($field)),+];
+        /// Evaluated inputs, including the values the shading IR cannot represent.
+        #[derive(Debug, Clone, PartialEq)]
+        pub struct SurfaceValues { $(pub $field: $ty),+ }
+
+        impl Default for SurfaceValues {
+            fn default() -> Self { Self { $($field: $default),+ } }
+        }
+
+        impl SurfaceValues {
+            fn ports() -> impl Iterator<Item = (&'static str, PortValue)> {
+                [$( (stringify!($field), PortValue::$port($default)) ),+].into_iter()
+            }
+
+            pub fn from_graph(graph: &Graph) -> Result<Self, Error> {
+                let (id, eval) = evaluate_surface(graph)?;
+                Ok(Self {
+                    $($field: match eval.output(id, stringify!($field)) {
+                        Some(PortValue::$port(value)) => value.clone(),
+                        _ => unreachable!("a Surface declares this typed output"),
+                    }),+
+                })
+            }
+
+            pub fn to_graph(&self) -> Result<Graph, Error> {
+                let mut graph = default_graph();
+                let id = graph.nodes().next().expect("default Surface").id;
+                $(if self.$field != $default {
+                    graph.set_value(registry(), id, stringify!($field), PortValue::$port(self.$field.to_owned()))?;
+                })+
+                Ok(graph)
+            }
+        }
+    }
+}
+
+surface! {
+    base_color: [f64; 3] = [0.8; 3] => Colour,
+    base_texture: String = String::new() => String,
+    roughness: f64 = 0.5 => Float,
+    metallic: f64 = 0.0 => Float,
+    metallic_roughness_texture: String = String::new() => String,
+    normal_texture: String = String::new() => String,
+    normal_strength: f64 = 1.0 => Float,
+    emission: [f64; 3] = [0.0; 3] => Colour,
+    emissive_texture: String = String::new() => String,
+    occlusion_texture: String = String::new() => String,
+    occlusion_strength: f64 = 1.0 => Float,
+    alpha: f64 = 1.0 => Float,
+    alpha_mode: String = "OPAQUE".to_owned() => String,
+    alpha_cutoff: f64 = 0.5 => Float,
+    double_sided: bool = false => Bool,
+}
 
 pub fn registry() -> &'static NodeRegistry {
     static REGISTRY: OnceLock<NodeRegistry> = OnceLock::new();
@@ -63,15 +112,7 @@ pub fn registry() -> &'static NodeRegistry {
             Ok(PORTS.iter().map(|p| cx.value(p).clone()).collect())
         })
         .sink();
-        for (id, value) in PORTS.into_iter().zip([
-            V::Colour([0.8; 3]),
-            V::String(String::new()),
-            V::Float(0.5),
-            V::Float(0.0),
-            V::String(String::new()),
-            V::Float(1.0),
-            V::Colour([0.0; 3]),
-        ]) {
+        for (id, value) in SurfaceValues::ports() {
             surface = surface
                 .input(id, value.ty(), value.clone())
                 .output(id, value.ty());
@@ -131,8 +172,7 @@ pub fn compile_hosted(node: &Node) -> Result<ShadingGraph, Error> {
     }
 }
 
-/// Evaluate the typed surface and convert its inputs into the common source material.
-pub fn compile_graph(graph: &Graph) -> Result<ShadingGraph, Error> {
+fn evaluate_surface(graph: &Graph) -> Result<(GraphNodeId, Evaluation), Error> {
     let r = registry();
     let mut surfaces = graph.nodes().filter(|n| n.type_id == SURFACE);
     let root = surfaces
@@ -163,54 +203,41 @@ pub fn compile_graph(graph: &Graph) -> Result<ShadingGraph, Error> {
             return Err(Error::Invalid("invalid material graph link".into()));
         }
     }
-    let ev = graph.evaluate_all(r, &EvalEnv::headless(0.0))?;
-    let value = |port| {
-        ev.output(root.id, port)
-            .expect("Surface declares all of these outputs")
-    };
-    let float = |port| match value(port) {
-        PortValue::Float(v) => *v,
-        _ => unreachable!(),
-    };
-    let color = |port| match value(port) {
-        PortValue::Colour(v) => *v,
-        _ => unreachable!(),
-    };
-    let text = |port| match value(port) {
-        PortValue::String(v) => v.as_str(),
-        _ => unreachable!(),
-    };
+    Ok((root.id, graph.evaluate_all(r, &EvalEnv::headless(0.0))?))
+}
+
+/// Evaluate the typed surface and convert its inputs into the common source material.
+pub fn compile_graph(graph: &Graph) -> Result<ShadingGraph, Error> {
+    let s = SurfaceValues::from_graph(graph)?;
     let mut material = Material::new();
     for (id, value) in [
-        ("color.color", Value::Color(color("base_color"))),
-        (
-            "color.roughness",
-            Value::Float(float("roughness").clamp(0.0, 1.0)),
-        ),
+        ("color.color", Value::Color(s.base_color)),
+        ("color.roughness", Value::Float(s.roughness.clamp(0.0, 1.0))),
     ] {
         material.set(id, value);
     }
-    if float("metallic") >= 0.5 {
+    if s.metallic >= 0.5 {
         material.set("reflectance.spec.attenuation", Value::Enum("metal".into()));
     }
-    let base = text("base_texture");
-    if !base.is_empty() {
-        material.set("color.texture", Value::String(base.into()));
+    if !s.base_texture.is_empty() {
+        material.set("color.texture", Value::String(s.base_texture));
         material.set("color.mix_mode", Value::Enum("multiply".into()));
     }
-    let normal = text("normal_texture");
-    if !normal.is_empty() {
+    if !s.normal_texture.is_empty() {
         material.set("enable.normal", Value::Bool(true));
-        material.set("normal.texture", Value::String(normal.into()));
+        material.set("normal.texture", Value::String(s.normal_texture));
         material.set(
             "normal.strength",
-            Value::Float(float("normal_strength").clamp(0.0, 1000.0)),
+            Value::Float(s.normal_strength.clamp(0.0, 1000.0)),
         );
     }
-    let emission = color("emission");
-    if emission != [0.0; 3] {
+    if s.emission != [0.0; 3] {
         material.set("enable.luminance", Value::Bool(true));
-        material.set("luminance.color", Value::Color(emission));
+        material.set("luminance.color", Value::Color(s.emission));
+        if !s.emissive_texture.is_empty() {
+            material.set("luminance.texture", Value::String(s.emissive_texture));
+            material.set("luminance.mix_mode", Value::Enum("multiply".into()));
+        }
     }
     Ok(compile(&material))
 }
