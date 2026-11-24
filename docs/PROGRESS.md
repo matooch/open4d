@@ -10,7 +10,7 @@ linked files win.
 
 | | Now |
 |---|---|
-| Implementation briefs | **179 of 197 done** (91 %) · 7 ready · 11 waiting |
+| Implementation briefs | **180 of 197 done** (91 %) · 6 ready · 11 waiting |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
 | Acceptance scenarios | S1, S2, S3, S7, S8, S9 pass · S4, S5 queued · S6 blocked · S10 needs a measurement |
