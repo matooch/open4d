@@ -167,6 +167,13 @@ Items: **New**, **Open...**, **Save**, **Save As...**, separator, **Import OBJ..
 
 ## 3. Exchange options, generic commands, dialogs and batch conversion (brief 172)
 
+**Export frame (all formats).** `file.export`, `forge export` and `forge convert` export the scene
+**evaluated at the export frame** (the current frame in the editor, `--frame` on the CLI):
+generators and deformers are baked at that frame. For the animation-preserving formats (glTF,
+USD, Alembic) the evaluated scene still carries its tracks, so node transform animation is
+written as well; deformation is not animated (glTF has no deformers). Fixed after S1 showed a
+GLB with the bend at its stored value instead of frame 30.
+
 Sources: own design (area M, `docs/roadmap/areas/M-io.md`: "Import/export dialogs with
 options; batch export through the CLI"). The reference app's dialog layouts have no
 observation, so **the dialog layout, the option names and their order are parity-pending**.

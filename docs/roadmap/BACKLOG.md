@@ -37,7 +37,7 @@ implementers can avoid collisions.
 | 037 | [Spline primitives II](../agents/tasks/037-spline-primitives-2.md) | C | 038 | done | generators |
 | 038 | [Intermediate Points modes and R25 per-spline defaults](../agents/tasks/038-intermediate-points.md) | C | – | done | generators, geometry |
 | 039 | [Text spline (fonts)](../agents/tasks/039-text-spline.md) | C | 038 | done (9/9 O48 cases on font-independent invariants; glyph shapes parity-pending until a re-observation with a licensed font) | generators, text (new) |
-| 040 | [Metaball generator](../agents/tasks/040-metaball.md) | C | 083 | waiting: 083 | generators, volume |
+| 040 | [Metaball generator](../agents/tasks/040-metaball.md) | C | 083 | ready | generators, volume |
 | 041 | [Atom Array and Spline Mask](../agents/tasks/041-atom-array-spline-mask.md) | C | 029 | done (4/4 O20 cases; other mask modes, axes, oblique atom edges parity-pending) | generators |
 | 042 | [Sweep rail/banking/scale, Loft linear/multi, Lathe partial/movement, cap fixes](../agents/tasks/042-sweep-loft-lathe-r25.md) | C | – | done (Lathe done; Loft/Sweep R25 cases parity-pending: R20/R25 conflict, helix route) | generators |
 | 043 | [Boole R25 modes and numbering, Subdivision types, Symmetry planes](../agents/tasks/043-boole-subdivision-symmetry-r25.md) | C | – | done (Boole R25 strict numbering parity-pending) | generators, geometry |
@@ -51,7 +51,7 @@ implementers can avoid collisions.
 | 051 | [Squash & Stretch and Wrap deformers](../agents/tasks/051-squash-stretch-wrap.md) | D | 050 | done (11/11 level A; Center, Aspect, Smooth, Movement, Scale Z, Tension parity-pending, see MODIFIERS.md §7) | modifiers |
 | 052 | [Expression library; FFD, Formula and Melt deformers](../agents/tasks/052-expr-ffd-formula-melt.md) | D | 050, 063 | done (5 exact + 2 statistical of 7; Melt values parity-pending, see MODIFIERS.md §16-19) | expr (new), modifiers |
 | 053 | [Explosion, Shatter, Wind deformers](../agents/tasks/053-explosion-shatter-wind.md) | D | 050 | done (2 exact + 3 statistical of 5; random stream and wind noise parity-pending, see MODIFIERS.md §11-13) | modifiers |
-| 054 | [Smoothing deformer, Displacer, Polygon Reduction, Bevel deformer](../agents/tasks/054-smoothing-displacer-reduction-bevel.md) | D | 050, 125 | waiting: 125 | modifiers, modeling |
+| 054 | [Smoothing deformer, Displacer, Polygon Reduction, Bevel deformer](../agents/tasks/054-smoothing-displacer-reduction-bevel.md) | D | 050, 125 | ready | modifiers, modeling |
 | 055 | [Spline Wrap, Spline and Spline Rail deformers](../agents/tasks/055-spline-deformers.md) | D | 050, 028 | done (0 exact of 4, all pinned: sampler digits and unresolved helix frame / Spline pairing; see MODIFIERS.md §20-21) | modifiers |
 | 056 | [Mesh (cage), Surface, Camera, Collision, Jiggle, Delta Mush, Correction deformers](../agents/tasks/056-mesh-surface-camera-collision-jiggle-deltamush-correction.md) | D | 050 | done (3 exact of 8, one vacuous; 5 pinned: the reference export did not run the solvers; algorithms parity-pending, see MODIFIERS.md §14-15) | modifiers |
 | 057 | [Fields framework + Linear, Spherical, Box + Remapping](../agents/tasks/057-fields-framework.md) | D | 050 | done (27/27 samples; remap order and Step/Quadratic parity-pending, see FIELDS.md F5) | fields |
