@@ -3,7 +3,7 @@
 Status: waiting: 142, 198 · Area: R · Depends on: 142, 198 · Observations: – (own design; material values from O29/O42/O43 through the shading IR) · Touches: render-rt, render-gpu
 
 ## Goal
-Build and update bottom/top-level acceleration structures for meshes and clone instances each frame. Use hardware RT (Vulkan ray query through wgpu experimental features; decision D19) where available, else the compute BVH from brief 142.
+Build and update bottom/top-level acceleration structures for meshes and clone instances each frame. Use hardware RT on **both** Vulkan (ray query) and Metal (Metal ray tracing) through wgpu's experimental features, or per D19 through a narrow native backend per API behind one `RtBackend` trait; else the compute BVH from brief 142.
 
 ## Inputs
 - Area design: [../../roadmap/areas/R-realtime.md](../../roadmap/areas/R-realtime.md)
@@ -11,7 +11,7 @@ Build and update bottom/top-level acceleration structures for meshes and clone i
 - docs/specs/MATERIAL.md, SHADERS.md, RENDER.md
 
 ## Done when
-- [ ] Hardware and compute paths return identical hit results on a test scene (ray-by-ray comparison).
+- [ ] Vulkan RT, Metal RT and the compute path return identical hit results on a test scene (ray-by-ray comparison; each RT path runs where its API exists).
 - [ ] Instancing: 10 000 clones of one mesh use one BLAS and a TLAS update per frame.
 - [ ] Feature detection: no RT support selects the compute path without errors.
 - [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
