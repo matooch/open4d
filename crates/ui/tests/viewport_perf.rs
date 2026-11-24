@@ -4,7 +4,7 @@
 //! (skips without one unless FORGE_REQUIRE_GPU=1).
 
 use std::collections::BTreeSet;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use forge_core::{EvalCtx, NodeId, Value};
 use forge_generators::cloner_instances;
@@ -123,8 +123,14 @@ fn picking_returns_the_cloner_and_the_clone_index() {
     assert_eq!(pick_object(st.doc.scene(), &cam, 2.0, 2.0, w, h), None);
 }
 
-fn headless() -> Option<Gpu> {
-    match Gpu::new_headless() {
+/// One shared device, used by one test at a time: creating wgpu devices from parallel test
+/// threads crashed the software Vulkan driver in CI (SIGSEGV on lavapipe), as in
+/// crates/viewport/tests/render.rs.
+fn headless() -> Option<(MutexGuard<'static, ()>, &'static Gpu)> {
+    static GPU: OnceLock<Option<Gpu>> = OnceLock::new();
+    static LOCK: Mutex<()> = Mutex::new(());
+    let guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let gpu = GPU.get_or_init(|| match Gpu::new_headless() {
         Ok(g) => Some(g),
         Err(e) if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") => {
             panic!("FORGE_REQUIRE_GPU=1 but no GPU: {e}")
@@ -133,7 +139,8 @@ fn headless() -> Option<Gpu> {
             eprintln!("skipping GPU test: {e}");
             None
         }
-    }
+    });
+    gpu.as_ref().map(|g| (guard, g))
 }
 
 fn upload(
@@ -161,17 +168,19 @@ fn counts(cache: &GpuCache) -> (u64, u64, u64, u64) {
 
 #[test]
 fn the_upload_cache_reuploads_only_what_changed() {
-    let Some(gpu) = headless() else { return };
+    let Some((_serial, gpu)) = headless() else {
+        return;
+    };
     let mut st = state();
     let (c, proto, lone) = scene_with_cloner(&mut st);
     let mut cache = GpuCache::default();
     let none = BTreeSet::new();
 
     // first frame: everything uploads (one mesh, one instance set)
-    let first = upload(&st, &gpu, &mut cache, &none);
+    let first = upload(&st, gpu, &mut cache, &none);
     assert_eq!(counts(&cache), (1, 0, 1, 0));
     // the same scene again: nothing uploads, and the very same GPU objects come back
-    let again = upload(&st, &gpu, &mut cache, &none);
+    let again = upload(&st, gpu, &mut cache, &none);
     assert_eq!(counts(&cache), (1, 1, 1, 1));
     match (&first[0], &again[0]) {
         (GpuItem::Instanced(a, _), GpuItem::Instanced(b, _)) => assert!(Arc::ptr_eq(a, b)),
@@ -180,7 +189,7 @@ fn the_upload_cache_reuploads_only_what_changed() {
 
     // selecting an object changes only its colour
     let selected: BTreeSet<NodeId> = [lone].into();
-    let sel = upload(&st, &gpu, &mut cache, &selected);
+    let sel = upload(&st, gpu, &mut cache, &selected);
     assert_eq!(counts(&cache), (1, 2, 1, 2), "selection uploads nothing");
     let (GpuItem::Mesh(_, plain), GpuItem::Mesh(_, tint)) = (&again[1], &sel[1]) else {
         panic!("the plain cube is a mesh")
@@ -193,7 +202,7 @@ fn the_upload_cache_reuploads_only_what_changed() {
             tx.set_param(lone, "transform.pos", Value::Vec3([50.0, 0.0, -1500.0]))
         })
         .unwrap();
-    upload(&st, &gpu, &mut cache, &none);
+    upload(&st, gpu, &mut cache, &none);
     assert_eq!(counts(&cache), (2, 2, 1, 3));
 
     // editing the prototype or a cloner parameter re-uploads the instance set only
@@ -202,26 +211,26 @@ fn the_upload_cache_reuploads_only_what_changed() {
             tx.set_param(c, "linear_count", Value::Int(25))
         })
         .unwrap();
-    upload(&st, &gpu, &mut cache, &none);
+    upload(&st, gpu, &mut cache, &none);
     assert_eq!(counts(&cache), (2, 3, 2, 3));
     st.doc
         .transact("proto size", |tx| {
             tx.set_param(proto, "size_x", Value::Float(30.0))
         })
         .unwrap();
-    upload(&st, &gpu, &mut cache, &none);
+    upload(&st, gpu, &mut cache, &none);
     assert_eq!(counts(&cache), (2, 4, 3, 3));
 
     // an unrelated edit (a new null) re-uploads nothing
     st.doc
         .transact("null", |tx| tx.create("forge.null", None, None))
         .unwrap();
-    upload(&st, &gpu, &mut cache, &none);
+    upload(&st, gpu, &mut cache, &none);
     assert_eq!(counts(&cache), (2, 5, 3, 4));
 
     // removing the lone cube drops its entry
     st.doc.transact("delete", |tx| tx.delete(lone)).unwrap();
-    upload(&st, &gpu, &mut cache, &none);
+    upload(&st, gpu, &mut cache, &none);
     assert_eq!(cache.meshes.len(), 0);
     assert_eq!(cache.instances.len(), 1);
 }
@@ -232,7 +241,9 @@ fn texture_tag_and_material_edits_refresh_the_affected_draw() {
     use forge_viewport::render::{DrawMesh, Frame, Settings, Shading, render_to_rgba};
     use serde_json::json;
 
-    let Some(gpu) = headless() else { return };
+    let Some((_serial, gpu)) = headless() else {
+        return;
+    };
     let mut st = state();
     let (_, _, lone) = scene_with_cloner(&mut st);
     let material = execute(&mut st, "material.create", json!({})).unwrap()["material"]
@@ -258,7 +269,7 @@ fn texture_tag_and_material_edits_refresh_the_affected_draw() {
             panic!("second draw is the cube")
         };
         let img = render_to_rgba(
-            &gpu,
+            gpu,
             64,
             64,
             &cam,
@@ -280,7 +291,7 @@ fn texture_tag_and_material_edits_refresh_the_affected_draw() {
         let p = (32 * 64 + 32) * 4;
         [img[p], img[p + 1], img[p + 2]]
     };
-    let a = upload(&st, &gpu, &mut cache, &none);
+    let a = upload(&st, gpu, &mut cache, &none);
     st.doc
         .transact("make red", |tx| {
             tx.set_param(
@@ -290,7 +301,7 @@ fn texture_tag_and_material_edits_refresh_the_affected_draw() {
             )
         })
         .unwrap();
-    let b = upload(&st, &gpu, &mut cache, &none);
+    let b = upload(&st, gpu, &mut cache, &none);
     assert_ne!(center(&a), center(&b));
     let [r, g, blue] = center(&b);
     assert!(r > 200 && g == 0 && blue == 0, "{r} {g} {blue}");
@@ -298,7 +309,7 @@ fn texture_tag_and_material_edits_refresh_the_affected_draw() {
     st.doc
         .transact("remove tag", |tx| tx.delete(NodeId(tag)))
         .unwrap();
-    let fallback = center(&upload(&st, &gpu, &mut cache, &none));
+    let fallback = center(&upload(&st, gpu, &mut cache, &none));
     let palette = Palette::default().object.map(|v| (v * 255.0).round() as u8);
     assert!(
         fallback
