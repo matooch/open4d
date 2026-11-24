@@ -28,7 +28,7 @@ Done: 193, 195, 196, 049, 110, 106, 164 (+ follow-up), 066, 168, 071, 062, 078, 
 097, 122, 167, 145, 099, 132, 131, 140, 141, 124, 134, 129, 155, 146, 040, 054, 170, 197 (merged after planner review).
 Also done by the planner (not yours): 165, 166 (FBX import/export).
 
-Overnight queue (2026-11-24, from run 8). **Stack the branches:** start each brief from the
+Overnight queue (2026-11-24, run 8). **Stack the branches:** start each brief from the
 previous brief's branch, not from `origin/main`, unless the previous one is already merged into
 `main` (`git branch -r --contains <its last commit>` lists `origin/main`). That way the briefs of a
 run build on each other and the planner merges them without conflicts. Merge `origin/main` into your
@@ -36,17 +36,19 @@ current branch at the start of each brief as well.
 
 Already done from earlier runs: 146, 040, 054, 170, 197.
 
-1. [207](tasks/207-shader-nodes-wgsl.md) · R1 part 2: shader-node families → WGSL, harness over all nodes. Large exact port: if it does not fit, finish whole families (noise first), keep the rest on the documented fallback, write what is left in the Report as `in-progress`, push, and go on with 142 (the planner splits the rest off).
-2. [142](tasks/142-gpu-path-tracer.md) · GPU compute path tracer (wgpu): the compute fallback that area R tiers 2–3 build on
-3. [198](tasks/198-realtime-raster.md) · R2: real-time raster PBR engine (`render-rt`); the M5 Pro is the Metal reference
-4. [199](tasks/199-realtime-post.md) · R3: post effects and the viewport "Render" mode
-5. [205](tasks/205-s4-mograph-acceptance.md) · S4 acceptance: motion graphics through the CLI
-6. [206](tasks/206-s5-volume-acceptance.md) · S5 acceptance: volumes through the CLI
-7. [200](tasks/200-gpu-scene-rt.md) · R4: acceleration structures, `RtBackend`, compute fallback
-8. [201](tasks/201-hybrid-rt.md) · R5: hybrid ray-traced shadows, reflections, AO, GI
-9. [202](tasks/202-realtime-pathtrace.md) · R6: real-time path tracing with denoising
-10. [203](tasks/203-rt-consistency.md) · R7: consistency tests of every tier against the CPU path tracer
-11. [204](tasks/204-rt-performance.md) · R8: performance targets and benchmarks
+Mechanical briefs first (owner, 2026-11-24: this run uses a Flash model):
+
+1. [205](tasks/205-s4-mograph-acceptance.md) · S4 acceptance: motion graphics through the CLI
+2. [206](tasks/206-s5-volume-acceptance.md) · S5 acceptance: volumes through the CLI
+3. [142](tasks/142-gpu-path-tracer.md) · GPU compute path tracer (wgpu): the compute fallback that area R tiers 2–3 build on
+4. [198](tasks/198-realtime-raster.md) · R2: real-time raster PBR engine (`render-rt`); the M5 Pro is the Metal reference
+5. [199](tasks/199-realtime-post.md) · R3: post effects and the viewport "Render" mode
+
+**Stop after 199** (write `QUEUE FINISHED`). The briefs below are for a later run with a stronger
+model; do not start them in this run:
+
+- [207](tasks/207-shader-nodes-wgsl.md) · R1 part 2: shader-node families → WGSL (exact port; noise first)
+- [200](tasks/200-gpu-scene-rt.md)–[204](tasks/204-rt-performance.md) · R4–R8: ray tracing (Metal + compute fallback; Vulkan behind `RtBackend`)
 
 Briefs 198–204 show `waiting` in BACKLOG only on briefs earlier in this queue; on a stacked branch
 those are done, so start them in order. GPU tests run on the Mac's Metal adapter (M5 Pro); keep them

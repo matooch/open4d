@@ -61,17 +61,13 @@ Queue and rules: [agents/HERMES-IMPLEMENTER.md](agents/HERMES-IMPLEMENTER.md) §
 
 Done: 146 S8, 040 Metaball (run 4); 054 deformers, 170 camera exchange (run 5); 171 S9 exchange acceptance; 197 shading IR → WGSL (run 7).
 
-1. 207 · R1 part 2: shader nodes (noise, gradients, tiles …) → GPU shader code
-2. 142 · GPU compute path tracer
-3. 198 · R2: real-time raster PBR
-4. 199 · R3: post effects and the viewport "Render" mode
-5. 205 · S4 acceptance
-6. 206 · S5 acceptance
-7. 200 · R4: acceleration structures, `RtBackend` (Metal now; Vulkan run pending on the RTX 3090)
-8. 201 · R5: hybrid ray-traced shadows, reflections, AO, GI
-9. 202 · R6: real-time path tracing with denoising
-10. 203 · R7: consistency tests against the CPU path tracer
-11. 204 · R8: performance targets
+1. 205 · S4 acceptance
+2. 206 · S5 acceptance
+3. 142 · GPU compute path tracer
+4. 198 · R2: real-time raster PBR
+5. 199 · R3: post effects and the viewport "Render" mode
+
+Later, with a stronger model: 207 (shader nodes → GPU code) and 200–204 (ray tracing on Metal; Vulkan run pending on the RTX 3090).
 
 Overnight: `scripts/hermes-loop.sh docs/agents/prompts/implementer-opencode.txt` restarts the implementer in fresh sessions until the queue is done (HERMES-IMPLEMENTER.md §2b).
 
