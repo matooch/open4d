@@ -376,7 +376,7 @@ fn s1_png_render() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// S4: motion graphics through the CLI, `tests/acceptance/s4_mograph.rhai`.
+// S4: motion graphics through the CLI, `tests/acceptance/s4_motion_graphics.rhai`.
 //
 // "FORGE" is fractured into letters, cloned onto the 36 sampled points of a Circle spline,
 // turned by a seeded Random effector and lifted by a Plain effector whose Linear field falloff
@@ -384,7 +384,7 @@ fn s1_png_render() {
 // ---------------------------------------------------------------------------------------------
 
 fn s4_script() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/acceptance/s4_mograph.rhai")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/acceptance/s4_motion_graphics.rhai")
 }
 
 /// Builds the S4 scene twice-identically into `d` and returns the scene path, the fracture's
@@ -445,7 +445,14 @@ fn s4_fracture_at(d: &Path, scene: &Path, fracture: u64, frame: i64, out: &Path)
     let copy = d.join(format!("fracture-{frame}.forge"));
     std::fs::copy(scene, &copy).unwrap();
     let args = json!({"node": fracture, "parent": null}).to_string();
-    let (code, result) = json_run(&["cmd", s(&copy), "object.reparent", "--args", &args, "--save"]);
+    let (code, result) = json_run(&[
+        "cmd",
+        s(&copy),
+        "object.reparent",
+        "--args",
+        &args,
+        "--save",
+    ]);
     assert_eq!(code, 0, "{result}");
     let (code, result) = json_run(&[
         "eval",
@@ -476,7 +483,10 @@ fn s4_circle(radius: f64) -> Vec<[f64; 2]> {
             let t = f64::from(step) / 4000.0;
             let u = 1.0 - t;
             out.push([0, 1].map(|i| {
-                p0[i] * u * u * u + 3.0 * p1[i] * u * u * t + 3.0 * p2[i] * u * t * t + p3[i] * t * t * t
+                p0[i] * u * u * u
+                    + 3.0 * p1[i] * u * u * t
+                    + 3.0 * p2[i] * u * t * t
+                    + p3[i] * t * t * t
             }));
         }
     }
@@ -503,7 +513,7 @@ fn s4_distance(p: [f64; 2], line: &[[f64; 2]]) -> f64 {
 }
 
 #[test]
-fn s4_mograph_letters_on_a_spline_effectors_and_sequence() {
+fn s4_motion_graphics_letters_on_a_spline_effectors_and_sequence() {
     let d = dir("s4");
     let (scene, fracture, _cloner) = s4_build(&d, "a");
 
@@ -536,7 +546,10 @@ fn s4_mograph_letters_on_a_spline_effectors_and_sequence() {
         let b = frac0.positions[0];
         let origin = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
         let off = s4_distance([origin[0], origin[2]], &curve);
-        assert!(off < 1e-3, "clone {k} at {origin:?} is {off} off the spline");
+        assert!(
+            off < 1e-3,
+            "clone {k} at {origin:?} is {off} off the spline"
+        );
         if (0.5 + (origin[0] - 150.0) / 100.0).clamp(0.0, 1.0) > 0.0 {
             moved += 1;
         }
@@ -553,8 +566,8 @@ fn s4_mograph_letters_on_a_spline_effectors_and_sequence() {
     export_at(&scene, "90", &clones90_path);
     let clones90 = s4_obj(&clones90_path);
     assert_eq!(clones90.positions.len(), clones.positions.len());
-    for k in 0..36 {
-        let origin = origins[k];
+    for (k, origin) in origins.iter().enumerate() {
+        let origin = *origin;
         // Linear field, direction X+, length 50, remap strength 1: 0.5 + (x - p) / 100.
         let falloff = (0.5 + (origin[0] - 150.0) / 100.0).clamp(0.0, 1.0);
         for j in 0..n {

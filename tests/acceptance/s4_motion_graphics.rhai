@@ -1,5 +1,5 @@
 // Acceptance scenario S4 (docs/roadmap/README.md): motion graphics through the CLI.
-// Run: forge run tests/acceptance/s4_mograph.rhai --save s4.forge
+// Run: forge run tests/acceptance/s4_motion_graphics.rhai --save s4.forge
 //
 // "FORGE" is fractured into one piece per letter, the fracture is cloned onto the 36 sampled
 // points of a Circle spline, a Random effector turns every fragment and a Plain effector with
