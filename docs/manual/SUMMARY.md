@@ -12,6 +12,7 @@
 - [Animation](animation.md)
 - [Rendering](rendering.md)
 - [Files and recovery](files-and-recovery.md)
+- [Importing files from other apps](importing-files.md)
 - [Tutorial: model a chair](tutorial-chair.md)
 - [Plugins](plugins.md)
 - [Automation](automation.md)

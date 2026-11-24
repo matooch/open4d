@@ -659,3 +659,11 @@ format sections above. The reference's own per-format behaviour is the mapping:
   our export has one perspective camera, translation (0, 200, 600), `yfov` 31.417°,
   `znear` 0.01, `zfar` 1e10, aspect 16:9, no meshes and no lights; the Alembic case keeps
   the camera and no lights.
+- S9 acceptance (brief 171, `apps/forge/tests/s9_exchange.rs`): every O44 case imported from
+  every reference file the exporter wrote (`scene.fbx`, `scene.glb`, `scene.abc`, `scene.stl`)
+  through the `forge` CLI only (`convert --format forge --option scale=1`, `info`, `eval
+  --export`, `export --format gltf --frame N`, `cmd`), compared with `mesh.obj` and `case.toml`.
+  No new rule: the importers of §5, §7 and §8 already match; the per-format absences of the table
+  above are asserted (STL: one object, no skin, no camera or material; Alembic: no joints,
+  lights or materials; glTF: no lights, no arm animation). STL is compared triangle for
+  triangle, because plane grouping is not stable on a triangle soup of nearly planar quads.

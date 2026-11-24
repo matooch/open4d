@@ -10,10 +10,10 @@ linked files win.
 
 | | Now |
 |---|---|
-| Implementation briefs | **177 of 197 done** (90 %) · 8 ready · 12 waiting |
+| Implementation briefs | **178 of 197 done** (90 %) · 7 ready · 12 waiting |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
-| Acceptance scenarios | S1, S2, S3, S7, S8 pass · S4, S5 queued · S6 blocked · S9 needs its test (171) · S10 needs a measurement |
+| Acceptance scenarios | S1, S2, S3, S7, S8, S9 pass · S4, S5 queued · S6 blocked · S10 needs a measurement |
 | Release | No release cut yet (v1.0 checklist is brief 185, last) |
 | Next | Implementer run 6 continues from 197 (see below) |
 
@@ -32,7 +32,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | S6 | Rigging: joints, auto weights, IK + pole, **pose morph**, playback | 🔴 blocked | Pose Morph (107) has no reference data: **owner decision** |
 | S7 | Animation polish: dope sheet, broken/weighted tangents, easing, loop | ✅ passes | – |
 | S8 | Look-dev: area light, DOF camera, node material, CPU render + AOVs | ✅ passes (146) | Cross-OS reference check confirmed by CI |
-| S9 | Import FBX / glTF / Alembic from the reference app, matches | 🟡 FBX (165, 166) and camera exchange (170) done | The S9 test, 171 (ready) |
+| S9 | Import FBX / glTF / Alembic from the reference app, matches | ✅ passes (171): 6 cases × FBX, GLB, Alembic, STL through the CLI | glTF skinned-arm poses at f15/f30 pinned KNOWN_MISMATCH (≤ 5e-4) |
 | S10 | 1 M polygons + 10 k clones, ≥ 20 fps, 30-min fuzz without crash | 🟡 benchmarks exist (181) | A measured run on a real GPU (your M5 Pro / RTX 3090) |
 
 ## Areas
@@ -51,7 +51,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | J · Materials, shaders, UVs | 13 / 13 | Hands-on checks in GUI session G7 |
 | K · Rendering and viewport | 11 / 12 | 142 GPU path tracer (queued) |
 | L · UI and UX | 16 / 16 | Hands-on checks in GUI sessions G1, G2, G4 |
-| M · File exchange | 11 / 12 | 171 S9 tests (ready) |
+| M · File exchange | 12 / 12 | Done: S9 passes (171). Open: glTF skin-pose KNOWN_MISMATCH, PLY/USD/morph not observed |
 | N · Platform, packaging, docs | 13 / 14 | 185 v1.0 release checklist (last) |
 | R · Real-time GPU renderer | 0 / 9 | 197, 207, 198, 199 queued; then 200–204 (ray tracing on Vulkan + Metal) |
 
@@ -59,7 +59,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 
 Queue and rules: [agents/HERMES-IMPLEMENTER.md](agents/HERMES-IMPLEMENTER.md) §2.
 
-Done: 146 S8, 040 Metaball (run 4); 054 deformers, 170 camera exchange (run 5).
+Done: 146 S8, 040 Metaball (run 4); 054 deformers, 170 camera exchange (run 5); 171 S9 exchange acceptance.
 
 1. 197 · R1 part 1: shading IR → GPU shader code, cache (start of the real-time renderer)
 1b. 207 · R1 part 2: shader nodes (noise, gradients, tiles …) → GPU shader code
