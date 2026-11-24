@@ -51,7 +51,7 @@ fn add(s: &mut EditorState, tag: NodeId, ty: &str, pos: [f64; 2], values: Json) 
 }
 
 fn canvas<'a>(h: &'a Harness<'a, Editor>) -> &'a forge_ui::node_canvas::CanvasState {
-    &h.state().state.node_editor.canvas
+    h.state().state.node_editor.canvas_view()
 }
 
 fn graph(h: &Harness<'_, Editor>, tag: NodeId) -> Graph {
@@ -194,6 +194,46 @@ fn add_via_menu(h: &mut Harness<'_, Editor>, pos: Pos2, query: &str, entry: &str
     h.run();
     h.get_by_label_contains(entry).click();
     h.run();
+}
+
+#[test]
+fn material_canvas_adds_and_links_a_typed_node_in_undoable_steps() {
+    use forge_material::node_material::{NODE_MATERIAL, SCALAR, SURFACE, load_graph};
+    let (mut s, _) = state();
+    let id = NodeId(
+        execute(&mut s, "material.create", json!({"type": NODE_MATERIAL})).unwrap()["material"]
+            .as_u64()
+            .unwrap(),
+    );
+    s.node_editor.show_material(id);
+    let mut h = harness(s);
+    let graph_now = |h: &Harness<'_, Editor>| {
+        load_graph(h.state().state.doc.scene().node(id).unwrap()).unwrap()
+    };
+    let surface = graph_now(&h)
+        .nodes()
+        .find(|n| n.type_id == SURFACE)
+        .unwrap()
+        .id
+        .0;
+    let add_at = at(&h, 360.0, 70.0);
+    add_via_menu(&mut h, add_at, "scalar", "Scalar");
+    let scalar = graph_now(&h)
+        .nodes()
+        .find(|n| n.type_id == SCALAR)
+        .unwrap()
+        .id
+        .0;
+    let steps_before = steps(&h);
+    drag_ports(
+        &mut h,
+        (scalar, "value", Side::Output),
+        (surface, "roughness", Side::Input),
+    );
+    assert_eq!(graph_now(&h).links().len(), 1);
+    assert_eq!(steps(&h), steps_before + 1);
+    undo(&mut h);
+    assert!(graph_now(&h).links().is_empty());
 }
 
 /// Two math nodes with ids (1, 2) far enough apart to drag between.

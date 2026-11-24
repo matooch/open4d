@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use egui::{Color32, Ui};
 use forge_core::{NodeId, Scene};
+use forge_material::node_material::{self, NODE_MATERIAL, SURFACE};
 use forge_nodes::{
     Graph, GraphNodeId, NodeRegistry, PortRef, PortType, PortValue, TAG, load_graph,
 };
@@ -92,6 +93,7 @@ pub struct ExpressionModel {
     pub entries: Arc<Vec<MenuEntry>>,
     /// `"node.port"` to the value from the dry run.
     pub values: Arc<BTreeMap<String, Json>>,
+    registry: &'static NodeRegistry,
 }
 
 impl ExpressionModel {
@@ -111,7 +113,7 @@ impl CanvasModel for ExpressionModel {
 
     fn node(&self, key: NodeKey) -> Option<NodeView> {
         let n = self.graph.node(graph_node(key))?;
-        let def = NodeRegistry::builtin().get(&n.type_id)?;
+        let def = self.registry.get(&n.type_id)?;
         let inputs = def
             .inputs
             .iter()
@@ -143,6 +145,7 @@ impl CanvasModel for ExpressionModel {
         let outputs = def
             .outputs
             .iter()
+            .filter(|_| n.type_id != SURFACE)
             .map(|p| PortView {
                 id: p.id.clone(),
                 label: p.label.clone(),
@@ -183,7 +186,7 @@ impl CanvasModel for ExpressionModel {
         // The graph itself decides, on a copy: the same checks `graph.connect` makes.
         let mut g = (*self.graph).clone();
         g.connect(
-            NodeRegistry::builtin(),
+            self.registry,
             PortRef::new(graph_node(from.node), &from.port),
             PortRef::new(graph_node(to.node), &to.port),
         )
@@ -209,6 +212,9 @@ struct Cache {
 pub struct NodeEditorState {
     pub tag: Option<NodeId>,
     pub canvas: CanvasState,
+    materials: bool,
+    material: Option<NodeId>,
+    material_canvas: CanvasState,
     entries: Option<Arc<Vec<MenuEntry>>>,
     cache: Option<Cache>,
     /// Pan, zoom and selection of tags that are not shown now.
@@ -218,6 +224,7 @@ pub struct NodeEditorState {
 impl NodeEditorState {
     /// Shows `tag`, keeping the view and selection of the one shown before.
     pub fn show_tag(&mut self, tag: NodeId) {
+        self.materials = false;
         if self.tag == Some(tag) {
             return;
         }
@@ -234,6 +241,31 @@ impl NodeEditorState {
         self.canvas.notice = None;
         self.tag = Some(tag);
         self.cache = None;
+    }
+
+    pub fn show_material(&mut self, material: NodeId) {
+        self.materials = true;
+        if self.material != Some(material) {
+            self.material = Some(material);
+            self.material_canvas = CanvasState::default();
+        }
+    }
+
+    pub(crate) fn active_canvas(&mut self) -> &mut CanvasState {
+        if self.materials {
+            &mut self.material_canvas
+        } else {
+            &mut self.canvas
+        }
+    }
+
+    /// Layout and selection of the currently shown graph.
+    pub fn canvas_view(&self) -> &CanvasState {
+        if self.materials {
+            &self.material_canvas
+        } else {
+            &self.canvas
+        }
     }
 
     /// The error of the last dry run, if it failed.
@@ -413,6 +445,14 @@ pub fn run_action(st: &mut EditorState, tag: NodeId, action: CanvasAction) {
 
 /// Draws the panel: the tag chooser, then the canvas.
 pub fn node_editor_ui(ui: &mut Ui, st: &mut EditorState) {
+    ui.horizontal(|ui| {
+        ui.selectable_value(&mut st.node_editor.materials, false, "Expressions");
+        ui.selectable_value(&mut st.node_editor.materials, true, "Materials");
+    });
+    if st.node_editor.materials {
+        material_editor_ui(ui, st);
+        return;
+    }
     let tags = expression_tags(st.doc.scene());
     if st
         .node_editor
@@ -490,11 +530,178 @@ pub fn node_editor_ui(ui: &mut Ui, st: &mut EditorState) {
             .clone()
             .unwrap_or_else(|| Arc::new(Vec::new())),
         values: cache.values.clone(),
+        registry: NodeRegistry::builtin(),
     };
     let actions = st.node_editor.canvas.show(ui, &model);
     for a in actions {
         run_action(st, tag, a);
     }
+}
+
+fn material_editor_ui(ui: &mut Ui, st: &mut EditorState) {
+    let scene = st.doc.scene();
+    let list: Vec<_> = scene
+        .materials()
+        .iter()
+        .filter_map(|&id| {
+            let node = scene.node(id).filter(|n| n.type_id == NODE_MATERIAL)?;
+            Some((id, node.name.clone()))
+        })
+        .collect();
+    let selected = st
+        .node_editor
+        .material
+        .filter(|id| list.iter().any(|(m, _)| m == id))
+        .or_else(|| list.first().map(|(id, _)| *id));
+    let Some(mut material) = selected else {
+        st.node_editor.material_canvas.hot = false;
+        ui.weak("No node material. Create one in the Materials panel.");
+        return;
+    };
+    let current = list
+        .iter()
+        .find(|(id, _)| *id == material)
+        .map_or("none", |(_, name)| name);
+    ui.horizontal(|ui| {
+        let label = ui.label("Material graph");
+        egui::ComboBox::from_id_salt("node_material")
+            .selected_text(current)
+            .show_ui(ui, |ui| {
+                for (id, name) in &list {
+                    ui.selectable_value(&mut material, *id, name);
+                }
+            })
+            .response
+            .labelled_by(label.id);
+    });
+    st.node_editor.show_material(material);
+    let node = st.doc.scene().node(material).expect("listed material");
+    let graph = match node_material::load_graph(node).and_then(|g| {
+        node_material::compile_graph(&g)?;
+        Ok(g)
+    }) {
+        Ok(g) => g,
+        Err(e) => {
+            st.node_editor.material_canvas.hot = false;
+            ui.colored_label(crate::theme::Theme::current(ui.ctx()).error, e.to_string());
+            return;
+        }
+    };
+    let registry = node_material::registry();
+    let model = ExpressionModel {
+        graph: Arc::new(graph),
+        registry,
+        entries: Arc::new(
+            registry
+                .defs()
+                .filter(|d| d.id != SURFACE)
+                .map(|d| MenuEntry {
+                    id: d.id.clone(),
+                    label: d.label.clone(),
+                    category: d.category.clone(),
+                })
+                .collect(),
+        ),
+        values: Arc::default(),
+    };
+    let actions = st.node_editor.material_canvas.show(ui, &model);
+    for action in actions {
+        st.status = run_material_action(st, material, action)
+            .err()
+            .unwrap_or_default();
+    }
+}
+
+/// Run a shared canvas action against a hosted material graph.
+pub fn run_material_action(
+    st: &mut EditorState,
+    material: NodeId,
+    action: CanvasAction,
+) -> Result<(), String> {
+    let scene = st.doc.scene();
+    let node = scene
+        .node(material)
+        .ok_or_else(|| "material not found".to_string())?;
+    let mut graph = node_material::load_graph(node).map_err(|e| e.to_string())?;
+    let reg = node_material::registry();
+    let graph_error = |e: forge_nodes::GraphError| e.to_string();
+    let reference = |p: &PortAddr| PortRef::new(graph_node(p.node), &p.port);
+    let mut select = None;
+    let mut delete = false;
+    let gesture = match action {
+        CanvasAction::AddNode { type_id, pos } => {
+            let id = graph.add_node(reg, &type_id).map_err(graph_error)?;
+            graph
+                .set_position(id, pos.map(f64::from))
+                .map_err(graph_error)?;
+            select = Some(id.0);
+            None
+        }
+        CanvasAction::Move { moves, gesture } => {
+            for (id, pos) in moves {
+                graph
+                    .set_position(graph_node(id), pos.map(f64::from))
+                    .map_err(graph_error)?;
+            }
+            Some(gesture)
+        }
+        CanvasAction::Connect { from, to, released } => {
+            let to = reference(&to);
+            if let Some(prev) = released.as_ref().map(reference).filter(|prev| prev != &to) {
+                graph.disconnect(&prev).map_err(graph_error)?;
+            }
+            graph
+                .connect(reg, reference(&from), to)
+                .map_err(graph_error)?;
+            None
+        }
+        CanvasAction::Disconnect { to } => {
+            graph.disconnect(&reference(&to)).map_err(graph_error)?;
+            None
+        }
+        CanvasAction::Delete { nodes } => {
+            for id in nodes {
+                let key = graph_node(id);
+                if graph.node(key).is_some_and(|node| node.type_id == SURFACE) {
+                    return Err("The Surface is required".into());
+                }
+                graph.remove_node(key).map_err(graph_error)?;
+            }
+            delete = true;
+            None
+        }
+        CanvasAction::SetConstant {
+            node,
+            port,
+            value,
+            gesture,
+        } => {
+            let id = graph_node(node);
+            let ty = graph
+                .node(id)
+                .and_then(|n| reg.get(&n.type_id))
+                .and_then(|d| d.find_input(&port))
+                .ok_or_else(|| format!("unknown input {port}"))?
+                .ty;
+            let val = PortValue::from_json(ty, &value_json(&value)).map_err(|e| e.to_string())?;
+            graph.set_value(reg, id, &port, val).map_err(graph_error)?;
+            gesture
+        }
+        CanvasAction::Refused(reason) => return Err(reason),
+    };
+    execute(
+        st,
+        "material.set_graph",
+        json!({
+            "material": material.0, "graph": graph.to_json(), "gesture": gesture,
+        }),
+    )?;
+    if let Some(id) = select {
+        st.node_editor.material_canvas.selection = BTreeSet::from([id]);
+    } else if delete {
+        st.node_editor.material_canvas.selection.clear();
+    }
+    Ok(())
 }
 
 #[cfg(test)]

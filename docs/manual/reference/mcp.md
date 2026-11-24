@@ -254,6 +254,7 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `restriction_set` | Restrict Deformer. Undoable editing command. Runs command `restriction.set`. |
 | `user_data_add` | Add User Data. Undoable editing command. Runs command `user_data.add`. |
 | `material_create` | Create Material. Undoable editing command. Runs command `material.create`. |
+| `material_set_graph` | Edit Material Graph. Undoable editing command. Runs command `material.set_graph`. |
 | `material_delete` | Delete Material. Undoable editing command. Runs command `material.delete`. |
 | `material_assign` | Assign Material. Undoable editing command. Runs command `material.assign`. |
 | `shader_set` | Set Shader. Undoable editing command. Runs command `shader.set`. |

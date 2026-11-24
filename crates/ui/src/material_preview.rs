@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use forge_core::{Node, NodeId, Scene, Value};
 use forge_geometry::{CornerUvs, PolyMesh};
+use forge_material::node_material::{NODE_MATERIAL, compile_hosted};
 use forge_material::{
     MATERIAL, Material, Projection, TEXTURE_TAG, TagSpace, UVW_TAG, generate_uvw,
 };
@@ -36,7 +37,10 @@ impl<'a> Binding<'a> {
             let Some(Value::Link(Some(id))) = tag.params.get("material") else {
                 return None;
             };
-            Some((tag, scene.node(*id).filter(|n| n.type_id == MATERIAL)?))
+            let material = scene
+                .node(*id)
+                .filter(|n| matches!(n.type_id.as_str(), MATERIAL | NODE_MATERIAL))?;
+            Some((tag, material))
         })?;
         Some(Self {
             tag,
@@ -67,7 +71,8 @@ impl<'a> Binding<'a> {
         queue: &wgpu::Queue,
         scene: &Scene,
     ) -> Arc<PreviewMaterial> {
-        let graph = forge_material::compile(&Material::from_node(self.material));
+        let graph = compile_hosted(self.material)
+            .unwrap_or_else(|_| forge_material::compile(&Material::new()));
         let (shaders, _) = ShaderSet::from_material(scene, self.material.id, &load_image);
         Arc::new(PreviewMaterial::bake(
             device,

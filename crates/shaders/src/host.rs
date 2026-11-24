@@ -4,10 +4,11 @@ use std::sync::Arc;
 
 use forge_core::{Category, NodeId, Scene, Value};
 use forge_image::Image;
+use forge_material::node_material::{NODE_MATERIAL, compile_hosted};
 use forge_material::shader_name;
 
 use crate::build::{Inputs, ShaderError, Values, build};
-use crate::shader::{Shader, ShaderSet};
+use crate::shader::{Bitmap, Shader, ShaderSet};
 
 /// Deepest shader tree [`build_node`] follows.
 pub const MAX_DEPTH: usize = 32;
@@ -71,6 +72,25 @@ impl ShaderSet {
         let Some(node) = scene.node(material) else {
             return (set, failed);
         };
+        if node.type_id == NODE_MATERIAL
+            && let Ok(graph) = compile_hosted(node)
+        {
+            for ir in graph.nodes {
+                if let forge_material::IrNode::Texture(path) = ir
+                    && !set.shaders.contains_key(&path)
+                    && let Some(image) = images(&path)
+                {
+                    set.shaders.insert(
+                        path,
+                        Shader::Bitmap(Bitmap {
+                            image,
+                            repeat: true,
+                            interpolate: true,
+                        }),
+                    );
+                }
+            }
+        }
         for v in node.params.values() {
             if let Value::Link(Some(root)) = v {
                 match build_node(scene, *root, images) {

@@ -2,7 +2,7 @@
 
 # Command reference
 
-201 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+202 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -201,6 +201,7 @@
 | [`restriction.set`](#restrictionset) | Restrict Deformer | yes | `restriction_set` |
 | [`user_data.add`](#user_dataadd) | Add User Data | yes | `user_data_add` |
 | [`material.create`](#materialcreate) | Create Material | yes | `material_create` |
+| [`material.set_graph`](#materialset_graph) | Edit Material Graph | yes | `material_set_graph` |
 | [`material.delete`](#materialdelete) | Delete Material | yes | `material_delete` |
 | [`material.assign`](#materialassign) | Assign Material | yes | `material_assign` |
 | [`shader.set`](#shaderset) | Set Shader | yes | `shader_set` |
@@ -2537,6 +2538,18 @@ Create Material. One undo step.
 | `type` | string or null | no | Material type (default `forge.material.standard`). |
 
 Example: `forge cmd scene.forge material.create --args '{}'`
+
+### `material.set_graph`
+
+Edit Material Graph. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `material` | integer | yes |  |
+| `graph` | string | yes | Serialized forge-nodes material graph. |
+| `gesture` | integer or null | no | Merge repeated edits in one continuous canvas gesture. |
+
+Example: `forge cmd scene.forge material.set_graph --args '{"graph":"{\"next_id\":2,\"nodes\":[{\"id\":1,\"type_id\":\"material.surface\",\"values\":{}}],\"links\":[]}","material":1}'`
 
 ### `material.delete`
 

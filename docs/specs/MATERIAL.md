@@ -147,9 +147,41 @@ interaction are native and **parity-pending**.
 - Tests exercise a real pointer drag and undo in `egui_kittest`, plus the CPU thumbnail's
   size, repeatability and response to a material colour change.
 
+## M8 Node materials (brief 124)
+
+Sources: [area J](../roadmap/areas/J-materials.md), [G7 §3](../parity/GUI-SESSIONS.md)
+and [NODES](NODES.md) for typed graphs. The ports and interaction are native and
+**parity-pending G7**.
+
+`forge.material.node` is a hosted Material that can use an ordinary texture tag.
+Its `graph` parameter holds the forge-nodes JSON (stable IDs, positions and links).
+A new graph has one **Surface**. A dedicated registry allows Color, Scalar, Image
+Texture (path) and Mix Color; it has no expression nodes that can read or write scene
+parameters. Evaluate the inputs and lower them through the Standard compiler:
+
+| Surface input | Default | Standard IR mapping |
+|---|---|---|
+| `base_color` | `(0.8, 0.8, 0.8)` | `color.color` |
+| `base_texture` | empty | `color.texture`, multiplied by base colour |
+| `roughness` | `0.5` | `color.roughness`, clamped to `[0,1]` |
+| `metallic` | `0` | `reflectance.spec.attenuation`: metal at `>= 0.5`; graph keeps the number |
+| `normal_texture`, `normal_strength` | empty, `1` | tangent-space normal, enabled with a path |
+| `emission` | `(0,0,0)` | `luminance.color`, enabled when nonzero |
+
+Image Texture outputs its filename. Renderers use the same bitmap sampler as
+Standard's hosted shaders. Invalid graphs report an error in the editor; renderers
+may fall back to the default material. Equivalent Standard and node inputs must
+compile to equal IR.
+
+Create a Node Material from Materials and open it via **Nodes**, or select it in
+the Node Editor's Materials mode. Both modes use the same typed canvas. The sole
+Surface cannot be deleted. `material.set_graph` validates a replacement graph and
+records one undoable edit (continuous canvas gestures merge).
+The `graph.*` expression command handlers live in `forge-app`; `forge-nodes` is
+shared by both graph kinds without depending on the command/I/O layer.
+
 ## M5 Unsupported / parity-pending
 
-- No node materials (brief 124), no
-  Layer Setup (a list of reflectance layers: only the default layer is modelled).
+- No Layer Setup (reflectance layers: only the default layer is modelled).
 - O43 render parity: not tested (level C needs a renderer); the IR is checked structurally.
 - All IR shading rules are **parity-pending**: they follow the published models.

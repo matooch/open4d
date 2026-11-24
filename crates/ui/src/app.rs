@@ -601,8 +601,8 @@ impl Editor {
         let presses = ctx.input_mut(|i| self.state.keys.map.take_presses(i, hot));
         for (id, args) in presses {
             // Delete over the node editor deletes nodes, not objects (UI.md §17.4).
-            if id == "object.delete" && self.state.node_editor.canvas.hot {
-                self.state.node_editor.canvas.delete_requested = true;
+            if id == "object.delete" && self.state.node_editor.active_canvas().hot {
+                self.state.node_editor.active_canvas().delete_requested = true;
                 ctx.request_repaint();
                 continue;
             }
@@ -1133,7 +1133,7 @@ impl Editor {
             Panel::Materials => {
                 for c in crate::material_manager::material_manager_ui(
                     ui,
-                    &self.state,
+                    &mut self.state,
                     &mut self.material_previews,
                 ) {
                     self.run(c);

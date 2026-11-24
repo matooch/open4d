@@ -121,7 +121,7 @@ implementers can avoid collisions.
 | 121 | [Particles in the clone toolset and volumes](../agents/tasks/121-particles-in-clones-volumes.md) | I | 119, 076, 081 | ready | dynamics, clone-engine, volume |
 | 122 | [Bake to keys and cache tags; dynamics UI](../agents/tasks/122-dynamics-bake-ui.md) | I | 115, 093 | done | dynamics, ui |
 | 123 | [Material model: Standard material + material tag + IR compile](../agents/tasks/123-material-model.md) | J | – | done (8 tests; scene hosting of materials needs a core slot) | material (new), plugin |
-| 124 | [Node material graph + node editor UI](../agents/tasks/124-node-material.md) | J | 123, 109 | ready | material, ui |
+| 124 | [Node material graph + node editor UI](../agents/tasks/124-node-material.md) | J | 123, 109 | done (parity-pending: G7) | material, ui |
 | 125 | [Shaders I: Noise, Gradient, Color, Fresnel, Falloff, Layer, Colorizer, Bitmap](../agents/tasks/125-shaders-1.md) | J | 063, 123 | done (6/17 exact; noise basis known mismatch) | shaders (new) |
 | 126 | [Shaders II: Tiles, Checkerboard, Brick, Fusion, Filter, Normalizer, Vertex Map, Field, AO](../agents/tasks/126-shaders-2.md) | J | 125 | done (checker, tiles exact; brick, field shader unsupported) | shaders |
 | 127 | [Texture tag projections + Generate UVW](../agents/tasks/127-texture-projections.md) | J | 123, 128 | done (6/7 exact; frontal known mismatch; no Generate UVW command yet) | material, geometry |

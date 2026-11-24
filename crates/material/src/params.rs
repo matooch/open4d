@@ -617,6 +617,7 @@ impl Plugin for MaterialPlugin {
     fn register(&self, registry: &mut Registry) -> Result<(), RegistryError> {
         registry.register(standard_type())?;
         registry.register(texture_tag_type())?;
-        registry.register(uvw_tag_type())
+        registry.register(uvw_tag_type())?;
+        registry.register(crate::node_material::node_material_type())
     }
 }

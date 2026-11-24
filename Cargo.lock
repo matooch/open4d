@@ -1699,6 +1699,7 @@ dependencies = [
  "forge-core",
  "forge-generators",
  "forge-geometry",
+ "forge-nodes",
  "forge-parity-harness",
  "glam 0.34.1",
  "thiserror 2.0.21",
@@ -1753,13 +1754,11 @@ name = "forge-nodes"
 version = "0.1.0"
 dependencies = [
  "forge-app",
- "forge-command",
  "forge-core",
  "forge-noise",
  "forge-script",
  "glam 0.34.1",
  "rhai",
- "schemars",
  "serde",
  "serde_json",
  "thiserror 2.0.21",

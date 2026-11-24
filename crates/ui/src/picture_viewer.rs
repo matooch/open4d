@@ -108,8 +108,8 @@ pub(crate) fn prepare_render(
             continue;
         };
         let ix = *materials.entry(binding.material.id).or_insert_with(|| {
-            let graph =
-                forge_material::compile(&forge_material::Material::from_node(binding.material));
+            let graph = forge_material::node_material::compile_hosted(binding.material)
+                .unwrap_or_else(|_| forge_material::compile(&forge_material::Material::new()));
             let (shaders, _) = forge_shaders::ShaderSet::from_material(
                 &frame.scene,
                 binding.material.id,

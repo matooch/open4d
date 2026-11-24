@@ -8,7 +8,7 @@ use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use egui::{Color32, ColorImage, Label, Sense, TextureHandle, Ui, vec2};
 use forge_core::{NodeId, Scene, Value};
 use forge_geometry::triangulate::triangulate;
-use forge_material::{MATERIAL, Material, compile};
+use forge_material::node_material::{NODE_MATERIAL, compile_hosted};
 use forge_render_api::{
     AreaShape, Background, Control, Environment, Instance, Light, LightKind, Lighting,
     MaterialData, MeshData, RenderEngine, RenderSettings, Snapshot,
@@ -35,9 +35,9 @@ pub(crate) fn assign_to(MaterialDrag(material): MaterialDrag, node: NodeId) -> C
 
 /// Fixed studio snapshot: one smooth UV sphere with an area key and environment fill.
 pub fn render_preview(scene: &Scene, id: NodeId) -> Option<ColorImage> {
-    let material = scene.node(id).filter(|m| m.type_id == MATERIAL)?;
+    let material = scene.node(id)?;
     let (shaders, _) = ShaderSet::from_material(scene, id, &crate::material_preview::load_image);
-    let graph = compile(&Material::from_node(material));
+    let graph = compile_hosted(material).ok()?;
     let values = BTreeMap::from([("segments".to_owned(), Value::Int(24))]);
     let (mesh, uv) = forge_generators::uv::build_with_uvs("forge.sphere", &values).ok()?;
     let uv = uv?;
@@ -182,14 +182,18 @@ pub fn rows(s: &EditorState) -> Vec<(NodeId, String, [u8; 3])> {
 /// Draws the panel and returns the commands the buttons ask for.
 pub fn material_manager_ui(
     ui: &mut Ui,
-    s: &EditorState,
+    s: &mut EditorState,
     previews: &mut MaterialPreviews,
 ) -> Vec<Cmd> {
     let mut cmds: Vec<Cmd> = Vec::new();
+    let mut edit_nodes = None;
     let has_selection = !s.selection.nodes.is_empty();
     ui.horizontal(|ui| {
         if ui.button("New").clicked() {
             cmds.push(("material.create", json!({})));
+        }
+        if ui.button("New Node Material").clicked() {
+            cmds.push(("material.create", json!({"type": NODE_MATERIAL})));
         }
     });
     ui.separator();
@@ -232,10 +236,22 @@ pub fn material_manager_ui(
                                 cmds.push(("material.delete", json!({"materials": [id.0]})));
                             }
                         });
+                        if s.doc
+                            .scene()
+                            .node(id)
+                            .is_some_and(|m| m.type_id == NODE_MATERIAL)
+                            && ui.small_button("Nodes").clicked()
+                        {
+                            edit_nodes = Some(id);
+                        }
                     });
                 });
             }
         });
     });
+    if let Some(id) = edit_nodes {
+        s.dock.reveal(crate::dock::Panel::NodeEditor);
+        s.node_editor.show_material(id);
+    }
     cmds
 }

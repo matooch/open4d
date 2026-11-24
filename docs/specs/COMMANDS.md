@@ -181,6 +181,7 @@ touch history.
 | `material.create` | `type?` (default `forge.material.standard`), `name?`, `index?` | `{material}` | yes |
 | `material.delete` | `materials` (ids) | `{deleted}` | yes |
 | `material.assign` | `material`, `nodes?` (selection), `projection?` | `{tags}` | yes |
+| `material.set_graph` | `material`, `graph` (forge-nodes JSON string), `gesture?` | `{material}` | yes |
 | `shader.set` | `type` (`forge.shader.*`, null removes), then `material` + `channel` (a slot such as `color`, or a slot param id) or `parent` (a shader); `params?` (JSON by the shader type's units) | `{shader}` | yes |
 | `uv.generate` | `object?`, `tag?`, `camera?` (UV.md U6) | `{tag, corners}` | yes |
 | `graph.add_node` | `tag`, `type`, `values?`, `pos?` (NODES.md §6) | `{node}` | yes |

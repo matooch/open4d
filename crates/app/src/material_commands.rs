@@ -6,6 +6,7 @@ use forge_command::{
 };
 use forge_core::{Category, NodeId, Value};
 use forge_generators::{POLYGON, to_poly_mesh};
+use forge_material::node_material::{GRAPH, NODE_MATERIAL, compile_graph};
 use forge_material::{Camera, MATERIAL, Projection, TEXTURE_TAG, TagSpace, UVW_TAG, generate_uvw};
 use glam::DVec3;
 use schemars::JsonSchema;
@@ -27,6 +28,16 @@ struct CreateArgs {
 #[serde(deny_unknown_fields)]
 struct DeleteArgs {
     materials: Vec<u64>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct GraphArgs {
+    material: u64,
+    /// Serialized forge-nodes material graph.
+    graph: String,
+    /// Merge repeated edits in one continuous canvas gesture.
+    gesture: Option<u64>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -87,6 +98,12 @@ pub fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
         create,
     )?;
     r.register_fn(
+        spec("material.set_graph", "Edit Material Graph", || {
+            json!({"material": 1, "graph": forge_material::node_material::default_graph().to_json()})
+        }),
+        set_graph,
+    )?;
+    r.register_fn(
         spec(
             "material.delete",
             "Delete Material",
@@ -134,6 +151,31 @@ fn create(ctx: &mut dyn CommandContext, a: CreateArgs) -> Result<Json, CommandEr
         }
         Ok(id)
     })?;
+    Ok(json!({"material": id.0}))
+}
+
+fn set_graph(ctx: &mut dyn CommandContext, a: GraphArgs) -> Result<Json, CommandError> {
+    let id = require_material(ctx, a.material)?;
+    let scene = ctx.doc().scene();
+    if !scene.node(id).is_some_and(|n| n.type_id == NODE_MATERIAL) {
+        return Err(CommandError::failed("not a node material"));
+    }
+    let graph =
+        forge_nodes::Graph::from_json(&a.graph).map_err(|e| CommandError::failed(e.to_string()))?;
+    compile_graph(&graph).map_err(|e| CommandError::failed(e.to_string()))?;
+    let value = Value::String(graph.to_json());
+    if scene.param(id, GRAPH) != Some(&value) {
+        let edit = |tx: &mut forge_core::Tx| tx.set_param(id, GRAPH, value);
+        if let Some(gesture) = a.gesture {
+            ctx.doc_mut().transact_merged(
+                "Edit Material Graph",
+                &format!("material.graph:{id}:{gesture}"),
+                edit,
+            )?;
+        } else {
+            ctx.doc_mut().transact("Edit Material Graph", edit)?;
+        }
+    }
     Ok(json!({"material": id.0}))
 }
 

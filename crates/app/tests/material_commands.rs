@@ -21,6 +21,62 @@ fn cube(app: &mut App) -> NodeId {
 }
 
 #[test]
+fn node_material_graph_is_validated_undoable_hosted_and_round_trips() {
+    use forge_material::node_material::{
+        GRAPH, NODE_MATERIAL, compile_hosted, default_graph, registry,
+    };
+    use forge_nodes::PortValue;
+
+    let mut app = App::new_default();
+    let object = cube(&mut app);
+    let material = id(
+        &app.run("material.create", json!({"type": NODE_MATERIAL}))
+            .unwrap(),
+        "material",
+    );
+    let mut graph = default_graph();
+    let surface = graph.nodes().next().unwrap().id;
+    graph
+        .set_value(registry(), surface, "roughness", PortValue::Float(0.125))
+        .unwrap();
+    app.run(
+        "material.set_graph",
+        json!({"material": material.0, "graph": graph.to_json()}),
+    )
+    .unwrap();
+    assert!(app.doc.undo());
+    assert!(app.doc.redo());
+    let before = app.doc.undo_depth();
+    let mut invalid = graph.clone();
+    invalid.remove_node(surface).unwrap();
+    assert!(
+        app.run(
+            "material.set_graph",
+            json!({"material": material.0, "graph": invalid.to_json()})
+        )
+        .is_err()
+    );
+    assert_eq!(app.doc.undo_depth(), before);
+    app.run(
+        "material.assign",
+        json!({"material": material.0, "nodes": [object.0]}),
+    )
+    .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("node-material.forge");
+    app.save(path.to_str().unwrap()).unwrap();
+    let mut reopened = App::new_default();
+    reopened.open(path.to_str().unwrap()).unwrap();
+    let scene = reopened.doc.scene();
+    assert_eq!(
+        scene.param(material, GRAPH),
+        Some(&Value::String(graph.to_json()))
+    );
+    let ir = compile_hosted(scene.node(material).unwrap()).unwrap();
+    assert_eq!(ir.outputs.diffuse.unwrap().roughness, 0.125);
+}
+
+#[test]
 fn a_script_builds_a_material_with_a_gradient_and_it_survives_save_and_reopen() {
     let mut app = App::new_default();
     let obj = cube(&mut app);
