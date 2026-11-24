@@ -13,8 +13,9 @@ use forge_rig::weights::{WeightMap, bind};
 use forge_rig::{Rig, tools};
 use glam::DVec3;
 
-/// Cases not derived (RIG.md §8).
-const UNSUPPORTED: &[&str] = &["rigging/j2-bend-dq", "rigging/j2-bend-90-blended"];
+/// Cases not derived (RIG.md §8): none, Spherical is the dual quaternion skin and Blended the
+/// 50 % mix of it with the linear one.
+const UNSUPPORTED: &[&str] = &[];
 
 /// Frames of the skinned-arm case whose recorded bounding box is off by 2e-4: the animated
 /// angle at frame 15 carries the reference's animation noise (RIG.md §8). The static 45 degree
@@ -207,11 +208,16 @@ fn rigging_matches_the_reference() {
         let m = case.manifest().unwrap();
         let p = &m.params;
         let skin_type = p["skin_type"].as_str().unwrap();
-        if skin_type != "Linear" {
-            println!("{key}: unsupported (skin type {skin_type})");
-            unsupported.insert(key);
-            continue;
-        }
+        let skin_kind = match skin_type {
+            "Linear" => "linear",
+            "Spherical" => "dual_quaternion",
+            "Blended" => "blended",
+            other => {
+                println!("{key}: unsupported (skin type {other})");
+                unsupported.insert(key);
+                continue;
+            }
+        };
         let positions: Vec<DVec3> = p["joint_positions"]
             .as_array()
             .unwrap()
@@ -258,6 +264,12 @@ fn rigging_matches_the_reference() {
             }
         }
         apply_pose(&mut rig, &parse_pose(p["pose"].as_str().unwrap()));
+        let skin = rig.skin;
+        rig.doc
+            .transact("skin type", |tx| {
+                tx.set_param(skin, "type", Value::Enum(skin_kind.to_string()))
+            })
+            .unwrap();
         // Cases that read values instead of a mesh: the weights, the posed points.
         let sample_files = case.samples().unwrap();
         if case.expected_mesh().unwrap().is_none() {
@@ -290,7 +302,9 @@ fn rigging_matches_the_reference() {
             "rigging/j1-twist-90",
             "rigging/j2-bend-45",
             "rigging/j2-bend-90",
+            "rigging/j2-bend-90-blended",
             "rigging/j2-bend-90-single",
+            "rigging/j2-bend-dq",
             "rigging/j2-scale"
         ]
     );

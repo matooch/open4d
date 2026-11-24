@@ -15,8 +15,13 @@ pub(crate) fn skin_type() -> NodeType {
             "type",
             "Type",
             "linear",
-            &[("linear", "Linear"), ("dual_quaternion", "Dual Quaternion")],
+            &[
+                ("linear", "Linear"),
+                ("dual_quaternion", "Dual Quaternion"),
+                ("blended", "Blended"),
+            ],
         ))
+        .param(ParamDesc::float("blend", "Blend", 0.5).range(0.0, 1.0))
         .param(ParamDesc::int("max_influences", "Max influences", 0).range(0i64, 32i64))
         .param(ParamDesc::bool("normalise", "Normalise", true))
         .param(ParamDesc::bool("enabled", "Enabled", true))
@@ -27,15 +32,19 @@ pub(crate) fn skin_type() -> NodeType {
 pub enum SkinType {
     Linear,
     DualQuaternion,
+    /// `(1 - blend) · linear + blend · dual quaternion` (RIG.md §3).
+    Blended,
 }
 
 /// Skinning settings independent of the scene.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SkinSettings {
     pub kind: SkinType,
     /// 0 = unlimited.
     pub max_influences: usize,
     pub normalise: bool,
+    /// Share of the dual quaternion result in `Blended`.
+    pub blend: f64,
 }
 
 impl Default for SkinSettings {
@@ -44,6 +53,7 @@ impl Default for SkinSettings {
             kind: SkinType::Linear,
             max_influences: 0,
             normalise: true,
+            blend: 0.5,
         }
     }
 }
@@ -72,7 +82,7 @@ pub fn effective_weights(row: &[(u32, f64)], s: &SkinSettings) -> Vec<(u32, f64)
 /// linear skin is `p' = p + Σ w_j · (K_j · p − p)`: the weights are used as stored (a sum
 /// above or below 1 scales the displacement, the reference's behaviour, RIG.md §3).
 pub fn skin_points(points: &mut [DVec3], weights: &WeightMap, k: &[DMat4], s: &SkinSettings) {
-    let dual: Vec<DualQuat> = if s.kind == SkinType::DualQuaternion {
+    let dual: Vec<DualQuat> = if s.kind != SkinType::Linear {
         k.iter().map(DualQuat::from_matrix).collect()
     } else {
         Vec::new()
@@ -86,14 +96,24 @@ pub fn skin_points(points: &mut [DVec3], weights: &WeightMap, k: &[DMat4], s: &S
         if row.is_empty() || row.iter().map(|(_, w)| *w).sum::<f64>() == 0.0 {
             continue;
         }
+        let linear = || {
+            if s.normalise {
+                row.iter().fold(DVec3::ZERO, |acc, (slot, w)| {
+                    acc + k[*slot as usize].transform_point3(*p) * *w
+                })
+            } else {
+                row.iter().fold(*p, |acc, (slot, w)| {
+                    acc + (k[*slot as usize].transform_point3(*p) - *p) * *w
+                })
+            }
+        };
         *p = match s.kind {
-            SkinType::Linear if !s.normalise => row.iter().fold(*p, |acc, (slot, w)| {
-                acc + (k[*slot as usize].transform_point3(*p) - *p) * *w
-            }),
-            SkinType::Linear => row.iter().fold(DVec3::ZERO, |acc, (slot, w)| {
-                acc + k[*slot as usize].transform_point3(*p) * *w
-            }),
+            SkinType::Linear => linear(),
             SkinType::DualQuaternion => blend_dual(&dual, &row).transform_point(*p),
+            SkinType::Blended => {
+                let b = s.blend.clamp(0.0, 1.0);
+                linear() * (1.0 - b) + blend_dual(&dual, &row).transform_point(*p) * b
+            }
         };
     }
 }
@@ -168,7 +188,12 @@ fn read_settings(scene: &Scene, deformer: NodeId) -> Option<SkinSettings> {
     }
     let kind = match node.params.get("type") {
         Some(Value::Enum(t)) if t == "dual_quaternion" => SkinType::DualQuaternion,
+        Some(Value::Enum(t)) if t == "blended" => SkinType::Blended,
         _ => SkinType::Linear,
+    };
+    let blend = match node.params.get("blend") {
+        Some(Value::Float(b)) => *b,
+        _ => 0.5,
     };
     let max_influences = match node.params.get("max_influences") {
         Some(Value::Int(n)) if *n > 0 => *n as usize,
@@ -179,6 +204,7 @@ fn read_settings(scene: &Scene, deformer: NodeId) -> Option<SkinSettings> {
         kind,
         max_influences,
         normalise,
+        blend,
     })
 }
 
