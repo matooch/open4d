@@ -12,7 +12,7 @@ One test suite that renders the O30/O43 scenes and the material set in every tie
 
 ## Done when
 - [ ] Budgets: Tier 3 ≥ 35 dB, Tier 2 ≥ 28 dB, Tier 1 ≥ 24 dB after exposure normalisation (adjust only with a written reason).
-- [ ] Runs in CI through the compute fallback where no RT GPU exists; on the owner's Mac with Metal RT and on an RTX-class machine with Vulkan RT (manual steps, numbers recorded in the Report). Vulkan and Metal images agree within the Tier budget.
+- [ ] Runs in CI through the compute fallback where no RT GPU exists; on the owner's M5 Pro with Metal RT and on the RTX 3090 with Vulkan RT (manual steps, numbers recorded in the Report). Vulkan and Metal images agree within the Tier budget.
 - [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)

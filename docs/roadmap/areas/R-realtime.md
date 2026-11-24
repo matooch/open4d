@@ -70,6 +70,17 @@ fall back documented (e.g. subsurface → diffuse wrap in Tier 1).
   with an `ash` (Vulkan) and an `objc2-metal` (Metal) implementation of acceleration-structure
   builds and ray dispatch. Everything else stays on wgpu.
 
+## Reference machines (owner, 2026-11-24)
+
+| Machine | API | Ray tracing | Used for |
+|---|---|---|---|
+| Apple M5 Pro (macOS) | Metal | hardware (Apple GPU ray tracing) | Metal RT reference: Tier 2–3 tests, R7 Metal runs, R8 numbers |
+| NVIDIA RTX 3090 (Windows now, Linux later) | Vulkan (DX12 also available) | hardware (2nd-gen RT cores, `VK_KHR_ray_query`) | Vulkan RT reference: Tier 2–3 tests, R7 Vulkan runs, R8 numbers |
+
+Both run the RT passes natively, so every tier is tested on both APIs. CI (no RT GPU) covers
+the compute fallback. The owner runs the manual RT steps on these two machines and records the
+numbers in the briefs' Reports.
+
 ## Briefs
 
 | # | Brief | Depends on |
