@@ -110,9 +110,7 @@ fn objects_can_be_created_headless_and_the_unbuilt_ones_say_why() {
             .unwrap();
         let r = evaluate(doc.scene(), ex, &EvalCtx::default());
         match name {
-            "cogwheel" | "formula" => {
-                assert!(matches!(r, Err(BuildError::Unsupported(_))), "{name}")
-            }
+            "cogwheel" => assert!(matches!(r, Err(BuildError::Unsupported(_))), "{name}"),
             _ => assert!(r.unwrap().unwrap().points.len() >= 8, "{name}"),
         }
     }
@@ -309,4 +307,35 @@ fn a_ring_extrudes_with_a_reversed_inner_wall_and_refuses_caps_and_other_generat
         evaluate(doc.scene(), lathe, &EvalCtx::default()),
         Err(BuildError::Unsupported(_))
     ));
+}
+
+#[test]
+fn formula_samples_the_expressions_and_refuses_what_is_not_derived() {
+    let s = |v: &str| Value::String(v.into());
+    let pts = points(
+        "formula",
+        &[
+            ("x_t", s("2*t")),
+            ("y_t", s("t*t")),
+            ("z_t", s("3")),
+            ("t_min", f(0.0)),
+            ("t_max", f(2.0)),
+            ("samples", Value::Int(4)),
+            ("intermediate", e("natural")),
+        ],
+    );
+    assert_eq!(pts.len(), 5);
+    assert!((pts[2] - DVec3::new(2.0, 1.0, 3.0)).length() < 1e-12);
+    assert!((pts[4] - DVec3::new(4.0, 4.0, 3.0)).length() < 1e-12);
+    let err = |extra: &[(&str, Value)]| {
+        build_curve("forge.formula_spline", &values(extra))
+            .map(|_| ())
+            .unwrap_err()
+    };
+    assert!(matches!(
+        err(&[("cubic_interpolation", Value::Bool(true))]),
+        BuildError::Unsupported(_)
+    ));
+    assert!(matches!(err(&[("x_t", s("2*"))]), BuildError::Failed(_)));
+    assert!(matches!(err(&[("y_t", s("1/0"))]), BuildError::Failed(_)));
 }

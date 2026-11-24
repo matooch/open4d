@@ -35,6 +35,7 @@ const MATCHING: &[&str] = &[
     "flower-defaults",
     "fourside-defaults",
     "fourside-types",
+    "formula-defaults",
     "linear-open-uniform",
     "nside-8",
     "nside-defaults",
@@ -58,9 +59,8 @@ const FIRST_RING_ONLY: &[&str] = &[
     "helix-uniform-sub50",
 ];
 
-/// Not built: the Cogwheel's tooth outline is not derived (GENERATORS2.md §6.3) and the
-/// Formula needs the expression library of brief 052.
-const UNSUPPORTED: &[&str] = &["cog-defaults", "formula-defaults"];
+/// Not built: the Cogwheel's tooth outline is not derived (GENERATORS2.md §6.3).
+const UNSUPPORTED: &[&str] = &["cog-defaults"];
 
 /// Extrude Direction Auto (brief 044 owns the real rule). Observed so far: the extrusion goes
 /// to -z exactly when the spline, closed by its chord, runs clockwise (`cycloid-defaults` is the

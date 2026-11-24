@@ -10,6 +10,7 @@ rayon = "1"
 forge-clone-engine = { path = "../clone-engine" }
 forge-anim = { path = "../anim" }
 forge-core = { path = "../core" }
+forge-expr = { path = "../expr" }
 forge-geometry = { path = "../geometry" }
 forge-modifiers = { path = "../modifiers" }
 forge-noise = { path = "../noise" }

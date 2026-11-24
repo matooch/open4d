@@ -1641,6 +1641,7 @@ dependencies = [
  "forge-anim",
  "forge-clone-engine",
  "forge-core",
+ "forge-expr",
  "forge-fields",
  "forge-geometry",
  "forge-modifiers",

@@ -288,9 +288,12 @@ Teeth rows are not modelled (the values are stored as given, no clamping).
   is unused); Epicycloid: `x = (R + r)·cos t − a·cos(k·t)`, `y = (R + r)·sin t − a·sin(k·t)`,
   `k = (R + r)/r`. Hypocycloid → `Unsupported`. The piece count 62 is **parity-pending** for
   other angle spans and radii.
-- **Formula** → `Unsupported` ("the expression library (brief 052) does not exist yet"):
-  `formula-defaults` is a line polyline of `samples + 1` points at `t_min + (t_max − t_min)·i/samples`,
-  open. Needs `forge-expr` for `x_t`, `y_t`, `z_t`.
+- **Formula** (`formula-defaults`, 5e-7): an open polyline of `samples + 1` points at
+  `t_i = t_min + (t_max − t_min)·i/samples`, each `(x_t(t_i), y_t(t_i), z_t(t_i))` with the three texts
+  compiled by `forge-expr` (EXPR.md; `t` is the only variable, `Sin` takes radians, `PI` is a constant).
+  Cubic interpolation off only; **on** is `Unsupported` (no case; **parity-pending**), as are the
+  `plane` / `reverse` options of the reference (recorded at XY / off). A text that does not parse
+  or gives a non-finite value fails the build (`BuildError::Failed`).
 - **Cogwheel** → `Unsupported` (`cog-defaults`): the outline is not derived. What the export
   shows (20 teeth, pitch 18°, tooth centre at 4.5° + 18°·k): two loops (outline and the centre
   hole, a circle of `hole_radius` 15 with Adaptive 68 points), 12 spline points per tooth
@@ -537,10 +540,9 @@ and reversal; §9a), the Banking-on frame (asserted to still differ), and lathe 
 
 `crates/generators/tests/spline_sampling.rs` runs the 22 O17 cases (`splines-2`): an Extrude
 of offset 20, caps off, over the spline, with the offset negated when the signed area of the
-spline is negative (§6.3, Direction Auto), compared strictly after `export_weld`. **20 of 22
+spline is negative (§6.3, Direction Auto), compared strictly after `export_weld`. **21 of 22
 exact** (`helix-uniform` on its first ring, 6e-7: the second ring is displaced along a direction
-the Extrude does not model); `cog-defaults` and `formula-defaults`
-are `Unsupported` (§6.3). `tests/spline_prims.rs` covers defaults, options and the refusals.
+the Extrude does not model); `cog-defaults` is `Unsupported` (§6.3); `formula-defaults` is exact since the Formula spline uses `forge-expr`. `tests/spline_prims.rs` covers defaults, options and the refusals.
 
 ### 11.1 R25 drift cases and the R25 extrude cap order
 

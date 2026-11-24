@@ -252,9 +252,7 @@ pub(crate) fn build(type_id: &str, p: &Params, sampling: Sampling) -> Result<Cur
         PROFILE => profile(p, sampling),
         CISSOID => cissoid(p, sampling),
         COGWHEEL => Err(BuildError::Unsupported("cogwheel")),
-        FORMULA => Err(BuildError::Unsupported(
-            "formula spline: the expression library (brief 052) does not exist yet",
-        )),
+        FORMULA => formula(p, sampling),
         other => Err(BuildError::UnknownType(other.to_string())),
     }
 }
@@ -434,6 +432,35 @@ fn cissoid(p: &Params, sampling: Sampling) -> Result<Curve, BuildError> {
             DVec3::new(t * y, y, 0.0)
         })
         .collect();
+    Ok(Curve::polyline(&pts, false, sampling))
+}
+
+/// Formula (§6.3): `samples + 1` points of `(x_t, y_t, z_t)` over `[t_min, t_max]`, an open
+/// polyline (cubic interpolation is not derived).
+fn formula(p: &Params, sampling: Sampling) -> Result<Curve, BuildError> {
+    if p.bool("cubic_interpolation") {
+        return Err(BuildError::Unsupported(
+            "formula spline: cubic interpolation",
+        ));
+    }
+    let compile = |id: &str| {
+        forge_expr::Expr::parse(&p.string(id), &["t"])
+            .map_err(|e| BuildError::Failed(format!("formula spline {id}: {e}")))
+    };
+    let (x, y, z) = (compile("x_t")?, compile("y_t")?, compile("z_t")?);
+    let (t0, t1) = (p.float("t_min"), p.float("t_max"));
+    let n = p.int("samples").max(2);
+    let mut pts = Vec::with_capacity(n + 1);
+    for i in 0..=n {
+        let t = [t0 + (t1 - t0) * i as f64 / n as f64];
+        let v = DVec3::new(x.eval(&t), y.eval(&t), z.eval(&t));
+        if !v.is_finite() {
+            return Err(BuildError::Failed(
+                "formula spline: the formulas gave a non-finite point".to_string(),
+            ));
+        }
+        pts.push(v);
+    }
     Ok(Curve::polyline(&pts, false, sampling))
 }
 
