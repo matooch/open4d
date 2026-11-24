@@ -1143,11 +1143,12 @@ fn bevel_extrude(ring: &[DVec3], mv: DVec3, b: &RoundBevel) -> PolyMesh {
         .collect();
     // ids[end][c][level]
     let mut ids = vec![vec![vec![0u32; seg + 1]; n]; 2];
-    for end in 0..2 {
-        for c in 0..n {
-            ids[end][c][0] = (end * n + c) as u32;
+    for (end, end_ids) in ids.iter_mut().enumerate() {
+        for (c, corner) in end_ids.iter_mut().enumerate() {
+            corner[0] = (end * n + c) as u32;
         }
     }
+    #[allow(clippy::needless_range_loop)] // `end` also selects the base offset and the cap order
     for end in 0..2 {
         let (base, sign) = if end == 0 {
             (DVec3::ZERO, -1.0)
