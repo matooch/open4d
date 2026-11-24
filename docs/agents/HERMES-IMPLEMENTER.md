@@ -41,6 +41,8 @@ current branch at the start of each brief as well.
 6. [142](tasks/142-gpu-path-tracer.md) · GPU compute path tracer (wgpu): the compute fallback that area R tiers 2–3 build on
 7. [198](tasks/198-realtime-raster.md) · R2: real-time raster PBR engine (`render-rt`); your M5 Pro is the Metal reference
 8. [199](tasks/199-realtime-post.md) · R3: post effects and the viewport "Render" mode
+9. [205](tasks/205-s4-mograph-acceptance.md) · S4 acceptance: motion graphics through the CLI
+10. [206](tasks/206-s5-volume-acceptance.md) · S5 acceptance: volumes through the CLI
 
 198 and 199 show `waiting` in BACKLOG only on briefs earlier in this queue (197, 198); on a
 stacked branch those are done, so start them in order. GPU tests run on the Mac's Metal adapter
