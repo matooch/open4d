@@ -33,7 +33,7 @@ fn queued_renders_appear_in_history_and_can_be_compared() {
     h.get_by_label("All passes").click();
     h.run();
     h.get_by_label("Queue frame").click();
-    h.run();
+    h.step(); // a render is now running and keeps requesting repaints; see below
     {
         let st = &mut h.state_mut().1;
         st.timeline.current = 7;
@@ -44,12 +44,16 @@ fn queued_renders_appear_in_history_and_can_be_compared() {
             .unwrap();
     }
     h.get_by_label("Queue frame").click();
-    h.run();
+    // While a render is in progress the viewer keeps requesting repaints (progress), so step
+    // frame by frame until both queued renders are in the history; `run()` would wait for a
+    // settled UI and can exceed its step limit depending on the machine's speed.
+    h.step();
     let deadline = Instant::now() + Duration::from_secs(10);
     while h.state().0.history_len() < 2 && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(5));
-        h.run();
+        h.step();
     }
+    h.run();
     assert_eq!(h.state().0.history_len(), 2);
     h.get_by_label("Render #1 · Frame 0").click();
     h.run();
