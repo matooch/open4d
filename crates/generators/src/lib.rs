@@ -14,6 +14,7 @@ mod fracture;
 pub mod instance_time;
 mod landscape;
 mod lathe;
+pub mod metaball;
 mod modeling;
 mod oil_tank;
 mod plane;
@@ -116,6 +117,7 @@ impl Plugin for Primitives {
         r.register(spline_gens::loft_type())?;
         r.register(spline_gens::sweep_type())?;
         r.register(atom_array::node_type())?;
+        r.register(metaball::node_type())?;
         r.register(spline_mask::node_type())?;
         r.register(tracer::node_type())?;
         r.register(instance_time::node_type())?;
@@ -307,6 +309,9 @@ pub(crate) fn evaluate_geometry(
     if node.type_id == spline_mask::TYPE {
         return spline_mask::cap_mesh(scene, id);
     }
+    if node.type_id == metaball::TYPE {
+        return metaball::evaluate(scene, id, &node.params);
+    }
     if node.type_id == cloner::TYPE {
         return cloner::evaluate_cloner(scene, id, &node.params, ctx);
     }
@@ -412,6 +417,7 @@ fn produces_geometry(scene: &Scene, type_id: &str) -> bool {
         || type_id == clone_text::TYPE
         || type_id == fracture::TYPE
         || type_id == polygon::TYPE
+        || type_id == metaball::TYPE
         || type_id == modeling::INSTANCE
         || modeling::input_count(type_id).is_some()
         || spline_gens::spline_input_count(type_id).is_some()
@@ -465,6 +471,7 @@ pub fn is_consumed(scene: &Scene, id: NodeId) -> bool {
         instance_time::TYPE => instance_time::trail_child(scene, p.id) == Some(id),
         t if modeling::input_count(t).is_some() => modeling::inputs_of(scene, p.id).contains(&id),
         spline_mask::TYPE => spline_mask::inputs_of(scene, p.id).contains(&id),
+        metaball::TYPE => metaball::is_source(scene, p.id, id),
         t if spline_gens::spline_input_count(t).is_some() => {
             spline_gens::spline_inputs_of(scene, p.id).contains(&id)
         }

@@ -122,3 +122,55 @@ Discovers `tests/golden/atom-array` and `tests/golden/spline-mask`, builds the s
 case file (`[params]`, `[params.input]`, `[params.input2]`; the mask's `extrude_offset` and
 `caps` belong to the wrapping Extrude), and compares with `compare_meshes` after `export_weld`.
 Results are in docs/parity/STATUS.md.
+
+## 3. Metaball (`forge.metaball`, `metaball.rs`)
+
+Sources: observation O20 ([generators-3.md](../parity/generators-3.md) §Metaball) and its
+cases `tests/golden/metaball/{two-spheres,hull-50,editor-sub}`. A generator whose sphere
+and spline children are inputs (consumed, not drawn).
+
+| id | label | kind | default | range |
+|---|---|---|---|---|
+| `hull_value` | Hull Value | float, percent | 100 % (1.0) | 0 .. 1000 % (0 .. 10) |
+| `editor_subdiv` | Editor Subdivision | float | 40 | 0.001 .. unbounded |
+| `render_subdiv` | Render Subdivision | float | 5 | 0.001 .. unbounded |
+| `exponential_falloff` | Exponential Falloff | bool | off | – |
+| `accurate_normals` | Accurate Normals | bool | off | – |
+
+### 3.1 Field
+
+1. Each **sphere child** is a point source at its placed origin with the sphere's
+   `radius` and strength 1. Its contribution at distance `d` is `f = (radius / d)^2`; the
+   gradient is `-2 radius^2 (p - c) / d^4`. The field is the **sum** of the sources, and
+   the hull value is the iso level (`hull 100 %` = 1, `hull 50 %` = 0.5).
+   Proof: on every vertex of `two-spheres` the summed field is 0.99 ± 0.04 (mean 0.99),
+   and on `hull-50` it is 0.50 ± 0.01 (mean 0.496); the bbox `±175.07 / ±130.43` follows
+   from the sum, not from a union of radius-100 spheres. **Parity-pending**: only radius
+   100, strength 1 and hull 50/100 are observed.
+2. Each **spline child** contributes the same falloff with `d` the distance to its sampled
+   polyline and `radius` the spline's own `radius` parameter when it has one (else 100).
+   **Parity-pending**: O20 has no spline metaball case; the radius rule is a literal
+   reading of the design decision, not an observation.
+3. `exponential_falloff` and `accurate_normals` are stored and change nothing in the
+   observed default cases (**parity-pending**: their effect is unobserved).
+4. A hull value of 0 has no finite surface, and a metaball without sphere/spline children
+   has no geometry (`Ok(None)`).
+
+### 3.2 Mesh
+
+- The lattice is aligned at multiples of `editor_subdiv` (the golden vertex coordinates
+  include exact multiples of 40 and 20) and spans the union of each source's reach
+  `radius * sqrt(n / hull)`, padded by one cell. Values are sampled densely; the field is
+  zero outside.
+- The surface is extracted with `forge_geometry::isosurface` (the cell mesher shared with
+  the volume mesher, VOLUME.md §7) with inside above the hull value. Every vertex is then
+  projected onto the true iso surface with two Newton steps on the analytic field, because
+  a cell mean sits inside the surface on curved parts.
+- `render_subdiv` is stored; evaluation uses `editor_subdiv`, which is the spacing the
+  golden meshes were exported at (**parity-pending**: the render subdivision is not
+  exercised by O20).
+- Results: `two-spheres` and `hull-50` pass the geometric comparison (Hausdorff 7.9 / 5.9
+  below voxel/2, area -1.3 % / -0.9 %, volume -1.7 % / -1.3 %, Euler 2). `editor-sub`
+  matches geometrically (Hausdorff 2.1, area -0.5 %) but its reference mesh is **not
+  closed** (Euler 12, boundary edges), so its Euler characteristic cannot equal a closed
+  iso-surface; pinned as `KNOWN_MISMATCH` in `metaball_parity.rs`.
