@@ -266,17 +266,15 @@ impl App {
     ) -> Result<usize, AppError> {
         forge_io::formats::validate_export_path(format, path)
             .map_err(|e| AppError::Io(e.to_string()))?;
-        let evaluated;
-        let scene = if forge_io::formats::preserves_animation(format) {
-            self.doc.scene()
-        } else {
-            evaluated = self.eval.get(self.doc.scene(), frame);
-            &evaluated
-        };
-        let (bytes, count) = export_bytes(format, scene, roots, options).map_err(|e| match e {
-            IoError::NothingToExport => AppError::NothingToExport,
-            other => AppError::Io(other.to_string()),
-        })?;
+        // Every format sees the scene evaluated at `frame` (IO.md §3): deformers and
+        // generators are baked at that frame. The evaluated scene keeps its tracks, so the
+        // animation-preserving formats (glTF, USD, Alembic) still write the node animation.
+        let evaluated = self.eval.get(self.doc.scene(), frame);
+        let (bytes, count) =
+            export_bytes(format, &evaluated, roots, options).map_err(|e| match e {
+                IoError::NothingToExport => AppError::NothingToExport,
+                other => AppError::Io(other.to_string()),
+            })?;
         std::fs::write(path, bytes).map_err(|e| AppError::Io(e.to_string()))?;
         Ok(count)
     }
