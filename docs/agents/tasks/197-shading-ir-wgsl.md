@@ -1,6 +1,6 @@
 # 197 · Shading IR to WGSL codegen and shader cache
 
-Status: waiting: 123, 125, 126 · Area: R · Depends on: 123, 125, 126 · Observations: – (own design; material values from O29/O42/O43 through the shading IR) · Touches: material, shaders
+Status: ready · Area: R · Depends on: 123, 125, 126 · Observations: – (own design; material values from O29/O42/O43 through the shading IR) · Touches: material, shaders
 
 ## Goal
 Compile the shading IR (crates/material, brief 123) and the shader nodes (125, 126) to WGSL: one specialised shader per material, cached by IR hash, recompiled on edit. This is the bridge from node materials to every GPU tier.
