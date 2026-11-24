@@ -28,6 +28,9 @@ Not everything needs exact face-order parity. Each spec says which level it targ
 
 ## Done so far (phases 0–7, partial)
 
+> Historical (the early phases). Live status is [roadmap/BACKLOG.md](roadmap/BACKLOG.md) (161+ of 186
+> briefs done) and [parity/STATUS.md](parity/STATUS.md); the `[~]` marks below predate it.
+
 - [x] 0 Workspace, CI, parity harness, golden layout, cleanroom gate.
 - [x] 1 core: scene graph, params, undo, file, cache, registry, transforms.
 - [~] 2 geometry: mesh, half-edge, normals, selections, subdivision, booleans, splines (UVs open).
@@ -43,23 +46,23 @@ Goal: model, animate, shade and render a small scene, save it, export it. Behavi
 follows the reference app where it matters for muscle memory (level C), our own design
 elsewhere, marked **parity-pending** for later observation.
 
-- [ ] U1 Editable meshes (batch 08): polygon object, Make Editable / Current State to
+- [x] U1 Editable meshes (batch 08): polygon object, Make Editable / Current State to
       Object (03); OBJ import/export + File menu (04); point/edge/polygon modes and
       selection (05); component move/rotate/scale (06).
-- [ ] U2 Animation basics (batch 09): `samples.json` level-B golden format (08); keyframe
+- [x] U2 Animation basics (batch 09): `samples.json` level-B golden format (08); keyframe
       tracks + interpolation, checked against O2/O12 (09); timeline with keys,
       record, autokey, playback (10). Briefs written; 08 running.
-- [ ] U3 Familiar layout (batch 10): reference-like arrangement (tool palette left,
+- [x] U3 Familiar layout (batch 10): reference-like arrangement (tool palette left,
       Object manager top right, Attribute manager below it, Coordinates/Materials
       bottom), own icons, shortcut map (11).
-- [ ] U4 Modeling tools (batch 11): extrude, inset, bevel, loop cut, knife, bridge,
+- [x] U4 Modeling tools (batch 11): extrude, inset, bevel, loop cut, knife, bridge,
       weld/merge, delete, optimize, normals flip/align; selection grow/shrink/loop/ring.
-- [ ] U5 Look-dev (batch 12): camera + light objects, basic PBR material + material tag,
+- [ ] U5 Look-dev (camera, light, Standard material, material tag, material list done; viewport material display = brief 132) (batch 12): camera + light objects, basic PBR material + material tag,
       material manager, viewport shows material colour.
-- [ ] U6 Rendering (batch 13): `render-api` trait, CPU path tracer (BVH, area/point/
+- [x] U6 Rendering (batch 13): `render-api` trait, CPU path tracer (BVH, area/point/
       sun lights, PBR), render settings, render to PNG/EXR and image sequence,
       render view.
-- [ ] U7 Packaging: AppImage build in CI, crash-safe autosave, preferences.
+- [ ] U7 Packaging (release workflow 176, crash log 178, autosave 179 done; preferences = brief 155; no release cut yet): AppImage build in CI, crash-safe autosave, preferences.
 
 ## Track P · Parity breadth (after M1, or in parallel when the implementer waits)
 
@@ -82,13 +85,21 @@ elsewhere, marked **parity-pending** for later observation.
 - [ ] P7 io: glTF, FBX, Alembic, USD.
 - [ ] P8 Scripting (Rhai/Python), plugin API stabilisation, Flatpak.
 
+## Track R · Real-time GPU renderer (owner request, 2026-11-24)
+
+- [ ] R1–R8 (briefs 197–204, [roadmap/areas/R-realtime.md](roadmap/areas/R-realtime.md), D19): node
+      materials compiled from the shading IR to WGSL; Tier 1 real-time raster PBR (every GPU);
+      Tier 2 hybrid ray-traced shadows/reflections/AO/GI with hardware RT on Vulkan and Metal;
+      Tier 3 real-time path tracing with denoising (also the GPU final-frame renderer); one
+      consistency suite against the CPU path tracer; S10-scale performance targets.
+
 Parked: external renderer bridge ([REDSHIFT.md](REDSHIFT.md)). R25 doesn't bundle it,
 so it isn't a parity item. Revisit after P6.
 
 ## Observations queue
 
 The live queue, with statuses, is [parity/QUEUE.md](parity/QUEUE.md): the observer runs
-it unattended (OBSERVER.md §6). Done so far: O0–O9, O11. Next: O12–O15.
+it unattended (OBSERVER.md §6). Live status: [parity/QUEUE.md](parity/QUEUE.md).
 
 Owner action still open: confirm the reference app's licence allows scripted use
 (OBSERVER.md §1 step 6) and note it in r25-drift.md §0 (add a row).

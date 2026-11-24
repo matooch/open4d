@@ -37,7 +37,7 @@ implementers can avoid collisions.
 | 037 | [Spline primitives II](../agents/tasks/037-spline-primitives-2.md) | C | 038 | done | generators |
 | 038 | [Intermediate Points modes and R25 per-spline defaults](../agents/tasks/038-intermediate-points.md) | C | – | done | generators, geometry |
 | 039 | [Text spline (fonts)](../agents/tasks/039-text-spline.md) | C | 038 | done (9/9 O48 cases on font-independent invariants; glyph shapes parity-pending until a re-observation with a licensed font) | generators, text (new) |
-| 040 | [Metaball generator](../agents/tasks/040-metaball.md) | C | 083 | waiting: 083 | generators, volume |
+| 040 | [Metaball generator](../agents/tasks/040-metaball.md) | C | 083 | ready | generators, volume |
 | 041 | [Atom Array and Spline Mask](../agents/tasks/041-atom-array-spline-mask.md) | C | 029 | done (4/4 O20 cases; other mask modes, axes, oblique atom edges parity-pending) | generators |
 | 042 | [Sweep rail/banking/scale, Loft linear/multi, Lathe partial/movement, cap fixes](../agents/tasks/042-sweep-loft-lathe-r25.md) | C | – | done (Lathe done; Loft/Sweep R25 cases parity-pending: R20/R25 conflict, helix route) | generators |
 | 043 | [Boole R25 modes and numbering, Subdivision types, Symmetry planes](../agents/tasks/043-boole-subdivision-symmetry-r25.md) | C | – | done (Boole R25 strict numbering parity-pending) | generators, geometry |
@@ -51,7 +51,7 @@ implementers can avoid collisions.
 | 051 | [Squash & Stretch and Wrap deformers](../agents/tasks/051-squash-stretch-wrap.md) | D | 050 | done (11/11 level A; Center, Aspect, Smooth, Movement, Scale Z, Tension parity-pending, see MODIFIERS.md §7) | modifiers |
 | 052 | [Expression library; FFD, Formula and Melt deformers](../agents/tasks/052-expr-ffd-formula-melt.md) | D | 050, 063 | done (5 exact + 2 statistical of 7; Melt values parity-pending, see MODIFIERS.md §16-19) | expr (new), modifiers |
 | 053 | [Explosion, Shatter, Wind deformers](../agents/tasks/053-explosion-shatter-wind.md) | D | 050 | done (2 exact + 3 statistical of 5; random stream and wind noise parity-pending, see MODIFIERS.md §11-13) | modifiers |
-| 054 | [Smoothing deformer, Displacer, Polygon Reduction, Bevel deformer](../agents/tasks/054-smoothing-displacer-reduction-bevel.md) | D | 050, 125 | waiting: 125 | modifiers, modeling |
+| 054 | [Smoothing deformer, Displacer, Polygon Reduction, Bevel deformer](../agents/tasks/054-smoothing-displacer-reduction-bevel.md) | D | 050, 125 | ready | modifiers, modeling |
 | 055 | [Spline Wrap, Spline and Spline Rail deformers](../agents/tasks/055-spline-deformers.md) | D | 050, 028 | done (0 exact of 4, all pinned: sampler digits and unresolved helix frame / Spline pairing; see MODIFIERS.md §20-21) | modifiers |
 | 056 | [Mesh (cage), Surface, Camera, Collision, Jiggle, Delta Mush, Correction deformers](../agents/tasks/056-mesh-surface-camera-collision-jiggle-deltamush-correction.md) | D | 050 | done (3 exact of 8, one vacuous; 5 pinned: the reference export did not run the solvers; algorithms parity-pending, see MODIFIERS.md §14-15) | modifiers |
 | 057 | [Fields framework + Linear, Spherical, Box + Remapping](../agents/tasks/057-fields-framework.md) | D | 050 | done (27/27 samples; remap order and Step/Quadratic parity-pending, see FIELDS.md F5) | fields |
@@ -193,4 +193,12 @@ implementers can avoid collisions.
 | 194 | [Materials and shaders in the document: hosting, links, Generate UVW command](../agents/tasks/194-material-hosting.md) | J | 123, 125, 127 | done | core, material, shaders, app, command, ui, io |
 | 195 | [Grow Selection: Use Edge option for polygons](../agents/tasks/195-grow-use-edge.md) | B | 023 | done | geometry, command |
 | 196 | [OBJ texture coordinates (vt) import and export](../agents/tasks/196-obj-uvs.md) | M | 004, 128 | done | io |
+| 197 | [Shading IR to WGSL codegen and shader cache](../agents/tasks/197-shading-ir-wgsl.md) | R | 123, 125, 126 | waiting: 123, 125, 126 | material, shaders |
+| 198 | [Real-time raster PBR engine (render-rt)](../agents/tasks/198-realtime-raster.md) | R | 197, 133, 137 | waiting: 197, 133, 137 | render-rt (new), viewport, render-api |
+| 199 | [Post effects and viewport Render mode](../agents/tasks/199-realtime-post.md) | R | 198 | waiting: 198 | render-rt, viewport, ui |
+| 200 | [GPU scene: acceleration structures and compute fallback](../agents/tasks/200-gpu-scene-rt.md) | R | 142, 198 | waiting: 142, 198 | render-rt, render-gpu |
+| 201 | [Hybrid ray-traced shadows, reflections, AO and GI](../agents/tasks/201-hybrid-rt.md) | R | 200 | waiting: 200 | render-rt |
+| 202 | [Real-time path tracing with denoising](../agents/tasks/202-realtime-pathtrace.md) | R | 200, 201 | waiting: 200, 201 | render-rt |
+| 203 | [Consistency tests across render tiers](../agents/tasks/203-rt-consistency.md) | R | 198, 202 | waiting: 198, 202 | tests, render-rt |
+| 204 | [Real-time performance targets](../agents/tasks/204-rt-performance.md) | R | 199, 201 | waiting: 199, 201 | render-rt, bench |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |

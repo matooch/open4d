@@ -4,11 +4,9 @@
 //! > `forge` CLI builds a scene from a script (cube, cloner with random effector, bend
 //! > deformer), evaluates frame 30, exports glTF and renders a PNG, headless.
 //!
-//! Passing today: script -> scene file, validate, evaluate frame 30, export OBJ (the glTF
-//! stand-in), bend deformer animated, determinism. **Pending** (ignored tests below, each
-//! names its brief): cloner with random effector (065, 069), glTF export (164), PNG render
-//! (136, 139, 146). Until then the CLI stubs are pinned, so the day they start working the
-//! pinning test fails and the matching ignored test must be filled in.
+//! Covered: script -> scene file, validate, evaluate frame 30 (bend animated), OBJ export,
+//! glTF (GLB) export, a cloner with a seeded random effector (`s1_cloner.rhai`), PNG render,
+//! determinism.
 
 use std::path::{Path, PathBuf};
 
@@ -224,45 +222,119 @@ fn s1_is_deterministic() {
     );
 }
 
-/// The unfinished output is a stub today. When this test fails, the stub is gone:
-/// fill in the matching ignored test below and delete the stub assertion here.
+fn script_named(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/acceptance")
+        .join(name)
+}
+
+/// The second half of S1: `tests/acceptance/s1_cloner.rhai` (cloner, random effector, bend).
+fn build_cloner(d: &Path) -> PathBuf {
+    let scene = d.join("s1c.forge");
+    let (code, out) = json_run(&[
+        "run",
+        s(&script_named("s1_cloner.rhai")),
+        "--save",
+        s(&scene),
+    ]);
+    assert_eq!(code, 0, "{out}");
+    assert!(out["output"][0].as_str().unwrap().starts_with("cloner="));
+    scene
+}
+
 #[test]
-fn s1_pending_outputs_are_still_stubs() {
-    let d = dir("stubs");
+fn s1_cloner_with_random_effector() {
+    let (a, b) = (dir("cloner-a"), dir("cloner-b"));
+    let (scene_a, scene_b) = (build_cloner(&a), build_cloner(&b));
+    let (code, v) = json_run(&["validate", s(&scene_a)]);
+    assert_eq!(code, 0, "{v}");
+    let (obj_a, obj_b) = (a.join("f30.obj"), b.join("f30.obj"));
+    export_at(&scene_a, "30", &obj_a);
+    export_at(&scene_b, "30", &obj_b);
+    let mesh = parse_obj(&std::fs::read_to_string(&obj_a).unwrap()).unwrap();
+    // Five clones of the 8-point, 6-face cube.
+    assert_eq!(mesh.positions.len(), 5 * 8);
+    assert_eq!(mesh.faces.len(), 5 * 6);
+    // The random effector moved the clones off the straight row: the clone centres are not
+    // all on one line (y and z differ between clones), and the same seed gives the same file.
+    let centres: Vec<[f64; 3]> = (0..5)
+        .map(|c| {
+            let pts = &mesh.positions[c * 8..c * 8 + 8];
+            let mut m = [0.0; 3];
+            for p in pts {
+                for k in 0..3 {
+                    m[k] += p[k] / 8.0;
+                }
+            }
+            m
+        })
+        .collect();
+    let spread = |k: usize| {
+        let v: Vec<f64> = centres.iter().map(|c| c[k]).collect();
+        v.iter().cloned().fold(f64::MIN, f64::max) - v.iter().cloned().fold(f64::MAX, f64::min)
+    };
+    assert!(spread(1) > 1.0 && spread(2) > 1.0, "{centres:?}");
+    assert_eq!(
+        std::fs::read_to_string(&obj_a).unwrap(),
+        std::fs::read_to_string(&obj_b).unwrap(),
+        "same seed, same geometry"
+    );
+}
+
+#[test]
+fn s1_gltf_export() {
+    // `forge export s1.forge --format gltf --out s1.glb --frame 30` writes binary glTF 2.0 (the
+    // writer only writes GLB, so the path must end in `.glb`, IO.md §5). Converting it back
+    // to OBJ gives the frame-30 points of the OBJ export.
+    let d = dir("gltf");
     let scene = build(&d);
-    let gltf = d.join("s1.gltf");
+    let glb = d.join("s1.glb");
     let (code, out) = json_run(&[
         "export",
         s(&scene),
         "--format",
         "gltf",
         "--out",
-        s(&gltf),
+        s(&glb),
         "--frame",
         "30",
     ]);
+    assert_eq!(code, 0, "{out}");
+    let bytes = std::fs::read(&glb).unwrap();
+    assert_eq!(&bytes[0..4], b"glTF", "GLB magic");
     assert_eq!(
-        code, 1,
-        "glTF export now exists (brief 164): enable s1_gltf_export {out}"
+        u32::from_le_bytes(bytes[4..8].try_into().unwrap()),
+        2,
+        "glTF 2.0"
     );
-    assert!(!gltf.exists());
-}
 
-#[test]
-#[ignore = "pending briefs 065 (cloner) and 069 (random effector)"]
-fn s1_cloner_with_random_effector() {
-    // Extend tests/acceptance/s1.rhai: create the cloner above the cube, add a random
-    // effector with a fixed seed, then assert the clone count at frame 30 and that two
-    // runs give identical geometry.
-    todo!("needs the cloner and the random effector");
-}
-
-#[test]
-#[ignore = "pending brief 164 (glTF export)"]
-fn s1_gltf_export() {
-    // `forge export s1.forge --format gltf --out s1.gltf --frame 30`: the file parses as
-    // glTF 2.0 with one mesh node whose positions equal the frame-30 OBJ export.
-    todo!("needs glTF export");
+    // `forge convert` imports foreign files into native scenes (`--format forge`) and exports
+    // native scenes (IO.md §3), so GLB -> OBJ is two steps.
+    let native = d.join("native");
+    let (code, out) = json_run(&["convert", s(&glb), "--out", s(&native), "--format", "forge"]);
+    assert_eq!(code, 0, "{out}");
+    let back = d.join("back");
+    let (code, out) = json_run(&["convert", s(&native), "--out", s(&back), "--format", "obj"]);
+    assert_eq!(code, 0, "{out}");
+    let f30 = d.join("f30.obj");
+    export_at(&scene, "30", &f30);
+    let points = |p: &Path| {
+        let mesh = parse_obj(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let mut v: Vec<[i64; 3]> = mesh
+            .positions
+            .iter()
+            .map(|q| [0, 1, 2].map(|k| (q[k] * 1e4).round() as i64))
+            .collect();
+        v.sort();
+        v.dedup();
+        v
+    };
+    let obj_back = std::fs::read_dir(&back)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .find(|p| p.extension().is_some_and(|x| x == "obj"))
+        .expect("converted OBJ");
+    assert_eq!(points(&obj_back), points(&f30));
 }
 
 #[test]

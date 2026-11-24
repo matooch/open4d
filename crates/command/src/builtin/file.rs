@@ -480,18 +480,16 @@ fn export_file(
     let options = formats::resolve_options(&descs, options).map_err(bad_option)?;
     let roots: Vec<NodeId> = ctx.selection().nodes.iter().copied().collect();
     formats::validate_export_path(id, path).map_err(bad_option)?;
-    let evaluated;
-    let scene = if formats::preserves_animation(id) {
-        ctx.doc().scene()
-    } else {
-        evaluated = ctx.evaluated_scene();
-        &evaluated
-    };
-    let (bytes, count) = formats::export_bytes(id, scene, selected.then_some(&roots[..]), &options)
-        .map_err(|e| match e {
-            IoError::NothingToExport => CommandError::failed("Nothing to export"),
-            other => CommandError::Failed(format!("Export failed: {other}")),
-        })?;
+    // The scene at the current frame for every format (IO.md §3): deformers and generators are
+    // baked; the evaluated scene keeps its tracks for the animation-preserving formats.
+    let evaluated = ctx.evaluated_scene();
+    let (bytes, count) =
+        formats::export_bytes(id, &evaluated, selected.then_some(&roots[..]), &options).map_err(
+            |e| match e {
+                IoError::NothingToExport => CommandError::failed("Nothing to export"),
+                other => CommandError::Failed(format!("Export failed: {other}")),
+            },
+        )?;
     std::fs::write(path, bytes).map_err(|e| CommandError::Failed(format!("Export failed: {e}")))?;
     ctx.set_status(String::new());
     Ok(json!({"objects": count, "format": id}))
