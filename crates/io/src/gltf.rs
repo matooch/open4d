@@ -41,7 +41,26 @@ struct Node {
     transform: Transform,
     primitives: Vec<Primitive>,
     skin: Option<usize>,
+    camera: Option<CameraKind>,
     tracks: BTreeMap<String, Track>,
+}
+
+/// The camera fields of a glTF node.
+#[derive(Clone, Copy)]
+#[allow(dead_code)] // orthographic ymag and clipping are stored but not all modelled
+enum CameraKind {
+    Perspective {
+        yfov: f64,
+        znear: f64,
+        zfar: f64,
+        aspect: Option<f64>,
+    },
+    Orthographic {
+        xmag: f64,
+        ymag: f64,
+        znear: f64,
+        zfar: f64,
+    },
 }
 
 struct Material {
@@ -401,6 +420,20 @@ pub fn read(bytes: &[u8], scale: f64) -> Result<ImportScene, Error> {
                 },
                 primitives,
                 skin: n.skin().map(|s| s.index()),
+                camera: n.camera().map(|c| match c.projection() {
+                    gltf::camera::Projection::Perspective(p) => CameraKind::Perspective {
+                        yfov: f64::from(p.yfov()),
+                        znear: f64::from(p.znear()),
+                        zfar: p.zfar().map_or(1.0e10, f64::from),
+                        aspect: p.aspect_ratio().map(f64::from),
+                    },
+                    gltf::camera::Projection::Orthographic(o) => CameraKind::Orthographic {
+                        xmag: f64::from(o.xmag()),
+                        ymag: f64::from(o.ymag()),
+                        znear: f64::from(o.znear()),
+                        zfar: f64::from(o.zfar()),
+                    },
+                }),
                 tracks: BTreeMap::new(),
             })
         })
@@ -442,6 +475,8 @@ impl ImportScene {
             let inline_mesh = !joint && n.primitives.len() == 1;
             let kind = if joint {
                 forge_rig::JOINT
+            } else if n.camera.is_some() {
+                "forge.camera"
             } else if inline_mesh {
                 forge_generators::POLYGON
             } else {
@@ -459,6 +494,43 @@ impl ImportScene {
                 (SCALE, n.transform.scale),
             ] {
                 tx.set_param(id, param, Value::Vec3(val.to_array()))?;
+            }
+            if let Some(camera) = n.camera {
+                match camera {
+                    CameraKind::Perspective {
+                        yfov,
+                        znear,
+                        zfar,
+                        aspect,
+                    } => {
+                        let aspect = aspect.unwrap_or(16.0 / 9.0);
+                        let horizontal = 2.0 * ((yfov / 2.0).tan() * aspect).atan();
+                        tx.set_param(id, "projection", Value::Enum("perspective".into()))?;
+                        tx.set_param(id, "sensor_size", Value::Float(36.0))?;
+                        tx.set_param(id, "fov_horizontal", Value::Float(horizontal))?;
+                        // glTF's defaults are 0.01 / 1e10; the scene's clipping params
+                        // only matter when the file asks for other planes.
+                        if (znear - 0.01).abs() > 1e-6 {
+                            tx.set_param(id, "enable_near_clipping", Value::Bool(true))?;
+                            tx.set_param(id, "near_clipping", Value::Float(znear))?;
+                        }
+                        if (zfar - 1.0e10).abs() > 1.0e6 {
+                            tx.set_param(id, "enable_far_clipping", Value::Bool(true))?;
+                            tx.set_param(id, "far_clipping", Value::Float(zfar))?;
+                        }
+                    }
+                    CameraKind::Orthographic { xmag, .. } => {
+                        tx.set_param(id, "projection", Value::Enum("parallel".into()))?;
+                        tx.set_param(
+                            id,
+                            "zoom",
+                            Value::Float(
+                                forge_generators::scene_objects::ORTHO_WIDTH
+                                    / (2.0 * xmag).max(1e-9),
+                            ),
+                        )?;
+                    }
+                }
             }
             for (key, track) in &n.tracks {
                 tx.set_track(id, key, Some(track.clone()))?;
