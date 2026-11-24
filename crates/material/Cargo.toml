@@ -15,7 +15,10 @@ thiserror = "2"
 [dev-dependencies]
 forge-generators = { path = "../generators" }
 forge-parity-harness = { path = "../parity-harness" }
+naga = "30"
+pollster = "1"
 toml = "1"
+wgpu = "30"
 
 [lints]
 workspace = true
