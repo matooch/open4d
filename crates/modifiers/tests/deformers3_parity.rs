@@ -22,24 +22,16 @@ const FEATURES: &[&str] = &[
 /// Cases pinned because the derived rule does not reproduce the reference.
 const KNOWN_MISMATCH: &[(&str, &str)] = &[
     (
-        "smoothing-deformer/defaults",
-        "the reference Laplacian shrinks much more (area 141k vs 238k, volume 4.3M vs 9.3M); the strength/stiffness weighting is not derived",
-    ),
-    (
-        "smoothing-deformer/iterations-10",
-        "same as defaults (10 is already the default); shrink weighting not derived",
-    ),
-    (
         "displacer/height-noise",
         "no UVW tag is observed for the procedural cube; object-box UVW gives Hausdorff 23.8 and volume -2.7 %",
     ),
     (
         "polygon-reduction/defaults",
-        "the quality-factor stopping rule is not derived: 13/22 expected, our target leaves 104/108",
+        "counts now match exactly (13 points / 22 faces); positions differ: Hausdorff 37.1, area -28 %, volume -40 % (collapse order/cost not derived)",
     ),
     (
         "polygon-reduction/50",
-        "the quality-factor stopping rule is not derived: 58/112 expected, our target leaves 104/108",
+        "counts now match exactly (58 points / 112 faces); positions differ: Hausdorff 9.9, area -4 %, volume -7 % (collapse order/cost not derived)",
     ),
     (
         "bevel-deformer/offset-20",

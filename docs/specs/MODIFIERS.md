@@ -1374,12 +1374,13 @@ Bevel deformer have no Falloff group (O19).
 | `stiffness_map` | Stiffness Map | string | empty |
 
 - Each iteration is Jacobi Laplacian smoothing: every point moves
-  `strength * stiffness` of the way to the mean of its edge neighbours. `type` and
-  `keep_displacements` are stored; their distinct behaviour is **parity-pending**.
-- **Known mismatch** (`smoothing-deformer/defaults`, `iterations-10`): the reference
-  shrinks the edited cube much more (area 141k vs our 238k, volume 4.3M vs 9.3M); the
-  per-type weighting and the exact strength/stiffness mapping are not derived. The two
-  cases are identical because 10 is already the default.
+  `strength * (1 - stiffness)` of the way to the mean of its **edge** neighbours
+  (`smoothing-deformer/defaults`: at strength 100 % and stiffness 30 % the weight 0.7
+  gives area 140,956 and volume 4,339,075, exactly the golden; weight `strength * stiffness`
+  gives 238k / 9.3M). The two cases are identical because 10 is already the default
+  Iterations.
+- `type` and `keep_displacements` are stored; their distinct behaviour is
+  **parity-pending** (only `smooth` at strength 100 % is observed).
 
 ### 22.2 Displacer (`forge.displacer`)
 
@@ -1401,12 +1402,16 @@ Params: `reduction_strength` (0.9), `mesh_quality_factor` (1000),
 `co_planar_optimization` (on), `bounday_curve_preservation` (on),
 `polygon_quality_preservation` (off).
 
-- Quadric edge collapse: plane quadrics are accumulated per point, the cheapest manifold
-  interior edge (two faces, two common neighbours) collapses to its midpoint until the face
-  target is reached. The target is `(1 - strength)² * faces` (**our design**, not observed).
-- **Known mismatch** (`polygon-reduction/defaults`, `/50`): the reference stops on a
-  quality criterion (13/22 and 58/112 faces) that is not derived; ours leaves 104/108 for
-  both strengths.
+- The input is triangulated first and the output stays all triangles. Quadric edge collapse:
+  plane quadrics are accumulated per point, and the cheapest edge whose two endpoints share
+  exactly two neighbours (the link condition on a closed mesh) collapses to its midpoint.
+  The target is `round((1 - strength) * triangles)`, derived from both cases: the default
+  sphere has 224 triangles, 50 % keeps 112 faces / 58 points and 90 % keeps 22 faces /
+  13 points (`F = 2V - 4` for a closed all-triangle mesh). Both counts match exactly.
+- **Known mismatch** (positions only): `polygon-reduction/50` has Hausdorff 9.9 with area
+  -4 % and volume -7 %; `polygon-reduction/defaults` Hausdorff 37.1 with area -28 % and
+  volume -40 %. The counts match, but the collapse order/cost (the reference is not a plain
+  midpoint QEM) is not derived.
 
 ### 22.4 Bevel deformer (`forge.bevel_deformer`)
 
@@ -1426,8 +1431,9 @@ Params follow the O19 table (`component_mode`, `selection`, `use_angle`, `angle_
 ### 22.5 Parity
 
 `crates/modifiers/tests/deformers3_parity.rs` compares with the volume metric (Hausdorff,
-area, volume, Euler): `displacer/defaults` and `bevel-deformer/defaults` pass; the six cases
-above are in `KNOWN_MISMATCH` with the measured reasons. **Parity-pending**: the
-Smoothing type/stiffness mapping and Keep Displacements, the Displacer UVW/tag mapping and
-channel variants, the Polygon Reduction quality criterion, and the Bevel Subdivision and
-rounded profile.
+area, volume, Euler): `smoothing-deformer/defaults`, `smoothing-deformer/iterations-10`,
+`displacer/defaults` and `bevel-deformer/defaults` pass; `displacer/height-noise`,
+`polygon-reduction/defaults`, `polygon-reduction/50` and `bevel-deformer/offset-20` are in
+`KNOWN_MISMATCH` with the measured reasons. **Parity-pending**: the Smoothing type and Keep
+Displacements, the Displacer UVW/tag mapping and channel variants, the Polygon Reduction
+collapse order, and the Bevel Subdivision and rounded profile.

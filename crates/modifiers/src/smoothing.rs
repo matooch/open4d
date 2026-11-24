@@ -31,10 +31,12 @@ impl Default for SmoothingParams {
     }
 }
 
-/// Laplacian smoothing: every point moves `strength * stiffness` of the way to the mean of
-/// its edge neighbours, repeated `iterations` times (Jacobi, so the order does not matter).
+/// Laplacian smoothing: every point moves `strength * (1 - stiffness)` of the way to the
+/// mean of its edge neighbours, repeated `iterations` times (Jacobi, so the order does not
+/// matter). The `1 - stiffness` weight is the one that reproduces
+/// `smoothing-deformer/defaults` (area 140,956, volume 4,339,075).
 pub fn smooth(mesh: &mut PolyMesh, p: &SmoothingParams) {
-    let lambda = p.strength.clamp(0.0, 1.0) * p.stiffness.clamp(0.0, 1.0);
+    let lambda = p.strength.clamp(0.0, 1.0) * (1.0 - p.stiffness.clamp(0.0, 1.0));
     if lambda == 0.0 {
         return;
     }
