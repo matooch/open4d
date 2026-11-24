@@ -17,7 +17,8 @@ Class: a = fixable in our code from the golden data, b = reference-data limitati
 | platonic bucky x4 | b | export is an irregular fixed table (layers with equal coordinates, radii 96.7..99.8, asymmetric z layers 91.857 ... -92.13); no formula |
 | spline-mask/cap | b | near-cocircular Delaunay tie on 432 points decided by sub-float32 noise (GEOMETRY.md 6.1 R1) |
 | caps-bevel/tri-extrude-ngon | b | regular hexagon, exact cocircular tie, same reason |
-| caps-bevel/bevel-* (6), sweep-caps-bevel | c | studied (see below); numbering is shape-specific and the Round profile angles (29.2776 / 60.7224 deg) have no rule yet |
+| caps-bevel/bevel-round, bevel-inner | a | FIXED (round 2): the Round profile is a rational quadratic quarter arc (weights 1, sqrt2/2, 1) sampled uniformly in the parameter; layout of a 4-point extrude derived, both strict (GENERATORS2.md 7b) |
+| caps-bevel/bevel-step, -chamfer, -concave, sweep-caps-bevel | c | numbering of Step/Solid shapes and of the sweep circle profile still not derived |
 | caps-bevel/caps-delaunay, caps-grid | c | order seen for one outline only / 730-point grid not derived |
 | caps-bevel/tri-ellipse-loft, tri-loft-rotated | b | input not recorded in the case |
 | caps-bevel/tri-slice-orient-x, tri-dodeca-seg2 | b | exported from editable polygon objects (Make Editable triangulation, sub-float noise) |
@@ -67,7 +68,9 @@ Class: a = fixable in our code from the golden data, b = reference-data limitati
   Step n: staircase (inset 10/n, depth 10/n per step), Solid: L shape of 3 + 3 equal segments, Round: arc of radius 10.
   Point numbering differs per shape: Round is corner-major (q3..q0, profile order outer -> inner), Chamfer ring-major, Step has a
   group of horizontal-move points corner-major with an irregular first pair, Solid starts with the cap ring in q0..q3 order.
-  The Round profile points sit on the circle at 29.2776 and 60.7224 deg (not 30/60, not a Bezier-sampled circle with k = 0.5523);
-  no rule found, so no code was written.
+  The Round profile points sit on the circle at 29.2776 and 60.7224 deg (not 30/60, not a Bezier-sampled circle with k = 0.5523).
+  **Solved in round 2:** the points are the rational quadratic arc P0 (1,0), P1 (1,1), P2 (0,1), weights 1, sqrt2/2, 1 at s = 1/3, 2/3
+  (the golden insets 1.277396 : 5.109584 are exactly 1 : 4, and tan(phi/2) = 0.2612, 2 - sqrt2 gave the weight away). Polynomial Bezier samples (k = 0.5, 0.5523) and
+  arc-length variants do not lie on the circle. Implemented for the 4-point extrude (bevel-round, bevel-inner strict); Step/Solid/sweep not attempted further.
 - Outline: moved distance d*1.00013035 for both radius 200/d 20 and radius 100/d 10; a 100-chord polyline length of a k = 0.55228 Bezier quarter
   gives 1.00012999, close but not equal; no rule adopted.

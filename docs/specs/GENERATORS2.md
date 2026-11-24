@@ -357,6 +357,38 @@ Extrude caps (closed splines; the cap points are the first and last row):
   the point and face order of the reference's bevel rings and of its Delaunay and grid fills is not derived. Pinned in the test with the
   case list below. With Size 0 the bevel params do nothing (every other case).
 
+### 7b. Round bevel of an Extrude (`caps-bevel/bevel-round`, `bevel-inner`)
+
+Source: the two golden cases (400 x 400 rectangle, offset 100, Bevel Size 10, Segments 3, both caps beveled with the one set of controls).
+Implemented for: a closed single-loop outline of 4 points wound counter-clockwise about the extrude direction, N-gon caps on both ends,
+Subdivision 1, `separate_bevel_controls` off, `bevel_extended_shape` off, `bevel_height` 0, `bevel_shape_depth` 1. Anything else with Size > 0
+is `Unsupported` (other point counts: the corner order below is observed for a rectangle only, **parity-pending**).
+
+**Profile (derived exactly).** Level k = 0..segments of a corner sits at inset `u_k` (in the outline plane, perpendicular to the edges, so a
+corner moves by `(u_k, u_k)` on a rectangle) and depth `v_k` along the extrude direction away from the shell, with `(u_k, v_k) = size · (1 − x, y)`
+where `(x, y)` is the rational quadratic Bezier arc with control points (1,0), (1,1), (0,1) and weights 1, √2/2, 1 at the parameter
+`s = k / segments`. These points lie exactly on the quarter circle of radius `size` about (inset `size`, depth 0), at the angles 29.2776° and 60.7224°
+for 3 segments (not 30° / 60°; `tan(φ/2)` = 0.2612, 0.5858 = 2 − √2 for k = 1, 2): `u = 1.277396, 5.109584` and `v = 4.890417, 8.722604` for size 10, to
+the 6 decimals of the export. Hypotheses rejected first (PARITY-DEBT.md): polynomial Bezier samples (k = 0.5523 gives 30.31°, off the circle by 2e-4;
+k = 0.5 gives 29.48°, off by 2e-2).
+
+**Bevel Outside off** (`bevel-round`): the shell stays on the outline; level 0 is the shell ring, level `segments` the cap ring (inset `size`, depth `size`
+beyond the end row). **On** (`bevel-inner`): the shell ring is the outline moved *outwards* by `size` (the corners mitred), the cap ring is the
+outline itself, `size` beyond the end row; level k is the shell ring moved inwards by `u_k`.
+
+**Points.** The 2·n shell points (row 0 then row 1), then the start bevel, then the end bevel. Off: per end, the corners in the order `q(n−1), …, q0`,
+each with its levels 1..segments; the first corner ascending (`q3`: 8, 9, 10), the others descending (`q2`: 11 = innermost, …, 13 = level 1). On: per end first the
+cap ring (level `segments`) of all corners in the order `q0..q(n−1)` (8..11, 20..23), then per corner the levels `segments−1 … 1` (start: corners `q(n−1)..q0`; end: `q0..q(n−1)`).
+
+**Faces.** The n shell sides, then the start cap (the reversed cap ring `[q3, q2, q1, q0]`), the start strips, the end cap (`[q0, …, q3]`), the end strips. Off:
+edge by edge with `cur` = `q3, q2, q1, q0` and `next = cur − 1`, level rows k = 0..segments−1, start `[next.k, next.k+1, cur.k+1, cur.k]`, end
+`[cur.k, cur.k+1, next.k+1, next.k]`. On: rows from the cap towards the shell, `a = segments − r`, `b = a − 1`: even rows `[cur.a, cur.b, next.b, next.a]`, odd rows
+`[next.b, next.a, cur.a, cur.b]`; start edges `cur = q3 … q0`, `next = cur − 1`, end edges `cur = q0 … q3`, `next = cur + 1`. The alternation of the row start
+corner is seen for 3 segments only (rows 0, 1, 2), **parity-pending** for other counts.
+
+Not derived: Step, Solid and Curve shapes (their numbering is shape specific: Step has a group of horizontal-move points corner-major with an irregular first
+pair, Solid starts with the cap ring in q0..q3 order), the sweep's circle profile (`sweep-caps-bevel`), separate controls, other outlines.
+
 ## 8. Lathe (`forge.lathe`)
 
 Params: `angle` 360°, `subdivision` 32 (R20: 24), `movement` 0, `scaling` 100 %, caps as Extrude
