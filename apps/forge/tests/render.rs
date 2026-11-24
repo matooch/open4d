@@ -363,3 +363,269 @@ fn sky_and_floor_objects_light_and_fill_the_background() {
         "the floor changes the picture"
     );
 }
+
+// ---- S8 look-dev acceptance (brief 146, RENDER.md R19) ------------------------------------
+
+/// Builds the S8 scene through the CLI: a cube with a noise+fresnel shader tree, an Area
+/// light and a physical camera with the thin lens on.
+fn s8_scene(d: &Path) -> (String, u64) {
+    let scene = s(&d.join("s8.forge")).to_string();
+    assert_eq!(json_run(&["new", &scene]).0, 0);
+    let created = cmd(&scene, "object.create", json!({"type": "forge.cube"}));
+    let cube = created["result"]["node"].as_u64().unwrap();
+    let created = cmd(&scene, "material.create", json!({}));
+    let material = created["result"]["material"].as_u64().unwrap();
+    // The node-graph material has no noise/fresnel nodes: use the shader node tree.
+    cmd(
+        &scene,
+        "shader.set",
+        json!({
+            "type": "forge.shader.noise", "material": material, "channel": "color",
+            "params": {
+                "space": "object", "global_scale": 0.05,
+                "color_1": [0.8, 0.1, 0.1], "color_2": [0.1, 0.3, 0.8],
+            },
+        }),
+    );
+    cmd(
+        &scene,
+        "shader.set",
+        json!({
+            "type": "forge.shader.fresnel", "material": material, "channel": "bump",
+            "params": {"ior": 1.5},
+        }),
+    );
+    cmd(
+        &scene,
+        "material.assign",
+        json!({"material": material, "nodes": [cube]}),
+    );
+    let created = cmd(&scene, "object.create", json!({"type": "forge.camera"}));
+    let camera = created["result"]["node"].as_u64().unwrap();
+    for (param, value) in [
+        ("transform.pos", json!([0.0, 0.0, -600.0])),
+        ("transform.rot", json!([10.0, 15.0, 0.0])),
+        ("f_stop", json!(2.8)),
+        ("focus_distance", json!(600.0)),
+    ] {
+        cmd(
+            &scene,
+            "param.set",
+            json!({"node": camera, "param": param, "value": value}),
+        );
+    }
+    let created = cmd(&scene, "object.create", json!({"type": "forge.light"}));
+    let light = created["result"]["node"].as_u64().unwrap();
+    for (param, value) in [
+        ("type", json!("area")),
+        ("intensity", json!(3.0)),
+        ("size_x", json!(300.0)),
+        ("size_y", json!(300.0)),
+        ("transform.pos", json!([0.0, 300.0, -400.0])),
+    ] {
+        cmd(
+            &scene,
+            "param.set",
+            json!({"node": light, "param": param, "value": value}),
+        );
+    }
+    (scene, camera)
+}
+
+/// PSNR of two linear RGB images, peak 1.
+fn psnr(a: &forge_image::Image, b: &forge_image::Image) -> f64 {
+    assert_eq!((a.width, a.height), (b.width, b.height));
+    let mut sum = 0.0;
+    let mut n = 0.0;
+    for (p, q) in a
+        .data
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(b.data.as_chunks::<4>().0.iter())
+    {
+        for k in 0..3 {
+            let d = f64::from(p[k]) - f64::from(q[k]);
+            sum += d * d;
+            n += 1.0;
+        }
+    }
+    if sum == 0.0 {
+        f64::INFINITY
+    } else {
+        10.0 * (n / sum).log10()
+    }
+}
+
+/// Per-channel mean value ratio in dB (20 log10(mean / reference)).
+fn mean_db(a: &forge_image::Image, b: &forge_image::Image) -> [f64; 3] {
+    let sum = |img: &forge_image::Image| {
+        let mut s = [0.0f64; 3];
+        for p in img.data.as_chunks::<4>().0 {
+            for (k, v) in s.iter_mut().enumerate() {
+                *v += f64::from(p[k]);
+            }
+        }
+        s
+    };
+    let (sa, sb) = (sum(a), sum(b));
+    std::array::from_fn(|k| 20.0 * (sa[k] / sb[k]).log10())
+}
+
+fn render_s8(scene: &str, out: &Path, extra: &[&str]) -> Value {
+    let mut a = vec![
+        "render",
+        scene,
+        "--out",
+        s(out),
+        "--width",
+        "96",
+        "--height",
+        "72",
+        "--samples",
+        "8",
+        "--max-depth",
+        "3",
+        "--seed",
+        "7",
+    ];
+    a.extend_from_slice(extra);
+    let (code, r) = json_run(&a);
+    assert_eq!(code, 0, "{r}");
+    r
+}
+
+#[test]
+fn s8_lookdev_area_light_camera_dof_material_and_aovs() {
+    let d = dir("s8");
+    let (scene, camera) = s8_scene(&d);
+    let out = d.join("s8-{pass}.png");
+    let r = render_s8(&scene, &out, &["--dof", "--aov", "all"]);
+    let files: Vec<String> = r["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f.as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(files.len(), 11, "beauty and ten passes: {files:?}");
+    let beauty = decode(&d.join("s8-beauty.png"));
+    let lit = lit_pixels(&beauty);
+    assert!(
+        lit > 500 && lit < 96 * 72,
+        "{lit} lit pixels: the camera frames the cube"
+    );
+    // not uniform: a shader tree with noise gives more than one colour
+    let first = beauty.data.as_chunks::<4>().0[0];
+    assert!(
+        beauty
+            .data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .any(|p| p[..3] != first[..3]),
+        "the beauty is a flat colour"
+    );
+
+    // Every pass decodes, and the data passes differ from the beauty.
+    for pass in [
+        "depth",
+        "normal",
+        "albedo",
+        "position",
+        "object_id",
+        "material_id",
+        "shadow",
+        "diffuse",
+        "specular",
+        "emission",
+    ] {
+        let img = decode(&d.join(format!("s8-{pass}.png")));
+        assert_eq!((img.width, img.height), (96, 72), "{pass}");
+        assert_eq!(img.data.len(), beauty.data.len(), "{pass}");
+        assert_ne!(
+            std::fs::read(d.join(format!("s8-{pass}.png"))).unwrap(),
+            std::fs::read(d.join("s8-beauty.png")).unwrap(),
+            "{pass} is not a copy of the beauty"
+        );
+    }
+    let non_black = |img: &forge_image::Image| {
+        img.data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|p| p[0] > 0.01 || p[1] > 0.01 || p[2] > 0.01)
+            .count()
+    };
+    assert!(non_black(&decode(&d.join("s8-depth.png"))) > 500);
+    let normal = decode(&d.join("s8-normal.png"));
+    assert!(
+        normal.data.iter().any(|v| v.abs() > 0.1),
+        "the normal pass has no direction"
+    );
+    assert!(non_black(&decode(&d.join("s8-albedo.png"))) > 500);
+    // Object and material ids: background 0 plus at least one geometry id.
+    for pass in ["object_id", "material_id"] {
+        let img = decode(&d.join(format!("s8-{pass}.png")));
+        let ids: std::collections::BTreeSet<u32> = img
+            .data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|p| (p[0] * 255.0).round() as u32)
+            .collect();
+        assert!(
+            ids.contains(&0) && ids.iter().any(|v| *v > 0),
+            "{pass} ids {ids:?}"
+        );
+    }
+
+    // Deterministic: the same scene, seed and settings render byte-identically.
+    let again_dir = d.join("again");
+    std::fs::create_dir_all(&again_dir).unwrap();
+    render_s8(
+        &scene,
+        &again_dir.join("s8-{pass}.png"),
+        &["--dof", "--aov", "all"],
+    );
+    for file in &files {
+        let name = Path::new(file).file_name().unwrap();
+        assert_eq!(
+            std::fs::read(d.join(name)).unwrap(),
+            std::fs::read(again_dir.join(name)).unwrap(),
+            "{} differs on the second run",
+            name.to_string_lossy()
+        );
+    }
+
+    // The thin lens is live: moving the focus to the near field changes the beauty.
+    cmd(
+        &scene,
+        "param.set",
+        json!({"node": camera, "param": "focus_distance", "value": 60.0}),
+    );
+    let focused = d.join("focused.png");
+    render_s8(&scene, &focused, &["--dof"]);
+    assert_ne!(
+        std::fs::read(&focused).unwrap(),
+        std::fs::read(d.join("s8-beauty.png")).unwrap(),
+        "the focus distance did not change the render"
+    );
+
+    // Cross-OS: compare with the checked-in reference (REGENERATE writes it).
+    let reference =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/acceptance/s8-reference.png");
+    if std::env::var_os("FORGE_S8_WRITE_REFERENCE").is_some() {
+        std::fs::copy(d.join("s8-beauty.png"), &reference).unwrap();
+    } else if reference.exists() {
+        let expected = decode(&reference);
+        let db = mean_db(&beauty, &expected);
+        for (k, db) in db.iter().enumerate() {
+            assert!(
+                db.abs() <= 1.0,
+                "channel {k} is {db:.3} dB from the reference (budget 1 dB)"
+            );
+        }
+        let p = psnr(&beauty, &expected);
+        assert!(p >= 30.0, "PSNR {p:.1} dB against the reference (min 30)");
+    }
+}
