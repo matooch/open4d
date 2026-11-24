@@ -2,6 +2,7 @@
 
 A native Rust reimplementation of a classic DCC application for Linux, macOS and Windows. See `CLAUDE.md` and
 `docs/` for the rules and specs; the full plan is `docs/roadmap/README.md`.
+**Progress (done, running, left, blocked): [`docs/PROGRESS.md`](docs/PROGRESS.md).**
 
 ## Automation
 

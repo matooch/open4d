@@ -1,5 +1,7 @@
 # Plan
 
+> **Progress at a glance (done, running, left, blocked): [PROGRESS.md](PROGRESS.md).**
+
 > **The full project plan now lives in [roadmap/README.md](roadmap/README.md)** (areas A–N,
 > decisions, waves, acceptance scenarios S1–S10) with every brief listed in
 > [roadmap/BACKLOG.md](roadmap/BACKLOG.md). Briefs 01–10 below are done; new work is
