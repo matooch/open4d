@@ -1,6 +1,6 @@
 # 134 · Material exchange mapping (glTF PBR to node material)
 
-Status: ready · Area: J · Depends on: 124, 164 · Observations: – · Touches: io, material
+Status: done · Area: J · Depends on: 124, 164 · Observations: – · Touches: io, material
 
 ## Goal
 Map glTF metallic-roughness materials to and from our materials.
@@ -12,8 +12,8 @@ Map glTF metallic-roughness materials to and from our materials.
 - Documented mapping table in MATERIAL.md.
 
 ## Done when
-- [ ] Round-trip test glTF → ours → glTF keeps parameters.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Round-trip test glTF → ours → glTF keeps parameters.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -22,10 +22,16 @@ Map glTF metallic-roughness materials to and from our materials.
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- glTF core materials import as hosted node graphs. GLB exports from evaluated
+  Surface inputs, preserving RGBA, fractional metallic/roughness, emission, alpha
+  mode/cutoff, sidedness and all five core texture slots with their scalar inputs.
+- The new round trip checks exact representable factors, shared embedded image
+  deduplication, PNG buffer views, an opaque external URI, and equal reopened graphs.
+  All existing glTF tests pass, including O44 geometry, material/UV and skin checks.
+- The native shader still approximates fractional metal with its existing flag;
+  alpha/sidedness, occlusion and packed maps are exchange-only. Additional UV sets,
+  sampler overrides and glTF material extensions are not supported.
+- Files: MATERIAL §M9, IO §5, material Surface values, glTF import/export,
+  embedded preview image loading, and `crates/app/tests/gltf_exchange.rs`.
+- Gate: `GATE: 2493 tests passed, 0 failed`; `GATE: all passed`.

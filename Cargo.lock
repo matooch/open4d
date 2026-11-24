@@ -1660,6 +1660,7 @@ version = "0.1.0"
 dependencies = [
  "forge-parity-harness",
  "glam 0.34.1",
+ "nalgebra-sparse",
  "thiserror 2.0.21",
 ]
 
@@ -1699,6 +1700,7 @@ dependencies = [
  "forge-core",
  "forge-generators",
  "forge-geometry",
+ "forge-nodes",
  "forge-parity-harness",
  "glam 0.34.1",
  "thiserror 2.0.21",
@@ -1753,13 +1755,11 @@ name = "forge-nodes"
 version = "0.1.0"
 dependencies = [
  "forge-app",
- "forge-command",
  "forge-core",
  "forge-noise",
  "forge-script",
  "glam 0.34.1",
  "rhai",
- "schemars",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
@@ -1947,14 +1947,20 @@ dependencies = [
  "forge-fields",
  "forge-generators",
  "forge-geometry",
+ "forge-image",
  "forge-io",
+ "forge-material",
  "forge-modeling",
  "forge-modifiers",
  "forge-nodes",
  "forge-platform",
+ "forge-render-api",
+ "forge-render-bridge",
+ "forge-render-cpu",
  "forge-rig",
  "forge-rpc",
  "forge-script",
+ "forge-shaders",
  "forge-viewport",
  "forge-volume",
  "glam 0.34.1",
@@ -1976,6 +1982,7 @@ dependencies = [
  "bytemuck",
  "criterion",
  "forge-geometry",
+ "forge-material",
  "forge-modeling",
  "glam 0.34.1",
  "png",
@@ -2801,6 +2808,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "nalgebra-sparse"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8935b578b6a012f3667131452add895472f37c242d2844497daf7c49f6b8059"
+dependencies = [
+ "nalgebra",
+ "num-traits",
 ]
 
 [[package]]

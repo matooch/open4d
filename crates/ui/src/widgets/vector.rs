@@ -17,20 +17,30 @@ pub fn show(ui: &mut egui::Ui, cx: &Cx, row: &AttrRow, unit: Unit) -> Option<Edi
     ui.horizontal(|ui| {
         for (k, axis) in ["X", "Y", "Z"].iter().enumerate() {
             let mut d = to_display(unit, v[k]);
+            let mut base = scrub::base_step(unit, false, row.step);
+            let suffix = unit_suffix(unit);
+            if unit == Unit::Distance {
+                d = cx.distance.to_display(d);
+                base = cx.distance.to_display(base);
+            }
             let (r, changed) = number::show(
                 ui,
                 &mut d,
                 &NumberField {
-                    base: scrub::base_step(unit, false, row.step),
+                    base,
                     prefix: format!("{axis} "),
-                    suffix: unit_suffix(unit),
+                    suffix,
                     mixed: row.mixed_axes[k],
                     label: cx.label,
                 },
             );
             if changed {
                 edit = Some(Edit {
-                    value: json!(d),
+                    value: json!(if unit == Unit::Distance {
+                        cx.distance.to_centimetres(d)
+                    } else {
+                        d
+                    }),
                     component: Some(k as u8),
                     target: None,
                     create: None,

@@ -254,9 +254,14 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `restriction_set` | Restrict Deformer. Undoable editing command. Runs command `restriction.set`. |
 | `user_data_add` | Add User Data. Undoable editing command. Runs command `user_data.add`. |
 | `material_create` | Create Material. Undoable editing command. Runs command `material.create`. |
+| `material_set_graph` | Edit Material Graph. Undoable editing command. Runs command `material.set_graph`. |
 | `material_delete` | Delete Material. Undoable editing command. Runs command `material.delete`. |
 | `material_assign` | Assign Material. Undoable editing command. Runs command `material.assign`. |
 | `shader_set` | Set Shader. Undoable editing command. Runs command `shader.set`. |
 | `uv_generate` | Generate UVW. Undoable editing command. Runs command `uv.generate`. |
+| `uv_relax` | Relax UVs. Undoable editing command. Runs command `uv.relax`. |
+| `uv_pack` | Pack UV Islands. Undoable editing command. Runs command `uv.pack`. |
+| `uv_seam` | Set UV Seam. Undoable editing command. Runs command `uv.seam`. |
+| `uv_transform` | Transform UVs. Undoable editing command. Runs command `uv.transform`. |
 | `cloner_bake` | Bake Clone Cache. Undoable editing command. Runs command `cloner.bake`. |
 | `plugin_list` | List Plugins. Not an undoable edit. Runs command `plugin.list`. |

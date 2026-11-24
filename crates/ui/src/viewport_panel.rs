@@ -20,6 +20,7 @@ use forge_viewport::gizmo::Gizmo;
 use forge_viewport::grid::grid_lines;
 use forge_viewport::instancing::InstanceInput;
 use forge_viewport::lod::lod_proxy;
+use forge_viewport::material_preview::PreviewMaterial;
 use forge_viewport::nav;
 use forge_viewport::panes::Pane;
 use forge_viewport::render::{
@@ -29,6 +30,7 @@ use forge_viewport::render::{
 use glam::DMat4;
 
 use crate::components::{EditMode, display_selection, stored_selection};
+use crate::material_preview::Binding;
 use crate::theme::Theme;
 
 /// What a held navigation key makes a primary drag do (UI.md §6.1).
@@ -199,6 +201,7 @@ pub enum GpuItem {
 pub struct GpuCache {
     pub meshes: RevisionCache<NodeId, Arc<MeshBuffers>>,
     pub instances: RevisionCache<NodeId, Arc<InstanceSet>>,
+    materials: RevisionCache<NodeId, Arc<PreviewMaterial>>,
 }
 
 /// Meshes with more triangles than this get a LOD proxy when proxies are on.
@@ -367,6 +370,7 @@ struct Slot<T> {
     out: Arc<schedule::NodeOutput>,
     selected: bool,
     smoothing: u64,
+    material: Option<u64>,
     /// Built as the component target (its buffers differ from a plain object's).
     target: bool,
     item: Option<T>,
@@ -440,10 +444,12 @@ impl<T: Clone> SlotCache<T> {
             let is_selected = selected.contains(id);
             let smoothing =
                 smoothing_bits(forge_core::smoothing::smoothing_angle(&frame.scene, *id));
+            let material = Binding::resolve(&frame.scene, *id).map(|b| b.revision(&frame.scene));
             let kept = slots.remove(id).filter(|s| {
                 Arc::ptr_eq(&s.out, out)
                     && s.selected == is_selected
                     && s.smoothing == smoothing
+                    && s.material == material
                     && !s.target
                     && !is_target(id)
             });
@@ -456,6 +462,7 @@ impl<T: Clone> SlotCache<T> {
                         out: out.clone(),
                         selected: is_selected,
                         smoothing,
+                        material,
                         target: is_target(id),
                         item,
                     }
@@ -503,7 +510,7 @@ fn smoothing_bits(s: Option<f64>) -> u64 {
 /// (docs/specs/VIEWPORT.md §10.2); entries of nodes that are no longer drawn are dropped.
 pub fn upload_items(
     cache: &mut GpuCache,
-    device: &wgpu::Device,
+    gpu: (&wgpu::Device, &wgpu::Queue),
     scene: &Scene,
     items: Vec<DrawItem>,
     component: Option<(NodeId, EditMode)>,
@@ -513,17 +520,18 @@ pub fn upload_items(
     let live: BTreeSet<NodeId> = items.iter().map(DrawItem::id).collect();
     let out = items
         .into_iter()
-        .map(|item| upload_item(cache, device, scene, item, component, palette, opts))
+        .map(|item| upload_item(cache, gpu, scene, item, component, palette, opts))
         .collect();
     cache.meshes.retain(|k| live.contains(k));
     cache.instances.retain(|k| live.contains(k));
+    cache.materials.retain(|k| scene.materials().contains(k));
     out
 }
 
 /// Uploads one item through the cache (no clean-up of other entries).
 pub fn upload_item(
     cache: &mut GpuCache,
-    device: &wgpu::Device,
+    (device, queue): (&wgpu::Device, &wgpu::Queue),
     scene: &Scene,
     item: DrawItem,
     component: Option<(NodeId, EditMode)>,
@@ -531,6 +539,15 @@ pub fn upload_item(
     opts: UploadSettings,
 ) -> GpuItem {
     let lod_flag = u64::from(opts.lod_proxies);
+    let binding = Binding::resolve(scene, item.id());
+    let material = binding.as_ref().map(|b| {
+        cache
+            .materials
+            .get_or_insert_with(b.material.id, b.material_revision(scene), || {
+                b.bake(device, queue, scene)
+            })
+    });
+    let preview = binding.as_ref().zip(material);
     match item {
         DrawItem::Mesh {
             id,
@@ -550,35 +567,64 @@ pub fn upload_item(
             // the colour is not part of the buffers: selecting an object uploads nothing
             let mut rev = combine(mesh_revision(&mesh), smoothing_bits(smoothing));
             rev = combine(rev, lod_flag);
+            if let Some((b, _)) = &preview {
+                rev = combine(rev, b.revision(scene));
+                // Projection lives in object space, not in the world-space vertex buffer.
+                if let Some(world) = scene.world_matrix(id) {
+                    for x in world.to_cols_array() {
+                        rev = combine(rev, x.to_bits());
+                    }
+                }
+            }
             if let Some((mode, sel)) = &shown {
                 rev = combine(combine(rev, *mode as u64 + 1), selection_revision(sel));
             }
             let buffers = cache.meshes.get_or_insert_with(id, rev, || {
-                Arc::new(match &shown {
-                    Some((mode, sel)) => {
-                        let build = if *mode == EditMode::Points {
-                            MeshBuffers::with_device
-                        } else {
-                            MeshBuffers::with_device_no_points
-                        };
-                        build(device, &mesh, sel, smoothing)
-                    }
-                    None => {
-                        let mut b = MeshBuffers::with_device_no_points(
-                            device,
-                            &mesh,
-                            &Selection::default(),
-                            smoothing,
-                        );
-                        if opts.lod_proxies && triangle_estimate(&mesh) > LOD_MIN_TRIS {
-                            b.set_lod(MeshBuffers::with_device_no_points(
+                Arc::new(if let Some((binding, material)) = preview {
+                    let mut world = scene.world_matrix(id).unwrap_or(DMat4::IDENTITY);
+                    world = if world.determinant().abs() > 1e-20 {
+                        world.inverse()
+                    } else {
+                        DMat4::IDENTITY
+                    };
+                    let uv = binding.coords(&mesh, world, true);
+                    let selection = Selection::default();
+                    MeshBuffers::with_preview(
+                        device,
+                        &mesh,
+                        shown.as_ref().map_or(&selection, |(_, s)| s),
+                        smoothing,
+                        target.is_some_and(|(_, m)| m == EditMode::Points),
+                        &uv,
+                        material,
+                    )
+                } else {
+                    match &shown {
+                        Some((mode, sel)) => {
+                            let build = if *mode == EditMode::Points {
+                                MeshBuffers::with_device
+                            } else {
+                                MeshBuffers::with_device_no_points
+                            };
+                            build(device, &mesh, sel, smoothing)
+                        }
+                        None => {
+                            let mut b = MeshBuffers::with_device_no_points(
                                 device,
-                                &lod_proxy(&mesh, LOD_CELLS),
+                                &mesh,
                                 &Selection::default(),
                                 smoothing,
-                            ));
+                            );
+                            if opts.lod_proxies && triangle_estimate(&mesh) > LOD_MIN_TRIS {
+                                b.set_lod(MeshBuffers::with_device_no_points(
+                                    device,
+                                    &lod_proxy(&mesh, LOD_CELLS),
+                                    &Selection::default(),
+                                    smoothing,
+                                ));
+                            }
+                            b
                         }
-                        b
                     }
                 })
             });
@@ -598,14 +644,33 @@ pub fn upload_item(
         } => {
             let input = instance_input(&instances);
             let protos: Vec<u64> = instances.prototypes.iter().map(mesh_revision).collect();
-            let rev = combine(
+            let mut rev = combine(
                 combine(
                     instances_revision(&protos, &input, &world),
                     smoothing_bits(smoothing),
                 ),
                 lod_flag,
             );
+            if let Some((b, _)) = &preview {
+                rev = combine(rev, b.revision(scene));
+            }
             let set = cache.instances.get_or_insert_with(id, rev, || {
+                if let Some((binding, material)) = preview {
+                    let uvs: Vec<_> = instances
+                        .prototypes
+                        .iter()
+                        .map(|p| binding.coords(p, DMat4::IDENTITY, false))
+                        .collect();
+                    return Arc::new(InstanceSet::with_preview(
+                        device,
+                        &instances.prototypes,
+                        smoothing,
+                        &input,
+                        &world,
+                        &uvs,
+                        material,
+                    ));
+                }
                 let mut set =
                     InstanceSet::new(device, &instances.prototypes, smoothing, &input, &world);
                 if opts.lod_proxies {
@@ -714,12 +779,23 @@ impl ViewportPanel {
             let cache = &mut self.cache;
             self.slots
                 .refresh(frame, selected, component, opts.lod_proxies, |item| {
-                    upload_item(cache, device, &frame.scene, item, component, &palette, opts)
+                    upload_item(
+                        cache,
+                        (device, &rs.queue),
+                        &frame.scene,
+                        item,
+                        component,
+                        &palette,
+                        opts,
+                    )
                 });
             if self.slots.rebuilt > 0 {
                 let live = self.slots.live();
                 self.cache.meshes.retain(|k| live.contains(k));
                 self.cache.instances.retain(|k| live.contains(k));
+                self.cache
+                    .materials
+                    .retain(|k| frame.scene.materials().contains(k));
             }
         }
         if !scheduled
@@ -731,7 +807,7 @@ impl ViewportPanel {
         {
             let items = upload_items(
                 &mut self.cache,
-                device,
+                (device, &rs.queue),
                 scene,
                 scene_draw_items_at(scene, selected, &ctx),
                 component,

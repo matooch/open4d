@@ -452,6 +452,17 @@ did not change, so a move with autokey on keys only Position.
 Values go through the parameter's range clamp first (`ParamDesc::validate`), like
 `set_param`.
 
+### 2.4a S7 CLI acceptance (brief 099)
+
+Source: [roadmap scenario S7](../roadmap/README.md) and
+[area G](../roadmap/areas/G-animation.md). Drive `forge new`, saved `forge cmd`
+edits, and `forge eval` exports, without opening the editor or a GPU. Key a cube's
+position at 0, 15 and 30; scale the key times by 2 about frame 0; edit the middle
+key's broken, weighted handles; ease only its outgoing segment via `key.set_speed`;
+then loop the track with `track.set_behavior`. Compare exported positions at the
+retimed keys, on both sides of the edit, and one period later. The test is native
+acceptance, not reference parity, and belongs to the existing three-OS CLI suite.
+
 ### 2.5 Keys, navigation, delete
 - Key frames of the selected nodes: the key times of all their tracks times `fps`, sorted,
   de-duplicated within `1e-6`.

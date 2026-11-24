@@ -126,13 +126,87 @@ sessions G6/G7 pending), so every rule here is **parity-pending**.
 - **UI.** The Materials panel (`Panel::Materials`, opened from the Window menu) lists
   `Scene::materials()` with the icon colour swatch and the name; New runs `material.create`, a row's
   Assign button runs `material.assign` for the selected objects, Delete runs `material.delete`.
-  Dragging a row onto an object, renaming in place, a shader tree view and a material preview are
-  not done (GUI sessions G6/G7 have no answers yet); edit parameters in the Attributes panel
-  through `param.set` / `shader.set`. Level C.
+  Edit parameters in the Attributes panel through `param.set` / `shader.set`.
+
+## M7 Material manager previews (brief 131)
+
+Sources: [area J](../roadmap/areas/J-materials.md), [G7 §§1–2](../parity/GUI-SESSIONS.md)
+and [RENDER §R1–R2](RENDER.md). No G7 answers are recorded; layout, lighting and drag
+interaction are native and **parity-pending**.
+
+- The Materials panel shows a wrapping card grid in document order. Its thumbnails are
+  deterministic 64×64, four-sample CPU path traces of a smooth UV sphere in a fixed
+  studio scene, using the compiled material and hosted shader tree. A single preview
+  renders at a time off the UI thread. The icon colour stands in until a thumbnail is
+  available; edits to the material or its linked shaders invalidate the thumbnail,
+  and late results for deleted or changed materials are not installed.
+- Drag a card's preview/name onto an Object Manager object row or a pickable viewport
+  object, not onto empty space. Treat a hit on a clone as its cloner. A drop runs one
+  `material.assign` command for that object only, with one undo step and no selection
+  change. Assign-to-selection and Delete remain available.
+- Tests exercise a real pointer drag and undo in `egui_kittest`, plus the CPU thumbnail's
+  size, repeatability and response to a material colour change.
+
+## M8 Node materials (brief 124)
+
+Sources: [area J](../roadmap/areas/J-materials.md), [G7 §3](../parity/GUI-SESSIONS.md)
+and [NODES](NODES.md) for typed graphs. The ports and interaction are native and
+**parity-pending G7**.
+
+`forge.material.node` is a hosted Material that can use an ordinary texture tag.
+Its `graph` parameter holds the forge-nodes JSON (stable IDs, positions and links).
+A new graph has one **Surface**. A dedicated registry allows Color, Scalar, Image
+Texture (path) and Mix Color; it has no expression nodes that can read or write scene
+parameters. Evaluate the inputs and lower them through the Standard compiler:
+
+| Surface input | Default | Standard IR mapping |
+|---|---|---|
+| `base_color` | `(0.8, 0.8, 0.8)` | `color.color` |
+| `base_texture` | empty | `color.texture`, multiplied by base colour |
+| `roughness` | `0.5` | `color.roughness`, clamped to `[0,1]` |
+| `metallic` | `0` | `reflectance.spec.attenuation`: metal at `>= 0.5`; graph keeps the number |
+| `normal_texture`, `normal_strength` | empty, `1` | tangent-space normal, enabled with a path |
+| `emission` | `(0,0,0)` | `luminance.color`, enabled when nonzero |
+
+Image Texture outputs its filename. Renderers use the same bitmap sampler as
+Standard's hosted shaders. Invalid graphs report an error in the editor; renderers
+may fall back to the default material. Equivalent Standard and node inputs must
+compile to equal IR.
+
+Create a Node Material from Materials and open it via **Nodes**, or select it in
+the Node Editor's Materials mode. Both modes use the same typed canvas. The sole
+Surface cannot be deleted. `material.set_graph` validates a replacement graph and
+records one undoable edit (continuous canvas gestures merge).
+The `graph.*` expression command handlers live in `forge-app`; `forge-nodes` is
+shared by both graph kinds without depending on the command/I/O layer.
+
+## M9 glTF metallic–roughness mapping (brief 134)
+
+Source: [glTF 2.0 core material model](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#materials)
+and [IO §5](IO.md). Import named materials as node materials; export the evaluated
+Surface inputs, not the renderer's approximation:
+
+| glTF field | Surface input |
+|---|---|
+| `baseColorFactor` RGBA | `base_color` RGB plus `alpha` |
+| `metallicFactor`, `roughnessFactor` | `metallic`, `roughness` |
+| `emissiveFactor` | `emission` |
+| `alphaMode`, `alphaCutoff`, `doubleSided` | `alpha_mode`, `alpha_cutoff`, `double_sided` |
+| `baseColorTexture`, `metallicRoughnessTexture` | `base_texture`, `metallic_roughness_texture` |
+| `normalTexture`, `scale` | `normal_texture`, `normal_strength` |
+| `occlusionTexture`, `strength` | `occlusion_texture`, `occlusion_strength` |
+| `emissiveTexture` | `emissive_texture` |
+
+Use glTF defaults on import. Paths/URIs stay verbatim; embed PNG/JPEG payloads from
+data URIs or GLB image buffer views in the exported GLB. Only TEXCOORD_0 is
+supported; reject other texture coordinate sets. Sampler overrides and extensions are
+not mapped. Standard export retains its colour and roughness mapping, and maps the
+metal flag to 0/1. The IR still has a binary metal flag; alpha mode, face sidedness,
+occlusion and the packed metallic/roughness map are retained for exchange, not
+reproduced by native shading. Numeric round trips use glTF's `f32` precision.
 
 ## M5 Unsupported / parity-pending
 
-- No node materials (brief 124), no
-  Layer Setup (a list of reflectance layers: only the default layer is modelled).
+- No Layer Setup (reflectance layers: only the default layer is modelled).
 - O43 render parity: not tested (level C needs a renderer); the IR is checked structurally.
 - All IR shading rules are **parity-pending**: they follow the published models.

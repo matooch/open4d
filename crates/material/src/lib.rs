@@ -3,6 +3,7 @@
 
 pub mod ir;
 pub mod material;
+pub mod node_material;
 pub mod params;
 pub mod projection;
 

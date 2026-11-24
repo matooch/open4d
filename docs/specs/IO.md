@@ -319,8 +319,9 @@ Sources: [glTF 2.0 specification](https://registry.khronos.org/glTF/specs/2.0/gl
 and [O44](../parity/exchange.md). `forge_io::gltf` parses GLB or self-contained glTF
 into an `ImportScene` before applying any edits. Write binary GLB and keep node
 hierarchy, per-corner UVs, base colour and roughness, TRS animation, and linear skins.
-Camera, light, texture and morph exchange is outside this brief; reject morph targets
-explicitly. External resources are not fetched by the byte reader.
+Camera, light and morph exchange is outside this brief; reject morph targets
+explicitly. Brief 134 maps glTF core materials and images to node materials
+(see [MATERIAL §M9](MATERIAL.md)); external resources are not fetched by the byte reader.
 Use `file.import`/`file.export` or `forge convert` with format `gltf`. Import accepts
 `.glb` and `.gltf`, export writes `.glb`; both expose a positive `scale` option.
 

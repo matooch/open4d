@@ -9,6 +9,7 @@ pub mod coords;
 pub mod diagnostics;
 pub mod dynamics;
 mod dynamics_commands;
+mod graph_commands;
 pub mod material_commands;
 pub mod motion;
 pub mod motion_tags;
@@ -20,6 +21,7 @@ pub mod schedule;
 pub mod select;
 pub mod tag_commands;
 pub mod user_data_commands;
+pub mod uv_commands;
 pub mod weight_commands;
 
 use std::sync::Arc;
@@ -67,12 +69,13 @@ pub fn default_command_registry() -> CommandRegistry {
     parameter_keys::register(&mut commands).expect("parameter key command is unique");
     dynamics_commands::register(&mut commands).expect("dynamics commands are unique");
     coords::register(&mut commands).expect("transform.edit is unique");
-    forge_nodes::register_commands(&mut commands).expect("graph.* ids are unique");
+    graph_commands::register_commands(&mut commands).expect("graph.* ids are unique");
     rig_commands::register(&mut commands).expect("joint.* ids are unique");
     weight_commands::register(&mut commands).expect("weights.* ids are unique");
     tag_commands::register(&mut commands).expect("tag command ids are unique");
     user_data_commands::register(&mut commands).expect("user_data command ids are unique");
     material_commands::register(&mut commands).expect("material command ids are unique");
+    uv_commands::register(&mut commands).expect("UV editor command ids are unique");
     clone_commands::register(&mut commands).expect("clone command ids are unique");
     commands
 }

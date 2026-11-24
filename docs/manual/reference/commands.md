@@ -2,7 +2,7 @@
 
 # Command reference
 
-201 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+206 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -201,10 +201,15 @@
 | [`restriction.set`](#restrictionset) | Restrict Deformer | yes | `restriction_set` |
 | [`user_data.add`](#user_dataadd) | Add User Data | yes | `user_data_add` |
 | [`material.create`](#materialcreate) | Create Material | yes | `material_create` |
+| [`material.set_graph`](#materialset_graph) | Edit Material Graph | yes | `material_set_graph` |
 | [`material.delete`](#materialdelete) | Delete Material | yes | `material_delete` |
 | [`material.assign`](#materialassign) | Assign Material | yes | `material_assign` |
 | [`shader.set`](#shaderset) | Set Shader | yes | `shader_set` |
 | [`uv.generate`](#uvgenerate) | Generate UVW | yes | `uv_generate` |
+| [`uv.relax`](#uvrelax) | Relax UVs | yes | `uv_relax` |
+| [`uv.pack`](#uvpack) | Pack UV Islands | yes | `uv_pack` |
+| [`uv.seam`](#uvseam) | Set UV Seam | yes | `uv_seam` |
+| [`uv.transform`](#uvtransform) | Transform UVs | yes | `uv_transform` |
 | [`cloner.bake`](#clonerbake) | Bake Clone Cache | yes | `cloner_bake` |
 | [`plugin.list`](#pluginlist) | List Plugins | no | `plugin_list` |
 
@@ -2538,6 +2543,18 @@ Create Material. One undo step.
 
 Example: `forge cmd scene.forge material.create --args '{}'`
 
+### `material.set_graph`
+
+Edit Material Graph. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `material` | integer | yes |  |
+| `graph` | string | yes | Serialized forge-nodes material graph. |
+| `gesture` | integer or null | no | Merge repeated edits in one continuous canvas gesture. |
+
+Example: `forge cmd scene.forge material.set_graph --args '{"graph":"{\"next_id\":2,\"nodes\":[{\"id\":1,\"type_id\":\"material.surface\",\"values\":{}}],\"links\":[]}","material":1}'`
+
 ### `material.delete`
 
 Delete Material. One undo step.
@@ -2591,6 +2608,54 @@ Generate UVW. One undo step.
 | `tag` | integer or null | no | A texture tag of the object (default: its first). |
 
 Example: `forge cmd scene.forge uv.generate --args '{}'`
+
+### `uv.relax`
+
+Relax UVs. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `object` | integer or null | no |  |
+
+Example: `forge cmd scene.forge uv.relax --args '{}'`
+
+### `uv.pack`
+
+Pack UV Islands. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `object` | integer or null | no |  |
+| `padding` | number or null | no | Padding on each side of an island, in UV units (default 0.01). |
+
+Example: `forge cmd scene.forge uv.pack --args '{}'`
+
+### `uv.seam`
+
+Set UV Seam. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `edge` | integer | yes |  |
+| `marked` | boolean | yes |  |
+| `object` | integer or null | no |  |
+
+Example: `forge cmd scene.forge uv.seam --args '{"edge":0,"marked":true}'`
+
+### `uv.transform`
+
+Transform UVs. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `corners` | array of integer | yes | Flattened corner indices (polygon order, then corner order). |
+| `object` | integer or null | no |  |
+| `offset` | array of number (length 2) or null | no |  |
+| `pivot` | array of number (length 2) or null | no | Centre of scale/rotation (default: arithmetic centre of selected corners). |
+| `rotation_deg` | number or null | no |  |
+| `scale` | array of number (length 2) or null | no |  |
+
+Example: `forge cmd scene.forge uv.transform --args '{"corners":[0],"offset":[0.1,0.0]}'`
 
 
 ## `cloner`

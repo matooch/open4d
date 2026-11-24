@@ -605,6 +605,7 @@ pub fn texture_tag_type() -> NodeType {
 pub fn uvw_tag_type() -> NodeType {
     NodeType::new(UVW_TAG, "UVW", Category::Tag)
         .param(ParamDesc::float_list("uvw", "UVW").range(-1e12, 1e12))
+        .param(ParamDesc::index_list("seams", "UV Seams").hidden())
 }
 
 /// Registers the material node types.
@@ -617,6 +618,7 @@ impl Plugin for MaterialPlugin {
     fn register(&self, registry: &mut Registry) -> Result<(), RegistryError> {
         registry.register(standard_type())?;
         registry.register(texture_tag_type())?;
-        registry.register(uvw_tag_type())
+        registry.register(uvw_tag_type())?;
+        registry.register(crate::node_material::node_material_type())
     }
 }

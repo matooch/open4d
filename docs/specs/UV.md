@@ -120,3 +120,26 @@ Level C command around the U4 maths (own design, parity-pending except the proje
   cases and compares per corner with the golden `mesh.obj` (the same 6 exact cases within 1e-5 and
   `proj-frontal` pinned as known mismatch with the same bounds as U4). It also checks that the command
   writes one tag, reuses it and records no step when the result is unchanged.
+
+## U7 UV editor (brief 129)
+
+Sources: [area J](../roadmap/areas/J-materials.md), [G7 §4](../parity/GUI-SESSIONS.md),
+and Lévy et al., *Least Squares Conformal Maps for Automatic Texture Atlas Generation*
+(SIGGRAPH 2002). The editor and its layout are native and **parity-pending G7**.
+
+- The UV workspace opens a UV Editor tab for the active polygon mesh. Display its
+  corners and edges against the unit tile; select welded UV vertices, move via
+  drag, or scale/rotate about the selection centre. Commands use stable flattened
+  corner indices; each gesture is a single undo step.
+- The UVW tag stores `seams` as `PolyMesh::edges()` indices. Seam mode toggles an
+  edge and highlights it. Charts split at explicit seams, mesh boundaries,
+  non-manifold edges and pre-existing per-edge UV discontinuities. A mesh with
+  no stored UVs uses cubic coordinates for display but not for detecting splits.
+- Relax triangulates each chart, pins two distant boundary vertices and solves
+  area-weighted Cauchy–Riemann equations by sparse least squares. Closed charts
+  need a cut; reject degenerate or nonconvergent charts without changing the scene.
+- Pack keeps chart orientation and relative scale, places padded bounding rectangles
+  on a lowest-fit skyline, and fits them into `[0,1]²`. No chart bounds overlap.
+- `uv.transform`, `uv.seam`, `uv.relax` and `uv.pack` edit the first UVW tag (create
+  if necessary). Application and geometry tests check undo, a cut cylinder's
+  near-isometry and non-overlapping rectangular packing.

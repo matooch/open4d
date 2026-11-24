@@ -7,6 +7,7 @@ use base64::Engine;
 use forge_core::transform::{POS, ROT, SCALE, Transform, hpb_from_rotation};
 use forge_core::{EditError, Interp, Key, NodeId, Track, Tx, Value};
 use forge_geometry::{CornerUvs, PolyMesh};
+use forge_material::node_material::{GRAPH, NODE_MATERIAL, SurfaceValues};
 use forge_rig::weights::{WeightMap, matrix_to_entries};
 use glam::{DMat3, DMat4, DQuat, DVec3};
 use gltf::animation::{Interpolation, util::ReadOutputs};
@@ -45,8 +46,7 @@ struct Node {
 
 struct Material {
     name: String,
-    color: [f64; 3],
-    roughness: f64,
+    graph: String,
 }
 
 struct Skin {
@@ -183,6 +183,97 @@ fn read_buffers(file: &gltf::Gltf) -> Result<Vec<Vec<u8>>, Error> {
         .collect()
 }
 
+/// Decode an embedded core glTF image. Non-data URIs are left to the caller.
+pub fn decode_embedded_image(uri: &str) -> Result<Option<(&str, Vec<u8>)>, Error> {
+    let Some(data) = uri.strip_prefix("data:") else {
+        return Ok(None);
+    };
+    let (mime, data) = data
+        .split_once(";base64,")
+        .ok_or_else(|| invalid("invalid image data URI"))?;
+    if !matches!(mime, "image/png" | "image/jpeg") {
+        return Err(Error::Unsupported("embedded image MIME type"));
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|e| invalid(e.to_string()))?;
+    Ok(Some((mime, bytes)))
+}
+
+fn texture_source(
+    texture: gltf::Texture<'_>,
+    coords: u32,
+    buffers: &[Vec<u8>],
+) -> Result<String, Error> {
+    if coords != 0 {
+        return Err(Error::Unsupported("material texture using a second UV set"));
+    }
+    match texture.source().source() {
+        gltf::image::Source::Uri { uri, .. } => Ok(uri.to_owned()),
+        gltf::image::Source::View { view, mime_type } => {
+            if !matches!(mime_type, "image/png" | "image/jpeg") {
+                return Err(Error::Unsupported("embedded image MIME type"));
+            }
+            let bytes = view
+                .offset()
+                .checked_add(view.length())
+                .and_then(|end| buffers.get(view.buffer().index())?.get(view.offset()..end))
+                .ok_or_else(|| invalid("image buffer view outside buffer"))?;
+            let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+            Ok(format!("data:{mime_type};base64,{encoded}"))
+        }
+    }
+}
+
+fn read_material(mat: gltf::Material<'_>, buffers: &[Vec<u8>]) -> Result<Material, Error> {
+    use gltf::material::AlphaMode;
+    let pbr = mat.pbr_metallic_roughness();
+    let [r, g, b, alpha] = pbr.base_color_factor().map(f64::from);
+    let info = |info: Option<gltf::texture::Info<'_>>| {
+        info.map_or_else(
+            || Ok(String::new()),
+            |t| texture_source(t.texture(), t.tex_coord(), buffers),
+        )
+    };
+    let normal = mat.normal_texture();
+    let occlusion = mat.occlusion_texture();
+    let surface = SurfaceValues {
+        base_color: [r, g, b],
+        alpha,
+        metallic: f64::from(pbr.metallic_factor()),
+        roughness: f64::from(pbr.roughness_factor()),
+        emission: mat.emissive_factor().map(f64::from),
+        alpha_mode: match mat.alpha_mode() {
+            AlphaMode::Opaque => "OPAQUE",
+            AlphaMode::Mask => "MASK",
+            AlphaMode::Blend => "BLEND",
+        }
+        .into(),
+        alpha_cutoff: f64::from(mat.alpha_cutoff().unwrap_or(0.5)),
+        double_sided: mat.double_sided(),
+        base_texture: info(pbr.base_color_texture())?,
+        metallic_roughness_texture: info(pbr.metallic_roughness_texture())?,
+        normal_texture: normal
+            .as_ref()
+            .map(|t| texture_source(t.texture(), t.tex_coord(), buffers))
+            .transpose()?
+            .unwrap_or_default(),
+        normal_strength: normal.as_ref().map_or(1.0, |t| f64::from(t.scale())),
+        occlusion_texture: occlusion
+            .as_ref()
+            .map(|t| texture_source(t.texture(), t.tex_coord(), buffers))
+            .transpose()?
+            .unwrap_or_default(),
+        occlusion_strength: occlusion.as_ref().map_or(1.0, |t| f64::from(t.strength())),
+        emissive_texture: info(mat.emissive_texture())?,
+    };
+    let graph = surface.to_graph().map_err(|e| invalid(e.to_string()))?;
+    Ok(Material {
+        name: mat.name().unwrap_or("Material").into(),
+        graph: graph.to_json(),
+    })
+}
+
 fn read_animation(
     file: &gltf::Gltf,
     nodes: &mut [Node],
@@ -255,16 +346,8 @@ pub fn read(bytes: &[u8], scale: f64) -> Result<ImportScene, Error> {
         .collect();
     let materials = file
         .materials()
-        .map(|mat| {
-            let pbr = mat.pbr_metallic_roughness();
-            let [r, g, b, _] = pbr.base_color_factor().map(f64::from);
-            Material {
-                name: mat.name().unwrap_or("Material").into(),
-                color: [r, g, b],
-                roughness: f64::from(pbr.roughness_factor()),
-            }
-        })
-        .collect();
+        .map(|mat| read_material(mat, &buffers))
+        .collect::<Result<_, _>>()?;
     let skins = file
         .skins()
         .map(|s| -> Result<Skin, Error> {
@@ -338,10 +421,9 @@ impl ImportScene {
             .materials
             .iter()
             .map(|m| {
-                let id = tx.create_material(forge_material::MATERIAL, None)?;
+                let id = tx.create_material(NODE_MATERIAL, None)?;
                 tx.rename(id, &m.name)?;
-                tx.set_param(id, "color.color", Value::Color(m.color))?;
-                tx.set_param(id, "color.roughness", Value::Float(m.roughness))?;
+                tx.set_param(id, GRAPH, Value::String(m.graph.clone()))?;
                 Ok(id)
             })
             .collect::<Result<Vec<_>, EditError>>()?;
@@ -405,6 +487,9 @@ impl ImportScene {
                 if let Some(m) = p.material {
                     let tag = tx.attach_tag(forge_material::TEXTURE_TAG, mesh, None)?;
                     tx.set_param(tag, "material", Value::Link(Some(mats[m])))?;
+                    if p.uv.is_some() {
+                        tx.set_param(tag, "projection", Value::Enum("uvw".into()))?;
+                    }
                 }
                 if let Some(s) = n.skin {
                     meshes.push((mesh, s, &p.weights));

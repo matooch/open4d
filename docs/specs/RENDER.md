@@ -298,6 +298,23 @@ Findings:
   objects the forms describe, so the lighting model is **parity-pending** until the default light
   and the light units are observed.
 
+### R14a Render parity inventory (brief 145)
+
+Sources: [O30](../parity/render-reference.md), [O43](../parity/material-renders.md)
+and [O57](../parity/camera.md). The CPU render tests share one measurement path
+for exposure-normalised PSNR and the existing silhouette rules. A case's explicit
+`[tolerance].psnr` is its minimum PSNR in dB; a missing setting is diagnostic only
+(none of these captures records a PSNR floor). Do not use the mesh manifest's default
+PSNR as if it were an observed limit.
+
+All 23 `render` and 8 `camera` archives are rendered and measured. The silhouette
+gates remain zero disagreements beyond one pixel, or the one-sided coverage and
+bounding-box check for O57 calibration frames. Compared at these gates: 17 render
+cases and 7 camera cases pass. The existing `area-soft`, `area-soft-2`,
+`mat-checker-uv`, `mat-checker-cubic`, `checker-plane` and `ortho-zoom-2` pins
+remain; `mat-metal` reports tone only because the reflection does not bound the
+object. Unavailable captures stay separately listed and are not counted as passes.
+
 ## R15 Camera parity with O57 and the thin lens (brief 138)
 
 Source: `tests/golden/camera` (4 observed cases of 320 x 240, `render.png` + `mesh.obj`),
@@ -394,6 +411,49 @@ shows 1 (furnace); **a sphere under a dim sky image with a small sun 330 times b
 Not done: importance sampling by the BSDF at the same time as the image (the MIS pairing is
 there, but the BSDF lobe is not importance sampled against the environment), an HDRI mip chain for
 filtered background display, sun/sky models other than the gradient of `forge.sky`.
+
+## R17 Picture Viewer and render queue (brief 140)
+
+Sources: [area K](../roadmap/areas/K-rendering.md), [G8 §3](../parity/GUI-SESSIONS.md)
+and the existing R4 render control. GUI behaviour is native and **parity-pending**
+until G8 is recorded.
+
+- Open **Picture Viewer** from the Window menu. Queue the current frame, capturing
+  the scene and render settings at submission. One background worker at a time evaluates
+  the captured frame, builds the render snapshot (including scene cameras, lights and
+  supported materials), and runs the CPU engine. Progress callbacks wake the UI.
+  Jobs run FIFO; removing a waiting job or cancelling the active job adds no history.
+  Render failures are shown without stopping later jobs.
+- Completed frames appear newest-first in bounded session history. Selecting a row shows
+  its beauty; **Set A** and **Set B** pin the selected row. **Show A/B** switches between
+  pinned renders without rerendering and keeps the same channel where available. Data
+  passes use display mappings; **Exposure** adjusts colour passes only. **Save PNG**
+  saves the displayed RGB view, not a replacement for the CLI's raw EXR/multipass export.
+- Capture beauty by default; an opt-in **All passes** checkbox captures every AOV.
+  Limit the queue and history to eight entries each, with a 128 MiB linear image
+  budget and a maximum edge of 4096 pixels for an individual render. The viewer is
+  for stills; CLI sequence rendering is unchanged.
+- Tests: real queued CPU renders appear in egui history; select the two renders,
+  pin/switch A and B, and exercise channel selection without remaking the render.
+
+## R18 Interactive render preview (brief 141)
+
+Sources: [area K](../roadmap/areas/K-rendering.md), R4 tile/cancel control and the
+brief's snapshot-invalidation requirement. This is a native preview, not reference parity.
+
+- **Interactive Render** is a viewport-area dock tab. While shown, it renders the
+  current evaluated frame, using the same materials, camera and lights as R17.
+  Cap the longest edge at 512 px, samples at 16 and tiles at 16 px to keep the
+  preview responsive. It does not add to Picture Viewer history.
+- The document identity, revision and timeline frame identify the submitted scene snapshot.
+  A changed key clears accumulation and cancels the old generation; coalesce edits
+  into a single desired snapshot and start it when the previous worker exits.
+  Only the current generation may display tiles. Hidden tabs cancel their render;
+  Stop/Start pauses and resumes without changing the scene or history.
+- Render and evaluate off the UI thread. Blit finished tiles onto a bounded preview
+  buffer and wake the UI, then show the engine's final output on success. The
+  restart-latency test uses an injected engine to measure cancellation and start
+  of the new render within 100 ms of a parameter edit, independent of CPU shading cost.
 
 ## R13 Not done / follow-ups
 

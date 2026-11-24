@@ -1,6 +1,6 @@
 # 124 · Node material graph + node editor UI
 
-Status: ready · Area: J · Depends on: 123, 109 · Observations: G7 · Touches: material, ui
+Status: done (parity-pending: G7) · Area: J · Depends on: 123, 109 · Observations: G7 · Touches: material, ui
 
 ## Goal
 Node-based materials using forge-nodes and the shared canvas.
@@ -14,8 +14,8 @@ Node-based materials using forge-nodes and the shared canvas.
 - Node material compiles to the same IR.
 
 ## Done when
-- [ ] A node material and an equivalent Standard material compile to equal IR.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] A node material and an equivalent Standard material compile to equal IR.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -24,10 +24,15 @@ Node-based materials using forge-nodes and the shared canvas.
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+## Report
+- Hosted node materials use the shared typed graph and canvas with a dedicated pure
+  material registry. Surface values lower through the Standard compiler; the test
+  compares exact IR with linked colour, roughness, texture, metal, normal and emission.
+- Validated graph replacement is undoable and survives save/open and assignment.
+  The egui test adds a Scalar from the canvas menu, wires it to roughness and undoes
+  the connection. Viewport, thumbnails and still/IPR share hosted compilation.
+- Expression `graph.*` command handlers moved to `forge-app` (same contract) so
+  material and I/O can depend on the forge-nodes graph kernel without a dependency cycle.
+- G7 §3 layout and interactions remain unobserved. The native surface subset
+  uses the existing binary metal flag and does not claim reference UI parity.
+- Gate: `GATE: 2492 tests passed, 0 failed`; `GATE: all passed`.
