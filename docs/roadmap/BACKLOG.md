@@ -37,7 +37,7 @@ implementers can avoid collisions.
 | 037 | [Spline primitives II](../agents/tasks/037-spline-primitives-2.md) | C | 038 | done | generators |
 | 038 | [Intermediate Points modes and R25 per-spline defaults](../agents/tasks/038-intermediate-points.md) | C | – | done | generators, geometry |
 | 039 | [Text spline (fonts)](../agents/tasks/039-text-spline.md) | C | 038 | done (9/9 O48 cases on font-independent invariants; glyph shapes parity-pending until a re-observation with a licensed font) | generators, text (new) |
-| 040 | [Metaball generator](../agents/tasks/040-metaball.md) | C | 083 | ready | generators, volume |
+| 040 | [Metaball generator](../agents/tasks/040-metaball.md) | C | 083 | done | generators, volume |
 | 041 | [Atom Array and Spline Mask](../agents/tasks/041-atom-array-spline-mask.md) | C | 029 | done (4/4 O20 cases; other mask modes, axes, oblique atom edges parity-pending) | generators |
 | 042 | [Sweep rail/banking/scale, Loft linear/multi, Lathe partial/movement, cap fixes](../agents/tasks/042-sweep-loft-lathe-r25.md) | C | – | done (Lathe done; Loft/Sweep R25 cases parity-pending: R20/R25 conflict, helix route) | generators |
 | 043 | [Boole R25 modes and numbering, Subdivision types, Symmetry planes](../agents/tasks/043-boole-subdivision-symmetry-r25.md) | C | – | done (Boole R25 strict numbering parity-pending) | generators, geometry |
@@ -143,7 +143,7 @@ implementers can avoid collisions.
 | 143 | [Viewport upgrades: lights, shadows, AA, display modes, 4-view layout](../agents/tasks/143-viewport-upgrades.md) | K | – | done (parity-pending G8) | viewport |
 | 144 | [Viewport performance: GPU instancing, LOD, large meshes](../agents/tasks/144-viewport-performance.md) | K | 143 | done (instancing, upload cache, chunked upload, culling, LOD hook; benchmarks in VIEWPORT.md §10.10) | viewport |
 | 145 | [Render parity tests against O30/O43/O57](../agents/tasks/145-render-parity-tests.md) | K | 137, 138 | done (parity-pending: existing silhouette and lighting gaps) | tests |
-| 146 | [S8 acceptance test and rendering docs](../agents/tasks/146-s8-rendering-acceptance.md) | K | 139, 145 | ready | tests, docs |
+| 146 | [S8 acceptance test and rendering docs](../agents/tasks/146-s8-rendering-acceptance.md) | K | 139, 145 | done | tests, docs |
 | 147 | [Familiar default layout: command bar, tool palette, manager arrangement](../agents/tasks/147-default-layout.md) | L | 011 | done (parity-pending G1) | ui |
 | 148 | [Icon set and icon atlas](../agents/tasks/148-icon-set.md) | L | 147 | done (parity-pending G1; icons not yet drawn in the layout buttons) | ui |
 | 149 | [Object manager parity: columns, dots, tags, drag/drop, search, context menus](../agents/tasks/149-object-manager.md) | L | 147 | done (parity-pending G1; follow-up: render bridge honours render visibility, layer colours) | ui |
@@ -162,8 +162,8 @@ implementers can avoid collisions.
 | 162 | [S3 acceptance test and UI docs](../agents/tasks/162-s3-ui-acceptance.md) | L | 147–153 | done (parity-pending G1/G2/G4) | tests, docs |
 | 163 | [Native format: migrations, binary encoding, external references](../agents/tasks/163-native-format.md) | M | – | done (format version 6; follow-up: a file-path param on the first texture/cache node, compression wrapper) | core, io |
 | 164 | [glTF import/export (meshes, hierarchy, materials, animation, skins, morphs)](../agents/tasks/164-gltf.md) | M | 088, 101, 107 | done | io |
-| 165 | [FBX import (ufbx)](../agents/tasks/165-fbx-import.md) | M | 088, 101 | ready | io |
-| 166 | [FBX export (ASCII 7.4)](../agents/tasks/166-fbx-export.md) | M | 165 | ready | io |
+| 165 | [FBX import (ufbx)](../agents/tasks/165-fbx-import.md) | M | 088, 101 | done | io |
+| 166 | [FBX export (ASCII 7.4)](../agents/tasks/166-fbx-export.md) | M | 165 | done (parity-pending: no reference ASCII FBX; validated by re-import) | io |
 | 167 | [Alembic (Ogawa) import/export](../agents/tasks/167-alembic.md) | M | 088 | done | io |
 | 168 | [USD .usda import/export](../agents/tasks/168-usd.md) | M | 123 | done (parity-pending: no reference USD) | io |
 | 169 | [STL and PLY](../agents/tasks/169-stl-ply.md) | M | – | done (parity-pending: PLY not observed) | io |

@@ -3,6 +3,7 @@
 
 pub mod boolean;
 pub mod halfedge;
+pub mod isosurface;
 pub mod mesh;
 pub mod normals;
 pub mod selection;

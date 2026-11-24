@@ -170,7 +170,7 @@ Items: **New**, **Open...**, **Save**, **Save As...**, separator, **Import OBJ..
 **Export frame (all formats).** `file.export`, `forge export` and `forge convert` export the scene
 **evaluated at the export frame** (the current frame in the editor, `--frame` on the CLI):
 generators and deformers are baked at that frame. For the animation-preserving formats (glTF,
-USD, Alembic) the evaluated scene still carries its tracks, so node transform animation is
+USD, Alembic, FBX) the evaluated scene still carries its tracks, so node transform animation is
 written as well; deformation is not animated (glTF has no deformers). Fixed after S1 showed a
 GLB with the bend at its stored value instead of frame 30.
 
@@ -182,8 +182,8 @@ The options themselves are the ones §1 already defines. Every action is a regis
 
 ### 3.1 Format table (`forge_io::formats`)
 `FormatInfo { id, label, extensions, import, export }`. `formats()` lists them in a fixed
-order: `obj`, "Wavefront OBJ", extensions `["obj"]`; `stl` and `ply` (§4);
-`gltf` (§5); and `abc` (§6). All import and export.
+order: `obj`, "Wavefront OBJ", extensions `["obj"]`; `stl` and `ply` (§4); `gltf` (§5); `usda` (§6);
+`fbx` (§8; extension `fbx`); and `abc` (§7). All import and export.
 `format_for_path(path)` matches the extension case-insensitively; `format_by_id(id)` matches
 the id exactly (lower case). New formats (area M briefs 164 to 171) add one entry, one pair of
 option lists and one reader/writer arm each.
@@ -201,6 +201,8 @@ id gives `None`.
 | stl, ply | import | `scale` | Scale | float | 1.0 | multiplier of every coordinate (§4) |
 | stl, ply | export | `binary` | Binary | bool | true | binary or ASCII file (§4) |
 | stl, ply | export | `scale` | Scale | float | 1.0 | multiplier of every coordinate (§4) |
+| fbx | import | `scale` | Scale | float | 1.0 | multiplier on top of the file's unit, which is converted to centimetres (§8.2) |
+| fbx | export | `scale` | Scale | float | 1.0 | file units per centimetre, declared as the file's unit (§8.8) |
 
 The defaults are the `Default` values of `ReadOptions` and `WriteOptions` (a test pins this).
 
@@ -402,3 +404,231 @@ Use `file.import` / `file.export` or `forge convert` with format `abc`.
   or selected roots and their descendants; a detached root bakes its world
   transform. Deterministically write standard Xform and PolyMesh properties and
   native Ogawa blocks; reject topology changes instead of discarding later faces.
+
+## 8. FBX (`forge_io::fbx`, briefs 165 and 166)
+
+Sources: the public ufbx documentation and header ([ufbx.github.io](https://ufbx.github.io/),
+MIT or public domain, used through the `ufbx` crate, no vendored copy), the public
+descriptions of the FBX file structure (the node/property layout, the `Lcl Translation`,
+`Lcl Rotation`, `Lcl Scaling`, `PreRotation`/`PostRotation` and `Pivot` properties, the
+`Deformer`/`SubDeformer` skin clusters and the `LayerElement` mapping modes), and
+[O44](../parity/exchange.md): `tests/golden/exchange/*/scene.fbx` (binary FBX 7.7 written
+by the reference exporter, 6 cases) with the scene each `case.toml` records and the
+`mesh.obj` of the same scene as the geometry truth. Use `file.import` or `forge convert`
+with format `fbx` (extension `.fbx`). Brief 165 is the import (§8.1 to §8.7); the ASCII
+writer of brief 166 is §8.8.
+
+### 8.1 Pipeline and options
+`forge_io::fbx::read(bytes, scale) -> Result<ImportScene, Error>` parses binary or ASCII
+FBX (any version ufbx reads) into an engine-neutral `ImportScene` (nodes, meshes,
+materials, skins, tracks). `ImportScene::apply(tx)` installs it as one transaction and
+returns the new roots, like the glTF, USD and Alembic importers. `ImportScene::warnings()`
+lists the content that was skipped (§8.6). The only import option is `scale` (float,
+default 1, range 1e-9 to 1e9): a multiplier applied after the unit conversion of §8.2.
+The unit and the axes are converted by our own change of basis (§8.2), not by ufbx, so the
+same rule covers nodes, geometry, animation and skin bind matrices. ufbx is asked for
+`geometry_transform_handling = ModifyGeometry`, `pivot_handling = AdjustToPivot` and
+`inherit_mode_handling = Compensate`, so that every node is a plain translate, rotate,
+scale node with normal inheritance, and pivots and geometric transforms are baked into the
+vertices. The first animation stack is used. Files above 128 MiB are rejected.
+
+### 8.2 Unit and axis rule (observed)
+- **Units.** The file's own unit (`UnitScaleFactor`, centimetres when 1) is converted to
+  our centimetres: coordinates are multiplied by `file metres per unit / 0.01 * scale`
+  (`k`). *Observed:* all six O44 files declare 0.01 m per unit, and `static-mesh` has the
+  same cube corners (+-100) as its OBJ.
+- **Axes.** FBX has no fixed axes: the header names them (`settings.axes`: right, up and
+  front; a file without them is right-handed Y-up). The change of basis is
+  `C = k S P`: `P` the signed permutation that takes the file's right, up and front axes to
+  +X, +Y and +Z, `S = diag(1, 1, -1)` the Z reflection into our left-handed world (the same
+  rule as glTF section 5 and Alembic section 7). Every point `p` becomes `C p`; every node
+  or bind matrix `M` becomes `C M C^-1`, so a rotation about a file axis becomes the
+  rotation about the image of that axis, written as HPB (TRANSFORM.md: `Ry(-h) Rx(-p)
+  Rz(-b)`), a scale is permuted by `|S P|`, a translation is `C t`. Polygon corner order is
+  reversed after the first corner (`[v0, v1 .. vn] -> [v0, vn .. v1]`) when `C` mirrors
+  (`det(S P) < 0`: every right-handed file), so the polygons keep facing outwards; a
+  left-handed file keeps them. For the usual right-handed Y-up file `C` is `S`:
+  `(x, y, z) -> (x, y, -z)`, a rotation about X or Y by `a` becomes `-a` in the
+  right-handed reading, which HPB turns back into `+a` for P and H, and a rotation about
+  Z stays, which HPB writes as `-B`.
+  *Observed:* `camera-light` camera at FBX `(0, 200, +600)` is `case.toml`
+  `(0, 200, -600)`; `omni` `(300, 400, +300)` is `(300, 400, -300)`; `hierarchy` Root
+  Euler Y `+45` is H `45`; `skinned-arm` J2 Euler Z `-90` is B `+90`; the geometry of all
+  six cases matches the OBJ in position and in plane orientation (`compare_geometric`
+  distinguishes a face from its reverse). A Z-up file in metres (`fbx.rs`
+  `axes_and_units_are_converted`, hand-written ASCII) imports to the same objects as the
+  same scene written Y-up in centimetres: file `(x, y, z)` Z-up becomes `(x, z, y) * 100`;
+  its animation (`animation_of_a_z_up_file_is_converted`: a move along file Y and a turn
+  about the file's up axis) becomes a move along our Z and H.
+- **Cameras** look along their local +X with +Y up (and +Z to the right) in FBX and along
+  +Z (+X right) in our scene, so the node rotation is multiplied from the right by
+  `Ry(-90)` (the frame change that takes our look axis to the FBX one) before the change of
+  basis. *Observed:* the `camera-light` camera gets `rotation_degrees = [0, -15, 0]`
+  (P -15) exactly as in `case.toml`.
+- **Lights** shine along `light.local_direction` (FBX default: local -Y) and ours along
+  +Z, so the node rotation is multiplied by the shortest rotation that takes -Z to that
+  direction (`Rx(-90)` for -Y) before the change of basis. *Observed:* FBX `Spot` and
+  `Omni` both carry Rx(90) and both become the identity rotation in `case.toml`.
+
+### 8.3 Content
+- **Hierarchy.** One engine object per FBX node (the invisible scene root is not
+  imported), same names and parent/child order. A node with a mesh is a polygon object,
+  with a camera a camera, with a light a light, a bone (or any node a skin cluster
+  names as its bone) a joint, and anything else a null.
+- **Polygons.** Positions, n-gons (all corner counts of 3 or more; points and lines are
+  dropped), per-corner UVs on a UVW tag (V unchanged: FBX and our UV origin are both
+  bottom-left). The engine has no authored-normal channel, so normals are not stored;
+  a smoothing tag with default values is added unless the file has normals and every
+  corner normal equals its polygon normal (a faceted mesh).
+- **Materials.** One node material per FBX material, named like it: base colour =
+  diffuse colour times diffuse factor, alpha `1 - transparency factor` (alpha mode
+  `BLEND` when below 1), emission = emission colour times factor, roughness
+  `sqrt(2 / (shininess + 2))` for a Phong material and 1 for a Lambert one (own rule,
+  not observed). Textures are not read (O44 writes none: `materials/Checker Texture` is
+  an ordinary 0.8 grey material in the file). A mesh with one material gets one texture
+  tag; with several, one polygon selection tag per used slot (named after the material)
+  and one texture tag per slot whose `selection` names it, so each polygon keeps its
+  material. *Observed:* `materials` imports "Red Matte" `(1, 0, 0)`, "Blue Glossy"
+  `(0, 0, 1)` and "Checker Texture" `(0.8, 0.8, 0.8)` on the cubes at x = -150, 0, 150.
+- **Cameras.** `sensor_size` = aperture width in mm (inches times 25.4),
+  `fov_horizontal` = `2 atan(sensor / (2 focal))` radians, near and far plane and
+  `FocusDistance` in our units (`near_clipping`, `far_clipping`, both enabled), an
+  orthographic camera is `parallel` with `zoom = 1000 / width` (**parity-pending**).
+  *Observed:* focal 36 mm and sensor 36 mm give the 53.130102 degrees of `case.toml`.
+  A file may carry more cameras than the scene description lists (the exporter also
+  writes its viewport camera); every camera node is imported.
+- **Lights.** Point to `omni`, spot to `spot` (inner and outer cone angle in radians),
+  directional to `infinite`, area to `area`, volume to `omni`; colour; intensity (FBX
+  100 is 1.0). Decay and shadow settings are not mapped.
+- **Animation.** The scene's first stack is baked by ufbx (`bake_anim`, keys kept at
+  their own times, curves with non-linear interpolation resampled at 30 per second,
+  steps become 1 ms ramps) into local translation, rotation and scale per node, in
+  seconds (our tracks are in seconds as well). Channels that never change become the
+  node's static transform; the others become `transform.pos.*`, `transform.rot.*` and
+  `transform.scale.*` tracks with linear keys (only the axes that change); rotation
+  tracks are quaternion tracks with the Euler values made continuous. Property
+  animation (lens, light, material) is not imported. *Observed:* `anim-transform` has 31
+  linear keys per curve (one per frame); frame 30 gives position `(200, 100, 0)`, H `90`,
+  scale `1.5`.
+- **Skins.** The first skin deformer of a mesh becomes a weight tag (joints in cluster
+  order, one weight row per point), a bind pose and a skin deformer, like the glTF and
+  rigging objects. The bind matrix of a joint is the cluster's bone transform at bind
+  time in the mesh's space, `inverse(geometry_to_bone)`, changed to our basis.
+  FBX linear skinning is the weighted sum of the cluster transforms with the unweighted
+  remainder (`1 - sum`) staying at the bind position (ufbx `get_skin_vertex_matrix`), so
+  the imported skin deformer has `normalise` off. *Observed:* `skinned-arm` has three
+  clusters (49, 88 and 49 weights over 106 points); the exporter quantises weights to 16
+  bits (rows sum to `1 + 1.5e-5`), and only without renormalising do the posed bounds of
+  frames 15 and 30 match `f15_bbox` and `f30_bbox` to 1e-4 (renormalised, the minimum X is
+  off by `3.6e-4` and `4.2e-4`).
+
+### 8.4 Errors
+`Error::Invalid(String)` for a file ufbx cannot read (the message is ufbx's), a file above
+the size limit or a non-finite or non-positive `scale`. Unsupported content is skipped
+with a warning (§8.6), never an error.
+
+### 8.5 Parity (O44)
+All six `scene.fbx` files are imported and compared with their `mesh.obj` through
+`compare_geometric` (points, planes with orientation, closedness; position tolerance of
+the case), and with the values of `case.toml`: node names and local transforms
+(`static-mesh`, `hierarchy`, `anim-transform`, `camera-light`), the tracks sampled at the
+recorded frames (`anim-transform` frames 0 and 30), the materials of `materials`, and for
+`skinned-arm` the weights of the recorded points, the J2 rotation at frames 15 and 30 and
+the skinned bounds at frames 15 and 30 against `f15_bbox` and `f30_bbox`. Results are
+listed in `docs/parity/STATUS.md`.
+
+### 8.6 Not imported (reported by `warnings()`)
+NURBS curves and surfaces, line curves, procedural geometry, blend shapes (morphs), cache
+deformers, constraints, additional animation stacks, more than one skin deformer per mesh,
+texture files, property animation. The affected node is still imported as a null (or as its
+mesh without the unsupported part).
+
+### 8.7 Checks
+`crates/io/tests/fbx.rs`: the six O44 scenes (geometry, transforms, animation, cameras and
+lights, materials, skin), the axis and unit rules on hand-written ASCII files (Z-up in
+metres, left-handed Y-up, `scale`, animation), UV, material and shading rules, bad input,
+reported skips and undo. `crates/io/tests/formats.rs`: the format table.
+`apps/forge/tests/convert.rs`: `forge convert` of an `.fbx`.
+
+### 8.8 Export: ASCII FBX 7.4 (brief 166)
+
+Sources: the public descriptions of the FBX file structure (ASCII layout, `FBXHeaderExtension`,
+`GlobalSettings`, `Definitions`, `Objects`, `Connections`; `Properties70` entries; `Geometry`
+with `Vertices`, `PolygonVertexIndex` where the last index of a polygon is stored as `-index - 1`,
+`LayerElementNormal`/`UV`/`Material` with their mapping and reference modes; `Deformer` skin and
+cluster objects with `Indexes`, `Weights`, `Transform`, `TransformLink`; `AnimationStack`,
+`AnimationLayer`, `AnimationCurveNode` and `AnimationCurve` with `KeyTime` in 1/46186158000 s) and
+our own importer (§8.1 to §8.7) as the check. The writer is our own code
+(`forge_io::fbx::write`): no SDK and no text copied from any file. Use `file.export` or
+`forge convert --format fbx` (extension `.fbx`); option `scale` (float, default 1, range 1e-9
+to 1e9) is the number of file units per centimetre, declared in the file as the unit
+(`UnitScaleFactor = 1 / scale` centimetres), so scale 1 writes centimetres and 0.01 metres.
+The result is UTF-8 text and deterministic: the same scene gives the same bytes.
+
+- **Scene.** The scene given to the writer is the one evaluated at the export frame (§3, "Export
+  frame"): generators and deformers are baked at that frame, skinned meshes are written as their
+  bind mesh with the skin, and the tracks of every object are kept. The whole scene (or the
+  selected objects with their descendants) is written; an object whose parent is not selected
+  becomes a root with its world transform (an animated one is an error). Consumed inputs of
+  generators and skin deformers are not objects. Nothing to write is `NothingToExport`.
+- **Axes and unit** are the inverse of §8.2: right-handed Y-up (`UpAxis 1`, `FrontAxis 2`,
+  `CoordAxis 0`), points `(x, y, z) -> (x, y, -z) * scale`, node and bind matrices `D M D^-1`
+  with `D = scale * S`, polygon corners `[v0, v1 .. vn] -> [v0, vn .. v1]`. A rotation is
+  written as XYZ Euler degrees (`RotationOrder 0`: `R = Rz Ry Rx`) of the reflected rotation
+  matrix, after the inverse frame change of §8.2 for cameras (`Ry(+90)`) and lights
+  (`Rx(+90)`).
+- **Objects.** Null, polygon object, camera, light and joint become `Model` of class `Null`,
+  `Mesh`, `Camera`, `Light`, `LimbNode`; every other object type is written as a null.
+  Hierarchy and names are kept. `NodeAttribute`: camera (`FocalLength` from the horizontal
+  field of view and sensor, `FilmWidth` in inches and a 16:9 `FilmHeight`, `ApertureMode 3`,
+  `NearPlane`, `FarPlane`, `FocusDistance`; a projection other than perspective is written as
+  `CameraProjectionType 1` with `OrthoZoom = width / 30` in file units, 30 being the unit ufbx
+  assumes for files from other writers, **parity-pending**; the six axis views are written as
+  such a parallel camera with the object's own rotation, they ignore it when rendering),
+  light (`LightType` 0 point for omni and IES, 1 directional for infinite and parallel, 2 spot
+  for all spot kinds, 3 area; `Color`; `Intensity` = 100 times ours; `InnerAngle` and
+  `OuterAngle` in degrees for spots), joint (`LimbNode` skeleton).
+- **Polygons.** `Geometry` of class `Mesh`: all points, all polygons (n-gons included),
+  `LayerElementNormal` per corner from our shading rule (the smoothing tag's angle, faceted
+  without a tag), `LayerElementUV` per corner (deduplicated values, `IndexToDirect`) for an
+  object with a UVW tag, `LayerElementMaterial` (`AllSame` or `ByPolygon`).
+- **Materials.** `Material` with `ShadingModel` `lambert` (roughness 1) or `phong` with
+  `Shininess = 2 / roughness^2 - 2` (the inverse of §8.3), `DiffuseColor` = base colour,
+  `EmissiveColor`, `TransparencyFactor = 1 - alpha`; metallic, normal, occlusion and texture
+  slots are not written (no textures: the format option is out of scope). The material slots of
+  an object are its texture tags in tag order; a tag with a `selection` names a polygon
+  selection tag of the object and covers those polygons, the last tag without selection covers
+  the rest; polygons no tag covers get an extra material "Default" (our default surface) when
+  another polygon has a material. Materials shared by objects are written once.
+- **Skin.** A mesh with a weight tag and a skin deformer gets a `Deformer` skin and one
+  cluster per joint (`Indexes`, `Weights` of the points that use it; `Transform` = the mesh
+  node's matrix relative to the joint at bind time, the inverse of our bind matrix, which is
+  how ufbx reads that field; `TransformLink` = the joint's world matrix at bind time, the
+  mesh's current world matrix times our bind matrix; all reflected and scaled), the joint
+  `Model` connected to its cluster. Rows are written as the engine
+  evaluates them: normalised when the skin deformer normalises, as stored when it does not
+  (FBX skinning is the unnormalised weighted sum, §8.3).
+- **Animation.** One `AnimationStack` ("Take 001", `LocalStart` 0 or the first key to the last
+  key) with one `AnimationLayer`; per animated object and parameter one `AnimationCurveNode`
+  (`Lcl Translation`, `Lcl Rotation`, `Lcl Scaling`) with an `AnimationCurve` per axis. Keys
+  are written at the union of the key times of the parameter's three tracks, plus every
+  document frame between the first and last key when a track is spline-interpolated and for
+  every rotation (FBX interpolates rotation channels as Euler angles, never as orientations,
+  so a quaternion track is sampled on every frame); the values are the track values there
+  (a rotation: the Euler angles of the interpolated orientation, made continuous).
+  Keys are linear (`KeyAttrFlags 4`), or constant (`2`) when every key of the parameter is a
+  step. Mixed step and continuous interpolation in one parameter is an error. Key times are
+  `round(t * 46186158000)`. The document frame rate is `TimeMode` (or 14 with
+  `CustomFrameRate`).
+- **Not written:** textures and texture-related material slots, blend shapes, cameras'
+  stereo settings, light shadow and decay settings, bind pose objects (the clusters carry the
+  bind matrices), property animation (lens, light, material), splines and other non-polygon
+  geometry.
+
+**Checks** (`crates/io/tests/fbx_export.rs`): the six O44 scenes are imported, exported as
+ASCII FBX, imported again and compared object by object (names, parents, kinds, local transforms
+at several times, world meshes with `compare_geometric`, materials, camera and light settings,
+skinned bounds at the recorded frames); scenes built in code cover a hierarchy with a rotation
+about three axes, animation with linear, spline and step keys, cameras and lights with every
+exported setting, materials with selections, a skin with metre units (scale 0.01 then 100),
+selected roots, determinism and the file header.

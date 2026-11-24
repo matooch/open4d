@@ -26,7 +26,7 @@ fn cube_scene() -> forge_core::Scene {
 fn table_and_extension_lookup() {
     assert_eq!(
         formats().iter().map(|f| f.id).collect::<Vec<_>>(),
-        ["obj", "stl", "ply", "gltf", "usda", "abc"]
+        ["obj", "stl", "ply", "gltf", "usda", "fbx", "abc"]
     );
     let obj = format_by_id("obj").unwrap();
     assert!(obj.import && obj.export);
