@@ -123,7 +123,7 @@ fn convert_to(c: &mut NodeCtx<'_>, to: T) -> Out {
 }
 
 /// A scene parameter value as a port value.
-pub(crate) fn value_to_port(v: &Value) -> Result<V, EvalError> {
+pub fn value_to_port(v: &Value) -> Result<V, EvalError> {
     Ok(match v {
         Value::Bool(b) => V::Bool(*b),
         Value::Int(i) => V::Int(*i),

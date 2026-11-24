@@ -12,14 +12,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use common::golden::{ObjGroup, parse_obj};
+use common::image_parity::{self, REFERENCE_THRESHOLD};
 use forge_core::{Document, Registry, Value};
-use forge_parity_harness::{CompareOptions, ImageBuf, compare_image};
+use forge_parity_harness::ImageBuf;
 use forge_render_api::*;
 use forge_render_bridge::{apply_scene_objects, default_material};
 use forge_render_cpu::CpuEngine;
 use glam::{DMat4, DVec3};
-
-const REFERENCE_THRESHOLD: f32 = 0.05;
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden/camera")
@@ -54,7 +53,14 @@ fn is_calibration(name: &str) -> bool {
         .contains_key("texture_tag")
 }
 
-const NOT_OBSERVED: &[&str] = &["default", "focal-100", "aspect-square", "dof", "sensor"];
+const NOT_OBSERVED: &[&str] = &[
+    "default",
+    "focal-100",
+    "aspect-square",
+    "dof",
+    "sensor",
+    "focal-100-2",
+];
 
 fn case_names() -> Vec<String> {
     let mut v: Vec<String> = std::fs::read_dir(root())
@@ -176,52 +182,28 @@ fn load(name: &str) -> Case {
     }
 }
 
-fn settings(size: (u32, u32)) -> RenderSettings {
-    RenderSettings {
-        filter: PixelFilter::Cubic,
-        filter_width: 2.0,
-        ..RenderSettings::new(size.0, size.1, 16)
-    }
-}
-
-/// Silhouette pixels beyond 1 px between the reference and our coverage.
-fn mismatch(name: &str) -> usize {
+fn rendered(name: &str) -> (Case, ImageBuf) {
     let c = load(name);
     let out = CpuEngine::new()
-        .render(&c.snapshot, &settings(c.size), &Control::new())
+        .render(
+            &c.snapshot,
+            &image_parity::settings(c.size, vec![]),
+            &Control::new(),
+        )
         .unwrap();
-    let mut e = c.expected.clone();
-    e.alpha = Some(
-        e.mask(REFERENCE_THRESHOLD)
-            .iter()
-            .map(|b| if *b { 1.0 } else { 0.0 })
-            .collect(),
-    );
     let act = ImageBuf::from_rgba(c.size.0, c.size.1, &out.beauty.data);
-    compare_image(
-        &e,
-        &act,
-        &CompareOptions {
-            silhouette_threshold: 0.5,
-            ..CompareOptions::default()
-        },
-    )
-    .unwrap()
-    .silhouette_mismatch_px
+    let psnr = image_parity::psnr(&root().join(name), &c.expected, &act);
+    println!("{name:16} psnr {psnr:.1} dB");
+    (c, act)
 }
 
 /// Lit reference pixels with no covered pixel of ours within 1 px, and the bounding boxes of
 /// the two masks `(x0, y0, x1, y1)`.
 fn one_sided(name: &str) -> (usize, [u32; 4], [u32; 4]) {
-    let c = load(name);
-    let out = CpuEngine::new()
-        .render(&c.snapshot, &settings(c.size), &Control::new())
-        .unwrap();
+    let (c, act) = rendered(name);
     let (w, h) = c.size;
     let lit = c.expected.mask(REFERENCE_THRESHOLD);
-    let ours: Vec<bool> = (0..(w * h) as usize)
-        .map(|i| out.beauty.data[i * 4 + 3] > REFERENCE_THRESHOLD)
-        .collect();
+    let ours = act.mask(REFERENCE_THRESHOLD);
     let near = |x: u32, y: u32| {
         (y.saturating_sub(1)..=(y + 1).min(h - 1)).any(|yy| {
             (x.saturating_sub(1)..=(x + 1).min(w - 1)).any(|xx| ours[(yy * w + xx) as usize])
@@ -278,7 +260,8 @@ fn silhouettes_match_within_one_pixel() {
         if UNSUPPORTED.iter().any(|(n, _)| *n == name) || is_calibration(&name) {
             continue;
         }
-        let m = mismatch(&name);
+        let (c, act) = rendered(&name);
+        let m = image_parity::silhouette(&c.expected, &act).silhouette_mismatch_px;
         println!("{name:12} mismatch {m}");
         if KNOWN_MISMATCH.iter().any(|(n, _)| *n == name) {
             assert!(m > 0, "{name} now matches: remove it from KNOWN_MISMATCH");

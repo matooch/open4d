@@ -4,11 +4,11 @@
 use std::f64::consts::PI;
 
 use bytemuck::{Pod, Zeroable};
-use forge_geometry::PolyMesh;
 use forge_geometry::normals::{Weighting, corner_normals, poly_normal};
 use forge_geometry::selection::Selection;
 use forge_geometry::triangulate::triangulate;
-use std::sync::{Mutex, OnceLock};
+use forge_geometry::{CornerUvs, PolyMesh};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use glam::{DMat4, DVec3};
 use wgpu::util::DeviceExt;
@@ -23,6 +23,7 @@ use crate::instancing::{
 };
 use crate::lights::{self, AMBIENT, Light, LightKind, Lighting, MAX_LIGHTS};
 use crate::lod;
+use crate::material_preview::{self, PreviewMaterial};
 
 const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -103,6 +104,7 @@ struct TriVertex {
     flat_n: [f32; 3],
     smooth_n: [f32; 3],
     selected: f32,
+    uv: [f32; 2],
 }
 
 #[repr(C)]
@@ -269,6 +271,7 @@ impl UploadOptions {
 
 /// GPU copy of a polygon mesh: triangles, edges and points with selection flags.
 pub struct MeshBuffers {
+    preview: Option<Arc<PreviewMaterial>>,
     tris: Vertices,
     edges: Vertices,
     points: Vertices,
@@ -334,6 +337,7 @@ impl MeshBuffers {
             smoothing,
             true,
             UploadOptions::default(),
+            None,
         )
     }
 
@@ -345,7 +349,7 @@ impl MeshBuffers {
         smoothing: Option<f64>,
         opts: UploadOptions,
     ) -> MeshBuffers {
-        Self::build(d, mesh, selection, smoothing, false, opts)
+        Self::build(d, mesh, selection, smoothing, false, opts, None)
     }
 
     /// As [`MeshBuffers::with_device`] without point buffers (the points are never drawn).
@@ -362,6 +366,27 @@ impl MeshBuffers {
             smoothing,
             false,
             UploadOptions::default(),
+            None,
+        )
+    }
+
+    pub fn with_preview(
+        d: &wgpu::Device,
+        mesh: &PolyMesh,
+        selection: &Selection,
+        smoothing: Option<f64>,
+        with_points: bool,
+        uvs: &CornerUvs,
+        material: Arc<PreviewMaterial>,
+    ) -> MeshBuffers {
+        Self::build(
+            d,
+            mesh,
+            selection,
+            smoothing,
+            with_points,
+            UploadOptions::default(),
+            Some((uvs, material)),
         )
     }
 
@@ -372,7 +397,9 @@ impl MeshBuffers {
         smoothing: Option<f64>,
         with_points: bool,
         opts: UploadOptions,
+        preview: Option<(&CornerUvs, Arc<PreviewMaterial>)>,
     ) -> MeshBuffers {
+        let preview = preview.filter(|(uvs, _)| uvs.matches(mesh));
         let smooth = match smoothing {
             Some(angle) => corner_normals(mesh, angle, Weighting::Angle),
             None => mesh
@@ -407,6 +434,9 @@ impl MeshBuffers {
                             flat_n: f3(flat[*f as usize]),
                             smooth_n: f3(smooth[*f as usize][corner]),
                             selected,
+                            uv: preview.as_ref().map_or([0.0; 2], |(uvs, _)| {
+                                uvs.corners[*f as usize][corner].map(|x| x as f32)
+                            }),
                         });
                     }
                 }
@@ -457,6 +487,7 @@ impl MeshBuffers {
             }
         }
         MeshBuffers {
+            preview: preview.map(|(_, material)| material),
             tris: Vertices::from_chunks(tri_chunks),
             edges: Vertices::from_chunks(edge_chunks),
             points: Vertices::new(d, "mesh points", &points),
@@ -672,6 +703,7 @@ pub struct DrawMesh<'a> {
 
 /// GPU data of one cloner: prototype meshes and an instance buffer (docs/specs/VIEWPORT.md §10.1).
 pub struct InstanceSet {
+    preview: Option<Arc<PreviewMaterial>>,
     protos: Vec<MeshBuffers>,
     buffer: Option<wgpu::Buffer>,
     layout: InstanceLayout,
@@ -699,9 +731,56 @@ impl InstanceSet {
         world: &DMat4,
         chunk: usize,
     ) -> InstanceSet {
+        Self::build(d, prototypes, smoothing, input, world, chunk, None)
+    }
+
+    pub fn with_preview(
+        d: &wgpu::Device,
+        prototypes: &[PolyMesh],
+        smoothing: Option<f64>,
+        input: &InstanceInput,
+        world: &DMat4,
+        uvs: &[CornerUvs],
+        material: Arc<PreviewMaterial>,
+    ) -> InstanceSet {
+        Self::build(
+            d,
+            prototypes,
+            smoothing,
+            input,
+            world,
+            INSTANCE_CHUNK,
+            Some((uvs, material)),
+        )
+    }
+
+    fn build(
+        d: &wgpu::Device,
+        prototypes: &[PolyMesh],
+        smoothing: Option<f64>,
+        input: &InstanceInput,
+        world: &DMat4,
+        chunk: usize,
+        preview: Option<(&[CornerUvs], Arc<PreviewMaterial>)>,
+    ) -> InstanceSet {
+        let preview = preview.filter(|(uvs, _)| {
+            uvs.len() == prototypes.len() && uvs.iter().zip(prototypes).all(|(uv, m)| uv.matches(m))
+        });
         let protos: Vec<MeshBuffers> = prototypes
             .iter()
-            .map(|m| MeshBuffers::with_device_no_points(d, m, &Selection::default(), smoothing))
+            .enumerate()
+            .map(|(i, m)| match &preview {
+                Some((uvs, mat)) => MeshBuffers::with_preview(
+                    d,
+                    m,
+                    &Selection::default(),
+                    smoothing,
+                    false,
+                    &uvs[i],
+                    mat.clone(),
+                ),
+                None => MeshBuffers::with_device_no_points(d, m, &Selection::default(), smoothing),
+            })
             .collect();
         let bounds: Vec<_> = protos.iter().map(|p| p.bounds).collect();
         let mut layout = build_layout(&bounds, input, world, chunk);
@@ -716,6 +795,7 @@ impl InstanceSet {
             })
         });
         InstanceSet {
+            preview: preview.map(|(_, material)| material),
             protos,
             buffer,
             layout,
@@ -852,10 +932,11 @@ struct Uniforms {
     base: [f32; 4],
     selection: [f32; 4],
     wire: [f32; 4],
-    light: [f32; 4],
+    preview: [f32; 4],
     params: [f32; 4],
     /// x: half point size in pixels, y/z: NDC units per pixel (2/width, 2/height).
     point: [f32; 4],
+    eye: [f32; 4],
 }
 
 fn rgba(c: [f32; 3]) -> [f32; 4] {
@@ -989,6 +1070,8 @@ pub struct Renderer {
     grid: wgpu::RenderPipeline,
     gizmo: wgpu::RenderPipeline,
     shadow_sampler: wgpu::Sampler,
+    preview_sampler: wgpu::Sampler,
+    dummy_preview: wgpu::TextureView,
     /// 1x1 single-layer map bound when nothing casts a shadow.
     dummy_shadow: ShadowMaps,
     /// The map set of the last shadowed frame, reused while size and layer count match.
@@ -1024,16 +1107,34 @@ impl Renderer {
         });
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("viewport uniforms"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
         });
         let light_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("viewport lights"),
@@ -1077,8 +1178,7 @@ impl Renderer {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
-        let tri_attrs =
-            wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x3, 3 => Float32];
+        let tri_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x3, 3 => Float32, 8 => Float32x2];
         let edge_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32];
         let quad_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32, 2 => Float32x2];
         let color_attrs = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
@@ -1206,6 +1306,16 @@ impl Renderer {
         });
         Renderer {
             samples,
+            preview_sampler: device.create_sampler(&wgpu::SamplerDescriptor {
+                address_mode_u: wgpu::AddressMode::Repeat,
+                address_mode_v: wgpu::AddressMode::Repeat,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                ..Default::default()
+            }),
+            dummy_preview: device
+                .create_texture(&material_preview::texture(1))
+                .create_view(&Default::default()),
             tri: make(spec(
                 "tris",
                 "vs_tri",
@@ -1275,7 +1385,15 @@ impl Renderer {
         self.samples
     }
 
-    fn bind(&self, device: &wgpu::Device, u: Uniforms) -> wgpu::BindGroup {
+    fn bind(
+        &self,
+        device: &wgpu::Device,
+        mut u: Uniforms,
+        preview: Option<&PreviewMaterial>,
+    ) -> wgpu::BindGroup {
+        if let Some(preview) = preview {
+            u.preview = preview.params;
+        }
         let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("viewport uniforms"),
             contents: bytemuck::bytes_of(&u),
@@ -1284,10 +1402,22 @@ impl Renderer {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("viewport uniforms"),
             layout: &self.layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buf.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(
+                        preview.map_or(&self.dummy_preview, |p| &p.view),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.preview_sampler),
+                },
+            ],
         })
     }
 
@@ -1363,12 +1493,13 @@ impl Renderer {
             .view_proj(width as f64 / height as f64)
             .as_mat4()
             .to_cols_array_2d();
+        let eye = f3(cam.eye_world());
         let uniforms = |base: [f32; 3], smooth: bool, bias: f32, unlit: bool| Uniforms {
             view_proj,
             base: rgba(base),
             selection: rgba(pal.selection),
             wire: rgba(pal.wire),
-            light: [0.0; 4],
+            preview: [0.0; 4],
             params: [flag(smooth), bias, flag(unlit), 0.0],
             point: [
                 s.point_size / 2.0,
@@ -1376,6 +1507,7 @@ impl Renderer {
                 2.0 / height.max(1) as f32,
                 0.0,
             ],
+            eye: [eye[0], eye[1], eye[2], flag(base != pal.object)],
         };
         let (fill, wire) = (style.fill, style.wire);
         let bias = if fill { OVERLAY_BIAS } else { 0.0 };
@@ -1388,7 +1520,11 @@ impl Renderer {
                 } else {
                     m.color
                 };
-                self.bind(device, uniforms(base, style.smooth, bias, style.unlit))
+                self.bind(
+                    device,
+                    uniforms(base, style.smooth, bias, style.unlit),
+                    m.mesh.preview.as_deref().filter(|_| !style.hidden),
+                )
             })
             .collect();
         let inst_groups: Vec<wgpu::BindGroup> = frame
@@ -1403,10 +1539,14 @@ impl Renderer {
                 let mut u = uniforms(base, style.smooth, bias, style.unlit);
                 // clone colours tint the fill, except in Hidden Line (background colour)
                 u.params[3] = flag(!style.hidden);
-                self.bind(device, u)
+                self.bind(
+                    device,
+                    u,
+                    m.set.preview.as_deref().filter(|_| !style.hidden),
+                )
             })
             .collect();
-        let plain = self.bind(device, uniforms(pal.object, false, 0.0, false));
+        let plain = self.bind(device, uniforms(pal.object, false, 0.0, false), None);
         let grid = frame
             .grid
             .map(|g| Vertices::new(device, "grid", &grid_vertices(g, pal)));
@@ -1465,7 +1605,7 @@ impl Renderer {
                     view_proj: matrix.as_mat4().to_cols_array_2d(),
                     ..uniforms(pal.object, false, 0.0, false)
                 };
-                let group = self.bind(device, u);
+                let group = self.bind(device, u, None);
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("shadow map"),
                     color_attachments: &[],

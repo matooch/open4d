@@ -128,6 +128,162 @@ fn flat_and_smooth_shading() {
 }
 
 #[test]
+fn material_preview_image_baseline() {
+    use forge_geometry::CornerUvs;
+    use forge_material::{IrNode, Material, ShadeCtx, TextureSampler, compile};
+    use forge_viewport::lights::{Light, Lighting, SceneLights};
+    use forge_viewport::material_preview::PreviewMaterial;
+
+    struct Chart;
+    impl TextureSampler for Chart {
+        fn sample(&self, name: &str, ctx: &ShadeCtx) -> [f64; 3] {
+            if name == "normal" {
+                return [1.0, 0.5, 1.0];
+            }
+            match (ctx.uvw[0] > 0.5, ctx.uvw[1] > 0.5) {
+                (false, false) => [0.7, 0.1, 0.1],
+                (true, false) => [0.1, 0.7, 0.1],
+                (false, true) => [0.1, 0.1, 0.7],
+                (true, true) => [0.7, 0.7, 0.1],
+            }
+        }
+    }
+
+    let Some((_lock, gpu)) = gpu() else { return };
+    let cam = Camera::default();
+    let quad = forge_geometry::PolyMesh {
+        points: vec![
+            DVec3::new(-1.0, -1.0, 0.0),
+            DVec3::new(1.0, -1.0, 0.0),
+            DVec3::new(1.0, 1.0, 0.0),
+            DVec3::new(-1.0, 1.0, 0.0),
+        ],
+        polys: vec![vec![0, 1, 2, 3]],
+    };
+    let uv = CornerUvs {
+        corners: vec![vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]],
+    };
+    let mut graph = compile(&Material::new());
+    let diffuse = graph.outputs.diffuse.as_mut().unwrap();
+    diffuse.color = graph.nodes.len();
+    diffuse.level = 1.0;
+    diffuse.roughness = 0.2;
+    graph.nodes.push(IrNode::Texture("chart".into()));
+    let shot = |graph: &forge_material::ShadingGraph, settings| {
+        let surface = PreviewMaterial::bake(&gpu.device, &gpu.queue, graph, &Chart, |_| true);
+        let mesh = MeshBuffers::with_preview(
+            &gpu.device,
+            &quad,
+            &Selection::default(),
+            None,
+            false,
+            &uv,
+            surface.into(),
+        );
+        render(
+            gpu,
+            &cam,
+            &[DrawMesh {
+                mesh: &mesh,
+                color: Palette::default().object,
+            }],
+            settings,
+        )
+    };
+    let chart = shot(&graph, settings(Shading::Constant));
+    let baseline = [
+        [[26, 26, 179], [179, 179, 26]],
+        [[179, 26, 26], [26, 179, 26]],
+    ];
+    for (j, row) in baseline.iter().enumerate() {
+        for (i, &expected) in row.iter().enumerate() {
+            for dy in [-0.15, 0.0, 0.15] {
+                for dx in [-0.15, 0.0, 0.15] {
+                    let p = DVec3::new(i as f64 - 0.5 + dx, 0.5 - j as f64 + dy, 0.0);
+                    assert!(
+                        close(chart.under(&cam, p), expected),
+                        "{p}: {:?}",
+                        chart.under(&cam, p)
+                    );
+                }
+            }
+        }
+    }
+    use forge_viewport::instancing::InstanceInput;
+    use forge_viewport::render::{DrawInstanced, InstanceSet};
+    use glam::DMat4;
+    let surface = PreviewMaterial::bake(&gpu.device, &gpu.queue, &graph, &Chart, |_| true);
+    let set = InstanceSet::with_preview(
+        &gpu.device,
+        std::slice::from_ref(&quad),
+        None,
+        &InstanceInput {
+            matrices: &[DMat4::IDENTITY],
+            colors: &[[0.5, 1.0, 1.0]],
+            visible: &[true],
+            child: &[0],
+        },
+        &DMat4::IDENTITY,
+        std::slice::from_ref(&uv),
+        surface.into(),
+    );
+    let cloned = Image(render_to_rgba(
+        gpu,
+        W,
+        H,
+        &cam,
+        &Frame {
+            instanced: &[DrawInstanced {
+                set: &set,
+                color: Palette::default().object,
+            }],
+            meshes: &[],
+            grid: None,
+            lines: &[],
+            gizmo: None,
+            settings: settings(Shading::Constant),
+        },
+    ));
+    assert!(close(
+        cloned.under(&cam, DVec3::new(-0.5, -0.5, 0.0)),
+        [90, 26, 26]
+    ));
+    let mut lit = settings(Shading::Flat);
+    lit.lighting = Lighting::Scene(SceneLights::new(&[Light::directional(
+        DVec3::new(-0.65, 0.0, -1.0),
+        0.9,
+    )]));
+    let sample = |image: Image| image.under(&cam, DVec3::new(-0.5, -0.5, 0.0));
+    let original = sample(shot(&graph, lit));
+    graph.outputs.diffuse.as_mut().unwrap().roughness = 0.95;
+    let rough = sample(shot(&graph, lit));
+    assert!(
+        !close(rough, original),
+        "roughness must change the highlight"
+    );
+    graph.outputs.specular.as_mut().unwrap().metal = true;
+    let metallic = sample(shot(&graph, lit));
+    assert!(
+        metallic[1] + 10 < rough[1],
+        "metal must remove diffuse light"
+    );
+    graph.outputs.specular.as_mut().unwrap().metal = false;
+    graph.outputs.normal = Some(forge_material::NormalMap {
+        texture: graph.nodes.len(),
+        strength: 1.0,
+        method: "tangent".into(),
+        flip: [false; 3],
+        swap_yz: false,
+    });
+    graph.nodes.push(IrNode::Texture("normal".into()));
+    let mapped = sample(shot(&graph, lit));
+    assert!(
+        mapped[0] > rough[0] + 8,
+        "normal map should tilt toward the light: {mapped:?} vs {rough:?}"
+    );
+}
+
+#[test]
 fn wireframe_and_overlay() {
     let Some((_lock, gpu)) = gpu() else { return };
     let cam = Camera::default();

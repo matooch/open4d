@@ -3,11 +3,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use forge_core::transform::{POS, ROT, SCALE, Transform, hpb_from_rotation};
 use forge_core::{EvalCtx, Interp, NodeId, Scene, Value};
 use forge_geometry::{CornerUvs, PolyMesh, triangulate::triangulate};
+use forge_material::node_material::{NODE_MATERIAL, SurfaceValues, load_graph};
 use forge_rig::weights::{WeightMap, find_weight_tag, read_bind_pose, read_weights, tag_joints};
 use glam::{DMat3, DQuat, DVec3};
 use serde_json::{Value as Json, json};
 
-use super::{Error, invalid, swap_matrix};
+use super::{Error, decode_embedded_image, invalid, swap_matrix};
 
 #[derive(Default)]
 struct Buffer {
@@ -17,6 +18,16 @@ struct Buffer {
 }
 
 impl Buffer {
+    fn view(&mut self, bytes: impl IntoIterator<Item = u8>) -> usize {
+        self.bytes.resize(self.bytes.len().next_multiple_of(4), 0);
+        let start = self.bytes.len();
+        self.bytes.extend(bytes);
+        let view = self.views.len();
+        self.views
+            .push(json!({"buffer":0,"byteOffset":start,"byteLength":self.bytes.len()-start}));
+        view
+    }
+
     fn accessor(
         &mut self,
         bytes: impl IntoIterator<Item = u8>,
@@ -25,12 +36,7 @@ impl Buffer {
         kind: &str,
         bounds: Option<(Json, Json)>,
     ) -> usize {
-        self.bytes.resize(self.bytes.len().next_multiple_of(4), 0);
-        let start = self.bytes.len();
-        self.bytes.extend(bytes);
-        let view = self.views.len();
-        self.views
-            .push(json!({"buffer":0,"byteOffset":start,"byteLength":self.bytes.len()-start}));
+        let view = self.view(bytes);
         let mut a = json!({"bufferView":view,"componentType":component,"count":count,"type":kind});
         if let Some((min, max)) = bounds {
             a["min"] = min;
@@ -59,6 +65,117 @@ impl Buffer {
             kind,
             bounds,
         )
+    }
+}
+
+#[derive(Default)]
+struct MaterialAssets {
+    materials: Vec<Json>,
+    slots: BTreeMap<NodeId, (usize, bool)>,
+    images: Vec<Json>,
+    textures: Vec<Json>,
+    by_path: BTreeMap<String, usize>,
+}
+
+impl MaterialAssets {
+    fn texture(&mut self, path: &str, buf: &mut Buffer) -> Result<Option<Json>, Error> {
+        if path.is_empty() {
+            return Ok(None);
+        }
+        if let Some(index) = self.by_path.get(path) {
+            return Ok(Some(json!({"index": index})));
+        }
+        let image = match decode_embedded_image(path)? {
+            Some((mime, bytes)) => json!({"bufferView": buf.view(bytes), "mimeType": mime}),
+            None => json!({"uri": path}),
+        };
+        let index = self.textures.len();
+        self.textures.push(json!({"source": self.images.len()}));
+        self.images.push(image);
+        self.by_path.insert(path.to_owned(), index);
+        Ok(Some(json!({"index": index})))
+    }
+
+    fn material(
+        &mut self,
+        scene: &Scene,
+        id: NodeId,
+        buf: &mut Buffer,
+    ) -> Result<(usize, bool), Error> {
+        if let Some(&slot) = self.slots.get(&id) {
+            return Ok(slot);
+        }
+        let node = scene.node(id).ok_or_else(|| invalid("missing material"))?;
+        let s = if node.type_id == NODE_MATERIAL {
+            let graph = load_graph(node).map_err(|e| invalid(e.to_string()))?;
+            SurfaceValues::from_graph(&graph).map_err(|e| invalid(e.to_string()))?
+        } else {
+            let m = forge_material::Material::from_node(node);
+            SurfaceValues {
+                base_color: m.c("color.color"),
+                metallic: f64::from(u8::from(m.e("reflectance.spec.attenuation") == "metal")),
+                roughness: m.f("color.roughness"),
+                emission: if m.enabled("luminance") {
+                    m.c("luminance.color")
+                } else {
+                    [0.0; 3]
+                },
+                ..SurfaceValues::default()
+            }
+        };
+        let unit = |v: f64| v.clamp(0.0, 1.0);
+        let [r, g, b] = s.base_color.map(unit);
+        let mut pbr = json!({
+            "baseColorFactor":[r,g,b,unit(s.alpha)], "metallicFactor":unit(s.metallic),
+            "roughnessFactor":unit(s.roughness)
+        });
+        let mut textured = false;
+        for (key, path) in [
+            ("baseColorTexture", &s.base_texture),
+            ("metallicRoughnessTexture", &s.metallic_roughness_texture),
+        ] {
+            if let Some(info) = self.texture(path, buf)? {
+                pbr[key] = info;
+                textured = true;
+            }
+        }
+        let alpha = match s.alpha_mode.as_str() {
+            mode @ ("OPAQUE" | "MASK" | "BLEND") => mode,
+            _ => return Err(invalid("alpha mode must be OPAQUE, MASK or BLEND")),
+        };
+        let mut mat = json!({
+            "name": node.name, "pbrMetallicRoughness": pbr,
+            "emissiveFactor": s.emission.map(unit), "alphaMode": alpha,
+            "doubleSided": s.double_sided,
+        });
+        if alpha == "MASK" || s.alpha_cutoff != 0.5 {
+            mat["alphaCutoff"] = json!(s.alpha_cutoff.max(0.0));
+        }
+        for (key, path, factor) in [
+            (
+                "normalTexture",
+                &s.normal_texture,
+                Some(("scale", s.normal_strength)),
+            ),
+            (
+                "occlusionTexture",
+                &s.occlusion_texture,
+                Some(("strength", unit(s.occlusion_strength))),
+            ),
+            ("emissiveTexture", &s.emissive_texture, None),
+        ] {
+            if let Some(mut info) = self.texture(path, buf)? {
+                if let Some((key, value)) = factor {
+                    info[key] = json!(value);
+                }
+                mat[key] = info;
+                textured = true;
+            }
+        }
+        let slot = (self.materials.len(), textured);
+        self.materials.push(mat);
+        self.slots.insert(id, slot);
+        Ok(slot)
     }
 }
 
@@ -314,8 +431,7 @@ pub fn write(
     let mut nodes = Vec::new();
     let mut meshes = Vec::new();
     let mut skins = Vec::new();
-    let mut materials = Vec::new();
-    let mut material_slots = BTreeMap::new();
+    let mut materials = MaterialAssets::default();
     let mut buffer = Buffer::default();
     let mut anim = Animation {
         samplers: Vec::new(),
@@ -372,28 +488,26 @@ pub fn write(
                 .flatten()
         };
         if let Some(mesh) = mesh.filter(|m| !m.polys.is_empty()) {
-            let mat = node.tags.iter().find_map(|&tag| {
+            let mat = node.tags.iter().rev().find_map(|&tag| {
+                let n = scene.node(tag)?;
+                if n.type_id != forge_material::TEXTURE_TAG
+                    || matches!(n.params.get("selection"), Some(Value::String(s)) if !s.is_empty())
+                {
+                    return None;
+                }
                 let Some(Value::Link(Some(m))) = scene.param(tag, "material") else {
                     return None;
                 };
                 scene
                     .node(*m)
-                    .filter(|m| m.type_id == forge_material::MATERIAL)
+                    .filter(|m| {
+                        matches!(m.type_id.as_str(), forge_material::MATERIAL | NODE_MATERIAL)
+                    })
                     .map(|_| *m)
             });
-            let mat = mat.map(|id| *material_slots.entry(id).or_insert_with(|| {
-                let [r,g,b] = match scene.param(id, "color.color") {
-                    Some(Value::Color(c)) => c.map(|v| v.clamp(0.0, 1.0)),
-                    _ => [0.8; 3],
-                };
-                let roughness = match scene.param(id, "color.roughness") {
-                    Some(Value::Float(v)) => v.clamp(0.0, 1.0),
-                    _ => 0.5,
-                };
-                materials.push(json!({"name":scene.node(id).unwrap().name,
-                    "pbrMetallicRoughness":{"baseColorFactor":[r,g,b,1.0],"roughnessFactor":roughness,"metallicFactor":0.0}}));
-                materials.len() - 1
-            }));
+            let mat = mat
+                .map(|id| materials.material(scene, id, &mut buffer))
+                .transpose()?;
             let weights = skin_tag.map(|tag| read_weights(scene, tag));
             if let Some(tag) = skin_tag {
                 let joints = tag_joints(scene, tag);
@@ -420,13 +534,25 @@ pub fn write(
                 n["skin"] = json!(skins.len());
                 skins.push(json!({"joints":joint_slots,"inverseBindMatrices":accessor}));
             }
-            let uv = crate::scene::node_uvs(scene, id, &mesh);
+            let mut uv = crate::scene::node_uvs(scene, id, &mesh);
+            if uv.is_none() && mat.is_some_and(|(_, textured)| textured) {
+                uv = forge_generators::uv::primitive_uvs(&node.type_id, &node.params, &mesh)
+                    .or_else(|| {
+                        forge_material::generate_uvw(
+                            &mesh,
+                            &forge_material::TagSpace::default(),
+                            forge_material::Projection::Cubic,
+                            glam::DMat4::IDENTITY,
+                        )
+                        .ok()
+                    });
+            }
             let p = primitive(
                 &mut buffer,
                 &mesh,
                 uv.as_ref(),
                 weights.as_ref(),
-                mat,
+                mat.map(|(ix, _)| ix),
                 scale,
             )?;
             n["mesh"] = json!(meshes.len());
@@ -443,8 +569,12 @@ pub fn write(
     if !skins.is_empty() {
         doc["skins"] = json!(skins);
     }
-    if !materials.is_empty() {
-        doc["materials"] = json!(materials);
+    if !materials.materials.is_empty() {
+        doc["materials"] = json!(materials.materials);
+    }
+    if !materials.textures.is_empty() {
+        doc["images"] = json!(materials.images);
+        doc["textures"] = json!(materials.textures);
     }
     if !anim.channels.is_empty() {
         doc["animations"] = json!([{"samplers":anim.samplers,"channels":anim.channels}]);

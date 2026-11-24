@@ -149,6 +149,7 @@ fn o44_skin_pose_matches_manifest_and_round_trips() {
 #[test]
 fn o44_material_links_and_corner_uvs_survive_round_trip() {
     use forge_core::Value;
+    use forge_material::node_material::{SurfaceValues, load_graph};
     let bytes = std::fs::read(fixture("materials", "scene.glb")).unwrap();
     let app = import(&bytes, 1.0);
     let (out, count) = gltf::write(app.doc.scene(), None, 0.01).unwrap();
@@ -176,16 +177,92 @@ fn o44_material_links_and_corner_uvs_survive_round_trip() {
                     })
                     .unwrap();
                 assert_eq!(uv.len(), 12 * 3 * 2);
-                (
-                    scene.node(mat).unwrap().name.clone(),
-                    scene.param(mat, "color.color").unwrap().clone(),
-                    scene.param(mat, "color.roughness").unwrap().clone(),
-                    uv,
-                )
+                let node = scene.node(mat).unwrap();
+                let surface = SurfaceValues::from_graph(&load_graph(node).unwrap()).unwrap();
+                (node.name.clone(), surface.base_color, surface.roughness, uv)
             })
             .collect::<Vec<_>>()
     };
     assert_eq!(data(&app), data(&reopened));
+}
+
+#[test]
+fn gltf_pbr_factors_and_texture_slots_round_trip_through_the_surface() {
+    use forge_material::node_material::{NODE_MATERIAL, SurfaceValues, load_graph};
+    use serde_json::Value;
+    fn json_len(glb: &[u8]) -> usize {
+        u32::from_le_bytes(glb[12..16].try_into().unwrap()) as usize
+    }
+    let source = std::fs::read(fixture("materials", "scene.glb")).unwrap();
+    let old_end = 20 + json_len(&source);
+    let mut doc: Value = serde_json::from_slice(&source[20..old_end]).unwrap();
+    let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGNgAAAAAgABSK+kcQAAAABJRU5ErkJggg==";
+    doc["images"] = json!([{"uri":png},{"uri":"occlusion.png"}]);
+    doc["textures"] = json!([{"source":0},{"source":1}]);
+    doc["materials"][0] = json!({
+        "name":"Coated metal",
+        "pbrMetallicRoughness":{
+            "baseColorFactor":[0.25,0.5,0.75,0.625], "metallicFactor":0.375, "roughnessFactor":0.25,
+            "baseColorTexture":{"index":0}, "metallicRoughnessTexture":{"index":0}
+        },
+        "normalTexture":{"index":0,"scale":0.5},
+        "occlusionTexture":{"index":1,"strength":0.75},
+        "emissiveFactor":[0.125,0.25,0.5],
+        "emissiveTexture":{"index":0},
+        "alphaMode":"MASK","alphaCutoff":0.375,"doubleSided":true
+    });
+    let mut json_bytes = serde_json::to_vec(&doc).unwrap();
+    json_bytes.resize(json_bytes.len().next_multiple_of(4), b' ');
+    let mut input = source[..20].to_vec();
+    input[12..16].copy_from_slice(&(json_bytes.len() as u32).to_le_bytes());
+    input.extend(json_bytes);
+    input.extend_from_slice(&source[old_end..]);
+    let length = input.len() as u32;
+    input[8..12].copy_from_slice(&length.to_le_bytes());
+    let inspect = |app: &App| {
+        let scene = app.doc.scene();
+        let node = scene
+            .materials()
+            .iter()
+            .find_map(|&m| scene.node(m).filter(|n| n.name == "Coated metal"))
+            .unwrap();
+        assert_eq!(node.type_id, NODE_MATERIAL);
+        SurfaceValues::from_graph(&load_graph(node).unwrap()).unwrap()
+    };
+    let app = import(&input, 1.0);
+    let surface = inspect(&app);
+    assert_eq!(surface.base_color, [0.25, 0.5, 0.75]);
+    assert_eq!(
+        (surface.alpha, surface.metallic, surface.roughness),
+        (0.625, 0.375, 0.25)
+    );
+    assert_eq!(
+        (
+            surface.alpha_mode.as_str(),
+            surface.alpha_cutoff,
+            surface.double_sided
+        ),
+        ("MASK", 0.375, true)
+    );
+    assert_eq!(surface.emission, [0.125, 0.25, 0.5]);
+    assert_eq!(
+        (surface.normal_strength, surface.occlusion_strength),
+        (0.5, 0.75)
+    );
+    for slot in [
+        &surface.base_texture,
+        &surface.metallic_roughness_texture,
+        &surface.normal_texture,
+        &surface.emissive_texture,
+    ] {
+        assert_eq!(slot, png);
+    }
+    assert_eq!(surface.occlusion_texture, "occlusion.png");
+    let (out, _) = gltf::write(app.doc.scene(), None, 1.0).unwrap();
+    let file: Value = serde_json::from_slice(&out[20..20 + json_len(&out)]).unwrap();
+    assert!(file["images"][0]["bufferView"].is_u64(), "{file:?}");
+    assert_eq!(file["images"].as_array().unwrap().len(), 2);
+    assert_eq!(surface, inspect(&import(&out, 1.0)));
 }
 
 #[test]

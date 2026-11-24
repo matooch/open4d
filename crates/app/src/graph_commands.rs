@@ -9,11 +9,10 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value as Json, json};
 
-use crate::expression::{GRAPH_PARAM, load_graph};
-use crate::graph::{Graph, GraphError, GraphNodeId, PortRef};
-use crate::nodes::value_to_port;
-use crate::ports::{PortType, PortValue};
-use crate::registry::{EvalEnv, NodeRegistry};
+use forge_nodes::{
+    EvalEnv, GRAPH_PARAM, Graph, GraphError, GraphNodeId, NodeRegistry, PortDecl, PortRef,
+    PortType, PortValue, load_graph, value_to_port,
+};
 
 fn spec(
     id: &'static str,
@@ -380,7 +379,7 @@ fn get(ctx: &mut dyn CommandContext, a: TagArgs) -> Result<Json, CommandError> {
 }
 
 fn node_types() -> Json {
-    let port = |p: &crate::registry::PortDecl, with_default: bool| {
+    let port = |p: &PortDecl, with_default: bool| {
         let mut o = json!({"id": p.id, "label": p.label, "type": p.ty.name()});
         if with_default {
             o["default"] = p.default.to_json();

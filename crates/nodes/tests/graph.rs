@@ -250,6 +250,9 @@ fn graphs_round_trip_through_json_deterministically() {
 }
 
 static COUNT: AtomicUsize = AtomicUsize::new(0);
+/// Tests that run `test.count` nodes share `COUNT`; they hold this lock so they never overlap
+/// when the test harness runs them in parallel.
+static COUNT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 struct CountingNodes;
 
@@ -272,6 +275,7 @@ impl NodePlugin for CountingNodes {
 
 #[test]
 fn a_shared_node_runs_once_per_evaluation() {
+    let _serial = COUNT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut r = reg();
     r.install(&CountingNodes).unwrap();
     let mut g = Graph::new();
@@ -299,6 +303,7 @@ fn a_shared_node_runs_once_per_evaluation() {
 
 #[test]
 fn only_what_the_sinks_need_runs() {
+    let _serial = COUNT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut r = reg();
     r.install(&CountingNodes).unwrap();
     let mut g = Graph::new();

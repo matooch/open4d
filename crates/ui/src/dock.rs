@@ -53,11 +53,14 @@ pub enum Panel {
     DopeSheet,
     ValueGraph,
     Materials,
+    PictureViewer,
+    InteractiveRender,
+    UvEditor,
 }
 
 impl Panel {
     /// Every panel, in Window menu order.
-    pub const ALL: [Panel; 17] = [
+    pub const ALL: [Panel; 20] = [
         Panel::CommandBar,
         Panel::ToolPalette,
         Panel::Viewport,
@@ -75,6 +78,9 @@ impl Panel {
         Panel::DopeSheet,
         Panel::ValueGraph,
         Panel::Materials,
+        Panel::PictureViewer,
+        Panel::InteractiveRender,
+        Panel::UvEditor,
     ];
 
     /// The panels `Dock::default()` opens; the others open from the Window menu.
@@ -107,6 +113,9 @@ impl Panel {
             Panel::DopeSheet => "Dope Sheet",
             Panel::ValueGraph => "Value Graph",
             Panel::Materials => "Materials",
+            Panel::PictureViewer => "Picture Viewer",
+            Panel::InteractiveRender => "Interactive Render",
+            Panel::UvEditor => "UV Editor",
         }
     }
 
@@ -127,6 +136,9 @@ impl Panel {
             Panel::ContentBrowser => Area::RightBottom,
             Panel::WeightManager => Area::RightBottom,
             Panel::Materials => Area::RightBottom,
+            Panel::PictureViewer => Area::Center,
+            Panel::InteractiveRender => Area::Center,
+            Panel::UvEditor => Area::Center,
             Panel::DopeSheet | Panel::ValueGraph => Area::Bottom,
         }
     }

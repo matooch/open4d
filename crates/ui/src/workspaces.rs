@@ -51,7 +51,7 @@ impl Workspace {
         use Area::{Bottom, Center, Left, RightBottom, RightTop, Top};
         use Panel::{
             Attributes, CommandBar, Console, Coordinates, History, NodeEditor, ObjectTree, Script,
-            Timeline, ToolPalette, Viewport,
+            Timeline, ToolPalette, UvEditor, Viewport,
         };
         let sizes = |left_width, right_width, right_top_fraction, bottom_height| Sizes {
             left_width,
@@ -87,7 +87,7 @@ impl Workspace {
                 vec![
                     (Top, &[CommandBar]),
                     (Left, &[ToolPalette]),
-                    (Center, &[Viewport]),
+                    (Center, &[UvEditor, Viewport]),
                     (RightBottom, &[Attributes, Coordinates, ObjectTree]),
                     (Bottom, &[History]),
                 ],

@@ -1367,6 +1367,31 @@ change; `use_settings_file(path)` loads; an unknown theme name or a non-finite o
 scale falls back per field to the default (lenient, like the key map). `EditorState.prefs`
 holds it.
 
+### 24.2a Preferences window (brief 155)
+
+Sources: [area L](../roadmap/areas/L-ui.md), [O29 §§1, 5](../parity/scene-defaults.md),
+[PLATFORM §7](PLATFORM.md) and [RPC §2](RPC.md). O29 is form-only; it records a new
+project's centimetre scale and 1280×720 render size, Cubic filter at width 2 and
+Default Light on. It explicitly excludes the separate user preferences. The
+Preferences window and its other defaults are native, not reference parity.
+
+**Edit → Preferences** opens a draft form backed by `ParamDesc` descriptors.
+Apply validates and saves the draft; Cancel or closing discards it. Changes are
+not scene edits. Write the per-user JSON atomically and keep unrelated settings.
+
+| Controls | Storage and effect |
+|---|---|
+| Theme, UI scale | Existing `ui.theme` and `ui.scale`; immediate |
+| Distance unit (mm, cm, m, in) | `ui.distance_unit` (default cm); convert display/edit values in Attributes and Coordinates, not document or command units |
+| Autosave enabled, interval seconds | Existing `autosave` keys; immediate, retention unchanged |
+| Editor render defaults (opt-in), width, height, samples, depth, filter and default light | `render_defaults`; applies to new Picture Viewer/IPR renders of scenes without stored render settings; CLI defaults unchanged |
+| RPC port and token | Existing `rpc` keys; masked token field, secure temporary file on Unix, restart required, environment overrides still win |
+
+Default per-user RPC remains loopback and cannot enable insecure mode from this
+form. An empty token means no saved token, not unauthenticated access. Test a
+fresh editor loading saved values from a temporary settings file; O29 defaults
+are checked directly because the observation created no golden cases.
+
 ### 24.3 Commands (not undoable, window actions like `ui.workspace`)
 `ui.theme {name}` (`dark`, `light`, `high-contrast`) and `ui.scale {factor}`; a factor outside
 `0.5..=3.0` or non-finite is `InvalidArgs`. They ask the window (`UiRequest::Theme`,

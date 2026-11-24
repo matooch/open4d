@@ -25,24 +25,26 @@ Work only on briefs in the queue below, top to bottom, skipping ones whose Statu
 ### Queue (the planner edits this list)
 
 Done: 193, 195, 196, 049, 110, 106, 164 (+ follow-up), 066, 168, 071, 062, 078, 077, 075, 092,
-097, 122, 167 (merged after planner review).
+097, 122, 167, 145, 099, 132, 131, 140, 141, 124, 134, 129, 155 (merged after planner review).
 
-Run 3 queue (2026-11-23). **Stack the branches:** start each brief from the previous brief's
+Run 4 queue (2026-11-24). **Stack the branches:** start each brief from the previous brief's
 branch, not from `origin/main`, unless the previous one is already merged into `main`
 (`git branch -r --contains <its last commit>` lists `origin/main`). That way the briefs of a run
 build on each other and the planner merges them without conflicts. Merge `origin/main` into your
 current branch at the start of each brief as well.
 
-1. [145](tasks/145-render-parity-tests.md) · Render parity tests against O30/O43/O57 (consolidate the existing render tests; no new rules invented)
-2. [099](tasks/099-s7-animation-acceptance.md) · S7 acceptance test and animation docs
-3. [132](tasks/132-viewport-materials.md) · Viewport material display (PBR preview, textures)
-4. [131](tasks/131-material-manager.md) · Material manager UI with preview renders
-5. [140](tasks/140-picture-viewer-queue.md) · Picture viewer and render queue
-6. [141](tasks/141-ipr.md) · IPR (interactive render)
-7. [124](tasks/124-node-material.md) · Node material graph + node editor UI (large)
-8. [134](tasks/134-material-exchange-mapping.md) · Material exchange mapping (glTF PBR ↔ node material)
-9. [129](tasks/129-uv-editor.md) · UV editor (view, transform, relax LSCM, pack, seams) (large)
-10. [155](tasks/155-preferences.md) · Preferences window and settings storage
+1. [146](tasks/146-s8-rendering-acceptance.md) · S8 acceptance test and rendering docs
+2. [040](tasks/040-metaball.md) · Metaball generator (uses the volume mesher, 083)
+3. [054](tasks/054-smoothing-displacer-reduction-bevel.md) · Smoothing deformer, Displacer, Polygon Reduction, Bevel deformer
+4. [170](tasks/170-camera-light-material-exchange.md) · Camera, light and material exchange across glTF/USD/Alembic
+5. [197](tasks/197-shading-ir-wgsl.md) · R1: shading IR → WGSL codegen and shader cache (start of area R; read `docs/roadmap/areas/R-realtime.md` and D19 first)
+6. [142](tasks/142-gpu-path-tracer.md) · GPU compute path tracer (wgpu): the compute fallback that area R tiers 2–3 build on
+7. [198](tasks/198-realtime-raster.md) · R2: real-time raster PBR engine (`render-rt`); your M5 Pro is the Metal reference
+8. [199](tasks/199-realtime-post.md) · R3: post effects and the viewport "Render" mode
+
+198 and 199 show `waiting` in BACKLOG only on briefs earlier in this queue (197, 198); on a
+stacked branch those are done, so start them in order. GPU tests run on the Mac's Metal adapter
+(M5 Pro); keep them skippable without an adapter so CI stays green.
 
 **Handing a brief back.** When a brief's branch is pushed, add one line to
 `/Users/bigman/forge-implementer/log.md`: `<brief> <branch> <done|blocked> <one-line result>`. The
@@ -99,6 +101,18 @@ stop. Never write `QUEUE FINISHED` while a branch has unpushed commits.
 7. Finish: `cargo fmt --all`, then `sh scripts/gate.sh` until it prints `GATE: all passed`; fill
    the brief's Report; set BACKLOG to `done`; commit; push the branch; add one line to
    `/Users/bigman/forge-implementer/log.md` (brief, branch, result).
+
+## 5a. Tests that cannot flake
+
+Two run-3 tests passed on the Mac and failed in CI. Write tests so speed and parallelism cannot
+change the result:
+- **Background work in UI tests** (renders, IPR, previews): after the action that starts it,
+  advance with `h.step()` in a polling loop with a deadline until the result is there; call
+  `h.run()` only once nothing is running. `run()` waits for a settled UI and fails when a job
+  keeps requesting repaints.
+- **No shared mutable globals between tests** (`static` counters, caches). Use per-test state;
+  if a global is unavoidable, hold one `static Mutex` in every test that touches it.
+- Run a new test file at least 5 times in a row before committing; any failure is a bug.
 
 ## 6. Never
 
