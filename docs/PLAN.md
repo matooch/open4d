@@ -85,6 +85,14 @@ elsewhere, marked **parity-pending** for later observation.
 - [ ] P7 io: glTF, FBX, Alembic, USD.
 - [ ] P8 Scripting (Rhai/Python), plugin API stabilisation, Flatpak.
 
+## Track R · Real-time GPU renderer (owner request, 2026-11-24)
+
+- [ ] R1–R8 (briefs 197–204, [roadmap/areas/R-realtime.md](roadmap/areas/R-realtime.md), D19): node
+      materials compiled from the shading IR to WGSL; Tier 1 real-time raster PBR (every GPU);
+      Tier 2 hybrid ray-traced shadows/reflections/AO/GI on RT GPUs (Vulkan ray query);
+      Tier 3 real-time path tracing with denoising (also the GPU final-frame renderer); one
+      consistency suite against the CPU path tracer; S10-scale performance targets.
+
 Parked: external renderer bridge ([REDSHIFT.md](REDSHIFT.md)). R25 doesn't bundle it,
 so it isn't a parity item. Revisit after P6.
 

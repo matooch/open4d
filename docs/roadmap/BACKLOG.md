@@ -193,4 +193,12 @@ implementers can avoid collisions.
 | 194 | [Materials and shaders in the document: hosting, links, Generate UVW command](../agents/tasks/194-material-hosting.md) | J | 123, 125, 127 | done | core, material, shaders, app, command, ui, io |
 | 195 | [Grow Selection: Use Edge option for polygons](../agents/tasks/195-grow-use-edge.md) | B | 023 | done | geometry, command |
 | 196 | [OBJ texture coordinates (vt) import and export](../agents/tasks/196-obj-uvs.md) | M | 004, 128 | done | io |
+| 197 | [Shading IR to WGSL codegen and shader cache](../agents/tasks/197-shading-ir-wgsl.md) | R | 123, 125, 126 | waiting: 123, 125, 126 | material, shaders |
+| 198 | [Real-time raster PBR engine (render-rt)](../agents/tasks/198-realtime-raster.md) | R | 197, 133, 137 | waiting: 197, 133, 137 | render-rt (new), viewport, render-api |
+| 199 | [Post effects and viewport Render mode](../agents/tasks/199-realtime-post.md) | R | 198 | waiting: 198 | render-rt, viewport, ui |
+| 200 | [GPU scene: acceleration structures and compute fallback](../agents/tasks/200-gpu-scene-rt.md) | R | 142, 198 | waiting: 142, 198 | render-rt, render-gpu |
+| 201 | [Hybrid ray-traced shadows, reflections, AO and GI](../agents/tasks/201-hybrid-rt.md) | R | 200 | waiting: 200 | render-rt |
+| 202 | [Real-time path tracing with denoising](../agents/tasks/202-realtime-pathtrace.md) | R | 200, 201 | waiting: 200, 201 | render-rt |
+| 203 | [Consistency tests across render tiers](../agents/tasks/203-rt-consistency.md) | R | 198, 202 | waiting: 198, 202 | tests, render-rt |
+| 204 | [Real-time performance targets](../agents/tasks/204-rt-performance.md) | R | 199, 201 | waiting: 199, 201 | render-rt, bench |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |

@@ -83,6 +83,7 @@ Each area file holds:
 | L · UI and UX: layout, managers, preferences | [areas/L-ui.md](areas/L-ui.md) | 147–162 | A |
 | M · File exchange | [areas/M-io.md](areas/M-io.md) | 163–172 | G, H |
 | N · Platforms, packaging, performance, docs | [areas/N-platform.md](areas/N-platform.md) | 173–185 | all |
+| R · Real-time GPU renderer (raster, hybrid ray tracing, real-time path tracing; node materials) | [areas/R-realtime.md](areas/R-realtime.md) | 197–204 | J, K |
 
 ## Order of work
 
