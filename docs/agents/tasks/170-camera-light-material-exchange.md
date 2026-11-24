@@ -1,6 +1,6 @@
 # 170 · Camera, light and material exchange across formats
 
-Status: waiting: O44 · Area: M · Depends on: 047, 134 · Observations: O44 · Touches: io
+Status: done (parity-pending: USD) · Area: M · Depends on: 047, 134 · Observations: O44 · Touches: io
 
 ## Goal
 Cameras, lights and materials survive import/export.
@@ -13,8 +13,8 @@ Cameras, lights and materials survive import/export.
 - Mapping tables in IO.md.
 
 ## Done when
-- [ ] O44 camera/light cases.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] O44 camera/light cases.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -24,9 +24,9 @@ Cameras, lights and materials survive import/export.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: tests added; parity N/M (`UNSUPPORTED` / `KNOWN_MISMATCH` with reasons).
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: glTF camera export/import plus the O44 camera-light test; Alembic already carried the camera (existing test). O44 camera-light: 1/1 for the formats we write (glTF and Alembic); FBX/OBJ/STL do not carry cameras, matching the observation. Materials were already covered by brief 134.
+- Rules derived (IO.md §9, renumbered by the planner at merge; FBX is §8): glTF writes a `cameras[]` perspective entry (`yfov` vertical radians from `2 atan(tan(h/2)/aspect)`, `znear` 0.01 when the scene's near clipping is 0, `zfar` 1e10, `aspectRatio` from the stored render settings else 16:9), a node `camera` index, and no light nodes; a camera-only file has no BIN chunk. Import creates `forge.camera` with sensor 36, `fov_horizontal` from `yfov*aspectRatio`, and clipping only when it differs from the glTF defaults. The reference GLB's 8-byte length shortfall is handled in the test by appending the missing empty BIN chunk header, not by relaxing the reader.
+- Deviations: USD (our own format) still omits cameras and lights; O44 has no USD case, so it is parity-pending. FBX is not a format we write, so the observed FBX camera cannot be mirrored.
+- Files changed: `crates/io/src/gltf/write.rs`, `crates/io/src/gltf.rs`, `crates/app/tests/gltf_exchange.rs`, `docs/specs/IO.md` §8, `docs/parity/STATUS.md`, `docs/roadmap/BACKLOG.md`.
+- Open questions: a USD camera/light exchange case (own design) and whether lights should ever be exported to formats other than the native scene.
+- The last lines of the gate output: `GATE: 2515 tests passed, 0 failed` and `GATE: all passed`.

@@ -1745,9 +1745,12 @@ dependencies = [
  "forge-fields",
  "forge-generators",
  "forge-geometry",
+ "forge-material",
+ "forge-modeling",
  "forge-noise",
  "forge-parity-harness",
  "forge-rig",
+ "forge-shaders",
  "glam 0.34.1",
  "toml",
 ]

@@ -41,7 +41,26 @@ struct Node {
     transform: Transform,
     primitives: Vec<Primitive>,
     skin: Option<usize>,
+    camera: Option<CameraKind>,
     tracks: BTreeMap<String, Track>,
+}
+
+/// The camera fields of a glTF node.
+#[derive(Clone, Copy)]
+#[allow(dead_code)] // orthographic ymag and clipping are stored but not all modelled
+enum CameraKind {
+    Perspective {
+        yfov: f64,
+        znear: f64,
+        zfar: f64,
+        aspect: Option<f64>,
+    },
+    Orthographic {
+        xmag: f64,
+        ymag: f64,
+        znear: f64,
+        zfar: f64,
+    },
 }
 
 struct Material {
@@ -330,11 +349,32 @@ fn read_animation(
     Ok(())
 }
 
+/// Some exporters write a GLB without a BIN chunk but still count its 8-byte chunk header in
+/// the declared length (IO.md §9: the O44 `camera-light` file declares 472 bytes for 464).
+/// When the declared length is exactly 8 bytes longer than the file and the JSON chunk ends at
+/// the end of the file, returns a copy whose header declares the real length.
+fn repair_glb_length(bytes: &[u8]) -> Option<Vec<u8>> {
+    if bytes.len() < 20 || &bytes[..4] != b"glTF" {
+        return None;
+    }
+    let word = |i: usize| u32::from_le_bytes([bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]]);
+    let declared = word(8) as usize;
+    let json_end = 20usize.checked_add(word(12) as usize)?;
+    if declared != bytes.len() + 8 || json_end != bytes.len() {
+        return None;
+    }
+    let mut fixed = bytes.to_vec();
+    fixed[8..12].copy_from_slice(&u32::try_from(bytes.len()).ok()?.to_le_bytes());
+    Some(fixed)
+}
+
 /// Reads GLB or self-contained JSON glTF. `scale=100` converts metres to centimetres.
 pub fn read(bytes: &[u8], scale: f64) -> Result<ImportScene, Error> {
     if !scale.is_finite() || scale <= 0.0 {
         return Err(invalid("scale must be positive and finite"));
     }
+    let repaired = repair_glb_length(bytes);
+    let bytes = repaired.as_deref().unwrap_or(bytes);
     let file = gltf::Gltf::from_slice(bytes).map_err(|e| invalid(e.to_string()))?;
     let buffers = read_buffers(&file)?;
     let roots = file
@@ -401,6 +441,20 @@ pub fn read(bytes: &[u8], scale: f64) -> Result<ImportScene, Error> {
                 },
                 primitives,
                 skin: n.skin().map(|s| s.index()),
+                camera: n.camera().map(|c| match c.projection() {
+                    gltf::camera::Projection::Perspective(p) => CameraKind::Perspective {
+                        yfov: f64::from(p.yfov()),
+                        znear: f64::from(p.znear()),
+                        zfar: p.zfar().map_or(1.0e10, f64::from),
+                        aspect: p.aspect_ratio().map(f64::from),
+                    },
+                    gltf::camera::Projection::Orthographic(o) => CameraKind::Orthographic {
+                        xmag: f64::from(o.xmag()),
+                        ymag: f64::from(o.ymag()),
+                        znear: f64::from(o.znear()),
+                        zfar: f64::from(o.zfar()),
+                    },
+                }),
                 tracks: BTreeMap::new(),
             })
         })
@@ -442,6 +496,8 @@ impl ImportScene {
             let inline_mesh = !joint && n.primitives.len() == 1;
             let kind = if joint {
                 forge_rig::JOINT
+            } else if n.camera.is_some() {
+                "forge.camera"
             } else if inline_mesh {
                 forge_generators::POLYGON
             } else {
@@ -459,6 +515,43 @@ impl ImportScene {
                 (SCALE, n.transform.scale),
             ] {
                 tx.set_param(id, param, Value::Vec3(val.to_array()))?;
+            }
+            if let Some(camera) = n.camera {
+                match camera {
+                    CameraKind::Perspective {
+                        yfov,
+                        znear,
+                        zfar,
+                        aspect,
+                    } => {
+                        let aspect = aspect.unwrap_or(16.0 / 9.0);
+                        let horizontal = 2.0 * ((yfov / 2.0).tan() * aspect).atan();
+                        tx.set_param(id, "projection", Value::Enum("perspective".into()))?;
+                        tx.set_param(id, "sensor_size", Value::Float(36.0))?;
+                        tx.set_param(id, "fov_horizontal", Value::Float(horizontal))?;
+                        // glTF's defaults are 0.01 / 1e10; the scene's clipping params
+                        // only matter when the file asks for other planes.
+                        if (znear - 0.01).abs() > 1e-6 {
+                            tx.set_param(id, "enable_near_clipping", Value::Bool(true))?;
+                            tx.set_param(id, "near_clipping", Value::Float(znear))?;
+                        }
+                        if (zfar - 1.0e10).abs() > 1.0e6 {
+                            tx.set_param(id, "enable_far_clipping", Value::Bool(true))?;
+                            tx.set_param(id, "far_clipping", Value::Float(zfar))?;
+                        }
+                    }
+                    CameraKind::Orthographic { xmag, .. } => {
+                        tx.set_param(id, "projection", Value::Enum("parallel".into()))?;
+                        tx.set_param(
+                            id,
+                            "zoom",
+                            Value::Float(
+                                forge_generators::scene_objects::ORTHO_WIDTH
+                                    / (2.0 * xmag).max(1e-9),
+                            ),
+                        )?;
+                    }
+                }
             }
             for (key, track) in &n.tracks {
                 tx.set_track(id, key, Some(track.clone()))?;

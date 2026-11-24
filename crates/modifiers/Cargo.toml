@@ -13,7 +13,10 @@ forge-core = { path = "../core" }
 forge-expr = { path = "../expr" }
 forge-fields = { path = "../fields" }
 forge-geometry = { path = "../geometry" }
+forge-material = { path = "../material" }
+forge-modeling = { path = "../modeling" }
 forge-noise = { path = "../noise" }
+forge-shaders = { path = "../shaders" }
 forge-rig = { path = "../rig" }
 glam = "0.34"
 

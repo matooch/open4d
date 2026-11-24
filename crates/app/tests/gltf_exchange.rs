@@ -295,3 +295,86 @@ fn glb_round_trip_restores_hierarchy_and_real_world_scale() {
         100.0
     );
 }
+
+/// The JSON chunk of a GLB.
+fn glb_json(bytes: &[u8]) -> serde_json::Value {
+    assert_eq!(&bytes[..4], b"glTF");
+    let length = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
+    assert_eq!(length, bytes.len());
+    let chunk = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
+    serde_json::from_slice(&bytes[20..20 + chunk]).unwrap()
+}
+
+#[test]
+fn o44_camera_light_exports_the_camera_and_no_lights() {
+    // The golden GLB has the camera at (0, 200, -600), P -15, and no lights or meshes.
+    // Its header declares 472 bytes for a 464-byte file (the missing BIN chunk header,
+    // recorded in exchange.md); the importer accepts it unmodified (IO.md §9).
+    let bytes = std::fs::read(fixture("camera-light", "scene.glb")).unwrap();
+    let declared = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
+    assert_eq!(
+        declared,
+        bytes.len() + 8,
+        "the reference defect is still in the fixture"
+    );
+    let app = import(&bytes, 1.0);
+    let scene = app.doc.scene();
+    assert_eq!(scene.roots().len(), 1);
+    let camera = scene.roots()[0];
+    assert_eq!(scene.node(camera).unwrap().type_id, "forge.camera");
+    assert_eq!(
+        scene.local_transform(camera).unwrap().pos.to_array(),
+        [0.0, 200.0, -600.0]
+    );
+    let no_lights = |scene: &forge_core::Scene| {
+        scene
+            .roots()
+            .iter()
+            .flat_map(|r| std::iter::once(*r).chain(scene.descendants(*r)))
+            .all(|id| scene.node(id).unwrap().type_id != "forge.light")
+    };
+    assert!(no_lights(scene));
+    let sensor = scene.param(camera, "sensor_size").unwrap();
+    assert_eq!(sensor, &forge_core::Value::Float(36.0));
+    let fov = match scene.param(camera, "fov_horizontal") {
+        Some(forge_core::Value::Float(f)) => *f,
+        other => panic!("{other:?}"),
+    };
+    assert!((fov.to_degrees() - 53.130_102_354).abs() < 1e-6, "{fov}");
+
+    // Export at the case's scale (1.0, centimetres): the camera node is present and the
+    // lights stay out, as the reference's glTF export does.
+    let (bytes, _) = gltf::write(scene, None, 1.0).unwrap();
+    let json = glb_json(&bytes);
+    assert!(json.get("meshes").is_none(), "no meshes: {json}");
+    assert!(json.get("extensions").is_none(), "no light extension");
+    let cameras = json["cameras"].as_array().unwrap();
+    assert_eq!(cameras.len(), 1);
+    assert_eq!(cameras[0]["type"], "perspective");
+    let p = &cameras[0]["perspective"];
+    assert!(
+        (p["yfov"].as_f64().unwrap() - 0.548_334_896_564).abs() < 1e-6,
+        "{p}"
+    );
+    assert!((p["znear"].as_f64().unwrap() - 0.01).abs() < 1e-3);
+    assert!(p["zfar"].as_f64().unwrap() >= 1.0e9);
+    assert!((p["aspectRatio"].as_f64().unwrap() - 16.0 / 9.0).abs() < 1e-6);
+    let nodes = json["nodes"].as_array().unwrap();
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0]["camera"], 0);
+    let t = nodes[0]["translation"].as_array().unwrap();
+    assert!((t[0].as_f64().unwrap()).abs() < 1e-6);
+    assert!((t[1].as_f64().unwrap() - 200.0).abs() < 1e-6);
+    assert!((t[2].as_f64().unwrap() - 600.0).abs() < 1e-6);
+
+    // Importing our own export restores the same camera.
+    let again = import(&bytes, 1.0);
+    let scene = again.doc.scene();
+    assert_eq!(scene.roots().len(), 1);
+    let id = scene.roots()[0];
+    assert_eq!(scene.node(id).unwrap().type_id, "forge.camera");
+    assert_eq!(
+        scene.local_transform(id).unwrap().pos.to_array(),
+        [0.0, 200.0, -600.0]
+    );
+}

@@ -632,3 +632,30 @@ skinned bounds at the recorded frames); scenes built in code cover a hierarchy w
 about three axes, animation with linear, spline and step keys, cameras and lights with every
 exported setting, materials with selections, a skin with metre units (scale 0.01 then 100),
 selected roots, determinism and the file header.
+## 9. Cameras, lights and materials across formats (brief 170)
+
+Sources: O44 `camera-light` and `materials` ([exchange.md](../parity/exchange.md)) and the
+format sections above. The reference's own per-format behaviour is the mapping:
+
+| Format | Camera | Light | Material |
+|---|---|---|---|
+| glTF/GLB | yes: a `cameras[]` entry (perspective `yfov` vertical in radians, `znear`, `zfar`, `aspectRatio`) and a node `camera` index; transform keeps the glTF Y-up/flip-Z convention | **no** light export option, so lights are omitted | base colour and the metallic/roughness pair (brief 134) |
+| Alembic | yes: the camera's transform and static lens (§7) | no light nodes | names are not recoverable |
+| FBX (§8) | yes, both ways (import §8, export §8.8) | yes, both ways (Omni/Spot; direction rule §8) | diffuse colour both ways; roughness ↔ Phong shininess (own, §8.8) |
+| USD (our own) | parity-pending (no USD case in O44; the ASCII writer still omits cameras and lights) | parity-pending | brief 168 |
+
+- glTF import creates a `forge.camera` for a node with a camera: sensor 36,
+  `fov_horizontal` from `yfov * aspectRatio`, and near/far clipping only when the file
+  differs from glTF's 0.01 / 1e10 defaults. glTF export skips `forge.light` nodes, allows
+  a file with cameras and no meshes (no BIN chunk), and uses the scene's stored render
+  aspect else 16:9. The scene's default near clipping (enabled at 0) exports as 0.01.
+- The O44 golden `scene.glb` declares 472 bytes but is 464 (the missing BIN chunk header);
+  the importer accepts such a file as it is: when the declared length is exactly 8 bytes
+  more than the file and the JSON chunk ends at the end of the file, it reads the file with
+  its real length (users import files from that exporter; S9). Any other length mismatch is
+  still an error. Our own writer always declares the true length.
+- Checks (`crates/app/tests/gltf_exchange.rs` and `crates/io/tests/alembic.rs`): the
+  camera-light scene imports the camera at (0, 200, -600) with a 53.13° horizontal field;
+  our export has one perspective camera, translation (0, 200, 600), `yfov` 31.417°,
+  `znear` 0.01, `zfar` 1e10, aspect 16:9, no meshes and no lights; the Alembic case keeps
+  the camera and no lights.
