@@ -41,6 +41,7 @@ pub mod node_editor;
 pub mod object_manager;
 pub mod palette;
 pub mod panes;
+pub mod picture_viewer;
 pub mod prefs;
 pub mod scene_overlay;
 pub mod screenshot;

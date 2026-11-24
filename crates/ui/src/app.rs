@@ -114,6 +114,7 @@ pub struct Editor {
     /// The object manager's panel state: rename buffer, search text (UI.md §13).
     objects: ObjectManager,
     material_previews: crate::material_manager::MaterialPreviews,
+    picture_viewer: crate::picture_viewer::PictureViewer,
     /// The key map editor window (UI.md §14.5).
     keymap_editor: KeyMapEditor,
     /// The command palette window (UI.md §18).
@@ -219,6 +220,7 @@ impl Editor {
             viewport: ViewportPanel::default(),
             objects: ObjectManager::default(),
             material_previews: crate::material_manager::MaterialPreviews::default(),
+            picture_viewer: crate::picture_viewer::PictureViewer::default(),
             keymap_editor: KeyMapEditor::default(),
             palette: Palette::default(),
             name_edit: None,
@@ -476,6 +478,7 @@ impl Editor {
 
     /// Draws the whole editor. `rs` is `None` without a GPU (tests).
     pub fn show(&mut self, ui: &mut Ui, rs: Option<&egui_wgpu::RenderState>) {
+        self.picture_viewer.tick(ui.ctx());
         // RPC jobs run here, before anything is drawn: one command is one undo step.
         if let Some(inbox) = self.rpc.take() {
             if inbox.drain(&mut self.state) > 0 {
@@ -1124,6 +1127,10 @@ impl Editor {
                 ) {
                     self.run(c);
                 }
+            }
+            Panel::PictureViewer => {
+                self.picture_viewer
+                    .show(ui, self.state.doc.scene(), self.state.timeline.current)
             }
             Panel::WeightManager => {
                 for c in crate::weight_manager::weight_manager_ui(ui, &mut self.state) {

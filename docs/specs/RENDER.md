@@ -412,6 +412,30 @@ Not done: importance sampling by the BSDF at the same time as the image (the MIS
 there, but the BSDF lobe is not importance sampled against the environment), an HDRI mip chain for
 filtered background display, sun/sky models other than the gradient of `forge.sky`.
 
+## R17 Picture Viewer and render queue (brief 140)
+
+Sources: [area K](../roadmap/areas/K-rendering.md), [G8 §3](../parity/GUI-SESSIONS.md)
+and the existing R4 render control. GUI behaviour is native and **parity-pending**
+until G8 is recorded.
+
+- Open **Picture Viewer** from the Window menu. Queue the current frame, capturing
+  the scene and render settings at submission. One background worker at a time evaluates
+  the captured frame, builds the render snapshot (including scene cameras, lights and
+  supported materials), and runs the CPU engine. Progress callbacks wake the UI.
+  Jobs run FIFO; removing a waiting job or cancelling the active job adds no history.
+  Render failures are shown without stopping later jobs.
+- Completed frames appear newest-first in bounded session history. Selecting a row shows
+  its beauty; **Set A** and **Set B** pin the selected row. **Show A/B** switches between
+  pinned renders without rerendering and keeps the same channel where available. Data
+  passes use display mappings; **Exposure** adjusts colour passes only. **Save PNG**
+  saves the displayed RGB view, not a replacement for the CLI's raw EXR/multipass export.
+- Capture beauty by default; an opt-in **All passes** checkbox captures every AOV.
+  Limit the queue and history to eight entries each, with a 128 MiB linear image
+  budget and a maximum edge of 4096 pixels for an individual render. The viewer is
+  for stills; CLI sequence rendering is unchanged.
+- Tests: real queued CPU renders appear in egui history; select the two renders,
+  pin/switch A and B, and exercise channel selection without remaking the render.
+
 ## R13 Not done / follow-ups
 
 The material hosted in the document (brief 194), object-shaped area lights, falloff `Steps`, Sobol sampling,

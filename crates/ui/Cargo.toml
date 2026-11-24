@@ -23,6 +23,7 @@ forge-modeling = { path = "../modeling" }
 forge-material = { path = "../material" }
 forge-nodes = { path = "../nodes" }
 forge-render-api = { path = "../render-api" }
+forge-render-bridge = { path = "../render-bridge" }
 forge-render-cpu = { path = "../render-cpu" }
 forge-rig = { path = "../rig" }
 forge-rpc = { path = "../rpc" }
