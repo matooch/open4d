@@ -128,7 +128,7 @@ implementers can avoid collisions.
 | 128 | [Corner UVs on PolyMesh; primitive UV parity](../agents/tasks/128-primitive-uvs.md) | J | – | done (10/10 primitives per corner; CornerUvs beside PolyMesh, no OBJ vt IO yet) | geometry, generators, io |
 | 129 | [UV editor (view, transform, relax LSCM, pack, seams)](../agents/tasks/129-uv-editor.md) | J | 128, 150 | ready | ui, geometry |
 | 130 | [Image IO, texture cache, colour management](../agents/tasks/130-image-io-colour.md) | J | – | done | image (new) |
-| 131 | [Material manager UI with preview renders](../agents/tasks/131-material-manager.md) | J | 123, 136 | ready | ui |
+| 131 | [Material manager UI with preview renders](../agents/tasks/131-material-manager.md) | J | 123, 136 | done (parity-pending: G7) | ui |
 | 132 | [Viewport material display (PBR preview, textures)](../agents/tasks/132-viewport-materials.md) | J | 123, 143 | done | viewport |
 | 133 | [Environment: sky, HDRI, background, floor](../agents/tasks/133-environment.md) | J | 130, 137 | done (HDRI loading, importance sampling: 32.8 dB at 64 spp vs 4096; sky, background and floor objects; no O29 observation of these objects, own design) | render-api, generators |
 | 134 | [Material exchange mapping (glTF PBR to node material)](../agents/tasks/134-material-exchange-mapping.md) | J | 124, 164 | ready | io, material |

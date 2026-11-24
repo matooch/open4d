@@ -126,9 +126,26 @@ sessions G6/G7 pending), so every rule here is **parity-pending**.
 - **UI.** The Materials panel (`Panel::Materials`, opened from the Window menu) lists
   `Scene::materials()` with the icon colour swatch and the name; New runs `material.create`, a row's
   Assign button runs `material.assign` for the selected objects, Delete runs `material.delete`.
-  Dragging a row onto an object, renaming in place, a shader tree view and a material preview are
-  not done (GUI sessions G6/G7 have no answers yet); edit parameters in the Attributes panel
-  through `param.set` / `shader.set`. Level C.
+  Edit parameters in the Attributes panel through `param.set` / `shader.set`.
+
+## M7 Material manager previews (brief 131)
+
+Sources: [area J](../roadmap/areas/J-materials.md), [G7 §§1–2](../parity/GUI-SESSIONS.md)
+and [RENDER §R1–R2](RENDER.md). No G7 answers are recorded; layout, lighting and drag
+interaction are native and **parity-pending**.
+
+- The Materials panel shows a wrapping card grid in document order. Its thumbnails are
+  deterministic 64×64, four-sample CPU path traces of a smooth UV sphere in a fixed
+  studio scene, using the compiled material and hosted shader tree. A single preview
+  renders at a time off the UI thread. The icon colour stands in until a thumbnail is
+  available; edits to the material or its linked shaders invalidate the thumbnail,
+  and late results for deleted or changed materials are not installed.
+- Drag a card's preview/name onto an Object Manager object row or a pickable viewport
+  object, not onto empty space. Treat a hit on a clone as its cloner. A drop runs one
+  `material.assign` command for that object only, with one undo step and no selection
+  change. Assign-to-selection and Delete remain available.
+- Tests exercise a real pointer drag and undo in `egui_kittest`, plus the CPU thumbnail's
+  size, repeatability and response to a material colour change.
 
 ## M5 Unsupported / parity-pending
 

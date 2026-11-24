@@ -22,6 +22,8 @@ forge-io = { path = "../io" }
 forge-modeling = { path = "../modeling" }
 forge-material = { path = "../material" }
 forge-nodes = { path = "../nodes" }
+forge-render-api = { path = "../render-api" }
+forge-render-cpu = { path = "../render-cpu" }
 forge-rig = { path = "../rig" }
 forge-rpc = { path = "../rpc" }
 forge-script = { path = "../script" }

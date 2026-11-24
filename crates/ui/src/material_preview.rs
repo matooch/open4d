@@ -11,6 +11,12 @@ use forge_shaders::ShaderSet;
 use forge_viewport::material_preview::PreviewMaterial;
 use glam::{DMat4, DVec3};
 
+pub(crate) fn load_image(path: &str) -> Option<Arc<forge_image::Image>> {
+    let bytes = std::fs::read(path).ok()?;
+    let decoded = forge_image::decode(&bytes, &forge_image::Limits::default()).ok()?;
+    Some(Arc::new(decoded.image))
+}
+
 pub(crate) struct Binding<'a> {
     pub tag: &'a Node,
     pub material: &'a Node,
@@ -62,12 +68,7 @@ impl<'a> Binding<'a> {
         scene: &Scene,
     ) -> Arc<PreviewMaterial> {
         let graph = forge_material::compile(&Material::from_node(self.material));
-        let images = |path: &str| {
-            let bytes = std::fs::read(path).ok()?;
-            let decoded = forge_image::decode(&bytes, &forge_image::Limits::default()).ok()?;
-            Some(Arc::new(decoded.image))
-        };
-        let (shaders, _) = ShaderSet::from_material(scene, self.material.id, &images);
+        let (shaders, _) = ShaderSet::from_material(scene, self.material.id, &load_image);
         Arc::new(PreviewMaterial::bake(
             device,
             queue,

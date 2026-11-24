@@ -113,6 +113,7 @@ pub struct Editor {
     viewport: ViewportPanel,
     /// The object manager's panel state: rename buffer, search text (UI.md §13).
     objects: ObjectManager,
+    material_previews: crate::material_manager::MaterialPreviews,
     /// The key map editor window (UI.md §14.5).
     keymap_editor: KeyMapEditor,
     /// The command palette window (UI.md §18).
@@ -217,6 +218,7 @@ impl Editor {
             sizes: Sizes::default(),
             viewport: ViewportPanel::default(),
             objects: ObjectManager::default(),
+            material_previews: crate::material_manager::MaterialPreviews::default(),
             keymap_editor: KeyMapEditor::default(),
             palette: Palette::default(),
             name_edit: None,
@@ -1115,7 +1117,11 @@ impl Editor {
                 }
             }
             Panel::Materials => {
-                for c in crate::material_manager::material_manager_ui(ui, &mut self.state) {
+                for c in crate::material_manager::material_manager_ui(
+                    ui,
+                    &self.state,
+                    &mut self.material_previews,
+                ) {
                     self.run(c);
                 }
             }
@@ -1537,7 +1543,25 @@ impl Editor {
             (rect.width() * ppp).round() as u32,
             (rect.height() * ppp).round() as u32,
         ];
-        if input.navigating() {
+        use crate::material_manager::{MaterialDrag, assign_to};
+        if egui::DragAndDrop::has_payload_of_type::<MaterialDrag>(ui.ctx()) {
+            if let Some(material) = response.dnd_release_payload::<MaterialDrag>()
+                && let Some(pos) = ui.input(|i| i.pointer.latest_pos())
+            {
+                let frame = self.state.app.scheduled_draw(self.state.timeline.current);
+                let local = (pos - rect.min) * ppp;
+                if let Some(node) = crate::manipulate::pick_node(
+                    &frame.scene,
+                    &self.state.pane_camera(pane),
+                    f64::from(local.x),
+                    f64::from(local.y),
+                    f64::from(size[0].max(1)),
+                    f64::from(size[1].max(1)),
+                ) {
+                    self.run(assign_to(*material, node));
+                }
+            }
+        } else if input.navigating() {
             self.rect_drag = None;
         } else {
             self.viewport_interaction(ui, &response, rect, ppp, size);

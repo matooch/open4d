@@ -1954,6 +1954,8 @@ dependencies = [
  "forge-modifiers",
  "forge-nodes",
  "forge-platform",
+ "forge-render-api",
+ "forge-render-cpu",
  "forge-rig",
  "forge-rpc",
  "forge-script",

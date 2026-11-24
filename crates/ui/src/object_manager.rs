@@ -191,6 +191,14 @@ impl ObjectManager {
                 .selectable_label(selected, text)
                 .interact(Sense::click_and_drag());
             r.dnd_set_drag_payload(row.id);
+            // egui takes the payload before checking its type. Leave object reordering alone.
+            if egui::DragAndDrop::has_payload_of_type::<crate::material_manager::MaterialDrag>(
+                ui.ctx(),
+            ) && let Some(material) =
+                r.dnd_release_payload::<crate::material_manager::MaterialDrag>()
+            {
+                cmds.push(crate::material_manager::assign_to(*material, row.id));
+            }
             if r.double_clicked() {
                 self.renaming = Some((row.id, row.name.clone()));
             } else if r.clicked() {
