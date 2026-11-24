@@ -183,6 +183,32 @@ fn convert_round_trips_a_binary_gltf_scene() {
 }
 
 #[test]
+fn convert_imports_an_fbx_scene() {
+    let d = dir("fbx");
+    let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/golden/exchange/hierarchy/scene.fbx");
+    let native = d.join("native");
+    let (code, result) = json_run(&[
+        "convert",
+        s(&source),
+        "--out",
+        s(&native),
+        "--format",
+        "forge",
+    ]);
+    assert_eq!(code, 0, "{result}");
+    // two top-level objects: the exporter's viewport camera and the null (with its cube)
+    assert_eq!(result["files"][0]["nodes"], 2);
+    assert_eq!(names(&native), ["scene.forge"]);
+    // and on to OBJ through the native scene
+    let obj = d.join("obj");
+    let (code, result) = json_run(&["convert", s(&native.join("scene.forge")), "--out", s(&obj)]);
+    assert_eq!(code, 0, "{result}");
+    let text = std::fs::read_to_string(obj.join("scene.obj")).unwrap();
+    assert_eq!(text.lines().filter(|l| l.starts_with("v ")).count(), 8);
+}
+
+#[test]
 fn one_bad_scene_fails_the_run_but_the_others_are_written() {
     let d = dir("partial");
     let input = d.join("in");

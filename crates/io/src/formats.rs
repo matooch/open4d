@@ -7,7 +7,7 @@ use serde_json::Map;
 
 use crate::export_scene;
 use crate::obj::{self, ObjObject, ReadOptions, WriteOptions};
-use crate::{abc, gltf, ply, stl, usda};
+use crate::{abc, fbx, gltf, ply, stl, usda};
 
 /// One exchange format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,6 +55,13 @@ const FORMATS: &[FormatInfo] = &[
         extensions: &["usda"],
         import: true,
         export: true,
+    },
+    FormatInfo {
+        id: "fbx",
+        label: "FBX",
+        extensions: &["fbx"],
+        import: true,
+        export: false,
     },
     FormatInfo {
         id: "abc",
@@ -108,6 +115,7 @@ pub fn import_options(id: &str) -> Option<Vec<ParamDesc>> {
         "obj" => Some(vec![ParamDesc::bool("flip_z", "Flip Z", false)]),
         "stl" | "ply" | "abc" => Some(vec![scale_option()]),
         "gltf" => Some(vec![scale_option_with(100.0)]),
+        "fbx" => Some(vec![scale_option()]),
         "usda" => Some(vec![]),
         _ => None,
     }
@@ -328,6 +336,7 @@ pub enum Import {
     Gltf(gltf::ImportScene),
     Usda(usda::ImportScene),
     Abc(abc::ImportScene),
+    Fbx(fbx::ImportScene),
 }
 
 impl Import {
@@ -337,6 +346,7 @@ impl Import {
             Self::Gltf(scene) => scene.apply(tx),
             Self::Usda(scene) => scene.apply(tx),
             Self::Abc(scene) => scene.apply(tx),
+            Self::Fbx(scene) => scene.apply(tx),
         }
     }
 }
@@ -355,6 +365,10 @@ pub fn read_scene(id: &str, bytes: &[u8], options: &Options) -> Result<Import, I
         abc::read(bytes, scale_from(options, 1.0))
             .map(Import::Abc)
             .map_err(|e| IoError::Parse(e.to_string()))
+    } else if id == "fbx" {
+        fbx::read(bytes, scale_from(options, 1.0))
+            .map(Import::Fbx)
+            .map_err(|e| IoError::Parse(e.to_string()))
     } else {
         read_bytes(id, bytes, options).map(Import::Flat)
     }
@@ -362,7 +376,7 @@ pub fn read_scene(id: &str, bytes: &[u8], options: &Options) -> Result<Import, I
 
 /// The animated format preserves authored local transforms and the unposed bind mesh.
 pub fn preserves_animation(id: &str) -> bool {
-    matches!(id, "gltf" | "usda" | "abc")
+    matches!(id, "gltf" | "usda" | "abc" | "fbx")
 }
 
 /// GLB output must not be labelled as a JSON `.gltf` file.
