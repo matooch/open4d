@@ -54,11 +54,12 @@ pub enum Panel {
     ValueGraph,
     Materials,
     PictureViewer,
+    InteractiveRender,
 }
 
 impl Panel {
     /// Every panel, in Window menu order.
-    pub const ALL: [Panel; 18] = [
+    pub const ALL: [Panel; 19] = [
         Panel::CommandBar,
         Panel::ToolPalette,
         Panel::Viewport,
@@ -77,6 +78,7 @@ impl Panel {
         Panel::ValueGraph,
         Panel::Materials,
         Panel::PictureViewer,
+        Panel::InteractiveRender,
     ];
 
     /// The panels `Dock::default()` opens; the others open from the Window menu.
@@ -110,6 +112,7 @@ impl Panel {
             Panel::ValueGraph => "Value Graph",
             Panel::Materials => "Materials",
             Panel::PictureViewer => "Picture Viewer",
+            Panel::InteractiveRender => "Interactive Render",
         }
     }
 
@@ -131,6 +134,7 @@ impl Panel {
             Panel::WeightManager => Area::RightBottom,
             Panel::Materials => Area::RightBottom,
             Panel::PictureViewer => Area::Center,
+            Panel::InteractiveRender => Area::Center,
             Panel::DopeSheet | Panel::ValueGraph => Area::Bottom,
         }
     }

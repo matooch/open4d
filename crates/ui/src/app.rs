@@ -115,6 +115,7 @@ pub struct Editor {
     objects: ObjectManager,
     material_previews: crate::material_manager::MaterialPreviews,
     picture_viewer: crate::picture_viewer::PictureViewer,
+    interactive_render: crate::interactive_render::InteractiveRender,
     /// The key map editor window (UI.md §14.5).
     keymap_editor: KeyMapEditor,
     /// The command palette window (UI.md §18).
@@ -221,6 +222,7 @@ impl Editor {
             objects: ObjectManager::default(),
             material_previews: crate::material_manager::MaterialPreviews::default(),
             picture_viewer: crate::picture_viewer::PictureViewer::default(),
+            interactive_render: crate::interactive_render::InteractiveRender::default(),
             keymap_editor: KeyMapEditor::default(),
             palette: Palette::default(),
             name_edit: None,
@@ -479,6 +481,15 @@ impl Editor {
     /// Draws the whole editor. `rs` is `None` without a GPU (tests).
     pub fn show(&mut self, ui: &mut Ui, rs: Option<&egui_wgpu::RenderState>) {
         self.picture_viewer.tick(ui.ctx());
+        if self
+            .state
+            .dock
+            .area_of(Panel::InteractiveRender)
+            .and_then(|area| self.state.dock.active(area))
+            != Some(Panel::InteractiveRender)
+        {
+            self.interactive_render.suspend();
+        }
         // RPC jobs run here, before anything is drawn: one command is one undo step.
         if let Some(inbox) = self.rpc.take() {
             if inbox.drain(&mut self.state) > 0 {
@@ -1132,6 +1143,11 @@ impl Editor {
                 self.picture_viewer
                     .show(ui, self.state.doc.scene(), self.state.timeline.current)
             }
+            Panel::InteractiveRender => self.interactive_render.show(
+                ui,
+                self.state.doc.scene(),
+                self.state.timeline.current,
+            ),
             Panel::WeightManager => {
                 for c in crate::weight_manager::weight_manager_ui(ui, &mut self.state) {
                     self.run(c);

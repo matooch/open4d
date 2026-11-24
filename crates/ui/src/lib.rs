@@ -26,6 +26,7 @@ pub mod field_overlay;
 pub mod history_panel;
 pub mod hud;
 pub mod icons;
+pub mod interactive_render;
 mod key_indicator;
 pub mod keymap;
 pub mod keymap_editor;

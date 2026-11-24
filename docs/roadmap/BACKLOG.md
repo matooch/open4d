@@ -138,7 +138,7 @@ implementers can avoid collisions.
 | 138 | [Physical camera: projection, sensor, ortho, DOF, motion blur](../agents/tasks/138-physical-camera.md) | K | 136, 047 | done (4/4 O57 cases within 1 px; thin-lens DOF own design, no parity data; motion blur, lens distortion, vignetting not done) | render-cpu, core |
 | 139 | [Render settings, image sequences, formats, multipass/AOVs](../agents/tasks/139-render-settings-outputs.md) | K | 136, 130 | done (settings by CLI flags; not yet stored in the scene) | render-api, render-cpu |
 | 140 | [Picture viewer and render queue](../agents/tasks/140-picture-viewer-queue.md) | K | 139 | done (parity-pending: G8) | ui |
-| 141 | [IPR (interactive render)](../agents/tasks/141-ipr.md) | K | 136 | ready | render-cpu, ui |
+| 141 | [IPR (interactive render)](../agents/tasks/141-ipr.md) | K | 136 | done | render-cpu, ui |
 | 142 | [GPU path tracer (wgpu compute)](../agents/tasks/142-gpu-path-tracer.md) | K | 136 | ready | render-gpu |
 | 143 | [Viewport upgrades: lights, shadows, AA, display modes, 4-view layout](../agents/tasks/143-viewport-upgrades.md) | K | – | done (parity-pending G8) | viewport |
 | 144 | [Viewport performance: GPU instancing, LOD, large meshes](../agents/tasks/144-viewport-performance.md) | K | 143 | done (instancing, upload cache, chunked upload, culling, LOD hook; benchmarks in VIEWPORT.md §10.10) | viewport |

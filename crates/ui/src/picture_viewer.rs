@@ -10,7 +10,7 @@ use forge_core::Scene;
 use forge_geometry::triangulate::triangulate;
 use forge_image::{AlphaMode, Image};
 use forge_render_api::{
-    Aov, Control, RenderEngine, RenderError, RenderEvent, RenderOutput, RenderSettings,
+    Aov, Control, RenderEngine, RenderError, RenderEvent, RenderOutput, RenderSettings, Snapshot,
 };
 use forge_render_bridge::{apply_scene_objects, settings_from_scene, snapshot_from_polys};
 use forge_render_cpu::CpuEngine;
@@ -74,8 +74,14 @@ impl Completed {
     }
 }
 
-fn render(mut job: Job, control: &Control) -> Result<Completed, RenderError> {
-    let frame = forge_app::schedule::Scheduler::default().evaluate(&job.scene, job.frame);
+/// Shared snapshot adapter for stills and IPR. Call on the render worker.
+pub(crate) fn prepare_render(
+    scene: &Scene,
+    frame: i64,
+    settings: &mut RenderSettings,
+    control: &Control,
+) -> Result<(Snapshot, Vec<String>), RenderError> {
+    let frame = forge_app::schedule::Scheduler::default().evaluate(scene, frame);
     if control.is_cancelled() {
         return Err(RenderError::Cancelled);
     }
@@ -91,7 +97,7 @@ fn render(mut job: Job, control: &Control) -> Result<Completed, RenderError> {
     }
     let mut snap = snapshot_from_polys(
         &polys,
-        f64::from(job.settings.width) / f64::from(job.settings.height),
+        f64::from(settings.width) / f64::from(settings.height),
     );
     let mut materials = BTreeMap::new();
     for (i, (&id, mesh)) in ids.iter().zip(&polys).enumerate() {
@@ -140,14 +146,19 @@ fn render(mut job: Job, control: &Control) -> Result<Completed, RenderError> {
     }
     let applied = apply_scene_objects(&mut snap, &frame.scene);
     if applied.scene_has_lights {
-        job.settings.default_light = false;
+        settings.default_light = false;
     }
+    Ok((snap, applied.warnings))
+}
+
+fn render(mut job: Job, control: &Control) -> Result<Completed, RenderError> {
+    let (snap, warnings) = prepare_render(&job.scene, job.frame, &mut job.settings, control)?;
     let output = CpuEngine::new().render(&snap, &job.settings, control)?;
     Ok(Completed {
         id: job.id,
         frame: job.frame,
         output,
-        warnings: applied.warnings,
+        warnings,
     })
 }
 

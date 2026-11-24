@@ -436,6 +436,25 @@ until G8 is recorded.
 - Tests: real queued CPU renders appear in egui history; select the two renders,
   pin/switch A and B, and exercise channel selection without remaking the render.
 
+## R18 Interactive render preview (brief 141)
+
+Sources: [area K](../roadmap/areas/K-rendering.md), R4 tile/cancel control and the
+brief's snapshot-invalidation requirement. This is a native preview, not reference parity.
+
+- **Interactive Render** is a viewport-area dock tab. While shown, it renders the
+  current evaluated frame, using the same materials, camera and lights as R17.
+  Cap the longest edge at 512 px, samples at 16 and tiles at 16 px to keep the
+  preview responsive. It does not add to Picture Viewer history.
+- The document identity, revision and timeline frame identify the submitted scene snapshot.
+  A changed key clears accumulation and cancels the old generation; coalesce edits
+  into a single desired snapshot and start it when the previous worker exits.
+  Only the current generation may display tiles. Hidden tabs cancel their render;
+  Stop/Start pauses and resumes without changing the scene or history.
+- Render and evaluate off the UI thread. Blit finished tiles onto a bounded preview
+  buffer and wake the UI, then show the engine's final output on success. The
+  restart-latency test uses an injected engine to measure cancellation and start
+  of the new render within 100 ms of a parameter edit, independent of CPU shading cost.
+
 ## R13 Not done / follow-ups
 
 The material hosted in the document (brief 194), object-shaped area lights, falloff `Steps`, Sobol sampling,
