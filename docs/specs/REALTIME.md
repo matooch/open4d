@@ -232,3 +232,12 @@ Vulkan driver (lavapipe); the bound is what the test asserts.
 | Layer, Fusion | all 9 blend modes, layer stack with a disabled layer, no base, nested, empty | 5.9e-7 (Fusion Overlay) | 1e-4 (default) |
 | Colorizer, Filter, Normalizer | 4 inputs x cycle, no child, HSL hue/saturation/lightness/contrast/gamma/invert, grey input, degenerate span | 9.0e-7 (Normalizer) | 1e-4 (default) |
 | Vertex Map, AO | points with and without a vertex weight / occlusion value | 6.0e-8 | 1e-4 (default) |
+| Bitmap | 5x3 and 16x16 images x repeat/clamp x nearest/bilinear, two images and a shared binding in one module | 5.7e-7 (nearest is exact: 0) | 1e-4 (default) |
+
+Compile time: a 50-node material (25 shader nodes spread over every family, plus 25 mixes)
+compiles in about 2 ms in a dev build (test limit 100 ms); the library functions are emitted
+once, so the cost is a few hundred bytes per node.
+
+Nothing is left on the fallback: every `Shader` variant is ported. The `(0.8, 0.8, 0.8)`
+fallback of section 1.2 remains only for `compile` / `ShaderCache::module` without a
+`TextureCodegen`.

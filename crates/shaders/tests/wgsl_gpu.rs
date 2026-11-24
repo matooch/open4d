@@ -391,3 +391,8 @@ fn colorizer_filter_normalizer_match_the_cpu() {
 fn vertex_map_and_ao_match_the_cpu() {
     check("context", context_cases());
 }
+
+#[test]
+fn bitmaps_match_the_cpu() {
+    check("bitmap", bitmap_cases());
+}

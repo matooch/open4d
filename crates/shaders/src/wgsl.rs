@@ -96,6 +96,43 @@ fn forge_hsl_to_rgb(hsl: vec3<f32>) -> vec3<f32> {
 }
 "#;
 
+/// Bitmap filtering by `textureLoad`, the CPU rule exactly (REALTIME.md §2.8).
+const BITMAP_WGSL: &str = r#"
+fn forge_texel(tex: texture_2d<f32>, x: i32, y: i32, repeat: bool) -> vec3<f32> {
+    let dims = vec2<i32>(textureDimensions(tex));
+    var p = vec2<i32>(x, y);
+    if (repeat) {
+        p = ((p % dims) + dims) % dims;
+    } else {
+        p = clamp(p, vec2<i32>(0), dims - vec2<i32>(1));
+    }
+    return textureLoad(tex, p, 0).xyz;
+}
+fn forge_bitmap(tex: texture_2d<f32>, uvw: vec3<f32>, repeat: bool, interpolate: bool) -> vec3<f32> {
+    let dims = vec2<f32>(textureDimensions(tex));
+    let x = uvw.x * dims.x;
+    let y = (1.0 - uvw.y) * dims.y;
+    if (!interpolate) {
+        return forge_texel(tex, i32(floor(x)), i32(floor(y)), repeat);
+    }
+    let fx = x - 0.5;
+    let fy = y - 0.5;
+    let x0 = floor(fx);
+    let y0 = floor(fy);
+    let tx = fx - x0;
+    let ty = fy - y0;
+    let ix = i32(x0);
+    let iy = i32(y0);
+    let a = forge_texel(tex, ix, iy, repeat);
+    let b = forge_texel(tex, ix + 1, iy, repeat);
+    let c = forge_texel(tex, ix, iy + 1, repeat);
+    let d = forge_texel(tex, ix + 1, iy + 1, repeat);
+    let top = a + (b - a) * tx;
+    let bot = c + (d - c) * tx;
+    return top + (bot - top) * ty;
+}
+"#;
+
 const TILES_WGSL: &str = r#"
 // Shader::Tiles cell_hash(seed, i, j) % 3
 fn forge_tile_pick(seed: u32, i: i32, j: i32) -> u32 {
@@ -164,7 +201,7 @@ impl TextureCodegen for ShaderSetCodegen<'_> {
     fn emit(&self, name: &str, module: &mut ModuleBuilder) -> Option<String> {
         match self.set.shaders.get(name) {
             None => Some("vec3<f32>(1.0)".into()),
-            Some(s) => emit_shader(s, module).map(|f| format!("{f}(ctx)")),
+            Some(s) => Some(format!("{}(ctx)", emit_shader(s, module))),
         }
     }
 }
@@ -196,18 +233,86 @@ impl Fnv {
             self.0 = self.0.wrapping_mul(0x0000_0100_0000_01b3);
         }
     }
-}
 
-/// Hashes everything the generated code depends on (the whole tree, bitmap pixels included).
-fn fingerprint(s: &Shader, h: &mut Fnv) {
-    let mut text = |t: String| h.feed(t.as_bytes());
-    match s {
-        Shader::Noise(n) => text(format!("{n:?}")),
-        _ => text(format!("{s:?}")),
+    fn text(&mut self, t: String) {
+        self.feed(t.as_bytes());
+    }
+
+    /// Whole words (bitmap pixels): the same mixing, four bytes at a time.
+    fn words(&mut self, data: &[f32]) {
+        self.feed(b"px");
+        for v in data {
+            self.0 ^= u64::from(v.to_bits());
+            self.0 = self.0.wrapping_mul(0x0000_0100_0000_01b3);
+        }
     }
 }
 
-fn emit_shader(s: &Shader, m: &mut ModuleBuilder) -> Option<String> {
+/// Hashes everything the generated code depends on: the whole tree, bitmap pixels included
+/// (everything else through its `Debug` text, which has no images in it).
+fn fingerprint(s: &Shader, h: &mut Fnv) {
+    let opt = |c: &Option<Box<Shader>>, h: &mut Fnv| match c {
+        Some(c) => fingerprint(c, h),
+        None => h.feed(b"none"),
+    };
+    match s {
+        Shader::Bitmap(b) => {
+            h.text(format!(
+                "bitmap {} {} {} {}",
+                b.image.width, b.image.height, b.repeat, b.interpolate
+            ));
+            h.words(&b.image.data);
+        }
+        Shader::Layer { base, layers } => {
+            h.feed(b"layer");
+            opt(base, h);
+            for l in layers {
+                h.text(format!("{:?} {} {}", l.mode, l.opacity, l.enabled));
+                fingerprint(&l.shader, h);
+            }
+        }
+        Shader::Fusion {
+            base,
+            blend,
+            mode,
+            opacity,
+        } => {
+            h.text(format!("fusion {mode:?} {opacity}"));
+            fingerprint(base, h);
+            fingerprint(blend, h);
+        }
+        Shader::Colorizer {
+            input,
+            cycle,
+            gradient,
+            texture,
+        } => {
+            h.text(format!("colorizer {input:?} {cycle} {gradient:?}"));
+            opt(texture, h);
+        }
+        Shader::Filter {
+            texture,
+            hue,
+            saturation,
+            lightness,
+            contrast,
+            gamma,
+            invert,
+        } => {
+            h.text(format!(
+                "filter {hue} {saturation} {lightness} {contrast} {gamma} {invert}"
+            ));
+            opt(texture, h);
+        }
+        Shader::Normalizer { texture, low, high } => {
+            h.text(format!("normalizer {low} {high}"));
+            opt(texture, h);
+        }
+        other => h.text(format!("{other:?}")),
+    }
+}
+
+fn emit_shader(s: &Shader, m: &mut ModuleBuilder) -> String {
     let body = match s {
         Shader::Noise(n) => noise_body(n, m),
         Shader::Color { color, brightness } => {
@@ -247,11 +352,23 @@ fn emit_shader(s: &Shader, m: &mut ModuleBuilder) -> Option<String> {
             v3(*color_2)
         ),
         Shader::Tiles(t) => tiles_body(t, m),
+        Shader::Bitmap(b) => {
+            m.once("bitmap", BITMAP_WGSL);
+            let k = m.resource(b.image.clone());
+            m.once(
+                &format!("tex{k}"),
+                &format!("@group(1) @binding({k}) var forge_tex_{k}: texture_2d<f32>;"),
+            );
+            format!(
+                "    return forge_bitmap(forge_tex_{k}, ctx.uvw, {}, {});",
+                b.repeat, b.interpolate
+            )
+        }
         Shader::Layer { base, layers } => {
             m.once("blend", BLEND_WGSL);
-            let mut b = format!("    var acc = {};\n", sub(base, m)?);
+            let mut b = format!("    var acc = {};\n", sub(base, m));
             for l in layers.iter().filter(|l| l.enabled) {
-                let top = emit_shader(&l.shader, m)?;
+                let top = emit_shader(&l.shader, m);
                 let _ = writeln!(
                     b,
                     "    acc = forge_blend(acc, {top}(ctx), {}u, {});",
@@ -269,7 +386,7 @@ fn emit_shader(s: &Shader, m: &mut ModuleBuilder) -> Option<String> {
             opacity,
         } => {
             m.once("blend", BLEND_WGSL);
-            let (base, blend) = (emit_shader(base, m)?, emit_shader(blend, m)?);
+            let (base, blend) = (emit_shader(base, m), emit_shader(blend, m));
             format!(
                 "    return forge_blend({base}(ctx), {blend}(ctx), {}u, {});",
                 blend_index(*mode),
@@ -283,7 +400,7 @@ fn emit_shader(s: &Shader, m: &mut ModuleBuilder) -> Option<String> {
             texture,
         } => {
             let ramp = ramp_fn(gradient, m);
-            let c = sub(texture, m)?;
+            let c = sub(texture, m);
             let t = match input {
                 ColorizeInput::Luminance => {
                     "0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z".to_string()
@@ -309,7 +426,7 @@ fn emit_shader(s: &Shader, m: &mut ModuleBuilder) -> Option<String> {
             invert,
         } => {
             m.once("hsl", HSL_WGSL);
-            let c = sub(texture, m)?;
+            let c = sub(texture, m);
             let mut b = format!(
                 "    var hsl = forge_rgb_to_hsl({c});\n    hsl.x = hsl.x + {};\n    hsl.y = clamp(hsl.y * {}, 0.0, 1.0);\n    var c = forge_hsl_to_rgb(hsl);\n    c = c + vec3<f32>({});\n    c = (c - vec3<f32>(0.5)) * {} + vec3<f32>(0.5);\n    c = pow(max(c, vec3<f32>(0.0)), vec3<f32>({}));\n",
                 f(*hue),
@@ -325,7 +442,7 @@ fn emit_shader(s: &Shader, m: &mut ModuleBuilder) -> Option<String> {
             b
         }
         Shader::Normalizer { texture, low, high } => {
-            let c = sub(texture, m)?;
+            let c = sub(texture, m);
             format!(
                 "    return clamp(({c} - vec3<f32>({})) / {}, vec3<f32>(0.0), vec3<f32>(1.0));",
                 f(*low),
@@ -342,9 +459,8 @@ fn emit_shader(s: &Shader, m: &mut ModuleBuilder) -> Option<String> {
             low = v3(*low),
             high = v3(*high)
         ),
-        _ => return None,
     };
-    Some(m.function("ctx: ShadeCtx", "vec3<f32>", &body))
+    m.function("ctx: ShadeCtx", "vec3<f32>", &body)
 }
 
 fn noise_library() -> String {
@@ -562,9 +678,9 @@ fn blend_index(mode: BlendMode) -> u32 {
 }
 
 /// The colour of an optional child shader: black without one (the CPU `sub`).
-fn sub(child: &Option<Box<Shader>>, m: &mut ModuleBuilder) -> Option<String> {
+fn sub(child: &Option<Box<Shader>>, m: &mut ModuleBuilder) -> String {
     match child {
-        Some(c) => emit_shader(c, m).map(|f| format!("{f}(ctx)")),
-        None => Some("vec3<f32>(0.0)".into()),
+        Some(c) => format!("{}(ctx)", emit_shader(c, m)),
+        None => "vec3<f32>(0.0)".into(),
     }
 }

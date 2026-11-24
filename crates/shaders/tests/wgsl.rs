@@ -58,6 +58,7 @@ fn all_cases() -> Vec<Case> {
     cases.extend(filter_cases());
     cases.extend(normalizer_cases());
     cases.extend(context_cases());
+    cases.extend(bitmap_cases());
     cases
 }
 
@@ -80,6 +81,37 @@ fn library_functions_are_emitted_once_per_module() {
             "{lib} emitted more than once"
         );
     }
+}
+
+#[test]
+fn bitmaps_bind_one_texture_per_image() {
+    let cases = bitmap_cases();
+    let m = compile(&graph_of(&cases), &set_of(&cases));
+    // two distinct images in the case list
+    assert_eq!(m.resources.len(), 2);
+    for k in 0..2 {
+        assert!(m.source.contains(&format!(
+            "@group(1) @binding({k}) var forge_tex_{k}: texture_2d<f32>;"
+        )));
+    }
+    assert_eq!(m.source.matches("fn forge_bitmap(").count(), 1);
+}
+
+#[test]
+fn the_cache_key_covers_bitmap_pixels() {
+    let mut cases = bitmap_cases();
+    cases.truncate(1);
+    let g = graph_of(&cases);
+    let set = set_of(&cases);
+    let a = hash_graph_with(&g, &ShaderSetCodegen { set: &set });
+    let mut edited = set.clone();
+    if let Some(Shader::Bitmap(b)) = edited.shaders.get_mut(&cases[0].name) {
+        let mut img = (*b.image).clone();
+        img.data[0] += 0.25;
+        b.image = std::sync::Arc::new(img);
+    }
+    let b = hash_graph_with(&g, &ShaderSetCodegen { set: &edited });
+    assert_ne!(a, b);
 }
 
 #[test]

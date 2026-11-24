@@ -562,3 +562,59 @@ pub fn context_cases() -> Vec<Case> {
         ),
     ]
 }
+
+fn test_image(w: u32, h: u32, seed: f32) -> std::sync::Arc<forge_image::Image> {
+    std::sync::Arc::new(forge_image::Image::from_fn(
+        w,
+        h,
+        forge_image::AlphaMode::Straight,
+        |x, y| {
+            let (x, y) = (x as f32, y as f32);
+            [
+                (x * 0.37 + y * 0.11 + seed).fract(),
+                (x * 0.05 + y * 0.43 + seed * 2.0).fract(),
+                ((x + 1.0) * (y + 2.0) * 0.071 + seed * 3.0).fract(),
+                0.5,
+            ]
+        },
+    ))
+}
+
+pub fn bitmap_cases() -> Vec<Case> {
+    let small = test_image(5, 3, 0.2);
+    let big = test_image(16, 16, 0.7);
+    let bitmap = |image: &std::sync::Arc<forge_image::Image>, repeat, interpolate| {
+        Shader::Bitmap(Bitmap {
+            image: image.clone(),
+            repeat,
+            interpolate,
+        })
+    };
+    let mut cases = Vec::new();
+    for (name, image) in [("5x3", &small), ("16x16", &big)] {
+        for repeat in [false, true] {
+            for interpolate in [false, true] {
+                cases.push(case(
+                    &format!("Bitmap-{name}-repeat-{repeat}-bilinear-{interpolate}"),
+                    bitmap(image, repeat, interpolate),
+                    DEFAULT_BOUND,
+                ));
+            }
+        }
+    }
+    // two bitmaps (one shared) in one module, one inside a layer
+    cases.push(case(
+        "Bitmap-in-layer",
+        Shader::Layer {
+            base: Some(Box::new(bitmap(&small, true, true))),
+            layers: vec![LayerItem {
+                shader: bitmap(&big, false, true),
+                mode: forge_shaders::BlendMode::Multiply,
+                opacity: 0.6,
+                enabled: true,
+            }],
+        },
+        DEFAULT_BOUND,
+    ));
+    cases
+}
