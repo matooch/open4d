@@ -1353,3 +1353,81 @@ Follow-up cases (planner, **interactive export** so the deformer has its box and
 `spline-wrap/closed` (a Circle); `spline-deformer/modifier-moved` (modifying Arc translated by (0, 50, 0), a straight original line and a
 straight modifying line so pairing is unambiguous, radius 100), `spline-deformer/radius-60`, `use-length`; `spline-rail/limited`, `within-box`,
 `scale-before-50`, `x-splines`, one-spline, and Z splines of different lengths; a plane with 10 × 10 segments for all of them.
+
+## 22. Smoothing, Displacer, Polygon Reduction and Bevel deformer (brief 054)
+
+Sources: observation O19 ([deformers-3.md](../parity/deformers-3.md)) and its cases
+`tests/golden/{smoothing-deformer,displacer,polygon-reduction,bevel-deformer}`. These four
+read or change the polygon mesh, so they run in `apply_deformer_mesh`, not in the points-only
+path. Smoothing and the Displacer keep an (empty) field list; Polygon Reduction and the
+Bevel deformer have no Falloff group (O19).
+
+### 22.1 Smoothing (`forge.smoothing_deformer`)
+
+| id | label | kind | default |
+|---|---|---|---|
+| `strength` | Strength | float, percent (stored 0..1) | 1 |
+| `type` | Type | enum `relax, smooth, stretch` | `smooth` |
+| `iterations` | Iterations | int | 10 |
+| `stiffness` | Stiffness | float, percent (stored 0..1) | 0.3 |
+| `keep_displacements` | Keep Displacements | bool | off |
+| `stiffness_map` | Stiffness Map | string | empty |
+
+- Each iteration is Jacobi Laplacian smoothing: every point moves
+  `strength * stiffness` of the way to the mean of its edge neighbours. `type` and
+  `keep_displacements` are stored; their distinct behaviour is **parity-pending**.
+- **Known mismatch** (`smoothing-deformer/defaults`, `iterations-10`): the reference
+  shrinks the edited cube much more (area 141k vs our 238k, volume 4.3M vs 9.3M); the
+  per-type weighting and the exact strength/stiffness mapping are not derived. The two
+  cases are identical because 10 is already the default.
+
+### 22.2 Displacer (`forge.displacer`)
+
+Params follow the O19 table (`strength`, `height`, `type`, `direction`, `channel`, shader
+link, offsets, lengths, `tile`, `use`, `invert`, `object`, `camera`, `backface_cull`,
+`process_normal_tag`, `emulation`).
+
+- The linked shader is sampled at the point; `Intensity (Centered)` uses
+  `2 * luminance - 1`, the per-axis modes move along the object's XYZ axes. The direction is
+  the vertex normal, the radial direction or +Y. Without a shader the deformer moves
+  nothing, which is `displacer/defaults` (exact).
+- **Known mismatch** (`displacer/height-noise`): the procedural cube has no observed UVW
+  tag; mapping the object box to 0..1 gives Hausdorff 23.8 and volume -2.7 %. The exact
+  texture mapping is parity-pending.
+
+### 22.3 Polygon Reduction (`forge.polygon_reduction`)
+
+Params: `reduction_strength` (0.9), `mesh_quality_factor` (1000),
+`co_planar_optimization` (on), `bounday_curve_preservation` (on),
+`polygon_quality_preservation` (off).
+
+- Quadric edge collapse: plane quadrics are accumulated per point, the cheapest manifold
+  interior edge (two faces, two common neighbours) collapses to its midpoint until the face
+  target is reached. The target is `(1 - strength)² * faces` (**our design**, not observed).
+- **Known mismatch** (`polygon-reduction/defaults`, `/50`): the reference stops on a
+  quality criterion (13/22 and 58/112 faces) that is not derived; ours leaves 104/108 for
+  both strengths.
+
+### 22.4 Bevel deformer (`forge.bevel_deformer`)
+
+Params follow the O19 table (`component_mode`, `selection`, `use_angle`, `angle_threshold`,
+`bevel_mode`, `offset_mode`, `offset`, `subdivision`, `depth`, `limit`, `shape`, `tension`,
+`mitering`, `ending`, `partial_rounding`, the N-gon and Phong flags).
+
+- Edge mode cuts every edge sharper than `angle_threshold` (all edges with Use Angle off):
+  every face is inset by `offset` along its edges, every edge becomes a quad between its
+  two faces and every vertex a polygon of its incident faces. This full-mesh chamfer is
+  needed because the shared Bevel tool (MODELING.md §3) rejects three selected edges at one
+  vertex. `bevel-deformer/defaults` matches exactly in geometry (24 points, 26 faces).
+- Point and polygon modes use the shared Bevel tool with all components selected.
+- **Known mismatch** (`bevel-deformer/offset-20`): Subdivision and the rounded shape are not
+  derived; our chamfer stays flat (24/26 against 96/98).
+
+### 22.5 Parity
+
+`crates/modifiers/tests/deformers3_parity.rs` compares with the volume metric (Hausdorff,
+area, volume, Euler): `displacer/defaults` and `bevel-deformer/defaults` pass; the six cases
+above are in `KNOWN_MISMATCH` with the measured reasons. **Parity-pending**: the
+Smoothing type/stiffness mapping and Keep Displacements, the Displacer UVW/tag mapping and
+channel variants, the Polygon Reduction quality criterion, and the Bevel Subdivision and
+rounded profile.

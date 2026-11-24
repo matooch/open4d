@@ -3,6 +3,7 @@
 //! deformer's local space; `apply_deformer` handles the scene around them.
 
 pub mod bend;
+pub mod bevel_deformer;
 pub mod bulge;
 pub mod cage;
 pub mod camera;
@@ -10,13 +11,16 @@ pub mod collision;
 pub mod common;
 pub mod correction;
 pub mod delta_mush;
+pub mod displacer;
 pub mod explosion;
 pub mod ffd;
 pub mod formula;
 pub mod helper;
 pub mod jiggle;
 pub mod melt;
+pub mod reduction;
 pub mod shear;
+pub mod smoothing;
 pub mod spherify;
 pub mod spline;
 pub mod squash;
@@ -77,6 +81,15 @@ pub const EXPLOSION: &str = "forge.explosion";
 pub const SHATTER: &str = "forge.shatter";
 /// Type id of the Wind deformer (MODIFIERS.md §12).
 pub const WIND: &str = "forge.wind";
+
+/// Type id of the Smoothing deformer (MODIFIERS.md §22.1).
+pub const SMOOTHING: &str = "forge.smoothing_deformer";
+/// Type id of the Displacer deformer (MODIFIERS.md §22.2).
+pub const DISPLACER: &str = "forge.displacer";
+/// Type id of the Polygon Reduction deformer (MODIFIERS.md §22.3).
+pub const POLYGON_REDUCTION: &str = "forge.polygon_reduction";
+/// Type id of the Bevel deformer (MODIFIERS.md §22.4).
+pub const BEVEL_DEFORMER: &str = "forge.bevel_deformer";
 
 /// Type id of the FFD deformer (MODIFIERS.md §16).
 pub const FFD: &str = "forge.ffd";
@@ -595,6 +608,225 @@ impl Deformers {
             .param(fields_param())
             .param(enabled_param())
     }
+
+    /// Smoothing: strength, type, iterations, stiffness (MODIFIERS.md §22.1).
+    pub fn smoothing_type() -> NodeType {
+        NodeType::new(SMOOTHING, "Smoothing", Category::Deformer)
+            .param(percent("strength", "Strength", 1.0).range(0.0, 1.0))
+            .param(ParamDesc::enumeration(
+                "type",
+                "Type",
+                "smooth",
+                &[
+                    ("relax", "Relax"),
+                    ("smooth", "Smooth"),
+                    ("stretch", "Stretch"),
+                ],
+            ))
+            .param(ParamDesc::int("iterations", "Iterations", 10).range(1, 999_999_999))
+            .param(percent("stiffness", "Stiffness", 0.3).range(0.0, 1.0))
+            .param(ParamDesc::bool(
+                "keep_displacements",
+                "Keep Displacements",
+                false,
+            ))
+            .param(ParamDesc::string("stiffness_map", "Stiffness Map", ""))
+            .param(fields_param())
+            .param(enabled_param())
+    }
+
+    /// Displacer: a shader height along the normal (MODIFIERS.md §22.2).
+    pub fn displacer_type() -> NodeType {
+        NodeType::new(DISPLACER, "Displacer", Category::Deformer)
+            .param(ParamDesc::bool("emulation", "Emulation", false))
+            .param(percent("strength", "Strength", 1.0))
+            .param(ParamDesc::float("height", "Height", 10.0))
+            .param(ParamDesc::enumeration(
+                "type",
+                "Type",
+                "centered",
+                &[
+                    ("intensity", "Intensity"),
+                    ("centered", "Intensity (Centered)"),
+                    ("red", "Red / Green"),
+                    ("green", "Green"),
+                    ("rgb_object", "RGB (XYZ Object)"),
+                    ("rgb_world", "RGB (XYZ World)"),
+                ],
+            ))
+            .param(ParamDesc::enumeration(
+                "direction",
+                "Direction",
+                "normal",
+                &[
+                    ("normal", "Vertex normal"),
+                    ("spherical", "Spherical"),
+                    ("planar", "Planar"),
+                ],
+            ))
+            .param(ParamDesc::bool(
+                "process_normal_tag",
+                "Process Normal Tag",
+                false,
+            ))
+            .param(ParamDesc::enumeration(
+                "channel",
+                "Channel",
+                "custom",
+                &[
+                    ("color", "Color"),
+                    ("luminance", "Luminance"),
+                    ("transparency", "Transparency"),
+                    ("environment", "Environment"),
+                    ("bump", "Bump"),
+                    ("alpha", "Alpha"),
+                    ("specular", "Specular"),
+                    ("displacement", "Displacement"),
+                    ("diffusion", "Diffusion"),
+                    ("normal", "Normal"),
+                    ("custom", "Custom Shader"),
+                ],
+            ))
+            .param(ParamDesc::link("shader", "Shader", &[Category::Shader]))
+            .param(ParamDesc::float("offsetu", "Offset U", 0.0))
+            .param(ParamDesc::float("offsetv", "Offset V", 0.0))
+            .param(percent("lengthu", "Length U", 1.0))
+            .param(percent("lengthv", "Length V", 1.0))
+            .param(ParamDesc::bool("tile", "Tile", true))
+            .param(ParamDesc::enumeration(
+                "use",
+                "Use",
+                "gray",
+                &[
+                    ("alpha", "Alpha"),
+                    ("gray", "Gray"),
+                    ("red", "Red"),
+                    ("green", "Green"),
+                    ("blue", "Blue"),
+                ],
+            ))
+            .param(ParamDesc::bool("invert", "Invert", false))
+            .param(ParamDesc::bool("object", "Object", true))
+            .param(ParamDesc::bool("camera", "Camera", false))
+            .param(ParamDesc::bool("backface_cull", "Backface Cull", false))
+            .param(fields_param())
+            .param(enabled_param())
+    }
+
+    /// Polygon Reduction (MODIFIERS.md §22.3); no falloff group.
+    pub fn reduction_type() -> NodeType {
+        NodeType::new(POLYGON_REDUCTION, "Polygon Reduction", Category::Deformer)
+            .param(percent("reduction_strength", "Reduction Strength", 0.9).range(0.0, 1.0))
+            .param(
+                ParamDesc::float("mesh_quality_factor", "Mesh Quality Factor", 1000.0)
+                    .range(0.0, 20000.0),
+            )
+            .param(ParamDesc::bool(
+                "co_planar_optimization",
+                "Co-Planar Optimization",
+                true,
+            ))
+            .param(ParamDesc::bool(
+                "bounday_curve_preservation",
+                "Bounday Curve Preservation",
+                true,
+            ))
+            .param(ParamDesc::bool(
+                "polygon_quality_preservation",
+                "Polygon Quality Preservation",
+                false,
+            ))
+            .param(enabled_param())
+    }
+
+    /// Bevel deformer: the Bevel tool applied to all components (MODIFIERS.md §22.4).
+    pub fn bevel_deformer_type() -> NodeType {
+        NodeType::new(BEVEL_DEFORMER, "Bevel", Category::Deformer)
+            .param(ParamDesc::enumeration(
+                "component_mode",
+                "Component Mode",
+                "edges",
+                &[
+                    ("points", "Points"),
+                    ("edges", "Edges"),
+                    ("polygons", "Polygons"),
+                ],
+            ))
+            .param(ParamDesc::string("selection", "Selection", ""))
+            .param(ParamDesc::bool("use_angle", "Use Angle", true))
+            .param(
+                ParamDesc::float("angle_threshold", "Angle Threshold", 40.0)
+                    .unit(Unit::Angle)
+                    .range(0.0, 999_999_999.0),
+            )
+            .param(ParamDesc::enumeration(
+                "bevel_mode",
+                "Bevel Mode",
+                "chamfer",
+                &[("chamfer", "Chamfer"), ("solid", "Solid")],
+            ))
+            .param(ParamDesc::enumeration(
+                "offset_mode",
+                "Offset Mode",
+                "fixed_distance",
+                &[
+                    ("fixed_distance", "Fixed Distance"),
+                    ("radial", "Radial"),
+                    ("proportional", "Proportional"),
+                ],
+            ))
+            .param(ParamDesc::float("offset", "Offset", 1.0).range(0.0, 999_999_999.0))
+            .param(ParamDesc::int("subdivision", "Subdivision", 0).range(0, 999_999_999))
+            .param(percent("depth", "Depth", 1.0))
+            .param(ParamDesc::bool("limit", "Limit", true))
+            .param(ParamDesc::enumeration(
+                "shape",
+                "Shape",
+                "round",
+                &[("round", "Round"), ("user", "User"), ("profile", "Profile")],
+            ))
+            .param(percent("tension", "Tension", 1.0))
+            .param(ParamDesc::enumeration(
+                "mitering",
+                "Mitering",
+                "default",
+                &[
+                    ("default", "Default"),
+                    ("uniform", "Uniform"),
+                    ("radial", "Radial"),
+                    ("patch", "Patch"),
+                ],
+            ))
+            .param(ParamDesc::enumeration(
+                "ending",
+                "Ending",
+                "default",
+                &[
+                    ("default", "Default"),
+                    ("extend", "Extend"),
+                    ("inset", "Inset"),
+                ],
+            ))
+            .param(ParamDesc::enumeration(
+                "partial_rounding",
+                "Partial Rounding",
+                "none",
+                &[("none", "None"), ("full", "Full"), ("convex", "Convex")],
+            ))
+            .param(ParamDesc::bool("corner_n_gons", "Corner N-gons", false))
+            .param(ParamDesc::bool("rounding_n_gons", "Rounding N-gons", false))
+            .param(ParamDesc::bool(
+                "phong_break_rounding",
+                "Phong Break Rounding",
+                false,
+            ))
+            .param(ParamDesc::bool(
+                "phong_break_miters",
+                "Phong Break Miters",
+                false,
+            ))
+            .param(enabled_param())
+    }
 }
 
 /// Objects a helper link may point to (cages, surfaces, cameras, colliders).
@@ -656,6 +888,10 @@ impl Plugin for Deformers {
         r.register(Deformers::bulge_type())?;
         r.register(Deformers::shear_type())?;
         r.register(Deformers::spherify_type())?;
+        r.register(Deformers::smoothing_type())?;
+        r.register(Deformers::displacer_type())?;
+        r.register(Deformers::reduction_type())?;
+        r.register(Deformers::bevel_deformer_type())?;
         r.register(Deformers::squash_stretch_type())?;
         r.register(Deformers::wrap_type())?;
         r.register(Deformers::explosion_type())?;
@@ -987,6 +1223,12 @@ fn apply_deformer_unrestricted(
         }
         return;
     }
+    if matches!(
+        scene.node(deformer).map(|n| n.type_id.as_str()),
+        Some(SMOOTHING) | Some(DISPLACER) | Some(POLYGON_REDUCTION) | Some(BEVEL_DEFORMER)
+    ) {
+        return apply_topology_deformer(scene, deformer, target, mesh, ctx);
+    }
     let kind = match scene.node(deformer).map(|n| n.type_id.as_str()) {
         Some(EXPLOSION) => Kind::Explosion,
         Some(SHATTER) => Kind::Shatter,
@@ -1024,6 +1266,132 @@ fn apply_deformer_unrestricted(
     blast(mesh, kind, &p, ctx.seed);
     for q in mesh.points.iter_mut() {
         *q = to_target.transform_point3(*q);
+    }
+}
+
+/// The four deformers that need the polygon mesh (§22): smoothing and the Displacer read
+/// the connectivity and normals, Polygon Reduction and the Bevel change the topology.
+fn apply_topology_deformer(
+    scene: &Scene,
+    deformer: NodeId,
+    target: NodeId,
+    mesh: &mut PolyMesh,
+    ctx: &EvalCtx,
+) {
+    let (Some(node), Some(ty)) = (scene.node(deformer), scene.node_type(deformer)) else {
+        return;
+    };
+    if !is_enabled(ty, node) || !forge_core::layers::deformers_on(scene, deformer) {
+        return;
+    }
+    let (Some(tw), Some(dw)) = (scene.world_matrix(target), scene.world_matrix(deformer)) else {
+        return;
+    };
+    let to_target = tw.inverse() * dw;
+    let to_deformer = to_target.inverse();
+    if !to_deformer.is_finite() {
+        return;
+    }
+    for p in &mut mesh.points {
+        *p = to_deformer.transform_point3(*p);
+    }
+    let params = &node.params;
+    match node.type_id.as_str() {
+        SMOOTHING => smoothing::smooth(
+            mesh,
+            &smoothing::SmoothingParams {
+                strength: read_float(ty, params, "strength"),
+                kind: match read_enum(ty, params, "type").as_str() {
+                    "relax" => smoothing::Kind::Relax,
+                    "stretch" => smoothing::Kind::Stretch,
+                    _ => smoothing::Kind::Smooth,
+                },
+                iterations: read_int(ty, params, "iterations").clamp(1, 999_999_999) as u32,
+                stiffness: read_float(ty, params, "stiffness"),
+                keep_displacements: read_bool(ty, params, "keep_displacements"),
+            },
+        ),
+        DISPLACER => {
+            let shader = node
+                .params
+                .get("shader")
+                .and_then(|v| match v {
+                    Value::Link(Some(id)) => Some(*id),
+                    _ => None,
+                })
+                .or_else(|| {
+                    node.children.iter().copied().find(|c| {
+                        scene
+                            .node_type(*c)
+                            .is_some_and(|t| t.category == Category::Shader)
+                    })
+                });
+            let shader = shader.and_then(|id| {
+                forge_shaders::host::build_node(scene, id, &forge_shaders::host::no_images).ok()
+            });
+            displacer::displace(
+                mesh,
+                shader.as_ref(),
+                &displacer::DisplacerParams {
+                    strength: read_float(ty, params, "strength"),
+                    height: read_float(ty, params, "height"),
+                    kind: match read_enum(ty, params, "type").as_str() {
+                        "intensity" => displacer::Kind::Intensity,
+                        "red" => displacer::Kind::Red,
+                        "green" => displacer::Kind::Green,
+                        "rgb_object" => displacer::Kind::ObjectRgb,
+                        "rgb_world" => displacer::Kind::WorldRgb,
+                        _ => displacer::Kind::Centered,
+                    },
+                    direction: match read_enum(ty, params, "direction").as_str() {
+                        "spherical" => displacer::Direction::Spherical,
+                        "planar" => displacer::Direction::Planar,
+                        _ => displacer::Direction::Normal,
+                    },
+                    offset_u: read_float(ty, params, "offsetu"),
+                    offset_v: read_float(ty, params, "offsetv"),
+                    length_u: read_float(ty, params, "lengthu"),
+                    length_v: read_float(ty, params, "lengthv"),
+                    tile: read_bool(ty, params, "tile"),
+                    invert: read_bool(ty, params, "invert"),
+                },
+                ctx.time,
+            );
+        }
+        POLYGON_REDUCTION => reduction::reduce(
+            mesh,
+            &reduction::ReductionParams {
+                strength: read_float(ty, params, "reduction_strength"),
+                quality: read_float(ty, params, "mesh_quality_factor"),
+                co_planar: read_bool(ty, params, "co_planar_optimization"),
+                boundary: read_bool(ty, params, "bounday_curve_preservation"),
+                polygon_quality: read_bool(ty, params, "polygon_quality_preservation"),
+            },
+        ),
+        BEVEL_DEFORMER => bevel_deformer::bevel_all(
+            mesh,
+            &bevel_deformer::BevelParams {
+                component: read_enum(ty, params, "component_mode"),
+                use_angle: read_bool(ty, params, "use_angle"),
+                angle: read_float(ty, params, "angle_threshold").to_degrees(),
+                bevel_mode: read_enum(ty, params, "bevel_mode"),
+                offset_mode: read_enum(ty, params, "offset_mode"),
+                offset: read_float(ty, params, "offset"),
+                subdivision: read_int(ty, params, "subdivision"),
+                depth: read_float(ty, params, "depth"),
+                shape: read_enum(ty, params, "shape"),
+                tension: read_float(ty, params, "tension"),
+                mitering: read_enum(ty, params, "mitering"),
+                ending: read_enum(ty, params, "ending"),
+                partial_rounding: read_enum(ty, params, "partial_rounding"),
+                corner_ngons: read_bool(ty, params, "corner_n_gons"),
+                rounding_ngons: read_bool(ty, params, "rounding_n_gons"),
+            },
+        ),
+        _ => {}
+    }
+    for p in &mut mesh.points {
+        *p = to_target.transform_point3(*p);
     }
 }
 
