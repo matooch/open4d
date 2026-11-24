@@ -268,6 +268,34 @@ fn dual_quaternion_keeps_volume_where_linear_collapses() {
 }
 
 #[test]
+fn blended_is_the_mix_of_linear_and_dual_quaternion() {
+    let k = [
+        DMat4::from_rotation_y(std::f64::consts::FRAC_PI_2),
+        DMat4::from_rotation_y(-std::f64::consts::FRAC_PI_2),
+    ];
+    let w = WeightMap::from_dense(&[vec![0.5, 0.5]]);
+    let run = |kind, blend| {
+        let mut p = vec![DVec3::X];
+        skin_points(
+            &mut p,
+            &w,
+            &k,
+            &SkinSettings {
+                kind,
+                blend,
+                ..SkinSettings::default()
+            },
+        );
+        p[0]
+    };
+    let lin = run(SkinType::Linear, 0.5);
+    let dq = run(SkinType::DualQuaternion, 0.5);
+    assert!(close(run(SkinType::Blended, 0.5), (lin + dq) * 0.5));
+    assert!(close(run(SkinType::Blended, 0.0), lin));
+    assert!(close(run(SkinType::Blended, 1.0), dq));
+}
+
+#[test]
 fn dual_quaternion_applies_a_rigid_transform_exactly() {
     let m = DMat4::from_translation(DVec3::new(1.0, 2.0, 3.0)) * DMat4::from_rotation_z(0.7);
     let w = WeightMap::from_dense(&[vec![1.0]]);

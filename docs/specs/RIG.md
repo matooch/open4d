@@ -92,7 +92,8 @@ Category `Deformer`, child of the mesh object; it reads the first weight tag of 
 
 | Param id | Label | Kind, default | Source |
 |---|---|---|---|
-| `type` | Type | enum `linear` (linear, dual_quaternion) | O34 (Linear default); dual quaternion is ours |
+| `type` | Type | enum `linear` (linear, dual_quaternion, blended) | O34: Linear default; the reference's Spherical is `dual_quaternion`, its Blended is `blended` |
+| `blend` | Blend | float 0..=1, default 0.5 (used by `blended`) | O34 (`skin.blend` 0.5) |
 | `max_influences` | Max influences | int 0..=32, 0 = unlimited | H design |
 | `normalise` | Normalise | bool true | H design |
 | `enabled` | Enabled | bool true | O34 |
@@ -122,10 +123,15 @@ and at y = ±75 both J1/J3 and J2 round 32767.5 up: the stored sum is 65536/6553
 points agree to 1e-12 with this rule. The test builds it from the bind-pose y of each point;
 the 4-decimal copies are checked within 5e-5.
 
-Dual quaternion option (own, not parity-tested): each `K_j` becomes a unit dual quaternion
-from its normalised rotation columns and translation (scale and shear are dropped), blended with
-the sign chosen against the first influence, normalised, applied to the point. O34 had no
-dual quaternion type; its Spherical type is §8.
+Dual quaternion type (the reference's **Spherical**, O34 `j2-bend-dq`, exact): each `K_j` becomes a unit
+dual quaternion from its normalised rotation columns and translation (scale and shear are dropped),
+blended with the sign chosen against the first influence, normalised, applied to the point. The
+posed mesh of `j2-bend-dq` (J2 turned B 90, bbox x min -67.175144) equals this rule at 1e-4 on every point.
+
+Blended type (O34 `j2-bend-90-blended`, exact): `p' = (1 - blend) · p_linear + blend · p_dual`, the
+two skins above evaluated on the same weights, `blend` 0.5 by default. Evidence: the posed bbox x min
+-57.337782 is the mean of Linear's -47.50042 and Spherical's -67.175144, and the whole mesh agrees at
+1e-4. **Parity-pending**: `blend` values other than 0.5 (only the default was observed).
 
 ## 4. Auto weights (brief 103)
 
@@ -209,8 +215,8 @@ selected joint, the weight squares of the objects whose weight tag lists it.
 ## 8. Parity cases and what is pinned
 
 Test: `crates/rig/tests/rigging_parity.rs` (tolerance from the case manifest: 1e-4 on exported
-positions after `export_weld`, same face lists; the readouts at their own 1e-6). Six of the O34
-mesh cases are exact, two readouts are exact, two are unsupported, one is form only.
+positions after `export_weld`, same face lists; the readouts at their own 1e-6). Eight of the O34
+mesh cases are exact, two readouts are exact, one is form only.
 
 | Case | Result |
 |---|---|
@@ -220,8 +226,8 @@ mesh cases are exact, two readouts are exact, two are unsupported, one is form o
 | `rigging/weights-readback` | exact at 1e-6: 106 x 3 weights |
 | `rigging/j2-bend-90-points` | exact at 1e-6: the 106 posed points read from the deform cache |
 | `rigging/j2-bend-90-matrix` | form only (J2 global matrix and rotation H 0, P 0, B 90): no mesh, no samples; pinned in `repo_golden` |
-| `rigging/j2-bend-dq` | UNSUPPORTED: Spherical skin type, no formula fitted |
-| `rigging/j2-bend-90-blended` | UNSUPPORTED: Blended skin type (posed bbox (−57.34, −150, −20)..(150, 20, 20) differs from Linear's), no formula fitted |
+| `rigging/j2-bend-dq` | **exact**: Spherical = dual quaternion skinning (§3) |
+| `rigging/j2-bend-90-blended` | **exact**: Blended = 50 % mean of the linear and the dual quaternion result (§3) |
 
 What settled the four old pins (they were attributed to the reference's numeric noise before the
 follow-up readouts): (1) the stored weights are k/65535 with the half cases rounding by floating-point
@@ -244,7 +250,7 @@ J2 keyed B 0 at frame 0 and 90 at frame 30 (linear, `forge_anim::scene_at`).
 Other exchange formats (FBX, glTF, Alembic skins) are not read here.
 
 Not modelled (observed in O34's parameter table, not used by any case): Skin Coord, Transform,
-Length, Blend, Map, Mode, Force, List; Spherical and Blended types; the weight tag's vertex map.
+Length, Map, Mode, Force, List; the weight tag's vertex map.
 
 ## 9. Weight tools (brief 102)
 
