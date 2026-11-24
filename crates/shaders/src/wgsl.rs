@@ -8,9 +8,10 @@ use forge_material::ir::ShadingGraph;
 use forge_material::wgsl::{ModuleBuilder, TextureCodegen, WgslMaterial, compile_with};
 use forge_noise::NoiseKind;
 
+use crate::blend::BlendMode;
 use crate::gradient::{Gradient, Interp};
 use crate::shader::{
-    GradientKind, GradientShader, NoiseShader, NoiseSpace, Shader, ShaderSet, Tiles,
+    ColorizeInput, GradientKind, GradientShader, NoiseShader, NoiseSpace, Shader, ShaderSet, Tiles,
 };
 use crate::wgsl_noise::{NOISE_WGSL, U64_WGSL};
 
@@ -30,6 +31,68 @@ fn forge_ramp_seg(c0: vec3<f32>, c1: vec3<f32>, p0: f32, p1: f32, t: f32, interp
         x = x * x * (3.0 - 2.0 * x);
     }
     return c0 + (c1 - c0) * x;
+}
+"#;
+
+/// Layer/Fusion blend and the HSL helpers of Filter (REALTIME.md §2.5, §2.6).
+const BLEND_WGSL: &str = r#"
+// mode: the BlendMode declaration index (normal 0 ... difference 8)
+fn forge_blend(a: vec3<f32>, b: vec3<f32>, mode: u32, opacity: f32) -> vec3<f32> {
+    var r = b;
+    switch (mode) {
+        case 1u: { r = a + b; }
+        case 2u: { r = a - b; }
+        case 3u: { r = a * b; }
+        case 4u: { r = a + b - a * b; }
+        case 5u: {
+            r = select(vec3<f32>(1.0) - 2.0 * (vec3<f32>(1.0) - a) * (vec3<f32>(1.0) - b),
+                       2.0 * a * b, a < vec3<f32>(0.5));
+        }
+        case 6u: { r = min(a, b); }
+        case 7u: { r = max(a, b); }
+        case 8u: { r = abs(a - b); }
+        default: {}
+    }
+    return a + (r - a) * opacity;
+}
+"#;
+
+const HSL_WGSL: &str = r#"
+fn forge_rgb_to_hsl(c: vec3<f32>) -> vec3<f32> {
+    let mx = max(c.x, max(c.y, c.z));
+    let mn = min(c.x, min(c.y, c.z));
+    let l = (mx + mn) * 0.5;
+    if (mx == mn) { return vec3<f32>(0.0, 0.0, l); }
+    let d = mx - mn;
+    var s = d / (mx + mn);
+    if (l > 0.5) { s = d / (2.0 - mx - mn); }
+    var h = 0.0;
+    if (mx == c.x) {
+        h = (c.y - c.z) / d + select(0.0, 6.0, c.y < c.z);
+    } else if (mx == c.y) {
+        h = (c.z - c.x) / d + 2.0;
+    } else {
+        h = (c.x - c.y) / d + 4.0;
+    }
+    return vec3<f32>(h / 6.0, s, l);
+}
+fn forge_hue_channel(p: f32, q: f32, t0: f32) -> f32 {
+    let t = t0 - floor(t0);
+    if (t < 1.0 / 6.0) { return p + (q - p) * 6.0 * t; }
+    if (t < 0.5) { return q; }
+    if (t < 2.0 / 3.0) { return p + (q - p) * (2.0 / 3.0 - t) * 6.0; }
+    return p;
+}
+fn forge_hsl_to_rgb(hsl: vec3<f32>) -> vec3<f32> {
+    let l = hsl.z;
+    if (hsl.y == 0.0) { return vec3<f32>(l); }
+    var q = l + hsl.y - l * hsl.y;
+    if (l < 0.5) { q = l * (1.0 + hsl.y); }
+    let p = 2.0 * l - q;
+    return vec3<f32>(
+        forge_hue_channel(p, q, hsl.x + 1.0 / 3.0),
+        forge_hue_channel(p, q, hsl.x),
+        forge_hue_channel(p, q, hsl.x - 1.0 / 3.0));
 }
 "#;
 
@@ -184,6 +247,101 @@ fn emit_shader(s: &Shader, m: &mut ModuleBuilder) -> Option<String> {
             v3(*color_2)
         ),
         Shader::Tiles(t) => tiles_body(t, m),
+        Shader::Layer { base, layers } => {
+            m.once("blend", BLEND_WGSL);
+            let mut b = format!("    var acc = {};\n", sub(base, m)?);
+            for l in layers.iter().filter(|l| l.enabled) {
+                let top = emit_shader(&l.shader, m)?;
+                let _ = writeln!(
+                    b,
+                    "    acc = forge_blend(acc, {top}(ctx), {}u, {});",
+                    blend_index(l.mode),
+                    f(l.opacity)
+                );
+            }
+            b.push_str("    return acc;");
+            b
+        }
+        Shader::Fusion {
+            base,
+            blend,
+            mode,
+            opacity,
+        } => {
+            m.once("blend", BLEND_WGSL);
+            let (base, blend) = (emit_shader(base, m)?, emit_shader(blend, m)?);
+            format!(
+                "    return forge_blend({base}(ctx), {blend}(ctx), {}u, {});",
+                blend_index(*mode),
+                f(*opacity)
+            )
+        }
+        Shader::Colorizer {
+            input,
+            cycle,
+            gradient,
+            texture,
+        } => {
+            let ramp = ramp_fn(gradient, m);
+            let c = sub(texture, m)?;
+            let t = match input {
+                ColorizeInput::Luminance => {
+                    "0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z".to_string()
+                }
+                ColorizeInput::Red => "c.x".to_string(),
+                ColorizeInput::Green => "c.y".to_string(),
+                ColorizeInput::Blue => "c.z".to_string(),
+            };
+            let wrap = if *cycle {
+                "t - floor(t)"
+            } else {
+                "clamp(t, 0.0, 1.0)"
+            };
+            format!("    let c = {c};\n    let t = {t};\n    return {ramp}({wrap});")
+        }
+        Shader::Filter {
+            texture,
+            hue,
+            saturation,
+            lightness,
+            contrast,
+            gamma,
+            invert,
+        } => {
+            m.once("hsl", HSL_WGSL);
+            let c = sub(texture, m)?;
+            let mut b = format!(
+                "    var hsl = forge_rgb_to_hsl({c});\n    hsl.x = hsl.x + {};\n    hsl.y = clamp(hsl.y * {}, 0.0, 1.0);\n    var c = forge_hsl_to_rgb(hsl);\n    c = c + vec3<f32>({});\n    c = (c - vec3<f32>(0.5)) * {} + vec3<f32>(0.5);\n    c = pow(max(c, vec3<f32>(0.0)), vec3<f32>({}));\n",
+                f(*hue),
+                f(1.0 + saturation),
+                f(*lightness),
+                f(1.0 + contrast),
+                f(1.0 / gamma.max(1e-9))
+            );
+            if *invert {
+                b.push_str("    c = vec3<f32>(1.0) - c;\n");
+            }
+            b.push_str("    return c;");
+            b
+        }
+        Shader::Normalizer { texture, low, high } => {
+            let c = sub(texture, m)?;
+            format!(
+                "    return clamp(({c} - vec3<f32>({})) / {}, vec3<f32>(0.0), vec3<f32>(1.0));",
+                f(*low),
+                f((high - low).max(1e-9))
+            )
+        }
+        Shader::VertexMap { low, high } => format!(
+            "    return {low} + ({high} - {low}) * clamp(ctx.vertex_weight, 0.0, 1.0);",
+            low = v3(*low),
+            high = v3(*high)
+        ),
+        Shader::Ao { low, high } => format!(
+            "    return {low} + ({high} - {low}) * clamp(ctx.ao, 0.0, 1.0);",
+            low = v3(*low),
+            high = v3(*high)
+        ),
         _ => return None,
     };
     Some(m.function("ctx: ShadeCtx", "vec3<f32>", &body))
@@ -387,4 +545,26 @@ fn tiles_body(t: &Tiles, m: &mut ModuleBuilder) -> String {
         v3(t.colors[1]),
         v3(t.colors[2])
     )
+}
+
+fn blend_index(mode: BlendMode) -> u32 {
+    match mode {
+        BlendMode::Normal => 0,
+        BlendMode::Add => 1,
+        BlendMode::Subtract => 2,
+        BlendMode::Multiply => 3,
+        BlendMode::Screen => 4,
+        BlendMode::Overlay => 5,
+        BlendMode::Darken => 6,
+        BlendMode::Lighten => 7,
+        BlendMode::Difference => 8,
+    }
+}
+
+/// The colour of an optional child shader: black without one (the CPU `sub`).
+fn sub(child: &Option<Box<Shader>>, m: &mut ModuleBuilder) -> Option<String> {
+    match child {
+        Some(c) => emit_shader(c, m).map(|f| format!("{f}(ctx)")),
+        None => Some("vec3<f32>(0.0)".into()),
+    }
 }

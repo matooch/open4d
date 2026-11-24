@@ -229,3 +229,6 @@ Vulkan driver (lavapipe); the bound is what the test asserts.
 | Gradient | 8 kinds, each plain and with cycle + linear ramp + turbulence; step ramp, one knot, degenerate axis | 3.7e-6 (Radial) | 1e-4 (default) |
 | Color, Checkerboard, Fresnel, Falloff | 6 cases (invert, ramps, no-geometry points) | 1.7e-6 | 1e-4 (default) |
 | Tiles | bevel, no bevel, randomize (seeds 0 and 12345), non-square pitch | 2.9e-6 | 1e-4 (default) |
+| Layer, Fusion | all 9 blend modes, layer stack with a disabled layer, no base, nested, empty | 5.9e-7 (Fusion Overlay) | 1e-4 (default) |
+| Colorizer, Filter, Normalizer | 4 inputs x cycle, no child, HSL hue/saturation/lightness/contrast/gamma/invert, grey input, degenerate span | 9.0e-7 (Normalizer) | 1e-4 (default) |
+| Vertex Map, AO | points with and without a vertex weight / occlusion value | 6.0e-8 | 1e-4 (default) |

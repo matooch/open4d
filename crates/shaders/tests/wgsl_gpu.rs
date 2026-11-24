@@ -373,3 +373,21 @@ fn colour_checkerboard_fresnel_falloff_match_the_cpu() {
 fn tiles_match_the_cpu() {
     check("tiles", tiles_cases());
 }
+
+#[test]
+fn layer_and_fusion_match_the_cpu() {
+    check("blend", blend_cases());
+}
+
+#[test]
+fn colorizer_filter_normalizer_match_the_cpu() {
+    let mut cases = colorizer_cases();
+    cases.extend(filter_cases());
+    cases.extend(normalizer_cases());
+    check("colour", cases);
+}
+
+#[test]
+fn vertex_map_and_ao_match_the_cpu() {
+    check("context", context_cases());
+}

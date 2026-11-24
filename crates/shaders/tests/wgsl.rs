@@ -53,6 +53,11 @@ fn all_cases() -> Vec<Case> {
     cases.extend(gradient_cases());
     cases.extend(surface_cases());
     cases.extend(tiles_cases());
+    cases.extend(blend_cases());
+    cases.extend(colorizer_cases());
+    cases.extend(filter_cases());
+    cases.extend(normalizer_cases());
+    cases.extend(context_cases());
     cases
 }
 
