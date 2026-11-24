@@ -402,3 +402,28 @@ Use `file.import` / `file.export` or `forge convert` with format `abc`.
   or selected roots and their descendants; a detached root bakes its world
   transform. Deterministically write standard Xform and PolyMesh properties and
   native Ogawa blocks; reject topology changes instead of discarding later faces.
+
+## 8. Cameras, lights and materials across formats (brief 170)
+
+Sources: O44 `camera-light` and `materials` ([exchange.md](../parity/exchange.md)) and the
+format sections above. The reference's own per-format behaviour is the mapping:
+
+| Format | Camera | Light | Material |
+|---|---|---|---|
+| glTF/GLB | yes: a `cameras[]` entry (perspective `yfov` vertical in radians, `znear`, `zfar`, `aspectRatio`) and a node `camera` index; transform keeps the glTF Y-up/flip-Z convention | **no** light export option, so lights are omitted | base colour and the metallic/roughness pair (brief 134) |
+| Alembic | yes: the camera's transform and static lens (§7) | no light nodes | names are not recoverable |
+| USD (our own) | parity-pending (no USD case in O44; the ASCII writer still omits cameras and lights) | parity-pending | brief 168 |
+
+- glTF import creates a `forge.camera` for a node with a camera: sensor 36,
+  `fov_horizontal` from `yfov * aspectRatio`, and near/far clipping only when the file
+  differs from glTF's 0.01 / 1e10 defaults. glTF export skips `forge.light` nodes, allows
+  a file with cameras and no meshes (no BIN chunk), and uses the scene's stored render
+  aspect else 16:9. The scene's default near clipping (enabled at 0) exports as 0.01.
+- The O44 golden `scene.glb` declares 472 bytes but is 464 (the missing BIN chunk header);
+  the test pads the reference bytes by that empty chunk header before reading. Our own
+  writer always declares the true length.
+- Checks (`crates/app/tests/gltf_exchange.rs` and `crates/io/tests/alembic.rs`): the
+  camera-light scene imports the camera at (0, 200, -600) with a 53.13° horizontal field;
+  our export has one perspective camera, translation (0, 200, 600), `yfov` 31.417°,
+  `znear` 0.01, `zfar` 1e10, aspect 16:9, no meshes and no lights; the Alembic case keeps
+  the camera and no lights.

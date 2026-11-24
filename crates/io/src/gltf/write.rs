@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use forge_core::transform::{POS, ROT, SCALE, Transform, hpb_from_rotation};
 use forge_core::{EvalCtx, Interp, NodeId, Scene, Value};
+use forge_generators::scene_objects::{Lens, camera_data};
 use forge_geometry::{CornerUvs, PolyMesh, triangulate::triangulate};
 use forge_material::node_material::{NODE_MATERIAL, SurfaceValues, load_graph};
 use forge_rig::weights::{WeightMap, find_weight_tag, read_bind_pose, read_weights, tag_joints};
@@ -387,7 +388,8 @@ fn glb(doc: &Json, bytes: Vec<u8>) -> Result<Vec<u8>, Error> {
     let mut text = serde_json::to_vec(doc).map_err(|e| invalid(e.to_string()))?;
     text.resize(text.len().next_multiple_of(4), b' ');
     let bin = bytes.len().next_multiple_of(4);
-    let size = 28 + text.len() + bin;
+    let header = if bytes.is_empty() { 0 } else { 8 };
+    let size = 20 + text.len() + header + bin;
     let size = u32::try_from(size).map_err(|_| invalid("GLB exceeds file size limit"))?;
     let mut out = Vec::new();
     out.extend(b"glTF");
@@ -396,9 +398,11 @@ fn glb(doc: &Json, bytes: Vec<u8>) -> Result<Vec<u8>, Error> {
     out.extend((text.len() as u32).to_le_bytes());
     out.extend(b"JSON");
     out.extend(text);
-    out.extend((bin as u32).to_le_bytes());
-    out.extend(b"BIN\0");
-    out.extend(bytes);
+    if !bytes.is_empty() {
+        out.extend((bin as u32).to_le_bytes());
+        out.extend(b"BIN\0");
+        out.extend(bytes);
+    }
     out.resize(size as usize, 0);
     Ok(out)
 }
@@ -419,7 +423,9 @@ pub fn write(
         for id in std::iter::once(r).chain(scene.descendants(r)) {
             if scene.local_transform(id).is_some()
                 && !forge_generators::is_consumed(scene, id)
-                && scene.node(id).is_some_and(|n| n.type_id != forge_rig::SKIN)
+                && scene
+                    .node(id)
+                    .is_some_and(|n| n.type_id != forge_rig::SKIN && n.type_id != "forge.light")
                 && seen.insert(id)
             {
                 order.push(id);
@@ -432,6 +438,11 @@ pub fn write(
     let mut meshes = Vec::new();
     let mut skins = Vec::new();
     let mut materials = MaterialAssets::default();
+    let mut cameras = Vec::new();
+    let aspect = scene
+        .render_config()
+        .map(|c| f64::from(c.width) / f64::from(c.height))
+        .unwrap_or(16.0 / 9.0);
     let mut buffer = Buffer::default();
     let mut anim = Animation {
         samplers: Vec::new(),
@@ -468,6 +479,10 @@ pub fn write(
             .collect();
         if !children.is_empty() {
             n["children"] = json!(children);
+        }
+        if let Some(camera) = camera_data(scene, id) {
+            n["camera"] = json!(cameras.len());
+            cameras.push(camera_asset(&camera, aspect));
         }
         anim.add_node(scene, id, index, t, scale, &mut buffer)?;
         let skin_tag = find_weight_tag(scene, id).filter(|_| {
@@ -560,12 +575,20 @@ pub fn write(
         }
         nodes.push(n);
     }
-    if meshes.is_empty() {
-        return Err(invalid("no polygon meshes to export"));
+    if meshes.is_empty() && cameras.is_empty() {
+        return Err(invalid("no polygon meshes or cameras to export"));
     }
     let mut doc = json!({"asset":{"version":"2.0","generator":"Forge3D"},"scene":0,"scenes":[{"nodes":top}],
-        "nodes":nodes,"meshes":meshes,"bufferViews":buffer.views,"accessors":buffer.accessors,
-        "buffers":[{"byteLength":buffer.bytes.len()}]});
+        "nodes":nodes});
+    if !meshes.is_empty() {
+        doc["meshes"] = json!(meshes);
+        doc["bufferViews"] = json!(buffer.views);
+        doc["accessors"] = json!(buffer.accessors);
+        doc["buffers"] = json!([{"byteLength":buffer.bytes.len()}]);
+    }
+    if !cameras.is_empty() {
+        doc["cameras"] = json!(cameras);
+    }
     if !skins.is_empty() {
         doc["skins"] = json!(skins);
     }
@@ -580,4 +603,25 @@ pub fn write(
         doc["animations"] = json!([{"samplers":anim.samplers,"channels":anim.channels}]);
     }
     Ok((glb(&doc, buffer.bytes)?, meshes.len()))
+}
+
+/// A glTF camera asset (glTF 2.0 §5.11) from a scene camera. `yfov` is vertical, in radians.
+fn camera_asset(c: &forge_generators::scene_objects::CameraData, aspect: f64) -> Json {
+    // The scene's near clipping is enabled by default at 0; glTF wants a positive plane.
+    let znear = c.near_clip.filter(|z| *z > 0.0).unwrap_or(0.01);
+    let zfar = c.far_clip.unwrap_or(1.0e10);
+    match &c.lens {
+        Lens::Perspective {
+            focal_mm,
+            sensor_mm,
+            ..
+        } => {
+            let horizontal = 2.0 * (sensor_mm / (2.0 * focal_mm)).atan();
+            let yfov = 2.0 * ((horizontal / 2.0).tan() / aspect).atan();
+            json!({"type":"perspective","perspective":{
+                "yfov":yfov,"znear":znear,"zfar":zfar,"aspectRatio":aspect}})
+        }
+        Lens::Orthographic { width } => json!({"type":"orthographic","orthographic":{
+            "xmag":width / 2.0,"ymag":width / (2.0 * aspect),"znear":znear,"zfar":zfar}}),
+    }
 }
