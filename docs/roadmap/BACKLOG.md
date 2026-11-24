@@ -202,6 +202,6 @@ implementers can avoid collisions.
 | 202 | [Real-time path tracing with denoising](../agents/tasks/202-realtime-pathtrace.md) | R | 200, 201 | waiting: 200, 201 | render-rt |
 | 203 | [Consistency tests across render tiers](../agents/tasks/203-rt-consistency.md) | R | 198, 202 | waiting: 198, 202 | tests, render-rt |
 | 204 | [Real-time performance targets](../agents/tasks/204-rt-performance.md) | R | 199, 201 | waiting: 199, 201 | render-rt, bench |
-| 205 | [S4 acceptance test and motion-graphics docs](../agents/tasks/205-s4-mograph-acceptance.md) | E | 066, 072, 074, 075, 136 | ready | tests, docs |
+| 205 | [S4 acceptance test and motion-graphics docs](../agents/tasks/205-s4-mograph-acceptance.md) | E | 066, 072, 074, 075, 136 | in-progress (hermes) | tests, docs |
 | 206 | [S5 acceptance test and volume docs](../agents/tasks/206-s5-volume-acceptance.md) | F | 081, 082, 083, 003 | ready | tests, docs |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |

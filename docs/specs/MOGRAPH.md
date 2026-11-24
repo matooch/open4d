@@ -160,6 +160,14 @@ SplitMix64 supplies seeded draws. O21 random cases are compared statistically
 standard errors, and variance within a factor of four), not by sample order.
 Volume on open meshes or with a polygon selection is unsupported.
 
+**Spline source (brief 205; public manual, Cloner Object mode).** A spline has no mesh of its
+own, so a spline linked as the cloner's `object` uses its sampled polyline as the source
+(SPLINES.md §6: the curve's points in the spline's own space, mapped through the cloner's
+inverse world matrix like any other source). Vertex clones on those points in order; Edge and
+Polygon Center use the chord midpoints (a two-point chord reports the same midpoint either
+way). Surface draws nothing (a chord has no area) and Volume is `Unsupported` (the polyline is
+not a closed hull). No observation records a spline source, so this rule is **parity-pending**.
+
 Limit: a cloner makes at most `MAX_CLONES = 1 000 000` clones; more is `Unsupported`.
 
 ## C3. Evaluation and geometry expansion
