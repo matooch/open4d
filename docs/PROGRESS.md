@@ -13,7 +13,7 @@ linked files win.
 | Implementation briefs | **178 of 197 done** (90 %) · 7 ready · 12 waiting |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
-| Acceptance scenarios | S1, S2, S3, S7, S8, S9 pass · S4, S5 queued · S6 blocked · S9 passes (171) · S10 needs a measurement |
+| Acceptance scenarios | S1, S2, S3, S7, S8, S9 pass · S4, S5 queued · S6 blocked · S10 needs a measurement |
 | Release | No release cut yet (v1.0 checklist is brief 185, last) |
 | Next | Implementer run 6 continues from 197 (see below) |
 
