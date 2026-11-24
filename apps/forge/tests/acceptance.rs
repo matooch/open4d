@@ -645,3 +645,241 @@ fn s4_motion_graphics_letters_on_a_spline_effectors_and_sequence() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// S5: volumes through the CLI, `tests/acceptance/s5_volume.rhai`.
+//
+// Three overlapping spheres and a Circle-spline tube in one Volume Builder, a light Gaussian
+// smooth layer on top of the list, a Volume Mesher and Make Editable. Every number below is
+// read back from CLI output; the volume reference is computed here from the analytic SDF of the
+// same union, so no reference-app data is involved.
+// ---------------------------------------------------------------------------------------------
+
+/// The builder's voxel size in the S5 script.
+const S5_VOXEL: f64 = 10.0;
+const S5_SPHERE_RADIUS: f64 = 100.0;
+/// Circle radius (major radius of the tube).
+const S5_TUBE_MAJOR: f64 = 300.0;
+/// `0.735 * spline_voxel_range * voxel_size` (docs/specs/VOLUME.md 6.3) with range 4.
+const S5_TUBE_MINOR: f64 = 0.735 * 4.0 * S5_VOXEL;
+/// Distance between neighbouring sphere centres.
+const S5_SPHERE_SPACING: f64 = 120.0;
+
+fn s5_script() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/acceptance/s5_volume.rhai")
+}
+
+fn s5_obj(path: &Path) -> forge_parity_harness::Mesh {
+    parse_obj(&std::fs::read_to_string(path).unwrap()).unwrap()
+}
+
+/// Builds the S5 scene into `d` and returns the scene path and the polygon node id.
+fn s5_build(d: &Path, name: &str) -> (PathBuf, u64) {
+    let scene = d.join(format!("s5-{name}.forge"));
+    let (code, out) = json_run(&["run", s(&s5_script()), "--save", s(&scene)]);
+    assert_eq!(code, 0, "{out}");
+    let line = out["output"][0]
+        .as_str()
+        .expect("the script prints its node ids");
+    let polygon = line
+        .split_whitespace()
+        .find_map(|token| token.strip_prefix("polygon=")?.parse::<u64>().ok())
+        .unwrap_or_else(|| panic!("no polygon= in {line:?}"));
+    (scene, polygon)
+}
+
+/// Every undirected edge is used once in each direction and no face is degenerate.
+fn s5_assert_closed_manifold(mesh: &forge_parity_harness::Mesh) {
+    let mut directed: std::collections::BTreeMap<(u32, u32), usize> =
+        std::collections::BTreeMap::new();
+    for face in &mesh.faces {
+        assert!(
+            face.len() >= 3,
+            "face with {} corners: {face:?}",
+            face.len()
+        );
+        let distinct: std::collections::BTreeSet<u32> = face.iter().copied().collect();
+        assert_eq!(distinct.len(), face.len(), "repeated index: {face:?}");
+        // Newell normal: its length is twice the polygon's area.
+        let mut normal = [0.0f64; 3];
+        for i in 0..face.len() {
+            let a = mesh.positions[face[i] as usize];
+            let b = mesh.positions[face[(i + 1) % face.len()] as usize];
+            normal[0] += (a[1] - b[1]) * (a[2] + b[2]);
+            normal[1] += (a[2] - b[2]) * (a[0] + b[0]);
+            normal[2] += (a[0] - b[0]) * (a[1] + b[1]);
+        }
+        let area =
+            0.5 * (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
+        assert!(area > 1e-9, "degenerate face {face:?} (area {area})");
+        for i in 0..face.len() {
+            *directed
+                .entry((face[i], face[(i + 1) % face.len()]))
+                .or_default() += 1;
+        }
+    }
+    for (&(a, b), &count) in &directed {
+        assert_eq!(count, 1, "edge {a} -> {b} is used {count} times");
+        assert_eq!(
+            directed.get(&(b, a)),
+            Some(&1),
+            "edge {a} -> {b} has no opposite half-edge"
+        );
+    }
+}
+
+/// Enclosed volume by the divergence theorem over the fan triangulation.
+fn s5_signed_volume(mesh: &forge_parity_harness::Mesh) -> f64 {
+    let mut total = 0.0;
+    for face in &mesh.faces {
+        let a = mesh.positions[face[0] as usize];
+        for i in 1..face.len() - 1 {
+            let b = mesh.positions[face[i] as usize];
+            let c = mesh.positions[face[i + 1] as usize];
+            total += (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0])
+                + a[2] * (b[0] * c[1] - b[1] * c[0]))
+                / 6.0;
+        }
+    }
+    total
+}
+
+/// The S5 union's volume from its fine analytic SDF: 2.5-unit lattice samples of the positive
+/// octant (the union is symmetric in x, y and z), times the cell volume.
+fn s5_reference_volume() -> f64 {
+    const H: f64 = 2.5;
+    const LIMIT: f64 = 340.0;
+    let n = (LIMIT / H) as i64 + 1;
+    let mut inside = 0u64;
+    for i in 0..n {
+        let x = (i as f64 + 0.5) * H;
+        for j in 0..n {
+            let y = (j as f64 + 0.5) * H;
+            for k in 0..n {
+                let z = (k as f64 + 0.5) * H;
+                let mut d = f64::MAX;
+                for centre in [-S5_SPHERE_SPACING, 0.0, S5_SPHERE_SPACING] {
+                    let p = [x - centre, y, z];
+                    d = d.min((p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt() - S5_SPHERE_RADIUS);
+                }
+                let rho = (x * x + z * z).sqrt();
+                d = d.min(((rho - S5_TUBE_MAJOR).powi(2) + y * y).sqrt() - S5_TUBE_MINOR);
+                if d < 0.0 {
+                    inside += 1;
+                }
+            }
+        }
+    }
+    inside as f64 * H * H * H * 8.0
+}
+
+/// The same union in closed form: three spheres minus the two overlap lenses, plus the torus.
+fn s5_closed_form_volume() -> f64 {
+    let r = S5_SPHERE_RADIUS;
+    let d = S5_SPHERE_SPACING;
+    let lens = std::f64::consts::PI / 12.0 * (4.0 * r + d) * (2.0 * r - d).powi(2);
+    let spheres = 3.0 * 4.0 / 3.0 * std::f64::consts::PI * r.powi(3) - 2.0 * lens;
+    spheres
+        + 2.0 * std::f64::consts::PI * std::f64::consts::PI * S5_TUBE_MAJOR * S5_TUBE_MINOR.powi(2)
+}
+
+#[test]
+fn s5_volume_union_is_smoothed_meshed_and_made_editable() {
+    let d = dir("s5");
+    let (scene, polygon) = s5_build(&d, "a");
+
+    // 1. Make Editable leaves one polygon object and no volume node.
+    let (code, info) = json_run(&["info", s(&scene)]);
+    assert_eq!(code, 0, "{info}");
+    assert_eq!(info["roots"].as_array().unwrap().len(), 1, "{info}");
+    let root = info["roots"][0].clone();
+    assert_eq!(root["id"], polygon);
+    assert_eq!(root["type"], "forge.polygon");
+    assert!(
+        root["params"]["mesh"]["polys"].as_u64().unwrap() > 1000,
+        "the polygon holds the meshed volume: {root}"
+    );
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        let ty = node["type"].as_str().unwrap();
+        assert!(
+            !ty.starts_with("forge.volume_"),
+            "{ty} is still in the scene after Make Editable"
+        );
+        for child in node["children"]
+            .as_array()
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+        {
+            stack.push(child.clone());
+        }
+    }
+
+    // 2. The exported mesh is closed, manifold and free of degenerate faces.
+    let obj = d.join("s5.obj");
+    export_at(&scene, "0", &obj);
+    let mesh = s5_obj(&obj);
+    assert!(
+        mesh.positions.len() > 1000,
+        "{} points",
+        mesh.positions.len()
+    );
+    s5_assert_closed_manifold(&mesh);
+
+    // 3. Every side of the bounding box is within one voxel of the sources' box.
+    let mut lo = [f64::MAX; 3];
+    let mut hi = [f64::MIN; 3];
+    for p in &mesh.positions {
+        for axis in 0..3 {
+            lo[axis] = lo[axis].min(p[axis]);
+            hi[axis] = hi[axis].max(p[axis]);
+        }
+    }
+    let outer = [
+        S5_TUBE_MAJOR + S5_TUBE_MINOR,
+        S5_SPHERE_RADIUS,
+        S5_TUBE_MAJOR + S5_TUBE_MINOR,
+    ];
+    for axis in 0..3 {
+        assert!(
+            (lo[axis] + outer[axis]).abs() <= S5_VOXEL,
+            "axis {axis}: low {lo:?} is not within one voxel of {outer:?}"
+        );
+        assert!(
+            (hi[axis] - outer[axis]).abs() <= S5_VOXEL,
+            "axis {axis}: high {hi:?} is not within one voxel of {outer:?}"
+        );
+    }
+
+    // 4. Enclosed volume within 5 % of the fine analytic reference.
+    let reference = s5_reference_volume();
+    let closed = s5_closed_form_volume();
+    assert!(
+        (reference - closed).abs() / closed < 0.005,
+        "the fine grid reference {reference} disagrees with the closed form {closed}"
+    );
+    let volume = s5_signed_volume(&mesh);
+    let relative = (volume - reference).abs() / reference;
+    assert!(
+        relative < 0.05,
+        "mesh volume {volume} vs reference {reference}: {:.2} %",
+        100.0 * relative
+    );
+
+    // 5. Reopen and export again: the same bytes, and the same bytes from a second run.
+    let again = d.join("s5-again.obj");
+    export_at(&scene, "0", &again);
+    assert_eq!(
+        std::fs::read(&obj).unwrap(),
+        std::fs::read(&again).unwrap(),
+        "save -> reopen -> export changed the OBJ"
+    );
+    let (scene_b, _) = s5_build(&d, "b");
+    let second = d.join("s5-b.obj");
+    export_at(&scene_b, "0", &second);
+    assert_eq!(
+        std::fs::read(&obj).unwrap(),
+        std::fs::read(&second).unwrap(),
+        "two runs of the script gave different OBJ files"
+    );
+}

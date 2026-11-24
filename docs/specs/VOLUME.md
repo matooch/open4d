@@ -476,3 +476,40 @@ return in under 50 ms and the old preview stays visible; at most two further com
 slice markers are not drawn yet. The mesher's own mesh is drawn through the ordinary evaluation, which
 reaches it through the registry evaluator hook (PLUGINS.md §8: `forge_generators::evaluate` calls
 the evaluator `VolumePlugin` sets for `forge.volume_mesher`; no crate cycle).
+
+## 12. Acceptance scenario S5 (brief 206)
+
+`tests/acceptance/s5_volume.rhai` is the S5 scene of the roadmap README, run through
+`forge run`; `apps/forge/tests/acceptance.rs` checks it through the CLI only (no reference
+comparison, so this section is own design and **parity-pending** where it quotes a bound).
+The scene: one Volume Builder at voxel size 10. Its list, top to bottom, is a Gaussian smooth
+layer (§8; `voxel_distance` 1, `strength` 0.1, one iteration), three spheres (radius 100,
+64 segments, centres (-120,0,0), (0,0,0), (120,0,0)) and a Circle spline (radius 300, plane
+`xz`) with `spline_voxel_range` 4, so the tube radius is `0.735 * 4 * 10 = 29.4` (§6.3). A
+Volume Mesher sits above the builder and the script runs Make Editable on it.
+
+- **One object after editing.** The mesher converts to one `forge.polygon`; every
+  `forge.volume_*` node is gone (§6.5).
+- **Closed and manifold.** Every undirected edge is used once in each direction and no face
+  has a repeated index or zero area.
+- **Bounds.** Every side of the mesh's bounding box is within one voxel (10) of the union's
+  bounding box (`x, z` in +-329.4, `y` in +-100). The mesher's vertices are cell means
+  (§7.2), so the mesh is up to a voxel smaller than the sources and never larger.
+- **Volume.** The enclosed volume (signed sum over the fan triangulation) is within 5 % of a
+  reference computed in the test from the fine analytic SDF of the same union: the count of
+  2.5-unit lattice samples with `min(|p - c_i| - 100, |p_rho - 300| - 29.4) < 0` over the
+  octant `x, y, z >= 0` (the union is symmetric), times the cell volume. That gives 15.96e6
+  against the closed form 15.94e6 (the sphere union `3 * 4/3 pi 100^3` minus two lenses
+  `pi/12 (4r + d)(2r - d)^2` with `r = 100`, `d = 120`, plus the torus `2 pi^2 R r^2`; the
+  tube's nearest surface is 150.6 from the nearest sphere centre, so nothing overlaps): +0.13 %.
+  The mesh measures 15.39e6, -3.6 %. The 5 % comes from the voxel size: the cell mesher
+  loses 1.5 % on a sphere at voxel 10 (4.1269e6 against 4.1888e6 measured), the tube is only
+  3 voxels in radius (about 2 %), and the light smooth layer another 1.2 % (15.57e6 without
+  it). The 16-segment sphere default is 6.3 % below an analytic sphere, so the scene uses 64
+  segments (0.4 %).
+- **Smooth layer strength.** The reference-form default (voxel distance 2, strength 1)
+  over-smooths the 3-voxel tube: the union shrinks by 21 % and the tube surface gains 16
+  doubled edges (a cell with one vertex for two surface sheets, §7.2 rule 4), so it is not
+  manifold. The light setting keeps every edge manifold and the volume inside the tolerance.
+- **Reopen and determinism.** Save -> reopen -> export gives byte-identical OBJ files, and
+  two independent runs of the script are byte-identical.
