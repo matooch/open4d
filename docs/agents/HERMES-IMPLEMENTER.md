@@ -25,7 +25,8 @@ Work only on briefs in the queue below, top to bottom, skipping ones whose Statu
 ### Queue (the planner edits this list)
 
 Done: 193, 195, 196, 049, 110, 106, 164 (+ follow-up), 066, 168, 071, 062, 078, 077, 075, 092,
-097, 122, 167, 145, 099, 132, 131, 140, 141, 124, 134, 129, 155 (merged after planner review).
+097, 122, 167, 145, 099, 132, 131, 140, 141, 124, 134, 129, 155, 146, 040 (merged after planner review).
+Also done by the planner (not yours): 165, 166 (FBX import/export).
 
 Run 4 queue (2026-11-24). **Stack the branches:** start each brief from the previous brief's
 branch, not from `origin/main`, unless the previous one is already merged into `main`
