@@ -226,3 +226,6 @@ Vulkan driver (lavapipe); the bound is what the test asserts.
 | Family | Cases | Measured max | Bound |
 |---|---|---|---|
 | Noise | all 17 kinds (4 octaves, 4D with time), 8-octave Fbm/Turbulence/Ridged, absolute, clip/brightness/contrast, relative scale, seeds | 3.6e-6 (Simplex with clip and contrast; Ridged 8 octaves 3.6e-6) | 1e-4 (default) |
+| Gradient | 8 kinds, each plain and with cycle + linear ramp + turbulence; step ramp, one knot, degenerate axis | 3.7e-6 (Radial) | 1e-4 (default) |
+| Color, Checkerboard, Fresnel, Falloff | 6 cases (invert, ramps, no-geometry points) | 1.7e-6 | 1e-4 (default) |
+| Tiles | bevel, no bevel, randomize (seeds 0 and 12345), non-square pitch | 2.9e-6 | 1e-4 (default) |

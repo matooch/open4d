@@ -50,12 +50,10 @@ fn graph_of(cases: &[Case]) -> ShadingGraph {
 
 fn all_cases() -> Vec<Case> {
     let mut cases = noise_cases();
-    cases.extend(extra_cases());
+    cases.extend(gradient_cases());
+    cases.extend(surface_cases());
+    cases.extend(tiles_cases());
     cases
-}
-
-fn extra_cases() -> Vec<Case> {
-    Vec::new()
 }
 
 #[test]

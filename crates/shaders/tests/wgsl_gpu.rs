@@ -358,3 +358,18 @@ fn check(family: &str, cases: Vec<Case>) {
 fn noise_matches_the_cpu() {
     check("noise", noise_cases());
 }
+
+#[test]
+fn gradient_matches_the_cpu() {
+    check("gradient", gradient_cases());
+}
+
+#[test]
+fn colour_checkerboard_fresnel_falloff_match_the_cpu() {
+    check("surface", surface_cases());
+}
+
+#[test]
+fn tiles_match_the_cpu() {
+    check("tiles", tiles_cases());
+}
