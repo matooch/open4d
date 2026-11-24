@@ -455,6 +455,33 @@ brief's snapshot-invalidation requirement. This is a native preview, not referen
   restart-latency test uses an injected engine to measure cancellation and start
   of the new render within 100 ms of a parameter edit, independent of CPU shading cost.
 
+## R19 S8 look-dev acceptance (brief 146)
+
+Sources: [roadmap README S8](../roadmap/README.md), [area K](../roadmap/areas/K-rendering.md).
+This is a scenario test through the CLI, not a new render rule.
+
+- Build the scene only with `forge new` / `forge cmd ... --save`: a cube, one Area light
+  (`type: area`, rectangle, size), and a physical `forge.camera` with a short focus
+  distance and a small f-stop so the thin lens is on. The first camera in tree order is
+  the render camera and the first light replaces the default light (R11, S5).
+- Give the cube a Standard material whose **color** slot is a `forge.shader.noise` node
+  and whose **bump** slot is a `forge.shader.fresnel` node, both hosted by
+  `shader.set`. The node-graph material (`forge.material.node`) has no noise or fresnel
+  node definitions, so the scenario uses the shader node tree; this is recorded as a
+  deviation, not a new rule.
+- Render 96×72 at 8 samples and depth 3 with `--dof --aov all`; every pass and the beauty
+  are written to `{pass}.png` (R12). A second render with the same seed is byte-identical.
+  Changing only the focus distance changes the beauty (the aperture is live).
+- Checks: beauty is framed (lit but not full) and not uniform; every AOV file exists and
+  decodes; depth/normal/albedo are non-black where geometry is; the object and material
+  id passes hold background 0 plus at least one non-zero id.
+- Cross-OS: `tests/acceptance/s8-reference.png` is the checked-in macOS beauty.
+  The same test runs in the CI matrix on macOS, Linux and Windows, and each render is
+  compared with the reference. Each colour channel's mean linear value must stay within
+  **1 dB** (`20 log10(mean/ref)`), and PSNR must be at least 30 dB. Set
+  `FORGE_S8_WRITE_REFERENCE=1` to regenerate the reference when the scene changes
+  intentionally.
+
 ## R13 Not done / follow-ups
 
 The material hosted in the document (brief 194), object-shaped area lights, falloff `Steps`, Sobol sampling,
