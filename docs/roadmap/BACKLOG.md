@@ -163,7 +163,7 @@ implementers can avoid collisions.
 | 163 | [Native format: migrations, binary encoding, external references](../agents/tasks/163-native-format.md) | M | – | done (format version 6; follow-up: a file-path param on the first texture/cache node, compression wrapper) | core, io |
 | 164 | [glTF import/export (meshes, hierarchy, materials, animation, skins, morphs)](../agents/tasks/164-gltf.md) | M | 088, 101, 107 | done | io |
 | 165 | [FBX import (ufbx)](../agents/tasks/165-fbx-import.md) | M | 088, 101 | done | io |
-| 166 | [FBX export (ASCII 7.4)](../agents/tasks/166-fbx-export.md) | M | 165 | ready | io |
+| 166 | [FBX export (ASCII 7.4)](../agents/tasks/166-fbx-export.md) | M | 165 | done (parity-pending: no reference ASCII FBX; validated by re-import) | io |
 | 167 | [Alembic (Ogawa) import/export](../agents/tasks/167-alembic.md) | M | 088 | done | io |
 | 168 | [USD .usda import/export](../agents/tasks/168-usd.md) | M | 123 | done (parity-pending: no reference USD) | io |
 | 169 | [STL and PLY](../agents/tasks/169-stl-ply.md) | M | – | done (parity-pending: PLY not observed) | io |

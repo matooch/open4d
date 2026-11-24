@@ -51,7 +51,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | J · Materials, shaders, UVs | 13 / 13 | Hands-on checks in GUI session G7 |
 | K · Rendering and viewport | 10 / 12 | 146 S8 (run 4), 142 GPU path tracer (run 4) |
 | L · UI and UX | 16 / 16 | Hands-on checks in GUI sessions G1, G2, G4 |
-| M · File exchange | 9 / 12 | 170 (run 4), 166 FBX export, 171 S9 tests |
+| M · File exchange | 10 / 12 | 170 (run 4), 171 S9 tests |
 | N · Platform, packaging, docs | 13 / 14 | 185 v1.0 release checklist (last) |
 | R · Real-time GPU renderer | 0 / 8 | 197, 198, 199 in run 4; then 200–204 (ray tracing on Vulkan + Metal) |
 

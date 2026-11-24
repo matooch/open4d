@@ -13,7 +13,7 @@
   - meshes, normals, UVs; hierarchy; cameras; lights (`KHR_lights_punctual`);
   - PBR materials;
   - animation (TRS, morph targets); skins.
-- [ ] **FBX** import (ufbx) and export:
+- [ ] **FBX** import (ufbx) and export (briefs 165, 166 done except blend shapes and textures):
   - meshes, hierarchy, materials;
   - animation curves; skin clusters; blend shapes; cameras; lights.
 - [ ] **Alembic** import and export (Ogawa): polymesh, xform, animated topology, cameras,

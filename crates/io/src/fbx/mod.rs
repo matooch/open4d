@@ -2,8 +2,10 @@
 
 mod apply;
 mod read;
+mod write;
 
 pub use read::{ImportScene, read};
+pub use write::write;
 
 use std::collections::BTreeMap;
 
@@ -19,6 +21,8 @@ pub(crate) const MAX_BYTES: usize = 128 * 1024 * 1024;
 pub enum Error {
     #[error("invalid FBX: {0}")]
     Invalid(String),
+    #[error("Nothing to export")]
+    Empty,
 }
 
 /// One object of the file in our conventions (left-handed Y-up, centimetres by default).

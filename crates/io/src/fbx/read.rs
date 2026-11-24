@@ -602,7 +602,8 @@ fn is_faceted(m: &ufbx::Mesh, faces: &[usize], corners: &[Vec<usize>]) -> bool {
 }
 
 fn camera(c: &ufbx::Camera, basis: &Basis) -> Camera {
-    let sensor = c.aperture_size_inch.x * 25.4;
+    // the film gate width: independent of the render resolution (`aperture_size_inch` follows it)
+    let sensor = c.film_size_inch.x * 25.4;
     let sensor = if sensor.is_finite() && sensor > 0.0 {
         sensor
     } else {

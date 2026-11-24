@@ -147,7 +147,7 @@ fn options_apply_and_bad_ones_fail_before_writing() {
         "--out",
         s(&out),
         "--format",
-        "fbx",
+        "dxf",
     ]);
     assert_eq!(code, 1);
     assert!(
@@ -206,6 +206,44 @@ fn convert_imports_an_fbx_scene() {
     assert_eq!(code, 0, "{result}");
     let text = std::fs::read_to_string(obj.join("scene.obj")).unwrap();
     assert_eq!(text.lines().filter(|l| l.starts_with("v ")).count(), 8);
+}
+
+#[test]
+fn convert_writes_an_ascii_fbx_scene_and_reads_it_back() {
+    let d = dir("fbx-out");
+    let source = d.join("model.forge");
+    scene(&source, "forge.cube");
+    let out = d.join("fbx");
+    let (code, result) = json_run(&["convert", s(&source), "--out", s(&out), "--format", "fbx"]);
+    assert_eq!(code, 0, "{result}");
+    let text = std::fs::read_to_string(out.join("model.fbx")).unwrap();
+    assert!(text.starts_with("; FBX 7.4.0 project file"));
+    let native = d.join("native");
+    let (code, result) = json_run(&[
+        "convert",
+        s(&out.join("model.fbx")),
+        "--out",
+        s(&native),
+        "--format",
+        "forge",
+    ]);
+    assert_eq!(code, 0, "{result}");
+    assert_eq!(result["files"][0]["nodes"], 1);
+    // the unit option: metres
+    let metres = d.join("metres");
+    let (code, _) = json_run(&[
+        "convert",
+        s(&source),
+        "--out",
+        s(&metres),
+        "--format",
+        "fbx",
+        "--option",
+        "scale=0.01",
+    ]);
+    assert_eq!(code, 0);
+    let text = std::fs::read_to_string(metres.join("model.fbx")).unwrap();
+    assert!(text.contains("\"UnitScaleFactor\", \"double\", \"Number\", \"\",100\n"));
 }
 
 #[test]

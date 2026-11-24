@@ -61,7 +61,7 @@ const FORMATS: &[FormatInfo] = &[
         label: "FBX",
         extensions: &["fbx"],
         import: true,
-        export: false,
+        export: true,
     },
     FormatInfo {
         id: "abc",
@@ -135,6 +135,7 @@ pub fn export_options(id: &str) -> Option<Vec<ParamDesc>> {
         "gltf" => Some(vec![scale_option_with(0.01)]),
         "usda" => Some(vec![]),
         "abc" => Some(vec![scale_option()]),
+        "fbx" => Some(vec![scale_option()]),
         _ => None,
     }
 }
@@ -293,6 +294,12 @@ pub fn export_bytes(
     if id == "abc" {
         return abc::write(scene, roots, scale_from(options, 1.0))
             .map_err(|e| IoError::Parse(e.to_string()));
+    }
+    if id == "fbx" {
+        return fbx::write(scene, roots, scale_from(options, 1.0)).map_err(|e| match e {
+            fbx::Error::Empty => IoError::NothingToExport,
+            e => IoError::Parse(e.to_string()),
+        });
     }
     let objects = export_scene(scene, roots);
     if objects.is_empty() {
