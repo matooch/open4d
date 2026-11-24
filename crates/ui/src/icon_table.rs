@@ -428,6 +428,7 @@ pub(crate) const ICON_MAP: &[(&str, &str)] = &[
     ("forge.matrix", "matrix"),
     ("forge.melt", "melt"),
     ("forge.mesh_deformer", "mesh_deform"),
+    ("forge.metaball", "atom_array"),
     ("forge.nside_spline", "nside"),
     ("forge.null", "null"),
     ("forge.oil_tank", "oil_tank"),
