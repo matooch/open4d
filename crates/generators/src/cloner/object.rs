@@ -61,7 +61,11 @@ pub(super) fn placements(
     if reaches(scene, *source, id) {
         return Err(BuildError::Unsupported("cyclic cloner object source"));
     }
-    let Some(mut mesh) = evaluate(scene, *source, ctx)? else {
+    // A spline has no mesh of its own: its sampled polyline is the clone source (its points
+    // are the Vertex distribution, its chords the Edge and Polygon Center ones).
+    let Some(mut mesh) =
+        crate::splines::polyline_mesh(scene, *source).or(evaluate(scene, *source, ctx)?)
+    else {
         return Ok(Vec::new());
     };
     for p in &mut mesh.points {
