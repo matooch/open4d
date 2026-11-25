@@ -1,6 +1,6 @@
 # 200 · GPU scene: RtBackend trait, instanced scene, compute backend (part 1 of 3)
 
-Status: ready · Area: R · Depends on: 142, 198 · Observations: – (own design) · Touches: render-rt, render-gpu
+Status: done · Area: R · Depends on: 142, 198 · Observations: – (own design) · Touches: render-rt, render-gpu
 
 ## Goal
 The ray-tracing foundation every later tier (201–204) uses: one `RtBackend` trait and a **compute
@@ -26,8 +26,8 @@ Vulkan (212). Split on 2026-11-25 because the whole brief was too big to start i
 4. naga translation test for every new module (SPIR-V, MSL, HLSL), gate, Report.
 
 ## Done when
-- [ ] Compute backend hits equal the CPU reference on the test scene; instancing and detection tests pass.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Compute backend hits equal the CPU reference on the test scene; instancing and detection tests pass.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -37,3 +37,15 @@ Vulkan (212). Split on 2026-11-25 because the whole brief was too big to start i
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+
+- R23 uses the R20.1 BVH builder and node layout with successor links for stackless traversal.
+  The compute backend uploads object-space triangles once per indexed mesh and reuses those
+  buffers on transform-only updates. Exact-distance ties and extreme values outside `f32`
+  precision are not part of the CPU agreement fixture.
+- Compute ran on the M5 Pro's Metal adapter without requesting experimental ray queries.
+  The GPU agreed with the CPU on hit/miss, IDs, and `t/u/v` within `1e-4`, including 10,000
+  clones, a moved clone, overlapping nonuniformly scaled instances, and a second BLAS
+  with interior nodes. Naga translated the compute shader to SPIR-V, MSL and HLSL.
+- No reference observations or golden cases apply. Metal hardware RT belongs to 211;
+  Vulkan RT run pending on the owner's RTX 3090 (`parity-pending` for 212).
+- Gate: 2663 tests passed, 0 failed; `GATE: all passed`.

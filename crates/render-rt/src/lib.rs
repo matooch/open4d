@@ -6,6 +6,7 @@
 mod engine;
 pub mod framegraph;
 pub mod post;
+pub mod ray;
 pub mod shader;
 pub mod shadow;
 

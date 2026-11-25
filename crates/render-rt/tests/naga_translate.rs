@@ -39,6 +39,11 @@ fn translate(name: &str, source: &str) {
 }
 
 #[test]
+fn instanced_ray_compute_translates_to_all_backends() {
+    translate("instanced ray queries", forge_render_rt::ray::COMPUTE_WGSL);
+}
+
+#[test]
 fn every_raster_module_translates_to_all_backends() {
     for name in case_names() {
         let case = load(&name);
