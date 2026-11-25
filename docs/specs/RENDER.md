@@ -698,6 +698,141 @@ coverage, as R3 asks.
   rectangle with one `Tile` event and cancel stops; two renders are byte-identical.
 - `forge render --engine rt` runs through the CLI (`apps/forge/tests/render.rs`).
 
+## R22 Post effects and the viewport Render mode (brief 199)
+
+Tier 1's image polish (area R, D19): **our own design**, no reference observation. Every effect is
+deterministic (fixed sample tables, fixed kernels, no noise textures), so two renders of one scene
+stay bit-identical (R21.6) and the effects are testable by numbers.
+
+Settings live in `RenderSettings::post` (`forge_render_api::PostSettings`); every effect is **off**
+by default, so R21's images and parity tests are unchanged, and the CPU and compute tracers ignore
+the field. The CLI exposes the toggles with `forge render --engine rt --post ssao,ssr,bloom,taa,tonemap`
+(`--post none` is the default).
+
+### R22.1 Settings
+
+| field | toggle | default | meaning |
+|---|---|---|---|
+| `ssao` | yes | `false` | screen-space ambient occlusion |
+| `ssao_radius` | – | `40.0` | world-space sampling radius |
+| `ssao_strength` | – | `1.0` | 0 = no darkening, 1 = fully occluded ambient is black |
+| `ssr` | yes | `false` | screen-space reflections |
+| `ssr_steps` | – | `16` | march steps per ray |
+| `bloom` | yes | `false` | bloom over the threshold |
+| `bloom_threshold` | – | `1.0` | linear luminance above which a pixel blooms |
+| `bloom_strength` | – | `0.25` | weight of the blurred bright pass added back |
+| `taa` | yes | `false` | temporal anti-aliasing |
+| `taa_samples` | – | `4` | jittered subframes averaged per render |
+| `tonemap` | yes | `false` | filmic tone mapping of the beauty |
+| `exposure` | – | `1.0` | linear multiplier before the curve |
+
+`PostSettings::validate` rejects a negative radius or strength, `ssr_steps` outside `1..=128`,
+`taa_samples` outside `1..=32`, a negative threshold or exposure. `RenderSettings::validate`
+validates the post block.
+
+### R22.2 Ambient occlusion (`ssao`)
+
+AO must darken the *ambient* term only, so it is computed inside the lighting pass from the
+G-buffer (the split and albedo passes call the same shading function, so all three agree; the
+albedo pass is unaffected because AO scales radiance, not colour).
+
+At a covered pixel `p` with shading normal `n` (R21.3), twelve fixed samples sit in the tangent
+disc `t1, t2` of `n` (a golden-angle spiral, directions `k` fixed in the shader):
+
+`s_k = p + radius * (cos θ_k t1 + sin θ_k t2)` with `θ_k = 2π k / 12` and radii
+`0.35, 0.35, 0.7, 0.7, 1, 1, …` (`r_k = 0.35 + 0.65 * (k % 3) / 2`).
+
+Each sample is projected to a pixel (`project` of R21.2, NDC y up, pixel y down); the G-buffer
+position `q` there occludes when `|q - p| < radius` and `dot(q - p, p - eye) < -0.02 * radius`
+(the stored point is nearer the camera). `ao = 1 - strength * occluded / 12`, clamped to `[0, 1]`.
+The environment diffuse and specular terms are multiplied by `ao`; direct light is untouched and
+background pixels are unchanged. One bounce, no multi-sample rotation and no denoise: an edge darkens
+by at most what twelve samples resolve (documented gap against ray-traced AO, brief 201).
+
+### R22.3 Screen-space reflections (`ssr`)
+
+A full-screen pass after `lighting`: it reads `beauty`, `g0`, `g1` and writes `beauty` (a second
+target, read → write, so the pass never aliases). For a covered pixel with normal `n`, view `v`:
+`r = reflect(-v, n)`; the ray is marched in `ssr_steps` geometric steps, `t_i = 0.05 * scale *
+1.35^(i-1)` (scene scale as in R21.2), and each point `p + t_i r` is projected to a pixel; a hit is
+the first step whose stored G-buffer position lies within `0.05 * t_i` along the ray (and in front
+of the eye). The hit's `beauty` colour is the reflected radiance `R`; with no hit `R` is the
+environment reflection `env_radiance(r)` of R21.5.
+
+The pass recomputes the pixel's material (`surface_vals`, R21.3) and adds
+
+`sv.spec * fade * (R - env_radiance(r))`
+
+with `fade = 1 - smoothstep(0.1, 0.6, roughness)` and `roughness = sqrt(sv.alpha)`, so a rough
+surface keeps its environment reflection and a glossy one takes the screen hit. This *replaces* the
+environment reflection the lighting pass added, rather than adding a second one. Off-screen rays
+fall back to the environment (no SSR outside the frame). The `Specular` AOV is the split pass's
+direct-plus-environment specular and does not include the SSR delta (documented).
+
+### R22.4 Bloom (`bloom`)
+
+Computed on the readback (CPU) from the linear beauty: the bright pass keeps
+`k = max(lum - threshold, 0) / max(lum, 1e-6)` of a covered pixel's RGB and 0 at the background,
+then two separable 9-tap Gaussian passes with fixed weights (σ = 8 px, edge clamp) run over the
+whole image, and `bloom_strength * blurred` is added to the beauty. Covered and background pixels
+both receive the blur, so a bright object glows over the background.
+
+### R22.5 Temporal anti-aliasing (`taa`)
+
+`taa_samples` subframes of the whole raster pipeline, each with the camera jittered by the
+Halton(2,3) point of that subframe scaled to `±0.5` px added to the principal point (`cx`, `cy` of
+R21.2), averaged 1/N in linear radiance. The averaged beauty then takes bloom and tone mapping; the
+AOVs are the *last* subframe's, un-averaged (depth, normals and ids must not be blended).
+
+There is no history across render calls and no motion-vector reprojection (Tier 3's temporal
+accumulation, brief 202), so a render is a pure function of its snapshot: R21.6's byte-identical
+determinism holds with `taa` on as well.
+
+### R22.6 Filmic tone mapping (`tonemap`)
+
+After bloom and averaging, the beauty RGB (not the alpha, not the AOVs) goes through
+
+`x' = clamp((x (2.51 x + 0.03)) / (x (2.43 x + 0.59) + 0.14), 0, 1)`, `x = exposure * linear`,
+
+the ACES filmic fit published by K. Narkowicz (2016, public literature). `post::tonemap(x)` in
+`forge_render_rt` is the same formula, so tests compare pixels exactly; AOVs stay linear because
+they are data, not display colour.
+
+### R22.7 The viewport's "Render" display mode (`crates/ui`)
+
+`EditorState::display` is `DisplayMode::{Shaded, Render}`, switched from the View menu
+("Display: Shaded" / "Display: Render") and the post toggles next to it ("SSAO", "SSR", "Bloom",
+"TAA", "Tone map"). It is UI state, not a document change: no undo entry is pushed, the scene is not
+dirtied, and switching back restores the shaded panes.
+
+In Render mode a pane shows a `render-rt` frame of the **pane's own camera**:
+
+- camera: `transform = view().inverse() * diag(1, -1, 1)` (the rasteriser's camera space is y-down,
+  R21.2), perspective `focal_mm = 36 h / (2 w tan(fov_y / 2))` with `sensor_mm = 36`, orthographic
+  `width = 2 (view height / 2) (w / h)`;
+- snapshot: the scheduled scene (`prepare_render`'s evaluation), with the pane camera replacing the
+  render camera;
+- size: the pane's point size × the pixels-per-point, capped at 640 × 400 (the preview is not the
+  final render);
+- settings: defaults with `samples = 1`, no AOVs and `post` from the editor state.
+
+The frame is rendered synchronously and cached by (scene revision, camera, size, post), so a static
+scene costs one frame; a device request that fails is remembered and the pane keeps the shaded image
+with a "Render unavailable" note. Overlays (gizmo, HUD, selection) are not drawn over the render
+image. A background worker with latest-snapshot cancellation is a performance follow-up (brief 204).
+
+### R22.8 Tests
+
+- `crates/render-rt/tests/post.rs` (GPU, one device per file behind the lock, skipped without an
+  adapter): `ssao` darkens a crease and leaves a convex face and the silhouette within 2 %;
+  `ssr` puts the bright object's colour on the glossy floor and leaves distant pixels;
+  `bloom` lifts pixels around a bright object and leaves a dim one alone; `taa` turns hard
+  silhouette steps into graded pixels; `tonemap` maps every pixel by `post::tonemap` of the linear
+  render (1e-4) and keeps the alpha; the settings validate; two renders with the default post block
+  are byte-identical to a render without it.
+- `crates/ui/tests/render_mode.rs` (kittest, no GPU needed): the View menu switches to Render and
+  back, the document's undo depth and revision do not change, and the post toggles are UI state.
+
 ## R13 Not done / follow-ups
 
 The material hosted in the document (brief 194), object-shaped area lights, falloff `Steps`, Sobol sampling,
