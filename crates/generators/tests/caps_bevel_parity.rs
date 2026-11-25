@@ -19,12 +19,11 @@ const UNSUPPORTED: &[&str] = &[
     "caps-bevel/caps-delaunay",
     // pending: the Regular Grid fill (730 points, 20 x 20 cells per cap) is not derived.
     "caps-bevel/caps-grid",
-    // pending: bevel rings (point and face order of Round, Solid and Step with 1 to 3 segments, Bevel
-    // Outside) are not derived; every bevel with Size > 0 is refused.
+    // pending: bevel rings of Solid and Step (point and face order) and of the sweep's circle
+    // profile are not derived; those bevels with Size > 0 are refused (the Round bevel of a
+    // 4-point extrude outline is derived, GENERATORS2.md 7b).
     "caps-bevel/bevel-chamfer",
     "caps-bevel/bevel-concave",
-    "caps-bevel/bevel-inner",
-    "caps-bevel/bevel-round",
     "caps-bevel/bevel-step",
     "caps-bevel/sweep-caps-bevel",
     // The two ellipse sections of the case are recorded without their positions (the export has 79
@@ -175,5 +174,5 @@ fn caps_and_bevel_cases_match_the_reference() {
     let want: BTreeSet<String> = UNSUPPORTED.iter().map(|s| s.to_string()).collect();
     assert_eq!(unsupported, want, "unsupported set changed");
     assert_eq!(seen, 22);
-    assert_eq!(matched.len(), 9, "{matched:?}");
+    assert_eq!(matched.len(), 11, "{matched:?}");
 }

@@ -304,6 +304,11 @@ fn cap_faces(
 }
 
 fn no_fillets(p: &Params) -> Result<(), BuildError> {
+    no_fillets_with(p, false)
+}
+
+/// `bevel_ok`: the generator builds the Round bevel ring itself (Extrude, §7b).
+fn no_fillets_with(p: &Params, bevel_ok: bool) -> Result<(), BuildError> {
     for id in ["cap_start", "cap_end"] {
         if p.enumeration(id).starts_with("fillet") {
             return Err(BuildError::Unsupported("fillet caps"));
@@ -314,7 +319,7 @@ fn no_fillets(p: &Params) -> Result<(), BuildError> {
     }
     // Bevel rings are not derived (§7a); with Size 0 the Bevel section does nothing.
     for id in ["bevel_size", "end_bevel_size"] {
-        if p.float(id) != 0.0 {
+        if !bevel_ok && p.float(id) != 0.0 {
             return Err(BuildError::Unsupported("bevels"));
         }
     }
@@ -455,7 +460,7 @@ fn displacement(
 pub fn extrude(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMesh, BuildError> {
     let ty = extrude_type();
     let p = Params { ty: &ty, values };
-    no_fillets(&p)?;
+    no_fillets_with(&p, true)?;
     let loops = curve.loops();
     if loops.len() > 1
         && curve.closed
@@ -494,6 +499,9 @@ pub fn extrude(curve: &Curve, values: &BTreeMap<String, Value>) -> Result<PolyMe
             }
             start += m;
         }
+    }
+    if let Some(spec) = round_bevel(&p, &loops, curve.closed, mv, sub, r20)? {
+        return Ok(bevel_extrude(&ring, mv, &spec));
     }
     if curve.closed {
         let cap_type = p.enumeration("cap_type");
@@ -1023,4 +1031,222 @@ fn sweep_faces(
         polys.extend(triangle_caps(&points, &start, &end, p)?);
     }
     Ok(PolyMesh { points, polys })
+}
+
+/// The Round bevel of an Extrude as far as it is observed (GENERATORS2.md §7b).
+struct RoundBevel {
+    size: f64,
+    segments: usize,
+    outside: bool,
+}
+
+/// The Round bevel when the Extrude uses one this code derives: a closed 4-point outline with
+/// both N-gon caps, one segment row, the same Round bevel on both caps, wound like the observed
+/// counter-clockwise rectangle. `Ok(None)` without a bevel, `Unsupported` for any other bevel.
+fn round_bevel(
+    p: &Params,
+    loops: &[Vec<DVec3>],
+    closed: bool,
+    mv: DVec3,
+    sub: usize,
+    r20: bool,
+) -> Result<Option<RoundBevel>, BuildError> {
+    let size = p.float("bevel_size");
+    let end_size = p.float("end_bevel_size");
+    let separate = p.bool("separate_bevel_controls");
+    if size == 0.0 && (!separate || end_size == 0.0) {
+        return Ok(None);
+    }
+    let no = |what: &'static str| Err(BuildError::Unsupported(what));
+    if separate {
+        return no("separate bevel controls");
+    }
+    if p.enumeration("bevel_shape") != "round" {
+        return no("Solid, Curve and Step bevels");
+    }
+    if p.bool("bevel_extended_shape") || p.float("bevel_height") != 0.0 {
+        return no("extended bevel shapes");
+    }
+    if p.float("bevel_shape_depth") != 1.0 {
+        return no("bevel shape depth");
+    }
+    let ngon = p.enumeration("cap_type") == "ngons";
+    let caps = p.enumeration("cap_start") == "cap" && p.enumeration("cap_end") == "cap";
+    if r20 || !closed || sub != 1 || loops.len() != 1 || loops[0].len() != 4 || !ngon || !caps {
+        return no("bevels of this outline or caps");
+    }
+    let normal = newell(&loops[0]);
+    if normal.dot(mv) <= 1e-9 * normal.length() * mv.length() {
+        return no("bevels of a clockwise outline");
+    }
+    Ok(Some(RoundBevel {
+        size,
+        segments: p.int("bevel_segments"),
+        outside: p.bool("bevel_outside"),
+    }))
+}
+
+/// The Round profile of Bevel Size `size`: `(inset, depth)` of the levels 0..=segments, the points
+/// of the rational quadratic arc (control points (1,0), (1,1), (0,1), weights 1, √2/2, 1) at
+/// equal parameter steps, exactly on the circle (GENERATORS2.md §7b).
+fn round_profile(size: f64, segments: usize) -> Vec<(f64, f64)> {
+    let w = std::f64::consts::FRAC_1_SQRT_2;
+    (0..=segments)
+        .map(|k| {
+            let s = k as f64 / segments as f64;
+            let (a, b, c) = ((1.0 - s) * (1.0 - s), 2.0 * w * s * (1.0 - s), s * s);
+            let d = a + b + c;
+            (size * (1.0 - (a + b) / d), size * (b + c) / d)
+        })
+        .collect()
+}
+
+/// The outline moved `d` inwards (outwards for a negative `d`), the corners mitred.
+fn inset_ring(ring: &[DVec3], normal: DVec3, d: f64) -> Vec<DVec3> {
+    let n = ring.len();
+    let inward = |i: usize| {
+        normal
+            .cross(ring[(i + 1) % n] - ring[i])
+            .normalize_or_zero()
+    };
+    (0..n)
+        .map(|i| {
+            let (a, b) = (inward((i + n - 1) % n), inward(i));
+            ring[i] + (a + b) * (d / (1.0 + a.dot(b)))
+        })
+        .collect()
+}
+
+/// Extrude of a 4-point outline with the Round bevel on both caps. Layout as observed in
+/// `caps-bevel/bevel-round` (Bevel Outside off) and `bevel-inner` (on); level `L0` is the shell
+/// ring, level `L<segments>` the cap ring.
+fn bevel_extrude(ring: &[DVec3], mv: DVec3, b: &RoundBevel) -> PolyMesh {
+    let n = ring.len();
+    let seg = b.segments;
+    let normal = newell(ring).normalize_or_zero();
+    let dir = mv.normalize_or_zero();
+    let profile = round_profile(b.size, seg);
+    // level rings: the in-plane outline and the depth along -dir (start) / +dir (end) per level
+    let rings: Vec<Vec<DVec3>> = profile
+        .iter()
+        .map(|&(u, _)| inset_ring(ring, normal, if b.outside { u - b.size } else { u }))
+        .collect();
+    let mut points = Vec::new();
+    for off in [DVec3::ZERO, mv] {
+        points.extend(rings[0].iter().map(|&q| q + off));
+    }
+    let mut polys: Vec<Vec<u32>> = (0..n)
+        .map(|i| {
+            let j = (i + 1) % n;
+            vec![i as u32, j as u32, (n + j) as u32, (n + i) as u32]
+        })
+        .collect();
+    // ids[end][c][level]
+    let mut ids = vec![vec![vec![0u32; seg + 1]; n]; 2];
+    for (end, end_ids) in ids.iter_mut().enumerate() {
+        for (c, corner) in end_ids.iter_mut().enumerate() {
+            corner[0] = (end * n + c) as u32;
+        }
+    }
+    #[allow(clippy::needless_range_loop)] // `end` also selects the base offset and the cap order
+    for end in 0..2 {
+        let (base, sign) = if end == 0 {
+            (DVec3::ZERO, -1.0)
+        } else {
+            (mv, 1.0)
+        };
+        let mut put = |c: usize, l: usize, points: &mut Vec<DVec3>| {
+            ids[end][c][l] = points.len() as u32;
+            points.push(rings[l][c] + base + dir * (sign * profile[l].1));
+        };
+        let order: Vec<usize> = if end == 0 {
+            (0..n).rev().collect()
+        } else if b.outside {
+            (0..n).collect()
+        } else {
+            (0..n).rev().collect()
+        };
+        if b.outside {
+            // the cap ring first, forward, then each corner from the cap towards the shell
+            for c in 0..n {
+                put(c, seg, &mut points);
+            }
+            for &c in &order {
+                for l in (1..seg).rev() {
+                    put(c, l, &mut points);
+                }
+            }
+        } else {
+            for (k, &c) in order.iter().enumerate() {
+                if k == 0 {
+                    (1..=seg).for_each(|l| put(c, l, &mut points));
+                } else {
+                    (1..=seg).rev().for_each(|l| put(c, l, &mut points));
+                }
+            }
+        }
+        // the cap, then the strips
+        let id = |c: usize, l: usize| ids[end][c][l];
+        let fwd: Vec<u32> = (0..n).map(|c| id(c, seg)).collect();
+        if end == 0 {
+            polys.push(fwd.iter().rev().copied().collect());
+        } else {
+            polys.push(fwd);
+        }
+        for &cur in &order {
+            let next = if b.outside && end == 1 {
+                (cur + 1) % n
+            } else {
+                (cur + n - 1) % n
+            };
+            for r in 0..seg {
+                if b.outside {
+                    let (a, bb) = (seg - r, seg - r - 1);
+                    polys.push(if r % 2 == 0 {
+                        vec![id(cur, a), id(cur, bb), id(next, bb), id(next, a)]
+                    } else {
+                        vec![id(next, bb), id(next, a), id(cur, a), id(cur, bb)]
+                    });
+                } else if end == 0 {
+                    polys.push(vec![
+                        id(next, r),
+                        id(next, r + 1),
+                        id(cur, r + 1),
+                        id(cur, r),
+                    ]);
+                } else {
+                    polys.push(vec![
+                        id(cur, r),
+                        id(cur, r + 1),
+                        id(next, r + 1),
+                        id(next, r),
+                    ]);
+                }
+            }
+        }
+    }
+    PolyMesh { points, polys }
+}
+
+#[cfg(test)]
+mod bevel_tests {
+    use super::*;
+
+    /// The Round profile points lie on the circle of the bevel size at 29.2776 and 60.7224
+    /// degrees for 3 segments (`caps-bevel/bevel-round`), symmetric about 45 degrees.
+    #[test]
+    fn round_profile_is_the_rational_quarter_arc() {
+        let pr = round_profile(10.0, 3);
+        assert_eq!(pr.len(), 4);
+        assert_eq!(pr[0], (0.0, 0.0));
+        assert!((pr[3].0 - 10.0).abs() < 1e-12 && (pr[3].1 - 10.0).abs() < 1e-12);
+        let deg = |(u, v): (f64, f64)| v.atan2(10.0 - u).to_degrees();
+        assert!((deg(pr[1]) - 29.2776).abs() < 1e-4, "{}", deg(pr[1]));
+        assert!((deg(pr[2]) - 60.7224).abs() < 1e-4, "{}", deg(pr[2]));
+        for q in &pr {
+            assert!((((10.0 - q.0).powi(2) + q.1.powi(2)).sqrt() - 10.0).abs() < 1e-9);
+        }
+        // the observed coordinates
+        assert!((pr[1].0 - 1.277396).abs() < 1e-6 && (pr[1].1 - 4.890417).abs() < 1e-6);
+    }
 }

@@ -181,6 +181,6 @@ fn a_fifty_node_material_compiles_under_100_ms() {
     let elapsed = start.elapsed();
     assert!(elapsed.as_millis() < 100, "compiled in {elapsed:?}");
     assert_eq!(m.hash, hash_graph(&graph));
-    assert_eq!(CODEGEN_VERSION, 1);
+    assert_eq!(CODEGEN_VERSION, 2);
     validate(&m.source);
 }

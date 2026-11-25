@@ -25,6 +25,9 @@ exceptions = [
     { allow = ["OFL-1.1", "Ubuntu-font-1.0"], crate = "epaint_default_fonts" },
     # CC0-1.0 is a public-domain dedication (pulled in via egui -> ahash -> const-random).
     { allow = ["CC0-1.0"], crate = "tiny-keccak" },
+    # BSL-1.0 (Boost, permissive, OSI) for a hash helper used only by the build script of
+    # mach-dxcompiler-rs, which links the DXC shader compiler for DX12 (wgpu static-dxc, D19).
+    { allow = ["BSL-1.0"], crate = "lhash" },
 ]
 
 [advisories]

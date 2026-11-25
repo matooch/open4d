@@ -277,13 +277,15 @@ fn ir_channels_match_the_cpu_on_the_gpu() {
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     if (id.x >= arrayLength(&forge_out)) { return; }
-    let base = id.x * 4u;
+    let base = id.x * 5u;
     var ctx: ShadeCtx;
     ctx.uvw = forge_in[base].xyz;
     ctx.time = forge_in[base].w;
     ctx.position = forge_in[base + 1u].xyz;
     ctx.normal = forge_in[base + 2u].xyz;
     ctx.view = forge_in[base + 3u].xyz;
+    ctx.vertex_weight = forge_in[base + 4u].x;
+    ctx.ao = forge_in[base + 4u].y;
     forge_out[id.x] = forge_surface(ctx);
 }
 "#
@@ -332,7 +334,7 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         cache: None,
     });
 
-    let mut input = Vec::with_capacity(POINTS * 4 * 4);
+    let mut input = Vec::with_capacity(POINTS * 5 * 4);
     for i in 0..POINTS {
         let c = ctx(i);
         input.extend_from_slice(&c.uvw.map(|v| v as f32));
@@ -343,6 +345,9 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
         input.push(0.0);
         input.extend_from_slice(&c.view.map(|v| v as f32));
         input.push(0.0);
+        input.push(c.vertex_weight.unwrap_or(0.0) as f32);
+        input.push(c.ao.unwrap_or(1.0) as f32);
+        input.extend_from_slice(&[0.0, 0.0]);
     }
     let input_bytes: Vec<u8> = input.iter().flat_map(|v| v.to_le_bytes()).collect();
     let output_size = (POINTS * SURFACE_FIELDS * 4 * 4) as u64;

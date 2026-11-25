@@ -19,6 +19,12 @@ uploaded as workflow artifacts (`release-bundle` holds the final set); no Releas
 | all | `SHA256SUMS`, `CHANGELOG.md` (release body) | `checksums.sh`, `changelog.sh` |
 
 Each package holds `forge-studio` (editor), `forge`, `forge-mcp`, `forge-rpc-serve`.
+The Windows binaries link Microsoft's DXC shader compiler statically (wgpu `static-dxc`, via
+`mach-dxcompiler-rs`; REALTIME.md §3), so DX12 never uses the old FXC compiler. The Windows build
+downloads the prebuilt DXC library from that crate's immutable GitHub release (needs `curl` and
+`tar`, present on Windows 10/11 and the hosted runners). **Ship DXC's licence notice** (University
+of Illinois/NCSA and the LLVM exception, from the DirectXShaderCompiler repository) in the Windows
+zip next to the program, and keep it in the release notes' third-party section.
 The AppImage bundles `libxkbcommon`, `libxkbcommon-x11` and `libxcb-xkb` (loaded at run time by
 winit); GPU drivers, libX11 and Wayland client libraries come from the host. Run
 `Forge3D.AppImage forge ...` to use a bundled tool instead of the editor.
