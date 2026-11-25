@@ -4,16 +4,16 @@ One page to check where the project stands. The planner updates it after every m
 Details live in the files linked at the bottom; when this page and those files disagree, the
 linked files win.
 
-**Last updated:** 2026-11-24, after S9 (171, PR #51) and Hermes run 7 (197 part 1).
+**Last updated:** 2026-11-25, after Hermes run 8 (205, 206) and the GPU shader nodes (207, PR #53).
 
 ## At a glance
 
 | | Now |
 |---|---|
-| Implementation briefs | **180 of 197 done** (91 %) · 6 ready · 11 waiting |
+| Implementation briefs | **182 of 198 done** (92 %) · 5 ready · 11 waiting |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
-| Acceptance scenarios | S1, S2, S3, S7, S8, S9 pass · S4, S5 queued · S6 blocked · S10 needs a measurement |
+| Acceptance scenarios | S1–S5, S7, S8, S9 pass · S6 blocked · S10 needs a measurement |
 | Release | No release cut yet (v1.0 checklist is brief 185, last) |
 | Next | Implementer run 6 continues from 197 (see below) |
 
@@ -27,8 +27,8 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | S1 | CLI script: cube, cloner + random effector, bend, frame 30, glTF + PNG | ✅ passes | – |
 | S2 | MCP agent drives a running editor (key a sphere, read frame 15) | ✅ passes | – |
 | S3 | Model a chair in the editor, save, reopen, export OBJ | ✅ passes | Feel checks in GUI sessions G1/G2/G4 |
-| S4 | Motion graphics: text → fracture → cloner on spline → field effectors → 1080p sequence | 🟡 brief 205 queued (run 4) | Test + manual chapter |
-| S5 | Volumes: 3 spheres + spline tube → builder → smooth → mesh → editable | 🟡 brief 206 queued (run 4) | Test + manual chapter |
+| S4 | Motion graphics: text → fracture → cloner on spline → field effectors → 1080p sequence | ✅ passes (205) | Spline-source cloner is own design (parity-pending) |
+| S5 | Volumes: 3 spheres + spline tube → builder → smooth → mesh → editable | ✅ passes (206) | 208: mesher must stay manifold on thin tubes with default smoothing |
 | S6 | Rigging: joints, auto weights, IK + pole, **pose morph**, playback | 🔴 blocked | Pose Morph (107) has no reference data: **owner decision** |
 | S7 | Animation polish: dope sheet, broken/weighted tangents, easing, loop | ✅ passes | – |
 | S8 | Look-dev: area light, DOF camera, node material, CPU render + AOVs | ✅ passes (146) | Cross-OS reference check confirmed by CI |
@@ -43,8 +43,8 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | B · Modeling tools, selections, splines | 18 / 18 | Interactive feel (GUI session G3) |
 | C · Primitives and generators | 16 / 17 | 046 Null/Instance display (waits on GUI session G8) |
 | D · Deformers and fields | 15 / 15 | Parity-pending: Bevel deformer rounding, Displacer UVW, Polygon Reduction positions |
-| E · Clone toolset (MoGraph) | 16 / 17 | 205 S4 acceptance (queued) |
-| F · Volumes | 8 / 9 | 206 S5 acceptance (queued) |
+| E · Clone toolset (MoGraph) | 17 / 17 | – |
+| F · Volumes | 9 / 10 | 208 manifold mesher (planner subagent, running) |
 | G · Animation | 13 / 13 | – |
 | H · Rigging, tags, constraints | 13 / 15 | 107 Pose Morph (blocked), 114 S6 acceptance (needs 107) |
 | I · Dynamics and particles | 5 / 8 | 119, 120 particles + forces (blocked), 121 (needs 119) |
@@ -59,15 +59,13 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 
 Queue and rules: [agents/HERMES-IMPLEMENTER.md](agents/HERMES-IMPLEMENTER.md) §2.
 
-Done: 146 S8, 040 Metaball (run 4); 054 deformers, 170 camera exchange (run 5); 171 S9 exchange acceptance; 197 shading IR → WGSL (run 7).
+Done: 146 S8, 040 Metaball (run 4); 054 deformers, 170 camera exchange (run 5); 171 S9 exchange acceptance; 197 shading IR → WGSL (run 7); 207 shader nodes → WGSL (planner subagent); 205 S4, 206 S5 (run 8).
 
-1. 205 · S4 acceptance
-2. 206 · S5 acceptance
-3. 142 · GPU compute path tracer
-4. 198 · R2: real-time raster PBR
-5. 199 · R3: post effects and the viewport "Render" mode
+1. 142 · GPU compute path tracer
+2. 198 · R2: real-time raster PBR
+3. 199 · R3: post effects and the viewport "Render" mode
 
-Later, with a stronger model: 207 (shader nodes → GPU code) and 200–204 (ray tracing on Metal; Vulkan run pending on the RTX 3090).
+Later, with a stronger model: 200–204 (ray tracing on Metal; Vulkan run pending on the RTX 3090).
 
 Overnight: `scripts/hermes-loop.sh docs/agents/prompts/implementer-opencode.txt` restarts the implementer in fresh sessions until the queue is done (HERMES-IMPLEMENTER.md §2b).
 
