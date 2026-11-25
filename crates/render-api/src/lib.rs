@@ -18,5 +18,5 @@ pub use light::{
     AreaShape, Background, Environment, Falloff, Light, LightKind, Lighting, ShadowMode,
 };
 pub use output::{Aov, RenderOutput, RenderStats};
-pub use settings::{PixelFilter, RenderSettings};
+pub use settings::{PixelFilter, PostSettings, RenderSettings};
 pub use snapshot::{Instance, MaterialData, MeshData, Snapshot};

@@ -33,6 +33,91 @@ pub struct RenderSettings {
     /// Trace camera rays through the camera's thin lens (RENDER.md R15). Off by default: a
     /// camera is then a pinhole and the image is sharp everywhere.
     pub depth_of_field: bool,
+    /// Post effects of the real-time raster tier (RENDER.md R22). Off by default, so the other
+    /// engines and the R21 parity tests are unchanged; they ignore the field.
+    pub post: PostSettings,
+}
+
+/// The tier-1 post chain (RENDER.md R22.1). Every effect is its own toggle, all off by default;
+/// the values are fixed so two renders of one scene stay bit-identical (R21.6).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PostSettings {
+    /// Screen-space ambient occlusion (R22.2).
+    pub ssao: bool,
+    /// World-space sampling radius of the AO samples.
+    pub ssao_radius: f64,
+    /// 0 leaves the ambient term alone, 1 lets full occlusion black it out.
+    pub ssao_strength: f64,
+    /// Screen-space reflections (R22.3).
+    pub ssr: bool,
+    /// March steps per reflection ray.
+    pub ssr_steps: u32,
+    /// Bloom over the threshold (R22.4).
+    pub bloom: bool,
+    /// Linear luminance above which a pixel blooms.
+    pub bloom_threshold: f64,
+    /// Weight of the blurred bright pass added back.
+    pub bloom_strength: f64,
+    /// Temporal anti-aliasing: jittered subframes averaged per render (R22.5).
+    pub taa: bool,
+    /// Subframes per render.
+    pub taa_samples: u32,
+    /// Filmic tone mapping of the beauty (R22.6).
+    pub tonemap: bool,
+    /// Linear multiplier before the tone curve.
+    pub exposure: f64,
+}
+
+impl Default for PostSettings {
+    fn default() -> Self {
+        PostSettings {
+            ssao: false,
+            ssao_radius: 40.0,
+            ssao_strength: 1.0,
+            ssr: false,
+            ssr_steps: 16,
+            bloom: false,
+            bloom_threshold: 1.0,
+            bloom_strength: 0.25,
+            taa: false,
+            taa_samples: 4,
+            tonemap: false,
+            exposure: 1.0,
+        }
+    }
+}
+
+impl PostSettings {
+    /// True when no effect is switched on: the raster tier then renders exactly as R21.
+    pub fn is_off(&self) -> bool {
+        !(self.ssao || self.ssr || self.bloom || self.taa || self.tonemap)
+    }
+
+    pub fn validate(&self) -> Result<(), RenderError> {
+        let bad = |s: &str| Err(RenderError::Settings(s.to_string()));
+        if !(self.ssao_radius > 0.0 && self.ssao_radius.is_finite()) {
+            return bad("the AO radius must be positive");
+        }
+        if !(0.0..=1.0).contains(&self.ssao_strength) {
+            return bad("the AO strength must be in [0, 1]");
+        }
+        if !(1..=128).contains(&self.ssr_steps) {
+            return bad("ssr steps must be in 1..=128");
+        }
+        if !(1..=32).contains(&self.taa_samples) {
+            return bad("taa samples must be in 1..=32");
+        }
+        if !(self.bloom_threshold >= 0.0 && self.bloom_threshold.is_finite()) {
+            return bad("the bloom threshold must not be negative");
+        }
+        if !(self.bloom_strength >= 0.0 && self.bloom_strength.is_finite()) {
+            return bad("the bloom strength must not be negative");
+        }
+        if !(self.exposure > 0.0 && self.exposure.is_finite()) {
+            return bad("the exposure must be positive");
+        }
+        Ok(())
+    }
 }
 
 impl Default for RenderSettings {
@@ -52,6 +137,7 @@ impl Default for RenderSettings {
             region: None,
             threads: None,
             depth_of_field: false,
+            post: PostSettings::default(),
         }
     }
 }
@@ -88,6 +174,7 @@ impl RenderSettings {
         if self.threads == Some(0) {
             return bad("threads must be at least 1");
         }
+        self.post.validate()?;
         Ok(())
     }
 }
