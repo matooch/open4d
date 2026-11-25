@@ -258,3 +258,7 @@ to a DLL or FXC (not a supported release target). Licence and packaging: docs/RE
 ## 4. GPU ray-query scene
 
 See [RENDER.md R23](RENDER.md#r23-instanced-ray-queries-brief-200).
+
+## 5. Hybrid ray-traced effects
+
+See [RENDER.md R24](RENDER.md#r24-hybrid-ray-traced-effects-brief-201).

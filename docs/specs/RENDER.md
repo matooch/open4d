@@ -980,6 +980,76 @@ Sources: [area R](../roadmap/areas/R-realtime.md), D19, and
   return misses without a hardware dispatch. Compare with compute on the R23 scene
   using the same exact IDs and `1e-4` bounds, including after a transform-only update.
 
+## R24 Hybrid ray-traced effects (brief 201)
+
+Sources: [area R](../roadmap/areas/R-realtime.md), [D19](../roadmap/DECISIONS.md),
+[O43](../parity/material-renders.md) for material inputs only, and the integrator
+and shading conventions in R7–R9. The hybrid renderer is our own design.
+
+### R24.1 Tier selection and composition
+
+- Keep raster primary visibility and the R21 material inputs. There are four
+  independently selectable effects: RT shadows, reflections, AO and diffuse GI,
+  all off by default. With RT disabled, all four effects off, or no usable
+  ray backend, use the unmodified Tier 1 path, including its post settings.
+- Use the selected R23 backend for all ray batches (Metal ray queries or compute;
+  Vulkan hardware queries follow in brief 212). Update its acceleration structures
+  when the scene changes. Split large ray batches to respect backend dispatch
+  limits. Hit shading takes instance, triangle and barycentrics from R23 and
+  evaluates the snapshot's shared shading IR, not a separate set of material
+  parameters. Primary background pixels retain the raster background.
+- Replace the selected lighting term in linear HDR, before bloom and tone mapping.
+  RT shadows replace shadow-map visibility, RT reflections replace SSR, and RT
+  AO replaces SSAO. The replaced approximation must not also be applied. Disabled
+  effects keep the corresponding Tier 1 behavior. GI adds a diffuse bounce; it
+  does not re-add primary direct lighting.
+
+### R24.2 Ray estimators
+
+- Use deterministic per-pixel, per-frame sample sequences. Offset ray origins
+  toward their outgoing hemisphere to avoid self-hits. Shadow and AO rays are
+  visibility queries; reflection and GI rays use the nearest surface hit.
+  R23 intersects opaque triangles: transmissive and alpha-cutout visibility
+  are not part of R24.
+- For a shadowed light, trace to the sampled light position or along the direction
+  to an infinite light. Area lights sample their emitting surface using R8; terminate
+  finite rays just before the light sample. Weight each light sample by its own
+  visibility, including the R8 shadow density and tint, so blockers affect the
+  direct term but not emission or environment.
+- Reflections sample the specular lobe around the reflected direction, using the
+  primary roughness and reflectance. Evaluate emission and direct light at a
+  secondary hit, or sample the environment on a miss.
+- AO samples the cosine-weighted hemisphere up to the configured world-space AO
+  radius. Apply the unoccluded fraction to the ambient term, not direct light or
+  emission. A zero radius leaves ambient unchanged.
+- GI samples the cosine-weighted hemisphere. A visible secondary surface supplies
+  its emissive and directly lit radiance, weighted by the primary diffuse
+  reflectance. No additional indirect bounces. A miss adds no GI when the raster
+  environment already supplies the diffuse sky term.
+
+### R24.3 Denoising and acceptance
+
+- Keep temporal history per view and per effect. Accumulate repeated frames of
+  an unchanged scene and camera; invalidate history on scene, camera, size or
+  estimator-setting changes. Do not blend invalid history into a new frame.
+  Spatial filtering respects primary surface position/depth and normals to avoid
+  blending across silhouettes or distinct surfaces. Filter the effect signals,
+  not the entire raster beauty.
+- Compare linear beauty against a deterministic, higher-sample Forge CPU render
+  with the same camera, geometry, lights and O43 material values. Load the O43
+  inputs without editing the golden files. The original material-only setups
+  do not isolate all four estimators; controlled extensions add an area-light
+  blocker, an off-screen reflector target, finite-radius occluding geometry
+  and a diffuse bounce receiver. In each fixture enable only the effect under
+  test and require strictly higher PSNR than Tier 1, using the same fixed image
+  range for both scores and no fitted exposure gain. Compare GI against Tier 1
+  without that bounce.
+- Test that each toggle is independent and that all effects off preserves Tier 1.
+  On a static scene, compare successive linear frames: the late-frame difference
+  must be lower than the early-frame difference. A camera change must discard the
+  accumulated history. Check on Metal here and keep the tests runnable on the
+  compute fallback.
+
 ## R13 Not done / follow-ups
 
 The material hosted in the document (brief 194), object-shaped area lights, falloff `Steps`, Sobol sampling,
