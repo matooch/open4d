@@ -629,3 +629,40 @@ fn s8_lookdev_area_light_camera_dof_material_and_aovs() {
         assert!(p >= 30.0, "PSNR {p:.1} dB against the reference (min 30)");
     }
 }
+
+#[test]
+fn renders_with_the_real_time_engine() {
+    if forge_render_rt::request_default_device().is_err() {
+        if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") {
+            panic!("FORGE_REQUIRE_GPU=1 but no GPU adapter for --engine rt");
+        }
+        eprintln!("skipping --engine rt: no GPU adapter");
+        return;
+    }
+    let d = dir("rt");
+    let scene = cube_scene(&d);
+    let out = d.join("rt.png");
+    let (code, r) = json_run(&[
+        "render",
+        &scene,
+        "--engine",
+        "rt",
+        "--out",
+        s(&out),
+        "--width",
+        "64",
+        "--height",
+        "48",
+    ]);
+    assert_eq!(code, 0, "{r}");
+    let lit = lit_pixels(&decode(&out));
+    assert!(lit > 100, "only {lit} lit pixels");
+    // an unknown engine is a usage error and writes nothing
+    let bad = d.join("bad.png");
+    let out = forge()
+        .args(["render", &scene, "--engine", "nope", "--out", s(&bad)])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert!(!bad.exists());
+}

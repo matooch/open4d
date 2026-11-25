@@ -201,12 +201,13 @@ forge rpc <method> [--params] [--port] [--token]
 Render an image or an image sequence with the CPU path tracer (docs/specs/RENDER.md)
 
 ```
-forge render <scene> --out [--width] [--height] [--samples] [--max-depth] [--seed] [--frame] [--start] [--end] [--step] [--format] [--depth] [--alpha] [--aov] [--dof] [--multipart]
+forge render <scene> [--engine] --out [--width] [--height] [--samples] [--max-depth] [--seed] [--frame] [--start] [--end] [--step] [--format] [--depth] [--alpha] [--aov] [--dof] [--multipart]
 ```
 
 | Argument | Required | Default | Description |
 |---|---|---|---|
 | `<scene>` | yes |  |  |
+| `--engine` | no | `cpu` | Render engine: cpu (path tracer), gpu (compute path tracer) or rt (real-time raster) |
 | `--out` | yes |  | Output path template; tokens {frame}, {frame:N}, {pass}, {name}. The extension picks the format when it is a known one |
 | `--width` | no |  | Image width (default: the scene's stored render settings, else 320) |
 | `--height` | no |  | Image height (default: the scene's stored render settings, else 240) |

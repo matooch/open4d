@@ -529,4 +529,8 @@ impl TextureSampler for ShaderSet {
     fn sample(&self, name: &str, ctx: &ShadeCtx) -> [f64; 3] {
         self.shaders.get(name).map_or([1.0; 3], |s| s.sample(ctx))
     }
+
+    fn codegen(&self) -> Option<Box<dyn forge_material::wgsl::TextureCodegen + '_>> {
+        Some(Box::new(crate::wgsl::ShaderSetCodegen { set: self }))
+    }
 }

@@ -132,10 +132,12 @@ the message reads `<script>: line N: <message>` and the printed lines go to stde
 file that cannot be read is exit 1; a scene that cannot be loaded is exit 2.
 
 ### `forge render <scene> --out <path> [options]`
-Renders the scene evaluated at one frame or a frame range with the CPU path tracer
-(RENDER.md R4-R12) and writes the images. The scene has no camera or light objects yet, so the
-camera frames the geometry (R12) and the engine adds its default light.
-Options: `--width W` (320), `--height H` (240), `--samples N` (16), `--max-depth N` (5),
+Renders the scene evaluated at one frame or a frame range with the chosen engine (RENDER.md
+R4-R12, R20, R21) and writes the images: `--engine cpu|gpu|rt` (cpu, the path tracer), where
+`gpu` is the compute path tracer (R20) and `rt` the real-time raster tier (R21; it needs a GPU
+adapter and reports "no GPU adapter" as an error without one). The scene has no camera or light
+objects yet, so the camera frames the geometry (R12) and the engine adds its default light.
+Options: `--engine cpu|gpu|rt` (cpu), `--width W` (320), `--height H` (240), `--samples N` (16), `--max-depth N` (5),
 `--seed N` (1), `--frame N` (default 0, clamped to the scene range) or `--start A --end B
 [--step S]` (both together, never with `--frame`), `--format png|tif|jpg|hdr|exr` (default: the
 extension of `--out`, else png), `--depth 8|16|32` (8, or 32 for exr and hdr), `--alpha`,

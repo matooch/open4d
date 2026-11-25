@@ -25,6 +25,8 @@ forge-plugin = { path = "../../crates/plugin" }
 forge-render-api = { path = "../../crates/render-api" }
 forge-render-bridge = { path = "../../crates/render-bridge" }
 forge-render-cpu = { path = "../../crates/render-cpu" }
+forge-render-gpu = { path = "../../crates/render-gpu" }
+forge-render-rt = { path = "../../crates/render-rt" }
 forge-rpc = { path = "../../crates/rpc" }
 forge-script = { path = "../../crates/script" }
 serde_json = "1"

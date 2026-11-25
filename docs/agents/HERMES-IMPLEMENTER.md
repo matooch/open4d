@@ -137,6 +137,13 @@ change the result:
 - **No shared mutable globals between tests** (`static` counters, caches). Use per-test state;
   if a global is unavoidable, hold one `static Mutex` in every test that touches it.
 - Run a new test file at least 5 times in a row before committing; any failure is a bug.
+- **GPU shaders must build on every backend, not only Metal.** Your Mac translates WGSL to MSL;
+  Linux and Windows (Vulkan) translate it to SPIR-V and DX12 to HLSL, and naga has bugs that only
+  one backend hits (brief 142's path tracer crashed naga's SPIR-V writer: "Expression [..] is not
+  cached!"). Add a plain unit test that translates every module your code builds through naga to
+  SPIR-V, MSL and HLSL (`naga::front::wgsl`, `valid::Validator`, `back::{spv,msl,hlsl}`), so CI
+  catches it without a GPU. Linux CI runs GPU tests on a software Vulkan driver
+  (`FORGE_REQUIRE_GPU=1`), so they really execute there.
 
 ## 6. Never
 

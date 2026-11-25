@@ -66,6 +66,16 @@ impl ModuleBuilder {
         self.decls.push('\n');
     }
 
+    /// The declarations collected so far (library and generated shader functions, bindings).
+    pub fn declarations(&self) -> &str {
+        &self.decls
+    }
+
+    /// The bound resources collected so far: entry `k` is bound at `@group(1) @binding(k)`.
+    pub fn resources(&self) -> &[Arc<dyn Any + Send + Sync>] {
+        &self.resources
+    }
+
     /// Registers a bound resource and returns its `@group(1)` binding index (the same
     /// `Arc` always gets the same index).
     pub fn resource(&mut self, r: Arc<dyn Any + Send + Sync>) -> u32 {
@@ -95,6 +105,18 @@ impl TextureCodegen for NoShaders {
     }
     fn emit(&self, _: &str, _: &mut ModuleBuilder) -> Option<String> {
         None
+    }
+}
+
+/// The codegen of a sampler that answers white for every shader node (the `White` sampler).
+pub struct WhiteShaders;
+
+impl TextureCodegen for WhiteShaders {
+    fn fingerprint(&self, _: &str) -> u64 {
+        1
+    }
+    fn emit(&self, _: &str, _: &mut ModuleBuilder) -> Option<String> {
+        Some("vec3<f32>(1.0)".into())
     }
 }
 
@@ -245,8 +267,27 @@ pub fn compile(graph: &ShadingGraph) -> WgslMaterial {
 
 /// Compiles the IR to a WGSL module, porting shader nodes through `lib`.
 pub fn compile_with(graph: &ShadingGraph, lib: &dyn TextureCodegen) -> WgslMaterial {
-    let mut out = String::from(SURFACE_WGSL);
     let mut module = ModuleBuilder::default();
+    let (mut source, fallbacks) = compile_into(graph, lib, &mut module);
+    source.push_str(&module.decls);
+    WgslMaterial {
+        source,
+        hash: hash_graph_with(graph, lib),
+        fallbacks,
+        resources: module.resources,
+    }
+}
+
+/// Compiles `graph` into the shared `module`: returns the source of the surface (the common
+/// prologue, `irN` functions and `forge_surface`) and the fallback names, while the shader
+/// declarations go into `module`. Several materials compiled into one builder share their
+/// library functions and bindings (docs/specs/RENDER.md R20.1).
+pub fn compile_into(
+    graph: &ShadingGraph,
+    lib: &dyn TextureCodegen,
+    module: &mut ModuleBuilder,
+) -> (String, Vec<String>) {
+    let mut out = String::from(SURFACE_WGSL);
     let mut exprs: HashMap<&str, Option<String>> = HashMap::new();
     let mut fallbacks = Vec::new();
     for (ix, node) in graph.nodes.iter().enumerate() {
@@ -255,7 +296,7 @@ pub fn compile_with(graph: &ShadingGraph, lib: &dyn TextureCodegen) -> WgslMater
             IrNode::Texture(name) => {
                 let e = exprs
                     .entry(name.as_str())
-                    .or_insert_with(|| lib.emit(name, &mut module))
+                    .or_insert_with(|| lib.emit(name, module))
                     .clone();
                 match e {
                     Some(e) => (e, None),
@@ -455,13 +496,7 @@ pub fn compile_with(graph: &ShadingGraph, lib: &dyn TextureCodegen) -> WgslMater
         out.push_str("    s.diffusion_present = vec4<f32>(1.0, 0.0, 0.0, 0.0);\n");
     }
     out.push_str("    return s;\n}\n");
-    out.push_str(&module.decls);
-    WgslMaterial {
-        source: out,
-        hash: hash_graph_with(graph, lib),
-        fallbacks,
-        resources: module.resources,
-    }
+    (out, fallbacks)
 }
 
 /// A per-session cache of compiled IR modules.

@@ -165,6 +165,12 @@ pub struct ShadeCtx {
 /// The shader hook of the interpreter.
 pub trait TextureSampler {
     fn sample(&self, name: &str, ctx: &ShadeCtx) -> [f64; 3];
+
+    /// The WGSL port of this sampler's shader nodes (REALTIME.md §2), when it has one. A
+    /// GPU renderer needs it to compile materials with shader-node channels.
+    fn codegen(&self) -> Option<Box<dyn crate::wgsl::TextureCodegen + '_>> {
+        None
+    }
 }
 
 /// A sampler that returns white for every texture.
@@ -172,6 +178,10 @@ pub struct White;
 impl TextureSampler for White {
     fn sample(&self, _: &str, _: &ShadeCtx) -> [f64; 3] {
         [1.0; 3]
+    }
+
+    fn codegen(&self) -> Option<Box<dyn crate::wgsl::TextureCodegen + '_>> {
+        Some(Box::new(crate::wgsl::WhiteShaders))
     }
 }
 
