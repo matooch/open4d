@@ -10,10 +10,10 @@ linked files win.
 
 | | Now |
 |---|---|
-| Implementation briefs | **187 of 199 done** (94 %) · 4 ready · 8 waiting |
+| Implementation briefs | **189 of 199 done** (95 %) · 2 ready · 8 waiting |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
-| Acceptance scenarios | S1–S5, S7, S8, S9 pass · S6 blocked · S10 needs a measurement |
+| Acceptance scenarios | S1–S9 pass (S6 with own-design Pose Morph, parity-pending) · S10 needs a measurement |
 | Release | No release cut yet (v1.0 checklist is brief 185, last) |
 | Next | Implementer run 6 continues from 197 (see below) |
 
@@ -29,7 +29,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | S3 | Model a chair in the editor, save, reopen, export OBJ | ✅ passes | Feel checks in GUI sessions G1/G2/G4 |
 | S4 | Motion graphics: text → fracture → cloner on spline → field effectors → 1080p sequence | ✅ passes (205) | Spline-source cloner is own design (parity-pending) |
 | S5 | Volumes: 3 spheres + spline tube → builder → smooth → mesh → editable | ✅ passes (206) | – (208: mesher stays manifold on thin tubes) |
-| S6 | Rigging: joints, auto weights, IK + pole, **pose morph**, playback | 🔴 blocked | Pose Morph (107) has no reference data: **owner decision** |
+| S6 | Rigging: joints, auto weights, IK + pole, **pose morph**, playback | ✅ passes (114) | Pose Morph is own design (D20), parity-pending O37; GUI capture G9 checks it |
 | S7 | Animation polish: dope sheet, broken/weighted tangents, easing, loop | ✅ passes | – |
 | S8 | Look-dev: area light, DOF camera, node material, CPU render + AOVs | ✅ passes (146) | Cross-OS reference check confirmed by CI |
 | S9 | Import FBX / glTF / Alembic from the reference app, matches | ✅ passes (171): 6 cases × FBX, GLB, Alembic, STL through the CLI | glTF skinned-arm poses at f15/f30 pinned KNOWN_MISMATCH (≤ 5e-4) |
@@ -46,7 +46,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | E · Clone toolset (MoGraph) | 17 / 17 | – |
 | F · Volumes | 10 / 10 | – |
 | G · Animation | 13 / 13 | – |
-| H · Rigging, tags, constraints | 13 / 15 | 107 Pose Morph (blocked), 114 S6 acceptance (needs 107) |
+| H · Rigging, tags, constraints | 15 / 15 | Parity-pending: Pose Morph (own design D20, O37) |
 | I · Dynamics and particles | 5 / 8 | 119, 120 particles + forces (blocked), 121 (needs 119) |
 | J · Materials, shaders, UVs | 13 / 13 | Hands-on checks in GUI session G7 |
 | K · Rendering and viewport | 11 / 12 | 142 GPU path tracer (queued) |
@@ -75,7 +75,6 @@ Overnight: `scripts/hermes-loop.sh docs/agents/prompts/implementer-opencode.txt`
 
 | Item | Why it's stuck | What unblocks it |
 |---|---|---|
-| Pose Morph (107) → S6 (114) | The reference app's morph strength can't be scripted, so there's no golden data (O37) | Either: build it as **own design** (parity-pending), or capture it by hand in a GUI session |
 | Particles + forces (119, 120, 121) | The emitter exposes no particle list to scripts (O40) | Same choice: **own design**, or a GUI capture |
 | GUI sessions G1–G9 | Feel, layout, shortcuts, viewport look can only be checked by a person at the reference app | An hour or two per session: [parity/GUI-SESSIONS.md](parity/GUI-SESSIONS.md) |
 | Hands-on use of the editor | Nobody has used the editor for real work yet; that's where the remaining usability bugs are | Build a small scene in it and report what gets in the way |
