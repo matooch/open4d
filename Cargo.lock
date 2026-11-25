@@ -1538,6 +1538,8 @@ dependencies = [
  "forge-render-api",
  "forge-render-bridge",
  "forge-render-cpu",
+ "forge-render-gpu",
+ "forge-render-rt",
  "forge-rpc",
  "forge-script",
  "serde_json",
@@ -1880,6 +1882,28 @@ dependencies = [
  "forge-shaders",
  "glam 0.34.1",
  "pollster 1.0.1",
+ "toml",
+ "wgpu",
+]
+
+[[package]]
+name = "forge-render-rt"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "forge-core",
+ "forge-generators",
+ "forge-image",
+ "forge-material",
+ "forge-parity-harness",
+ "forge-render-api",
+ "forge-render-cpu",
+ "forge-render-gpu",
+ "forge-shaders",
+ "glam 0.34.1",
+ "naga",
+ "pollster 1.0.1",
+ "thiserror 2.0.21",
  "toml",
  "wgpu",
 ]

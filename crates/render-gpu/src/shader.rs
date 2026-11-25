@@ -49,8 +49,9 @@ fn dispatch(n: usize) -> String {
     s
 }
 
-/// The whole compute module for `graphs`.
-pub fn assemble(graphs: &[&ShadingGraph]) -> Result<String, RenderError> {
+/// The surface struct and every material as `forge_surface_<i>` plus the `forge_shade`
+/// dispatcher, for any WGSL module that shades through the IR (R20.1, R21.3).
+pub fn materials(graphs: &[&ShadingGraph]) -> Result<String, RenderError> {
     if graphs.iter().any(|g| needs_shader_nodes(g)) {
         return Err(RenderError::Unsupported(
             "shader-node material channels on the GPU (REALTIME.md §2, brief 207)".into(),
@@ -63,6 +64,12 @@ pub fn assemble(graphs: &[&ShadingGraph]) -> Result<String, RenderError> {
         out.push_str(&rename(body, i));
     }
     out.push_str(&dispatch(compiled.len()));
+    Ok(out)
+}
+
+/// The whole compute module for `graphs`.
+pub fn assemble(graphs: &[&ShadingGraph]) -> Result<String, RenderError> {
+    let mut out = materials(graphs)?;
     out.push_str(&frame_constants());
     out.push_str(crate::RNG_WGSL);
     out.push('\n');
