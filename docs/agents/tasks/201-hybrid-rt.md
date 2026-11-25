@@ -1,6 +1,6 @@
 # 201 · Hybrid ray-traced shadows, reflections, AO and GI
 
-Status: waiting: 200 · Area: R · Depends on: 200 · Observations: – (own design; material values from O29/O42/O43 through the shading IR) · Touches: render-rt
+Status: in-progress (hermes) · Area: R · Depends on: 200 · Observations: – (own design; material values from O29/O42/O43 through the shading IR) · Touches: render-rt
 
 ## Goal
 Replace the screen-space approximations with ray-traced soft shadows (area lights), reflections, ambient occlusion and one-bounce diffuse GI, with a spatio-temporal denoiser. Each effect toggles; fallback to Tier 1 when RT is off.
@@ -23,3 +23,9 @@ Replace the screen-space approximations with ray-traced soft shadows (area light
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+
+AO checkpoint: the controlled O43 `mat-red-matte` fixture improves from 17.223
+to 35.230 dB PSNR on Metal and on the explicit compute fallback. The tests
+also cover exact Tier 1 fallback, SSAO replacement, zero radius, decreasing
+successive-frame delta, and camera-change history invalidation. Shadows,
+reflections and GI remain to be implemented and checked; R24 is not done.

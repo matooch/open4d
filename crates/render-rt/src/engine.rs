@@ -1,6 +1,7 @@
 //! The raster engine: resources, passes, readback and outputs (docs/specs/RENDER.md R21).
 
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 use bytemuck::{Pod, Zeroable};
 use forge_image::{AlphaMode, Image};
@@ -16,6 +17,7 @@ use wgpu::util::DeviceExt;
 
 use crate::frame;
 use crate::framegraph::FrameGraph;
+use crate::hybrid::{AoInput, HybridView};
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
 
 /// One shadow map descriptor, 416 bytes (R21.4).
@@ -57,6 +59,7 @@ impl ShadowGpu {
 pub struct RtEngine {
     device: wgpu::Device,
     queue: wgpu::Queue,
+    hybrid: Arc<Mutex<HybridView>>,
 }
 
 /// One frame's targets (R21.3). Two G-buffer targets keep the pass inside Metal's 32-byte
@@ -83,13 +86,121 @@ struct Targets {
 impl RtEngine {
     /// The default adapter; `Err` carries the reason there is none.
     pub fn new() -> Result<RtEngine, RenderError> {
-        let (device, queue) = crate::request_default_device()
+        let (device, queue) = crate::request_rt_device()
             .map_err(|e| RenderError::Unsupported(format!("no GPU adapter: {e}")))?;
-        Ok(RtEngine { device, queue })
+        Ok(Self::with_device(device, queue))
     }
 
     pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> RtEngine {
-        RtEngine { device, queue }
+        RtEngine {
+            device,
+            queue,
+            hybrid: Arc::new(Mutex::new(HybridView::default())),
+        }
+    }
+
+    fn upload_ao(&self, w: u32, h: u32, mask: &[f32]) -> wgpu::TextureView {
+        let size = wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        };
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("ray-traced ambient visibility"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R32Float,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        self.queue.write_texture(
+            texture.as_image_copy(),
+            bytemuck::cast_slice(mask),
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(w * 4),
+                rows_per_image: Some(h),
+            },
+            size,
+        );
+        texture.create_view(&Default::default())
+    }
+
+    fn read_rgba(
+        &self,
+        textures: &[&wgpu::Texture],
+        w: u32,
+        h: u32,
+    ) -> Result<Vec<Vec<[f32; 4]>>, RenderError> {
+        let row_bytes = w * 16;
+        let stride = row_bytes.div_ceil(256) * 256;
+        let bytes = u64::from(stride) * u64::from(h);
+        let size = wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        };
+        let mut enc = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("readback"),
+            });
+        let mut staging = Vec::with_capacity(textures.len());
+        for t in textures {
+            let buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("staging"),
+                size: bytes,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            enc.copy_texture_to_buffer(
+                t.as_image_copy(),
+                wgpu::TexelCopyBufferInfo {
+                    buffer: &buf,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(stride),
+                        rows_per_image: Some(h),
+                    },
+                },
+                size,
+            );
+            staging.push(buf);
+        }
+        self.queue.submit([enc.finish()]);
+        let slots: Vec<_> = staging
+            .iter()
+            .map(|buf| forge_render_gpu::map_read(&buf.slice(..)))
+            .collect();
+        for slot in &slots {
+            forge_render_gpu::await_mapped(&self.device, slot)?;
+        }
+        staging
+            .iter()
+            .map(|buf| {
+                let data = buf
+                    .slice(..)
+                    .get_mapped_range()
+                    .map_err(|e| RenderError::Output(format!("GPU readback: {e}")))?;
+                let mut out = Vec::with_capacity((w * h) as usize);
+                for row in data.chunks_exact(stride as usize) {
+                    out.extend(
+                        row[..row_bytes as usize]
+                            .as_chunks::<16>()
+                            .0
+                            .iter()
+                            .map(|b| {
+                                std::array::from_fn(|i| f32::from_le_bytes(b.as_chunks::<4>().0[i]))
+                            }),
+                    );
+                }
+                drop(data);
+                buf.unmap();
+                Ok(out)
+            })
+            .collect()
     }
 
     /// Uploads each bitmap as an `Rgba32Float` texture, the way the path tracer does
@@ -317,7 +428,13 @@ fn frame_base(
 }
 
 /// The passes this engine registers, in order (R21.1).
-fn frame_pass_graph(shadow_count: usize, split: bool, albedo: bool, ssr: bool) -> FrameGraph {
+fn frame_pass_graph(
+    shadow_count: usize,
+    split: bool,
+    albedo: bool,
+    ssr: bool,
+    rt_ao: bool,
+) -> FrameGraph {
     let mut g = FrameGraph::new();
     g.input("tris");
     let names: Vec<String> = (0..shadow_count).map(|i| format!("shadow:{i}")).collect();
@@ -327,6 +444,10 @@ fn frame_pass_graph(shadow_count: usize, split: bool, albedo: bool, ssr: bool) -
     g.add("gbuffer", &["tris"], &["g0", "g1", "depth"]);
     let mut reads = vec!["g0", "g1", "depth"];
     reads.extend(names.iter().map(|s| s.as_str()));
+    if rt_ao {
+        g.add("ray_ao", &["g0", "g1", "tris"], &["ao_mask"]);
+        reads.push("ao_mask");
+    }
     g.add("lighting", &reads, &["beauty", "shadow"]);
     if ssr {
         // R22.3: the reflections read the lit beauty and write its own target
@@ -397,6 +518,12 @@ impl RenderEngine for RtEngine {
         control: &Control,
     ) -> Result<RenderOutput, RenderError> {
         settings.validate()?;
+        if !settings.hybrid.enabled || !settings.hybrid.ao {
+            self.hybrid
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .reset();
+        }
         // R22.5: TAA averages `taa_samples` jittered subframes in linear radiance and takes
         // the display effects once, on the mean; a subframe keeps its own events.
         if settings.post.taa && settings.post.taa_samples > 1 {
@@ -472,7 +599,8 @@ impl RtEngine {
             .iter()
             .any(|a| matches!(a, Aov::Diffuse | Aov::Specular | Aov::Emission));
         let albedo = settings.aovs.contains(&Aov::Albedo);
-        let graph = frame_pass_graph(plans.len(), split, albedo, settings.post.ssr);
+        let rt_ao = settings.hybrid.enabled && settings.hybrid.ao;
+        let graph = frame_pass_graph(plans.len(), split, albedo, settings.post.ssr, rt_ao);
         graph
             .validate()
             .map_err(|e| RenderError::Settings(format!("frame graph: {e}")))?;
@@ -822,42 +950,43 @@ impl RtEngine {
                 })
                 .collect::<Vec<_>>(),
         });
-        let lit_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("lighting"),
-            layout: &lighting_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&targets.g_views[0]),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&targets.g_views[1]),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&atlas_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::Sampler(&shadow_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::TextureView(&env_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: wgpu::BindingResource::Sampler(&env_sampler),
-                },
-                // the lighting pass does not read the beauty source; the SSR pass binds the
-                // lit beauty here (R22.3), so both share one bind group layout
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: wgpu::BindingResource::TextureView(&targets.g_views[0]),
-                },
-            ],
-        });
+        let lighting_bind = |source: &wgpu::TextureView| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("lighting"),
+                layout: &lighting_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&targets.g_views[0]),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&targets.g_views[1]),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(&atlas_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::Sampler(&shadow_sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(&env_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::Sampler(&env_sampler),
+                    },
+                    // Lighting reads an optional RT AO mask; SSR reads the lit beauty here.
+                    wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: wgpu::BindingResource::TextureView(source),
+                    },
+                ],
+            })
+        };
 
         control.emit(RenderEvent::Started {
             width: w,
@@ -960,6 +1089,42 @@ impl RtEngine {
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
+        let mut primary = None;
+        let ao_view = if rt_ao {
+            let mut view = self.hybrid.lock().unwrap_or_else(|e| e.into_inner());
+            let mask = view
+                .prepare(snapshot, settings, device, queue)
+                .and_then(|()| {
+                    let g = self.read_rgba(&[&targets.g[0], &targets.g[1]], w, h)?;
+                    let mask = view.ambient_visibility(
+                        settings,
+                        AoInput {
+                            positions: &g[0],
+                            normals: &g[1],
+                            jitter,
+                            epsilon: packed.scale.max(1e-6) * 1e-6,
+                        },
+                        control,
+                    )?;
+                    primary = Some(g);
+                    Ok(mask)
+                });
+            match mask {
+                Ok(mask) => {
+                    values[frame::RT_AO_ON] = 1.0;
+                    queue.write_buffer(&frame_buf, 0, &frame_bytes(&values));
+                    Some(self.upload_ao(w, h, &mask))
+                }
+                Err(RenderError::Unsupported(_)) => {
+                    view.reset();
+                    None
+                }
+                Err(e) => return Err(e),
+            }
+        } else {
+            None
+        };
+        let lit_bind = lighting_bind(ao_view.as_ref().unwrap_or(&targets.g_views[0]));
         let run_full =
             |label: &str, pipeline: &wgpu::RenderPipeline, views: &[&wgpu::TextureView]| {
                 let mut enc = device
@@ -1006,40 +1171,7 @@ impl RtEngine {
             if control.is_cancelled() {
                 return Err(RenderError::Cancelled);
             }
-            let ssr_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("ssr"),
-                layout: &lighting_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&targets.g_views[0]),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&targets.g_views[1]),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::TextureView(&atlas_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::Sampler(&shadow_sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: wgpu::BindingResource::TextureView(&env_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 5,
-                        resource: wgpu::BindingResource::Sampler(&env_sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 6,
-                        resource: wgpu::BindingResource::TextureView(&targets.beauty_view),
-                    },
-                ],
-            });
+            let ssr_bind = lighting_bind(&targets.beauty_view);
             let mut enc = device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("ssr") });
             {
@@ -1090,8 +1222,10 @@ impl RtEngine {
         }
 
         // read back the beauty, the G-buffer and (when asked for) the light split
-        let mut order: Vec<&wgpu::Texture> =
-            vec![beauty_target, &targets.shadow, &targets.g[0], &targets.g[1]];
+        let mut order = vec![beauty_target, &targets.shadow];
+        if primary.is_none() {
+            order.extend([&targets.g[0], &targets.g[1]]);
+        }
         if split {
             order.push(&targets.split[0]);
             order.push(&targets.split[1]);
@@ -1099,65 +1233,9 @@ impl RtEngine {
         if albedo {
             order.push(&targets.albedo);
         }
-        let row_bytes = w * 16;
-        let stride = row_bytes.div_ceil(256) * 256;
-        let bytes = stride as u64 * h as u64;
-        let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("readback"),
-        });
-        let mut staging = Vec::new();
-        for t in &order {
-            let buf = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("staging"),
-                size: bytes,
-                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            enc.copy_texture_to_buffer(
-                t.as_image_copy(),
-                wgpu::TexelCopyBufferInfo {
-                    buffer: &buf,
-                    layout: wgpu::TexelCopyBufferLayout {
-                        offset: 0,
-                        bytes_per_row: Some(stride),
-                        rows_per_image: Some(h),
-                    },
-                },
-                wgpu::Extent3d {
-                    width: w,
-                    height: h,
-                    depth_or_array_layers: 1,
-                },
-            );
-            staging.push(buf);
-        }
-        queue.submit([enc.finish()]);
-        let mut pixels: Vec<Vec<[f32; 4]>> = Vec::new();
-        let slots: Vec<_> = staging
-            .iter()
-            .map(|buf| forge_render_gpu::map_read(&buf.slice(..)))
-            .collect();
-        for slot in &slots {
-            forge_render_gpu::await_mapped(device, slot)?;
-        }
-        for buf in &staging {
-            let slice = buf.slice(..);
-            let data = slice
-                .get_mapped_range()
-                .map_err(|e| RenderError::Output(format!("GPU readback: {e}")))?;
-            let mut out = Vec::with_capacity((w * h) as usize);
-            for y in 0..h as usize {
-                let row = &data[y * stride as usize..y * stride as usize + row_bytes as usize];
-                for b in row.as_chunks::<16>().0 {
-                    let f = |k: usize| {
-                        f32::from_le_bytes([b[k * 4], b[k * 4 + 1], b[k * 4 + 2], b[k * 4 + 3]])
-                    };
-                    out.push([f(0), f(1), f(2), f(3)]);
-                }
-            }
-            pixels.push(out);
-            drop(data);
-            buf.unmap();
+        let mut pixels = self.read_rgba(&order, w, h)?;
+        if let Some(primary) = primary {
+            pixels.splice(2..2, primary);
         }
         let beauty_px = &pixels[0];
         let shadow_px = &pixels[1];

@@ -35,6 +35,14 @@ pub fn request_backend(
     adapter: &wgpu::Adapter,
     allow_hardware: bool,
 ) -> Result<(BackendKind, Box<dyn RtBackend>), RenderError> {
+    let (device, queue) = request_device(adapter, allow_hardware)?;
+    on_device(device, queue)
+}
+
+pub(crate) fn request_device(
+    adapter: &wgpu::Adapter,
+    allow_hardware: bool,
+) -> Result<(wgpu::Device, wgpu::Queue), RenderError> {
     if allow_hardware
         && preferred_backend(adapter.get_info().backend, adapter.features()) == BackendKind::Metal
     {
@@ -48,14 +56,25 @@ pub fn request_backend(
             ..Default::default()
         };
         if let Ok((device, queue)) = pollster::block_on(adapter.request_device(&desc)) {
-            return Ok((
-                BackendKind::Metal,
-                Box::new(hardware::HardwareBackend::new(device, queue)?),
-            ));
+            return Ok((device, queue));
         }
     }
     let (device, queue) = pollster::block_on(adapter.request_device(&Default::default()))
         .map_err(|err| RenderError::Settings(format!("ray query device: {err}")))?;
+    Ok((device, queue))
+}
+
+pub(crate) fn on_device(
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+) -> Result<(BackendKind, Box<dyn RtBackend>), RenderError> {
+    if device
+        .features()
+        .contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY)
+        && let Ok(native) = hardware::HardwareBackend::new(device.clone(), queue.clone())
+    {
+        return Ok((BackendKind::Metal, Box::new(native)));
+    }
     Ok((
         BackendKind::Compute,
         Box::new(ComputeBackend::new(device, queue)?),
@@ -90,7 +109,7 @@ pub struct SceneStats {
     pub tlas_updates: usize,
 }
 
-pub trait RtBackend {
+pub trait RtBackend: Send {
     fn update_scene(&mut self, snapshot: &Snapshot) -> Result<(), RenderError>;
     /// Returns one hit or miss per ray, in input order.
     fn trace(&self, rays: &[Ray]) -> Result<Vec<Option<RayHit>>, RenderError>;

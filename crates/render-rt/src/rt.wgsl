@@ -673,7 +673,12 @@ fn shade_pixel(px: vec2<i32>, frag: vec2<f32>) -> Shaded {
     }
     if (has_env()) {
         // R22.2: occlusion darkens the ambient term only, never direct light.
-        let ao = ssao_at(p, n);
+        var ao = 1.0;
+        if (fr(F_RT_AO_ON) > 0.5) {
+            ao = textureLoad(forge_beauty_src, px, 0).x;
+        } else {
+            ao = ssao_at(p, n);
+        }
         diffuse += sv.albedo * env_radiance(n) * ao;
         let r = reflect(-view, n);
         specular += sv.spec * env_radiance(normalize(r)) * ao;

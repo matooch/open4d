@@ -7,7 +7,7 @@ mod common;
 use common::{centre_mean, diffuse, golden, plane};
 use forge_render_api::*;
 use forge_render_cpu::CpuEngine;
-use forge_render_rt::{RtEngine, request_default_device};
+use forge_render_rt::{RtEngine, request_default_device, request_rt_device};
 use glam::{DMat4, DVec3};
 use std::sync::Mutex;
 
@@ -152,12 +152,18 @@ fn psnr(actual: &RenderOutput, expected: &RenderOutput) -> f64 {
     10.0 * (PSNR_PEAK.powi(2) / mse).log10()
 }
 
-fn with_raster_engine(test: impl FnOnce(RtEngine)) {
+fn with_gpu(test: impl FnOnce(&wgpu::Device, &wgpu::Queue)) {
     // Keep the per-file device locked for the full test, including all submits
     // and readbacks (software Vulkan in CI can take longer than Metal).
     let mut gpu = GPU.lock().unwrap_or_else(|e| e.into_inner());
-    match gpu.get_or_insert_with(request_default_device) {
-        Ok((device, queue)) => test(RtEngine::with_device(device.clone(), queue.clone())),
+    match gpu.get_or_insert_with(|| {
+        if std::env::var_os("FORGE_TEST_RT_COMPUTE").is_some() {
+            request_default_device()
+        } else {
+            request_rt_device()
+        }
+    }) {
+        Ok((device, queue)) => test(device, queue),
         Err(e) if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") => {
             panic!("FORGE_REQUIRE_GPU=1 but no GPU: {e}")
         }
@@ -167,7 +173,8 @@ fn with_raster_engine(test: impl FnOnce(RtEngine)) {
 
 #[test]
 fn tier_one_has_a_measurable_error_against_each_cpu_reference() {
-    with_raster_engine(|engine| {
+    with_gpu(|device, queue| {
+        let engine = RtEngine::with_device(device.clone(), queue.clone());
         for effect in Effect::ALL {
             let scene = fixture(effect);
             let target = reference(&scene);
@@ -179,6 +186,87 @@ fn tier_one_has_a_measurable_error_against_each_cpu_reference() {
             assert!(baseline.is_finite(), "{effect:?}: Tier 1 PSNR {baseline}");
             eprintln!("{effect:?}: Tier 1 PSNR {baseline:.3} dB");
         }
+    });
+}
+
+#[test]
+fn ray_traced_ao_improves_psnr_and_respects_the_tier_one_fallback() {
+    with_gpu(|device, queue| {
+        let engine = RtEngine::with_device(device.clone(), queue.clone());
+        let scene = fixture(Effect::Ao);
+        let target = reference(&scene);
+        let mut settings = Effect::Ao.raster_settings();
+        let render =
+            |settings: &RenderSettings| engine.render(&scene, settings, &Control::new()).unwrap();
+        let raster = render(&settings);
+        settings.hybrid.enabled = true;
+        assert_eq!(render(&settings).beauty.data, raster.beauty.data);
+        settings.hybrid.enabled = false;
+        settings.hybrid.ao = true;
+        assert_eq!(render(&settings).beauty.data, raster.beauty.data);
+
+        settings.hybrid.enabled = true;
+        settings.hybrid.ao_radius = AO_RADIUS;
+        let hybrid = render(&settings);
+        let baseline = psnr(&raster, &target);
+        let improved = psnr(&hybrid, &target);
+        assert!(improved > baseline, "AO: {improved:.3} vs {baseline:.3} dB");
+        eprintln!("AO: {baseline:.3} → {improved:.3} dB");
+
+        // RT AO replaces, rather than multiplying, the SSAO approximation.
+        settings.post.ssao = false;
+        let fresh = RtEngine::with_device(device.clone(), queue.clone());
+        let no_ssao = fresh.render(&scene, &settings, &Control::new()).unwrap();
+        assert_eq!(no_ssao.beauty.data, hybrid.beauty.data);
+
+        settings.hybrid.ao_radius = 0.0;
+        let zero_radius = render(&settings);
+        settings.hybrid.enabled = false;
+        assert_eq!(zero_radius.beauty.data, render(&settings).beauty.data);
+    });
+}
+
+fn frame_delta(a: &RenderOutput, b: &RenderOutput) -> f64 {
+    a.beauty
+        .data
+        .iter()
+        .zip(&b.beauty.data)
+        .map(|(a, b)| (f64::from(*a) - f64::from(*b)).abs())
+        .sum()
+}
+
+#[test]
+fn ray_traced_ao_converges_and_discards_history_after_camera_change() {
+    with_gpu(|device, queue| {
+        let engine = RtEngine::with_device(device.clone(), queue.clone());
+        let mut scene = fixture(Effect::Ao);
+        let mut settings = Effect::Ao.raster_settings();
+        settings.hybrid.enabled = true;
+        settings.hybrid.ao = true;
+        settings.hybrid.ao_radius = AO_RADIUS;
+
+        let mut previous = engine.render(&scene, &settings, &Control::new()).unwrap();
+        let mut early = 0.0;
+        let mut late = 0.0;
+        for frame in 1..16 {
+            let next = engine.render(&scene, &settings, &Control::new()).unwrap();
+            let delta = frame_delta(&previous, &next);
+            if frame == 1 {
+                early = delta;
+            }
+            late = delta;
+            previous = next;
+        }
+        assert!(early > 0.0 && late < early, "early {early}, late {late}");
+
+        scene.camera = Camera::new(
+            DMat4::from_translation(DVec3::X * 3.0) * down_from(5.0),
+            Projection::Orthographic { width: 84.0 },
+        );
+        let changed = engine.render(&scene, &settings, &Control::new()).unwrap();
+        let fresh = RtEngine::with_device(device.clone(), queue.clone());
+        let expected = fresh.render(&scene, &settings, &Control::new()).unwrap();
+        assert_eq!(changed.beauty.data, expected.beauty.data);
     });
 }
 
