@@ -22,6 +22,7 @@ forge-geometry = { path = "../geometry" }
 forge-parity-harness = { path = "../parity-harness" }
 forge-shaders = { path = "../shaders" }
 toml = "1"
+naga = { version = "30", features = ["wgsl-in", "spv-out", "msl-out", "hlsl-out"] }
 
 [lints]
 workspace = true

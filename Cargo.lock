@@ -1879,6 +1879,7 @@ dependencies = [
  "forge-render-cpu",
  "forge-shaders",
  "glam 0.34.1",
+ "naga",
  "pollster 1.0.1",
  "toml",
  "wgpu",

@@ -777,7 +777,9 @@ struct Acc {
     emission: vec3<f32>,
 };
 
-fn acc_add(a: ptr<function, Acc>, c: vec3<f32>, depth: u32, lobe_target: u32, clamp: f32) {
+// Takes the whole `TraceOut`, not a pointer to its `acc` field: the SPIR-V writer of naga 30
+// panics ("Expression is not cached") on a pointer to a sub-field passed as an argument.
+fn acc_add(t: ptr<function, TraceOut>, c: vec3<f32>, depth: u32, lobe_target: u32, clamp: f32) {
     var cc = c;
     if (clamp > 0.0 && depth > 0u) {
         let m = max(max(cc.x, cc.y), cc.z);
@@ -785,13 +787,13 @@ fn acc_add(a: ptr<function, Acc>, c: vec3<f32>, depth: u32, lobe_target: u32, cl
             cc = cc * (clamp / m);
         }
     }
-    (*a).rgb = (*a).rgb + cc;
+    (*t).acc.rgb = (*t).acc.rgb + cc;
     if (lobe_target == 0u) {
-        (*a).emission = (*a).emission + cc;
+        (*t).acc.emission = (*t).acc.emission + cc;
     } else if (lobe_target == 1u) {
-        (*a).diffuse = (*a).diffuse + cc;
+        (*t).acc.diffuse = (*t).acc.diffuse + cc;
     } else {
-        (*a).specular = (*a).specular + cc;
+        (*t).acc.specular = (*t).acc.specular + cc;
     }
 }
 
@@ -856,7 +858,7 @@ fn trace_path(o_in: vec3<f32>, d_in: vec3<f32>, rng: ptr<function, Rng>) -> Trac
             if (!prev_delta) {
                 w = power_heuristic(prev_pdf, lh.pdf);
             }
-            acc_add(&out.acc, throughput * lh.le * w, depth, target_of(cat), clamp_value);
+            acc_add(&out, throughput * lh.le * w, depth, target_of(cat), clamp_value);
             if (depth == 0u) {
                 out.sample.covered = true;
             }
@@ -875,7 +877,7 @@ fn trace_path(o_in: vec3<f32>, d_in: vec3<f32>, rng: ptr<function, Rng>) -> Trac
                 if (!prev_delta) {
                     w = power_heuristic(prev_pdf, INV_4PI_F);
                 }
-                acc_add(&out.acc, throughput * le * w, depth, target_of(cat), clamp_value);
+                acc_add(&out, throughput * le * w, depth, target_of(cat), clamp_value);
             }
             break;
         }
@@ -901,7 +903,7 @@ fn trace_path(o_in: vec3<f32>, d_in: vec3<f32>, rng: ptr<function, Rng>) -> Trac
             out.sample.material_id = f32(mat_ix) + 1.0;
         }
         if (any(surf.emission != vec3<f32>(0.0))) {
-            acc_add(&out.acc, throughput * surf.emission, depth, target_of(cat), clamp_value);
+            acc_add(&out, throughput * surf.emission, depth, target_of(cat), clamp_value);
         }
         let origin = g.p + ngv * eps;
 
@@ -1074,8 +1076,8 @@ fn nee(
         td = target_of(cat);
         ts = target_of(cat);
     }
-    acc_add(&(*out).acc, throughput * cd, depth, td, clamp_value);
-    acc_add(&(*out).acc, throughput * cs, depth, ts, clamp_value);
+    acc_add(out, throughput * cd, depth, td, clamp_value);
+    acc_add(out, throughput * cs, depth, ts, clamp_value);
 }
 
 // ---------------------------------------------------------------- pixel (R2, R4)
