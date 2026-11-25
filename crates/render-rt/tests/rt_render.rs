@@ -394,7 +394,7 @@ fn two_shadowed_lights_each_cast_their_own_shadow() {
     );
     let settings = RenderSettings::new(160, 120, 1);
     let render = |snap: &mut Snapshot, a: bool, b: bool| {
-        let mut lights = vec![above.clone(), side.clone()];
+        let mut lights = vec![above, side];
         lights[0].shadow = if a {
             ShadowMode::Hard
         } else {
