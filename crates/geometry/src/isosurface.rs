@@ -321,6 +321,95 @@ fn key(i: IVec3) -> (i32, i32, i32) {
     (i.x, i.y, i.z)
 }
 
+/// Index of the cell edge joining corners `a` and `b` (in either order), `usize::MAX` when they
+/// are not joined by an edge.
+const fn edge_between(a: usize, b: usize) -> usize {
+    let mut i = 0;
+    while i < 12 {
+        let (x, y) = EDGES[i];
+        if (x == a && y == b) || (x == b && y == a) {
+            return i;
+        }
+        i += 1;
+    }
+    usize::MAX
+}
+
+/// The six cell faces: corner indices in cyclic order.
+const FACES: [[usize; 4]; 6] = [
+    [0, 1, 3, 2],
+    [4, 5, 7, 6],
+    [0, 1, 5, 4],
+    [2, 3, 7, 6],
+    [0, 2, 6, 4],
+    [1, 3, 7, 5],
+];
+
+/// Cell edge between the corners at positions `k` and `k + 1` of every face.
+const FACE_EDGES: [[usize; 4]; 6] = {
+    let mut t = [[0; 4]; 6];
+    let mut f = 0;
+    while f < 6 {
+        let mut k = 0;
+        while k < 4 {
+            t[f][k] = edge_between(FACES[f][k], FACES[f][(k + 1) % 4]);
+            k += 1;
+        }
+        f += 1;
+    }
+    t
+};
+
+/// Marks an edge without a sign change in [`edge_components`].
+const NO_COMPONENT: u8 = u8::MAX;
+
+fn find(parent: &mut [u8; 12], mut i: usize) -> usize {
+    while usize::from(parent[i]) != i {
+        parent[i] = parent[usize::from(parent[i])];
+        i = usize::from(parent[i]);
+    }
+    i
+}
+
+/// The surface components of a cell (VOLUME.md section 7.2 rule 4): for every cell edge the
+/// smallest edge index of its component, [`NO_COMPONENT`] for edges without a sign change.
+/// `inside` holds the corner signs. Each face joins the crossed edges it holds in pairs: the two
+/// of a face with two, and for an alternating face the two edges at every inside corner.
+fn edge_components(inside: &[bool; 8]) -> [u8; 12] {
+    let mut parent: [u8; 12] = std::array::from_fn(|i| i as u8);
+    let mut crossed = [false; 12];
+    for (e, &(a, b)) in EDGES.iter().enumerate() {
+        crossed[e] = inside[a] != inside[b];
+    }
+    let join = |parent: &mut [u8; 12], a: usize, b: usize| {
+        let (ra, rb) = (find(parent, a), find(parent, b));
+        let (lo, hi) = (ra.min(rb), ra.max(rb));
+        parent[hi] = lo as u8;
+    };
+    for (f, corners) in FACES.iter().enumerate() {
+        let edges = &FACE_EDGES[f];
+        let hit: Vec<usize> = (0..4).filter(|&k| crossed[edges[k]]).collect();
+        match hit.len() {
+            2 => join(&mut parent, edges[hit[0]], edges[hit[1]]),
+            4 => {
+                for k in 0..4 {
+                    if inside[corners[k]] {
+                        join(&mut parent, edges[(k + 3) % 4], edges[k]);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut out = [NO_COMPONENT; 12];
+    for e in 0..12 {
+        if crossed[e] {
+            out[e] = find(&mut parent, e) as u8;
+        }
+    }
+    out
+}
+
 /// Which side of the iso value is inside.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Polarity {
@@ -344,7 +433,8 @@ pub fn volume_to_mesh(grid: &SparseGrid<f32>, iso: f64, pol: Polarity) -> PolyMe
 }
 
 /// The cell mesh of [`volume_to_mesh`] with the lattice cell (lower corner index) of every
-/// vertex, the input of the adaptive merge.
+/// vertex, the input of the adaptive merge. A cell with several surface components appears once
+/// per component.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CellMesh {
     pub mesh: PolyMesh,
@@ -367,16 +457,23 @@ pub fn cell_mesh(grid: &SparseGrid<f32>, iso: f64, pol: Polarity) -> CellMesh {
             }
         }
     }
-    // Cells around the crossed edges, with one vertex each.
-    let mut cells: BTreeMap<(i32, i32, i32), u32> = BTreeMap::new();
+    // Cells around the crossed edges, with one vertex per surface component of each cell
+    // (VOLUME.md section 7.2 rule 4), numbered in order of first use.
+    let mut components: HashMap<(i32, i32, i32), [u8; 12]> = HashMap::new();
+    let mut vertices: BTreeMap<((i32, i32, i32), u8), u32> = BTreeMap::new();
     let mut points: Vec<DVec3> = Vec::new();
-    let mut cell_vertex = |c: IVec3, grid: &SparseGrid<f32>| -> u32 {
-        *cells.entry(key(c)).or_insert_with(|| {
-            let vals: Vec<f32> = CORNERS.iter().map(|d| grid.get(c + *d)).collect();
+    // the vertex of the component of cell `c` that holds its edge `edge`
+    let mut cell_vertex = |c: IVec3, edge: usize, grid: &SparseGrid<f32>| -> u32 {
+        let vals: [f32; 8] = std::array::from_fn(|i| grid.get(c + CORNERS[i]));
+        let comp = *components.entry(key(c)).or_insert_with(|| {
+            edge_components(&std::array::from_fn(|i| inside(vals[i], iso, pol)))
+        });
+        let group = comp[edge];
+        *vertices.entry((key(c), group)).or_insert_with(|| {
             let mut sum = DVec3::ZERO;
             let mut n = 0.0;
-            for &(a, b) in &EDGES {
-                if inside(vals[a], iso, pol) != inside(vals[b], iso, pol) {
+            for (e, &(a, b)) in EDGES.iter().enumerate() {
+                if comp[e] == group {
                     let (va, vb) = (f64::from(vals[a]), f64::from(vals[b]));
                     let t = ((iso - va) / (vb - va)).clamp(0.0, 1.0);
                     let pa = (c + CORNERS[a]).as_dvec3();
@@ -398,7 +495,16 @@ pub fn cell_mesh(grid: &SparseGrid<f32>, iso: f64, pol: Polarity) -> CellMesh {
             _ => (IVec3::X, IVec3::Y),
         };
         let ring = [p - u - v, p - v, p, p - u];
-        let mut quad: Vec<u32> = ring.iter().map(|c| cell_vertex(*c, grid)).collect();
+        let mut quad: Vec<u32> = ring
+            .iter()
+            .map(|c| {
+                // the lattice edge from `p` along axis `a` as an edge of cell `c`
+                let lo = p - *c;
+                let lo_corner = (lo.x + 2 * lo.y + 4 * lo.z) as usize;
+                let edge = edge_between(lo_corner, lo_corner + (1 << a));
+                cell_vertex(*c, edge, grid)
+            })
+            .collect();
         // `p` inside: the surface faces +axis (outside is beyond the upper end).
         if !inside(grid.get(p), iso, pol) {
             quad.reverse();
@@ -406,7 +512,7 @@ pub fn cell_mesh(grid: &SparseGrid<f32>, iso: f64, pol: Polarity) -> CellMesh {
         polys.push(quad);
     }
     let mut cell_of = vec![IVec3::ZERO; points.len()];
-    for ((x, y, z), i) in &cells {
+    for (((x, y, z), _), i) in &vertices {
         cell_of[*i as usize] = IVec3::new(*x, *y, *z);
     }
     CellMesh {
@@ -475,7 +581,19 @@ pub fn merge_blocks(cm: &CellMesh, tolerance: f64) -> PolyMesh {
     let mut stack: Vec<(u32, Vec<usize>)> =
         top.into_values().rev().map(|m| (MAX_LEVEL, m)).collect();
     while let Some((level, members)) = stack.pop() {
-        if level == 0 || plane_deviation(&members, points, &normals) <= tolerance {
+        // vertices of one cell are different surface components and are never merged
+        let mut cells_of_members: Vec<IVec3> = members.iter().map(|&i| cm.cells[i]).collect();
+        cells_of_members.sort_by_key(|c| key(*c));
+        let shares_cell = cells_of_members.windows(2).any(|w| w[0] == w[1]);
+        if level == 0 && shares_cell {
+            for &i in &members {
+                leaf_of[i] = leaves.len();
+                leaves.push(vec![i]);
+            }
+            continue;
+        }
+        if level == 0 || (!shares_cell && plane_deviation(&members, points, &normals) <= tolerance)
+        {
             for &i in &members {
                 leaf_of[i] = leaves.len();
             }

@@ -22,7 +22,9 @@ voxels around a surface; a spline tube needs a Spline Voxel Range large enough f
 Filters are children of the builder too. `offset` moves the surface, `reshape` opens and
 closes it, and `smooth` runs a Gaussian, mean, median or Laplacian operator; `Strength` blends
 the filtered field back into the input and `Voxel Distance` is the window. Strong smoothing of
-a thin tube can pinch it: keep the strength low, or widen the tube.
+a thin tube shrinks and can pinch it: the mesh stays closed and manifold (the mesher gives every
+separate sheet of a cell its own vertex), but keep the strength low, or widen the tube, to keep
+its volume.
 
 ## Meshing and editing
 
