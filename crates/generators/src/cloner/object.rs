@@ -63,9 +63,11 @@ pub(super) fn placements(
     }
     // A spline has no mesh of its own: its sampled polyline is the clone source (its points
     // are the Vertex distribution, its chords the Edge and Polygon Center ones).
-    let Some(mut mesh) =
-        crate::splines::polyline_mesh(scene, *source).or(evaluate(scene, *source, ctx)?)
-    else {
+    let spline = crate::splines::polyline_mesh(scene, *source);
+    let Some(mut mesh) = (match spline {
+        Some(polyline) => Some(polyline),
+        None => evaluate(scene, *source, ctx)?,
+    }) else {
         return Ok(Vec::new());
     };
     for p in &mut mesh.points {
