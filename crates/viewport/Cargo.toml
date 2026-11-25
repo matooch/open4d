@@ -12,7 +12,7 @@ forge-material = { path = "../material" }
 forge-modeling = { path = "../modeling" }
 glam = "0.34"
 pollster = "1"
-wgpu = "30"
+wgpu = { version = "30", features = ["static-dxc"] }
 
 [dev-dependencies]
 png = "0.18"

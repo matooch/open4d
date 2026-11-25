@@ -241,3 +241,16 @@ once, so the cost is a few hundred bytes per node.
 Nothing is left on the fallback: every `Shader` variant is ported. The `(0.8, 0.8, 0.8)`
 fallback of section 1.2 remains only for `compile` / `ShaderCache::module` without a
 `TextureCodegen`.
+
+## 3. Shader compilation per backend (DX12)
+
+wgpu translates WGSL with naga per backend: SPIR-V for Vulkan, MSL for Metal, HLSL for DX12. The
+HLSL then needs a DirectX compiler. wgpu's default (`Dx12Compiler::Auto`) uses a statically linked
+DXC when the `static-dxc` feature is on, otherwise a `dxcompiler.dll` on the PATH, otherwise the
+legacy FXC. **FXC cannot compile the noise family** (§2): on the Windows CI runner (DX12, WARP
+adapter) `create_compute_pipeline` failed with "FXC D3DCompile error: internal error: compilation
+aborted unexpectedly", while every other family compiled. Rule: the workspace enables wgpu's
+`static-dxc` feature (in `crates/viewport`, unified for every crate that uses wgpu), so `Auto`
+always selects DXC on Windows x86_64 and FXC is never used. The `WGPU_DX12_COMPILER` environment
+variable can still override it for debugging. Windows on ARM has no static DXC; it falls back
+to a DLL or FXC (not a supported release target). Licence and packaging: docs/RELEASING.md.
