@@ -255,22 +255,6 @@ always selects DXC on Windows x86_64 and FXC is never used. The `WGPU_DX12_COMPI
 variable can still override it for debugging. Windows on ARM has no static DXC; it falls back
 to a DLL or FXC (not a supported release target). Licence and packaging: docs/RELEASING.md.
 
-## 4. GPU ray-query scene (brief 200, planned)
+## 4. GPU ray-query scene
 
-Sources: [area R](../roadmap/areas/R-realtime.md), decision D19 in
-[DECISIONS.md](../roadmap/DECISIONS.md), and the existing compute scene in
-[RENDER.md](RENDER.md) R20.1. These are implementation requirements, not measured parity.
-
-- An `RtBackend` abstracts acceleration-structure construction, instance updates and ray
-  dispatch. Vulkan and Metal use hardware API ray queries where supported; a compute BVH
-  provides the fallback. Backend selection must not require unavailable RT features.
-- Mesh geometry is represented once per distinct mesh by a bottom-level acceleration
-  structure (BLAS). A top-level acceleration structure (TLAS) references those structures
-  with per-instance transforms and identifiers. Updating clone transforms must update the
-  TLAS without duplicating the mesh BLAS; the acceptance scene has 10,000 instances.
-- Ray-by-ray tests compare hit/miss, instance and primitive identity, distance and hit
-  coordinates between the available hardware paths and the compute path. Hardware tests
-  run only where the corresponding API and features are available. Vulkan RT execution
-  on the owner's RTX 3090 remains parity-pending until run there.
-- R20.1 currently flattens instances into world-space triangles. Reusing that path as a
-  fallback must not be mistaken for satisfying the BLAS/TLAS instancing requirement.
+See [RENDER.md R23](RENDER.md#r23-instanced-ray-queries-brief-200).

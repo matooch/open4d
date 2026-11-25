@@ -52,6 +52,8 @@ If the clone does not exist yet:
 
 === SESSIONS IN A LOOP (overnight) ===
 
+- EVERY SESSION MUST COMMIT PROGRESS. Keep the start checks short (one git status, one review check), then do the next step from state.json and commit at least one piece of work (spec section, test file or code) before you end. Never end a session after only checks, reading and notes. If the step is too big, split it and commit the first part. If you truly cannot progress, write "QUEUE PAUSED: <reason>" to log.md.
+
 You may be restarted in a fresh session by scripts/hermes-loop.sh (HERMES-IMPLEMENTER.md section 2b). So:
 - When your context is getting full: finish the current step, commit, push, update state.json (brief, branch, next step) and notes.md, then end the session. Never leave uncommitted work; never start a large step you cannot finish.
 - If you must stop for a reason a fresh session cannot fix (disk still full after cleaning, pushes keep failing, a planner decision is needed), write "QUEUE PAUSED: <reason>" to log.md and stop. The loop stops on it.

@@ -15,6 +15,14 @@ Merged with this test red on Windows by owner decision (2026-11-25), to be fixed
   (`nagaComparisonSamplerHeap[nagaGroup1SamplerIndexArray[3]]`, samplers at bindings 3 and 5),
   and WARP's `Linear` comparison filtering on `D32_FLOAT`.
 
+## Windows CI finding (2026-11-25)
+Windows CI's only adapter is WARP (software DX12). With the GPU tests serialized per file, the
+path-tracer render tests alone exceed the 75-minute job limit there (job cancelled at the limit),
+so Windows CI cannot run full GPU renders, regardless of the shadow bug. After the hardware run
+below, decide: either GPU *render* tests skip on software DX12 adapters (keeping the naga
+translation tests and every CPU test, which is what ci.yml's comment always intended for
+Windows), or Windows CI gets a GPU runner. Linux CI keeps running every GPU test on lavapipe.
+
 ## Steps (on the owner's Windows PC, RTX 3090)
 1. Run the test on hardware DX12 and on Vulkan:
    `set WGPU_BACKEND=dx12` then `cargo test -p forge-render-rt --test rt_render a_shadow`;
@@ -29,7 +37,7 @@ Merged with this test red on Windows by owner decision (2026-11-25), to be fixed
 
 ## Done when
 - [ ] The shadow tests pass on DX12 (hardware and WARP) and stay identical on Metal and Vulkan.
-- [ ] Windows CI is green.
+- [ ] Windows CI is green (after the decision above).
 - [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)

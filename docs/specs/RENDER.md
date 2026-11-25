@@ -941,6 +941,28 @@ image. A background worker with latest-snapshot cancellation is a performance fo
 - `crates/ui/tests/render_mode.rs` (kittest, no GPU needed): the View menu switches to Render and
   back, the document's undo depth and revision do not change, and the post toggles are UI state.
 
+## R23 Instanced ray queries (brief 200)
+
+Source: [area R](../roadmap/areas/R-realtime.md), decision
+[D19](../roadmap/DECISIONS.md), and R20.1's compute BVH. This is our own design.
+
+- `RtBackend` builds or updates a scene from a render snapshot and traces batches of
+  world-space rays. A ray carries an origin, direction and upper bound on its parameter.
+  Misses have no hit record; hits return the nearest parameter `t`, snapshot instance
+  index, mesh-local triangle index, and barycentric weights `u`, `v` for vertices 1 and 2.
+  Directions need not be unit-length; inverse instance transforms do not normalize them.
+- Each indexed mesh has one object-space BLAS, shared by its instances. A world-space
+  TLAS references the BLAS and inverse transform of each instance. Update the TLAS once
+  per scene update; a transform-only update reuses the existing BLAS buffers. The
+  compute fallback uses the R20.1 binary BVH layout and visits TLAS then BLAS in WGSL.
+- Backend preference is Metal RT on a Metal adapter with ray queries, Vulkan ray query
+  on a Vulkan adapter with that feature, otherwise compute. Brief 200 ships compute;
+  briefs 211 and 212 add the hardware implementations.
+- Compare GPU queries against the independent CPU tracer: exact hit/miss and IDs, and
+  absolute error at most `1e-4` for `t`, `u` and `v`. Fixtures avoid equal-distance ties.
+  Test 10,000 clones of one mesh and a transform-only update that changes the hits
+  without rebuilding geometry.
+
 ## R13 Not done / follow-ups
 
 The material hosted in the document (brief 194), object-shaped area lights, falloff `Steps`, Sobol sampling,
