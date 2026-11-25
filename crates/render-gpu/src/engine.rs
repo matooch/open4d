@@ -27,7 +27,8 @@ pub struct GpuEngine {
 /// finishes one submission well inside a driver watchdog (about 2 s on Windows).
 pub const SUBMISSION_BUDGET: u64 = 4096;
 
-type MapSlot = Arc<Mutex<Option<Result<(), wgpu::BufferAsyncError>>>>;
+/// The result of one `map_async`, stored by its callback (which never panics).
+pub type MapSlot = Arc<Mutex<Option<Result<(), wgpu::BufferAsyncError>>>>;
 
 /// Waits for every submission, bounded by `GPU_WAIT_TIMEOUT`.
 fn wait_for_gpu(device: &wgpu::Device) -> Result<(), RenderError> {
@@ -45,10 +46,22 @@ fn wait_for_gpu(device: &wgpu::Device) -> Result<(), RenderError> {
         })
 }
 
+/// Starts mapping `slice` for reading; pass the slot to [`await_mapped`].
+pub fn map_read(slice: &wgpu::BufferSlice<'_>) -> MapSlot {
+    let slot: MapSlot = Arc::new(Mutex::new(None));
+    let sink = Arc::clone(&slot);
+    slice.map_async(wgpu::MapMode::Read, move |r| {
+        if let Ok(mut s) = sink.lock() {
+            *s = Some(r);
+        }
+    });
+    slot
+}
+
 /// Waits until the map callback has stored its result, then turns it into an error if the map
 /// failed; a map callback never panics. With several threads polling one device, a poll can
 /// return before this thread's callback ran, so keep polling until the deadline.
-fn await_mapped(device: &wgpu::Device, slot: &MapSlot) -> Result<(), RenderError> {
+pub fn await_mapped(device: &wgpu::Device, slot: &MapSlot) -> Result<(), RenderError> {
     let start = std::time::Instant::now();
     loop {
         wait_for_gpu(device)?;
@@ -413,13 +426,7 @@ impl RenderEngine for GpuEngine {
                 row += rows;
             }
             let slice = staging.slice(..bytes);
-            let mapped: MapSlot = Arc::new(Mutex::new(None));
-            let sink = Arc::clone(&mapped);
-            slice.map_async(wgpu::MapMode::Read, move |r| {
-                if let Ok(mut slot) = sink.lock() {
-                    *slot = Some(r);
-                }
-            });
+            let mapped = map_read(&slice);
             await_mapped(device, &mapped)?;
             let data = slice
                 .get_mapped_range()

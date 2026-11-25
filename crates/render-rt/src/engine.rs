@@ -1133,21 +1133,13 @@ impl RtEngine {
         }
         queue.submit([enc.finish()]);
         let mut pixels: Vec<Vec<[f32; 4]>> = Vec::new();
-        for buf in &staging {
-            let slice = buf.slice(..);
-            slice.map_async(wgpu::MapMode::Read, |r| r.expect("readback"));
+        let slots: Vec<_> = staging
+            .iter()
+            .map(|buf| forge_render_gpu::map_read(&buf.slice(..)))
+            .collect();
+        for slot in &slots {
+            forge_render_gpu::await_mapped(device, slot)?;
         }
-        device
-            .poll(wgpu::PollType::Wait {
-                submission_index: None,
-                timeout: Some(forge_render_api::GPU_WAIT_TIMEOUT),
-            })
-            .map_err(|e| {
-                RenderError::Output(format!(
-                    "GPU did not finish within {:?} (hung or too slow): {e}",
-                    forge_render_api::GPU_WAIT_TIMEOUT
-                ))
-            })?;
         for buf in &staging {
             let slice = buf.slice(..);
             let data = slice

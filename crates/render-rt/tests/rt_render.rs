@@ -360,6 +360,110 @@ fn a_shadow_map_darkens_the_occluded_plane() {
     assert!(same > 100, "only {same} pixels are unaffected");
 }
 
+/// R21.4: every shadow-casting light draws its own map with its own matrix. Two spots, one
+/// above the sphere and one from the side, each cast a shadow on the plane in a different
+/// place; both shadows must show in one render (a backend that applied the last light's matrix
+/// to every shadow pass, or shared one tile, would lose one of them).
+#[test]
+fn two_shadowed_lights_each_cast_their_own_shadow() {
+    let Some((device, queue)) = gpu() else {
+        return;
+    };
+    let engine = RtEngine::with_device(device, queue);
+    let mut snap = sphere_on_plane(diffuse([0.8, 0.8, 0.8]));
+    let spot = |at: DMat4| {
+        let mut l = light(
+            LightKind::Spot {
+                inner: 0.0,
+                outer: 60f64.to_radians(),
+            },
+            at,
+        );
+        l.intensity = 3.0;
+        l
+    };
+    let above = spot(
+        DMat4::from_translation(DVec3::new(0.0, 600.0, 0.0))
+            * DMat4::from_rotation_x(std::f64::consts::FRAC_PI_2),
+    );
+    // From +X, 400 up, aimed at the origin: the light's +Z axis runs along (-500, -400, 0).
+    let side = spot(
+        DMat4::from_translation(DVec3::new(500.0, 400.0, 0.0))
+            * DMat4::from_rotation_y(-std::f64::consts::FRAC_PI_2)
+            * DMat4::from_rotation_x(400f64.atan2(500.0)),
+    );
+    let settings = RenderSettings::new(160, 120, 1);
+    let render = |snap: &mut Snapshot, a: bool, b: bool| {
+        let mut lights = vec![above.clone(), side.clone()];
+        lights[0].shadow = if a {
+            ShadowMode::Hard
+        } else {
+            ShadowMode::None
+        };
+        lights[1].shadow = if b {
+            ShadowMode::Hard
+        } else {
+            ShadowMode::None
+        };
+        snap.lights = lights;
+        engine.render(snap, &settings, &Control::new()).unwrap()
+    };
+    let lum = |o: &RenderOutput| -> Vec<f64> {
+        o.beauty
+            .data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|p| {
+                if p[3] < 0.5 {
+                    f64::NAN
+                } else {
+                    0.2126 * p[0] as f64 + 0.7152 * p[1] as f64 + 0.0722 * p[2] as f64
+                }
+            })
+            .collect()
+    };
+    let none = lum(&render(&mut snap, false, false));
+    let only_a = lum(&render(&mut snap, true, false));
+    let only_b = lum(&render(&mut snap, false, true));
+    let both = lum(&render(&mut snap, true, true));
+    let (mut a_region, mut b_region, mut a_kept, mut b_kept) = (0, 0, 0, 0);
+    for i in 0..none.len() {
+        if none[i].is_nan() {
+            continue;
+        }
+        // pixels the above light's shadow darkens, and whether the two-light render keeps it
+        if only_a[i] < 0.9 * none[i] {
+            a_region += 1;
+            if both[i] < 0.9 * only_b[i] {
+                a_kept += 1;
+            }
+        }
+        if only_b[i] < 0.9 * none[i] {
+            b_region += 1;
+            if both[i] < 0.9 * only_a[i] {
+                b_kept += 1;
+            }
+        }
+    }
+    assert!(
+        a_region > 100,
+        "the light above casts no shadow ({a_region})"
+    );
+    assert!(
+        b_region > 100,
+        "the side light casts no shadow ({b_region})"
+    );
+    assert!(
+        a_kept * 10 >= a_region * 9,
+        "the shadow of the light above is missing from the two-light render: {a_kept} of {a_region}"
+    );
+    assert!(
+        b_kept * 10 >= b_region * 9,
+        "the shadow of the side light is missing from the two-light render: {b_kept} of {b_region}"
+    );
+}
+
 #[test]
 fn a_constant_environment_lights_a_sphere() {
     let Some((device, queue)) = gpu() else {

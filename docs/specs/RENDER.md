@@ -711,6 +711,29 @@ farthest corner × 1.05, or the spot/area frustum's own depth range). The tile l
 kernel at the tile texel size (no jitter: deterministic). A shadowed light's contribution is
 multiplied by `(1 - density) + shadow_color * density` (the R8 shadow colour rule).
 
+**Per-pass state (Windows DX12 follow-up).** The matrix of a shadow pass lives in the frame uniform
+(`F_SHADOW_MAT`). The engine rewrites it with `queue.write_buffer` and **submits once per atlas
+tile**, so a pass never sees a later light's matrix (a queue write is applied before the next
+submission, not before the encoder it was recorded next to); the test
+`two_shadowed_lights_each_cast_their_own_shadow` renders two shadowed spots that shadow different
+parts of the plane and requires both shadows in one image, so any backend that shared one matrix
+between passes fails it. Windows CI (software DX12 adapter) reported `a_shadow_map_darkens_the_occluded_plane`
+with 0 pixels in shadow while Metal and Vulkan pass. Checked by reasoning and by translating the
+module with naga to HLSL (no DX12 device is available here), none of these is the cause:
+per-light data is read from a storage buffer with a 416-byte stride (no dynamic uniform offsets, so
+no 256-byte alignment rule); the depth-only pipeline has no fragment stage and writes
+`SV_Position` only; viewport depth range is 0..1 and the matrices map to 0..1 (`w = Qz`
+perspective, `w = 1` orthographic); the atlas texel convention is the same on every backend
+(`uv.y = 0.5 - 0.5 ndc.y`, framebuffer y down); `textureSampleCompareLevel` becomes
+`SampleCmpLevelZero` on a `SamplerComparisonState` with `LessEqual`; the depth bias
+(constant 2, slope 2, clamp 0) is the same formula on DX12 and Vulkan for `Depth32Float`, and a
+clamp of 0 means no clamp; the first pass clears the whole atlas and the later ones `Load` it.
+Not ruled out (needs the device): the HLSL declares the comparison sampler through the sampler
+heap, `nagaComparisonSamplerHeap[nagaGroup1SamplerIndexArray[3]]`, indexed by binding number, so a
+group with samplers at bindings 3 and 5 relies on the host filling that index array by binding;
+and WARP's handling of a `Linear` comparison sampler on `D32_FLOAT`. The test is not weakened;
+Windows CI stays the check.
+
 ### R21.5 Deferred lighting
 
 For each hit the lighting pass evaluates the R20.2 BRDF (Lambert `albedo/π` plus GGX specular,
@@ -772,7 +795,7 @@ coverage, as R3 asks.
   every O30 case, shader-node materials included (brief 209), keeps the CPU silhouette
   (IoU ≥ 0.98) and its mean luminance within `[0.6, 1.7]` (the CPU's GI makes it brighter than the
   raster), with the transmissive case compared by silhouette only (R2 is opaque); doubling a light's intensity doubles the image; a spot shadow map darkens the pixels
-  behind an occluder; a constant and a lat-long image environment light a sphere; all ten AOVs
+  behind an occluder, and two shadowed spots each keep their own shadow in one render; a constant and a lat-long image environment light a sphere; all ten AOVs
   have the R3 shapes and `beauty = diffuse + specular + emission`; a region renders its
   rectangle with one `Tile` event and cancel stops; two renders are byte-identical.
 - `shader.rs`: the raster module validates for no materials, every material channel and shader-node

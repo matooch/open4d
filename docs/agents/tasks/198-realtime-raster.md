@@ -73,3 +73,13 @@ come from the `Snapshot` through `render-gpu`'s packing, so there are no special
   tier and keep the compute tracer's behaviour unchanged.
 - Vulkan/DX12 were not run on this machine: the wgpu code paths are shared, and the GPU tests
   skip without an adapter. Recorded as parity-pending per the queue's instructions.
+
+### Follow-up: Windows CI (DirectX 12, software adapter)
+
+- Readback no longer panics: the map callback stores its `Result`, the engine returns
+  `RenderError::Output` (R20, R21). Shared helpers `map_read` / `await_mapped` in `forge-render-gpu`.
+- Compute tracer submits bands of rows under a pixels x samples budget, so no submission trips a
+  driver watchdog (R20.4); the image is byte-identical for any budget (test in `cpu_vs_gpu.rs`).
+- Shadows on DX12: cause not found without a DX12 device. Shadow passes already submit once per
+  tile, so the last-matrix-wins hypothesis does not apply; what was checked and what is still open
+  is recorded in R21.4 ("Per-pass state"). New test `two_shadowed_lights_each_cast_their_own_shadow`.
