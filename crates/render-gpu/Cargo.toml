@@ -3,6 +3,25 @@ name = "forge-render-gpu"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "wgpu compute path tracer on the same IR as the CPU tracer (docs/specs/RENDER.md R20)."
+
+[dependencies]
+bytemuck = { version = "1", features = ["derive"] }
+forge-image = { path = "../image" }
+forge-material = { path = "../material" }
+forge-render-api = { path = "../render-api" }
+forge-render-cpu = { path = "../render-cpu" }
+glam = "0.34"
+pollster = "1"
+wgpu = { version = "30", features = ["static-dxc"] }
+
+[dev-dependencies]
+forge-core = { path = "../core" }
+forge-generators = { path = "../generators" }
+forge-geometry = { path = "../geometry" }
+forge-parity-harness = { path = "../parity-harness" }
+forge-shaders = { path = "../shaders" }
+toml = "1"
 
 [lints]
 workspace = true

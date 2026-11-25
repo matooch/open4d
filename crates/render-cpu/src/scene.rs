@@ -130,6 +130,11 @@ fn build_blas(m: &MeshData) -> Blas {
 }
 
 impl Blas {
+    /// True when the winding normal must be negated to point outward (R6).
+    pub fn flip(&self) -> bool {
+        self.flip
+    }
+
     fn intersect(
         &self,
         o: DVec3,

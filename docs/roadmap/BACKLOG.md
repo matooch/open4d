@@ -139,7 +139,7 @@ implementers can avoid collisions.
 | 139 | [Render settings, image sequences, formats, multipass/AOVs](../agents/tasks/139-render-settings-outputs.md) | K | 136, 130 | done (settings by CLI flags; not yet stored in the scene) | render-api, render-cpu |
 | 140 | [Picture viewer and render queue](../agents/tasks/140-picture-viewer-queue.md) | K | 139 | done (parity-pending: G8) | ui |
 | 141 | [IPR (interactive render)](../agents/tasks/141-ipr.md) | K | 136 | done | render-cpu, ui |
-| 142 | [GPU path tracer (wgpu compute)](../agents/tasks/142-gpu-path-tracer.md) | K | 136 | ready | render-gpu |
+| 142 | [GPU path tracer (wgpu compute)](../agents/tasks/142-gpu-path-tracer.md) | K | 136 | done (CPU vs GPU 18/18 O30 cases at 71-158 dB; 5 shader-node cases unsupported until brief 207) | render-gpu |
 | 143 | [Viewport upgrades: lights, shadows, AA, display modes, 4-view layout](../agents/tasks/143-viewport-upgrades.md) | K | – | done (parity-pending G8) | viewport |
 | 144 | [Viewport performance: GPU instancing, LOD, large meshes](../agents/tasks/144-viewport-performance.md) | K | 143 | done (instancing, upload cache, chunked upload, culling, LOD hook; benchmarks in VIEWPORT.md §10.10) | viewport |
 | 145 | [Render parity tests against O30/O43/O57](../agents/tasks/145-render-parity-tests.md) | K | 137, 138 | done (parity-pending: existing silhouette and lighting gaps) | tests |

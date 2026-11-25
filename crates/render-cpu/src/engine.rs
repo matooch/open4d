@@ -57,7 +57,7 @@ fn filter_offset(f: PixelFilter, w: f64, u: (f64, f64), rng: &mut Rng) -> (f64, 
     }
 }
 
-fn ignored_channels(snap: &Snapshot) -> Vec<String> {
+pub fn ignored_channels(snap: &Snapshot) -> Vec<String> {
     let mut v = Vec::new();
     for m in &snap.materials {
         let o = &m.graph.outputs;
