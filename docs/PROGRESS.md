@@ -28,7 +28,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | S2 | MCP agent drives a running editor (key a sphere, read frame 15) | ✅ passes | – |
 | S3 | Model a chair in the editor, save, reopen, export OBJ | ✅ passes | Feel checks in GUI sessions G1/G2/G4 |
 | S4 | Motion graphics: text → fracture → cloner on spline → field effectors → 1080p sequence | ✅ passes (205) | Spline-source cloner is own design (parity-pending) |
-| S5 | Volumes: 3 spheres + spline tube → builder → smooth → mesh → editable | ✅ passes (206) | 208: mesher must stay manifold on thin tubes with default smoothing |
+| S5 | Volumes: 3 spheres + spline tube → builder → smooth → mesh → editable | ✅ passes (206) | – (208: mesher stays manifold on thin tubes) |
 | S6 | Rigging: joints, auto weights, IK + pole, **pose morph**, playback | 🔴 blocked | Pose Morph (107) has no reference data: **owner decision** |
 | S7 | Animation polish: dope sheet, broken/weighted tangents, easing, loop | ✅ passes | – |
 | S8 | Look-dev: area light, DOF camera, node material, CPU render + AOVs | ✅ passes (146) | Cross-OS reference check confirmed by CI |
@@ -44,7 +44,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | C · Primitives and generators | 16 / 17 | 046 Null/Instance display (waits on GUI session G8) |
 | D · Deformers and fields | 15 / 15 | Parity-pending: Bevel deformer rounding, Displacer UVW, Polygon Reduction positions |
 | E · Clone toolset (MoGraph) | 17 / 17 | – |
-| F · Volumes | 9 / 10 | 208 manifold mesher (planner subagent, running) |
+| F · Volumes | 10 / 10 | – |
 | G · Animation | 13 / 13 | – |
 | H · Rigging, tags, constraints | 13 / 15 | 107 Pose Morph (blocked), 114 S6 acceptance (needs 107) |
 | I · Dynamics and particles | 5 / 8 | 119, 120 particles + forces (blocked), 121 (needs 119) |

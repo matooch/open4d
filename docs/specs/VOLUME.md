@@ -222,8 +222,33 @@ face counts equal to the reference):
    the mean of four crossings at exactly -100.
 3. Every lattice edge with an inside and an outside end gets a **quad** from the four cells that
    share it, wound counter-clockwise seen from outside.
-4. Mixed cells with more than two sign regions still get one vertex (no case seen); no
-   triangles come out at adaptive 0 (O32: all quads).
+4. A mixed cell gets **one vertex per surface component** (manifold dual contouring, Schaefer,
+   Ju and Warren, "Manifold Dual Contouring", 2007; brief 208, own design, no reference
+   observation). The components are the loops of the cell's surface, found from the cell's own
+   edge sign changes by a rule that depends only on the samples of each cell face:
+   - Each of the 6 cell faces has 0, 2 or 4 sign-changing edges. With 2, the face's surface
+     segment joins those two edges. With 4 (the corner signs alternate around the face), each
+     **inside** corner is cut off on its own: the segment joins the two crossed edges at an
+     inside corner, so inside corners that touch only diagonally stay separate.
+   - The components are the connected groups of crossed edges under these segments (union of the
+     two edges of every segment). A cell whose crossed edges form one group is a
+     **single-component cell**: its vertex is the rule 2 mean over all its crossed edges, in
+     edge order, so the output equals the pre-208 output exactly. In a cell with several groups
+     (two sheets passing through one cell, or two inside corners that touch only diagonally
+     on a face) every group gets its own vertex: the mean of the crossings of
+     that group's edges, in the same edge order.
+   - A lattice edge's quad (rule 3) uses, in each of its four cells, the vertex of the group that
+     contains that edge. Two neighbouring cells see the same face, hence the same segments, so
+     the quad edges between them agree and every vertex's quads form one disc: the mesh is
+     closed and manifold wherever the grid is.
+   - Vertices are numbered in order of first use by the quads, as before.
+   Limit: two neighbouring cells whose single components are both glued along the two segments
+   of one alternating face (a ring of inside samples around a hole smaller than a cell, seen in
+   dense random noise, not in distance fields of the S5 kind) share the same vertex pair in two
+   quad pairs: the surface stays closed with as many quads each way, but those edges coincide.
+   No triangles come out at adaptive 0 (O32: all quads). The cube, sphere, union, hierarchy and
+   torus cases of O32 and O33 contain only single-component cells, which `volumes_parity` and the
+   mesher tests keep verifying unchanged.
 
 Result, 2168 points / 2166 faces for the default cube, every vertex position equal to 1e-3 to
 the reference (sorted comparison); the same counts for sphere (1832/1830), sphere at voxel 5
@@ -262,6 +287,12 @@ to 5.1 (our measure); the octant `[-1,-1,-1]` at 9.97 merged and its mirror imag
 threshold lies between 9.97 and 10.04 at adaptive 0.5, which `2 * 0.5 * 10 = 10` fits. The
 factor 2 is derived from this one case, **parity-pending** (the decision is borderline).
 Adaptive 0 skips the merge: the output equals §7.2.
+
+**Components stay apart (brief 208).** Vertices of different components of one cell (§7.2 rule 4)
+are never merged: a block is a leaf only when no two of its vertices come from the same cell, and
+at the single-cell level each vertex of a multi-component cell is its own leaf. A cell with one
+vertex is unaffected, so the sphere case above is unchanged. Own design; merging vertices of
+different cells (a thin slab thinner than a block) is not prevented.
 
 ### 7.6 Normals
 
@@ -508,8 +539,10 @@ Volume Mesher sits above the builder and the script runs Make Editable on it.
   it). The 16-segment sphere default is 6.3 % below an analytic sphere, so the scene uses 64
   segments (0.4 %).
 - **Smooth layer strength.** The reference-form default (voxel distance 2, strength 1)
-  over-smooths the 3-voxel tube: the union shrinks by 21 % and the tube surface gains 16
-  doubled edges (a cell with one vertex for two surface sheets, §7.2 rule 4), so it is not
-  manifold. The light setting keeps every edge manifold and the volume inside the tolerance.
+  over-smooths the 3-voxel tube: the union shrinks by 21 % and the tube surface gained 16
+  doubled edges while the mesher still put one vertex in a cell crossed by two sheets. Since
+  brief 208 (one vertex per surface component, §7.2 rule 4) the default layer meshes closed and
+  manifold too (`crates/volume/tests/manifold.rs`); the script keeps the light setting because
+  the default still shrinks the union by 21 %, outside the volume tolerance.
 - **Reopen and determinism.** Save -> reopen -> export gives byte-identical OBJ files, and
   two independent runs of the script are byte-identical.
