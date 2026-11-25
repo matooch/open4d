@@ -62,3 +62,26 @@ fn cpu_reference_shares_geometry_across_ten_thousand_instances() {
         .unwrap();
     assert_eq!((hit.inst, hit.tri), (9_999, 0));
 }
+
+#[test]
+fn cpu_reference_distinguishes_instance_transforms_across_frames() {
+    let mut frame = snapshot(2);
+    let before = Scene::build(&frame).unwrap();
+    let old_origin = DVec3::new(2.25, 0.25, 2.0);
+    let new_origin = DVec3::new(6.25, 0.25, 2.0);
+    assert_eq!(
+        before.intersect(old_origin, -DVec3::Z, 3.0).unwrap().inst,
+        1
+    );
+    assert!(before.intersect(new_origin, -DVec3::Z, 3.0).is_none());
+
+    frame.instances[1] = Instance::new(0, DMat4::from_translation(DVec3::new(6.0, 0.0, 0.0)), 0, 1);
+    let after = Scene::build(&frame).unwrap();
+    assert_eq!(after.blases.len(), 1);
+    assert!(after.intersect(old_origin, -DVec3::Z, 3.0).is_none());
+    let hit = after.intersect(new_origin, -DVec3::Z, 3.0).unwrap();
+    assert_eq!((hit.inst, hit.tri), (1, 0));
+    assert!((hit.t - 2.0).abs() < 1e-12);
+    assert!((hit.u - 0.25).abs() < 1e-12);
+    assert!((hit.v - 0.25).abs() < 1e-12);
+}
