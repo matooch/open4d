@@ -485,6 +485,64 @@ This is a scenario test through the CLI, not a new render rule.
   `FORGE_S8_WRITE_REFERENCE=1` to regenerate the reference when the scene changes
   intentionally.
 
+## R20 GPU compute path tracer (brief 142)
+
+`forge-render-gpu` is a second `RenderEngine` (`id` = `forge.render.gpu`) that runs the R9
+integrator on a wgpu compute pass. It is **not** a new renderer: it reproduces the CPU tracer's
+per-sample decisions so the two images agree. It is skipped when the machine has no adapter and
+required (`FORGE_REQUIRE_GPU=1`) in the gate.
+
+### R20.1 Scene upload
+
+- Geometry is flattened **world space**: every instance's triangles are transformed on the CPU
+  (positions, corner normals, corner UVWs), so the shader has one triangle list. The winding
+  normal is `e1 x e2` after the instance's inverse-transpose, flipped when the mesh is closed and
+  has negative signed volume (R6, `Blas::flip`). Instance/material ids ride along per triangle
+  (`ObjectId`, `MaterialId` AOVs use the CPU + 1 convention).
+- The BVH is the same binned-SAH tree as R6 over the world triangle boxes: node `(bounds,
+  first, count)`, leaf `count > 0`, otherwise `first` = left child and `right = first + 1`.
+  The shader walks it with an explicit stack, nearest child first, and the same slab test.
+- Lights are prepared by `forge_render_cpu::lights::prepare` (one implementation of R8) and
+  packed: kind tag, position, axis, colour, tangent/bitangent, falloff (kind + radius), shadow
+  (cast, density, colour), radius, diffuse/specular flags, `visible`, spot half angles, area shape
+  (kind, width/height or radius, two-sided).
+- Materials are `forge_material::wgsl::compile` modules (R1 of REALTIME.md): one `forge_surface`
+  per material (renamed per slot, sharing the first prologue). Shader-node (`Texture`) channels
+  are **not** ported in this brief, so a graph with one returns
+  `Unsupported("shader-node material channels on the GPU (REALTIME.md §2, brief 207)")`.
+
+### R20.2 Sampling and integrator parity
+
+- The pixel seed is `splitmix(seed ^ splitmix((x << 32) | y))` and the per-pixel stream is
+  PCG32, both implemented in WGSL with 64-bit emulation over two `u32` words (shift-add
+  multiply). `Rng::f()` is `((hi << 21) ^ lo) / 2^53`, evaluated as `hi / 2^32 + lo / 2^53` and
+  rounded to `f32`, i.e. the CPU value to ~1e-7. The AOV/beauty sample loop, the R2 pixel
+  sequence, `filter_offset` (all four filters, including the cubic's extra uniforms), the DOF
+  lens draw and `trace_path` (area-light hits, emission, NEE + MIS, dielectric branch,
+  Russian roulette at depth 3, `clamp`) keep the CPU's order of RNG calls.
+- Arithmetic is `f32`; the acceptance rule is the image comparison of R20.3, not bit identity.
+- Tiles: one dispatch per render tile, `(tile.width, tile.height, 1)` invocations of 1 pixel
+  each; `Started`, `Tile`, `Progress`, `Finished` and `Control::cancel` behave as R4 (cancel is
+  checked between tiles, a cancelled render returns `RenderError::Cancelled`).
+
+### R20.3 Parity rule
+
+Test `crates/render-gpu/tests/cpu_vs_gpu.rs`: for every O30 case whose materials have no
+shader-node channel, render `CpuEngine` and `GpuEngine` with the R14 settings (320 x 240,
+16 spp, cubic filter width 2) and require **PSNR >= 35 dB** between them (beauty, linear RGB,
+`compare_image`). The five shader-node cases (`mat-checker-uv`, `mat-checker-cubic`,
+`mat-fresnel`, `mat-bump-noise`, `checker-plane`) are listed in `UNSUPPORTED` with the reason
+above and asserted to return `Unsupported`.
+
+### R20.4 Unsupported on the GPU (with the reason)
+
+- materials with `Texture` channels (REALTIME.md §2 is part 2, brief 207);
+- an image environment (importance sampling of R16 needs the image upload; the CPU path keeps
+  it);
+- everything `prepare` already rejects (falloff `Steps`, object-shaped area lights);
+- `threads`, `tile` and the region are CPU-side scheduling only; a `region` renders its own
+  rectangle into the full-size image exactly as R2.
+
 ## R13 Not done / follow-ups
 
 The material hosted in the document (brief 194), object-shaped area lights, falloff `Steps`, Sobol sampling,
