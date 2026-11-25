@@ -1,4 +1,4 @@
-//! CPU reference and compute acceptance for RENDER.md R23.
+//! CPU reference and GPU backend acceptance for RENDER.md R23.
 
 #[path = "../../render-cpu/tests/common/mod.rs"]
 mod common;
@@ -149,7 +149,10 @@ fn compute_matches_cpu_and_updates_only_tlas_for_moving_clones() {
             return;
         }
     };
-    let mut backend = ComputeBackend::new(device, queue).unwrap();
+    exercise_instanced_queries(&mut ComputeBackend::new(device, queue).unwrap());
+}
+
+fn exercise_instanced_queries(backend: &mut dyn RtBackend) {
     let mut frame = snapshot(10_000);
     frame.meshes[0] = MeshData::new(
         vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [1., 1., 0.]],
@@ -170,9 +173,18 @@ fn compute_matches_cpu_and_updates_only_tlas_for_moving_clones() {
             direction: -2. * DVec3::Z,
             ..ray(0.1, 0.15, 2.0)
         },
+        Ray {
+            direction: -2. * DVec3::Z,
+            ..ray(0.1, 0.15, 1.4)
+        },
+        Ray {
+            origin: DVec3::new(0.1, 0.15, -2.0),
+            direction: DVec3::Z,
+            t_max: 6.0,
+        },
     ];
     backend.update_scene(&frame).unwrap();
-    compare(&backend, &frame, &rays);
+    compare(backend, &frame, &rays);
     assert_eq!(
         backend.stats(),
         SceneStats {
@@ -187,7 +199,7 @@ fn compute_matches_cpu_and_updates_only_tlas_for_moving_clones() {
     frame.instances[9_999].transform =
         DMat4::from_translation(DVec3::new(250., 0., 0.)).to_cols_array();
     backend.update_scene(&frame).unwrap();
-    compare(&backend, &frame, &rays);
+    compare(backend, &frame, &rays);
     assert_eq!(
         backend.stats(),
         SceneStats {
@@ -225,7 +237,7 @@ fn compute_matches_cpu_and_updates_only_tlas_for_moving_clones() {
     let rays: Vec<_> = (0..129)
         .map(|i| ray(4.75, f64::from(i % 17) + 0.25, 6.))
         .collect();
-    compare(&backend, &frame, &rays);
+    compare(backend, &frame, &rays);
     assert_eq!(backend.stats().blases, 2);
     assert_eq!(backend.stats().triangles, 10);
     assert_eq!(backend.stats().blas_builds, 2);
@@ -233,5 +245,5 @@ fn compute_matches_cpu_and_updates_only_tlas_for_moving_clones() {
 
     let empty = Snapshot::default();
     backend.update_scene(&empty).unwrap();
-    compare(&backend, &empty, &rays);
+    compare(backend, &empty, &rays);
 }
