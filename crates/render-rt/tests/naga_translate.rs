@@ -24,7 +24,10 @@ fn translate(name: &str, source: &str) {
     let mut out = String::new();
     hlsl::Writer::new(
         &mut out,
-        &hlsl::Options::default(),
+        &hlsl::Options {
+            shader_model: hlsl::ShaderModel::V6_5,
+            ..Default::default()
+        },
         &hlsl::PipelineOptions::default(),
     )
     .write(&module, &info, None)
@@ -32,10 +35,18 @@ fn translate(name: &str, source: &str) {
     msl::write_string(
         &module,
         &info,
-        &msl::Options::default(),
+        &msl::Options {
+            lang_version: (2, 4),
+            ..Default::default()
+        },
         &msl::PipelineOptions::default(),
     )
     .unwrap_or_else(|e| panic!("{name}: MSL: {e:?}"));
+}
+
+#[test]
+fn hardware_ray_queries_translate_to_all_backends() {
+    translate("hardware ray queries", forge_render_rt::ray::HARDWARE_WGSL);
 }
 
 #[test]

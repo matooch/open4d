@@ -212,10 +212,7 @@ fn upload<T: Pod>(
 }
 
 pub struct ComputeBackend {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    pipeline: wgpu::ComputePipeline,
-    layout: wgpu::BindGroupLayout,
+    dispatch: QueryDispatch,
     geometry: Option<Geometry>,
     top: Option<TopLevel>,
     stats: SceneStats,
@@ -223,10 +220,32 @@ pub struct ComputeBackend {
 
 impl ComputeBackend {
     pub fn new(device: wgpu::Device, queue: wgpu::Queue) -> Result<Self, RenderError> {
+        Ok(Self {
+            dispatch: QueryDispatch::new(device, queue, COMPUTE_WGSL)?,
+            geometry: None,
+            top: None,
+            stats: SceneStats::default(),
+        })
+    }
+}
+
+pub(super) struct QueryDispatch {
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    pipeline: wgpu::ComputePipeline,
+    layout: wgpu::BindGroupLayout,
+}
+
+impl QueryDispatch {
+    pub fn new(
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        source: &str,
+    ) -> Result<Self, RenderError> {
         let errors = device.push_error_scope(wgpu::ErrorFilter::Validation);
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("instanced ray queries"),
-            source: wgpu::ShaderSource::Wgsl(COMPUTE_WGSL.into()),
+            source: wgpu::ShaderSource::Wgsl(source.into()),
         });
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("instanced ray queries"),
@@ -245,9 +264,6 @@ impl ComputeBackend {
             queue,
             pipeline,
             layout,
-            geometry: None,
-            top: None,
-            stats: SceneStats::default(),
         })
     }
 }
@@ -262,10 +278,10 @@ impl RtBackend for ComputeBackend {
         {
             None
         } else {
-            Some(Geometry::build(&self.device, &snapshot.meshes)?)
+            Some(Geometry::build(&self.dispatch.device, &snapshot.meshes)?)
         };
         let geometry = replacement.as_ref().or(self.geometry.as_ref()).unwrap();
-        let top = TopLevel::build(&self.device, snapshot, geometry)?;
+        let top = TopLevel::build(&self.dispatch.device, snapshot, geometry)?;
         self.stats.blases = geometry.roots.iter().flatten().count();
         self.stats.triangles = geometry.meshes.iter().map(|m| m.triangles.len()).sum();
         self.stats.instances = top.count;
@@ -290,6 +306,28 @@ impl RtBackend for ComputeBackend {
         };
         if rays.is_empty() || top.count == 0 {
             return Ok(vec![None; rays.len()]);
+        }
+        self.dispatch.trace(
+            rays,
+            [
+                &top.nodes,
+                &top.instances,
+                &geometry.nodes,
+                &geometry.triangles,
+            ]
+            .map(wgpu::Buffer::as_entire_binding),
+        )
+    }
+}
+
+impl QueryDispatch {
+    pub fn trace<'a>(
+        &self,
+        rays: &[Ray],
+        scene: impl IntoIterator<Item = wgpu::BindingResource<'a>>,
+    ) -> Result<Vec<Option<RayHit>>, RenderError> {
+        if rays.is_empty() {
+            return Ok(Vec::new());
         }
         let device = &self.device;
         let size = (rays.len() * size_of::<Hit>()) as u64;
@@ -324,21 +362,21 @@ impl RtBackend for ComputeBackend {
             "ray readback",
             wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
         );
-        let entries = [
-            &top.nodes,
-            &top.instances,
-            &geometry.nodes,
-            &geometry.triangles,
-            &queries,
-            &out,
-        ]
-        .into_iter()
-        .enumerate()
-        .map(|(i, buffer)| wgpu::BindGroupEntry {
-            binding: i as u32,
-            resource: buffer.as_entire_binding(),
-        })
-        .collect::<Vec<_>>();
+        let scene_entries = scene
+            .into_iter()
+            .enumerate()
+            .map(|(i, resource)| wgpu::BindGroupEntry {
+                binding: i as u32,
+                resource,
+            })
+            .collect::<Vec<_>>();
+        let mut entries: Vec<wgpu::BindGroupEntry<'_>> = scene_entries;
+        for resource in [queries.as_entire_binding(), out.as_entire_binding()] {
+            entries.push(wgpu::BindGroupEntry {
+                binding: entries.len() as u32,
+                resource,
+            });
+        }
         let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("ray queries"),
             layout: &self.layout,

@@ -1,11 +1,13 @@
 //! Instanced ray queries shared by the real-time tiers (RENDER.md R23).
 
 mod compute;
+mod hardware;
 
 use forge_render_api::{RenderError, Snapshot};
 use glam::DVec3;
 
 pub use compute::{COMPUTE_WGSL, ComputeBackend};
+pub use hardware::HARDWARE_WGSL;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendKind {
@@ -25,6 +27,39 @@ pub fn preferred_backend(api: wgpu::Backend, features: wgpu::Features) -> Backen
         }
     }
     BackendKind::Compute
+}
+
+/// Opens a ray-query backend on this adapter. Set `allow_hardware` to false to
+/// explicitly request the compute path (for example, for backend comparisons).
+pub fn request_backend(
+    adapter: &wgpu::Adapter,
+    allow_hardware: bool,
+) -> Result<(BackendKind, Box<dyn RtBackend>), RenderError> {
+    if allow_hardware
+        && preferred_backend(adapter.get_info().backend, adapter.features()) == BackendKind::Metal
+    {
+        let desc = wgpu::DeviceDescriptor {
+            required_features: wgpu::Features::EXPERIMENTAL_RAY_QUERY,
+            required_limits: wgpu::Limits::default()
+                .using_acceleration_structure_values(adapter.limits()),
+            // SAFETY: opt in to wgpu's experimental API only on a supporting adapter.
+            // All acceleration structures and dispatches use wgpu's validated API.
+            experimental_features: unsafe { wgpu::ExperimentalFeatures::enabled() },
+            ..Default::default()
+        };
+        if let Ok((device, queue)) = pollster::block_on(adapter.request_device(&desc)) {
+            return Ok((
+                BackendKind::Metal,
+                Box::new(hardware::HardwareBackend::new(device, queue)?),
+            ));
+        }
+    }
+    let (device, queue) = pollster::block_on(adapter.request_device(&Default::default()))
+        .map_err(|err| RenderError::Settings(format!("ray query device: {err}")))?;
+    Ok((
+        BackendKind::Compute,
+        Box::new(ComputeBackend::new(device, queue)?),
+    ))
 }
 
 #[derive(Debug, Clone, Copy)]

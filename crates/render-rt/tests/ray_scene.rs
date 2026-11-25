@@ -6,7 +6,7 @@ mod common;
 use forge_render_api::{Instance, MeshData, Snapshot};
 use forge_render_cpu::scene::Scene;
 use forge_render_rt::ray::{
-    BackendKind, ComputeBackend, Ray, RtBackend, SceneStats, preferred_backend,
+    BackendKind, Ray, RayHit, RtBackend, SceneStats, preferred_backend, request_backend,
 };
 use glam::{DMat4, DVec3};
 
@@ -103,11 +103,11 @@ fn backend_preference_requires_both_the_api_and_ray_queries() {
     assert_eq!(preferred_backend(wgpu::Backend::Dx12, rays), Compute);
 }
 
-fn compare(backend: &dyn RtBackend, frame: &Snapshot, rays: &[Ray]) {
+fn compare(backend: &dyn RtBackend, frame: &Snapshot, rays: &[Ray]) -> Vec<Option<RayHit>> {
     let cpu = Scene::build(frame).unwrap();
     let hits = backend.trace(rays).unwrap();
     assert_eq!(hits.len(), rays.len());
-    for (i, (ray, got)) in rays.iter().zip(hits).enumerate() {
+    for (i, (ray, &got)) in rays.iter().zip(&hits).enumerate() {
         let want = cpu.intersect(ray.origin, ray.direction, ray.t_max);
         match (got, want) {
             (Some(got), Some(want)) => {
@@ -124,6 +124,7 @@ fn compare(backend: &dyn RtBackend, frame: &Snapshot, rays: &[Ray]) {
             other => panic!("ray {i}: GPU/CPU hits disagree: {other:?}"),
         }
     }
+    hits
 }
 
 fn ray(x: f64, y: f64, t_max: f64) -> Ray {
@@ -135,10 +136,12 @@ fn ray(x: f64, y: f64, t_max: f64) -> Ray {
 }
 
 #[test]
-fn compute_matches_cpu_and_updates_only_tlas_for_moving_clones() {
-    // This is the only GPU test in this file: no overlapping device work.
-    let (device, queue) = match forge_render_rt::request_default_device() {
-        Ok(context) => context,
+fn available_ray_backends_match_and_update_only_tlas_for_moving_clones() {
+    // This is the only GPU test in this file: one adapter, sequential device work.
+    let instance =
+        wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+    let adapter = match pollster::block_on(instance.request_adapter(&Default::default())) {
+        Ok(adapter) => adapter,
         Err(reason) => {
             assert_ne!(
                 std::env::var("FORGE_REQUIRE_GPU").as_deref(),
@@ -149,10 +152,43 @@ fn compute_matches_cpu_and_updates_only_tlas_for_moving_clones() {
             return;
         }
     };
-    exercise_instanced_queries(&mut ComputeBackend::new(device, queue).unwrap());
+    let (kind, mut compute) = request_backend(&adapter, false).unwrap();
+    assert_eq!(kind, BackendKind::Compute);
+    let expected = exercise_instanced_queries(compute.as_mut());
+    drop(compute);
+
+    let (kind, mut selected) = request_backend(&adapter, true).unwrap();
+    let has_metal =
+        preferred_backend(adapter.get_info().backend, adapter.features()) == BackendKind::Metal;
+    assert_eq!(
+        kind,
+        if has_metal {
+            BackendKind::Metal
+        } else {
+            BackendKind::Compute
+        }
+    );
+    let actual = exercise_instanced_queries(selected.as_mut());
+    assert_eq!(actual.len(), expected.len());
+    for (i, (actual, expected)) in actual.into_iter().zip(expected).enumerate() {
+        match (actual, expected) {
+            (Some(a), Some(b)) => {
+                assert_eq!(
+                    (a.instance, a.triangle),
+                    (b.instance, b.triangle),
+                    "ray {i}"
+                );
+                for (a, b) in [(a.t, b.t), (a.u, b.u), (a.v, b.v)] {
+                    assert!((a - b).abs() <= 1e-4, "ray {i}: {a} != {b}");
+                }
+            }
+            (None, None) => (),
+            other => panic!("ray {i}: selected/compute hits disagree: {other:?}"),
+        }
+    }
 }
 
-fn exercise_instanced_queries(backend: &mut dyn RtBackend) {
+fn exercise_instanced_queries(backend: &mut dyn RtBackend) -> Vec<Option<RayHit>> {
     let mut frame = snapshot(10_000);
     frame.meshes[0] = MeshData::new(
         vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [1., 1., 0.]],
@@ -184,7 +220,7 @@ fn exercise_instanced_queries(backend: &mut dyn RtBackend) {
         },
     ];
     backend.update_scene(&frame).unwrap();
-    compare(backend, &frame, &rays);
+    let mut results = compare(backend, &frame, &rays);
     assert_eq!(
         backend.stats(),
         SceneStats {
@@ -199,7 +235,7 @@ fn exercise_instanced_queries(backend: &mut dyn RtBackend) {
     frame.instances[9_999].transform =
         DMat4::from_translation(DVec3::new(250., 0., 0.)).to_cols_array();
     backend.update_scene(&frame).unwrap();
-    compare(backend, &frame, &rays);
+    results.extend(compare(backend, &frame, &rays));
     assert_eq!(
         backend.stats(),
         SceneStats {
@@ -235,9 +271,10 @@ fn exercise_instanced_queries(backend: &mut dyn RtBackend) {
     ));
     backend.update_scene(&frame).unwrap();
     let rays: Vec<_> = (0..129)
-        .map(|i| ray(4.75, f64::from(i % 17) + 0.25, 6.))
+        // Avoid the underlying quad's shared triangle edge.
+        .map(|i| ray(4.625, f64::from(i % 17) + 0.25, 6.))
         .collect();
-    compare(backend, &frame, &rays);
+    results.extend(compare(backend, &frame, &rays));
     assert_eq!(backend.stats().blases, 2);
     assert_eq!(backend.stats().triangles, 10);
     assert_eq!(backend.stats().blas_builds, 2);
@@ -245,5 +282,6 @@ fn exercise_instanced_queries(backend: &mut dyn RtBackend) {
 
     let empty = Snapshot::default();
     backend.update_scene(&empty).unwrap();
-    compare(backend, &empty, &rays);
+    results.extend(compare(backend, &empty, &rays));
+    results
 }
