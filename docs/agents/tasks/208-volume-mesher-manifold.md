@@ -77,4 +77,4 @@ them through one vertex. After Make Editable the user gets a broken mesh.
   `docs/roadmap/BACKLOG.md`, this brief.
 - Open questions: whether the reference app splits cells or also produces fins on thin tubes
   (needs a golden case); the coincident-edge limit above.
-- The last lines of the gate output: GATE_PLACEHOLDER
+- The last lines of the gate output: `ok: 1117 cases` and `GATE: all passed` (forge-volume 67 tests, forge-geometry 69, forge-generators 199, forge-cli 61, all ok).
