@@ -34,6 +34,14 @@ const OPAQUE_ONLY: &[(&str, &str)] = &[(
 
 static GPU: Mutex<Option<Option<(wgpu::Device, wgpu::Queue)>>> = Mutex::new(None);
 
+/// Held for a whole test: GPU tests in this file run one at a time, so a slow device (CI's
+/// software adapters) never makes one test's wait include another test's work (§5a).
+static SERIAL: Mutex<()> = Mutex::new(());
+
+fn serial() -> std::sync::MutexGuard<'static, ()> {
+    SERIAL.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 fn gpu() -> Option<(wgpu::Device, wgpu::Queue)> {
     let mut slot = GPU.lock().unwrap();
     slot.get_or_insert_with(|| match request_default_device() {
@@ -127,6 +135,7 @@ fn sphere_on_plane(mat: MaterialData) -> Snapshot {
 
 #[test]
 fn direct_light_matches_the_cpu_tracer() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -212,6 +221,7 @@ fn direct_light_matches_the_cpu_tracer() {
 
 #[test]
 fn the_o30_cases_keep_the_cpu_silhouette_and_light_level() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -253,6 +263,7 @@ fn the_o30_cases_keep_the_cpu_silhouette_and_light_level() {
 /// checker's two squares differ by about as much as they do in the CPU image.
 #[test]
 fn shader_node_colour_varies_across_the_surface() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -289,6 +300,7 @@ fn shader_node_colour_varies_across_the_surface() {
 
 #[test]
 fn a_light_intensity_scales_the_image() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -313,6 +325,7 @@ fn a_light_intensity_scales_the_image() {
 
 #[test]
 fn a_shadow_map_darkens_the_occluded_plane() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -366,6 +379,7 @@ fn a_shadow_map_darkens_the_occluded_plane() {
 /// to every shadow pass, or shared one tile, would lose one of them).
 #[test]
 fn two_shadowed_lights_each_cast_their_own_shadow() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -466,6 +480,7 @@ fn two_shadowed_lights_each_cast_their_own_shadow() {
 
 #[test]
 fn a_constant_environment_lights_a_sphere() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -498,6 +513,7 @@ fn a_constant_environment_lights_a_sphere() {
 
 #[test]
 fn an_image_environment_matches_a_constant_one() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -558,6 +574,7 @@ fn an_image_environment_matches_a_constant_one() {
 
 #[test]
 fn every_aov_has_its_r3_value() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -627,6 +644,7 @@ fn every_aov_has_its_r3_value() {
 
 #[test]
 fn two_renders_are_byte_identical() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -655,6 +673,7 @@ fn two_renders_are_byte_identical() {
 
 #[test]
 fn a_region_is_rendered_and_events_are_reported() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -713,6 +732,7 @@ fn a_region_is_rendered_and_events_are_reported() {
 
 #[test]
 fn depth_of_field_is_pinned_unsupported() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };

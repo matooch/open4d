@@ -23,6 +23,14 @@ const UNSUPPORTED: &[(&str, &str)] = &[];
 
 static GPU: Mutex<Option<Option<(wgpu::Device, wgpu::Queue)>>> = Mutex::new(None);
 
+/// Held for a whole test: GPU tests in this file run one at a time, so a slow device (CI's
+/// software adapters) never makes one test's wait include another test's work (§5a).
+static SERIAL: Mutex<()> = Mutex::new(());
+
+fn serial() -> std::sync::MutexGuard<'static, ()> {
+    SERIAL.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 fn gpu() -> Option<(wgpu::Device, wgpu::Queue)> {
     let mut slot = GPU.lock().unwrap();
     slot.get_or_insert_with(|| match request_default_device() {
@@ -47,6 +55,7 @@ fn unsupported_reason(name: &str) -> Option<&'static str> {
 
 #[test]
 fn beauty_matches_the_cpu_on_the_o30_cases() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -97,6 +106,7 @@ fn beauty_matches_the_cpu_on_the_o30_cases() {
 /// Every AOV the CPU writes has the same values on the GPU (R3, R20.2).
 #[test]
 fn aovs_match_the_cpu() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -135,6 +145,7 @@ fn aovs_match_the_cpu() {
 /// R4 with the GPU engine: one `Tile` per tile, the tiles rebuild the image, cancel stops.
 #[test]
 fn events_and_cancel() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -212,6 +223,7 @@ fn unsupported_pins_are_exact() {
 
 #[test]
 fn image_environment_is_unsupported() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -236,6 +248,7 @@ fn image_environment_is_unsupported() {
 /// The WGSL 64-bit emulation and PCG32 against `forge_render_cpu::sampling`.
 #[test]
 fn random_sequence_matches_the_cpu() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -376,6 +389,7 @@ fn shader_materials_share_one_module_and_match_the_cpu() {
     use forge_material::{Material, compile};
     use forge_shaders::shader::{Bitmap, Shader, ShaderSet};
     use std::sync::Arc;
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -494,6 +508,7 @@ fn shader_materials_share_one_module_and_match_the_cpu() {
 /// submission per tile, the pre-R20.4 behaviour) give identical bytes, AOVs included.
 #[test]
 fn the_submission_budget_does_not_change_the_image() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };

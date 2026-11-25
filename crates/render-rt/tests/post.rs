@@ -18,6 +18,14 @@ const SIZE: (u32, u32) = (96, 72);
 
 static GPU: Mutex<Option<Option<(wgpu::Device, wgpu::Queue)>>> = Mutex::new(None);
 
+/// Held for a whole test: GPU tests in this file run one at a time, so a slow device (CI's
+/// software adapters) never makes one test's wait include another test's work (§5a).
+static SERIAL: Mutex<()> = Mutex::new(());
+
+fn serial() -> std::sync::MutexGuard<'static, ()> {
+    SERIAL.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 fn gpu() -> Option<(wgpu::Device, wgpu::Queue)> {
     let mut slot = GPU.lock().unwrap();
     slot.get_or_insert_with(|| match request_default_device() {
@@ -33,9 +41,10 @@ fn gpu() -> Option<(wgpu::Device, wgpu::Queue)> {
     .clone()
 }
 
-fn engine() -> Option<RtEngine> {
+fn engine() -> Option<(std::sync::MutexGuard<'static, ()>, RtEngine)> {
+    let serial = serial();
     let (device, queue) = gpu()?;
-    Some(RtEngine::with_device(device, queue))
+    Some((serial, RtEngine::with_device(device, queue)))
 }
 
 /// A camera at `eye` looking at `target`, +Y up (the R21.2 camera basis).
@@ -118,7 +127,9 @@ fn pixels(out: &RenderOutput) -> Vec<[f32; 4]> {
 
 #[test]
 fn ssao_darkens_a_crease_and_leaves_open_faces() {
-    let Some(engine) = engine() else { return };
+    let Some((_serial, engine)) = engine() else {
+        return;
+    };
     let mut snap = Snapshot {
         meshes: vec![plane(400.0), cube(40.0)],
         instances: vec![
@@ -185,7 +196,9 @@ fn ssao_darkens_a_crease_and_leaves_open_faces() {
 
 #[test]
 fn ssr_replaces_the_environment_reflection_with_the_screen_hit() {
-    let Some(engine) = engine() else { return };
+    let Some((_serial, engine)) = engine() else {
+        return;
+    };
     let mut snap = Snapshot {
         meshes: vec![plane(400.0), cube(40.0)],
         instances: vec![
@@ -235,7 +248,9 @@ fn ssr_replaces_the_environment_reflection_with_the_screen_hit() {
 
 #[test]
 fn bloom_spreads_a_bright_object_and_ignores_a_dim_one() {
-    let Some(engine) = engine() else { return };
+    let Some((_serial, engine)) = engine() else {
+        return;
+    };
     let cube_at = |mat: MaterialData| Snapshot {
         meshes: vec![cube(20.0)],
         instances: vec![Instance::new(0, DMat4::IDENTITY, 0, 0)],
@@ -279,7 +294,9 @@ fn bloom_spreads_a_bright_object_and_ignores_a_dim_one() {
 
 #[test]
 fn taa_grades_the_silhouette() {
-    let Some(engine) = engine() else { return };
+    let Some((_serial, engine)) = engine() else {
+        return;
+    };
     let mut snap = Snapshot {
         meshes: vec![sphere(100.0, 32)],
         instances: vec![Instance::new(0, DMat4::IDENTITY, 0, 0)],
@@ -322,7 +339,9 @@ fn taa_grades_the_silhouette() {
 
 #[test]
 fn tonemap_maps_the_beauty_through_the_curve() {
-    let Some(engine) = engine() else { return };
+    let Some((_serial, engine)) = engine() else {
+        return;
+    };
     let snap = Snapshot {
         meshes: vec![cube(20.0)],
         instances: vec![Instance::new(0, DMat4::IDENTITY, 0, 0)],
@@ -394,7 +413,9 @@ fn post_settings_validate() {
 
 #[test]
 fn the_default_post_block_changes_nothing_and_stays_deterministic() {
-    let Some(engine) = engine() else { return };
+    let Some((_serial, engine)) = engine() else {
+        return;
+    };
     let mut snap = Snapshot {
         meshes: vec![plane(400.0), sphere(100.0, 32)],
         instances: vec![
