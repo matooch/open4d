@@ -41,11 +41,13 @@ Run 9 queue (ray tracing; use a strong model, e.g. Kimi K2.7 Code or GPT-6.2 Sol
 `origin/main` once the planner has merged 199 there (check `git branch -r --contains 34713d5`),
 otherwise from `hermes/199-realtime-post` with `origin/main` merged in:
 
-1. [200](tasks/200-gpu-scene-rt.md) · R4: acceleration structures, `RtBackend`, compute fallback
+1. [200](tasks/200-gpu-scene-rt.md) · R4 part 1: `RtBackend` trait, instanced scene, compute backend (split 2026-11-25; four steps, commit each)
+1b. [211](tasks/211-metal-rt-backend.md) · R4 part 2: Metal hardware ray tracing (your M5 Pro)
 2. [201](tasks/201-hybrid-rt.md) · R5: hybrid ray-traced shadows, reflections, AO, GI
 3. [202](tasks/202-realtime-pathtrace.md) · R6: real-time path tracing with denoising
 4. [203](tasks/203-rt-consistency.md) · R7: consistency tests of every tier against the CPU path tracer
 5. [204](tasks/204-rt-performance.md) · R8: performance targets and benchmarks
+6. [212](tasks/212-vulkan-rt-backend.md) · R4 part 3: Vulkan hardware ray tracing (compiles everywhere; the RTX 3090 run is the owner's)
 
 Briefs 198–204 show `waiting` in BACKLOG only on briefs earlier in this queue; on a stacked branch
 those are done, so start them in order. GPU tests run on the Mac's Metal adapter (M5 Pro); keep them
@@ -70,6 +72,13 @@ one line per brief: `<brief> <branch> <short SHA on origin> <done|blocked> <resu
 stop. Never write `QUEUE FINISHED` while a branch has unpushed commits.
 
 ## 2b. Overnight: one session after another
+
+**Every session must make progress.** A session that only re-runs the start checks, re-reads
+files and writes "resume" notes is wasted (the loop stops after two of those). After the start
+checks (keep them short: one `git status`, one review check), do the next step in `state.json` and
+commit at least one piece of work before ending: a spec section, a test file, or code. If the step
+is too big for the session, split it, do the first part and commit it. If you truly cannot
+progress, write `QUEUE PAUSED: <reason>` instead of ending quietly.
 
 The owner may run you in a loop (`scripts/hermes-loop.sh`): when a session ends, a fresh one starts
 with the same prompt and resumes from `state.json`. So:

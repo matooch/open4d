@@ -1,19 +1,32 @@
-# 200 · GPU scene: acceleration structures and compute fallback
+# 200 · GPU scene: RtBackend trait, instanced scene, compute backend (part 1 of 3)
 
-Status: ready · Area: R · Depends on: 142, 198 · Observations: – (own design; material values from O29/O42/O43 through the shading IR) · Touches: render-rt, render-gpu
+Status: ready · Area: R · Depends on: 142, 198 · Observations: – (own design) · Touches: render-rt, render-gpu
 
 ## Goal
-Build and update bottom/top-level acceleration structures for meshes and clone instances each frame. Use hardware RT on **both** Vulkan (ray query) and Metal (Metal ray tracing) through wgpu's experimental features, or per D19 through a narrow native backend per API behind one `RtBackend` trait; else the compute BVH from brief 142.
+The ray-tracing foundation every later tier (201–204) uses: one `RtBackend` trait and a **compute
+backend** that works on every GPU. Hardware backends come in two small follow-ups: Metal (211) and
+Vulkan (212). Split on 2026-11-25 because the whole brief was too big to start in one session.
 
 ## Inputs
-- Area design: [../../roadmap/areas/R-realtime.md](../../roadmap/areas/R-realtime.md)
-- Decision D19 in [../../roadmap/DECISIONS.md](../../roadmap/DECISIONS.md)
-- docs/specs/MATERIAL.md, SHADERS.md, RENDER.md
+- Area design: [../../roadmap/areas/R-realtime.md](../../roadmap/areas/R-realtime.md), decision D19
+- Brief 142's compute tracer (crates/render-gpu: the flattened SAH tree, `trace.wgsl` traversal)
+- docs/specs/RENDER.md R20 (GPU path tracer), R21 (raster engine)
+
+## Steps (one commit each; each is a good session-sized unit)
+1. **Spec** (RENDER.md, new R23): the `RtBackend` trait (build/update the scene, trace a batch of
+   rays → hits: t, triangle id, instance id, barycentrics), the scene layout (one BLAS per unique
+   mesh, one TLAS of instance transforms, rebuilt or refit per frame), feature detection order
+   (Metal RT, Vulkan ray query, else compute), and the hit-comparison rule used by 211/212.
+2. **Tests first** (CPU-side reference + GPU): a small instanced scene; rays traced on the CPU
+   (reuse forge-render-cpu's BVH) and by the compute backend must give identical hits (same
+   triangle and instance ids; t and barycentrics within 1e-4). Plus: 10 000 clones of one mesh use
+   one BLAS and one TLAS update per frame; feature detection without RT picks compute.
+3. **Code**: the trait, the scene build (BLAS per mesh, TLAS per frame), the compute backend (two-
+   level traversal in WGSL, reusing 142's BLAS layout), feature detection.
+4. naga translation test for every new module (SPIR-V, MSL, HLSL), gate, Report.
 
 ## Done when
-- [ ] Vulkan RT, Metal RT and the compute path return identical hit results on a test scene (ray-by-ray comparison; each RT path runs where its API exists).
-- [ ] Instancing: 10 000 clones of one mesh use one BLAS and a TLAS update per frame.
-- [ ] Feature detection: no RT support selects the compute path without errors.
+- [ ] Compute backend hits equal the CPU reference on the test scene; instancing and detection tests pass.
 - [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)

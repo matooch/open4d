@@ -10,7 +10,7 @@ linked files win.
 
 | | Now |
 |---|---|
-| Implementation briefs | **189 of 200 done** (95 %) · 6 ready · 5 waiting |
+| Implementation briefs | **189 of 202 done** (94 %) · 6 ready · 7 waiting |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
 | Acceptance scenarios | S1–S9 pass (S6 with own-design Pose Morph, parity-pending) · S10 needs a measurement |
@@ -61,11 +61,13 @@ Queue and rules: [agents/HERMES-IMPLEMENTER.md](agents/HERMES-IMPLEMENTER.md) §
 
 Run 8 finished: 205 S4, 206 S5, 142 GPU path tracer, 198 real-time raster, 199 post effects and the viewport Render mode.
 
-1. 200 · R4: acceleration structures, `RtBackend` (Metal; Vulkan behind the same trait)
+1. 200 · R4 part 1: `RtBackend` trait, instanced scene, compute backend
+1b. 211 · Metal hardware ray tracing (M5 Pro)
 2. 201 · R5: hybrid ray-traced shadows, reflections, AO, GI
 3. 202 · R6: real-time path tracing with denoising
 4. 203 · R7: consistency tests against the CPU path tracer
 5. 204 · R8: performance targets
+6. 212 · Vulkan hardware ray tracing (RTX 3090 run is yours)
 
 Use a strong model for this run (Kimi K2.7 Code or GPT-6.2 Sol). 209 (shader nodes in the raster engine) is small and can go to a planner subagent.
 
