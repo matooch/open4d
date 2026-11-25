@@ -45,16 +45,26 @@ fn wait_for_gpu(device: &wgpu::Device) -> Result<(), RenderError> {
         })
 }
 
-/// Turns the result a map callback stored into an error; a map callback never panics.
-fn check_mapped(slot: &MapSlot) -> Result<(), RenderError> {
-    match slot.lock().ok().and_then(|mut s| s.take()) {
-        Some(Ok(())) => Ok(()),
-        Some(Err(e)) => Err(RenderError::Output(format!(
-            "GPU readback failed (device lost or out of memory): {e}"
-        ))),
-        None => Err(RenderError::Output(
-            "GPU readback did not complete (device lost)".into(),
-        )),
+/// Waits until the map callback has stored its result, then turns it into an error if the map
+/// failed; a map callback never panics. With several threads polling one device, a poll can
+/// return before this thread's callback ran, so keep polling until the deadline.
+fn await_mapped(device: &wgpu::Device, slot: &MapSlot) -> Result<(), RenderError> {
+    let start = std::time::Instant::now();
+    loop {
+        wait_for_gpu(device)?;
+        if let Some(result) = slot.lock().ok().and_then(|mut s| s.take()) {
+            return result.map_err(|e| {
+                RenderError::Output(format!(
+                    "GPU readback failed (device lost or out of memory): {e}"
+                ))
+            });
+        }
+        if start.elapsed() > forge_render_api::GPU_WAIT_TIMEOUT {
+            return Err(RenderError::Output(
+                "GPU readback did not complete (device lost)".into(),
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
     }
 }
 
@@ -410,8 +420,7 @@ impl RenderEngine for GpuEngine {
                     *slot = Some(r);
                 }
             });
-            wait_for_gpu(device)?;
-            check_mapped(&mapped)?;
+            await_mapped(device, &mapped)?;
             let data = slice
                 .get_mapped_range()
                 .map_err(|e| RenderError::Output(format!("GPU readback: {e}")))?;
