@@ -583,6 +583,8 @@ sub-field passed as an argument, so `acc_add` takes a pointer to the whole `Trac
 - `threads`, `tile` and the region are CPU-side scheduling only; a `region` renders its own
   rectangle into the full-size image exactly as R2.
 
+**GPU wait limit (R20, R21).** Both GPU engines wait at most `GPU_WAIT_TIMEOUT` (120 s, `forge-render-api`) for one submission; a hung or pathologically slow device (seen: Windows CI's software DX12 adapter, WARP, never finishing one O30 path-trace case) fails the render with `RenderError::Output` instead of freezing the caller.
+
 ## R21 Real-time raster PBR engine (`forge-render-rt`, brief 198)
 
 Tier 1 of area R (D19): **our own design**, not a parity feature. Geometry, lights and materials

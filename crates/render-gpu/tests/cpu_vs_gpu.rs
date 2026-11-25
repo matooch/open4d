@@ -55,6 +55,8 @@ fn beauty_matches_the_cpu_on_the_o30_cases() {
     let mut checked = 0;
     let mut pinned = 0;
     for name in case_names() {
+        // Printed so a slow or hung case is named in CI logs (shown on failure or --nocapture).
+        eprintln!("beauty: {name}");
         let case = load(&name);
         let cpu = CpuEngine::new()
             .render(&case.snapshot, &settings, &Control::new())

@@ -1,6 +1,11 @@
 //! forge-render-api: the contract between the scene and the render engines.
 //! Spec: docs/specs/RENDER.md.
 
+/// The longest a GPU engine waits for one submission before giving up with an error
+/// (RENDER.md R20.4, R21.7): a hung or pathologically slow device (e.g. a software adapter)
+/// must fail the render, never freeze the caller.
+pub const GPU_WAIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
 pub mod camera;
 pub mod engine;
 pub mod files;

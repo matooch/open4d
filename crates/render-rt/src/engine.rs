@@ -1138,8 +1138,16 @@ impl RtEngine {
             slice.map_async(wgpu::MapMode::Read, |r| r.expect("readback"));
         }
         device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .map_err(|e| RenderError::Output(format!("GPU poll: {e}")))?;
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(forge_render_api::GPU_WAIT_TIMEOUT),
+            })
+            .map_err(|e| {
+                RenderError::Output(format!(
+                    "GPU did not finish within {:?} (hung or too slow): {e}",
+                    forge_render_api::GPU_WAIT_TIMEOUT
+                ))
+            })?;
         for buf in &staging {
             let slice = buf.slice(..);
             let data = slice

@@ -49,6 +49,8 @@ jobs:
   check:
     name: check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # A hung GPU test must fail the job, not block it for the default 6 hours.
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
