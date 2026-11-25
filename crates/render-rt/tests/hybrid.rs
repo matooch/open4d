@@ -7,10 +7,15 @@ mod common;
 use common::{centre_mean, diffuse, golden, plane};
 use forge_render_api::*;
 use forge_render_cpu::CpuEngine;
+use forge_render_rt::{RtEngine, request_default_device};
 use glam::{DMat4, DVec3};
+use std::sync::Mutex;
 
 const SIZE: u32 = 40;
 const AO_RADIUS: f64 = 40.0;
+// Fixed peak in linear radiance; no per-image exposure or normalization.
+const PSNR_PEAK: f64 = 1.0;
+static GPU: Mutex<Option<Result<(wgpu::Device, wgpu::Queue), String>>> = Mutex::new(None);
 
 #[derive(Clone, Copy, Debug)]
 enum Effect {
@@ -25,6 +30,19 @@ impl Effect {
 
     fn occludes(self) -> bool {
         matches!(self, Self::Shadows | Self::Ao)
+    }
+
+    fn raster_settings(self) -> RenderSettings {
+        RenderSettings {
+            default_light: false,
+            post: PostSettings {
+                ssao: matches!(self, Self::Ao),
+                ssao_radius: AO_RADIUS,
+                ssr: matches!(self, Self::Reflections),
+                ..PostSettings::default()
+            },
+            ..RenderSettings::new(SIZE, SIZE, 1)
+        }
     }
 }
 
@@ -110,6 +128,58 @@ fn reference(scene: &Snapshot) -> RenderOutput {
         ..RenderSettings::new(SIZE, SIZE, 256)
     };
     CpuEngine.render(scene, &settings, &Control::new()).unwrap()
+}
+
+fn psnr(actual: &RenderOutput, expected: &RenderOutput) -> f64 {
+    let a = &actual.beauty;
+    let b = &expected.beauty;
+    assert_eq!((a.width, a.height), (b.width, b.height));
+    let rgb_error = a
+        .data
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(b.data.as_chunks::<4>().0)
+        .map(|(p, q)| {
+            assert_eq!(p[3], q[3], "primary visibility differs");
+            (0..3)
+                .map(|c| (f64::from(p[c]) - f64::from(q[c])).powi(2))
+                .sum::<f64>()
+        })
+        .sum::<f64>();
+    let mse = rgb_error / (3.0 * f64::from(a.width) * f64::from(a.height));
+    assert!(mse.is_finite(), "non-finite linear beauty");
+    10.0 * (PSNR_PEAK.powi(2) / mse).log10()
+}
+
+fn with_raster_engine(test: impl FnOnce(RtEngine)) {
+    // Keep the per-file device locked for the full test, including all submits
+    // and readbacks (software Vulkan in CI can take longer than Metal).
+    let mut gpu = GPU.lock().unwrap_or_else(|e| e.into_inner());
+    match gpu.get_or_insert_with(request_default_device) {
+        Ok((device, queue)) => test(RtEngine::with_device(device.clone(), queue.clone())),
+        Err(e) if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") => {
+            panic!("FORGE_REQUIRE_GPU=1 but no GPU: {e}")
+        }
+        Err(e) => eprintln!("skipping GPU test: {e}"),
+    }
+}
+
+#[test]
+fn tier_one_has_a_measurable_error_against_each_cpu_reference() {
+    with_raster_engine(|engine| {
+        for effect in Effect::ALL {
+            let scene = fixture(effect);
+            let target = reference(&scene);
+            let raster = engine
+                .render(&scene, &effect.raster_settings(), &Control::new())
+                .unwrap();
+            let baseline = psnr(&raster, &target);
+            // All four references must leave room for a strict improvement.
+            assert!(baseline.is_finite(), "{effect:?}: Tier 1 PSNR {baseline}");
+            eprintln!("{effect:?}: Tier 1 PSNR {baseline:.3} dB");
+        }
+    });
 }
 
 #[test]
