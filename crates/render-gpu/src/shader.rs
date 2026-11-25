@@ -1,9 +1,20 @@
 //! Assembling the WGSL module: the frame constants, the compiled materials and the tracer
 //! (docs/specs/RENDER.md R20.1).
 
+use std::any::Any;
+use std::sync::Arc;
+
+use forge_material::TextureSampler;
 use forge_material::ir::{IrNode, ShadingGraph};
-use forge_material::wgsl::{SURFACE_WGSL, compile};
+use forge_material::wgsl::{ModuleBuilder, NoShaders, SURFACE_WGSL, compile_into};
 use forge_render_api::RenderError;
+
+/// The assembled compute module and the bitmaps its `@group(1)` bindings need.
+pub struct Assembled {
+    pub source: String,
+    /// Entry `k` is bound at `@group(1) @binding(k)` (REALTIME.md §2.8).
+    pub resources: Vec<Arc<dyn Any + Send + Sync>>,
+}
 
 /// The `F_*` constants of the frame uniform, generated from [`crate::frame`].
 pub fn frame_constants() -> String {
@@ -14,15 +25,10 @@ pub fn frame_constants() -> String {
     s
 }
 
-/// True when a material needs a shader node, which the codegen does not port yet.
-pub fn needs_shader_nodes(g: &ShadingGraph) -> bool {
-    g.nodes.iter().any(|n| matches!(n, IrNode::Texture(_)))
-}
-
 /// Renames one compiled material so several can share a module.
-fn rename(src: &str, i: usize) -> String {
+fn rename(src: &str, i: usize, nodes: usize) -> String {
     let mut out = src.replace("fn forge_surface(", &format!("fn forge_surface_{i}("));
-    for k in 0..64 {
+    for k in 0..nodes {
         out = out.replace(&format!("ir{k}(ctx)"), &format!("ir{i}_{k}(ctx)"));
         out = out.replace(&format!("fn ir{k}("), &format!("fn ir{i}_{k}("));
     }
@@ -49,23 +55,40 @@ fn dispatch(n: usize) -> String {
     s
 }
 
-/// The whole compute module for `graphs`.
-pub fn assemble(graphs: &[&ShadingGraph]) -> Result<String, RenderError> {
-    if graphs.iter().any(|g| needs_shader_nodes(g)) {
-        return Err(RenderError::Unsupported(
-            "shader-node material channels on the GPU (REALTIME.md §2, brief 207)".into(),
-        ));
+/// The whole compute module for `materials` (graph and the sampler that ports its shader
+/// nodes, R20.1b): every material is compiled into one shared [`ModuleBuilder`].
+pub fn assemble(
+    materials: &[(&ShadingGraph, &dyn TextureSampler)],
+) -> Result<Assembled, RenderError> {
+    let mut module = ModuleBuilder::default();
+    let mut compiled: Vec<String> = Vec::new();
+    for (g, sampler) in materials {
+        let has_texture = g.nodes.iter().any(|n| matches!(n, IrNode::Texture(_)));
+        let lib = sampler.codegen();
+        if has_texture && lib.is_none() {
+            return Err(RenderError::Unsupported(
+                "texture sampler without a WGSL codegen (RENDER.md R20.1b)".into(),
+            ));
+        }
+        let (src, _) = match &lib {
+            Some(l) => compile_into(g, l.as_ref(), &mut module),
+            None => compile_into(g, &NoShaders, &mut module),
+        };
+        let body = src.strip_prefix(SURFACE_WGSL).unwrap_or(&src);
+        compiled.push(rename(body, compiled.len(), g.nodes.len()));
     }
-    let compiled: Vec<String> = graphs.iter().map(|g| compile(g).source).collect();
     let mut out = String::from(SURFACE_WGSL);
-    for (i, src) in compiled.iter().enumerate() {
-        let body = src.strip_prefix(SURFACE_WGSL).unwrap_or(src);
-        out.push_str(&rename(body, i));
+    for body in &compiled {
+        out.push_str(body);
     }
+    out.push_str(module.declarations());
     out.push_str(&dispatch(compiled.len()));
     out.push_str(&frame_constants());
     out.push_str(crate::RNG_WGSL);
     out.push('\n');
     out.push_str(crate::TRACE_WGSL);
-    Ok(out)
+    Ok(Assembled {
+        source: out,
+        resources: module.resources().to_vec(),
+    })
 }

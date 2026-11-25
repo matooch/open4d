@@ -506,10 +506,40 @@ required (`FORGE_REQUIRE_GPU=1`) in the gate.
   packed: kind tag, position, axis, colour, tangent/bitangent, falloff (kind + radius), shadow
   (cast, density, colour), radius, diffuse/specular flags, `visible`, spot half angles, area shape
   (kind, width/height or radius, two-sided).
-- Materials are `forge_material::wgsl::compile` modules (R1 of REALTIME.md): one `forge_surface`
-  per material (renamed per slot, sharing the first prologue). Shader-node (`Texture`) channels
-  are **not** ported in this brief, so a graph with one returns
-  `Unsupported("shader-node material channels on the GPU (REALTIME.md §2, brief 207)")`.
+- Materials are `forge_material::wgsl` modules (REALTIME.md §1): one `forge_surface` per material
+  (renamed per slot, sharing the first prologue), dispatched by `forge_shade(mat, ctx)`.
+
+### R20.1b Shader-node materials (brief 142 follow-up, REALTIME.md §2)
+
+- **Who provides the code.** `MaterialData::sampler` is the host's `TextureSampler`; its new
+  method `codegen()` returns the sampler's `TextureCodegen` (`forge_shaders::ShaderSet` returns
+  `ShaderSetCodegen`, the `White` sampler returns `WhiteShaders`, white for every node as on the
+  CPU). The GPU crate never depends on `forge-shaders` at run time: it asks each material's
+  sampler. A sampler without a codegen and a graph with a `Texture` node returns
+  `Unsupported("texture sampler without a WGSL codegen")`; a graph without `Texture` nodes
+  needs none.
+- **One module, shared declarations.** Every material is compiled with
+  `forge_material::wgsl::compile_into` into **one** `ModuleBuilder`, so the library functions
+  (`forge_noise_eval`, `forge_blend`, ...), the generated `forge_fN` functions (deduplicated by
+  text, so names are unique across materials) and the bitmap bindings exist once in the
+  assembled module. Only `forge_surface` and `irN` are renamed per material slot.
+- **Bitmaps.** `ModuleBuilder::resources()` entry `k` (an `Image`, linear `f32` RGBA, row 0 at
+  the top) is uploaded as an `Rgba32Float` 2D texture (unfilterable) and bound at
+  `@group(1) @binding(k)`; the shader filters with `textureLoad` (REALTIME.md §2.8), so no sampler
+  exists. More bitmaps than the device's `max_sampled_textures_per_shader_stage` is
+  `Unsupported`.
+- **Shading context, per hit (`surface_at`), identical to the CPU `Surface::at`:** `uvw` = the
+  barycentric interpolation of the three corner UVWs the snapshot stores per triangle corner
+  (cubic, planar... projections are baked into `MeshData::uvs` by the bridge, so the tracer has
+  nothing to project); `position` = the hit point; `normal` = the interpolated shading normal
+  `ns` (outward side); `view` = `wo`, the unit direction from the hit to the ray origin;
+  `time` = 0; `vertex_weight` = 0 (no vertex map: the CPU `None`, which the Vertex Map shader
+  reads as 0); `ao` = 1 (the CPU `None`).
+- **Bump.** The height is the mean of the bump channel; with `eps = 1e-3 * scale` and the
+  tangent basis of the geometric normal, the two displaced contexts have `position + t_i * eps`
+  and `uvw` re-interpolated at that point from the triangle's corner positions and UVWs
+  (`uvw_at`, falling back to the hit's `uvw` for a degenerate triangle); `normal` and `view` stay
+  those of the hit, exactly as the CPU `ShadeCtx { position, uvw, ..ctx }`.
 
 ### R20.2 Sampling and integrator parity
 
@@ -527,16 +557,26 @@ required (`FORGE_REQUIRE_GPU=1`) in the gate.
 
 ### R20.3 Parity rule
 
-Test `crates/render-gpu/tests/cpu_vs_gpu.rs`: for every O30 case whose materials have no
-shader-node channel, render `CpuEngine` and `GpuEngine` with the R14 settings (320 x 240,
+Test `crates/render-gpu/tests/cpu_vs_gpu.rs`: for every O30 case (shader-node materials
+included, R20.1b), render `CpuEngine` and `GpuEngine` with the R14 settings (320 x 240,
 16 spp, cubic filter width 2) and require **PSNR >= 35 dB** between them (beauty, linear RGB,
-`compare_image`). The five shader-node cases (`mat-checker-uv`, `mat-checker-cubic`,
-`mat-fresnel`, `mat-bump-noise`, `checker-plane`) are listed in `UNSUPPORTED` with the reason
-above and asserted to return `Unsupported`.
+`compare_image`). `UNSUPPORTED` lists only the cases the GPU engine rejects (image
+environments) and asserts they return `Unsupported`.
+
+A second test, `shader_materials_share_one_module_and_match_the_cpu`, puts four materials
+(bilinear/repeat and nearest/clamp bitmaps, as colour and as bump, Vertex Map, AO) into one
+module and requires the same bound for each material alone; it also asserts that a sampler
+without a codegen is `Unsupported`. Measured beauty PSNR of the five former pins: `mat-checker-uv`
+75.5 dB, `mat-checker-cubic` 75.4 dB, `mat-fresnel` 102.5 dB, `mat-bump-noise` 83.3 dB,
+`checker-plane` 119.9 dB (lavapipe).
+
+SPIR-V note: the naga 30 SPIR-V writer panics ("Expression is not cached") on a pointer to a
+sub-field passed as an argument, so `acc_add` takes a pointer to the whole `TraceOut`.
 
 ### R20.4 Unsupported on the GPU (with the reason)
 
-- materials with `Texture` channels (REALTIME.md §2 is part 2, brief 207);
+- a `Texture` channel whose sampler has no `TextureCodegen`, and more bitmaps than the device
+  allows per stage (R20.1b);
 - an image environment (importance sampling of R16 needs the image upload; the CPU path keeps
   it);
 - everything `prepare` already rejects (falloff `Steps`, object-shaped area lights);

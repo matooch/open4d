@@ -594,7 +594,7 @@ fn surface_at(mat: u32, g: Geom, wo: vec3<f32>) -> Mat {
     ctx.normal = g.ns;
     ctx.view = wo;
     ctx.time = 0.0;
-    ctx.vertex_weight = 1.0;
+    ctx.vertex_weight = 0.0;
     ctx.ao = 1.0;
     let s = forge_shade(mat, ctx);
     var m: Mat;

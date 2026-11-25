@@ -18,30 +18,8 @@ use std::sync::Mutex;
 /// R20.3: CPU against GPU beauty, no exposure normalisation.
 const MIN_PSNR: f64 = 35.0;
 
-/// Cases whose material has a shader-node channel (R20.4): the GPU compiles it to the
-/// fallback colour, so its image would differ by the texture, not by the tracer.
-const UNSUPPORTED: &[(&str, &str)] = &[
-    (
-        "mat-checker-uv",
-        "shader-node material channels on the GPU (REALTIME.md §2, brief 207)",
-    ),
-    (
-        "mat-checker-cubic",
-        "shader-node material channels on the GPU (REALTIME.md §2, brief 207)",
-    ),
-    (
-        "mat-fresnel",
-        "shader-node material channels on the GPU (REALTIME.md §2, brief 207)",
-    ),
-    (
-        "mat-bump-noise",
-        "shader-node material channels on the GPU (REALTIME.md §2, brief 207)",
-    ),
-    (
-        "checker-plane",
-        "shader-node material channels on the GPU (REALTIME.md §2, brief 207)",
-    ),
-];
+/// Cases the GPU engine rejects (R20.4); none of the O30 cases is pinned any more.
+const UNSUPPORTED: &[(&str, &str)] = &[];
 
 static GPU: Mutex<Option<Option<(wgpu::Device, wgpu::Queue)>>> = Mutex::new(None);
 
@@ -385,4 +363,126 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {{
         assert!((gf - f).abs() < 1e-6, "point {i}: f {gf} vs {f}");
         assert_eq!(got[base + 5], (seed >> 13) as u32, "point {i}: shift");
     }
+}
+
+/// R20.1b: bitmaps (two images sharing one module), noise, vertex map and AO shaders across
+/// several materials of one module give the CPU image. The geometry is the O30 `checker-plane`
+/// scene with its instances spread over the materials.
+#[test]
+fn shader_materials_share_one_module_and_match_the_cpu() {
+    use forge_core::Value;
+    use forge_material::{Material, compile};
+    use forge_shaders::shader::{Bitmap, Shader, ShaderSet};
+    use std::sync::Arc;
+    let Some((device, queue)) = gpu() else {
+        return;
+    };
+    let engine = GpuEngine::with_device(device, queue);
+    let image = |w: u32, h: u32, seed: u32| {
+        let mut img = forge_image::Image::new(w, h, forge_image::AlphaMode::Straight);
+        for y in 0..h {
+            for x in 0..w {
+                let k = (x * 7 + y * 13 + seed * 5) % 11;
+                img.set_pixel(
+                    x,
+                    y,
+                    [k as f32 / 10.0, ((x + y) % 3) as f32 / 2.0, 0.25, 1.0],
+                );
+            }
+        }
+        Arc::new(img)
+    };
+    let mut set = ShaderSet::default();
+    let mut put = |name: &str, s: Shader| {
+        set.shaders.insert(name.to_string(), s);
+    };
+    put(
+        "bm_a",
+        Shader::Bitmap(Bitmap {
+            image: image(5, 3, 1),
+            repeat: true,
+            interpolate: true,
+        }),
+    );
+    put(
+        "bm_b",
+        Shader::Bitmap(Bitmap {
+            image: image(8, 8, 2),
+            repeat: false,
+            interpolate: false,
+        }),
+    );
+    put(
+        "vmap",
+        Shader::VertexMap {
+            low: [0.9, 0.2, 0.1],
+            high: [0.1, 0.2, 0.9],
+        },
+    );
+    put(
+        "ao",
+        Shader::Ao {
+            low: [0.1, 0.1, 0.1],
+            high: [0.3, 0.9, 0.3],
+        },
+    );
+    let sampler = Arc::new(set);
+    let material = |tex: &str, bump: Option<&str>| {
+        let mut o = std::collections::BTreeMap::new();
+        o.insert("color.texture".to_string(), Value::String(tex.into()));
+        if let Some(b) = bump {
+            o.insert("bump.texture".to_string(), Value::String(b.into()));
+            o.insert("bump.strength".to_string(), Value::Float(0.5));
+        }
+        MaterialData::new("m", compile(&Material::from_values(&o))).with_sampler(sampler.clone())
+    };
+    let mut case = load("checker-plane");
+    case.snapshot.materials = vec![
+        material("bm_a", None),
+        material("bm_b", Some("bm_a")),
+        material("vmap", None),
+        material("ao", Some("bm_b")),
+    ];
+    let count = case.snapshot.materials.len();
+    for (i, inst) in case.snapshot.instances.iter_mut().enumerate() {
+        inst.material = i % count;
+    }
+    let settings = image_parity::settings((160, 120), Vec::new());
+    for first in 0..count {
+        // Rotate which material each instance uses so every material is exercised alone.
+        for (i, inst) in case.snapshot.instances.iter_mut().enumerate() {
+            inst.material = (i + first) % count;
+        }
+        let cpu = CpuEngine::new()
+            .render(&case.snapshot, &settings, &Control::new())
+            .unwrap();
+        let gpu = engine
+            .render(&case.snapshot, &settings, &Control::new())
+            .unwrap();
+        let a = ImageBuf::from_rgba(cpu.width, cpu.height, &cpu.beauty.data);
+        let b = ImageBuf::from_rgba(gpu.width, gpu.height, &gpu.beauty.data);
+        let report = compare_image(&a, &b, &CompareOptions::default()).unwrap();
+        eprintln!("shader materials, rotation {first}: {:.2} dB", report.psnr);
+        assert!(
+            report.psnr >= MIN_PSNR,
+            "rotation {first}: PSNR {:.2} dB below {MIN_PSNR} dB",
+            report.psnr
+        );
+    }
+    // A sampler without a codegen is refused, not silently white.
+    struct Opaque;
+    impl forge_material::TextureSampler for Opaque {
+        fn sample(&self, _: &str, _: &forge_material::ShadeCtx) -> [f64; 3] {
+            [0.5; 3]
+        }
+    }
+    let mut snap = case.snapshot.clone();
+    snap.materials[0].sampler = Arc::new(Opaque);
+    for inst in &mut snap.instances {
+        inst.material = 0;
+    }
+    assert!(matches!(
+        engine.render(&snap, &settings, &Control::new()),
+        Err(RenderError::Unsupported(_))
+    ));
 }

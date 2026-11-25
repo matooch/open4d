@@ -75,3 +75,19 @@ A wgpu compute path tracer matching the CPU tracer.
   `a_shared_node_runs_once_per_evaluation` race): fmt ok, clippy `-D warnings` ok, 2592 tests
   passed 0 failed (the GPU tests ran on Metal), python ok, `cargo deny` ok, cleanroom ok, golden
   1117 cases ok, `GATE: all passed`.
+- **Follow-up (planner), shader-node materials on the GPU:** RENDER.md R20.1b. The tracer now
+  compiles every material into one shared `ModuleBuilder` (`forge_material::wgsl::compile_into`,
+  new) through the sampler's new `TextureSampler::codegen()` hook (`ShaderSet` returns
+  `ShaderSetCodegen`, `White` returns `WhiteShaders`); bitmaps are uploaded as `Rgba32Float`
+  textures at `@group(1) @binding(k)`. The per-hit `ShadeCtx` of `surface_at` already matched the
+  CPU (uvw interpolated from the baked corner UVWs, so cubic projection needs nothing extra;
+  position, shading normal, `view = wo`, bump re-interpolates `uvw` at the displaced point); the
+  one difference found was `vertex_weight`, which was 1 and is now 0 (the CPU `None`, read as 0 by
+  Vertex Map). All five cases are unpinned (`UNSUPPORTED` is empty) and pass the 35 dB bound:
+  `mat-checker-uv` 75.50 dB, `mat-checker-cubic` 75.43 dB, `mat-fresnel` 102.54 dB,
+  `mat-bump-noise` 83.26 dB, `checker-plane` 119.89 dB (lavapipe, 320x240, 16 spp). New test
+  `shader_materials_share_one_module_and_match_the_cpu` (two bitmaps, Vertex Map, AO, bump from a
+  bitmap, one module; 134.7-136.1 dB) and a sampler without codegen is `Unsupported`.
+  The naga 30 SPIR-V writer (Vulkan, lavapipe) panics on the former `acc_add(&out.acc, ...)`
+  (pointer to a sub-field as an argument), so `acc_add` now takes the whole `TraceOut`; the Metal
+  path never hit it. Image environments stay `Unsupported` (R20.4).

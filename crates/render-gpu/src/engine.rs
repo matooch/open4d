@@ -60,6 +60,50 @@ impl GpuEngine {
         GpuEngine { device, queue }
     }
 
+    /// Uploads each bitmap as an `Rgba32Float` texture (REALTIME.md §2.8, RENDER.md R20.1b).
+    fn bitmap_views(
+        &self,
+        resources: &[std::sync::Arc<dyn std::any::Any + Send + Sync>],
+    ) -> Result<Vec<wgpu::TextureView>, RenderError> {
+        resources
+            .iter()
+            .map(|r| {
+                let img = r.downcast_ref::<Image>().ok_or_else(|| {
+                    RenderError::Unsupported("a bound resource is not an image".into())
+                })?;
+                let tex = self.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("bitmap"),
+                    size: wgpu::Extent3d {
+                        width: img.width,
+                        height: img.height,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba32Float,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                    view_formats: &[],
+                });
+                self.queue.write_texture(
+                    tex.as_image_copy(),
+                    bytemuck::cast_slice(&img.data),
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(img.width * 16),
+                        rows_per_image: Some(img.height),
+                    },
+                    wgpu::Extent3d {
+                        width: img.width,
+                        height: img.height,
+                        depth_or_array_layers: 1,
+                    },
+                );
+                Ok(tex.create_view(&Default::default()))
+            })
+            .collect()
+    }
+
     fn shader_buffers(
         &self,
         packed: &Packed,
@@ -107,9 +151,16 @@ impl RenderEngine for GpuEngine {
         wanted.dedup();
         let stride = 1 + wanted.len();
 
-        let graphs: Vec<&forge_material::ShadingGraph> =
-            snapshot.materials.iter().map(|m| &m.graph).collect();
-        let source = crate::shader::assemble(&graphs)?;
+        let materials: Vec<(
+            &forge_material::ShadingGraph,
+            &dyn forge_material::TextureSampler,
+        )> = snapshot
+            .materials
+            .iter()
+            .map(|m| (&m.graph, &*m.sampler as &dyn forge_material::TextureSampler))
+            .collect();
+        let assembled = crate::shader::assemble(&materials)?;
+        let source = assembled.source;
 
         let device = &self.device;
         let errors = device.push_error_scope(wgpu::ErrorFilter::Validation);
@@ -137,12 +188,35 @@ impl RenderEngine for GpuEngine {
                 storage_entry(5, false),
             ],
         });
+        if assembled.resources.len()
+            > device.limits().max_sampled_textures_per_shader_stage as usize
+        {
+            return Err(RenderError::Unsupported(format!(
+                "{} bitmaps exceed the device's sampled texture limit (RENDER.md R20.1b)",
+                assembled.resources.len()
+            )));
+        }
+        let layout1 = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("bitmaps"),
+            entries: &(0..assembled.resources.len() as u32)
+                .map(|binding| wgpu::BindGroupLayoutEntry {
+                    binding,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                })
+                .collect::<Vec<_>>(),
+        });
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("path tracer"),
             layout: Some(
                 &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: None,
-                    bind_group_layouts: &[Some(&layout)],
+                    bind_group_layouts: &[Some(&layout), Some(&layout1)],
                     immediate_size: 0,
                 }),
             ),
@@ -215,6 +289,20 @@ impl RenderEngine for GpuEngine {
             ],
         });
 
+        let views = self.bitmap_views(&assembled.resources)?;
+        let bind1 = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("bitmaps"),
+            layout: &layout1,
+            entries: &views
+                .iter()
+                .enumerate()
+                .map(|(i, v)| wgpu::BindGroupEntry {
+                    binding: i as u32,
+                    resource: wgpu::BindingResource::TextureView(v),
+                })
+                .collect::<Vec<_>>(),
+        });
+
         let mut outs: Vec<TileOut> = Vec::with_capacity(tiles.len());
         for (i, &(tx, ty, tw, th)) in tiles.iter().enumerate() {
             if control.is_cancelled() {
@@ -237,6 +325,7 @@ impl RenderEngine for GpuEngine {
                 });
                 pass.set_pipeline(&pipeline);
                 pass.set_bind_group(0, &bind, &[]);
+                pass.set_bind_group(1, &bind1, &[]);
                 pass.dispatch_workgroups(tw.div_ceil(8), th.div_ceil(8), 1);
             }
             encoder.copy_buffer_to_buffer(&out, 0, &staging, 0, bytes);
