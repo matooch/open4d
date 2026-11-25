@@ -65,12 +65,12 @@ impl Aabb {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Node {
-    bounds: Aabb,
+pub struct Node {
+    pub bounds: Aabb,
     /// Leaf: first primitive slot. Interior: index of the left child (right = left + 1).
-    first: u32,
+    pub first: u32,
     /// Leaf: primitive count (> 0). Interior: 0.
-    count: u32,
+    pub count: u32,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -212,6 +212,16 @@ impl Bvh {
 
     pub fn node_count(&self) -> usize {
         self.nodes.len()
+    }
+
+    /// The flattened tree, for an upload to a GPU (render-gpu R20.1).
+    pub fn nodes(&self) -> &[Node] {
+        &self.nodes
+    }
+
+    /// Primitive ids in leaf order.
+    pub fn prims(&self) -> &[u32] {
+        &self.prims
     }
 
     /// Visits the primitives whose leaf boxes the ray enters (nearest child first).

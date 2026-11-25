@@ -1867,6 +1867,22 @@ dependencies = [
 [[package]]
 name = "forge-render-gpu"
 version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "forge-core",
+ "forge-generators",
+ "forge-geometry",
+ "forge-image",
+ "forge-material",
+ "forge-parity-harness",
+ "forge-render-api",
+ "forge-render-cpu",
+ "forge-shaders",
+ "glam 0.34.1",
+ "pollster 1.0.1",
+ "toml",
+ "wgpu",
+]
 
 [[package]]
 name = "forge-rig"

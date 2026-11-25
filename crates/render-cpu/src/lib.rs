@@ -8,4 +8,4 @@ pub mod sampling;
 pub mod scene;
 pub mod surface;
 
-pub use engine::CpuEngine;
+pub use engine::{CpuEngine, ignored_channels};
