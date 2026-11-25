@@ -14,9 +14,23 @@ use serde_json::json;
 
 use crate::{Fail, Out, Outcome, all_nodes, open, user};
 
+/// The render engine of `--engine` (RENDER.md R4, R20, R21).
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EngineKind {
+    /// The CPU path tracer (the default, the parity reference).
+    Cpu,
+    /// The compute path tracer on the GPU (R20).
+    Gpu,
+    /// The real-time raster tier on the GPU (R21).
+    Rt,
+}
+
 #[derive(clap::Args, Debug)]
 pub struct RenderArgs {
     pub scene: String,
+    /// Render engine: cpu (path tracer), gpu (compute path tracer) or rt (real-time raster).
+    #[arg(long, value_enum, default_value_t = EngineKind::Cpu)]
+    pub engine: EngineKind,
     /// Output path template; tokens {frame}, {frame:N}, {pass}, {name}. The extension picks
     /// the format when it is a known one.
     #[arg(long)]
@@ -156,7 +170,15 @@ pub fn render(a: &RenderArgs) -> Outcome {
     };
     settings.validate().map_err(|e| user(e.to_string()))?;
     let multiple = list.len() > 1;
-    let engine = CpuEngine::new();
+    let engine: Box<dyn RenderEngine> = match a.engine {
+        EngineKind::Cpu => Box::new(CpuEngine::new()),
+        EngineKind::Gpu => {
+            Box::new(forge_render_gpu::GpuEngine::new().map_err(|e| user(e.to_string()))?)
+        }
+        EngineKind::Rt => {
+            Box::new(forge_render_rt::RtEngine::new().map_err(|e| user(e.to_string()))?)
+        }
+    };
     let mut files = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
     for f in &list {

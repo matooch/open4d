@@ -71,6 +71,8 @@ pub struct Packed {
     pub nodes: Vec<Node>,
     pub prims: Vec<u32>,
     pub lights: Vec<GpuLight>,
+    /// How many of `lights` are real (the vector holds one dummy when there are none).
+    pub light_count: usize,
     pub scale: f64,
     pub triangles: usize,
     pub instances: usize,
@@ -209,6 +211,7 @@ impl Packed {
                 nodes: vec![empty_node()],
                 prims: vec![0],
                 lights: vec![empty_light()],
+                light_count: 0,
                 scale: scene.scale,
                 triangles: 0,
                 instances: 0,
@@ -301,6 +304,7 @@ impl Packed {
             .iter()
             .map(pack_light)
             .collect();
+        let light_count = lights.len();
         let lights = if lights.is_empty() {
             vec![empty_light()]
         } else {
@@ -311,6 +315,7 @@ impl Packed {
             nodes,
             prims,
             lights,
+            light_count,
             scale: scene.scale,
             triangles,
             instances: snap.instances.len(),

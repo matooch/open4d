@@ -1,0 +1,30 @@
+[package]
+name = "forge-render-rt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Real-time raster PBR engine on the shared shading IR (docs/specs/RENDER.md R21)."
+
+[dependencies]
+bytemuck = { version = "1", features = ["derive"] }
+forge-image = { path = "../image" }
+forge-material = { path = "../material" }
+forge-render-api = { path = "../render-api" }
+forge-render-cpu = { path = "../render-cpu" }
+forge-render-gpu = { path = "../render-gpu" }
+glam = "0.34"
+pollster = "1"
+thiserror = "2"
+wgpu = { version = "30", features = ["static-dxc"] }
+
+[dev-dependencies]
+naga = "30"
+forge-core = { path = "../core" }
+forge-generators = { path = "../generators" }
+forge-image = { path = "../image" }
+forge-parity-harness = { path = "../parity-harness" }
+forge-shaders = { path = "../shaders" }
+toml = "1"
+
+[lints]
+workspace = true

@@ -92,3 +92,33 @@ pub fn assemble(
         resources: module.resources().to_vec(),
     })
 }
+
+/// Whether a material graph reads shader nodes (an IR `Texture` node).
+pub fn needs_shader_nodes(g: &ShadingGraph) -> bool {
+    g.nodes.iter().any(|n| matches!(n, IrNode::Texture(_)))
+}
+
+/// The surface struct and every material as `forge_surface_<i>` plus the `forge_shade`
+/// dispatcher, for a WGSL module that shades through the IR without shader-node bindings
+/// (R20.1, R21.3: the real-time raster engine). Materials with shader nodes are
+/// `Unsupported` here; the path tracer compiles them through [`assemble`] (R20.1b).
+pub fn materials(graphs: &[&ShadingGraph]) -> Result<String, RenderError> {
+    if graphs.iter().any(|g| needs_shader_nodes(g)) {
+        return Err(RenderError::Unsupported(
+            "shader-node material channels in this engine (R21; the path tracer has them, R20.1b)"
+                .into(),
+        ));
+    }
+    let mut module = ModuleBuilder::default();
+    let mut out = String::from(SURFACE_WGSL);
+    let mut n = 0;
+    for g in graphs {
+        let (src, _) = compile_into(g, &NoShaders, &mut module);
+        let body = src.strip_prefix(SURFACE_WGSL).unwrap_or(&src);
+        out.push_str(&rename(body, n, g.nodes.len()));
+        n += 1;
+    }
+    out.push_str(module.declarations());
+    out.push_str(&dispatch(n));
+    Ok(out)
+}

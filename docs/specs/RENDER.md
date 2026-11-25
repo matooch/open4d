@@ -583,6 +583,161 @@ sub-field passed as an argument, so `acc_add` takes a pointer to the whole `Trac
 - `threads`, `tile` and the region are CPU-side scheduling only; a `region` renders its own
   rectangle into the full-size image exactly as R2.
 
+## R21 Real-time raster PBR engine (`forge-render-rt`, brief 198)
+
+Tier 1 of area R (D19): **our own design**, not a parity feature. Geometry, lights and materials
+come from the same `Snapshot` (R1) as the CPU tracer and the compute tracer, and the surface
+values from the same shading IR (`forge_material::wgsl`, R20.1/R7), so a material looks the same
+in all three renderers. The reference app's real-time viewport is not observed (D13).
+
+### R21.1 Frame graph
+
+`forge_render_rt::FrameGraph` is an ordered list of passes, each `{name, reads, writes}` over
+named resources. `validate()` rejects an empty graph, a repeated pass name, a read of a resource
+that no earlier pass writes, and a second writer of a resource. The engine registers, in order:
+`shadow:<i>` for every shadow-casting light (read `tris`, write `shadow:<i>`), `gbuffer` (read
+`tris`, write `g0`, `g1`, `depth`), `lighting` (read `g0`, `g1`, `depth`, every `shadow:<i>`;
+write `beauty`, `shadow`), and when a pass needs them `split` (read `g0`, `g1`; write `diffuse`,
+`specular`) and `albedo` (read `g0`, `g1`; write `albedo`).
+
+### R21.2 Geometry, camera and rasterisation
+
+The world-space triangles (`Tri`: origin, two edges, geometric normal, three shading normals,
+three UVs, material and object ids) and the prepared lights are the ones `render-gpu`'s `pack`
+builds (R20.1); both GPU tiers share that upload and the light preparation of R8. One draw call
+of `3 * triangles` vertices with no vertex buffers: the vertex shader pulls
+`tris[vertex_index / 3]`, and a corner index picks the origin, `p0 + e1` or `p0 + e2`.
+
+Projection is the CPU camera's own (R10), so a rasterised silhouette lands on the tracer's:
+
+- camera space `Q = world_to_camera * P`; perspective `f = width * focal / sensor`,
+  `cx = width / 2 + film_offset.x * width`, `cy = height / 2 - film_offset.y * height`;
+- `x_ndc = 2 (cx + f Qx/Qz) / width - 1`, `y_ndc = 2 (cy - f Qy/Qz) / height - 1`;
+  orthographic `x_ndc = 2 Qx / ortho_width`, `y_ndc = -2 Qy width / (ortho_width height)`;
+- clip `w = Qz` (perspective) or `1` (orthographic); near `1e-4 * scale`, far `100 * scale`, and
+  `z_ndc = far/(far-near) - far*near/((far-near) Qz)` (perspective) or
+  `(Qz - near)/(far - near)` (orthographic), depth in `[0, 1]`.
+
+Barycentrics are the vertex corners `(1,0,0)`, `(0,1,0)`, `(0,0,1)` interpolated perspective
+correctly. The shading normal is the barycentric blend of the three corner normals when the mesh
+has them, else the geometric normal, flipped to face the camera. The shading context is
+`position`, `normal`, `view = normalize(eye - position)`, `uvw = 0` (R21.3 does not store it),
+`time = 0`, `vertex_weight = 1`, `ao = 1`.
+
+### R21.3 G-buffer (deferred)
+
+Two `Rgba32Float` targets plus a `Depth32Float` target, cleared to 0/1, written once per pixel
+(depth test less, no culling). Two targets keep the pass within Metal's 32-byte per-sample
+colour-attachment budget:
+
+| target | contents |
+|---|---|
+| `g0` | world position, material index + 1 (0 = background) |
+| `g1` | shading normal (world, facing the camera), object id + 1 (0 = background) |
+
+The shading normal is the barycentric blend of the three corner normals when the mesh has them,
+else the geometric normal (both flipped to face the camera); UVW is not stored, because only
+texture channels read it and those are pinned below. The material is evaluated in the lighting
+pass from `g0`/`g1` with the IR values `surface_at` of R20.2 reads (diffuse and level, specular and
+level, specular flags/roughness, emission, the specular level's albedo reduction); each material
+is one specialised `forge_surface_i` function and a `switch` picks it. Materials whose colour
+channel needs a texture node are not ported yet (brief 207) and the engine returns `Unsupported`
+(as the compute tracer, R20.4). The engine is opaque: transmission is not refracted,
+bump/normal, displacement, alpha, fog, diffusion and environment channels are ignored (the last
+six are reported in `RenderStats::ignored_channels` by the same list as R7).
+
+### R21.4 Shadow maps
+
+Every light whose `ShadowMode` is `Hard` or `Soft` gets one tile of a `4096 x 2048` depth atlas
+(8 × 4 tiles of `512²`); omni lights get six consecutive tiles (a cube of 90° faces), other lights
+one tile, so at most `32 - 5 * (omni lights - 1)` shadow-casting omni lights fit and more returns
+`Unsupported`. The light view is a right-handed basis with `forward = light local +Z` (the
+direction the light shines); the up vector is world +Y unless the forward is within 1e-6 of it,
+then +Z.
+
+- Infinite: orthographic over the scene's world bounds in light space, square extent with 5 %
+  margin; no falloff.
+- Spot: perspective, `focal = 1 / tan(outer)`, `outer` clamped to 170°.
+- Area: perspective from the light position along its +Z, 120° full angle (the light plane is
+  approximated by its centre).
+- Omni: six cube faces, `+X, -X, +Y, -Y, +Z, -Z`, each with the basis right/up/forward
+  `(0,0,-1)/(0,1,0)/(1,0,0)`, `(0,0,1)/(0,1,0)/(-1,0,0)`, `(-1,0,0)/(0,0,1)/(0,1,0)`,
+  `(-1,0,0)/(0,0,-1)/(0,-1,0)`, `(1,0,0)/(0,1,0)/(0,0,1)`, `(-1,0,0)/(0,1,0)/(0,0,-1)`.
+
+Near/far come from the world bounds' distance to the light (`near = 0.01 * scale`, far = the
+farthest corner × 1.05, or the spot/area frustum's own depth range). The tile lookup is
+`uv = (tile + (0.5 + 0.5 ndc.x, 0.5 - 0.5 ndc.y)) / (8, 4)` and the comparison is
+`z - bias <= depth` with `bias = 2e-3`. `Hard` takes one comparison; `Soft` a fixed 3 × 3 tap
+kernel at the tile texel size (no jitter: deterministic). A shadowed light's contribution is
+multiplied by `(1 - density) + shadow_color * density` (the R8 shadow colour rule).
+
+### R21.5 Deferred lighting
+
+For each hit the lighting pass evaluates the R20.2 BRDF (Lambert `albedo/π` plus GGX specular,
+same `ggx_d` and `g1`, same Fresnel-free form) for every prepared light, in order:
+
+- Omni/Spot: one sample at the light position (the soft radius is not jittered), cosine falloff
+  and the spot inner/outer smoothstep of R8; `weight = colour × π × falloff`. The specular
+  radius is the shadow map's PCF.
+- Infinite: direction `-axis`, `weight = colour × π`.
+- Area: one sample at the light's centre with the R20.2 area weight
+  `weight = colour × falloff / pdf`, `pdf = d² / (cos(light normal) × area)`; area lights are
+  therefore noiseless but take one fixed sample rather than the tracer's sampled one.
+- `diffuse`/`specular` toggles from the light are applied; a light behind the shading or
+  geometric normal contributes nothing.
+- The Monte-Carlo MIS weight of the tracer is the power heuristic of the light pdf and the BSDF
+  pdf (1 at `pdf = 0`), as in R20.2.
+
+The light loop accumulates `Diffuse` and `Specular` separately, and
+`shadow = Σ lum(unshadowed contribution) × visibility / Σ lum(unshadowed contribution)`
+(1 when there is no light), matching the R3 `Shadow` AOV definition.
+
+Environment lighting (R16) is image-based: constant and sky lighting use R20.2's `env_radiance`
+directly; an image is sampled nearest-pixel at the lat-long of the direction, with the R16
+rotation and intensity. Diffuse indirect = `albedo × env_radiance(n)` (the uniform-radiance
+solution, also used for sky and image as an approximation), specular indirect =
+`specular × env_radiance(reflect(-view, n))`. There is no path-traced GI, no AO and no
+transmission: R2 is direct light plus the environment (Tier 2 adds ray-traced GI, brief 201),
+which is the documented gap against the CPU tracer.
+
+The lighting pass writes `beauty = emission + diffuse + specular` (and `shadow`); the `split` pass
+repeats the same shading and writes `diffuse` and `specular`, and the `albedo` pass writes the
+diffuse colour × level. At background pixels the beauty colour is the R1 background colour, or
+`env_radiance(ray)` when the background is the environment, with alpha = coverage; every pixel is
+one sample (raster). `RenderStats::samples` counts pixels, `tiles = 1`.
+
+### R21.6 Outputs, AOVs and limits
+
+AOVs are produced from the G-buffer and the lighting pass: `Depth` (camera distance from `g0`,
+0 with no coverage), `Normal`, `Albedo` (the `albedo` pass), `Position`, `ObjectId` (`g1.a`),
+`MaterialId` (`g0.a`), `Diffuse` and `Specular` (the `split` pass), `Emission`
+(`beauty - diffuse - specular`), `Shadow` (the lighting pass). Values are un-premultiplied by
+coverage, as R3 asks.
+
+- `samples`, `max_depth`, `seed` and `tile` do not change the image (one raster sample, direct
+  light only); the region is honoured with a scissor and one `Tile` event covers it.
+- `depth_of_field` is not supported by the raster tier and returns `Unsupported`.
+- A missing GPU adapter returns `Unsupported` (tests skip unless `FORGE_REQUIRE_GPU=1`).
+- The output is deterministic per adapter: no random numbers, a fixed light order, a fixed PCF
+  kernel (R21.4). Two renders of one scene compare bit-identical.
+- `forge render --engine rt` selects this engine (the default stays `cpu`).
+
+### R21.7 Tests (`crates/render-rt/tests/`)
+
+- `framegraph.rs`: unit tests of `FrameGraph::validate` (order, one writer, unknown read).
+- `rt_render.rs` (GPU, one device per file behind a `Mutex`, skipped without an adapter): the
+  frame graph the engine builds validates; directional, omni-falloff, glossy two-light and
+  two-material scenes match the CPU tracer at ≥ 30 dB PSNR with the CPU tracer's indirect light
+  off (`max_depth = 0`, so both are direct light only) — measured 48.0, 38.3, 45.2 and 37.5 dB;
+  every O30 case keeps the CPU silhouette (IoU ≥ 0.98) and its mean luminance within
+  `[0.6, 1.7]` (the CPU's GI makes it brighter than the raster), with the shader-node cases
+  pinned `Unsupported` (brief 207) and the transmissive case compared by silhouette only (R2 is
+  opaque); doubling a light's intensity doubles the image; a spot shadow map darkens the pixels
+  behind an occluder; a constant and a lat-long image environment light a sphere; all ten AOVs
+  have the R3 shapes and `beauty = diffuse + specular + emission`; a region renders its
+  rectangle with one `Tile` event and cancel stops; two renders are byte-identical.
+- `forge render --engine rt` runs through the CLI (`apps/forge/tests/render.rs`).
+
 ## R13 Not done / follow-ups
 
 The material hosted in the document (brief 194), object-shaped area lights, falloff `Steps`, Sobol sampling,
