@@ -500,3 +500,79 @@ and `KNOWN_MISMATCH` are empty. Not in O36: `clamp-surface`, `ik-then-constraint
 Ordering (`crates/rig/tests/tag_order.rs`, `crates/app/tests/rig_tags.rs`): own unit tests of
 section 12; there is no reference case, so the order of IK and constraints against each other
 is parity-pending (O36 ordering case not recorded).
+
+## 15. Pose Morph tag (brief 107)
+
+Status: **own design (D20), parity-pending (O37)**. No golden data exists: the reference app does
+not let a script set the morph strength, so `docs/parity/pose-morph.md` has 0 of 7 cases. A
+GUI-assisted capture (GUI-SESSIONS.md G9) will check these rules later.
+Sources: the public manual's description of the feature (a tag that stores a base pose and named
+morph poses of the points, each pose with a strength in percent, keyable in an animation mode, and a
+relative and an absolute way of combining them; the manual's exact wording of the absolute mode was
+not available to this implementation, so the absolute rule below is our reading) and the standard
+blend-shape maths (a weighted sum of target offsets from a base pose). Code:
+`crates/rig/src/pose_morph.rs`; the hook is `forge_generators::evaluate`; commands in
+`crates/app/src/pose_morph_commands.rs`.
+
+### 15.1 Parameters
+
+Tag type `forge.pose_morph_tag`, Category `Tag`, on an object with points (the commands accept
+polygon objects). The tag has `MAX_TARGETS = 16` target slots; the param list is generated from
+that constant, so the attribute UI, the undo history, the keyframe tracks and the native file all
+come from the descriptors.
+
+| Param id | Label | Kind, default | Notes |
+|---|---|---|---|
+| `enabled` | Enabled | bool true | off: the tag does nothing |
+| `mode` | Mode | enum `relative` (relative, absolute) | §15.2 |
+| `base` | (hidden) | `Vec3List` | the base pose; empty until the first target is made |
+| `name_i` | Name | string, default `Morph i+1` | `i` in 0..16 |
+| `target_i` | (hidden) | `Vec3List` | absolute point positions of target `i`; empty = slot unused |
+| `strength_i` | Strength | float, default 0, unit percent, animatable, **no hard range** | stored as a fraction: 1.0 is 100 % |
+
+Strengths below 0 and above 100 % are allowed (the evaluation extrapolates); the manual states no
+limit. A strength track is an ordinary track on `strength_i` (brief 088), so keys, interpolation
+and loops work as for any float.
+
+### 15.2 Evaluation
+
+Let `c` be the object's own points (its geometry after generators and Make Editable, before any
+deformer), `b` the `base` list, `t_i` the target lists and `s_i` the strengths. A slot is *active*
+when `t_i` has as many points as `c` and `s_i != 0`. The tag does nothing when it is disabled, when
+`b` has another point count than `c` (the topology changed), or when no slot is active. For every
+point `k`:
+
+- **Relative** (default): `p_k = c_k + Σ_i s_i · (t_i,k − b_k)`. A target is the offset from the base
+  pose; the offsets are added onto whatever the object's points are now, so a morph follows a base
+  that was edited or animated afterwards. At `s = 1` and `c = b` the point is exactly `t`.
+- **Absolute**: `p_k = c_k + Σ_i s_i · (t_i,k − c_k)`. A target is a goal position: a single target at
+  100 % puts the point exactly on `t_i,k` whatever `c` is, 50 % goes half way from the current point.
+  Several targets add their pulls (`s_1 + s_2 > 1` overshoots).
+
+With `c = b` the two modes agree for every strength; they differ only once `c` has moved away from
+the base. Points where every active target equals the base are never moved (relative) so a morph
+that only touches the upper half leaves the lower half bit-identical.
+
+### 15.3 Order with the skin
+
+The tag runs on the bind mesh: after the object's geometry and before its deformer children, so the
+skin deformer (§3) skins the morphed points. The skin's weights and bind pose stay those of the
+unmorphed mesh (the point count does not change). Own design, the usual order for blend shapes.
+
+### 15.4 Making and editing targets (undoable, one `Tx` each)
+
+- `capture_base(tx, tag, points)`: stores the base pose.
+- `add_target(tx, tag, name, points) -> slot`: the first free slot. Fails without a base pose, with
+  16 targets in use, or with a point count that differs from the base.
+- `set_target(tx, tag, slot, points)` replaces a target's points, `clear_target(tx, tag, slot)` empties
+  the slot and resets its name and strength; keys on the strength track stay (the slot is reused).
+- Commands: `pose_morph.add_target` (`object`, optional `name`; creates the tag if the object has
+  none, takes the object's current points, and captures them as the base first when the tag has no
+  base yet, so a target made from the unchanged object equals the base), `pose_morph.update_target` (`tag`, `slot`; current points,
+  or `points`), `pose_morph.clear_target`, `pose_morph.set_base`.
+
+### 15.5 Not modelled
+
+Position, rotation and scale (PSR) morphs of the object itself, vertex-map and material morphs, the
+manual's mix/fade tools, and tag-to-tag link morphs are left out: the manual's description of them
+was not available and O37's `psr-morph` case was not observed. Parity-pending in full (O37).

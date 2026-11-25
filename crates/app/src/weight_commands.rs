@@ -98,8 +98,27 @@ struct MirrorArgs {
     from: Option<FromArg>,
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct AutoBindArgs {
+    /// The mesh object (default: the active node). It gets a weight tag and a skin deformer
+    /// when it has none.
+    object: Option<u64>,
+    /// The joints to bind to, in slot order.
+    joints: Vec<u64>,
+}
+
 /// Registers the weight commands.
 pub fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
+    r.register_fn(
+        CommandSpec {
+            id: "weights.auto_bind",
+            label: "Auto Bind",
+            undoable: true,
+            sample: || json!({"joints": [1, 2, 3]}),
+        },
+        auto_bind_command,
+    )?;
     r.register_fn(
         CommandSpec {
             id: "weights.paint",
@@ -278,4 +297,60 @@ fn mirror(ctx: &mut dyn CommandContext, a: MirrorArgs) -> Result<Value, CommandE
         mirror_tag_weights(tx, tag, &mesh, plane, &RenameRule::LeftRight, from)
     })?;
     Ok(json!({"copied": report.copied, "unmatched": report.unmatched}))
+}
+
+/// `weights.auto_bind` (docs/specs/RIG.md section 4): bone heat weights for the given joints on
+/// the object's rest mesh, the current joint pose stored as the bind pose, one undo step.
+fn auto_bind_command(ctx: &mut dyn CommandContext, a: AutoBindArgs) -> Result<Value, CommandError> {
+    if a.joints.is_empty() {
+        return Err(CommandError::InvalidArgs(
+            "joints needs at least one joint".into(),
+        ));
+    }
+    let obj = match a.object {
+        Some(o) => NodeId(o),
+        None => ctx
+            .selection()
+            .active
+            .ok_or_else(|| CommandError::failed("select a mesh object"))?,
+    };
+    let scene = ctx.doc().scene();
+    if !scene.contains(obj) {
+        return Err(CommandError::failed(format!("unknown node {}", obj.0)));
+    }
+    let joints: Vec<NodeId> = a.joints.iter().map(|j| NodeId(*j)).collect();
+    if let Some(bad) = joints
+        .iter()
+        .find(|j| !forge_rig::joint::is_joint(scene, **j))
+    {
+        return Err(CommandError::failed(format!(
+            "node {} is not a joint",
+            bad.0
+        )));
+    }
+    let has_skin = scene.node(obj).is_some_and(|n| {
+        n.children
+            .iter()
+            .any(|c| scene.node(*c).is_some_and(|c| c.type_id == forge_rig::SKIN))
+    });
+    let existing = find_weight_tag(scene, obj);
+    let mesh = mesh_of(ctx, obj)?;
+    let tag = ctx.doc_mut().transact("Auto Bind", |tx| {
+        let tag = match existing {
+            Some(t) => t,
+            None => tx.attach_tag(forge_rig::WEIGHT_TAG, obj, None)?,
+        };
+        tx.set_param(tag, "joints", forge_core::Value::LinkList(joints.clone()))?;
+        forge_rig::auto_weights::auto_bind(
+            tx,
+            tag,
+            &mesh,
+            &forge_rig::auto_weights::AutoWeightOptions::default(),
+        )?;
+        if !has_skin {
+            tx.create(forge_rig::SKIN, Some(obj), None)?;
+        }
+        Ok(tag)
+    })?;
+    Ok(json!({"tag": tag.0}))
 }

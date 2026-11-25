@@ -488,3 +488,35 @@ fn shader_materials_share_one_module_and_match_the_cpu() {
         Err(RenderError::Unsupported(_))
     ));
 }
+
+/// R20.4: how a tile is split across submissions never changes the image. A budget of one
+/// pixel-sample (one row of a tile per submission) and a budget no tile reaches (one
+/// submission per tile, the pre-R20.4 behaviour) give identical bytes, AOVs included.
+#[test]
+fn the_submission_budget_does_not_change_the_image() {
+    let Some((device, queue)) = gpu() else {
+        return;
+    };
+    let all = vec![Aov::Depth, Aov::Normal, Aov::Shadow, Aov::Specular];
+    let mut settings = image_parity::settings((80, 60), all);
+    settings.samples = 4;
+    settings.tile = 24;
+    let whole =
+        GpuEngine::with_device(device.clone(), queue.clone()).with_submission_budget(u64::MAX);
+    let default = GpuEngine::with_device(device.clone(), queue.clone());
+    let tiny = GpuEngine::with_device(device, queue).with_submission_budget(1);
+    for name in ["cube-plane", "mat-bump-noise"] {
+        let case = load(name);
+        let render = |e: &GpuEngine| {
+            e.render(&case.snapshot, &settings, &Control::new())
+                .unwrap_or_else(|err| panic!("{name}: {err}"))
+        };
+        let (a, b, c) = (render(&whole), render(&default), render(&tiny));
+        for (label, other) in [("default", &b), ("one row per submission", &c)] {
+            assert_eq!(a.beauty.data, other.beauty.data, "{name}: beauty, {label}");
+            for (aov, img) in &a.aovs {
+                assert_eq!(img.data, other.aovs[aov].data, "{name}: {aov:?}, {label}");
+            }
+        }
+    }
+}

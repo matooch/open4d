@@ -76,8 +76,27 @@ struct MirrorArgs {
     suffix: Option<String>,
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct AttachArgs {
+    /// Tag type id, e.g. `forge.ik_tag`, `forge.weight_tag`, `forge.pose_morph_tag`.
+    #[serde(rename = "type")]
+    type_id: String,
+    /// The object that gets the tag.
+    node: u64,
+}
+
 /// Registers the joint commands.
 pub fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
+    r.register_fn(
+        CommandSpec {
+            id: "tag.attach",
+            label: "Attach Tag",
+            undoable: true,
+            sample: || json!({"type": "forge.ik_tag", "node": 1}),
+        },
+        attach,
+    )?;
     r.register_fn(
         CommandSpec {
             id: "joint.create_chain",
@@ -220,4 +239,17 @@ fn mirror(ctx: &mut dyn CommandContext, a: MirrorArgs) -> Result<Value, CommandE
     }
     sel.active = made.last().copied();
     Ok(json!({"nodes": ids_json(&made)}))
+}
+
+/// `tag.attach`: a tag of any registered tag type on a named object (unlike `object.create`,
+/// which uses the selection).
+fn attach(ctx: &mut dyn CommandContext, a: AttachArgs) -> Result<Value, CommandError> {
+    let node = NodeId(a.node);
+    if !ctx.doc().scene().contains(node) {
+        return Err(CommandError::failed(format!("unknown node {}", a.node)));
+    }
+    let tag = ctx
+        .doc_mut()
+        .transact("Attach Tag", |tx| tx.attach_tag(&a.type_id, node, None))?;
+    Ok(json!({"node": tag.0}))
 }

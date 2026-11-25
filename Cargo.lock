@@ -1650,6 +1650,7 @@ dependencies = [
  "forge-modifiers",
  "forge-noise",
  "forge-parity-harness",
+ "forge-rig",
  "forge-text",
  "glam 0.34.1",
  "rayon",

@@ -14,6 +14,7 @@ forge-expr = { path = "../expr" }
 forge-geometry = { path = "../geometry" }
 forge-modifiers = { path = "../modifiers" }
 forge-noise = { path = "../noise" }
+forge-rig = { path = "../rig" }
 forge-text = { path = "../text" }
 glam = "0.34"
 spade = "2.15.1"

@@ -2,7 +2,7 @@
 
 # Command reference
 
-206 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
+212 commands. Every user action is a command: the menus, the CLI (`forge cmd`), RPC (`command.run`), MCP (one tool per command, name with `.` replaced by `_`) and scripts (`run(id, #{...})`) all run the same handlers. Angles are degrees, percentages as shown, node ids are integers.
 
 | Id | Label | Undoable | MCP tool |
 |---|---|---|---|
@@ -186,14 +186,20 @@
 | [`graph.get`](#graphget) | Get Graph | no | `graph_get` |
 | [`graph.node_types`](#graphnode_types) | List Graph Node Types | no | `graph_node_types` |
 | [`graph.evaluate`](#graphevaluate) | Evaluate Graph | no | `graph_evaluate` |
+| [`tag.attach`](#tagattach) | Attach Tag | yes | `tag_attach` |
 | [`joint.create_chain`](#jointcreate_chain) | Create Joint Chain | yes | `joint_create_chain` |
 | [`joint.align`](#jointalign) | Align Joints | yes | `joint_align` |
 | [`joint.mirror`](#jointmirror) | Mirror Joints | yes | `joint_mirror` |
+| [`weights.auto_bind`](#weightsauto_bind) | Auto Bind | yes | `weights_auto_bind` |
 | [`weights.paint`](#weightspaint) | Paint Weights | yes | `weights_paint` |
 | [`weights.normalise`](#weightsnormalise) | Normalise Weights | yes | `weights_normalise` |
 | [`weights.prune`](#weightsprune) | Prune Weights | yes | `weights_prune` |
 | [`weights.smooth`](#weightssmooth) | Smooth Weights | yes | `weights_smooth` |
 | [`weights.mirror`](#weightsmirror) | Mirror Weights | yes | `weights_mirror` |
+| [`pose_morph.add_target`](#pose_morphadd_target) | Add Morph Target | yes | `pose_morph_add_target` |
+| [`pose_morph.update_target`](#pose_morphupdate_target) | Update Morph Target | yes | `pose_morph_update_target` |
+| [`pose_morph.clear_target`](#pose_morphclear_target) | Clear Morph Target | yes | `pose_morph_clear_target` |
+| [`pose_morph.set_base`](#pose_morphset_base) | Set Morph Base Pose | yes | `pose_morph_set_base` |
 | [`select.store`](#selectstore) | Set Selection | yes | `select_store` |
 | [`select.restore`](#selectrestore) | Restore Selection | yes | `select_restore` |
 | [`vertexmap.create`](#vertexmapcreate) | Create Vertex Map | yes | `vertexmap_create` |
@@ -2362,6 +2368,20 @@ Evaluate Graph. Not an undoable edit.
 Example: `forge cmd scene.forge graph.evaluate --args '{"tag":1}'`
 
 
+## `tag`
+
+### `tag.attach`
+
+Attach Tag. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | yes | Tag type id, e.g. `forge.ik_tag`, `forge.weight_tag`, `forge.pose_morph_tag`. |
+| `node` | integer | yes | The object that gets the tag. |
+
+Example: `forge cmd scene.forge tag.attach --args '{"node":1,"type":"forge.ik_tag"}'`
+
+
 ## `joint`
 
 ### `joint.create_chain`
@@ -2402,6 +2422,17 @@ Example: `forge cmd scene.forge joint.mirror --args '{"plane":"yz"}'`
 
 
 ## `weights`
+
+### `weights.auto_bind`
+
+Auto Bind. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `joints` | array of integer | yes | The joints to bind to, in slot order. |
+| `object` | integer or null | no | The mesh object (default: the active node). It gets a weight tag and a skin deformer when it has none. |
+
+Example: `forge cmd scene.forge weights.auto_bind --args '{"joints":[1,2,3]}'`
 
 ### `weights.paint`
 
@@ -2464,6 +2495,55 @@ Mirror Weights. One undo step.
 | `plane` | `"yz"` \| `"xz"` \| `"xy"` \| null | no |  |
 
 Example: `forge cmd scene.forge weights.mirror --args '{"from":"positive","plane":"yz"}'`
+
+
+## `pose_morph`
+
+### `pose_morph.add_target`
+
+Add Morph Target. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `name` | string or null | no | Name of the target (default `Morph N`). |
+| `object` | integer or null | no | The polygon object (default: the active node). Its Pose Morph tag is created when missing. |
+| `points` | array of array of number (length 3) or null | no | Point positions of the target; the object's current points when absent. |
+
+Example: `forge cmd scene.forge pose_morph.add_target --args '{"name":"Smile"}'`
+
+### `pose_morph.update_target`
+
+Update Morph Target. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes | The Pose Morph tag. |
+| `slot` | integer | yes | The target slot (0-based). |
+| `points` | array of array of number (length 3) or null | no | New point positions; the host object's current points when absent. |
+
+Example: `forge cmd scene.forge pose_morph.update_target --args '{"slot":0,"tag":1}'`
+
+### `pose_morph.clear_target`
+
+Clear Morph Target. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes | The Pose Morph tag. |
+| `slot` | integer | yes | The target slot (0-based). |
+
+Example: `forge cmd scene.forge pose_morph.clear_target --args '{"slot":0,"tag":1}'`
+
+### `pose_morph.set_base`
+
+Set Morph Base Pose. One undo step.
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `tag` | integer | yes | The Pose Morph tag. |
+| `points` | array of array of number (length 3) or null | no | New base pose; the host object's current points when absent. |
+
+Example: `forge cmd scene.forge pose_morph.set_base --args '{"tag":1}'`
 
 
 ## `vertexmap`

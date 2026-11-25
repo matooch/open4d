@@ -1,6 +1,7 @@
 //! The GPU engine: tiles, dispatches, readback and outputs (docs/specs/RENDER.md R20).
 
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 use forge_image::{AlphaMode, Image};
 use forge_render_api::{
@@ -18,6 +19,43 @@ use crate::pack::{Packed, frame_base};
 pub struct GpuEngine {
     device: wgpu::Device,
     queue: wgpu::Queue,
+    /// Most pixel-samples (pixels x samples per pixel) one submission may hold (R20.4).
+    submission_budget: u64,
+}
+
+/// Default for [`GpuEngine::submission_budget`]: small enough that a slow software device
+/// finishes one submission well inside a driver watchdog (about 2 s on Windows).
+pub const SUBMISSION_BUDGET: u64 = 4096;
+
+type MapSlot = Arc<Mutex<Option<Result<(), wgpu::BufferAsyncError>>>>;
+
+/// Waits for every submission, bounded by `GPU_WAIT_TIMEOUT`.
+fn wait_for_gpu(device: &wgpu::Device) -> Result<(), RenderError> {
+    device
+        .poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: Some(forge_render_api::GPU_WAIT_TIMEOUT),
+        })
+        .map(|_| ())
+        .map_err(|e| {
+            RenderError::Output(format!(
+                "GPU did not finish within {:?} (hung, lost or too slow): {e}",
+                forge_render_api::GPU_WAIT_TIMEOUT
+            ))
+        })
+}
+
+/// Turns the result a map callback stored into an error; a map callback never panics.
+fn check_mapped(slot: &MapSlot) -> Result<(), RenderError> {
+    match slot.lock().ok().and_then(|mut s| s.take()) {
+        Some(Ok(())) => Ok(()),
+        Some(Err(e)) => Err(RenderError::Output(format!(
+            "GPU readback failed (device lost or out of memory): {e}"
+        ))),
+        None => Err(RenderError::Output(
+            "GPU readback did not complete (device lost)".into(),
+        )),
+    }
 }
 
 /// One tile's finished pixels.
@@ -53,17 +91,32 @@ impl GpuEngine {
     pub fn new() -> Result<GpuEngine, RenderError> {
         let (device, queue) = crate::request_default_device()
             .map_err(|e| RenderError::Unsupported(format!("no GPU adapter: {e}")))?;
-        Ok(GpuEngine { device, queue })
+        Ok(GpuEngine {
+            device,
+            queue,
+            submission_budget: SUBMISSION_BUDGET,
+        })
     }
 
     pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> GpuEngine {
-        GpuEngine { device, queue }
+        GpuEngine {
+            device,
+            queue,
+            submission_budget: SUBMISSION_BUDGET,
+        }
+    }
+
+    /// Sets the most pixel-samples one submission may hold (at least one row of a tile is
+    /// always dispatched). The image does not depend on it (R20.4).
+    pub fn with_submission_budget(mut self, pixel_samples: u64) -> GpuEngine {
+        self.submission_budget = pixel_samples.max(1);
+        self
     }
 
     /// Uploads each bitmap as an `Rgba32Float` texture (REALTIME.md §2.8, RENDER.md R20.1b).
     fn bitmap_views(
         &self,
-        resources: &[std::sync::Arc<dyn std::any::Any + Send + Sync>],
+        resources: &[Arc<dyn std::any::Any + Send + Sync>],
     ) -> Result<Vec<wgpu::TextureView>, RenderError> {
         resources
             .iter()
@@ -313,36 +366,52 @@ impl RenderEngine for GpuEngine {
             frame[frame::TY] = ty as f32;
             frame[frame::TILE_W] = tw as f32;
             frame[frame::TILE_H] = th as f32;
-            self.queue.write_buffer(&frame_buf, 0, &frame_bytes(&frame));
             let bytes = tw as u64 * th as u64 * stride as u64 * 16;
-            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("tile"),
-            });
-            {
-                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            // One submission per band of rows: pixels x samples of a band stay under the
+            // budget, so a slow device's watchdog never sees a long dispatch (R20.4).
+            let rows_per_band = (self.submission_budget
+                / (settings.samples.max(1) as u64 * tw as u64))
+                .max(1) as u32;
+            let mut row = 0u32;
+            while row < th {
+                if control.is_cancelled() {
+                    return Err(RenderError::Cancelled);
+                }
+                let rows = rows_per_band.min(th - row);
+                let mut frame = frame;
+                frame[frame::TY] = (ty + row) as f32;
+                frame[frame::TILE_H] = rows as f32;
+                self.queue.write_buffer(&frame_buf, 0, &frame_bytes(&frame));
+                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("tile"),
-                    timestamp_writes: None,
                 });
-                pass.set_pipeline(&pipeline);
-                pass.set_bind_group(0, &bind, &[]);
-                pass.set_bind_group(1, &bind1, &[]);
-                pass.dispatch_workgroups(tw.div_ceil(8), th.div_ceil(8), 1);
+                {
+                    let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                        label: Some("tile"),
+                        timestamp_writes: None,
+                    });
+                    pass.set_pipeline(&pipeline);
+                    pass.set_bind_group(0, &bind, &[]);
+                    pass.set_bind_group(1, &bind1, &[]);
+                    pass.dispatch_workgroups(tw.div_ceil(8), rows.div_ceil(8), 1);
+                }
+                let band_bytes = tw as u64 * rows as u64 * stride as u64 * 16;
+                let band_at = tw as u64 * row as u64 * stride as u64 * 16;
+                encoder.copy_buffer_to_buffer(&out, 0, &staging, band_at, band_bytes);
+                self.queue.submit([encoder.finish()]);
+                wait_for_gpu(device)?;
+                row += rows;
             }
-            encoder.copy_buffer_to_buffer(&out, 0, &staging, 0, bytes);
-            self.queue.submit([encoder.finish()]);
             let slice = staging.slice(..bytes);
-            slice.map_async(wgpu::MapMode::Read, |r| r.expect("tile readback"));
-            device
-                .poll(wgpu::PollType::Wait {
-                    submission_index: None,
-                    timeout: Some(forge_render_api::GPU_WAIT_TIMEOUT),
-                })
-                .map_err(|e| {
-                    RenderError::Output(format!(
-                        "GPU did not finish within {:?} (hung or too slow): {e}",
-                        forge_render_api::GPU_WAIT_TIMEOUT
-                    ))
-                })?;
+            let mapped: MapSlot = Arc::new(Mutex::new(None));
+            let sink = Arc::clone(&mapped);
+            slice.map_async(wgpu::MapMode::Read, move |r| {
+                if let Ok(mut slot) = sink.lock() {
+                    *slot = Some(r);
+                }
+            });
+            wait_for_gpu(device)?;
+            check_mapped(&mapped)?;
             let data = slice
                 .get_mapped_range()
                 .map_err(|e| RenderError::Output(format!("GPU readback: {e}")))?;

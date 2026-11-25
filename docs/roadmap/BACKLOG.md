@@ -104,7 +104,7 @@ implementers can avoid collisions.
 | 104 | [IK tag: 2-bone, chain, pole, twist, IK/FK blend](../agents/tasks/104-ik.md) | H | 100 | done | rig |
 | 105 | [Constraint tag: PSR, Aim, Parent, Clamp](../agents/tasks/105-constraints.md) | H | 100 | done | rig |
 | 106 | [Tags: Target, Align to Spline, Vibrate, Look at Camera, Protection, Display, Compositing](../agents/tasks/106-expression-tags.md) | H | 088 | done | core, rig |
-| 107 | [Pose Morph tag](../agents/tasks/107-pose-morph.md) | H | 088 | ready (own design, D20) | rig |
+| 107 | [Pose Morph tag](../agents/tasks/107-pose-morph.md) | H | 088 | done (parity-pending: O37, own design D20) | rig |
 | 108 | [Node expression engine forge-nodes](../agents/tasks/108-forge-nodes.md) | H | 016 | done | nodes (new) |
 | 109 | [Node expression editor UI](../agents/tasks/109-node-editor-ui.md) | H | 108, 150 | done (parity-pending G6; follow-up: node materials reuse the canvas, brief 124) | ui, nodes |
 | 110 | [User data on any node](../agents/tasks/110-user-data.md) | H | 011, 150 | done | core, ui |
