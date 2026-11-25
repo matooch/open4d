@@ -204,4 +204,5 @@ implementers can avoid collisions.
 | 204 | [Real-time performance targets](../agents/tasks/204-rt-performance.md) | R | 199, 201 | waiting: 199, 201 | render-rt, bench |
 | 205 | [S4 acceptance test and motion-graphics docs](../agents/tasks/205-s4-mograph-acceptance.md) | E | 066, 072, 074, 075, 136 | done | tests, docs |
 | 206 | [S5 acceptance test and volume docs](../agents/tasks/206-s5-volume-acceptance.md) | F | 081, 082, 083, 003 | done | tests, docs |
+| 208 | [Volume mesher: manifold output on thin features](../agents/tasks/208-volume-mesher-manifold.md) | F | 083, 206 | ready | volume |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |
