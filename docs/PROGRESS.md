@@ -10,7 +10,7 @@ linked files win.
 
 | | Now |
 |---|---|
-| Implementation briefs | **189 of 199 done** (95 %) · 2 ready · 8 waiting |
+| Implementation briefs | **189 of 200 done** (95 %) · 6 ready · 5 waiting |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
 | Acceptance scenarios | S1–S9 pass (S6 with own-design Pose Morph, parity-pending) · S10 needs a measurement |
@@ -72,6 +72,8 @@ Use a strong model for this run (Kimi K2.7 Code or GPT-6.2 Sol). 209 (shader nod
 Overnight: `scripts/hermes-loop.sh docs/agents/prompts/implementer-opencode.txt` restarts the implementer in fresh sessions until the queue is done (HERMES-IMPLEMENTER.md §2b).
 
 ## Blocked: waiting on you (owner)
+
+- **DX12 shadows (210):** real-time shadows fail on DirectX 12 (Windows CI, WARP); Windows CI is red on that one test until it is fixed. Needs a run on your Windows PC (steps in the brief).
 
 | Item | Why it's stuck | What unblocks it |
 |---|---|---|
