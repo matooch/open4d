@@ -801,9 +801,9 @@ they are data, not display colour.
 
 ### R22.7 The viewport's "Render" display mode (`crates/ui`)
 
-`EditorState::display` is `DisplayMode::{Shaded, Render}`, switched from the View menu
-("Display: Shaded" / "Display: Render") and the post toggles next to it ("SSAO", "SSR", "Bloom",
-"TAA", "Tone map"). It is UI state, not a document change: no undo entry is pushed, the scene is not
+`EditorState::display` is `DisplayMode::{Shaded, Render}`, switched by the viewport header's
+"Render" button, with the post toggles ("SSAO", "SSR", "Bloom", "TAA", "Tone map") in the Post menu
+beside it. It is UI state, not a document change: no undo entry is pushed, the scene is not
 dirtied, and switching back restores the shaded panes.
 
 In Render mode a pane shows a `render-rt` frame of the **pane's own camera**:

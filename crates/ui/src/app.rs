@@ -979,29 +979,6 @@ impl Editor {
                     }
                 }
                 ui.separator();
-                // what the panes draw: the shaded scene or the real-time tier (UI.md §6.3).
-                // UI state only: no undo entry, no document change.
-                for (mode, label) in [
-                    (DisplayMode::Shaded, "Display: Shaded"),
-                    (DisplayMode::Render, "Display: Render"),
-                ] {
-                    if ui.radio(self.state.display == mode, label).clicked() {
-                        self.state.display = mode;
-                    }
-                }
-                let render = self.state.display == DisplayMode::Render;
-                ui.add_enabled_ui(render, |ui| {
-                    for (label, on) in [
-                        ("SSAO", &mut self.state.post.ssao),
-                        ("SSR", &mut self.state.post.ssr),
-                        ("Bloom", &mut self.state.post.bloom),
-                        ("TAA", &mut self.state.post.taa),
-                        ("Tone map", &mut self.state.post.tonemap),
-                    ] {
-                        ui.checkbox(on, label);
-                    }
-                });
-                ui.separator();
                 self.view_options_menu(ui);
                 self.hud_menu(ui);
                 self.appearance_menu(ui);
@@ -1559,6 +1536,33 @@ impl Editor {
                 ui.separator();
                 self.component_bar(ui);
             }
+            ui.separator();
+            // what the panes draw: the shaded scene or the real-time tier (UI.md §6.3).
+            // UI state only: no undo entry, no document change.
+            let render = self.state.display == DisplayMode::Render;
+            if ui
+                .add(egui::Button::new("Render").selected(render))
+                .clicked()
+            {
+                self.state.display = if render {
+                    DisplayMode::Shaded
+                } else {
+                    DisplayMode::Render
+                };
+            }
+            ui.add_enabled_ui(render, |ui| {
+                ui.menu_button("Post", |ui| {
+                    for (label, on) in [
+                        ("SSAO", &mut self.state.post.ssao),
+                        ("SSR", &mut self.state.post.ssr),
+                        ("Bloom", &mut self.state.post.bloom),
+                        ("TAA", &mut self.state.post.taa),
+                        ("Tone map", &mut self.state.post.tonemap),
+                    ] {
+                        ui.checkbox(on, label);
+                    }
+                });
+            });
         });
         let area = ui.available_rect_before_wrap();
         let rects = arrange(

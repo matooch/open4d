@@ -236,9 +236,9 @@ pane makes it active, the View menu radio entries.
 ### 6.3 Display mode "Render" (brief 199)
 
 `EditorState.display: DisplayMode::{Shaded, Render}` (default `Shaded`) and
-`EditorState.post: PostSettings` are **UI state**: the View menu entries "Display: Shaded",
-"Display: Render" and the post toggles ("SSAO", "SSR", "Bloom", "TAA", "Tone map") set them
-directly, so they push no undo entry and do not dirty the document. In Render mode a pane shows
+`EditorState.post: PostSettings` are **UI state**: the viewport header's "Render" toggle button
+and the Post menu beside it ("SSAO", "SSR", "Bloom", "TAA", "Tone map") set them directly, so they
+push no undo entry and do not dirty the document. In Render mode a pane shows
 the real-time tier's frame of its own camera (RENDER.md R22.7); the gizmo, HUD and selection
 overlays are left out, and a missing adapter keeps the shaded image with a "Render unavailable"
 note. Switching back to Shaded shows the shaded panes exactly as before.

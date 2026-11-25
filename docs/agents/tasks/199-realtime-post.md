@@ -45,7 +45,7 @@ The raster tier's post chain (RENDER.md R22, own design) and the viewport's Rend
   2016) with exposure, both on the readback; `post::tonemap` is the same function the test uses.
 - `forge render --engine rt --post ssao,ssr,bloom,taa,tonemap` (CLI reference regenerated).
 - `crates/ui`: `EditorState::display: DisplayMode::{Shaded, Render}` and `EditorState::post`, set
-  from the View menu ("Display: Render"/"Display: Shaded" plus the five post checkboxes); UI
+  by the viewport header's "Render" button and the Post menu beside it (five checkboxes); UI
   state, so no undo entry and no scene change. In Render mode a pane shows a render-rt frame of
   its own camera (`render_mode::RenderView`, cached by scene revision/camera/size/post, capped at
   640 x 400), with the gizmo/HUD overlays left out.
@@ -62,8 +62,8 @@ The raster tier's post chain (RENDER.md R22, own design) and the viewport's Rend
   `post::tonemap(linear)` within 1e-4 and keeps the alpha; values above 1 land below 1.
   `PostSettings` validation rejects every out-of-range value; two renders are byte-identical with
   the default block and with every effect on.
-- `crates/ui/tests/render_mode.rs`: the View menu switches to Render and back with the undo depth
-  and scene revision unchanged; the post checkboxes are UI state; the frame of a pane camera puts
+- `crates/ui/tests/render_mode.rs`: the header button switches to Render and back with the undo
+  depth and scene revision unchanged; the post checkboxes are UI state; the frame of a pane camera puts
   an object up and to the right of the target in the top-right quadrant (no flip or mirror).
   Run 5x, 5/5 green.
 - `apps/forge/tests/render.rs`: `--post` changes the image and an unknown effect is a usage error.

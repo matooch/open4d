@@ -23,21 +23,26 @@ fn harness(editor: Editor) -> Harness<'static, Editor> {
     h
 }
 
-fn open_view_menu(h: &mut Harness<'_, Editor>) {
-    h.get_by_label("View").click();
+/// The "Render" button of the viewport header, which switches the display mode.
+fn toggle_render(h: &mut Harness<'_, Editor>) {
+    h.get_by_label("Render").click();
+    h.run();
+}
+
+/// The header's Post menu, where the five effect toggles live.
+fn open_post_menu(h: &mut Harness<'_, Editor>) {
+    h.get_by_label("Post").click();
     h.run();
 }
 
 #[test]
-fn the_view_menu_switches_to_render_and_back_without_an_undo_entry() {
+fn the_header_switches_to_render_and_back_without_an_undo_entry() {
     let mut h = harness(Editor::new(common::state()));
     let (depth, revision) = {
         let doc = &h.state().state.app.doc;
         (doc.undo_depth(), doc.scene().revision())
     };
-    open_view_menu(&mut h);
-    h.get_by_label("Display: Render").click();
-    h.run();
+    toggle_render(&mut h);
     assert_eq!(h.state().state.display, DisplayMode::Render);
     // UI state: no undo entry and no scene change
     assert_eq!(h.state().state.app.doc.undo_depth(), depth);
@@ -45,9 +50,7 @@ fn the_view_menu_switches_to_render_and_back_without_an_undo_entry() {
     // the kittest window has no device, so the pane keeps the placeholder
     assert_eq!(h.query_all_by_label("Viewport unavailable").count(), 1);
 
-    open_view_menu(&mut h);
-    h.get_by_label("Display: Shaded").click();
-    h.run();
+    toggle_render(&mut h);
     assert_eq!(h.state().state.display, DisplayMode::Shaded);
     assert_eq!(h.state().state.app.doc.undo_depth(), depth);
     assert_eq!(h.state().state.app.doc.scene().revision(), revision);
@@ -59,14 +62,12 @@ fn the_post_toggles_are_ui_state() {
     let mut h = harness(Editor::new(common::state()));
     let depth = h.state().state.app.doc.undo_depth();
     assert_eq!(h.state().state.post, PostSettings::default());
-    open_view_menu(&mut h);
-    h.get_by_label("Display: Render").click();
-    h.run();
-    open_view_menu(&mut h);
+    toggle_render(&mut h);
+    open_post_menu(&mut h);
     h.get_by_label("SSAO").click();
     h.run();
     assert!(h.state().state.post.ssao);
-    open_view_menu(&mut h);
+    open_post_menu(&mut h);
     h.get_by_label("Bloom").click();
     h.run();
     assert!(h.state().state.post.bloom);
