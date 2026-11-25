@@ -1,6 +1,5 @@
 //! RENDER.md §R18: timed restart with a deterministic engine instead of a ray-trace benchmark.
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{Sender, channel};
@@ -30,7 +29,7 @@ impl RenderEngine for Stub {
     fn render(
         &self,
         snap: &Snapshot,
-        settings: &RenderSettings,
+        _settings: &RenderSettings,
         control: &Control,
     ) -> Result<RenderOutput, RenderError> {
         let first = self.calls.fetch_add(1, Ordering::Relaxed) == 0;
@@ -50,37 +49,24 @@ impl RenderEngine for Stub {
                 vec![0.0, 1.0, 0.0, 1.0]
             },
         });
-        self.signal.send(Signal::Started(x)).unwrap();
-        // Every render runs until it is cancelled, so a restart can only come from the cancel
-        // path, never from waiting for the old render to finish.
-        if !control.is_cancelled() {
-            while !control.is_cancelled() {
-                std::thread::sleep(Duration::from_millis(1));
-            }
-            // Simulate a tile crossing the cancel boundary.
-            control.emit(RenderEvent::Tile {
-                x: 0,
-                y: 0,
-                width: 1,
-                height: 1,
-                rgba: vec![1.0, 0.0, 1.0, 1.0],
-            });
-            self.signal.send(Signal::Cancelled).unwrap();
-            return Err(RenderError::Cancelled);
+        // The receiver may already be gone when the last render is cancelled at teardown.
+        let _ = self.signal.send(Signal::Started(x));
+        // Every render runs until it is cancelled and always reports the cancel (also when the
+        // cancel came before this point), so a restart can only come from the cancel path,
+        // never from waiting for the old render to finish.
+        while !control.is_cancelled() {
+            std::thread::sleep(Duration::from_millis(1));
         }
-        let mut beauty = forge_image::Image::new(
-            settings.width,
-            settings.height,
-            forge_image::AlphaMode::Straight,
-        );
-        beauty.data[..4].copy_from_slice(&[0.0, 1.0, 0.0, 1.0]);
-        Ok(RenderOutput {
-            width: settings.width,
-            height: settings.height,
-            beauty,
-            aovs: BTreeMap::new(),
-            stats: Default::default(),
-        })
+        // Simulate a tile crossing the cancel boundary.
+        control.emit(RenderEvent::Tile {
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            rgba: vec![1.0, 0.0, 1.0, 1.0],
+        });
+        let _ = self.signal.send(Signal::Cancelled);
+        Err(RenderError::Cancelled)
     }
 }
 
