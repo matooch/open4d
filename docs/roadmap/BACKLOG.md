@@ -197,7 +197,7 @@ implementers can avoid collisions.
 | 207 | [Shader nodes to WGSL, GPU comparison over all nodes (part 2)](../agents/tasks/207-shader-nodes-wgsl.md) | R | 197, 125, 126 | done | shaders, material |
 | 198 | [Real-time raster PBR engine (render-rt)](../agents/tasks/198-realtime-raster.md) | R | 197, 133, 137 | done | render-rt (new), viewport, render-api |
 | 199 | [Post effects and viewport Render mode](../agents/tasks/199-realtime-post.md) | R | 198 | done | render-rt, viewport, ui |
-| 200 | [GPU scene: acceleration structures and compute fallback](../agents/tasks/200-gpu-scene-rt.md) | R | 142, 198 | waiting: 142, 198 | render-rt, render-gpu |
+| 200 | [GPU scene: acceleration structures and compute fallback](../agents/tasks/200-gpu-scene-rt.md) | R | 142, 198 | ready | render-rt, render-gpu |
 | 201 | [Hybrid ray-traced shadows, reflections, AO and GI](../agents/tasks/201-hybrid-rt.md) | R | 200 | waiting: 200 | render-rt |
 | 202 | [Real-time path tracing with denoising](../agents/tasks/202-realtime-pathtrace.md) | R | 200, 201 | waiting: 200, 201 | render-rt |
 | 203 | [Consistency tests across render tiers](../agents/tasks/203-rt-consistency.md) | R | 198, 202 | waiting: 198, 202 | tests, render-rt |
@@ -205,4 +205,5 @@ implementers can avoid collisions.
 | 205 | [S4 acceptance test and motion-graphics docs](../agents/tasks/205-s4-mograph-acceptance.md) | E | 066, 072, 074, 075, 136 | done | tests, docs |
 | 206 | [S5 acceptance test and volume docs](../agents/tasks/206-s5-volume-acceptance.md) | F | 081, 082, 083, 003 | done | tests, docs |
 | 208 | [Volume mesher: manifold output on thin features](../agents/tasks/208-volume-mesher-manifold.md) | F | 083, 206 | done | volume |
+| 209 | [Shader-node materials in the real-time raster engine](../agents/tasks/209-rt-shader-nodes.md) | R | 198, 207 | ready | render-rt |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |

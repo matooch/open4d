@@ -1,6 +1,6 @@
 # 200 · GPU scene: acceleration structures and compute fallback
 
-Status: waiting: 142, 198 · Area: R · Depends on: 142, 198 · Observations: – (own design; material values from O29/O42/O43 through the shading IR) · Touches: render-rt, render-gpu
+Status: ready · Area: R · Depends on: 142, 198 · Observations: – (own design; material values from O29/O42/O43 through the shading IR) · Touches: render-rt, render-gpu
 
 ## Goal
 Build and update bottom/top-level acceleration structures for meshes and clone instances each frame. Use hardware RT on **both** Vulkan (ray query) and Metal (Metal ray tracing) through wgpu's experimental features, or per D19 through a narrow native backend per API behind one `RtBackend` trait; else the compute BVH from brief 142.
