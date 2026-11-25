@@ -960,8 +960,25 @@ Source: [area R](../roadmap/areas/R-realtime.md), decision
   briefs 211 and 212 add the hardware implementations.
 - Compare GPU queries against the independent CPU tracer: exact hit/miss and IDs, and
   absolute error at most `1e-4` for `t`, `u` and `v`. Fixtures avoid equal-distance ties.
-  Test 10,000 clones of one mesh and a transform-only update that changes the hits
-  without rebuilding geometry.
+   Test 10,000 clones of one mesh and a transform-only update that changes the hits
+   without rebuilding geometry.
+
+### R23.1 Metal acceleration structures (brief 211)
+
+Sources: [area R](../roadmap/areas/R-realtime.md), D19, and
+[wgpu acceleration structures](https://docs.rs/wgpu/30.0.1/wgpu/struct.CommandEncoder.html#method.build_acceleration_structures).
+
+- On Metal, request wgpu's experimental ray-query feature only when the adapter
+  advertises it. If the feature is absent or the hardware device request fails, use
+  the compute backend. Vulkan hardware selection is implemented separately in 212.
+- Build one native triangle BLAS per nonempty mesh and a TLAS over their transformed
+  instances. Rebuild the TLAS on a scene update; keep the BLAS handles and their geometry
+  when only transforms change. Preserve original snapshot instance IDs even when empty
+  instances are skipped, and report the mesh-local primitive index.
+- Query the nearest opaque, double-sided triangle. Preserve the world-ray parameter
+  for non-unit directions and return the R23 barycentric convention. Empty scenes
+  return misses without a hardware dispatch. Compare with compute on the R23 scene
+  using the same exact IDs and `1e-4` bounds, including after a transform-only update.
 
 ## R13 Not done / follow-ups
 
