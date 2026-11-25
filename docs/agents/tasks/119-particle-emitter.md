@@ -1,6 +1,6 @@
 # 119 · Particle emitter and particle data
 
-Status: waiting: O40 · Area: I · Depends on: 050 · Observations: O40 · Touches: dynamics
+Status: ready · Area: I · Depends on: 050 · Observations: O40 (not capturable by script; own design per D20) · Touches: dynamics
 
 ## Goal
 Emitter object with birth rate, lifetime, speed, variation, seeded.
@@ -11,6 +11,7 @@ Emitter object with birth rate, lifetime, speed, variation, seeded.
 - docs/parity/particles.md (O40)
 
 ## Design decisions (planner)
+- **Own design (D20), parity-pending; statistical tests.** The reference app's particle random sequence is private, so tests check statistics (count per frame from the birth rate, speed and lifetime distributions within tolerance of the spec's parameters, deterministic for a fixed seed, the cloud's response to each force), not individual particles. If the observer's capture (O40 follow-up) yields data, compare those statistics against it.
 - Struct-of-arrays particle data; emission count per frame must match exactly; distributions compared statistically.
 
 ## Done when

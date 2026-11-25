@@ -1,6 +1,6 @@
 # 107 · Pose Morph tag
 
-Status: waiting: O37 · Area: H · Depends on: 088 · Observations: O37 · Touches: rig
+Status: ready · Area: H · Depends on: 088 · Observations: O37 (not capturable by script; own design per D20) · Touches: rig
 
 ## Goal
 Point morph targets with strengths, absolute/relative modes, matching O37.
@@ -11,10 +11,22 @@ Point morph targets with strengths, absolute/relative modes, matching O37.
 - docs/parity/pose-morph.md (O37)
 
 ## Design decisions (planner)
-- Relative mode: p = base + Σ s_i (target_i − base).
+- **Own design (D20), parity-pending.** O37 has no golden data: the reference app does not let a
+  script set the morph strength. Build from the public manual and the standard blend, write the
+  rules in the spec (docs/specs/RIG.md, a new Pose Morph section), and test against the spec.
+  A GUI-assisted capture (GUI-SESSIONS.md G9, O37) checks it later.
+- Point morph, relative mode: p = base + Σ s_i (target_i − base), strengths may exceed 100 % and go
+  negative unless the manual says otherwise. Absolute mode: p = base + Σ s_i (target_i − base)
+  with targets stored as absolute positions; write the exact difference between the modes in
+  the spec from the manual.
+- Strengths are animatable parameters (keyed like any other track, brief 088), so S6 can key them.
+- Works on polygon objects and on the bind mesh under a skin (morph before skinning, the usual
+  order; spec it).
+- Position/rotation/scale (PSR) morph of the object itself: include if the manual describes it
+  simply, else leave it out and say so in the Report.
 
 ## Done when
-- [ ] O37 cases pass at level A.
+- [ ] Spec-derived tests: base, single target at 0/50/100/150 %, two targets mixed, absolute vs relative, keyed strength sampled at frames, morph under a skin.
 - [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)

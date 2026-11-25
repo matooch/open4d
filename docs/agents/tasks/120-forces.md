@@ -1,6 +1,6 @@
 # 120 · Forces: gravity, wind, attractor, deflector, friction, turbulence, rotation
 
-Status: waiting: O40 · Area: I · Depends on: 119, 115, 063 · Observations: O40 · Touches: dynamics
+Status: ready · Area: I · Depends on: 119, 115, 063 · Observations: O40 (not capturable by script; own design per D20) · Touches: dynamics
 
 ## Goal
 Force objects acting on particles and bodies.
@@ -11,6 +11,7 @@ Force objects acting on particles and bodies.
 - docs/parity/particles.md (force cases)
 
 ## Design decisions (planner)
+- **Own design (D20), parity-pending; statistical tests.** The reference app's particle random sequence is private, so tests check statistics (count per frame from the birth rate, speed and lifetime distributions within tolerance of the spec's parameters, deterministic for a fixed seed, the cloud's response to each force), not individual particles. If the observer's capture (O40 follow-up) yields data, compare those statistics against it.
 - Pure functions (position, velocity, time) → acceleration; fields as falloff.
 
 ## Done when
