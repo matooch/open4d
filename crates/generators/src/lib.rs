@@ -229,6 +229,8 @@ pub fn evaluate(scene: &Scene, id: NodeId, ctx: &EvalCtx) -> Result<Option<PolyM
     let mut mesh = evaluate_geometry(scene, id, ctx)?;
     if let Some(mesh) = mesh.as_mut() {
         let resolve = |helper: NodeId| resolve_helper(scene, helper, ctx);
+        // Pose Morph runs on the bind mesh, before every deformer (RIG.md section 15.3).
+        forge_rig::apply_pose_morph(scene, id, &mut mesh.points);
         for d in deformer_children(scene, id) {
             forge_modifiers::apply_deformer_resolved(scene, d, id, mesh, ctx, &resolve);
         }

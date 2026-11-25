@@ -34,21 +34,18 @@ previous brief's branch, not from `origin/main`, unless the previous one is alre
 run build on each other and the planner merges them without conflicts. Merge `origin/main` into your
 current branch at the start of each brief as well.
 
-Already done from earlier runs: 146, 040, 054, 170, 197.
+Already done: 146, 040, 054, 170, 197, 205, 206, 142, 198, 199 (Hermes); 207, 208 and the 142
+follow-ups (Vulkan fix, shader-node materials in the path tracer) by planner subagents.
 
-Mechanical briefs first (owner, 2026-11-24: this run uses a Flash model):
+Run 9 queue (ray tracing; use a strong model, e.g. Kimi K2.7 Code or GPT-6.2 Sol). Start 200 from
+`origin/main` once the planner has merged 199 there (check `git branch -r --contains 34713d5`),
+otherwise from `hermes/199-realtime-post` with `origin/main` merged in:
 
-1. [205](tasks/205-s4-mograph-acceptance.md) · S4 acceptance: motion graphics through the CLI
-2. [206](tasks/206-s5-volume-acceptance.md) · S5 acceptance: volumes through the CLI
-3. [142](tasks/142-gpu-path-tracer.md) · GPU compute path tracer (wgpu): the compute fallback that area R tiers 2–3 build on
-4. [198](tasks/198-realtime-raster.md) · R2: real-time raster PBR engine (`render-rt`); the M5 Pro is the Metal reference
-5. [199](tasks/199-realtime-post.md) · R3: post effects and the viewport "Render" mode
-
-**Stop after 199** (write `QUEUE FINISHED`). The briefs below are for a later run with a stronger
-model; do not start them in this run:
-
-- [207](tasks/207-shader-nodes-wgsl.md) · R1 part 2: shader-node families → WGSL (exact port; noise first)
-- [200](tasks/200-gpu-scene-rt.md)–[204](tasks/204-rt-performance.md) · R4–R8: ray tracing (Metal + compute fallback; Vulkan behind `RtBackend`)
+1. [200](tasks/200-gpu-scene-rt.md) · R4: acceleration structures, `RtBackend`, compute fallback
+2. [201](tasks/201-hybrid-rt.md) · R5: hybrid ray-traced shadows, reflections, AO, GI
+3. [202](tasks/202-realtime-pathtrace.md) · R6: real-time path tracing with denoising
+4. [203](tasks/203-rt-consistency.md) · R7: consistency tests of every tier against the CPU path tracer
+5. [204](tasks/204-rt-performance.md) · R8: performance targets and benchmarks
 
 Briefs 198–204 show `waiting` in BACKLOG only on briefs earlier in this queue; on a stacked branch
 those are done, so start them in order. GPU tests run on the Mac's Metal adapter (M5 Pro); keep them

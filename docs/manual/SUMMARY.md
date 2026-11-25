@@ -10,6 +10,7 @@
 - [Deformers and fields](deformers-and-fields.md)
 - [Cloner](cloner.md)
 - [Volumes](volumes.md)
+- [Rigging](rigging.md)
 - [Animation](animation.md)
 - [Rendering](rendering.md)
 - [Files and recovery](files-and-recovery.md)

@@ -48,6 +48,7 @@ struct ShadowMap {
 @group(1) @binding(3) var forge_shadow_sampler: sampler_comparison;
 @group(1) @binding(4) var forge_env_tex: texture_2d<f32>;
 @group(1) @binding(5) var forge_env_sampler: sampler;
+@group(1) @binding(6) var forge_beauty_src: texture_2d<f32>;
 
 const PI_F: f32 = 3.141592653589793;
 
@@ -76,16 +77,18 @@ fn project(p: vec3<f32>) -> vec4<f32> {
         let a = far / (far - near);
         let b = far * near / (far - near);
         // +Y in camera space is up, and NDC +y is the top of the viewport.
+        // the TAA subpixel jitter moves the principal point by whole pixels (R22.5)
         return vec4<f32>(
-            2.0 * fr(F_FILM_OFF_X) * q.z + k * q.x,
-            2.0 * fr(F_FILM_OFF_Y) * q.z + ky * q.y,
+            2.0 * fr(F_FILM_OFF_X) * q.z + k * q.x + 2.0 * fr(F_JITTER_X) * q.z / fr(F_W),
+            2.0 * fr(F_FILM_OFF_Y) * q.z + ky * q.y - 2.0 * fr(F_JITTER_Y) * q.z / fr(F_H),
             a * q.z - b,
             q.z,
         );
     }
     return vec4<f32>(
-        2.0 * q.x / fr(F_ORTHO_W),
-        2.0 * q.y * fr(F_W) / (fr(F_ORTHO_W) * fr(F_H)),
+        2.0 * q.x / fr(F_ORTHO_W) + 2.0 * fr(F_JITTER_X) / fr(F_W),
+        2.0 * q.y * fr(F_W) / (fr(F_ORTHO_W) * fr(F_H))
+            - 2.0 * fr(F_JITTER_Y) / fr(F_H),
         (q.z - near) / (far - near),
         1.0,
     );
@@ -134,7 +137,7 @@ fn vs_gbuffer(@builtin(vertex_index) vi: u32) -> GbufOut {
 struct GbufTargets {
     // position, material index + 1
     @location(0) g0: vec4<f32>,
-    // shading normal, object id + 1
+    // shading normal, triangle index + 1
     @location(1) g1: vec4<f32>,
 };
 
@@ -153,7 +156,7 @@ fn fs_gbuffer(in: GbufOut) -> GbufTargets {
     }
     var out: GbufTargets;
     out.g0 = vec4<f32>(p, t.ids.x + 1.0);
-    out.g1 = vec4<f32>(ns, t.ids.y + 1.0);
+    out.g1 = vec4<f32>(ns, f32(in.tri) + 1.0);
     return out;
 }
 
@@ -231,6 +234,52 @@ fn background(px: vec2<f32>) -> vec3<f32> {
         return vec3<f32>(fr(F_BG_X), fr(F_BG_Y), fr(F_BG_Z));
     }
     return env_radiance(camera_dir(px));
+}
+
+/// The framebuffer pixel a world point projects to (NDC y up, pixel y down, R21.2).
+fn pixel_of(p: vec3<f32>) -> vec2<i32> {
+    let c = project(p);
+    let uv = c.xy / c.w * 0.5 + vec2<f32>(0.5, 0.5);
+    return vec2<i32>(floor(vec2<f32>(uv.x * fr(F_W), (1.0 - uv.y) * fr(F_H))));
+}
+
+/// Screen-space ambient occlusion at a covered pixel (R22.2): twelve fixed tangent-disc
+/// samples, each read back from the G-buffer. Only the environment terms are scaled by it.
+fn ssao_at(p: vec3<f32>, n: vec3<f32>) -> f32 {
+    if (fr(F_SSAO_ON) < 0.5) {
+        return 1.0;
+    }
+    let radius = fr(F_SSAO_RADIUS);
+    let up = select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), abs(n.x) > 0.9);
+    let t1 = normalize(cross(n, up));
+    let t2 = cross(n, t1);
+    let eye = m4(F_CAM)[3].xyz;
+    var occluded = 0.0;
+    for (var k = 0u; k < 12u; k += 1u) {
+        let a = 2.0 * PI_F * f32(k) / 12.0;
+        let rk = 0.35 + 0.65 * f32(k % 3u) * 0.5;
+        // the hemisphere: 0.4 radii above the tangent plane, then the disc offset (R22.2)
+        let s = p + n * (0.4 * radius * rk) + radius * rk * (cos(a) * t1 + sin(a) * t2);
+        let c = project(s);
+        if (c.w <= 0.0) {
+            continue;
+        }
+        let uv = c.xy / c.w * 0.5 + vec2<f32>(0.5, 0.5);
+        if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
+            continue;
+        }
+        let spx = pixel_of(s);
+        let q0 = textureLoad(forge_g0, spx, 0);
+        if (q0.w < 0.5) {
+            continue;
+        }
+        // R22.2: occluded when the stored point is nearer the eye than the sample
+        let dv = normalize(s - eye);
+        if (length(q0.xyz - p) < radius && dot(q0.xyz - s, dv) < -0.02 * radius) {
+            occluded += 1.0;
+        }
+    }
+    return clamp(1.0 - fr(F_SSAO_STRENGTH) * occluded / 12.0, 0.0, 1.0);
 }
 
 struct Mat {
@@ -391,22 +440,62 @@ struct SurfaceVals {
     spec: vec3<f32>,
     alpha: f32,
     emission: vec3<f32>,
+    // the shading normal after bump, facing the camera
+    n: vec3<f32>,
 };
+
+/// The UVW at a point of triangle `t`: the corner UVWs blended with the weights solved from the
+/// point's offset along the edges (R20.1b `uvw_at`).
+fn uvw_at(t: Tri, p: vec3<f32>) -> vec3<f32> {
+    let e1 = t.e1.xyz;
+    let e2 = t.e2.xyz;
+    let w = p - t.p0.xyz;
+    let d11 = dot(e1, e1);
+    let d12 = dot(e1, e2);
+    let d22 = dot(e2, e2);
+    let w1 = dot(w, e1);
+    let w2 = dot(w, e2);
+    let det = d11 * d22 - d12 * d12;
+    if (abs(det) < 1e-30) {
+        return t.u0.xyz;
+    }
+    let u = (w1 * d22 - w2 * d12) / det;
+    let v = (w2 * d11 - w1 * d12) / det;
+    return t.u0.xyz * (1.0 - u - v) + t.u1.xyz * u + t.u2.xyz * v;
+}
+
+fn bump_height(mat: u32, ctx: ShadeCtx) -> f32 {
+    let s = forge_shade(mat, ctx);
+    return (s.bump.x + s.bump.y + s.bump.z) / 3.0;
+}
+
+/// A right-handed orthonormal basis whose third axis is `n` (the tracer's `basis`).
+fn tangent_basis(n: vec3<f32>) -> mat3x3<f32> {
+    let s = select(-1.0, 1.0, n.z >= 0.0);
+    let a = -1.0 / (s + n.z);
+    let b = n.x * n.y * a;
+    let t = vec3<f32>(1.0 + s * n.x * n.x * a, s * b, -s * n.x);
+    let u = vec3<f32>(b, s + n.y * n.y * a, -n.y);
+    return mat3x3<f32>(t, u, n);
+}
 
 fn surface_vals(g0: vec4<f32>, g1: vec4<f32>) -> SurfaceVals {
     let p = g0.xyz;
-    let n = normalize(g1.xyz);
-    let view = normalize(m4(F_CAM)[3].xyz - p);
-    // UVW is only read by texture channels, which R21.3 pins unsupported.
+    let tri = forge_tris[u32(g1.w - 1.0)];
+    let mat = u32(g0.w - 1.0);
+    let ng = tri.ng.xyz;
+    // the outward-side shading normal of the tracer's `surface_at` (R21.3)
+    let flip = dot(g1.xyz, ng) < 0.0;
+    let ns = normalize(select(g1.xyz, -g1.xyz, flip));
     var ctx: ShadeCtx;
-    ctx.uvw = vec3<f32>(0.0);
+    ctx.uvw = uvw_at(tri, p);
     ctx.position = p;
-    ctx.normal = n;
-    ctx.view = view;
+    ctx.normal = ns;
+    ctx.view = normalize(m4(F_CAM)[3].xyz - p);
     ctx.time = 0.0;
-    ctx.vertex_weight = 1.0;
+    ctx.vertex_weight = 0.0;
     ctx.ao = 1.0;
-    let s = forge_shade(u32(g0.w - 1.0), ctx);
+    let s = forge_shade(mat, ctx);
     var out: SurfaceVals;
     out.albedo = s.diffuse.xyz * s.diffuse.w;
     out.spec = vec3<f32>(0.0);
@@ -420,6 +509,28 @@ fn surface_vals(g0: vec4<f32>, g1: vec4<f32>) -> SurfaceVals {
         }
     }
     out.emission = s.emission.xyz;
+    var nb = ns;
+    if (s.bump_present.x > 0.5) {
+        let scale = fr(F_SCALE);
+        let eps = 1e-3 * scale;
+        let b = tangent_basis(ng);
+        let t1 = b[0];
+        let t2 = b[1];
+        let h0 = bump_height(mat, ctx);
+        var c1 = ctx;
+        c1.position = p + t1 * eps;
+        c1.uvw = uvw_at(tri, c1.position);
+        var c2 = ctx;
+        c2.position = p + t2 * eps;
+        c2.uvw = uvw_at(tri, c2.position);
+        let d1 = (bump_height(mat, c1) - h0) / eps;
+        let d2 = (bump_height(mat, c2) - h0) / eps;
+        let n = ns - (t1 * d1 + t2 * d2) * (s.bump.w * scale);
+        if (dot(n, n) > 0.0) {
+            nb = normalize(n);
+        }
+    }
+    out.n = select(nb, -nb, flip);
     return out;
 }
 
@@ -447,9 +558,9 @@ fn shade_pixel(px: vec2<i32>, frag: vec2<f32>) -> Shaded {
     }
     let g1 = textureLoad(forge_g1, px, 0);
     let p = g0.xyz;
-    let n = normalize(g1.xyz);
     let view = normalize(m4(F_CAM)[3].xyz - p);
     let sv = surface_vals(g0, g1);
+    let n = sv.n;
     var m: Mat;
     m.albedo = sv.albedo;
     m.spec = sv.spec;
@@ -561,9 +672,11 @@ fn shade_pixel(px: vec2<i32>, frag: vec2<f32>) -> Shaded {
         specular += fs * cos * weight * wm * factor;
     }
     if (has_env()) {
-        diffuse += sv.albedo * env_radiance(n);
+        // R22.2: occlusion darkens the ambient term only, never direct light.
+        let ao = ssao_at(p, n);
+        diffuse += sv.albedo * env_radiance(n) * ao;
         let r = reflect(-view, n);
-        specular += sv.spec * env_radiance(normalize(r));
+        specular += sv.spec * env_radiance(normalize(r)) * ao;
     }
     if (contribution_sum > 0.0) {
         out.shadow = clamp(visible_sum / contribution_sum, 0.0, 1.0);
@@ -587,6 +700,75 @@ fn fs_light(in: FullOut) -> LightOut {
     var out: LightOut;
     out.beauty = vec4<f32>(s.beauty, s.coverage);
     out.shadow = vec4<f32>(s.shadow, 0.0, 0.0, s.coverage);
+    return out;
+}
+
+/// R22.3: screen-space reflections after the lighting pass. Reads the lit beauty, the
+/// G-buffer and the environment; writes the beauty with the environment reflection replaced by
+/// the first screen-space hit (weighted by roughness), or a copy when there is no hit.
+struct SsrOut {
+    @location(0) beauty: vec4<f32>,
+};
+
+@fragment
+fn fs_ssr(in: FullOut) -> SsrOut {
+    let px = vec2<i32>(floor(in.pos.xy));
+    let base = textureLoad(forge_beauty_src, px, 0);
+    var out: SsrOut;
+    out.beauty = base;
+    let g0 = textureLoad(forge_g0, px, 0);
+    if (g0.w < 0.5 || fr(F_SSR_ON) < 0.5) {
+        return out;
+    }
+    let g1 = textureLoad(forge_g1, px, 0);
+    let p = g0.xyz;
+    let eye = m4(F_CAM)[3].xyz;
+    let view = normalize(eye - p);
+    let sv = surface_vals(g0, g1);
+    let n = sv.n;
+    if (all(sv.spec == vec3<f32>(0.0))) {
+        return out;
+    }
+    let rough = sqrt(clamp(sv.alpha, 0.0, 1.0));
+    let fade = 1.0 - smoothstep(0.1, 0.6, rough);
+    if (fade <= 0.0) {
+        return out;
+    }
+    let r = normalize(reflect(-view, n));
+    let steps = u32(fr(F_SSR_STEPS) + 0.5);
+    let step0 = 0.05 * fr(F_SCALE);
+    var t = step0;
+    var hit = false;
+    var colour = vec3<f32>(0.0);
+    for (var i = 0u; i < steps; i += 1u) {
+        if (i > 0u) {
+            t = t * 1.35;
+        }
+        let s = p + r * t;
+        let c = project(s);
+        if (c.w <= 0.0) {
+            break;
+        }
+        let uv = c.xy / c.w * 0.5 + vec2<f32>(0.5, 0.5);
+        if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
+            break;
+        }
+        let spx = pixel_of(s);
+        let q0 = textureLoad(forge_g0, spx, 0);
+        if (q0.w < 0.5) {
+            continue;
+        }
+        if (length(q0.xyz - s) < 0.05 * t + 0.002 * fr(F_SCALE)) {
+            colour = textureLoad(forge_beauty_src, spx, 0).xyz;
+            hit = true;
+            break;
+        }
+    }
+    if (!hit) {
+        return out;
+    }
+    let delta = sv.spec * fade * (colour - env_radiance(r));
+    out.beauty = vec4<f32>(base.xyz + delta, base.w);
     return out;
 }
 

@@ -44,6 +44,7 @@ pub mod palette;
 pub mod panes;
 pub mod picture_viewer;
 pub mod prefs;
+pub mod render_mode;
 pub mod scene_overlay;
 pub mod screenshot;
 pub mod script_panel;

@@ -154,6 +154,10 @@ Each item names the form row it fills. Record the result in that form, as usual.
 3. **O30 `spot` and `infinite`** (render-reference.md): build both in the GUI and render to the
    Picture Viewer. A scripted render of the spot comes out black even with the light read back
    pointing down, and a script cannot set the light Type to Infinite (it reads back Square Spot).
+3b. **O37 Pose Morph** (pose-morph.md; D20): on the form's setup, set the morph strengths by hand
+   in the tag (each case's row: A 0/50/100/150 %, A 100 % + B 50 %, and the absolute mode), and
+   after each one let the observer export the mesh by script (it can export; it just can't set the
+   strength). About 15 minutes; this checks our own-design Pose Morph (brief 107).
 4. **O40 particles** (particles.md): the emitter's particles can't be read by script. In the GUI,
    step to frames 10 and 30 and record the particle count and the positions of the first five
    particles shown by the particle info readout, or say there is no such readout.

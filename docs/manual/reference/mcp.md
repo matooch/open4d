@@ -239,14 +239,20 @@ Move the timeline to a frame, clamped to the project range (alias of timeline_se
 | `graph_get` | Get Graph. Not an undoable edit. Runs command `graph.get`. |
 | `graph_node_types` | List Graph Node Types. Not an undoable edit. Runs command `graph.node_types`. |
 | `graph_evaluate` | Evaluate Graph. Not an undoable edit. Runs command `graph.evaluate`. |
+| `tag_attach` | Attach Tag. Undoable editing command. Runs command `tag.attach`. |
 | `joint_create_chain` | Create Joint Chain. Undoable editing command. Runs command `joint.create_chain`. |
 | `joint_align` | Align Joints. Undoable editing command. Runs command `joint.align`. |
 | `joint_mirror` | Mirror Joints. Undoable editing command. Runs command `joint.mirror`. |
+| `weights_auto_bind` | Auto Bind. Undoable editing command. Runs command `weights.auto_bind`. |
 | `weights_paint` | Paint Weights. Undoable editing command. Runs command `weights.paint`. |
 | `weights_normalise` | Normalise Weights. Undoable editing command. Runs command `weights.normalise`. |
 | `weights_prune` | Prune Weights. Undoable editing command. Runs command `weights.prune`. |
 | `weights_smooth` | Smooth Weights. Undoable editing command. Runs command `weights.smooth`. |
 | `weights_mirror` | Mirror Weights. Undoable editing command. Runs command `weights.mirror`. |
+| `pose_morph_add_target` | Add Morph Target. Undoable editing command. Runs command `pose_morph.add_target`. |
+| `pose_morph_update_target` | Update Morph Target. Undoable editing command. Runs command `pose_morph.update_target`. |
+| `pose_morph_clear_target` | Clear Morph Target. Undoable editing command. Runs command `pose_morph.clear_target`. |
+| `pose_morph_set_base` | Set Morph Base Pose. Undoable editing command. Runs command `pose_morph.set_base`. |
 | `select_store` | Set Selection. Undoable editing command. Runs command `select.store`. |
 | `select_restore` | Restore Selection. Undoable editing command. Runs command `select.restore`. |
 | `vertexmap_create` | Create Vertex Map. Undoable editing command. Runs command `vertexmap.create`. |

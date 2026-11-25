@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use bytemuck::{Pod, Zeroable};
 use forge_image::{AlphaMode, Image};
+use forge_material::TextureSampler;
 use forge_material::ir::ShadingGraph;
 use forge_render_api::{
     Aov, Background, Control, Lighting, Projection, RenderEngine, RenderError, RenderEvent,
@@ -68,6 +69,9 @@ struct Targets {
     depth_view: wgpu::TextureView,
     beauty: wgpu::Texture,
     beauty_view: wgpu::TextureView,
+    /// The screen-space reflection pass's output (R22.3), read back in place of `beauty`.
+    beauty_ssr: wgpu::Texture,
+    beauty_ssr_view: wgpu::TextureView,
     shadow: wgpu::Texture,
     shadow_view: wgpu::TextureView,
     split: Vec<wgpu::Texture>,
@@ -86,6 +90,48 @@ impl RtEngine {
 
     pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> RtEngine {
         RtEngine { device, queue }
+    }
+
+    /// Uploads each bitmap as an `Rgba32Float` texture, the way the path tracer does
+    /// (REALTIME.md §2.8, RENDER.md R20.1b, R21.3).
+    fn bitmap_views(
+        &self,
+        resources: &[std::sync::Arc<dyn std::any::Any + Send + Sync>],
+    ) -> Result<Vec<wgpu::TextureView>, RenderError> {
+        resources
+            .iter()
+            .map(|r| {
+                let img = r.downcast_ref::<Image>().ok_or_else(|| {
+                    RenderError::Unsupported("a bound resource is not an image".into())
+                })?;
+                let size = wgpu::Extent3d {
+                    width: img.width,
+                    height: img.height,
+                    depth_or_array_layers: 1,
+                };
+                let tex = self.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("bitmap"),
+                    size,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba32Float,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                    view_formats: &[],
+                });
+                self.queue.write_texture(
+                    tex.as_image_copy(),
+                    bytemuck::cast_slice(&img.data),
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(img.width * 16),
+                        rows_per_image: Some(img.height),
+                    },
+                    size,
+                );
+                Ok(tex.create_view(&Default::default()))
+            })
+            .collect()
     }
 
     fn targets(&self, w: u32, h: u32) -> Targets {
@@ -118,6 +164,8 @@ impl RtEngine {
         let depth_view = depth.create_view(&Default::default());
         let beauty = make("beauty", wgpu::TextureFormat::Rgba32Float);
         let beauty_view = beauty.create_view(&Default::default());
+        let beauty_ssr = make("beauty_ssr", wgpu::TextureFormat::Rgba32Float);
+        let beauty_ssr_view = beauty_ssr.create_view(&Default::default());
         let shadow = make("shadow", wgpu::TextureFormat::Rgba32Float);
         let shadow_view = shadow.create_view(&Default::default());
         let mut split = Vec::new();
@@ -136,6 +184,8 @@ impl RtEngine {
             depth_view,
             beauty,
             beauty_view,
+            beauty_ssr,
+            beauty_ssr_view,
             shadow,
             shadow_view,
             split,
@@ -255,11 +305,19 @@ fn frame_base(
         }
     }
     v[f::EPS] = (scale * 1e-6) as f32;
+    // R22: the post toggles the lighting and reflection passes read (the jitter is added per
+    // TAA subframe by `render_with`).
+    let post = settings.post;
+    v[f::SSAO_ON] = if post.ssao { 1.0 } else { 0.0 };
+    v[f::SSAO_RADIUS] = post.ssao_radius as f32;
+    v[f::SSAO_STRENGTH] = post.ssao_strength as f32;
+    v[f::SSR_ON] = if post.ssr { 1.0 } else { 0.0 };
+    v[f::SSR_STEPS] = post.ssr_steps as f32;
     v
 }
 
 /// The passes this engine registers, in order (R21.1).
-fn frame_pass_graph(shadow_count: usize, split: bool, albedo: bool) -> FrameGraph {
+fn frame_pass_graph(shadow_count: usize, split: bool, albedo: bool, ssr: bool) -> FrameGraph {
     let mut g = FrameGraph::new();
     g.input("tris");
     let names: Vec<String> = (0..shadow_count).map(|i| format!("shadow:{i}")).collect();
@@ -270,6 +328,10 @@ fn frame_pass_graph(shadow_count: usize, split: bool, albedo: bool) -> FrameGrap
     let mut reads = vec!["g0", "g1", "depth"];
     reads.extend(names.iter().map(|s| s.as_str()));
     g.add("lighting", &reads, &["beauty", "shadow"]);
+    if ssr {
+        // R22.3: the reflections read the lit beauty and write its own target
+        g.add("ssr", &["beauty", "g0", "g1"], &["beauty_ssr"]);
+    }
     if split {
         g.add("split", &["g0", "g1"], &["diffuse", "specular"]);
     }
@@ -335,6 +397,51 @@ impl RenderEngine for RtEngine {
         control: &Control,
     ) -> Result<RenderOutput, RenderError> {
         settings.validate()?;
+        // R22.5: TAA averages `taa_samples` jittered subframes in linear radiance and takes
+        // the display effects once, on the mean; a subframe keeps its own events.
+        if settings.post.taa && settings.post.taa_samples > 1 {
+            let mut sub = settings.clone();
+            sub.post.taa = false;
+            sub.post.bloom = false;
+            sub.post.tonemap = false;
+            let n = settings.post.taa_samples as usize;
+            let mut acc: Option<Vec<[f32; 4]>> = None;
+            let mut last: Option<RenderOutput> = None;
+            for j in 0..n {
+                if control.is_cancelled() {
+                    return Err(RenderError::Cancelled);
+                }
+                let jitter = crate::post::halton_jitter(j as u32 + 1);
+                let out = self.render_with(snapshot, &sub, control, jitter)?;
+                let pixels: Vec<[f32; 4]> = out.beauty.data.as_chunks::<4>().0.to_vec();
+                crate::post::accumulate(&mut acc, &pixels, n);
+                last = Some(out);
+            }
+            let mut out = last.expect("at least one subframe");
+            if let Some(mut mean) = acc {
+                if settings.post.bloom {
+                    crate::post::bloom(&mut mean, settings.width, settings.height, &settings.post);
+                }
+                if settings.post.tonemap {
+                    crate::post::tonemap_image(&mut mean, &settings.post);
+                }
+                out.beauty.data = mean.iter().flat_map(|p| p.iter().copied()).collect();
+            }
+            return Ok(out);
+        }
+        self.render_with(snapshot, settings, control, [0.0, 0.0])
+    }
+}
+
+impl RtEngine {
+    fn render_with(
+        &self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        control: &Control,
+        jitter: [f32; 2],
+    ) -> Result<RenderOutput, RenderError> {
+        settings.validate()?;
         snapshot.validate()?;
         if settings.depth_of_field {
             return Err(RenderError::Unsupported(
@@ -342,15 +449,30 @@ impl RenderEngine for RtEngine {
             ));
         }
         let packed = Packed::build(snapshot, settings.default_light)?;
-        let graphs: Vec<&ShadingGraph> = snapshot.materials.iter().map(|m| &m.graph).collect();
-        let source = crate::shader::assemble(&graphs)?;
+        let materials: Vec<(&ShadingGraph, &dyn TextureSampler)> = snapshot
+            .materials
+            .iter()
+            .map(|m| (&m.graph, &*m.sampler as &dyn TextureSampler))
+            .collect();
+        let assembled = crate::shader::assemble(&materials)?;
+        // R21.3: the lighting pass samples five textures of its own besides the bitmaps
+        if assembled.resources.len() + 5
+            > self.device.limits().max_sampled_textures_per_shader_stage as usize
+        {
+            return Err(RenderError::Unsupported(format!(
+                "{} bitmaps exceed the device's sampled texture limit (RENDER.md R21.3)",
+                assembled.resources.len()
+            )));
+        }
+        let bitmap_views = self.bitmap_views(&assembled.resources)?;
+        let source = assembled.source;
         let plans = shadow::plans(snapshot, &packed)?;
         let split = settings
             .aovs
             .iter()
             .any(|a| matches!(a, Aov::Diffuse | Aov::Specular | Aov::Emission));
         let albedo = settings.aovs.contains(&Aov::Albedo);
-        let graph = frame_pass_graph(plans.len(), split, albedo);
+        let graph = frame_pass_graph(plans.len(), split, albedo, settings.post.ssr);
         graph
             .validate()
             .map_err(|e| RenderError::Settings(format!("frame graph: {e}")))?;
@@ -480,7 +602,15 @@ impl RenderEngine for RtEngine {
                 sampler_entry(3, true),
                 texture_entry(4, false),
                 sampler_entry(5, false),
+                texture_entry(6, false),
             ],
+        });
+        // R21.3: the shader-node bitmaps, one sampled texture per binding, in group 2
+        let bitmap_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("bitmaps"),
+            entries: &(0..bitmap_views.len() as u32)
+                .map(|binding| texture_entry(binding, false))
+                .collect::<Vec<_>>(),
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("geometry"),
@@ -489,7 +619,11 @@ impl RenderEngine for RtEngine {
         });
         let lighting_pipeline = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("lighting"),
-            bind_group_layouts: &[Some(&geometry_layout), Some(&lighting_layout)],
+            bind_group_layouts: &[
+                Some(&geometry_layout),
+                Some(&lighting_layout),
+                Some(&bitmap_layout),
+            ],
             immediate_size: 0,
         });
         let color_target = |format: wgpu::TextureFormat| {
@@ -586,6 +720,28 @@ impl RenderEngine for RtEngine {
         };
         let lighting = fullscreen("lighting", "fs_light");
         let split_pass = fullscreen("split", "fs_split");
+        // R22.3: one colour target, so its own pipeline descriptor
+        let ssr_pass = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("ssr"),
+            layout: Some(&lighting_pipeline),
+            vertex: wgpu::VertexState {
+                module: &module,
+                entry_point: Some("vs_full"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: Default::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &module,
+                entry_point: Some("fs_ssr"),
+                compilation_options: Default::default(),
+                targets: &[color_target(f)],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
         let albedo_pass = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("albedo"),
             layout: Some(&lighting_pipeline),
@@ -618,6 +774,9 @@ impl RenderEngine for RtEngine {
             mapped_at_creation: false,
         });
         let mut values = frame_base(snapshot, settings, &packed, plans.len());
+        // R22.5: this subframe's subpixel jitter (0 when TAA is off)
+        values[frame::JITTER_X] = jitter[0];
+        values[frame::JITTER_Y] = jitter[1];
         queue.write_buffer(&frame_buf, 0, &frame_bytes(&values));
         let tris = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("tris"),
@@ -651,6 +810,18 @@ impl RenderEngine for RtEngine {
                 },
             ],
         });
+        let bitmap_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("bitmaps"),
+            layout: &bitmap_layout,
+            entries: &bitmap_views
+                .iter()
+                .enumerate()
+                .map(|(i, v)| wgpu::BindGroupEntry {
+                    binding: i as u32,
+                    resource: wgpu::BindingResource::TextureView(v),
+                })
+                .collect::<Vec<_>>(),
+        });
         let lit_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("lighting"),
             layout: &lighting_layout,
@@ -678,6 +849,12 @@ impl RenderEngine for RtEngine {
                 wgpu::BindGroupEntry {
                     binding: 5,
                     resource: wgpu::BindingResource::Sampler(&env_sampler),
+                },
+                // the lighting pass does not read the beauty source; the SSR pass binds the
+                // lit beauty here (R22.3), so both share one bind group layout
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: wgpu::BindingResource::TextureView(&targets.g_views[0]),
                 },
             ],
         });
@@ -814,6 +991,7 @@ impl RenderEngine for RtEngine {
                 pass.set_pipeline(pipeline);
                 pass.set_bind_group(0, &bind, &[]);
                 pass.set_bind_group(1, &lit_bind, &[]);
+                pass.set_bind_group(2, &bitmap_bind, &[]);
                 pass.draw(0..3, 0..1);
                 drop(pass);
                 queue.submit([enc.finish()]);
@@ -823,6 +1001,77 @@ impl RenderEngine for RtEngine {
             &lighting,
             &[&targets.beauty_view, &targets.shadow_view],
         );
+        // R22.3: screen-space reflections, reading the lit beauty into their own target
+        let beauty_target = if settings.post.ssr {
+            if control.is_cancelled() {
+                return Err(RenderError::Cancelled);
+            }
+            let ssr_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("ssr"),
+                layout: &lighting_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&targets.g_views[0]),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&targets.g_views[1]),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(&atlas_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::Sampler(&shadow_sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(&env_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::Sampler(&env_sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: wgpu::BindingResource::TextureView(&targets.beauty_view),
+                    },
+                ],
+            });
+            let mut enc = device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("ssr") });
+            {
+                let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("ssr"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &targets.beauty_ssr_view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                pass.set_viewport(0.0, 0.0, w as f32, h as f32, 0.0, 1.0);
+                pass.set_scissor_rect(rx0, ry0, rx1 - rx0, ry1 - ry0);
+                pass.set_pipeline(&ssr_pass);
+                pass.set_bind_group(0, &bind, &[]);
+                pass.set_bind_group(1, &ssr_bind, &[]);
+                pass.set_bind_group(2, &bitmap_bind, &[]);
+                pass.draw(0..3, 0..1);
+            }
+            queue.submit([enc.finish()]);
+            &targets.beauty_ssr
+        } else {
+            &targets.beauty
+        };
         if split {
             if control.is_cancelled() {
                 return Err(RenderError::Cancelled);
@@ -841,12 +1090,8 @@ impl RenderEngine for RtEngine {
         }
 
         // read back the beauty, the G-buffer and (when asked for) the light split
-        let mut order: Vec<&wgpu::Texture> = vec![
-            &targets.beauty,
-            &targets.shadow,
-            &targets.g[0],
-            &targets.g[1],
-        ];
+        let mut order: Vec<&wgpu::Texture> =
+            vec![beauty_target, &targets.shadow, &targets.g[0], &targets.g[1]];
         if split {
             order.push(&targets.split[0]);
             order.push(&targets.split[1]);
@@ -888,13 +1133,13 @@ impl RenderEngine for RtEngine {
         }
         queue.submit([enc.finish()]);
         let mut pixels: Vec<Vec<[f32; 4]>> = Vec::new();
-        for buf in &staging {
-            let slice = buf.slice(..);
-            slice.map_async(wgpu::MapMode::Read, |r| r.expect("readback"));
+        let slots: Vec<_> = staging
+            .iter()
+            .map(|buf| forge_render_gpu::map_read(&buf.slice(..)))
+            .collect();
+        for slot in &slots {
+            forge_render_gpu::await_mapped(device, slot)?;
         }
-        device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .map_err(|e| RenderError::Output(format!("GPU poll: {e}")))?;
         for buf in &staging {
             let slice = buf.slice(..);
             let data = slice
@@ -925,6 +1170,17 @@ impl RenderEngine for RtEngine {
         } else {
             None
         };
+        // R22.4/R22.6: bloom and tone mapping on this subframe's linear beauty. The AOVs keep
+        // the linear values (they are data, not display colour).
+        let linear_px = beauty_px;
+        let mut beauty_px = beauty_px.clone();
+        if settings.post.bloom {
+            crate::post::bloom(&mut beauty_px, w, h, &settings.post);
+        }
+        if settings.post.tonemap {
+            crate::post::tonemap_image(&mut beauty_px, &settings.post);
+        }
+        let beauty_px = &beauty_px;
         let mut beauty = Image::new(w, h, AlphaMode::Premultiplied);
         let mut aov_imgs: BTreeMap<Aov, Image> = settings
             .aovs
@@ -958,7 +1214,12 @@ impl RenderEngine for RtEngine {
                         Aov::Albedo => albedo_px.map(|d| d[i]).unwrap_or([0.0; 4]),
                         Aov::Position => [p[0], p[1], p[2], alpha],
                         Aov::ObjectId => {
-                            let id = g1[3];
+                            // g1.w is the triangle index + 1 (R21.3)
+                            let id = if hit {
+                                packed.tris[g1[3] as usize - 1].ids[1] + 1.0
+                            } else {
+                                0.0
+                            };
                             [id, id, id, alpha]
                         }
                         Aov::MaterialId => {
@@ -971,7 +1232,7 @@ impl RenderEngine for RtEngine {
                         Aov::Emission => {
                             let d = diffuse_px.map(|d| d[i]).unwrap_or([0.0; 4]);
                             let s = specular_px.map(|d| d[i]).unwrap_or([0.0; 4]);
-                            let b = beauty_px[i];
+                            let b = linear_px[i];
                             [
                                 (b[0] - d[0] - s[0]).max(0.0),
                                 (b[1] - d[1] - s[1]).max(0.0),

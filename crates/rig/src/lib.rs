@@ -9,6 +9,7 @@ pub mod ik;
 pub mod joint;
 pub mod mirror;
 pub mod paint;
+pub mod pose_morph;
 pub mod skin;
 pub mod tags;
 pub mod tools;
@@ -19,6 +20,7 @@ use forge_core::{Plugin, Registry, RegistryError};
 pub use constraint::CONSTRAINT_TAG;
 pub use ik::IK_TAG;
 pub use joint::{Axis, JOINT};
+pub use pose_morph::{POSE_MORPH_TAG, apply_pose_morph};
 pub use skin::{SKIN, apply_skin};
 pub use weights::{WEIGHT_TAG, WeightMap};
 
@@ -95,6 +97,7 @@ impl Plugin for Rig {
         registry.register(skin::skin_type())?;
         registry.register(ik::ik_tag_type())?;
         registry.register(constraint::constraint_tag_type())?;
+        registry.register(pose_morph::pose_morph_tag_type())?;
         Ok(())
     }
 }

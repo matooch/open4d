@@ -4,16 +4,16 @@ One page to check where the project stands. The planner updates it after every m
 Details live in the files linked at the bottom; when this page and those files disagree, the
 linked files win.
 
-**Last updated:** 2026-11-25, after Hermes run 8 (205, 206) and the GPU shader nodes (207, PR #53).
+**Last updated:** 2026-11-25, after Hermes run 8 (205, 206, 142, 198, 199) and the planner follow-ups (207, 208, the GPU tracer Vulkan fix and shader nodes).
 
 ## At a glance
 
 | | Now |
 |---|---|
-| Implementation briefs | **182 of 198 done** (92 %) · 5 ready · 11 waiting |
+| Implementation briefs | **189 of 200 done** (95 %) · 6 ready · 5 waiting |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
-| Acceptance scenarios | S1–S5, S7, S8, S9 pass · S6 blocked · S10 needs a measurement |
+| Acceptance scenarios | S1–S9 pass (S6 with own-design Pose Morph, parity-pending) · S10 needs a measurement |
 | Release | No release cut yet (v1.0 checklist is brief 185, last) |
 | Next | Implementer run 6 continues from 197 (see below) |
 
@@ -29,7 +29,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | S3 | Model a chair in the editor, save, reopen, export OBJ | ✅ passes | Feel checks in GUI sessions G1/G2/G4 |
 | S4 | Motion graphics: text → fracture → cloner on spline → field effectors → 1080p sequence | ✅ passes (205) | Spline-source cloner is own design (parity-pending) |
 | S5 | Volumes: 3 spheres + spline tube → builder → smooth → mesh → editable | ✅ passes (206) | – (208: mesher stays manifold on thin tubes) |
-| S6 | Rigging: joints, auto weights, IK + pole, **pose morph**, playback | 🔴 blocked | Pose Morph (107) has no reference data: **owner decision** |
+| S6 | Rigging: joints, auto weights, IK + pole, **pose morph**, playback | ✅ passes (114) | Pose Morph is own design (D20), parity-pending O37; GUI capture G9 checks it |
 | S7 | Animation polish: dope sheet, broken/weighted tangents, easing, loop | ✅ passes | – |
 | S8 | Look-dev: area light, DOF camera, node material, CPU render + AOVs | ✅ passes (146) | Cross-OS reference check confirmed by CI |
 | S9 | Import FBX / glTF / Alembic from the reference app, matches | ✅ passes (171): 6 cases × FBX, GLB, Alembic, STL through the CLI | glTF skinned-arm poses at f15/f30 pinned KNOWN_MISMATCH (≤ 5e-4) |
@@ -46,34 +46,37 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | E · Clone toolset (MoGraph) | 17 / 17 | – |
 | F · Volumes | 10 / 10 | – |
 | G · Animation | 13 / 13 | – |
-| H · Rigging, tags, constraints | 13 / 15 | 107 Pose Morph (blocked), 114 S6 acceptance (needs 107) |
+| H · Rigging, tags, constraints | 15 / 15 | Parity-pending: Pose Morph (own design D20, O37) |
 | I · Dynamics and particles | 5 / 8 | 119, 120 particles + forces (blocked), 121 (needs 119) |
 | J · Materials, shaders, UVs | 13 / 13 | Hands-on checks in GUI session G7 |
 | K · Rendering and viewport | 11 / 12 | 142 GPU path tracer (queued) |
 | L · UI and UX | 16 / 16 | Hands-on checks in GUI sessions G1, G2, G4 |
 | M · File exchange | 12 / 12 | Done: S9 passes (171). Open: glTF skin-pose KNOWN_MISMATCH, PLY/USD/morph not observed |
 | N · Platform, packaging, docs | 13 / 14 | 185 v1.0 release checklist (last) |
-| R · Real-time GPU renderer | 2 / 9 | 197 and 207 done (IR and shader nodes → WGSL, cache, GPU harness; every family within 1e-4 of the CPU); 198, 199 queued; then 200–204 (ray tracing on Vulkan + Metal) |
+| R · Real-time GPU renderer | 6 / 10 | Done: 197, 207 (shaders → WGSL), 142 (GPU path tracer, 23/23 O30 vs CPU), 198 (real-time raster), 199 (post effects, viewport Render mode), 209 (shader nodes in raster, one material compile path for both GPU engines). Left: 200–204 (ray tracing on Metal + Vulkan) |
 
-## Next implementer run (rest of the run-4 queue)
+## Next implementer run (run 9: ray tracing)
 
 Queue and rules: [agents/HERMES-IMPLEMENTER.md](agents/HERMES-IMPLEMENTER.md) §2.
 
-Done: 146 S8, 040 Metaball (run 4); 054 deformers, 170 camera exchange (run 5); 171 S9 exchange acceptance; 197 shading IR → WGSL (run 7); 207 shader nodes → WGSL (planner subagent); 205 S4, 206 S5 (run 8).
+Run 8 finished: 205 S4, 206 S5, 142 GPU path tracer, 198 real-time raster, 199 post effects and the viewport Render mode.
 
-1. 142 · GPU compute path tracer
-2. 198 · R2: real-time raster PBR
-3. 199 · R3: post effects and the viewport "Render" mode
+1. 200 · R4: acceleration structures, `RtBackend` (Metal; Vulkan behind the same trait)
+2. 201 · R5: hybrid ray-traced shadows, reflections, AO, GI
+3. 202 · R6: real-time path tracing with denoising
+4. 203 · R7: consistency tests against the CPU path tracer
+5. 204 · R8: performance targets
 
-Later, with a stronger model: 200–204 (ray tracing on Metal; Vulkan run pending on the RTX 3090).
+Use a strong model for this run (Kimi K2.7 Code or GPT-6.2 Sol). 209 (shader nodes in the raster engine) is small and can go to a planner subagent.
 
 Overnight: `scripts/hermes-loop.sh docs/agents/prompts/implementer-opencode.txt` restarts the implementer in fresh sessions until the queue is done (HERMES-IMPLEMENTER.md §2b).
 
 ## Blocked: waiting on you (owner)
 
+- **DX12 shadows (210):** real-time shadows fail on DirectX 12 (Windows CI, WARP); Windows CI is red on that one test until it is fixed. Needs a run on your Windows PC (steps in the brief).
+
 | Item | Why it's stuck | What unblocks it |
 |---|---|---|
-| Pose Morph (107) → S6 (114) | The reference app's morph strength can't be scripted, so there's no golden data (O37) | Either: build it as **own design** (parity-pending), or capture it by hand in a GUI session |
 | Particles + forces (119, 120, 121) | The emitter exposes no particle list to scripts (O40) | Same choice: **own design**, or a GUI capture |
 | GUI sessions G1–G9 | Feel, layout, shortcuts, viewport look can only be checked by a person at the reference app | An hour or two per session: [parity/GUI-SESSIONS.md](parity/GUI-SESSIONS.md) |
 | Hands-on use of the editor | Nobody has used the editor for real work yet; that's where the remaining usability bugs are | Build a small scene in it and report what gets in the way |

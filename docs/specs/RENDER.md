@@ -583,6 +583,12 @@ sub-field passed as an argument, so `acc_add` takes a pointer to the whole `Trac
 - `threads`, `tile` and the region are CPU-side scheduling only; a `region` renders its own
   rectangle into the full-size image exactly as R2.
 
+**Submission budget (R20.4, from Windows CI).** A graphics driver's watchdog (about 2 s per submission on Windows) resets the device when one submission runs too long; on the software DX12 adapter the heaviest O30 material (`mat-bump-noise`: noise evaluated several times per hit for bump) at 320 x 240 / 16 spp did exactly that. The compute engine therefore never submits a whole tile at once: a tile is dispatched in **bands of rows**, one submission (and one bounded wait) per band, where a band holds `max(1, SUBMISSION_BUDGET / (spp * tile_width))` rows, i.e. at most `SUBMISSION_BUDGET` = 4096 pixels x samples (one full row of the tile is the floor). `GpuEngine::with_submission_budget(n)` overrides it. The frame uniform carries the band's first row (`TY`) and height (`TILE_H`); the shader keys the per-pixel RNG on the pixel's absolute `(x, y)` (R20.2), never on the dispatch, so **the image does not depend on the budget**: a band is the same pixels computed in the same order of RNG calls. The `cpu_vs_gpu` PSNR per case is unchanged (e.g. `mat-bump-noise` 83.26 dB, `mat-glossy` 65.49 dB on lavapipe), and the test `the_submission_budget_does_not_change_the_image` renders with a budget of 1 (one row per submission), the default and an unbounded budget (one submission per tile) and requires identical bytes in beauty and AOVs. Samples of one pixel are not split further (the RNG is one sequential stream per pixel, R20.2); a single row of `tile` pixels at very high spp stays one submission.
+
+**Readback never panics (R20, R21).** The map callback of a readback stores its `Result` in a shared slot instead of unwrapping it; after the bounded wait the engine reads the slot and returns `RenderError::Output("GPU readback failed (device lost or out of memory): ...")`. A poll made while other threads poll the same device can return before this thread's callback ran, so the wait repeats until the slot is filled or `GPU_WAIT_TIMEOUT` passes (seen: `BufferAsyncError` panic on Windows CI after the device was reset).
+
+**GPU wait limit (R20, R21).** Both GPU engines wait at most `GPU_WAIT_TIMEOUT` (120 s, `forge-render-api`) for one submission; a hung or pathologically slow device (seen: Windows CI's software DX12 adapter, WARP, never finishing one O30 path-trace case) fails the render with `RenderError::Output` instead of freezing the caller.
+
 ## R21 Real-time raster PBR engine (`forge-render-rt`, brief 198)
 
 Tier 1 of area R (D19): **our own design**, not a parity feature. Geometry, lights and materials
@@ -621,8 +627,9 @@ Projection is the CPU camera's own (R10), so a rasterised silhouette lands on th
 Barycentrics are the vertex corners `(1,0,0)`, `(0,1,0)`, `(0,0,1)` interpolated perspective
 correctly. The shading normal is the barycentric blend of the three corner normals when the mesh
 has them, else the geometric normal, flipped to face the camera. The shading context is
-`position`, `normal`, `view = normalize(eye - position)`, `uvw = 0` (R21.3 does not store it),
-`time = 0`, `vertex_weight = 1`, `ao = 1`.
+`position`, `normal`, `view = normalize(eye - position)`, `uvw` (the corner UVWs blended at the
+position, R21.3), `time = 0`, `vertex_weight = 0`, `ao = 1`; the lighting pass fills it exactly as
+the tracer's `surface_at` does (R20.1b, R21.3).
 
 ### R21.3 G-buffer (deferred)
 
@@ -633,18 +640,51 @@ colour-attachment budget:
 | target | contents |
 |---|---|
 | `g0` | world position, material index + 1 (0 = background) |
-| `g1` | shading normal (world, facing the camera), object id + 1 (0 = background) |
+| `g1` | shading normal (world, facing the camera), triangle index + 1 (0 = background) |
 
 The shading normal is the barycentric blend of the three corner normals when the mesh has them,
-else the geometric normal (both flipped to face the camera); UVW is not stored, because only
-texture channels read it and those are pinned below. The material is evaluated in the lighting
-pass from `g0`/`g1` with the IR values `surface_at` of R20.2 reads (diffuse and level, specular and
-level, specular flags/roughness, emission, the specular level's albedo reduction); each material
-is one specialised `forge_surface_i` function and a `switch` picks it. Materials whose colour
-channel needs a texture node are not ported yet (brief 207) and the engine returns `Unsupported`
-(as the compute tracer, R20.4). The engine is opaque: transmission is not refracted,
-bump/normal, displacement, alpha, fog, diffusion and environment channels are ignored (the last
-six are reported in `RenderStats::ignored_channels` by the same list as R7).
+else the geometric normal (both flipped to face the camera). The object id is not stored: the
+triangle index replaces it, and the `ObjectId` AOV reads `ids.y` of that triangle from the packed
+triangle list (R21.2), which is the same value as before.
+
+**One compile path for both GPU engines.** `render_gpu::shader::materials(&[(graph, sampler)],
+bitmap_group)` compiles every material through the sampler's WGSL codegen into one shared
+`ModuleBuilder` exactly as R20.1b says (same `Unsupported` for a `Texture` node without a codegen,
+same renaming of `forge_surface`/`irN`, same shared library and generated functions) and returns
+the module text (surface struct, materials, declarations, the `forge_shade` dispatcher) plus the
+bitmap resources. The path tracer's `assemble` is `materials(.., 1)` followed by its constants,
+RNG and tracer, so its module text is unchanged. The raster module is `materials(.., 2)`, the frame
+constants and `rt.wgsl`.
+
+**Bitmaps.** The codegen declares bitmap `k` at `@group(1) @binding(k)`; the raster module uses
+groups 0 (frame, triangles, lights, shadows) and 1 (G-buffer, shadow atlas, environment, lit
+beauty), so `materials` rewrites those bindings to the requested group: the raster bitmaps are
+`@group(2) @binding(k)`, uploaded exactly as R20.1b (`Rgba32Float`, `textureLoad`, no sampler),
+visible to the fragment stage. A device whose `max_sampled_textures_per_shader_stage` is smaller
+than the bitmaps plus the lighting pass's own five sampled textures returns `Unsupported`.
+
+**The shading context per lit pixel (`surface_vals`), as the tracer's `surface_at`:** the
+triangle `T` is read from `g1.w`; `position` = `g0.xyz`; `uvw` = the barycentric interpolation of
+`T`'s corner UVWs at the position (`uvw_at` of R20.1b: the weights solved from the position's
+offset along the two edges, the hit's first corner UVW for a degenerate triangle); `normal` = the
+outward-side shading normal, i.e. the stored normal flipped back when it faces away from `T`'s
+geometric normal; `view` = `normalize(eye - position)`; `time = 0`, `vertex_weight = 0`,
+`ao = 1`. The material is evaluated from the IR values `surface_at` of R20.2 reads (diffuse and
+level, specular and level, specular flags/roughness, emission, the specular level's albedo
+reduction); each material is one specialised `forge_surface_i` function and a `switch` on the
+material index picks it.
+
+**Bump.** When the material has a bump channel the lighting pass perturbs the shading normal as
+R20.1b: height = the mean of the bump channel, `eps = 1e-3 * scale`, an orthonormal basis of `T`'s
+geometric normal, two displaced contexts (`position + t_i eps`, `uvw` re-interpolated), and
+`n = ns - (t1 d1 + t2 d2) * strength * scale`, normalised when non-zero; the result is flipped
+back to face the camera when the outward-side normal was flipped. The perturbed normal is the one
+the lights, the environment and the screen-space passes see; the `Normal` AOV keeps the
+unperturbed G-buffer normal.
+
+The engine is opaque: transmission is not refracted; the normal, displacement, alpha, fog,
+diffusion and environment channels are ignored (reported in `RenderStats::ignored_channels` by the
+same list as R7).
 
 ### R21.4 Shadow maps
 
@@ -670,6 +710,29 @@ farthest corner × 1.05, or the spot/area frustum's own depth range). The tile l
 `z - bias <= depth` with `bias = 2e-3`. `Hard` takes one comparison; `Soft` a fixed 3 × 3 tap
 kernel at the tile texel size (no jitter: deterministic). A shadowed light's contribution is
 multiplied by `(1 - density) + shadow_color * density` (the R8 shadow colour rule).
+
+**Per-pass state (Windows DX12 follow-up).** The matrix of a shadow pass lives in the frame uniform
+(`F_SHADOW_MAT`). The engine rewrites it with `queue.write_buffer` and **submits once per atlas
+tile**, so a pass never sees a later light's matrix (a queue write is applied before the next
+submission, not before the encoder it was recorded next to); the test
+`two_shadowed_lights_each_cast_their_own_shadow` renders two shadowed spots that shadow different
+parts of the plane and requires both shadows in one image, so any backend that shared one matrix
+between passes fails it. Windows CI (software DX12 adapter) reported `a_shadow_map_darkens_the_occluded_plane`
+with 0 pixels in shadow while Metal and Vulkan pass. Checked by reasoning and by translating the
+module with naga to HLSL (no DX12 device is available here), none of these is the cause:
+per-light data is read from a storage buffer with a 416-byte stride (no dynamic uniform offsets, so
+no 256-byte alignment rule); the depth-only pipeline has no fragment stage and writes
+`SV_Position` only; viewport depth range is 0..1 and the matrices map to 0..1 (`w = Qz`
+perspective, `w = 1` orthographic); the atlas texel convention is the same on every backend
+(`uv.y = 0.5 - 0.5 ndc.y`, framebuffer y down); `textureSampleCompareLevel` becomes
+`SampleCmpLevelZero` on a `SamplerComparisonState` with `LessEqual`; the depth bias
+(constant 2, slope 2, clamp 0) is the same formula on DX12 and Vulkan for `Depth32Float`, and a
+clamp of 0 means no clamp; the first pass clears the whole atlas and the later ones `Load` it.
+Not ruled out (needs the device): the HLSL declares the comparison sampler through the sampler
+heap, `nagaComparisonSamplerHeap[nagaGroup1SamplerIndexArray[3]]`, indexed by binding number, so a
+group with samplers at bindings 3 and 5 relies on the host filling that index array by binding;
+and WARP's handling of a `Linear` comparison sampler on `D32_FLOAT`. The test is not weakened;
+Windows CI stays the check.
 
 ### R21.5 Deferred lighting
 
@@ -729,14 +792,154 @@ coverage, as R3 asks.
   frame graph the engine builds validates; directional, omni-falloff, glossy two-light and
   two-material scenes match the CPU tracer at ≥ 30 dB PSNR with the CPU tracer's indirect light
   off (`max_depth = 0`, so both are direct light only) — measured 48.0, 38.3, 45.2 and 37.5 dB;
-  every O30 case keeps the CPU silhouette (IoU ≥ 0.98) and its mean luminance within
-  `[0.6, 1.7]` (the CPU's GI makes it brighter than the raster), with the shader-node cases
-  pinned `Unsupported` (brief 207) and the transmissive case compared by silhouette only (R2 is
-  opaque); doubling a light's intensity doubles the image; a spot shadow map darkens the pixels
-  behind an occluder; a constant and a lat-long image environment light a sphere; all ten AOVs
+  every O30 case, shader-node materials included (brief 209), keeps the CPU silhouette
+  (IoU ≥ 0.98) and its mean luminance within `[0.6, 1.7]` (the CPU's GI makes it brighter than the
+  raster), with the transmissive case compared by silhouette only (R2 is opaque); doubling a light's intensity doubles the image; a spot shadow map darkens the pixels
+  behind an occluder, and two shadowed spots each keep their own shadow in one render; a constant and a lat-long image environment light a sphere; all ten AOVs
   have the R3 shapes and `beauty = diffuse + specular + emission`; a region renders its
   rectangle with one `Tile` event and cancel stops; two renders are byte-identical.
+- `shader.rs`: the raster module validates for no materials, every material channel and shader-node
+  materials (bitmaps at `@group(2)`); a `Texture` node without a sampler codegen is `Unsupported`.
+- `naga_translate.rs`: every raster module (the O30 cases, shader-node materials with a bitmap,
+  no materials) translates to SPIR-V, MSL and HLSL without a GPU (§5a).
 - `forge render --engine rt` runs through the CLI (`apps/forge/tests/render.rs`).
+
+## R22 Post effects and the viewport Render mode (brief 199)
+
+Tier 1's image polish (area R, D19): **our own design**, no reference observation. Every effect is
+deterministic (fixed sample tables, fixed kernels, no noise textures), so two renders of one scene
+stay bit-identical (R21.6) and the effects are testable by numbers.
+
+Settings live in `RenderSettings::post` (`forge_render_api::PostSettings`); every effect is **off**
+by default, so R21's images and parity tests are unchanged, and the CPU and compute tracers ignore
+the field. The CLI exposes the toggles with `forge render --engine rt --post ssao,ssr,bloom,taa,tonemap`
+(`--post none` is the default).
+
+### R22.1 Settings
+
+| field | toggle | default | meaning |
+|---|---|---|---|
+| `ssao` | yes | `false` | screen-space ambient occlusion |
+| `ssao_radius` | – | `40.0` | world-space sampling radius |
+| `ssao_strength` | – | `1.0` | 0 = no darkening, 1 = fully occluded ambient is black |
+| `ssr` | yes | `false` | screen-space reflections |
+| `ssr_steps` | – | `16` | march steps per ray |
+| `bloom` | yes | `false` | bloom over the threshold |
+| `bloom_threshold` | – | `1.0` | linear luminance above which a pixel blooms |
+| `bloom_strength` | – | `0.25` | weight of the blurred bright pass added back |
+| `taa` | yes | `false` | temporal anti-aliasing |
+| `taa_samples` | – | `4` | jittered subframes averaged per render |
+| `tonemap` | yes | `false` | filmic tone mapping of the beauty |
+| `exposure` | – | `1.0` | linear multiplier before the curve |
+
+`PostSettings::validate` rejects a negative radius or strength, `ssr_steps` outside `1..=128`,
+`taa_samples` outside `1..=32`, a negative threshold or exposure. `RenderSettings::validate`
+validates the post block.
+
+### R22.2 Ambient occlusion (`ssao`)
+
+AO must darken the *ambient* term only, so it is computed inside the lighting pass from the
+G-buffer (the split and albedo passes call the same shading function, so all three agree; the
+albedo pass is unaffected because AO scales radiance, not colour).
+
+At a covered pixel `p` with shading normal `n` (R21.3), twelve fixed samples sit in the tangent
+disc `t1, t2` of `n` (a golden-angle spiral, directions `k` fixed in the shader):
+
+`s_k = p + radius r_k (0.4 n + cos θ_k t1 + sin θ_k t2)` with `θ_k = 2π k / 12` and
+`r_k = 0.35 + 0.65 * (k % 3) / 2` (a hemisphere sample: the 0.4 n lift keeps a flat face
+unoccluded, a wall or a neighbouring face closer than the sample occludes it).
+
+Each sample is projected to a pixel (`project` of R21.2, NDC y up, pixel y down); the G-buffer
+position `q` there occludes when `|q - p| < radius` and the stored point is nearer the eye than
+the sample, `dot(q - s_k, normalize(s_k - eye)) < -0.02 * radius`. `ao = 1 - strength * occluded / 12`, clamped to `[0, 1]`.
+The environment diffuse and specular terms are multiplied by `ao`; direct light is untouched and
+background pixels are unchanged. One bounce, no multi-sample rotation and no denoise: an edge darkens
+by at most what twelve samples resolve (documented gap against ray-traced AO, brief 201).
+
+### R22.3 Screen-space reflections (`ssr`)
+
+A full-screen pass after `lighting`: it reads `beauty`, `g0`, `g1` and writes `beauty` (a second
+target, read → write, so the pass never aliases). For a covered pixel with normal `n`, view `v`:
+`r = reflect(-v, n)`; the ray is marched in `ssr_steps` geometric steps, `t_i = 0.05 * scale *
+1.35^(i-1)` (scene scale as in R21.2), and each point `p + t_i r` is projected to a pixel; a hit is
+the first step whose stored G-buffer position lies within `0.05 * t_i` along the ray (and in front
+of the eye). The hit's `beauty` colour is the reflected radiance `R`; with no hit `R` is the
+environment reflection `env_radiance(r)` of R21.5.
+
+The pass recomputes the pixel's material (`surface_vals`, R21.3) and adds
+
+`sv.spec * fade * (R - env_radiance(r))`
+
+with `fade = 1 - smoothstep(0.1, 0.6, roughness)` and `roughness = sqrt(sv.alpha)`, so a rough
+surface keeps its environment reflection and a glossy one takes the screen hit. This *replaces* the
+environment reflection the lighting pass added, rather than adding a second one. Off-screen rays
+fall back to the environment (no SSR outside the frame). The `Specular` AOV is the split pass's
+direct-plus-environment specular and does not include the SSR delta (documented).
+
+### R22.4 Bloom (`bloom`)
+
+Computed on the readback (CPU) from the linear beauty: the bright pass keeps
+`k = max(lum - threshold, 0) / max(lum, 1e-6)` of a covered pixel's RGB and 0 at the background,
+then two separable 9-tap Gaussian passes with fixed weights (σ = 8 px, edge clamp) run over the
+whole image, and `bloom_strength * blurred` is added to the beauty. Covered and background pixels
+both receive the blur, so a bright object glows over the background.
+
+### R22.5 Temporal anti-aliasing (`taa`)
+
+`taa_samples` subframes of the whole raster pipeline, each with the camera jittered by the
+Halton(2,3) point of that subframe scaled to `±0.5` px added to the principal point (`cx`, `cy` of
+R21.2), averaged 1/N in linear radiance. The averaged beauty then takes bloom and tone mapping; the
+AOVs are the *last* subframe's, un-averaged (depth, normals and ids must not be blended).
+
+There is no history across render calls and no motion-vector reprojection (Tier 3's temporal
+accumulation, brief 202), so a render is a pure function of its snapshot: R21.6's byte-identical
+determinism holds with `taa` on as well.
+
+### R22.6 Filmic tone mapping (`tonemap`)
+
+After bloom and averaging, the beauty RGB (not the alpha, not the AOVs) goes through
+
+`x' = clamp((x (2.51 x + 0.03)) / (x (2.43 x + 0.59) + 0.14), 0, 1)`, `x = exposure * linear`,
+
+the ACES filmic fit published by K. Narkowicz (2016, public literature). `post::tonemap(x)` in
+`forge_render_rt` is the same formula, so tests compare pixels exactly; AOVs stay linear because
+they are data, not display colour.
+
+### R22.7 The viewport's "Render" display mode (`crates/ui`)
+
+`EditorState::display` is `DisplayMode::{Shaded, Render}`, switched by the viewport header's
+"Render" button, with the post toggles ("SSAO", "SSR", "Bloom", "TAA", "Tone map") in the Post menu
+beside it. It is UI state, not a document change: no undo entry is pushed, the scene is not
+dirtied, and switching back restores the shaded panes.
+
+In Render mode a pane shows a `render-rt` frame of the **pane's own camera**:
+
+- camera: `transform = view().inverse() * diag(1, 1, -1)` (the viewport's view space looks along
+  `-Z`, the raster tier's camera space along `+Z` with +Y up, R21.2), perspective
+  `focal_mm = 36 h / (2 w tan(fov_y / 2))` with `sensor_mm = 36`, orthographic
+  `width = 2 (view height / 2) (w / h)`;
+- snapshot: the scheduled scene (`prepare_render`'s evaluation), with the pane camera replacing the
+  render camera;
+- size: the pane's point size × the pixels-per-point, capped at 640 × 400 (the preview is not the
+  final render);
+- settings: defaults with `samples = 1`, no AOVs and `post` from the editor state.
+
+The frame is rendered synchronously and cached by (scene revision, camera, size, post), so a static
+scene costs one frame; a device request that fails is remembered and the pane keeps the shaded image
+with a "Render unavailable" note. Overlays (gizmo, HUD, selection) are not drawn over the render
+image. A background worker with latest-snapshot cancellation is a performance follow-up (brief 204).
+
+### R22.8 Tests
+
+- `crates/render-rt/tests/post.rs` (GPU, one device per file behind the lock, skipped without an
+  adapter): `ssao` darkens a crease and leaves a convex face and the silhouette within 2 %;
+  `ssr` puts the bright object's colour on the glossy floor and leaves distant pixels;
+  `bloom` lifts pixels around a bright object and leaves a dim one alone; `taa` turns hard
+  silhouette steps into graded pixels; `tonemap` maps every pixel by `post::tonemap` of the linear
+  render (1e-4) and keeps the alpha; the settings validate; two renders with the default post block
+  are byte-identical to a render without it.
+- `crates/ui/tests/render_mode.rs` (kittest, no GPU needed): the View menu switches to Render and
+  back, the document's undo depth and revision do not change, and the post toggles are UI state.
 
 ## R13 Not done / follow-ups
 

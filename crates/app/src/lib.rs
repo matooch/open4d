@@ -15,6 +15,7 @@ pub mod motion;
 pub mod motion_tags;
 pub mod param_edit;
 pub mod parameter_keys;
+pub mod pose_morph_commands;
 pub mod query;
 pub mod rig_commands;
 pub mod schedule;
@@ -72,6 +73,7 @@ pub fn default_command_registry() -> CommandRegistry {
     graph_commands::register_commands(&mut commands).expect("graph.* ids are unique");
     rig_commands::register(&mut commands).expect("joint.* ids are unique");
     weight_commands::register(&mut commands).expect("weights.* ids are unique");
+    pose_morph_commands::register(&mut commands).expect("pose_morph.* ids are unique");
     tag_commands::register(&mut commands).expect("tag command ids are unique");
     user_data_commands::register(&mut commands).expect("user_data command ids are unique");
     material_commands::register(&mut commands).expect("material command ids are unique");

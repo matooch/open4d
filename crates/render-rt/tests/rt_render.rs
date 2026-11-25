@@ -25,30 +25,6 @@ const MIN_PSNR: f64 = 30.0;
 const MIN_IOU: f64 = 0.98;
 const MEAN_RATIO: (f64, f64) = (0.6, 1.7);
 
-/// Shader-node materials are not wired into the raster engine yet (the path tracer has them, R20.1b).
-const UNSUPPORTED: &[(&str, &str)] = &[
-    (
-        "mat-checker-uv",
-        "shader-node material channels in the raster engine (R21; the path tracer has them, R20.1b)",
-    ),
-    (
-        "mat-checker-cubic",
-        "shader-node material channels in the raster engine (R21; the path tracer has them, R20.1b)",
-    ),
-    (
-        "mat-fresnel",
-        "shader-node material channels in the raster engine (R21; the path tracer has them, R20.1b)",
-    ),
-    (
-        "mat-bump-noise",
-        "shader-node material channels in the raster engine (R21; the path tracer has them, R20.1b)",
-    ),
-    (
-        "checker-plane",
-        "shader-node material channels in the raster engine (R21; the path tracer has them, R20.1b)",
-    ),
-];
-
 /// R2 is opaque (R21.3): the CPU's transmissive material loses light the raster keeps, so only
 /// the silhouette is compared.
 const OPAQUE_ONLY: &[(&str, &str)] = &[(
@@ -57,6 +33,14 @@ const OPAQUE_ONLY: &[(&str, &str)] = &[(
 )];
 
 static GPU: Mutex<Option<Option<(wgpu::Device, wgpu::Queue)>>> = Mutex::new(None);
+
+/// Held for a whole test: GPU tests in this file run one at a time, so a slow device (CI's
+/// software adapters) never makes one test's wait include another test's work (§5a).
+static SERIAL: Mutex<()> = Mutex::new(());
+
+fn serial() -> std::sync::MutexGuard<'static, ()> {
+    SERIAL.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 fn gpu() -> Option<(wgpu::Device, wgpu::Queue)> {
     let mut slot = GPU.lock().unwrap();
@@ -71,13 +55,6 @@ fn gpu() -> Option<(wgpu::Device, wgpu::Queue)> {
         }
     })
     .clone()
-}
-
-fn unsupported_reason(name: &str) -> Option<&'static str> {
-    UNSUPPORTED
-        .iter()
-        .find(|(n, _)| *n == name)
-        .map(|(_, r)| *r)
 }
 
 fn psnr(a: &RenderOutput, b: &RenderOutput) -> f64 {
@@ -158,6 +135,7 @@ fn sphere_on_plane(mat: MaterialData) -> Snapshot {
 
 #[test]
 fn direct_light_matches_the_cpu_tracer() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -243,24 +221,16 @@ fn direct_light_matches_the_cpu_tracer() {
 
 #[test]
 fn the_o30_cases_keep_the_cpu_silhouette_and_light_level() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
     let engine = RtEngine::with_device(device, queue);
     let settings = image_parity::settings((320, 240), Vec::new());
     let mut checked = 0;
-    let mut pinned = 0;
     for name in case_names() {
         let case = load(&name);
         let rt = engine.render(&case.snapshot, &settings, &Control::new());
-        if let Some(reason) = unsupported_reason(&name) {
-            match rt {
-                Err(RenderError::Unsupported(_)) => pinned += 1,
-                Err(e) => panic!("{name}: expected Unsupported ({reason}), got {e}"),
-                Ok(_) => panic!("{name}: expected Unsupported ({reason}), rendered"),
-            }
-            continue;
-        }
         let cpu = CpuEngine::new()
             .render(&case.snapshot, &settings, &Control::new())
             .unwrap_or_else(|e| panic!("{name}: CPU: {e}"));
@@ -283,14 +253,54 @@ fn the_o30_cases_keep_the_cpu_silhouette_and_light_level() {
         checked += 1;
     }
     assert_eq!(
-        (checked, pinned),
-        (case_names().len() - UNSUPPORTED.len(), UNSUPPORTED.len()),
-        "every O30 case must be checked or pinned"
+        checked,
+        case_names().len(),
+        "every O30 case must be checked"
     );
+}
+
+/// R21.3: the shader-node colour reaches the raster image (it is not the fallback grey), so the
+/// checker's two squares differ by about as much as they do in the CPU image.
+#[test]
+fn shader_node_colour_varies_across_the_surface() {
+    let _serial = serial();
+    let Some((device, queue)) = gpu() else {
+        return;
+    };
+    let engine = RtEngine::with_device(device, queue);
+    let settings = image_parity::settings((320, 240), Vec::new());
+    for name in ["checker-plane", "mat-checker-uv", "mat-checker-cubic"] {
+        let case = load(name);
+        let spread = |out: &RenderOutput| {
+            let mut lo = f64::MAX;
+            let mut hi = 0.0f64;
+            for p in out.beauty.data.as_chunks::<4>().0 {
+                if p[3] > 0.5 {
+                    let l = 0.2126 * p[0] as f64 + 0.7152 * p[1] as f64 + 0.0722 * p[2] as f64;
+                    lo = lo.min(l);
+                    hi = hi.max(l);
+                }
+            }
+            hi / lo.max(1e-6)
+        };
+        let cpu = CpuEngine::new()
+            .render(&case.snapshot, &settings, &Control::new())
+            .unwrap();
+        let rt = engine
+            .render(&case.snapshot, &settings, &Control::new())
+            .unwrap();
+        let (c, r) = (spread(&cpu), spread(&rt));
+        eprintln!("{name}: brightest/darkest CPU {c:.2}, RT {r:.2}");
+        assert!(
+            r > 1.5,
+            "{name}: the raster image has no checker contrast ({r:.2})"
+        );
+    }
 }
 
 #[test]
 fn a_light_intensity_scales_the_image() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -315,6 +325,7 @@ fn a_light_intensity_scales_the_image() {
 
 #[test]
 fn a_shadow_map_darkens_the_occluded_plane() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -362,8 +373,114 @@ fn a_shadow_map_darkens_the_occluded_plane() {
     assert!(same > 100, "only {same} pixels are unaffected");
 }
 
+/// R21.4: every shadow-casting light draws its own map with its own matrix. Two spots, one
+/// above the sphere and one from the side, each cast a shadow on the plane in a different
+/// place; both shadows must show in one render (a backend that applied the last light's matrix
+/// to every shadow pass, or shared one tile, would lose one of them).
+#[test]
+fn two_shadowed_lights_each_cast_their_own_shadow() {
+    let _serial = serial();
+    let Some((device, queue)) = gpu() else {
+        return;
+    };
+    let engine = RtEngine::with_device(device, queue);
+    let mut snap = sphere_on_plane(diffuse([0.8, 0.8, 0.8]));
+    let spot = |at: DMat4| {
+        let mut l = light(
+            LightKind::Spot {
+                inner: 0.0,
+                outer: 60f64.to_radians(),
+            },
+            at,
+        );
+        l.intensity = 3.0;
+        l
+    };
+    let above = spot(
+        DMat4::from_translation(DVec3::new(0.0, 600.0, 0.0))
+            * DMat4::from_rotation_x(std::f64::consts::FRAC_PI_2),
+    );
+    // From +X, 400 up, aimed at the origin: the light's +Z axis runs along (-500, -400, 0).
+    let side = spot(
+        DMat4::from_translation(DVec3::new(500.0, 400.0, 0.0))
+            * DMat4::from_rotation_y(-std::f64::consts::FRAC_PI_2)
+            * DMat4::from_rotation_x(400f64.atan2(500.0)),
+    );
+    let settings = RenderSettings::new(160, 120, 1);
+    let render = |snap: &mut Snapshot, a: bool, b: bool| {
+        let mut lights = vec![above, side];
+        lights[0].shadow = if a {
+            ShadowMode::Hard
+        } else {
+            ShadowMode::None
+        };
+        lights[1].shadow = if b {
+            ShadowMode::Hard
+        } else {
+            ShadowMode::None
+        };
+        snap.lights = lights;
+        engine.render(snap, &settings, &Control::new()).unwrap()
+    };
+    let lum = |o: &RenderOutput| -> Vec<f64> {
+        o.beauty
+            .data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|p| {
+                if p[3] < 0.5 {
+                    f64::NAN
+                } else {
+                    0.2126 * p[0] as f64 + 0.7152 * p[1] as f64 + 0.0722 * p[2] as f64
+                }
+            })
+            .collect()
+    };
+    let none = lum(&render(&mut snap, false, false));
+    let only_a = lum(&render(&mut snap, true, false));
+    let only_b = lum(&render(&mut snap, false, true));
+    let both = lum(&render(&mut snap, true, true));
+    let (mut a_region, mut b_region, mut a_kept, mut b_kept) = (0, 0, 0, 0);
+    for i in 0..none.len() {
+        if none[i].is_nan() {
+            continue;
+        }
+        // pixels the above light's shadow darkens, and whether the two-light render keeps it
+        if only_a[i] < 0.9 * none[i] {
+            a_region += 1;
+            if both[i] < 0.9 * only_b[i] {
+                a_kept += 1;
+            }
+        }
+        if only_b[i] < 0.9 * none[i] {
+            b_region += 1;
+            if both[i] < 0.9 * only_a[i] {
+                b_kept += 1;
+            }
+        }
+    }
+    assert!(
+        a_region > 100,
+        "the light above casts no shadow ({a_region})"
+    );
+    assert!(
+        b_region > 100,
+        "the side light casts no shadow ({b_region})"
+    );
+    assert!(
+        a_kept * 10 >= a_region * 9,
+        "the shadow of the light above is missing from the two-light render: {a_kept} of {a_region}"
+    );
+    assert!(
+        b_kept * 10 >= b_region * 9,
+        "the shadow of the side light is missing from the two-light render: {b_kept} of {b_region}"
+    );
+}
+
 #[test]
 fn a_constant_environment_lights_a_sphere() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -396,6 +513,7 @@ fn a_constant_environment_lights_a_sphere() {
 
 #[test]
 fn an_image_environment_matches_a_constant_one() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -456,6 +574,7 @@ fn an_image_environment_matches_a_constant_one() {
 
 #[test]
 fn every_aov_has_its_r3_value() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -525,6 +644,7 @@ fn every_aov_has_its_r3_value() {
 
 #[test]
 fn two_renders_are_byte_identical() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -553,6 +673,7 @@ fn two_renders_are_byte_identical() {
 
 #[test]
 fn a_region_is_rendered_and_events_are_reported() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };
@@ -611,6 +732,7 @@ fn a_region_is_rendered_and_events_are_reported() {
 
 #[test]
 fn depth_of_field_is_pinned_unsupported() {
+    let _serial = serial();
     let Some((device, queue)) = gpu() else {
         return;
     };

@@ -36,7 +36,7 @@ use crate::object_manager::ObjectManager;
 use crate::palette::Palette;
 use crate::panes::{PANE_GAP, display_settings};
 use crate::snapping::{SnapScene, collect_sources, collect_sources_multi, drag_step};
-use crate::state::EditorState;
+use crate::state::{DisplayMode, EditorState};
 use crate::theme::{Theme, ThemeKind};
 use crate::viewport_panel::{
     NavAction, NavInput, NavMode, SceneView, ViewportPanel, apply_nav, nav_action,
@@ -111,6 +111,8 @@ pub struct Editor {
     /// Initial sizes of the resizable areas (docs/specs/UI.md §11).
     sizes: Sizes,
     viewport: ViewportPanel,
+    /// The Render display mode's frames and their cache (UI.md §6.3, R22.7).
+    render_view: crate::render_mode::RenderView,
     /// The object manager's panel state: rename buffer, search text (UI.md §13).
     objects: ObjectManager,
     material_previews: crate::material_manager::MaterialPreviews,
@@ -221,6 +223,7 @@ impl Editor {
             state,
             sizes: Sizes::default(),
             viewport: ViewportPanel::default(),
+            render_view: crate::render_mode::RenderView::default(),
             objects: ObjectManager::default(),
             material_previews: crate::material_manager::MaterialPreviews::default(),
             picture_viewer: crate::picture_viewer::PictureViewer::default(),
@@ -1533,6 +1536,33 @@ impl Editor {
                 ui.separator();
                 self.component_bar(ui);
             }
+            ui.separator();
+            // what the panes draw: the shaded scene or the real-time tier (UI.md §6.3).
+            // UI state only: no undo entry, no document change.
+            let render = self.state.display == DisplayMode::Render;
+            if ui
+                .add(egui::Button::new("Render").selected(render))
+                .clicked()
+            {
+                self.state.display = if render {
+                    DisplayMode::Shaded
+                } else {
+                    DisplayMode::Render
+                };
+            }
+            ui.add_enabled_ui(render, |ui| {
+                ui.menu_button("Post", |ui| {
+                    for (label, on) in [
+                        ("SSAO", &mut self.state.post.ssao),
+                        ("SSR", &mut self.state.post.ssr),
+                        ("Bloom", &mut self.state.post.bloom),
+                        ("TAA", &mut self.state.post.taa),
+                        ("Tone map", &mut self.state.post.tonemap),
+                    ] {
+                        ui.checkbox(on, label);
+                    }
+                });
+            });
         });
         let area = ui.available_rect_before_wrap();
         let rects = arrange(
@@ -1658,6 +1688,10 @@ impl Editor {
             self.paint_hud(ui, pane, rect, &frame);
             return;
         };
+        if self.state.display == DisplayMode::Render {
+            self.paint_render_mode(ui, pane, rect, ppp);
+            return;
+        }
         let gizmo = self.current_gizmo();
         // the scheduler's pass: only what changed since the last frame is evaluated and
         // rebuilt (CORE.md section 5b); a live tool preview replaces the target's mesh in
@@ -1783,6 +1817,43 @@ impl Editor {
                 4.0,
                 Theme::current(ui.ctx()).component_selection,
             );
+        }
+    }
+
+    /// The Render display mode: the real-time tier's frame of this pane's camera, without the
+    /// overlays (UI.md §6.3, RENDER.md R22.7). A missing device keeps a note instead of the
+    /// shaded image, since the shaded image needs the same device.
+    fn paint_render_mode(&mut self, ui: &mut Ui, pane: Pane, rect: egui::Rect, ppp: f32) {
+        let size = [
+            ((rect.width() * ppp).round() as u32).clamp(1, 640),
+            ((rect.height() * ppp).round() as u32).clamp(1, 400),
+        ];
+        let current = self.state.timeline.current;
+        let shown = self.state.app.scheduled_draw(current).scene.clone();
+        let camera = self.state.pane_camera(pane);
+        let post = self.state.post;
+        match self
+            .render_view
+            .image(ui.ctx(), &shown, &camera, current, size, post)
+        {
+            Ok(texture) => {
+                let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+                ui.painter()
+                    .image(texture.id(), rect, uv, egui::Color32::WHITE);
+                ui.painter().text(
+                    rect.left_top() + egui::vec2(8.0, 6.0),
+                    egui::Align2::LEFT_TOP,
+                    format!("{} · Render", pane.label()),
+                    egui::FontId::proportional(12.0),
+                    Theme::current(ui.ctx()).weak_text,
+                );
+            }
+            Err(_) => {
+                ui.put(
+                    rect,
+                    egui::Label::new("Render unavailable").selectable(false),
+                );
+            }
         }
     }
 

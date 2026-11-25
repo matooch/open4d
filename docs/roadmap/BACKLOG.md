@@ -104,20 +104,20 @@ implementers can avoid collisions.
 | 104 | [IK tag: 2-bone, chain, pole, twist, IK/FK blend](../agents/tasks/104-ik.md) | H | 100 | done | rig |
 | 105 | [Constraint tag: PSR, Aim, Parent, Clamp](../agents/tasks/105-constraints.md) | H | 100 | done | rig |
 | 106 | [Tags: Target, Align to Spline, Vibrate, Look at Camera, Protection, Display, Compositing](../agents/tasks/106-expression-tags.md) | H | 088 | done | core, rig |
-| 107 | [Pose Morph tag](../agents/tasks/107-pose-morph.md) | H | 088 | waiting: O37 | rig |
+| 107 | [Pose Morph tag](../agents/tasks/107-pose-morph.md) | H | 088 | done (parity-pending: O37, own design D20) | rig |
 | 108 | [Node expression engine forge-nodes](../agents/tasks/108-forge-nodes.md) | H | 016 | done | nodes (new) |
 | 109 | [Node expression editor UI](../agents/tasks/109-node-editor-ui.md) | H | 108, 150 | done (parity-pending G6; follow-up: node materials reuse the canvas, brief 124) | ui, nodes |
 | 110 | [User data on any node](../agents/tasks/110-user-data.md) | H | 011, 150 | done | core, ui |
 | 111 | [Evaluation order: tag priorities, expressions before generators](../agents/tasks/111-evaluation-order.md) | H | 104, 105, 108 | done | core |
 | 112 | [Weight and joint display modes in the viewport](../agents/tasks/112-rig-display.md) | H | 101, 143 | done (parity-pending: own design; draw lists and ramp as pure code, weight overlay as markers; VIEWPORT.md §13) | viewport |
 | 113 | [Rig mirroring (joints and weights, left/right naming)](../agents/tasks/113-rig-mirroring.md) | H | 101 | done (own design: no observation; symmetric-deformation unit test, RIG.md §5) | rig |
-| 114 | [S6 acceptance test and rigging docs](../agents/tasks/114-s6-rigging-acceptance.md) | H | 100–113 | ready | tests, docs |
+| 114 | [S6 acceptance test and rigging docs](../agents/tasks/114-s6-rigging-acceptance.md) | H | 100–113 | done | tests, docs |
 | 115 | [rapier integration: rigid body tag, shapes, scene settings, per-frame cache, scrubbing; compare_trajectory](../agents/tasks/115-rigid-bodies.md) | I | 050, 010 | done (parity-pending: scene gravity/steps are a fit; bounce and friction combine rules) | dynamics (new), parity-harness |
 | 116 | [Dynamics on clones](../agents/tasks/116-dynamics-on-clones.md) | I | 115, 065 | done (parity-pending: clone drift and edge balance are engine-specific) | dynamics, clone-engine |
 | 117 | [Connectors and springs](../agents/tasks/117-connectors-springs.md) | I | 115 | done (parity-pending: connector axis choice, spring stiffness scale) | dynamics |
 | 118 | [Soft bodies (PBD)](../agents/tasks/118-soft-bodies.md) | I | 115 | done (resting height pinned: the reference sinks through the plane; constants parity-pending) | dynamics |
-| 119 | [Particle emitter and particle data](../agents/tasks/119-particle-emitter.md) | I | 050 | waiting: O40 | dynamics |
-| 120 | [Forces: gravity, wind, attractor, deflector, friction, turbulence, rotation](../agents/tasks/120-forces.md) | I | 119, 115, 063 | waiting: O40 | dynamics |
+| 119 | [Particle emitter and particle data](../agents/tasks/119-particle-emitter.md) | I | 050 | ready (own design, D20) | dynamics |
+| 120 | [Forces: gravity, wind, attractor, deflector, friction, turbulence, rotation](../agents/tasks/120-forces.md) | I | 119, 115, 063 | ready (own design, D20) | dynamics |
 | 121 | [Particles in the clone toolset and volumes](../agents/tasks/121-particles-in-clones-volumes.md) | I | 119, 076, 081 | ready | dynamics, clone-engine, volume |
 | 122 | [Bake to keys and cache tags; dynamics UI](../agents/tasks/122-dynamics-bake-ui.md) | I | 115, 093 | done | dynamics, ui |
 | 123 | [Material model: Standard material + material tag + IR compile](../agents/tasks/123-material-model.md) | J | – | done (8 tests; scene hosting of materials needs a core slot) | material (new), plugin |
@@ -196,8 +196,8 @@ implementers can avoid collisions.
 | 197 | [Shading IR to WGSL codegen and shader cache (part 1: IR core)](../agents/tasks/197-shading-ir-wgsl.md) | R | 123 | done | material, shaders |
 | 207 | [Shader nodes to WGSL, GPU comparison over all nodes (part 2)](../agents/tasks/207-shader-nodes-wgsl.md) | R | 197, 125, 126 | done | shaders, material |
 | 198 | [Real-time raster PBR engine (render-rt)](../agents/tasks/198-realtime-raster.md) | R | 197, 133, 137 | done | render-rt (new), viewport, render-api |
-| 199 | [Post effects and viewport Render mode](../agents/tasks/199-realtime-post.md) | R | 198 | waiting: 198 | render-rt, viewport, ui |
-| 200 | [GPU scene: acceleration structures and compute fallback](../agents/tasks/200-gpu-scene-rt.md) | R | 142, 198 | waiting: 142, 198 | render-rt, render-gpu |
+| 199 | [Post effects and viewport Render mode](../agents/tasks/199-realtime-post.md) | R | 198 | done | render-rt, viewport, ui |
+| 200 | [GPU scene: acceleration structures and compute fallback](../agents/tasks/200-gpu-scene-rt.md) | R | 142, 198 | ready | render-rt, render-gpu |
 | 201 | [Hybrid ray-traced shadows, reflections, AO and GI](../agents/tasks/201-hybrid-rt.md) | R | 200 | waiting: 200 | render-rt |
 | 202 | [Real-time path tracing with denoising](../agents/tasks/202-realtime-pathtrace.md) | R | 200, 201 | waiting: 200, 201 | render-rt |
 | 203 | [Consistency tests across render tiers](../agents/tasks/203-rt-consistency.md) | R | 198, 202 | waiting: 198, 202 | tests, render-rt |
@@ -205,4 +205,6 @@ implementers can avoid collisions.
 | 205 | [S4 acceptance test and motion-graphics docs](../agents/tasks/205-s4-mograph-acceptance.md) | E | 066, 072, 074, 075, 136 | done | tests, docs |
 | 206 | [S5 acceptance test and volume docs](../agents/tasks/206-s5-volume-acceptance.md) | F | 081, 082, 083, 003 | done | tests, docs |
 | 208 | [Volume mesher: manifold output on thin features](../agents/tasks/208-volume-mesher-manifold.md) | F | 083, 206 | done | volume |
+| 209 | [Shader-node materials in the real-time raster engine](../agents/tasks/209-rt-shader-nodes.md) | R | 198, 207 | done | render-rt |
+| 210 | [Real-time shadows on DirectX 12](../agents/tasks/210-dx12-shadows.md) | R | 198 | ready (needs Windows DX12) | render-rt |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |

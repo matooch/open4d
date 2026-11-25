@@ -75,3 +75,20 @@ samples were written.
   named force objects created by their own menu commands, then frames 0 to 30 stepped one at a time.
 - For the record, the force objects the cases name (Gravity, Wind, Attractor, Deflector, Friction,
   Turbulence) were not built, because no case could be sampled even with them in place.
+
+## Follow-up (planner, 2026-11-25, D20): capture particle statistics through an export
+
+The emitter's particle list can't be read by script, and we now build particles as our own
+design with statistical tests (DECISIONS D20). Try these, in order, and record what works:
+
+1. **Alembic export of the emitter** at frames 10, 20 and 30 (the exporter's particle/points
+   option on). If the file holds points, write `samples.json` with per frame: particle count, mean
+   and standard deviation of position (x, y, z), of speed (from consecutive frames if no velocity
+   is stored) and, if present, age.
+2. **A Matrix object in Object mode on the emitter**, or a **Tracer** with the emitter as its
+   source: if either exposes one point or matrix per particle through its documented data, read
+   them per frame and write the same statistics.
+3. If neither works, write "not capturable" with what each attempt returned.
+
+Cases: the form's baseline emitter (default settings) and the gravity case. Same frames, same
+seed. No per-particle data is needed, only the statistics above.

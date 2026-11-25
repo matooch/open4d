@@ -883,3 +883,281 @@ fn s5_volume_union_is_smoothed_meshed_and_made_editable() {
         "two runs of the script gave different OBJ files"
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// S6: rigging through the CLI, `tests/acceptance/s6_rigging.rhai` (docs/roadmap/README.md S6):
+// a joint chain bound to a cylinder with automatic weights, IK with a pole target, a Pose Morph,
+// all animated. Pose Morph is our own design (D20, parity-pending O37); the IK pole side is the
+// observed rule of RIG.md section 10 (the elbow goes opposite the pole).
+// ---------------------------------------------------------------------------------------------
+
+/// Chain geometry of the script: J1 at (0, -100, 0), two bones of 100.
+const S6_ROOT: [f64; 3] = [0.0, -100.0, 0.0];
+const S6_BONE: f64 = 100.0;
+/// The goal and pole keys of the script at frames 0, 30 and 60.
+const S6_KEYED: [(i64, [f64; 3], [f64; 3]); 3] = [
+    (0, [60.0, 60.0, 0.0], [0.0, 0.0, 300.0]),
+    (30, [0.0, 20.0, 80.0], [300.0, 0.0, 0.0]),
+    (60, [-40.0, 70.0, 40.0], [0.0, 0.0, -300.0]),
+];
+/// The IK tag's default `threshold` (RIG.md section 10): the solver's stop rule.
+const S6_IK_THRESHOLD: f64 = 0.01;
+
+struct S6Ids {
+    body: u64,
+    m2: u64,
+    m3: u64,
+    morph: u64,
+}
+
+fn s6_script() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/acceptance/s6_rigging.rhai")
+}
+
+fn s6_build(d: &Path, name: &str) -> (PathBuf, S6Ids) {
+    let scene = d.join(format!("s6-{name}.forge"));
+    let (code, out) = json_run(&["run", s(&s6_script()), "--save", s(&scene)]);
+    assert_eq!(code, 0, "{out}");
+    let line = out["output"][0]
+        .as_str()
+        .expect("the script prints its node ids");
+    let id = |key: &str| {
+        line.split_whitespace()
+            .find_map(|token| token.strip_prefix(key)?.strip_prefix('='))
+            .unwrap_or_else(|| panic!("no {key}= in {line:?}"))
+            .parse::<u64>()
+            .unwrap()
+    };
+    let ids = S6Ids {
+        body: id("body"),
+        m2: id("m2"),
+        m3: id("m3"),
+        morph: id("morph"),
+    };
+    (scene, ids)
+}
+
+fn s6_sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+fn s6_dot(a: [f64; 3], b: [f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn s6_len(a: [f64; 3]) -> f64 {
+    s6_dot(a, a).sqrt()
+}
+
+/// The part of `v` perpendicular to the unit vector `c`.
+fn s6_perp(v: [f64; 3], c: [f64; 3]) -> [f64; 3] {
+    let k = s6_dot(v, c);
+    [v[0] - c[0] * k, v[1] - c[1] * k, v[2] - c[2] * k]
+}
+
+fn s6_cos(a: [f64; 3], b: [f64; 3]) -> f64 {
+    s6_dot(a, b) / (s6_len(a) * s6_len(b))
+}
+
+/// The centre of a node's evaluated bounding box at `frame`, from `forge eval --json`.
+fn s6_center(scene: &Path, frame: i64, node: u64) -> [f64; 3] {
+    let (code, out) = json_run(&[
+        "eval",
+        s(scene),
+        "--frame",
+        &frame.to_string(),
+        "--node",
+        &node.to_string(),
+    ]);
+    assert_eq!(code, 0, "{out}");
+    let bbox = &out["nodes"][0]["bbox"];
+    let c = |i: usize| (bbox[0][i].as_f64().unwrap() + bbox[1][i].as_f64().unwrap()) / 2.0;
+    [c(0), c(1), c(2)]
+}
+
+/// The points of a node at `frame`, exported to OBJ in `d`.
+fn s6_points(d: &Path, scene: &Path, frame: i64, node: u64, tag: &str) -> Vec<[f64; 3]> {
+    let obj = d.join(format!("{tag}-{node}-{frame}.obj"));
+    let (code, out) = json_run(&[
+        "eval",
+        s(scene),
+        "--frame",
+        &frame.to_string(),
+        "--node",
+        &node.to_string(),
+        "--export",
+        s(&obj),
+    ]);
+    assert_eq!(code, 0, "{out}");
+    parse_obj(&std::fs::read_to_string(&obj).unwrap())
+        .unwrap()
+        .positions
+}
+
+/// A copy of `scene` after one command.
+fn s6_variant(d: &Path, scene: &Path, name: &str, command: &str, args: Value) -> PathBuf {
+    let copy = d.join(format!("s6-variant-{name}.forge"));
+    std::fs::copy(scene, &copy).unwrap();
+    let (code, out) = json_run(&[
+        "cmd",
+        s(&copy),
+        command,
+        "--args",
+        &args.to_string(),
+        "--save",
+    ]);
+    assert_eq!(code, 0, "{out}");
+    copy
+}
+
+#[test]
+fn s6_rigging_skin_follows_the_joints_ik_pole_and_pose_morph() {
+    let d = dir("s6");
+    let (scene, ids) = s6_build(&d, "a");
+
+    // 1. IK: the tip (the J3 marker rides on the end joint) reaches the keyed goal within the
+    // solver's threshold; the bones keep their length (the chain never stretches); the elbow lies
+    // in the plane of the chord and the pole, on the side opposite the pole (RIG.md section 10).
+    let mut elbow_dirs = Vec::new();
+    for (frame, goal, pole) in S6_KEYED {
+        let tip = s6_center(&scene, frame, ids.m3);
+        let elbow = s6_center(&scene, frame, ids.m2);
+        let miss = s6_len(s6_sub(tip, goal));
+        assert!(
+            miss <= S6_IK_THRESHOLD,
+            "frame {frame}: the tip is {miss} from the goal"
+        );
+        let upper = s6_len(s6_sub(elbow, S6_ROOT));
+        let lower = s6_len(s6_sub(tip, elbow));
+        assert!(
+            (upper - S6_BONE).abs() < 1e-6 && (lower - S6_BONE).abs() < 1e-6,
+            "frame {frame}: bones {upper}, {lower}"
+        );
+        let to_goal = s6_sub(goal, S6_ROOT);
+        let chord = to_goal.map(|v| v / s6_len(to_goal));
+        let bend = s6_perp(s6_sub(elbow, S6_ROOT), chord);
+        let toward_pole = s6_perp(s6_sub(pole, S6_ROOT), chord);
+        let cosine = s6_cos(bend, toward_pole);
+        assert!(
+            cosine < -0.999_999,
+            "frame {frame}: the elbow must bend away from the pole (cos {cosine})"
+        );
+        elbow_dirs.push(bend);
+    }
+    // the pole moves from +Z to +X to -Z: the bend plane turns with it
+    assert!(s6_cos(elbow_dirs[0], elbow_dirs[1]) < 0.9);
+    assert!(s6_cos(elbow_dirs[0], elbow_dirs[2]) < 0.9);
+
+    // 2. Skin: the cap centres sit on the chain's ends (automatic weights give them to the end
+    // joints), so the skinned cylinder's ends follow the root and the IK-driven tip.
+    for (frame, goal, _) in S6_KEYED {
+        let pts = s6_points(&d, &scene, frame, ids.body, "skin");
+        assert_eq!(pts.len(), 110, "2 cap centres + 12 rings of 9");
+        let bottom = s6_len(s6_sub(pts[0], S6_ROOT));
+        let top = s6_len(s6_sub(pts[1], goal));
+        assert!(
+            bottom < 0.5,
+            "frame {frame}: bottom cap centre {bottom} from J1"
+        );
+        assert!(
+            top < 0.5,
+            "frame {frame}: top cap centre {top} from the tip"
+        );
+    }
+    let rest = s6_points(&d, &scene, 0, ids.body, "rest-check");
+    let bent = s6_points(&d, &scene, 30, ids.body, "rest-check");
+    let moved = rest
+        .iter()
+        .zip(&bent)
+        .map(|(a, b)| s6_len(s6_sub(*a, *b)))
+        .fold(0.0, f64::max);
+    assert!(
+        moved > 50.0,
+        "the skin follows the animated joints ({moved})"
+    );
+
+    // 3. Pose Morph: compared with the tag switched off. Strength 0 % (frame 0) changes nothing;
+    // at 100 % (frame 30) the widened upper half moves, the lower half and the cap centres do not;
+    // the skin is linear, so doubling a key doubles the displacement at the same frame.
+    let tag = ids.morph;
+    let off = s6_variant(
+        &d,
+        &scene,
+        "off",
+        "param.set",
+        json!({"node": tag, "param": "enabled", "value": false}),
+    );
+    let displacement = |frame: i64, other: &Path, with: &Path| -> Vec<[f64; 3]> {
+        let a = s6_points(&d, with, frame, ids.body, "morph-on");
+        let b = s6_points(&d, other, frame, ids.body, "morph-off");
+        assert_eq!(a.len(), b.len());
+        a.iter().zip(&b).map(|(p, q)| s6_sub(*p, *q)).collect()
+    };
+    let zero = displacement(0, &off, &scene);
+    assert!(zero.iter().all(|v| s6_len(*v) < 1e-9), "0 % moves nothing");
+    let full = displacement(30, &off, &scene);
+    // point 0 is the bottom cap centre; ring points j = 0..4 (y <= 0 at rest) are not in the target
+    let untouched = |i: usize| i == 0 || i == 1 || (i >= 2 && (i - 2) % 9 <= 4);
+    for (i, v) in full.iter().enumerate() {
+        if untouched(i) {
+            assert!(s6_len(*v) < 1e-9, "point {i} is outside the target: {v:?}");
+        }
+    }
+    let max_full = full.iter().map(|v| s6_len(*v)).fold(0.0, f64::max);
+    // at 100 % a rest-pose ring point moves by 20 (radius 20 -> 40); the skin blend can only shorten it
+    assert!(
+        max_full > 5.0 && max_full <= 20.0 + 1e-6,
+        "the morph moves the upper half by at most its 20 units ({max_full})"
+    );
+    // frame 60 holds 50 %; the same scene with that key at 100 % moves every point twice as far
+    let half = displacement(60, &off, &scene);
+    let doubled = s6_variant(
+        &d,
+        &scene,
+        "double",
+        "key.set",
+        json!({"node": tag, "track": "strength_0", "frame": 60, "value": 100.0}),
+    );
+    let double = displacement(60, &off, &doubled);
+    assert!(half.iter().any(|v| s6_len(*v) > 1.0));
+    for (i, (h, f)) in half.iter().zip(&double).enumerate() {
+        for axis in 0..3 {
+            assert!(
+                (2.0 * h[axis] - f[axis]).abs() < 1e-6,
+                "point {i}: 50 % {h:?} vs 100 % {f:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn s6_all_frames_evaluate_and_two_runs_agree() {
+    let d = dir("s6-frames");
+    let (a, ids) = s6_build(&d, "a");
+    let (b, _) = s6_build(&d, "b");
+    // every frame of the animation evaluates without error; the measured mean frame time is
+    // reported, not asserted (HERMES-IMPLEMENTER 5a: no wall-clock assertions)
+    let started = std::time::Instant::now();
+    let frames = 0..=60;
+    let count = frames.clone().count();
+    for frame in frames {
+        let (code, out) = json_run(&["eval", s(&a), "--frame", &frame.to_string()]);
+        assert_eq!(code, 0, "frame {frame}: {out}");
+        assert_eq!(out["ok"], true, "frame {frame}: {out}");
+    }
+    eprintln!(
+        "S6: {count} frames, mean {:.1} ms per frame (one forge process per frame, debug build)",
+        started.elapsed().as_secs_f64() * 1000.0 / count as f64
+    );
+    // determinism: the same script gives the same skinned points and joint positions
+    for frame in [0, 15, 30, 45, 60] {
+        assert_eq!(
+            s6_points(&d, &a, frame, ids.body, "run-a"),
+            s6_points(&d, &b, frame, ids.body, "run-b"),
+            "frame {frame}"
+        );
+        for node in [ids.m2, ids.m3] {
+            assert_eq!(s6_center(&a, frame, node), s6_center(&b, frame, node));
+        }
+    }
+}
