@@ -195,7 +195,7 @@ implementers can avoid collisions.
 | 196 | [OBJ texture coordinates (vt) import and export](../agents/tasks/196-obj-uvs.md) | M | 004, 128 | done | io |
 | 197 | [Shading IR to WGSL codegen and shader cache (part 1: IR core)](../agents/tasks/197-shading-ir-wgsl.md) | R | 123 | done | material, shaders |
 | 207 | [Shader nodes to WGSL, GPU comparison over all nodes (part 2)](../agents/tasks/207-shader-nodes-wgsl.md) | R | 197, 125, 126 | done | shaders, material |
-| 198 | [Real-time raster PBR engine (render-rt)](../agents/tasks/198-realtime-raster.md) | R | 197, 133, 137 | waiting: 197, 133, 137 | render-rt (new), viewport, render-api |
+| 198 | [Real-time raster PBR engine (render-rt)](../agents/tasks/198-realtime-raster.md) | R | 197, 133, 137 | in-progress (hermes) | render-rt (new), viewport, render-api |
 | 199 | [Post effects and viewport Render mode](../agents/tasks/199-realtime-post.md) | R | 198 | waiting: 198 | render-rt, viewport, ui |
 | 200 | [GPU scene: acceleration structures and compute fallback](../agents/tasks/200-gpu-scene-rt.md) | R | 142, 198 | waiting: 142, 198 | render-rt, render-gpu |
 | 201 | [Hybrid ray-traced shadows, reflections, AO and GI](../agents/tasks/201-hybrid-rt.md) | R | 200 | waiting: 200 | render-rt |
