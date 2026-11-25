@@ -269,6 +269,34 @@ impl Scene {
         self.trace(o, d, tmax, true).is_some()
     }
 
+    /// Reconstruct hit shading inputs from a rasterized world point and triangle ID
+    /// without traversing the acceleration structures.
+    pub fn geometry_at(&self, snap: &Snapshot, p: DVec3, inst: usize, tri: usize) -> HitGeom {
+        let instance = &self.insts[inst];
+        let t = &self.blases[instance.blas].tris[tri];
+        let q = instance.to_obj.transform_point3(p) - t.p0;
+        let (aa, ab, bb) = (t.e1.length_squared(), t.e1.dot(t.e2), t.e2.length_squared());
+        let (qa, qb) = (q.dot(t.e1), q.dot(t.e2));
+        let det = aa * bb - ab * ab;
+        let (u, v) = if det > 0.0 {
+            ((bb * qa - ab * qb) / det, (aa * qb - ab * qa) / det)
+        } else {
+            (0.0, 0.0)
+        };
+        self.geometry(
+            snap,
+            p,
+            DVec3::ZERO,
+            &Hit {
+                t: 0.0,
+                inst,
+                tri,
+                u,
+                v,
+            },
+        )
+    }
+
     /// World-space geometry of a hit.
     pub fn geometry(&self, snap: &Snapshot, o: DVec3, d: DVec3, h: &Hit) -> HitGeom {
         let inst = &self.insts[h.inst];

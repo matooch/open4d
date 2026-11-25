@@ -44,6 +44,8 @@ pub struct RenderSettings {
 pub struct HybridSettings {
     /// Master switch. When off, use the raster approximations.
     pub enabled: bool,
+    /// Replace shadow-casting lights' raster contribution with sampled RT lighting.
+    pub shadows: bool,
     /// Replace screen-space AO with ray-traced ambient visibility.
     pub ao: bool,
     /// Maximum AO ray distance in world units. Zero leaves ambient unchanged.
@@ -54,6 +56,7 @@ impl Default for HybridSettings {
     fn default() -> Self {
         Self {
             enabled: false,
+            shadows: false,
             ao: false,
             ao_radius: 40.0,
         }

@@ -92,6 +92,8 @@ pub mod frame {
     pub const JITTER_Y: usize = 107;
     /// Lighting reads the ray-traced AO mask instead of evaluating SSAO.
     pub const RT_AO_ON: usize = 108;
+    /// Lighting reads sampled, ray-tested direct lighting for shadow-casting lights.
+    pub const RT_SHADOWS_ON: usize = 109;
 
     pub const SLOTS: usize = 128;
 
@@ -145,5 +147,6 @@ pub mod frame {
         ("JITTER_X", JITTER_X),
         ("JITTER_Y", JITTER_Y),
         ("RT_AO_ON", RT_AO_ON),
+        ("RT_SHADOWS_ON", RT_SHADOWS_ON),
     ];
 }

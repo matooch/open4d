@@ -17,7 +17,7 @@ use wgpu::util::DeviceExt;
 
 use crate::frame;
 use crate::framegraph::FrameGraph;
-use crate::hybrid::{AoInput, HybridView};
+use crate::hybrid::{HybridView, PrimaryInput};
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
 
 /// One shadow map descriptor, 416 bytes (R21.4).
@@ -99,33 +99,68 @@ impl RtEngine {
         }
     }
 
-    fn upload_ao(&self, w: u32, h: u32, mask: &[f32]) -> wgpu::TextureView {
+    fn upload_hybrid(&self, w: u32, h: u32, shadows: &[[f32; 8]], ao: &[f32]) -> wgpu::TextureView {
+        let layer_count = match (shadows.is_empty(), ao.is_empty()) {
+            (true, _) => 1,
+            (false, true) => 2,
+            (false, false) => 3,
+        };
         let size = wgpu::Extent3d {
             width: w,
             height: h,
-            depth_or_array_layers: 1,
+            depth_or_array_layers: layer_count,
         };
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("ray-traced ambient visibility"),
+            label: Some("ray-traced lighting"),
             size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R32Float,
+            format: if shadows.is_empty() {
+                wgpu::TextureFormat::R32Float
+            } else {
+                wgpu::TextureFormat::Rgba32Float
+            },
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        self.queue.write_texture(
-            texture.as_image_copy(),
-            bytemuck::cast_slice(mask),
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(w * 4),
-                rows_per_image: Some(h),
-            },
-            size,
-        );
-        texture.create_view(&Default::default())
+        let write_layer = |index, bytes: &[u8], bytes_per_pixel| {
+            let mut copy = texture.as_image_copy();
+            copy.origin.z = index;
+            self.queue.write_texture(
+                copy,
+                bytes,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(w * bytes_per_pixel),
+                    rows_per_image: Some(h),
+                },
+                wgpu::Extent3d {
+                    depth_or_array_layers: 1,
+                    ..size
+                },
+            );
+        };
+        if shadows.is_empty() {
+            write_layer(0, bytemuck::cast_slice(ao), 4);
+            return lighting_source_view(&texture);
+        }
+        for layer in 0..2 {
+            let start = layer * 4;
+            let pixels: Vec<[f32; 4]> = shadows
+                .iter()
+                .map(|p| p[start..][..4].try_into().expect("four layer channels"))
+                .collect();
+            write_layer(layer as u32, bytemuck::cast_slice(&pixels), 16);
+        }
+        if !ao.is_empty() {
+            write_layer(
+                2,
+                bytemuck::cast_slice(&ao.iter().map(|&a| [a, 0.0, 0.0, 0.0]).collect::<Vec<_>>()),
+                16,
+            );
+        }
+        lighting_source_view(&texture)
     }
 
     fn read_rgba(
@@ -434,6 +469,7 @@ fn frame_pass_graph(
     albedo: bool,
     ssr: bool,
     rt_ao: bool,
+    rt_shadows: bool,
 ) -> FrameGraph {
     let mut g = FrameGraph::new();
     g.input("tris");
@@ -448,13 +484,17 @@ fn frame_pass_graph(
         g.add("ray_ao", &["g0", "g1", "tris"], &["ao_mask"]);
         reads.push("ao_mask");
     }
+    if rt_shadows {
+        g.add("ray_shadows", &["g0", "g1", "tris"], &["ray_direct"]);
+        reads.push("ray_direct");
+    }
     g.add("lighting", &reads, &["beauty", "shadow"]);
     if ssr {
         // R22.3: the reflections read the lit beauty and write its own target
         g.add("ssr", &["beauty", "g0", "g1"], &["beauty_ssr"]);
     }
     if split {
-        g.add("split", &["g0", "g1"], &["diffuse", "specular"]);
+        g.add("split", &reads, &["diffuse", "specular"]);
     }
     if albedo {
         g.add("albedo", &["g0", "g1"], &["albedo"]);
@@ -493,6 +533,13 @@ fn texture_entry(binding: u32, depth: bool) -> wgpu::BindGroupLayoutEntry {
     }
 }
 
+fn lighting_source_view(texture: &wgpu::Texture) -> wgpu::TextureView {
+    texture.create_view(&wgpu::TextureViewDescriptor {
+        dimension: Some(wgpu::TextureViewDimension::D2Array),
+        ..Default::default()
+    })
+}
+
 fn sampler_entry(binding: u32, comparison: bool) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
@@ -518,7 +565,7 @@ impl RenderEngine for RtEngine {
         control: &Control,
     ) -> Result<RenderOutput, RenderError> {
         settings.validate()?;
-        if !settings.hybrid.enabled || !settings.hybrid.ao {
+        if !settings.hybrid.enabled || !(settings.hybrid.ao || settings.hybrid.shadows) {
             self.hybrid
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
@@ -600,7 +647,15 @@ impl RtEngine {
             .any(|a| matches!(a, Aov::Diffuse | Aov::Specular | Aov::Emission));
         let albedo = settings.aovs.contains(&Aov::Albedo);
         let rt_ao = settings.hybrid.enabled && settings.hybrid.ao;
-        let graph = frame_pass_graph(plans.len(), split, albedo, settings.post.ssr, rt_ao);
+        let rt_shadows = settings.hybrid.enabled && settings.hybrid.shadows;
+        let graph = frame_pass_graph(
+            plans.len(),
+            split,
+            albedo,
+            settings.post.ssr,
+            rt_ao,
+            rt_shadows,
+        );
         graph
             .validate()
             .map_err(|e| RenderError::Settings(format!("frame graph: {e}")))?;
@@ -730,7 +785,14 @@ impl RtEngine {
                 sampler_entry(3, true),
                 texture_entry(4, false),
                 sampler_entry(5, false),
-                texture_entry(6, false),
+                wgpu::BindGroupLayoutEntry {
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    ..texture_entry(6, false)
+                },
             ],
         });
         // R21.3: the shader-node bitmaps, one sampled texture per binding, in group 2
@@ -979,7 +1041,7 @@ impl RtEngine {
                         binding: 5,
                         resource: wgpu::BindingResource::Sampler(&env_sampler),
                     },
-                    // Lighting reads an optional RT AO mask; SSR reads the lit beauty here.
+                    // Lighting reads optional RT signals; SSR reads lit beauty at layer 0.
                     wgpu::BindGroupEntry {
                         binding: 6,
                         resource: wgpu::BindingResource::TextureView(source),
@@ -1090,31 +1152,39 @@ impl RtEngine {
             return Err(RenderError::Cancelled);
         }
         let mut primary = None;
-        let ao_view = if rt_ao {
+        let hybrid_view = if rt_ao || rt_shadows {
             let mut view = self.hybrid.lock().unwrap_or_else(|e| e.into_inner());
-            let mask = view
+            let signals = view
                 .prepare(snapshot, settings, device, queue)
                 .and_then(|()| {
                     let g = self.read_rgba(&[&targets.g[0], &targets.g[1]], w, h)?;
-                    let mask = view.ambient_visibility(
-                        settings,
-                        AoInput {
-                            positions: &g[0],
-                            normals: &g[1],
-                            jitter,
-                            epsilon: packed.scale.max(1e-6) * 1e-6,
-                        },
-                        control,
-                    )?;
+                    let input = PrimaryInput {
+                        positions: &g[0],
+                        normals: &g[1],
+                        jitter,
+                        epsilon: packed.scale.max(1e-6) * 1e-6,
+                    };
+                    let ao = if rt_ao {
+                        view.ambient_visibility(settings, input, control)?
+                    } else {
+                        Vec::new()
+                    };
+                    let shadows = if rt_shadows {
+                        view.direct_shadows(snapshot, settings, input, control)?
+                    } else {
+                        Vec::new()
+                    };
                     primary = Some(g);
-                    Ok(mask)
+                    Ok((shadows, ao))
                 });
-            match mask {
-                Ok(mask) => {
-                    values[frame::RT_AO_ON] = 1.0;
+            match signals {
+                Ok((shadows, ao)) if !shadows.is_empty() || !ao.is_empty() => {
+                    values[frame::RT_AO_ON] = u32::from(!ao.is_empty()) as f32;
+                    values[frame::RT_SHADOWS_ON] = u32::from(!shadows.is_empty()) as f32;
                     queue.write_buffer(&frame_buf, 0, &frame_bytes(&values));
-                    Some(self.upload_ao(w, h, &mask))
+                    Some(self.upload_hybrid(w, h, &shadows, &ao))
                 }
+                Ok(_) => None,
                 Err(RenderError::Unsupported(_)) => {
                     view.reset();
                     None
@@ -1124,7 +1194,8 @@ impl RtEngine {
         } else {
             None
         };
-        let lit_bind = lighting_bind(ao_view.as_ref().unwrap_or(&targets.g_views[0]));
+        let placeholder = lighting_source_view(&targets.g[0]);
+        let lit_bind = lighting_bind(hybrid_view.as_ref().unwrap_or(&placeholder));
         let run_full =
             |label: &str, pipeline: &wgpu::RenderPipeline, views: &[&wgpu::TextureView]| {
                 let mut enc = device
@@ -1171,7 +1242,7 @@ impl RtEngine {
             if control.is_cancelled() {
                 return Err(RenderError::Cancelled);
             }
-            let ssr_bind = lighting_bind(&targets.beauty_view);
+            let ssr_bind = lighting_bind(&lighting_source_view(&targets.beauty));
             let mut enc = device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("ssr") });
             {

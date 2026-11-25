@@ -24,8 +24,11 @@ Replace the screen-space approximations with ray-traced soft shadows (area light
 
 ## Report (implementer fills in)
 
-AO checkpoint: the controlled O43 `mat-red-matte` fixture improves from 17.223
-to 35.230 dB PSNR on Metal and on the explicit compute fallback. The tests
-also cover exact Tier 1 fallback, SSAO replacement, zero radius, decreasing
-successive-frame delta, and camera-change history invalidation. Shadows,
-reflections and GI remain to be implemented and checked; R24 is not done.
+AO and shadow checkpoint, using controlled scenes with O43 `mat-red-matte`
+material and Forge CPU-traced references. First-frame linear beauty improves
+from 17.223 to 35.230 dB PSNR for AO and from 35.917 to 48.877 dB for area
+shadows on Metal and on the explicit compute fallback. Tests cover exact
+Tier 1 fallback, SSAO replacement, zero AO radius, shadow lighting AOVs,
+unmodified non-shadow-casting lights, decreasing successive-frame delta and
+camera-change history invalidation for both effects. Reflections and GI
+remain to be implemented and checked; R24 is not done.

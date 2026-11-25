@@ -48,7 +48,7 @@ struct ShadowMap {
 @group(1) @binding(3) var forge_shadow_sampler: sampler_comparison;
 @group(1) @binding(4) var forge_env_tex: texture_2d<f32>;
 @group(1) @binding(5) var forge_env_sampler: sampler;
-@group(1) @binding(6) var forge_beauty_src: texture_2d<f32>;
+@group(1) @binding(6) var forge_lighting_src: texture_2d_array<f32>;
 
 const PI_F: f32 = 3.141592653589793;
 
@@ -572,6 +572,9 @@ fn shade_pixel(px: vec2<i32>, frag: vec2<f32>) -> Shaded {
     let light_count = u32(fr(F_LIGHT_COUNT) + 0.5);
     for (var i = 0u; i < light_count; i += 1u) {
         let l = forge_lights[i];
+        if (fr(F_RT_SHADOWS_ON) > 0.5 && l.params.z > 0.5) {
+            continue;
+        }
         let kind = u32(l.axis_kind.w + 0.5);
         var wi = vec3<f32>(0.0, 0.0, 0.0);
         var weight = vec3<f32>(0.0);
@@ -671,11 +674,20 @@ fn shade_pixel(px: vec2<i32>, frag: vec2<f32>) -> Shaded {
         diffuse += fd * cos * weight * wm * factor;
         specular += fs * cos * weight * wm * factor;
     }
+    if (fr(F_RT_SHADOWS_ON) > 0.5) {
+        let d = textureLoad(forge_lighting_src, px, 0, 0);
+        let s = textureLoad(forge_lighting_src, px, 1, 0);
+        diffuse += d.xyz;
+        specular += s.xyz;
+        contribution_sum += d.w;
+        visible_sum += s.w;
+    }
     if (has_env()) {
         // R22.2: occlusion darkens the ambient term only, never direct light.
         var ao = 1.0;
         if (fr(F_RT_AO_ON) > 0.5) {
-            ao = textureLoad(forge_beauty_src, px, 0).x;
+            let ao_layer = select(0, 2, fr(F_RT_SHADOWS_ON) > 0.5);
+            ao = textureLoad(forge_lighting_src, px, ao_layer, 0).x;
         } else {
             ao = ssao_at(p, n);
         }
@@ -718,7 +730,7 @@ struct SsrOut {
 @fragment
 fn fs_ssr(in: FullOut) -> SsrOut {
     let px = vec2<i32>(floor(in.pos.xy));
-    let base = textureLoad(forge_beauty_src, px, 0);
+    let base = textureLoad(forge_lighting_src, px, 0, 0);
     var out: SsrOut;
     out.beauty = base;
     let g0 = textureLoad(forge_g0, px, 0);
@@ -764,7 +776,7 @@ fn fs_ssr(in: FullOut) -> SsrOut {
             continue;
         }
         if (length(q0.xyz - s) < 0.05 * t + 0.002 * fr(F_SCALE)) {
-            colour = textureLoad(forge_beauty_src, spx, 0).xyz;
+            colour = textureLoad(forge_lighting_src, spx, 0, 0).xyz;
             hit = true;
             break;
         }

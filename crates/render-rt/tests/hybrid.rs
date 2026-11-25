@@ -190,6 +190,58 @@ fn tier_one_has_a_measurable_error_against_each_cpu_reference() {
 }
 
 #[test]
+fn ray_traced_area_shadows_replace_raster_shadows_and_improve_psnr() {
+    with_gpu(|device, queue| {
+        let engine = RtEngine::with_device(device.clone(), queue.clone());
+        let mut scene = fixture(Effect::Shadows);
+        let target = reference(&scene);
+        let mut settings = Effect::Shadows.raster_settings();
+        settings.aovs = vec![Aov::Diffuse, Aov::Specular, Aov::Shadow];
+        let render = |scene: &Snapshot, settings: &RenderSettings| {
+            engine.render(scene, settings, &Control::new()).unwrap()
+        };
+
+        let raster = render(&scene, &settings);
+        settings.hybrid.enabled = true;
+        assert_eq!(render(&scene, &settings).beauty.data, raster.beauty.data);
+        settings.hybrid.enabled = false;
+        settings.hybrid.shadows = true;
+        assert_eq!(render(&scene, &settings).beauty.data, raster.beauty.data);
+        settings.hybrid.enabled = true;
+        let traced = render(&scene, &settings);
+        let baseline = psnr(&raster, &target);
+        let improved = psnr(&traced, &target);
+        assert!(
+            improved > baseline,
+            "shadows: {improved:.3} vs {baseline:.3} dB"
+        );
+        eprintln!("shadows: {baseline:.3} → {improved:.3} dB");
+
+        for (i, rgb) in traced.beauty.data.as_chunks::<4>().0.iter().enumerate() {
+            let shadow = traced.aovs[&Aov::Shadow].data[4 * i];
+            assert!((0.0..=1.0).contains(&shadow));
+            for (c, &value) in rgb[..3].iter().enumerate() {
+                assert_eq!(traced.aovs[&Aov::Diffuse].data[4 * i + c], value);
+                assert_eq!(traced.aovs[&Aov::Specular].data[4 * i + c], 0.0);
+            }
+        }
+        assert_ne!(
+            traced.aovs[&Aov::Shadow].data,
+            raster.aovs[&Aov::Shadow].data
+        );
+
+        scene.lights[0].shadow = ShadowMode::None;
+        let hybrid_unshadowed = render(&scene, &settings);
+        settings.hybrid.enabled = false;
+        assert_eq!(
+            hybrid_unshadowed.beauty.data,
+            render(&scene, &settings).beauty.data,
+            "a non-shadow-casting light keeps its Tier 1 contribution"
+        );
+    });
+}
+
+#[test]
 fn ray_traced_ao_improves_psnr_and_respects_the_tier_one_fallback() {
     with_gpu(|device, queue| {
         let engine = RtEngine::with_device(device.clone(), queue.clone());
@@ -237,12 +289,22 @@ fn frame_delta(a: &RenderOutput, b: &RenderOutput) -> f64 {
 
 #[test]
 fn ray_traced_ao_converges_and_discards_history_after_camera_change() {
+    converges_and_discards_history_after_camera_change(Effect::Ao);
+}
+
+#[test]
+fn ray_traced_shadows_converge_and_discard_history_after_camera_change() {
+    converges_and_discards_history_after_camera_change(Effect::Shadows);
+}
+
+fn converges_and_discards_history_after_camera_change(effect: Effect) {
     with_gpu(|device, queue| {
         let engine = RtEngine::with_device(device.clone(), queue.clone());
-        let mut scene = fixture(Effect::Ao);
-        let mut settings = Effect::Ao.raster_settings();
+        let mut scene = fixture(effect);
+        let mut settings = effect.raster_settings();
         settings.hybrid.enabled = true;
-        settings.hybrid.ao = true;
+        settings.hybrid.ao = matches!(effect, Effect::Ao);
+        settings.hybrid.shadows = matches!(effect, Effect::Shadows);
         settings.hybrid.ao_radius = AO_RADIUS;
 
         let mut previous = engine.render(&scene, &settings, &Control::new()).unwrap();
