@@ -205,5 +205,5 @@ implementers can avoid collisions.
 | 205 | [S4 acceptance test and motion-graphics docs](../agents/tasks/205-s4-mograph-acceptance.md) | E | 066, 072, 074, 075, 136 | done | tests, docs |
 | 206 | [S5 acceptance test and volume docs](../agents/tasks/206-s5-volume-acceptance.md) | F | 081, 082, 083, 003 | done | tests, docs |
 | 208 | [Volume mesher: manifold output on thin features](../agents/tasks/208-volume-mesher-manifold.md) | F | 083, 206 | done | volume |
-| 209 | [Shader-node materials in the real-time raster engine](../agents/tasks/209-rt-shader-nodes.md) | R | 198, 207 | ready | render-rt |
+| 209 | [Shader-node materials in the real-time raster engine](../agents/tasks/209-rt-shader-nodes.md) | R | 198, 207 | done | render-rt |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |

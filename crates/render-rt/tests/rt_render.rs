@@ -25,30 +25,6 @@ const MIN_PSNR: f64 = 30.0;
 const MIN_IOU: f64 = 0.98;
 const MEAN_RATIO: (f64, f64) = (0.6, 1.7);
 
-/// Shader-node materials are not wired into the raster engine yet (the path tracer has them, R20.1b).
-const UNSUPPORTED: &[(&str, &str)] = &[
-    (
-        "mat-checker-uv",
-        "shader-node material channels in the raster engine (R21; the path tracer has them, R20.1b)",
-    ),
-    (
-        "mat-checker-cubic",
-        "shader-node material channels in the raster engine (R21; the path tracer has them, R20.1b)",
-    ),
-    (
-        "mat-fresnel",
-        "shader-node material channels in the raster engine (R21; the path tracer has them, R20.1b)",
-    ),
-    (
-        "mat-bump-noise",
-        "shader-node material channels in the raster engine (R21; the path tracer has them, R20.1b)",
-    ),
-    (
-        "checker-plane",
-        "shader-node material channels in the raster engine (R21; the path tracer has them, R20.1b)",
-    ),
-];
-
 /// R2 is opaque (R21.3): the CPU's transmissive material loses light the raster keeps, so only
 /// the silhouette is compared.
 const OPAQUE_ONLY: &[(&str, &str)] = &[(
@@ -71,13 +47,6 @@ fn gpu() -> Option<(wgpu::Device, wgpu::Queue)> {
         }
     })
     .clone()
-}
-
-fn unsupported_reason(name: &str) -> Option<&'static str> {
-    UNSUPPORTED
-        .iter()
-        .find(|(n, _)| *n == name)
-        .map(|(_, r)| *r)
 }
 
 fn psnr(a: &RenderOutput, b: &RenderOutput) -> f64 {
@@ -249,18 +218,9 @@ fn the_o30_cases_keep_the_cpu_silhouette_and_light_level() {
     let engine = RtEngine::with_device(device, queue);
     let settings = image_parity::settings((320, 240), Vec::new());
     let mut checked = 0;
-    let mut pinned = 0;
     for name in case_names() {
         let case = load(&name);
         let rt = engine.render(&case.snapshot, &settings, &Control::new());
-        if let Some(reason) = unsupported_reason(&name) {
-            match rt {
-                Err(RenderError::Unsupported(_)) => pinned += 1,
-                Err(e) => panic!("{name}: expected Unsupported ({reason}), got {e}"),
-                Ok(_) => panic!("{name}: expected Unsupported ({reason}), rendered"),
-            }
-            continue;
-        }
         let cpu = CpuEngine::new()
             .render(&case.snapshot, &settings, &Control::new())
             .unwrap_or_else(|e| panic!("{name}: CPU: {e}"));
@@ -283,10 +243,48 @@ fn the_o30_cases_keep_the_cpu_silhouette_and_light_level() {
         checked += 1;
     }
     assert_eq!(
-        (checked, pinned),
-        (case_names().len() - UNSUPPORTED.len(), UNSUPPORTED.len()),
-        "every O30 case must be checked or pinned"
+        checked,
+        case_names().len(),
+        "every O30 case must be checked"
     );
+}
+
+/// R21.3: the shader-node colour reaches the raster image (it is not the fallback grey), so the
+/// checker's two squares differ by about as much as they do in the CPU image.
+#[test]
+fn shader_node_colour_varies_across_the_surface() {
+    let Some((device, queue)) = gpu() else {
+        return;
+    };
+    let engine = RtEngine::with_device(device, queue);
+    let settings = image_parity::settings((320, 240), Vec::new());
+    for name in ["checker-plane", "mat-checker-uv", "mat-checker-cubic"] {
+        let case = load(name);
+        let spread = |out: &RenderOutput| {
+            let mut lo = f64::MAX;
+            let mut hi = 0.0f64;
+            for p in out.beauty.data.as_chunks::<4>().0 {
+                if p[3] > 0.5 {
+                    let l = 0.2126 * p[0] as f64 + 0.7152 * p[1] as f64 + 0.0722 * p[2] as f64;
+                    lo = lo.min(l);
+                    hi = hi.max(l);
+                }
+            }
+            hi / lo.max(1e-6)
+        };
+        let cpu = CpuEngine::new()
+            .render(&case.snapshot, &settings, &Control::new())
+            .unwrap();
+        let rt = engine
+            .render(&case.snapshot, &settings, &Control::new())
+            .unwrap();
+        let (c, r) = (spread(&cpu), spread(&rt));
+        eprintln!("{name}: brightest/darkest CPU {c:.2}, RT {r:.2}");
+        assert!(
+            r > 1.5,
+            "{name}: the raster image has no checker contrast ({r:.2})"
+        );
+    }
 }
 
 #[test]

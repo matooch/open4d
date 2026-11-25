@@ -18,7 +18,7 @@ thiserror = "2"
 wgpu = { version = "30", features = ["static-dxc"] }
 
 [dev-dependencies]
-naga = "30"
+naga = { version = "30", features = ["wgsl-in", "spv-out", "msl-out", "hlsl-out"] }
 forge-core = { path = "../core" }
 forge-generators = { path = "../generators" }
 forge-image = { path = "../image" }

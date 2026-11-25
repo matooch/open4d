@@ -621,8 +621,9 @@ Projection is the CPU camera's own (R10), so a rasterised silhouette lands on th
 Barycentrics are the vertex corners `(1,0,0)`, `(0,1,0)`, `(0,0,1)` interpolated perspective
 correctly. The shading normal is the barycentric blend of the three corner normals when the mesh
 has them, else the geometric normal, flipped to face the camera. The shading context is
-`position`, `normal`, `view = normalize(eye - position)`, `uvw = 0` (R21.3 does not store it),
-`time = 0`, `vertex_weight = 1`, `ao = 1`.
+`position`, `normal`, `view = normalize(eye - position)`, `uvw` (the corner UVWs blended at the
+position, R21.3), `time = 0`, `vertex_weight = 0`, `ao = 1`; the lighting pass fills it exactly as
+the tracer's `surface_at` does (R20.1b, R21.3).
 
 ### R21.3 G-buffer (deferred)
 
@@ -633,18 +634,51 @@ colour-attachment budget:
 | target | contents |
 |---|---|
 | `g0` | world position, material index + 1 (0 = background) |
-| `g1` | shading normal (world, facing the camera), object id + 1 (0 = background) |
+| `g1` | shading normal (world, facing the camera), triangle index + 1 (0 = background) |
 
 The shading normal is the barycentric blend of the three corner normals when the mesh has them,
-else the geometric normal (both flipped to face the camera); UVW is not stored, because only
-texture channels read it and those are pinned below. The material is evaluated in the lighting
-pass from `g0`/`g1` with the IR values `surface_at` of R20.2 reads (diffuse and level, specular and
-level, specular flags/roughness, emission, the specular level's albedo reduction); each material
-is one specialised `forge_surface_i` function and a `switch` picks it. Materials whose colour
-channel needs a texture node are not ported yet (brief 207) and the engine returns `Unsupported`
-(as the compute tracer, R20.4). The engine is opaque: transmission is not refracted,
-bump/normal, displacement, alpha, fog, diffusion and environment channels are ignored (the last
-six are reported in `RenderStats::ignored_channels` by the same list as R7).
+else the geometric normal (both flipped to face the camera). The object id is not stored: the
+triangle index replaces it, and the `ObjectId` AOV reads `ids.y` of that triangle from the packed
+triangle list (R21.2), which is the same value as before.
+
+**One compile path for both GPU engines.** `render_gpu::shader::materials(&[(graph, sampler)],
+bitmap_group)` compiles every material through the sampler's WGSL codegen into one shared
+`ModuleBuilder` exactly as R20.1b says (same `Unsupported` for a `Texture` node without a codegen,
+same renaming of `forge_surface`/`irN`, same shared library and generated functions) and returns
+the module text (surface struct, materials, declarations, the `forge_shade` dispatcher) plus the
+bitmap resources. The path tracer's `assemble` is `materials(.., 1)` followed by its constants,
+RNG and tracer, so its module text is unchanged. The raster module is `materials(.., 2)`, the frame
+constants and `rt.wgsl`.
+
+**Bitmaps.** The codegen declares bitmap `k` at `@group(1) @binding(k)`; the raster module uses
+groups 0 (frame, triangles, lights, shadows) and 1 (G-buffer, shadow atlas, environment, lit
+beauty), so `materials` rewrites those bindings to the requested group: the raster bitmaps are
+`@group(2) @binding(k)`, uploaded exactly as R20.1b (`Rgba32Float`, `textureLoad`, no sampler),
+visible to the fragment stage. A device whose `max_sampled_textures_per_shader_stage` is smaller
+than the bitmaps plus the lighting pass's own five sampled textures returns `Unsupported`.
+
+**The shading context per lit pixel (`surface_vals`), as the tracer's `surface_at`:** the
+triangle `T` is read from `g1.w`; `position` = `g0.xyz`; `uvw` = the barycentric interpolation of
+`T`'s corner UVWs at the position (`uvw_at` of R20.1b: the weights solved from the position's
+offset along the two edges, the hit's first corner UVW for a degenerate triangle); `normal` = the
+outward-side shading normal, i.e. the stored normal flipped back when it faces away from `T`'s
+geometric normal; `view` = `normalize(eye - position)`; `time = 0`, `vertex_weight = 0`,
+`ao = 1`. The material is evaluated from the IR values `surface_at` of R20.2 reads (diffuse and
+level, specular and level, specular flags/roughness, emission, the specular level's albedo
+reduction); each material is one specialised `forge_surface_i` function and a `switch` on the
+material index picks it.
+
+**Bump.** When the material has a bump channel the lighting pass perturbs the shading normal as
+R20.1b: height = the mean of the bump channel, `eps = 1e-3 * scale`, an orthonormal basis of `T`'s
+geometric normal, two displaced contexts (`position + t_i eps`, `uvw` re-interpolated), and
+`n = ns - (t1 d1 + t2 d2) * strength * scale`, normalised when non-zero; the result is flipped
+back to face the camera when the outward-side normal was flipped. The perturbed normal is the one
+the lights, the environment and the screen-space passes see; the `Normal` AOV keeps the
+unperturbed G-buffer normal.
+
+The engine is opaque: transmission is not refracted; the normal, displacement, alpha, fog,
+diffusion and environment channels are ignored (reported in `RenderStats::ignored_channels` by the
+same list as R7).
 
 ### R21.4 Shadow maps
 
@@ -729,13 +763,16 @@ coverage, as R3 asks.
   frame graph the engine builds validates; directional, omni-falloff, glossy two-light and
   two-material scenes match the CPU tracer at ≥ 30 dB PSNR with the CPU tracer's indirect light
   off (`max_depth = 0`, so both are direct light only) — measured 48.0, 38.3, 45.2 and 37.5 dB;
-  every O30 case keeps the CPU silhouette (IoU ≥ 0.98) and its mean luminance within
-  `[0.6, 1.7]` (the CPU's GI makes it brighter than the raster), with the shader-node cases
-  pinned `Unsupported` (brief 207) and the transmissive case compared by silhouette only (R2 is
-  opaque); doubling a light's intensity doubles the image; a spot shadow map darkens the pixels
+  every O30 case, shader-node materials included (brief 209), keeps the CPU silhouette
+  (IoU ≥ 0.98) and its mean luminance within `[0.6, 1.7]` (the CPU's GI makes it brighter than the
+  raster), with the transmissive case compared by silhouette only (R2 is opaque); doubling a light's intensity doubles the image; a spot shadow map darkens the pixels
   behind an occluder; a constant and a lat-long image environment light a sphere; all ten AOVs
   have the R3 shapes and `beauty = diffuse + specular + emission`; a region renders its
   rectangle with one `Tile` event and cancel stops; two renders are byte-identical.
+- `shader.rs`: the raster module validates for no materials, every material channel and shader-node
+  materials (bitmaps at `@group(2)`); a `Texture` node without a sampler codegen is `Unsupported`.
+- `naga_translate.rs`: every raster module (the O30 cases, shader-node materials with a bitmap,
+  no materials) translates to SPIR-V, MSL and HLSL without a GPU (§5a).
 - `forge render --engine rt` runs through the CLI (`apps/forge/tests/render.rs`).
 
 ## R22 Post effects and the viewport Render mode (brief 199)

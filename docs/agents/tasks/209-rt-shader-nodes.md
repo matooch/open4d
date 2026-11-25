@@ -1,6 +1,6 @@
 # 209 · Shader-node materials in the real-time raster engine
 
-Status: ready · Area: R · Depends on: 198, 207 · Observations: – (own design; values through the shading IR) · Touches: render-rt
+Status: done · Area: R · Depends on: 198, 207 · Observations: – (own design; values through the shading IR) · Touches: render-rt
 
 ## Goal
 The raster engine (`forge.render.rt`, RENDER.md R21) still returns `Unsupported` for materials with
@@ -16,9 +16,9 @@ compiles them through the samplers' WGSL codegen with bitmaps at `@group(1)` (R2
 - Bitmaps bind in a group the raster pipelines don't use yet.
 
 ## Done when
-- [ ] The five pinned O30 cases render and keep the CPU silhouette and light-level bounds of the other 18 (R21 tests); the pin list is empty.
-- [ ] A naga test translates every raster module (with shader nodes) to SPIR-V, MSL and HLSL (§5a).
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] The five pinned O30 cases render and keep the CPU silhouette and light-level bounds of the other 18 (R21 tests); the pin list is empty.
+- [x] A naga test translates every raster module (with shader nodes) to SPIR-V, MSL and HLSL (§5a).
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -28,9 +28,8 @@ compiles them through the samplers' WGSL codegen with bitmaps at `@group(1)` (R2
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: one acceptance test added (`s8_lookdev_area_light_camera_dof_material_and_aovs` in `apps/forge/tests/render.rs`) plus the manual `docs/manual/rendering.md`. This brief has no observation, so parity is N/A. macOS is the observed OS; the existing CI matrix (macOS, Linux, Windows) runs the same test, and each OS render is compared with `tests/acceptance/s8-reference.png`.
-- Rules derived (RENDER.md R19): the scene is built only through `forge new`/`forge cmd ... --save` (cube, Area light, physical camera, Standard material with noise on colour and fresnel on bump); the first camera and first light are used (R11, S5); `--dof` traces the thin lens, and changing only the focus distance changes the beauty; `--aov all` writes beauty plus ten passes; the same seed renders byte-identically; the object and material id passes hold background 0 plus a geometry id. The reference comparison requires each colour channel's mean within 1 dB and PSNR ≥ 30 dB.
-- Deviations from the design decisions: the brief says "a node material with noise and fresnel", but the node-graph material's registry has only colour, scalar, texture, mix and Surface nodes, so the scenario uses the Standard material's shader node tree (noise + fresnel) instead. Adding noise/fresnel graph nodes would be a materials change outside this tests/docs brief. The comparison uses a checked-in macOS reference because cross-OS artifacts are not otherwise available inside one test run.
-- Files changed: `apps/forge/tests/render.rs`, `tests/acceptance/s8-reference.png`, `docs/specs/RENDER.md` (R19), `docs/manual/rendering.md`, `docs/manual/SUMMARY.md`, `docs/roadmap/BACKLOG.md`.
-- Open questions: none. Regenerate the reference with `FORGE_S8_WRITE_REFERENCE=1` only when the scene changes intentionally.
-- The last lines of the gate output: `GATE: 2501 tests passed, 0 failed` and `GATE: all passed`.
+- Result: the raster engine renders shader-node materials; the pin list is empty. Measured against the CPU (IoU, mean light-level ratio): checker-plane 0.9990 / 1.004, mat-checker-uv 0.9972 / 0.999, mat-checker-cubic 0.9972 / 1.000, mat-fresnel 0.9972 / 1.013, mat-bump-noise 0.9972 / 1.214 (bounds IoU >= 0.98, ratio 0.6-1.7, unchanged). All 23 O30 cases pass; the other 18 are unchanged.
+- Rules derived (RENDER.md R21.2, R21.3, R21.7): `render_gpu::shader::materials(&[(graph, sampler)], bitmap_group)` is the one material compile path (returns the module text and the bitmap resources); the path tracer's `assemble` is that plus its constants, RNG and tracer (module text unchanged), the raster module is that with the bitmaps moved to `@group(2)` plus `rt.wgsl`. The G-buffer's `g1.w` now holds the triangle index + 1 (the object id is read back from the packed triangles for the `ObjectId` AOV); the lighting pass fills `ShadeCtx` from that triangle as the tracer's `surface_at` does (UVW re-solved from the position, outward-side normal, `vertex_weight = 0` as the CPU `None`, bump from the mean of the bump channel with two displaced contexts). Bump now shades; the normal, displacement, alpha, fog, diffusion and environment channels are still ignored.
+- Deviations from the design decisions: the codegen hard-codes `@group(1)` for bitmaps, so `materials` rewrites that prefix in the declarations to the requested group instead of changing the shader crate (its text is pinned by its own tests).
+- Files changed: `docs/specs/RENDER.md`, `crates/render-gpu/src/shader.rs`, `crates/render-rt/src/{shader.rs,engine.rs,rt.wgsl}`, `crates/render-rt/tests/{rt_render.rs,shader.rs,naga_translate.rs}`, `crates/render-rt/Cargo.toml`, BACKLOG, STATUS, PROGRESS, this brief.
+- Open questions: none.

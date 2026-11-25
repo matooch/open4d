@@ -137,7 +137,7 @@ fn vs_gbuffer(@builtin(vertex_index) vi: u32) -> GbufOut {
 struct GbufTargets {
     // position, material index + 1
     @location(0) g0: vec4<f32>,
-    // shading normal, object id + 1
+    // shading normal, triangle index + 1
     @location(1) g1: vec4<f32>,
 };
 
@@ -156,7 +156,7 @@ fn fs_gbuffer(in: GbufOut) -> GbufTargets {
     }
     var out: GbufTargets;
     out.g0 = vec4<f32>(p, t.ids.x + 1.0);
-    out.g1 = vec4<f32>(ns, t.ids.y + 1.0);
+    out.g1 = vec4<f32>(ns, f32(in.tri) + 1.0);
     return out;
 }
 
@@ -440,22 +440,62 @@ struct SurfaceVals {
     spec: vec3<f32>,
     alpha: f32,
     emission: vec3<f32>,
+    // the shading normal after bump, facing the camera
+    n: vec3<f32>,
 };
+
+/// The UVW at a point of triangle `t`: the corner UVWs blended with the weights solved from the
+/// point's offset along the edges (R20.1b `uvw_at`).
+fn uvw_at(t: Tri, p: vec3<f32>) -> vec3<f32> {
+    let e1 = t.e1.xyz;
+    let e2 = t.e2.xyz;
+    let w = p - t.p0.xyz;
+    let d11 = dot(e1, e1);
+    let d12 = dot(e1, e2);
+    let d22 = dot(e2, e2);
+    let w1 = dot(w, e1);
+    let w2 = dot(w, e2);
+    let det = d11 * d22 - d12 * d12;
+    if (abs(det) < 1e-30) {
+        return t.u0.xyz;
+    }
+    let u = (w1 * d22 - w2 * d12) / det;
+    let v = (w2 * d11 - w1 * d12) / det;
+    return t.u0.xyz * (1.0 - u - v) + t.u1.xyz * u + t.u2.xyz * v;
+}
+
+fn bump_height(mat: u32, ctx: ShadeCtx) -> f32 {
+    let s = forge_shade(mat, ctx);
+    return (s.bump.x + s.bump.y + s.bump.z) / 3.0;
+}
+
+/// A right-handed orthonormal basis whose third axis is `n` (the tracer's `basis`).
+fn tangent_basis(n: vec3<f32>) -> mat3x3<f32> {
+    let s = select(-1.0, 1.0, n.z >= 0.0);
+    let a = -1.0 / (s + n.z);
+    let b = n.x * n.y * a;
+    let t = vec3<f32>(1.0 + s * n.x * n.x * a, s * b, -s * n.x);
+    let u = vec3<f32>(b, s + n.y * n.y * a, -n.y);
+    return mat3x3<f32>(t, u, n);
+}
 
 fn surface_vals(g0: vec4<f32>, g1: vec4<f32>) -> SurfaceVals {
     let p = g0.xyz;
-    let n = normalize(g1.xyz);
-    let view = normalize(m4(F_CAM)[3].xyz - p);
-    // UVW is only read by texture channels, which R21.3 pins unsupported.
+    let tri = forge_tris[u32(g1.w - 1.0)];
+    let mat = u32(g0.w - 1.0);
+    let ng = tri.ng.xyz;
+    // the outward-side shading normal of the tracer's `surface_at` (R21.3)
+    let flip = dot(g1.xyz, ng) < 0.0;
+    let ns = normalize(select(g1.xyz, -g1.xyz, flip));
     var ctx: ShadeCtx;
-    ctx.uvw = vec3<f32>(0.0);
+    ctx.uvw = uvw_at(tri, p);
     ctx.position = p;
-    ctx.normal = n;
-    ctx.view = view;
+    ctx.normal = ns;
+    ctx.view = normalize(m4(F_CAM)[3].xyz - p);
     ctx.time = 0.0;
-    ctx.vertex_weight = 1.0;
+    ctx.vertex_weight = 0.0;
     ctx.ao = 1.0;
-    let s = forge_shade(u32(g0.w - 1.0), ctx);
+    let s = forge_shade(mat, ctx);
     var out: SurfaceVals;
     out.albedo = s.diffuse.xyz * s.diffuse.w;
     out.spec = vec3<f32>(0.0);
@@ -469,6 +509,28 @@ fn surface_vals(g0: vec4<f32>, g1: vec4<f32>) -> SurfaceVals {
         }
     }
     out.emission = s.emission.xyz;
+    var nb = ns;
+    if (s.bump_present.x > 0.5) {
+        let scale = fr(F_SCALE);
+        let eps = 1e-3 * scale;
+        let b = tangent_basis(ng);
+        let t1 = b[0];
+        let t2 = b[1];
+        let h0 = bump_height(mat, ctx);
+        var c1 = ctx;
+        c1.position = p + t1 * eps;
+        c1.uvw = uvw_at(tri, c1.position);
+        var c2 = ctx;
+        c2.position = p + t2 * eps;
+        c2.uvw = uvw_at(tri, c2.position);
+        let d1 = (bump_height(mat, c1) - h0) / eps;
+        let d2 = (bump_height(mat, c2) - h0) / eps;
+        let n = ns - (t1 * d1 + t2 * d2) * (s.bump.w * scale);
+        if (dot(n, n) > 0.0) {
+            nb = normalize(n);
+        }
+    }
+    out.n = select(nb, -nb, flip);
     return out;
 }
 
@@ -496,9 +558,9 @@ fn shade_pixel(px: vec2<i32>, frag: vec2<f32>) -> Shaded {
     }
     let g1 = textureLoad(forge_g1, px, 0);
     let p = g0.xyz;
-    let n = normalize(g1.xyz);
     let view = normalize(m4(F_CAM)[3].xyz - p);
     let sv = surface_vals(g0, g1);
+    let n = sv.n;
     var m: Mat;
     m.albedo = sv.albedo;
     m.spec = sv.spec;
@@ -660,10 +722,10 @@ fn fs_ssr(in: FullOut) -> SsrOut {
     }
     let g1 = textureLoad(forge_g1, px, 0);
     let p = g0.xyz;
-    let n = normalize(g1.xyz);
     let eye = m4(F_CAM)[3].xyz;
     let view = normalize(eye - p);
     let sv = surface_vals(g0, g1);
+    let n = sv.n;
     if (all(sv.spec == vec3<f32>(0.0))) {
         return out;
     }

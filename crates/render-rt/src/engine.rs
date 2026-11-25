@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use bytemuck::{Pod, Zeroable};
 use forge_image::{AlphaMode, Image};
+use forge_material::TextureSampler;
 use forge_material::ir::ShadingGraph;
 use forge_render_api::{
     Aov, Background, Control, Lighting, Projection, RenderEngine, RenderError, RenderEvent,
@@ -89,6 +90,48 @@ impl RtEngine {
 
     pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> RtEngine {
         RtEngine { device, queue }
+    }
+
+    /// Uploads each bitmap as an `Rgba32Float` texture, the way the path tracer does
+    /// (REALTIME.md §2.8, RENDER.md R20.1b, R21.3).
+    fn bitmap_views(
+        &self,
+        resources: &[std::sync::Arc<dyn std::any::Any + Send + Sync>],
+    ) -> Result<Vec<wgpu::TextureView>, RenderError> {
+        resources
+            .iter()
+            .map(|r| {
+                let img = r.downcast_ref::<Image>().ok_or_else(|| {
+                    RenderError::Unsupported("a bound resource is not an image".into())
+                })?;
+                let size = wgpu::Extent3d {
+                    width: img.width,
+                    height: img.height,
+                    depth_or_array_layers: 1,
+                };
+                let tex = self.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("bitmap"),
+                    size,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba32Float,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                    view_formats: &[],
+                });
+                self.queue.write_texture(
+                    tex.as_image_copy(),
+                    bytemuck::cast_slice(&img.data),
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(img.width * 16),
+                        rows_per_image: Some(img.height),
+                    },
+                    size,
+                );
+                Ok(tex.create_view(&Default::default()))
+            })
+            .collect()
     }
 
     fn targets(&self, w: u32, h: u32) -> Targets {
@@ -406,8 +449,23 @@ impl RtEngine {
             ));
         }
         let packed = Packed::build(snapshot, settings.default_light)?;
-        let graphs: Vec<&ShadingGraph> = snapshot.materials.iter().map(|m| &m.graph).collect();
-        let source = crate::shader::assemble(&graphs)?;
+        let materials: Vec<(&ShadingGraph, &dyn TextureSampler)> = snapshot
+            .materials
+            .iter()
+            .map(|m| (&m.graph, &*m.sampler as &dyn TextureSampler))
+            .collect();
+        let assembled = crate::shader::assemble(&materials)?;
+        // R21.3: the lighting pass samples five textures of its own besides the bitmaps
+        if assembled.resources.len() + 5
+            > self.device.limits().max_sampled_textures_per_shader_stage as usize
+        {
+            return Err(RenderError::Unsupported(format!(
+                "{} bitmaps exceed the device's sampled texture limit (RENDER.md R21.3)",
+                assembled.resources.len()
+            )));
+        }
+        let bitmap_views = self.bitmap_views(&assembled.resources)?;
+        let source = assembled.source;
         let plans = shadow::plans(snapshot, &packed)?;
         let split = settings
             .aovs
@@ -547,6 +605,13 @@ impl RtEngine {
                 texture_entry(6, false),
             ],
         });
+        // R21.3: the shader-node bitmaps, one sampled texture per binding, in group 2
+        let bitmap_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("bitmaps"),
+            entries: &(0..bitmap_views.len() as u32)
+                .map(|binding| texture_entry(binding, false))
+                .collect::<Vec<_>>(),
+        });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("geometry"),
             bind_group_layouts: &[Some(&geometry_layout)],
@@ -554,7 +619,11 @@ impl RtEngine {
         });
         let lighting_pipeline = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("lighting"),
-            bind_group_layouts: &[Some(&geometry_layout), Some(&lighting_layout)],
+            bind_group_layouts: &[
+                Some(&geometry_layout),
+                Some(&lighting_layout),
+                Some(&bitmap_layout),
+            ],
             immediate_size: 0,
         });
         let color_target = |format: wgpu::TextureFormat| {
@@ -741,6 +810,18 @@ impl RtEngine {
                 },
             ],
         });
+        let bitmap_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("bitmaps"),
+            layout: &bitmap_layout,
+            entries: &bitmap_views
+                .iter()
+                .enumerate()
+                .map(|(i, v)| wgpu::BindGroupEntry {
+                    binding: i as u32,
+                    resource: wgpu::BindingResource::TextureView(v),
+                })
+                .collect::<Vec<_>>(),
+        });
         let lit_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("lighting"),
             layout: &lighting_layout,
@@ -910,6 +991,7 @@ impl RtEngine {
                 pass.set_pipeline(pipeline);
                 pass.set_bind_group(0, &bind, &[]);
                 pass.set_bind_group(1, &lit_bind, &[]);
+                pass.set_bind_group(2, &bitmap_bind, &[]);
                 pass.draw(0..3, 0..1);
                 drop(pass);
                 queue.submit([enc.finish()]);
@@ -982,6 +1064,7 @@ impl RtEngine {
                 pass.set_pipeline(&ssr_pass);
                 pass.set_bind_group(0, &bind, &[]);
                 pass.set_bind_group(1, &ssr_bind, &[]);
+                pass.set_bind_group(2, &bitmap_bind, &[]);
                 pass.draw(0..3, 0..1);
             }
             queue.submit([enc.finish()]);
@@ -1131,7 +1214,12 @@ impl RtEngine {
                         Aov::Albedo => albedo_px.map(|d| d[i]).unwrap_or([0.0; 4]),
                         Aov::Position => [p[0], p[1], p[2], alpha],
                         Aov::ObjectId => {
-                            let id = g1[3];
+                            // g1.w is the triangle index + 1 (R21.3)
+                            let id = if hit {
+                                packed.tris[g1[3] as usize - 1].ids[1] + 1.0
+                            } else {
+                                0.0
+                            };
                             [id, id, id, alpha]
                         }
                         Aov::MaterialId => {

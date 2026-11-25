@@ -53,7 +53,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | L · UI and UX | 16 / 16 | Hands-on checks in GUI sessions G1, G2, G4 |
 | M · File exchange | 12 / 12 | Done: S9 passes (171). Open: glTF skin-pose KNOWN_MISMATCH, PLY/USD/morph not observed |
 | N · Platform, packaging, docs | 13 / 14 | 185 v1.0 release checklist (last) |
-| R · Real-time GPU renderer | 5 / 10 | Done: 197, 207 (shaders → WGSL), 142 (GPU path tracer, 23/23 O30 vs CPU), 198 (real-time raster), 199 (post effects, viewport Render mode). Left: 209 (shader nodes in raster), 200–204 (ray tracing on Metal + Vulkan) |
+| R · Real-time GPU renderer | 6 / 10 | Done: 197, 207 (shaders → WGSL), 142 (GPU path tracer, 23/23 O30 vs CPU), 198 (real-time raster), 199 (post effects, viewport Render mode), 209 (shader nodes in raster, one material compile path for both GPU engines). Left: 200–204 (ray tracing on Metal + Vulkan) |
 
 ## Next implementer run (run 9: ray tracing)
 
