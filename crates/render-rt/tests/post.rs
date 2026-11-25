@@ -126,7 +126,10 @@ fn ssao_darkens_a_crease_and_leaves_open_faces() {
             Instance::new(1, DMat4::from_translation(DVec3::new(0.0, 40.0, 0.0)), 1, 1),
         ],
         materials: vec![diffuse([0.8, 0.8, 0.8]), diffuse([0.8, 0.8, 0.8])],
-        camera: look_at(DVec3::new(-190.0, 130.0, -260.0), DVec3::new(0.0, 25.0, 0.0)),
+        camera: look_at(
+            DVec3::new(-190.0, 130.0, -260.0),
+            DVec3::new(0.0, 25.0, 0.0),
+        ),
         ..Snapshot::default()
     };
     constant_env(&mut snap, [1.0; 3]);
@@ -187,7 +190,12 @@ fn ssr_replaces_the_environment_reflection_with_the_screen_hit() {
         meshes: vec![plane(400.0), cube(40.0)],
         instances: vec![
             Instance::new(0, DMat4::IDENTITY, 0, 0),
-            Instance::new(1, DMat4::from_translation(DVec3::new(0.0, 120.0, 0.0)), 1, 1),
+            Instance::new(
+                1,
+                DMat4::from_translation(DVec3::new(0.0, 120.0, 0.0)),
+                1,
+                1,
+            ),
         ],
         materials: vec![glossy_floor(), emissive([1.0, 0.1, 0.1], 400.0)],
         camera: look_at(DVec3::new(0.0, 240.0, -420.0), DVec3::new(0.0, 40.0, 0.0)),
@@ -263,7 +271,10 @@ fn bloom_spreads_a_bright_object_and_ignores_a_dim_one() {
     let dim = cube_at(emissive([1.0, 1.0, 1.0], 0.5));
     let d0 = render(&engine, &dim, &off);
     let d1 = render(&engine, &dim, &on);
-    assert_eq!(d0.beauty.data, d1.beauty.data, "a dim object does not bloom");
+    assert_eq!(
+        d0.beauty.data, d1.beauty.data,
+        "a dim object does not bloom"
+    );
 }
 
 #[test]
@@ -388,7 +399,12 @@ fn the_default_post_block_changes_nothing_and_stays_deterministic() {
         meshes: vec![plane(400.0), sphere(100.0, 32)],
         instances: vec![
             Instance::new(0, DMat4::IDENTITY, 0, 0),
-            Instance::new(1, DMat4::from_translation(DVec3::new(0.0, 100.0, 0.0)), 0, 1),
+            Instance::new(
+                1,
+                DMat4::from_translation(DVec3::new(0.0, 100.0, 0.0)),
+                0,
+                1,
+            ),
         ],
         materials: vec![diffuse([0.8, 0.8, 0.8]), diffuse([0.7, 0.6, 0.5])],
         camera: look_at(DVec3::new(0.0, 150.0, -600.0), DVec3::new(0.0, 80.0, 0.0)),
@@ -398,7 +414,10 @@ fn the_default_post_block_changes_nothing_and_stays_deterministic() {
     let base = settings(PostSettings::default());
     let a = render(&engine, &snap, &base);
     let b = render(&engine, &snap, &base);
-    assert_eq!(a.beauty.data, b.beauty.data, "two renders are byte-identical");
+    assert_eq!(
+        a.beauty.data, b.beauty.data,
+        "two renders are byte-identical"
+    );
     // every effect on: still deterministic (fixed kernels, fixed jitter, no history)
     let all = settings(PostSettings {
         ssao: true,
@@ -412,9 +431,5 @@ fn the_default_post_block_changes_nothing_and_stays_deterministic() {
     let c = render(&engine, &snap, &all);
     let d = render(&engine, &snap, &all);
     assert_eq!(c.beauty.data, d.beauty.data, "post on is deterministic too");
-    assert_eq!(
-        c.aovs.len(),
-        0,
-        "no AOV was asked for, so none is produced"
-    );
+    assert_eq!(c.aovs.len(), 0, "no AOV was asked for, so none is produced");
 }

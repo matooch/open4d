@@ -958,9 +958,8 @@ impl RtEngine {
                     },
                 ],
             });
-            let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("ssr"),
-            });
+            let mut enc = device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("ssr") });
             {
                 let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("ssr"),
@@ -1008,12 +1007,8 @@ impl RtEngine {
         }
 
         // read back the beauty, the G-buffer and (when asked for) the light split
-        let mut order: Vec<&wgpu::Texture> = vec![
-            beauty_target,
-            &targets.shadow,
-            &targets.g[0],
-            &targets.g[1],
-        ];
+        let mut order: Vec<&wgpu::Texture> =
+            vec![beauty_target, &targets.shadow, &targets.g[0], &targets.g[1]];
         if split {
             order.push(&targets.split[0]);
             order.push(&targets.split[1]);
@@ -1094,7 +1089,7 @@ impl RtEngine {
         };
         // R22.4/R22.6: bloom and tone mapping on this subframe's linear beauty. The AOVs keep
         // the linear values (they are data, not display colour).
-        let linear_px = &*beauty_px;
+        let linear_px = beauty_px;
         let mut beauty_px = beauty_px.clone();
         if settings.post.bloom {
             crate::post::bloom(&mut beauty_px, w, h, &settings.post);

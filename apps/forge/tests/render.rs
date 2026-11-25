@@ -666,3 +666,65 @@ fn renders_with_the_real_time_engine() {
     assert_eq!(out.status.code(), Some(1));
     assert!(!bad.exists());
 }
+
+/// RENDER.md R22: `--post` switches the tier's post effects on, and an unknown one is an error.
+#[test]
+fn renders_with_post_effects() {
+    if forge_render_rt::request_default_device().is_err() {
+        if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") {
+            panic!("FORGE_REQUIRE_GPU=1 but no GPU adapter for --engine rt");
+        }
+        eprintln!("skipping --engine rt: no GPU adapter");
+        return;
+    }
+    let d = dir("post");
+    let scene = cube_scene(&d);
+    let plain = d.join("plain.png");
+    let posted = d.join("posted.png");
+    for (out, extra) in [
+        (&plain, None),
+        (&posted, Some("ssao,ssr,bloom,taa,tonemap")),
+    ] {
+        let mut args = vec![
+            "render",
+            &scene,
+            "--engine",
+            "rt",
+            "--out",
+            s(out),
+            "--width",
+            "64",
+            "--height",
+            "48",
+        ];
+        if let Some(post) = extra {
+            args.push("--post");
+            args.push(post);
+        }
+        let (code, r) = json_run(&args);
+        assert_eq!(code, 0, "{r}");
+    }
+    assert!(lit_pixels(&decode(&plain)) > 100);
+    assert_ne!(
+        decode(&plain).data,
+        decode(&posted).data,
+        "the post chain changes the image"
+    );
+    // an unknown effect is a usage error and writes nothing
+    let bad = d.join("bad.png");
+    let out = forge()
+        .args([
+            "render",
+            &scene,
+            "--engine",
+            "rt",
+            "--post",
+            "sharpen",
+            "--out",
+            s(&bad),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert!(!bad.exists());
+}

@@ -739,12 +739,13 @@ albedo pass is unaffected because AO scales radiance, not colour).
 At a covered pixel `p` with shading normal `n` (R21.3), twelve fixed samples sit in the tangent
 disc `t1, t2` of `n` (a golden-angle spiral, directions `k` fixed in the shader):
 
-`s_k = p + radius * (cos θ_k t1 + sin θ_k t2)` with `θ_k = 2π k / 12` and radii
-`0.35, 0.35, 0.7, 0.7, 1, 1, …` (`r_k = 0.35 + 0.65 * (k % 3) / 2`).
+`s_k = p + radius r_k (0.4 n + cos θ_k t1 + sin θ_k t2)` with `θ_k = 2π k / 12` and
+`r_k = 0.35 + 0.65 * (k % 3) / 2` (a hemisphere sample: the 0.4 n lift keeps a flat face
+unoccluded, a wall or a neighbouring face closer than the sample occludes it).
 
 Each sample is projected to a pixel (`project` of R21.2, NDC y up, pixel y down); the G-buffer
-position `q` there occludes when `|q - p| < radius` and `dot(q - p, p - eye) < -0.02 * radius`
-(the stored point is nearer the camera). `ao = 1 - strength * occluded / 12`, clamped to `[0, 1]`.
+position `q` there occludes when `|q - p| < radius` and the stored point is nearer the eye than
+the sample, `dot(q - s_k, normalize(s_k - eye)) < -0.02 * radius`. `ao = 1 - strength * occluded / 12`, clamped to `[0, 1]`.
 The environment diffuse and specular terms are multiplied by `ao`; direct light is untouched and
 background pixels are unchanged. One bounce, no multi-sample rotation and no denoise: an edge darkens
 by at most what twelve samples resolve (documented gap against ray-traced AO, brief 201).
@@ -807,8 +808,9 @@ dirtied, and switching back restores the shaded panes.
 
 In Render mode a pane shows a `render-rt` frame of the **pane's own camera**:
 
-- camera: `transform = view().inverse() * diag(1, -1, 1)` (the rasteriser's camera space is y-down,
-  R21.2), perspective `focal_mm = 36 h / (2 w tan(fov_y / 2))` with `sensor_mm = 36`, orthographic
+- camera: `transform = view().inverse() * diag(1, 1, -1)` (the viewport's view space looks along
+  `-Z`, the raster tier's camera space along `+Z` with +Y up, R21.2), perspective
+  `focal_mm = 36 h / (2 w tan(fov_y / 2))` with `sensor_mm = 36`, orthographic
   `width = 2 (view height / 2) (w / h)`;
 - snapshot: the scheduled scene (`prepare_render`'s evaluation), with the pane camera replacing the
   render camera;
