@@ -5,11 +5,11 @@ Status: ready · Area: F · Depends on: 083, 206 · Observations: – (own desig
 ## Goal
 The Volume Mesher must never emit non-manifold geometry. Brief 206 found that a strong smooth
 layer on a tube about 3 voxels thick produces non-manifold edges ("fins"): the mesher places one
-vertex per mixed cell (VOLUME.md §7.2.4), so a cell crossed by two separate surface sheets joins
+vertex per mixed cell (VOLUME.md §7.2), so a cell crossed by two separate surface sheets joins
 them through one vertex. After Make Editable the user gets a broken mesh.
 
 ## Inputs
-- docs/specs/VOLUME.md §7 (mesher), §12 (S5 scenario and its open question 1)
+- docs/specs/VOLUME.md §7.2 (surface extraction), §7.5 (adaptivity), §12 (S5 scenario and its open question 1)
 - Brief 206's Report; tests/acceptance/s5_volume.rhai (the default-smoothing variant reproduces it)
 - Public literature on manifold dual contouring (one vertex per connected surface component
   inside a cell, e.g. Schaefer, Ju & Warren, "Manifold Dual Contouring", 2007)
