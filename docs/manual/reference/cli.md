@@ -201,7 +201,7 @@ forge rpc <method> [--params] [--port] [--token]
 Render an image or an image sequence with the CPU path tracer (docs/specs/RENDER.md)
 
 ```
-forge render <scene> [--engine] --out [--width] [--height] [--samples] [--max-depth] [--seed] [--frame] [--start] [--end] [--step] [--format] [--depth] [--alpha] [--aov] [--dof] [--multipart]
+forge render <scene> [--engine] --out [--width] [--height] [--samples] [--max-depth] [--seed] [--frame] [--start] [--end] [--step] [--format] [--depth] [--alpha] [--aov] [--dof] [--multipart] [--post]
 ```
 
 | Argument | Required | Default | Description |
@@ -224,3 +224,4 @@ forge render <scene> [--engine] --out [--width] [--height] [--samples] [--max-de
 | `--aov` | no |  | Extra passes, comma separated: depth, normal, albedo, position, object_id, material_id, shadow, diffuse, specular, emission, or `all` |
 | `--dof` | no |  | Depth of field through the camera's thin lens (default: the scene's stored render settings, else off) |
 | `--multipart` | no |  | One multipart EXR file with a layer per pass |
+| `--post` | no |  | Post effects of the real-time tier (--engine rt), comma separated: ssao, ssr, bloom, taa, tonemap (RENDER.md R22). Off when absent |

@@ -2010,6 +2010,7 @@ dependencies = [
  "forge-render-api",
  "forge-render-bridge",
  "forge-render-cpu",
+ "forge-render-rt",
  "forge-rig",
  "forge-rpc",
  "forge-script",

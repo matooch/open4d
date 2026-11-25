@@ -7,6 +7,7 @@ use std::sync::Arc;
 use forge_app::App;
 use forge_command::UiRequest;
 use forge_core::{NodeId, Registry};
+use forge_render_api::PostSettings;
 use forge_viewport::camera::{Camera, Handedness};
 use forge_viewport::gizmo::{GizmoMode, Space as GizmoSpace};
 use forge_viewport::panes::Pane;
@@ -30,6 +31,15 @@ use crate::weight_manager::WeightPanel;
 
 pub use forge_command::NodeSelection;
 
+/// What the viewports draw: the shaded scene, or a real-time tier frame of each pane's
+/// camera (docs/specs/UI.md §6.3, RENDER.md R22.7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DisplayMode {
+    #[default]
+    Shaded,
+    Render,
+}
+
 /// The application core plus the state only a window needs.
 pub struct EditorState {
     /// Document, selection, timeline, commands, evaluation cache (docs/specs/APP.md).
@@ -44,6 +54,11 @@ pub struct EditorState {
     pub shading: Shading,
     /// Viewport layout, active and maximised pane, lighting options and the other panes.
     pub views: Views,
+    /// What the panes show: the shaded scene or the real-time render (RENDER.md R22.7,
+    /// UI.md §6.3). UI state: switching it pushes no undo entry and saves no document.
+    pub display: DisplayMode,
+    /// The post effects the Render display mode uses (RENDER.md R22.1).
+    pub post: PostSettings,
     /// Script Manager source, console and recent list (docs/specs/UI.md §10).
     pub script: ScriptPanelState,
     /// The Console panel: log filter and the REPL (docs/specs/UI.md §19).
@@ -131,6 +146,8 @@ impl EditorState {
             view_aspect: 16.0 / 9.0,
             shading: DEFAULT_SHADING,
             views: Views::new(&Self::default_camera()),
+            display: DisplayMode::Shaded,
+            post: PostSettings::default(),
             script: ScriptPanelState::default(),
             console: ConsoleState::default(),
             layer_panel: LayerPanel::default(),

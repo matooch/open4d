@@ -5,7 +5,7 @@ use std::path::Path;
 use forge_core::NodeId;
 use forge_generators::is_consumed;
 use forge_render_api::{
-    Aov, Control, FrameRange, Multipass, OutputFormat, OutputSettings, RenderEngine,
+    Aov, Control, FrameRange, Multipass, OutputFormat, OutputSettings, PostSettings, RenderEngine,
     RenderSettings, frames, write_output,
 };
 use forge_render_bridge::{apply_scene_objects, settings_from_scene, snapshot_from_polys};
@@ -80,6 +80,26 @@ pub struct RenderArgs {
     /// One multipart EXR file with a layer per pass.
     #[arg(long)]
     pub multipart: bool,
+    /// Post effects of the real-time tier (--engine rt), comma separated: ssao, ssr, bloom, taa,
+    /// tonemap (RENDER.md R22). Off when absent.
+    #[arg(long)]
+    pub post: Option<String>,
+}
+
+fn parse_post(s: &str) -> Result<PostSettings, Fail> {
+    let mut post = PostSettings::default();
+    for name in s.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        match name {
+            "none" => post = PostSettings::default(),
+            "ssao" => post.ssao = true,
+            "ssr" => post.ssr = true,
+            "bloom" => post.bloom = true,
+            "taa" => post.taa = true,
+            "tonemap" => post.tonemap = true,
+            other => return Err(user(format!("unknown post effect {other:?}"))),
+        }
+    }
+    Ok(post)
 }
 
 fn parse_aovs(s: &str) -> Result<Vec<Aov>, Fail> {
@@ -168,6 +188,9 @@ pub fn render(a: &RenderArgs) -> Outcome {
         depth_of_field: a.dof || base.depth_of_field,
         ..base
     };
+    if let Some(s) = &a.post {
+        settings.post = parse_post(s)?;
+    }
     settings.validate().map_err(|e| user(e.to_string()))?;
     let multiple = list.len() > 1;
     let engine: Box<dyn RenderEngine> = match a.engine {

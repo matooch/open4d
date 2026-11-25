@@ -5,6 +5,7 @@
 
 mod engine;
 pub mod framegraph;
+pub mod post;
 pub mod shader;
 pub mod shadow;
 
@@ -68,6 +69,17 @@ pub mod frame {
     pub const SHADOW_MAT: usize = 84;
     pub const EPS: usize = 100;
 
+    /// Post: SSAO on (R22.2), its world radius and strength.
+    pub const SSAO_ON: usize = 101;
+    pub const SSAO_RADIUS: usize = 102;
+    pub const SSAO_STRENGTH: usize = 103;
+    /// Post: SSR on (R22.3) and its march steps.
+    pub const SSR_ON: usize = 104;
+    pub const SSR_STEPS: usize = 105;
+    /// Post: the subpixel jitter of a TAA subframe, in pixels (R22.5).
+    pub const JITTER_X: usize = 106;
+    pub const JITTER_Y: usize = 107;
+
     pub const SLOTS: usize = 128;
 
     /// Every slot, in order: the shader constant name and its index.
@@ -112,5 +124,12 @@ pub mod frame {
         ("ENV_H", ENV_H),
         ("SHADOW_MAT", SHADOW_MAT),
         ("EPS", EPS),
+        ("SSAO_ON", SSAO_ON),
+        ("SSAO_RADIUS", SSAO_RADIUS),
+        ("SSAO_STRENGTH", SSAO_STRENGTH),
+        ("SSR_ON", SSR_ON),
+        ("SSR_STEPS", SSR_STEPS),
+        ("JITTER_X", JITTER_X),
+        ("JITTER_Y", JITTER_Y),
     ];
 }

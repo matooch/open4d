@@ -25,6 +25,7 @@ forge-nodes = { path = "../nodes" }
 forge-render-api = { path = "../render-api" }
 forge-render-bridge = { path = "../render-bridge" }
 forge-render-cpu = { path = "../render-cpu" }
+forge-render-rt = { path = "../render-rt" }
 forge-rig = { path = "../rig" }
 forge-rpc = { path = "../rpc" }
 forge-script = { path = "../script" }
