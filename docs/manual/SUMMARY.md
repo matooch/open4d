@@ -9,6 +9,7 @@
 - [Editing meshes](editing-meshes.md)
 - [Deformers and fields](deformers-and-fields.md)
 - [Cloner](cloner.md)
+- [Volumes](volumes.md)
 - [Animation](animation.md)
 - [Rendering](rendering.md)
 - [Files and recovery](files-and-recovery.md)
