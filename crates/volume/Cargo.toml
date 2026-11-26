@@ -10,6 +10,7 @@ forge-core = { path = "../core" }
 forge-fields = { path = "../fields" }
 forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }
+forge-particles = { path = "../particles" }
 glam = "0.34"
 thiserror = "2"
 

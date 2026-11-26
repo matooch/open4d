@@ -16,6 +16,7 @@ forge-fields = { path = "../fields" }
 forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }
 forge-modeling = { path = "../modeling" }
+forge-particles = { path = "../particles" }
 forge-io = { path = "../io" }
 forge-modifiers = { path = "../modifiers" }
 forge-nodes = { path = "../nodes" }

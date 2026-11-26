@@ -3,6 +3,7 @@
 //! through the frames stepped so far; Connect All Objects joins their current positions.
 
 use forge_core::{Category, EvalCtx, NodeId, NodeType, ParamDesc, Scene, Value};
+use forge_particles::PointSource;
 use glam::{DMat4, DVec3};
 
 use crate::spline_sampling::{Interpolation, Sampling, add_params};
@@ -158,6 +159,10 @@ pub fn curve_of(scene: &Scene, id: NodeId, ctx: &EvalCtx) -> Result<Option<Curve
             .collect(),
         _ => Vec::new(),
     };
+    // Emitters are traced by particle id (DYNAMICS.md section 11), the other links by node.
+    let (emitters, links): (Vec<NodeId>, Vec<NodeId>) = links
+        .into_iter()
+        .partition(|l| forge_particles::is_emitter(scene, *l));
     let vertices = p.bool("trace_vertices");
     let closed = p.bool("close_spline");
     let reverse = p.bool("reverse_sequence");
@@ -172,10 +177,17 @@ pub fn curve_of(scene: &Scene, id: NodeId, ctx: &EvalCtx) -> Result<Option<Curve
         local.inverse() * parent.inverse()
     };
     let mut chains: Vec<Vec<DVec3>> = Vec::new();
-    if p.enumeration("tracing_mode") == "connect_all" {
+    let tracing_paths = p.enumeration("tracing_mode") != "connect_all";
+    if !tracing_paths {
         let mut line = Vec::new();
         for l in &links {
             line.extend(nodes_at(scene, *l, false, ctx)?);
+        }
+        let frame = (ctx.time * ctx.fps).round() as i64;
+        for e in &emitters {
+            if let Some(mut source) = forge_particles::EmitterPoints::new(scene, *e) {
+                line.extend(source.points_at(frame).iter().map(|q| q.position));
+            }
         }
         chains.push(line);
     } else {
@@ -198,6 +210,21 @@ pub fn curve_of(scene: &Scene, id: NodeId, ctx: &EvalCtx) -> Result<Option<Curve
                     chains[base + i].push(n);
                 }
             }
+        }
+    }
+    if tracing_paths {
+        let frame = (ctx.time * ctx.fps).round() as i64;
+        for e in &emitters {
+            let Some(mut source) = forge_particles::EmitterPoints::new(scene, *e) else {
+                continue;
+            };
+            let mut by_id: std::collections::BTreeMap<u64, Vec<DVec3>> = Default::default();
+            for f in sampled_frames(frame, p.int("sample_step").max(1) as i64) {
+                for q in source.points_at(f) {
+                    by_id.entry(q.id).or_default().push(q.position);
+                }
+            }
+            chains.extend(by_id.into_values());
         }
     }
     let mut curves: Vec<Curve> = chains

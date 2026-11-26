@@ -1489,6 +1489,7 @@ dependencies = [
  "forge-nodes",
  "forge-noise",
  "forge-parity-harness",
+ "forge-particles",
  "forge-platform",
  "forge-rig",
  "forge-shaders",
@@ -1599,6 +1600,7 @@ dependencies = [
  "forge-generators",
  "forge-geometry",
  "forge-parity-harness",
+ "forge-particles",
  "glam 0.34.1",
  "rapier3d-f64",
  "thiserror 2.0.21",
@@ -1650,6 +1652,7 @@ dependencies = [
  "forge-modifiers",
  "forge-noise",
  "forge-parity-harness",
+ "forge-particles",
  "forge-rig",
  "forge-text",
  "glam 0.34.1",
@@ -1793,6 +1796,19 @@ dependencies = [
  "serde_json",
  "tempfile",
  "toml",
+]
+
+[[package]]
+name = "forge-particles"
+version = "0.1.0"
+dependencies = [
+ "forge-anim",
+ "forge-clone-engine",
+ "forge-core",
+ "forge-fields",
+ "forge-noise",
+ "glam 0.34.1",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -2054,6 +2070,7 @@ dependencies = [
  "forge-generators",
  "forge-geometry",
  "forge-parity-harness",
+ "forge-particles",
  "glam 0.34.1",
  "thiserror 2.0.21",
  "toml",

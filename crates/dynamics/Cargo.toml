@@ -10,6 +10,7 @@ forge-clone-engine = { path = "../clone-engine" }
 forge-core = { path = "../core" }
 forge-generators = { path = "../generators" }
 forge-geometry = { path = "../geometry" }
+forge-particles = { path = "../particles" }
 glam = "0.34"
 rapier3d-f64 = { version = "0.36", default-features = false, features = ["dim3", "f64", "enhanced-determinism", "std"] }
 thiserror = "2"
