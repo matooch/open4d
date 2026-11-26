@@ -10,7 +10,7 @@ linked files win.
 
 | | Now |
 |---|---|
-| Implementation briefs | **189 of 202 done** (94 %) · 6 ready · 7 waiting |
+| Implementation briefs | **192 of 202 done** (95 %) · 3 ready · 7 waiting |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
 | Acceptance scenarios | S1–S9 pass (S6 with own-design Pose Morph, parity-pending) · S10 needs a measurement |
@@ -47,7 +47,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | F · Volumes | 10 / 10 | – |
 | G · Animation | 13 / 13 | – |
 | H · Rigging, tags, constraints | 15 / 15 | Parity-pending: Pose Morph (own design D20, O37) |
-| I · Dynamics and particles | 5 / 8 | 119, 120 particles + forces (blocked), 121 (needs 119) |
+| I · Dynamics and particles | 8 / 8 | Parity-pending: particles, forces and their point-source use (own design D20, O40; statistical tests) |
 | J · Materials, shaders, UVs | 13 / 13 | Hands-on checks in GUI session G7 |
 | K · Rendering and viewport | 11 / 12 | 142 GPU path tracer (queued) |
 | L · UI and UX | 16 / 16 | Hands-on checks in GUI sessions G1, G2, G4 |
@@ -79,7 +79,6 @@ Overnight: `scripts/hermes-loop.sh docs/agents/prompts/implementer-opencode.txt`
 
 | Item | Why it's stuck | What unblocks it |
 |---|---|---|
-| Particles + forces (119, 120, 121) | The emitter exposes no particle list to scripts (O40) | Same choice: **own design**, or a GUI capture |
 | GUI sessions G1–G9 | Feel, layout, shortcuts, viewport look can only be checked by a person at the reference app | An hour or two per session: [parity/GUI-SESSIONS.md](parity/GUI-SESSIONS.md) |
 | Hands-on use of the editor | Nobody has used the editor for real work yet; that's where the remaining usability bugs are | Build a small scene in it and report what gets in the way |
 | S10 + R8 numbers | Need real GPUs | Run the benchmarks on the M5 Pro and RTX 3090 |

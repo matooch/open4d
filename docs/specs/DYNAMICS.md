@@ -1,6 +1,7 @@
 # Dynamics spec (area I)
 
-Briefs: 115 rigid bodies, 116 dynamics on clones, 117 connectors and springs, 118 soft bodies.
+Briefs: 115 rigid bodies, 116 dynamics on clones, 117 connectors and springs, 118 soft bodies,
+119 particle emitter, 120 forces, 121 particles as a point source (§9-§11).
 Crate: `forge-dynamics` (`crates/dynamics`), on rapier3d (DECISIONS D8; `rapier3d-f64`, features
 `dim3 f64 enhanced-determinism std`; the licences are Apache-2.0 and pass `cargo deny`).
 
@@ -391,3 +392,212 @@ that case matches; the area design's pressure constraint is not implemented (not
 Bounce ("level C: rest shape, bounce") cannot be compared: the reference shows no rebound at the
 three recorded frames and its contact is not a contact; ours lands without a bounce at the 5 % tag
 value (frame 30 on the plane).
+
+
+## 9. Particles: the emitter (brief 119, own design D20)
+
+Sources: the public manual's description of the standard Emitter object (its parameter names and
+what they mean: birthrate editor and renderer, start and stop emission, lifetime, speed and their
+variations, rotation, end scale, seed, horizontal and vertical size and angle); the parameter
+table of [particles.md](../parity/particles.md) (O40, read-only: labels and defaults, no data).
+The reference app's particle random sequence is private and O40 captured no particle, so there is
+**no golden data**: every rule below that is not a name or a default is **own design (D20)** and
+**parity-pending (O40)**, and the tests are **statistical** (counts exact; distributions within
+tolerances derived from the sample size). The advanced particle system is out of scope (D13).
+
+Crate: `forge-particles` (`crates/particles`), re-exported as `forge_dynamics::particles`. It sits
+below the generators (the cloner, Tracer and volume builder read particles, §11), and
+`forge-dynamics` depends on the generators, so the module cannot live inside `forge-dynamics`
+itself.
+
+### 9.1 The emitter object (`forge.particle_emitter`)
+
+Category `Object`; it draws and produces no geometry. It emits along its own **+Z** axis from the
+rectangle or ellipse in its **XY** plane. All lengths cm, angles radians in storage.
+
+| id | label | default | meaning |
+|---|---|---|---|
+| `birthrate_editor` | Birthrate Editor | 10 | particles **per frame**, used for `ParticleMode::Editor` |
+| `birthrate_renderer` | Birthrate Renderer | 10 | the same for `ParticleMode::Render` |
+| `visibility_percent` | Visibility | 100 % | stored only (not simulated) |
+| `seed` | Seed | 0 | §9.4 |
+| `relative_speed` | Relative Speed | off | stored only |
+| `start_frame` | Start Emission | 0 | first emitting frame |
+| `stop_frame` | Stop Emission | 150 | first frame that does **not** emit (half-open) |
+| `lifetime` | Lifetime | 3 s | seconds |
+| `lifetime_variation_percent` | Lifetime Variation | 0 % | §9.3 |
+| `speed` | Speed | 150 | cm/s |
+| `speed_variation_percent` | Speed Variation | 0 % | §9.3 |
+| `shape` | Shape | `rectangle` | `rectangle` or `circle` (an ellipse) birth area |
+| `size_x`, `size_y` | Horizontal / Vertical Size | 50, 50 | full extents of the birth area |
+| `emitter_type` | Emitter Type | `angular` | `angular` or `pyramid` (§9.2) |
+| `angle_h`, `angle_v` | Horizontal / Vertical Angle | 0, 0 | full spread angles (0 = every particle along +Z) |
+| `rotation` | Rotation | 0 deg/s | spin rate of a particle |
+| `rotational_variation_percent` | Rotational Variation | 100 % | §9.3 |
+| `end_scale` | End Scale | 1 | scale at the end of life |
+| `scale_variation_percent` | Scale Variation | 0 % | §9.3 |
+| `substeps` | Substeps | 4 | integration steps per frame (§10.1) |
+
+Which birthrate applies: the **editor** rate for everything that evaluates the scene for the
+viewport or as a data source (the cloner, Tracer and volume builder of §11 included); the
+**renderer** rate when the caller asks for `ParticleMode::Render` (the renderer's scene
+evaluation, once wired). Both rates are particles per frame, whatever the frame rate.
+
+### 9.2 Birth: position and direction
+
+The birth point is uniform in the birth area: the rectangle `|x| <= size_x/2, |y| <= size_y/2`, or
+the ellipse with those semi-axes (`circle`: uniform in the unit disc scaled by `size/2`). The
+direction is the normalised vector `(u tan(angle_h/2), v tan(angle_v/2), 1)` with `(u, v)` uniform
+in the unit disc (`angular`) or in the square `[-1, 1]^2` (`pyramid`). With angles 0 the direction
+is exactly +Z. The velocity is `direction * speed_i`. The emitter's world matrix at the birth frame
+places the point (`transform_point3`, so its scale scales the birth area) and the direction (rotation
+and shear only; the direction is renormalised, so the emitter's scale does not change the speed).
+
+### 9.3 Variation
+
+`value = base * (1 + variation * u)` with `u` uniform in `[-1, 1)` and `variation` a fraction:
+lifetime (clamped to >= 0), speed (clamped to >= 0), spin rate (`rotation_deg`, in rad/s about a
+per-particle uniformly random unit axis), end scale (the particle's scale goes linearly from 1 at
+birth to its end scale at the end of life, then stays). A variation of 0 draws the number and
+ignores it, so changing one variation never changes another attribute's sequence.
+
+### 9.4 Seed and the random draws
+
+Particle number `n` (the emission index, counted from 0 over the whole run) has its own stream:
+`SplitMix64(hash_cell(seed, [n]))` (`forge_noise::hash_cell`, `forge_clone_engine::SplitMix64`).
+Draws, in this order, always all of them: birth `(a, b)`, direction `(u, v)`, speed, lifetime,
+spin axis `(z, phi)`, spin rate, end scale. So the attributes of particle `n` do not depend on the
+birthrate, on other particles or on the frames stepped; the same seed gives bit-identical particles
+and another seed gives different ones.
+
+### 9.5 How many particles are born (exact)
+
+Let `k = frame - start_frame` (the number of earlier emitting frames) and `R` the birthrate. In
+frame `f` with `start <= f < stop` the emitter has emitted in total `T(k) = floor(R * k + 1e-9)` by
+the start of the frame, and emits `T(k+1) - T(k)` particles: a fractional rate accumulates without
+drift (rate 2.5 gives 2, 3, 2, 3, ...; rate 0.1 gives one particle every tenth frame; after `m`
+emitting frames exactly `floor(R m)` have been born). The 1e-9 absorbs the binary rounding of
+rates like 0.1 and 0.7. A rate <= 0 emits nothing. The number of live particles is capped at
+1 000 000 (births past the cap are dropped, deterministically).
+
+### 9.6 Frame order, age and death
+
+State at frame `f` is what is left after: (1) if `f > start`, one frame of integration of the
+particles of frame `f-1` (§10.1; forces and collisions); (2) ages: `age = (f - birth) / fps`; a
+particle is **alive** while `f - birth < lifetime * fps - 1e-9` (so a lifetime of exactly `L`
+seconds gives `L * fps` frames of life, ages 0 .. L - 1/fps) and is removed otherwise; (3) births of
+frame `f` at age 0. Frames before `start_frame` hold no particles. The emitter's transform is read
+at each birth frame from the scene animated to that frame, so an animated emitter leaves a trail.
+Struct-of-arrays data (`Particles`): `id`, `position`, `velocity`, `age`, `lifetime`, `alive`,
+`scale`, `rotation` (spin angle, `spin_rate * age`), world space; `alive` is true for every entry of
+a frame snapshot (dead ones were removed in step 2; a deflector kill, §10, marks `alive` false
+before the removal).
+
+### 9.7 Cache and scrubbing (`ParticleCache`)
+
+Like `DynamicsCache` (§5): the cache holds one snapshot per frame from the start frame; asking for
+a later frame steps forward frame by frame, an earlier frame reads the cache (nothing is
+re-simulated), a frame before the start gives no particles. A cache is built for one scene
+state; editing the scene means building a new one, which restarts from the start frame, so the same
+scene always gives the same frames however the timeline was scrubbed. `particles_at(scene, emitter,
+frame, mode)` is the same thing as a pure function (it simulates from the start every call). The
+emitter's parameters live in the scene file like any other node's.
+
+### 9.8 Tests (`crates/particles/tests/emitter.rs`)
+
+Derivations are written next to each assertion. Counts are exact. Statistics use fixed seeds and a
+tolerance of 4 standard errors of the estimator for N >= 2000 particles (a fixed-seed test
+cannot flake; 4 sigma makes a wrong rule fail and a correct one pass with margin):
+
+* mean speed with `speed 150, variation 50 %`: `u` uniform, std of one speed is `150 * 0.5 / sqrt 3`,
+  standard error `std / sqrt N`; same for lifetime;
+* the direction spread of an `angular` emitter: `E[(vx/vz)^2] = tan^2(angle_h/2) / 4` (unit disc),
+  of a `pyramid` emitter `tan^2 / 3` (unit square), the mean of `vx/vz` is 0, standard error from
+  `E[x^4]`; every direction inside the cone (a hard bound);
+* birth positions fill the area: mean 0, variance `size^2 / 12` (rectangle) or `size^2 / 16`
+  (ellipse), standard error of a variance estimate `sqrt((m4 - var^2) / N)`.
+
+## 10. Particle forces (brief 120, own design D20)
+
+Sources: the public manual's descriptions of the Gravity, Wind, Attractor, Deflector, Friction,
+Turbulence and Rotation force objects (their names and the parameters that matter: acceleration,
+wind speed and air resistance, strength, elasticity and friction of the deflector). The formulas are
+**own design (D20)**, **parity-pending (O40)**; no force case has data.
+
+Every force is an object (`Category::Object`, no geometry): `forge.force_gravity`,
+`forge.force_wind`, `forge.force_attractor`, `forge.force_deflector`, `forge.force_friction`,
+`forge.force_turbulence`, `forge.force_rotation`. Common parameters:
+
+* `emitters` (link list): the emitters the force acts on; **empty = every emitter in the scene**
+  (the manual's forces act scene-wide); a listed set restricts it to those emitters.
+* `fields` (field list, `forge_fields::FieldList`): the **falloff**. The acceleration of a force is
+  multiplied by the list's value at the particle's position (an empty list gives 1; the deflector
+  ignores fields). A disabled object (`object.enabled`) has no effect.
+
+A force is a pure function `acceleration(position, velocity, time) -> DVec3` in world space
+(`Force::acceleration`; the force's world matrix is baked into it at the frame, so animated forces
+work); the deflector is a collision response `Force::collide(p_old, p_new, v)`.
+
+| force | extra parameters (defaults) | acceleration |
+|---|---|---|
+| gravity | `acceleration` 981 cm/s^2 | `a * (-Y_force)`, the force's local -Y axis in world space |
+| wind | `speed` 100 cm/s, `air_resistance` 1 /s | `k (w - v)` with `w = speed * Z_force` (the wind blows along +Z): the particle's velocity relaxes to the wind velocity, `v(t) = w + (v0 - w) e^(-k t)` |
+| attractor | `strength` 500 cm/s^2, `radius` 100 cm | toward the force's origin `c`: `s * d / |d| * (r / max(|d|, r))^2`, `d = c - p`: constant `s` inside the radius, inverse square outside; negative strength repels |
+| friction | `friction` 1 /s | `-k v` |
+| turbulence | `strength` 200 cm/s^2, `scale` 100 cm, `speed` 1 /s, `seed` 0 | `s * (n0, n1, n2)` with `n_i = perlin4(seed + i, (p / scale, speed * t))` (`forge_noise::perlin`); zero mean |
+| rotation | `strength` 200 cm/s^2 | tangential, about the force's local Y axis through its origin: `s * (axis x r_perp) / |r_perp|`, 0 on the axis |
+| deflector | `bounce` 0.5, `friction` 0, `kill` off | none; collision with the plane through the origin with normal +Y_force (§10.2) |
+
+### 10.1 Integration
+
+Per frame the emitter integrates `substeps` steps of `dt = 1 / (fps * substeps)` with
+**semi-implicit (symplectic) Euler**: for each step, `a` = sum over all forces acting on the
+particle of `falloff * acceleration(p, v, t)` evaluated at the start of the step (`t` the document
+time of the step start), then `v += a dt`, `p += v dt`, then the deflector collisions. Consequences,
+used as test tolerances: constant `a` gives after `n` steps `p = p0 + v0 t + a t^2 / 2 + a dt t / 2`
+exactly (the last term is the scheme's error, written in the test); friction gives
+`v_n = v0 (1 - k dt)^n`, within `n (k dt)^2 / 2 / (1 - k dt)^2` relative of `e^(-k t)`.
+
+### 10.2 Deflector
+
+After a step, a particle whose signed distance to the plane went from `d_old >= 0` to `d_new < 0`
+crosses it: its position becomes `p - (1 + b) d_new n` (so its distance is `-b d_new >= 0`, never
+below the plane), its velocity `v - (1 + b)(v . n) n` with the tangential part scaled by
+`(1 - friction)`; with `kill` the particle is marked not alive instead. A particle that starts
+below the plane is not deflected (it never crosses). Several deflectors apply in force order.
+
+### 10.3 Tests (`crates/particles/tests/forces.rs`)
+
+Per force: gravity (analytic positions at frames 5, 10, 20 within the scheme's error term),
+friction (speed ratio against `(1 - k dt)^n` exactly and against `e^(-k t)` within the
+bound above), wind (`v(t)` against the relaxation law within the scheme's error), attractor
+(the mean distance to the centre shrinks every frame; repulsion grows it), deflector (no particle
+below the plane at any frame, 2000 particles, bounce 0 / 0.5 / kill), rotation (the angular
+momentum about the axis `mean((r_perp x v) . axis)` rises and the axial velocity is untouched),
+turbulence (mean velocity within 4 standard errors of 0, variance growing frame to frame,
+identical for one seed and different for another), falloff (a Linear or Spherical field limits
+gravity to a region: particles outside it do not accelerate), listed emitters (a force that lists
+emitter A leaves emitter B unchanged).
+
+## 11. Particles as a point source (brief 121)
+
+`forge_particles::PointSource` is the shared interface: `points_at(&mut self, frame) ->
+Vec<ParticlePoint>` with `ParticlePoint { id, position (world), velocity, age, scale }`, the live
+particles of that frame ordered by id. `EmitterPoints::new(scene, node)` is the source of an emitter
+node (`None` for other nodes; one cache, so asking for many frames steps once). Consumers, all at
+the document frame `round(time * fps)` of their evaluation context and the **editor** rate:
+
+* **Tracer** (`trace_links`): an emitter link in Trace Paths makes one chain per particle id, the
+  particle's positions over the sampled frames in which it is alive (chains of fewer than two
+  points make no curve), appended after the chains of the other links in link order, by id; in
+  Connect All Objects the live particles of the current frame, by id, join the line.
+* **Cloner, Object mode**: with an emitter as the Object, one clone per live particle (any
+  distribution but Axis): position the particle's position in the cloner's space, orientation
+  (Align Clone, default on) with +Z along the velocity (the frame of `frame(p, z, up)`, up +Y;
+  no rotation for a particle at rest), uniform scale the particle's `scale`.
+* **Volume Builder**: an emitter child is an entry; each live particle is a sphere of radius
+  `0.735 * particle_voxel_range * voxel_size` (the spline factor `SPLINE_RADIUS_PER_RANGE` reused:
+  own design, parity-pending), spheres unioned with `points_to_sdf` (`PointUnion::Min`).
+
+Tests: one integration test per consumer (`crates/generators/tests/particles_consumers.rs` for the
+Tracer and the cloner, `crates/volume/tests/particles_source.rs` for the builder).

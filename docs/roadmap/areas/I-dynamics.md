@@ -9,11 +9,11 @@
 - [ ] **Scene settings:** gravity, time scale, steps per frame, enabled; a cache to bake,
   clear and play back.
 - [ ] **Dynamics on clones:** each clone is a body; per-clone forces.
-- [ ] **Connectors:** hinge, ball-socket, slider, fixed, spring. **Forces:** Gravity,
+- [x] **Connectors:** hinge, ball-socket, slider, fixed, spring. **Forces:** Gravity,
   Wind, Attractor, Deflector, Friction, Turbulence, Rotation.
 - [ ] **Soft bodies:** position-based dynamics, with stiffness, structural and shear
   springs, pressure, and a rest-shape strength.
-- [ ] **Particle emitter:** rate, lifetime, speed, variation, emitter shapes, seed. Emitted
+- [x] **Particle emitter:** rate, lifetime, speed, variation, emitter shapes, seed. Emitted
   objects as children (instancing), plus particle data for the clone toolset (Tracer,
   Volume points).
 - [ ] **v2:** cloth, fluids, the full particle-system node system.
