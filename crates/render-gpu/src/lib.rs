@@ -9,7 +9,7 @@ pub use engine::{GpuEngine, MapSlot, SUBMISSION_BUDGET, await_mapped, map_read};
 /// The deterministic RNG and sampling helpers (R20.2), for tests of the WGSL directly.
 pub const RNG_WGSL: &str = include_str!("rng.wgsl");
 /// The BVH walk, lights, surfaces and integrator (R20.1, R20.2).
-pub const TRACE_WGSL: &str = include_str!("trace.wgsl");
+pub const TRACE_WGSL: &str = concat!(include_str!("trace.wgsl"), include_str!("flat_scene.wgsl"));
 
 /// Requests the default adapter and device; `Err` carries the reason there is none.
 pub fn request_default_device() -> Result<(wgpu::Device, wgpu::Queue), String> {

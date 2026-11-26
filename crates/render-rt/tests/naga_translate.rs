@@ -85,6 +85,65 @@ fn path(@builtin(global_invocation_id) id: vec3<u32>) {
 }
 
 #[test]
+fn shared_path_transport_translates_with_both_inline_traversals() {
+    use forge_render_gpu::shader::assemble_with_scene;
+    use forge_render_rt::ray::{COMPUTE_TRAVERSAL_WGSL, HARDWARE_TRAVERSAL_WGSL, RAY_HIT_WGSL};
+
+    // A minimal geometry adapter lets this check the full integrator call graph, including
+    // primary and shadow queries, independently of Tier 3's attribute packing.
+    let adapter = "
+fn scene_intersect(o: vec3<f32>, d: vec3<f32>, tmax: f32) -> Hit {
+    let r = rt_closest(o, d, tmax);
+    return Hit(r.ids.x != 0xffffffffu, r.tuv.x, r.ids.y, r.ids.x, r.tuv.y, r.tuv.z);
+}
+fn scene_occluded(o: vec3<f32>, d: vec3<f32>, tmax: f32) -> bool {
+    return rt_closest(o, d, tmax).ids.x != 0xffffffffu;
+}
+fn scene_geometry(o: vec3<f32>, d: vec3<f32>, h: Hit) -> Geom {
+    var g: Geom;
+    g.p = o + h.t * d;
+    g.ng = vec3<f32>(0.0, 1.0, 0.0);
+    g.ns = g.ng;
+    return g;
+}
+fn scene_ids(h: Hit) -> vec2<f32> {
+    return vec2<f32>(0.0, f32(h.instance));
+}
+";
+    let case = load("mat-bump-noise");
+    let materials: Vec<(&ShadingGraph, &dyn TextureSampler)> = case
+        .snapshot
+        .materials
+        .iter()
+        .map(|m| (&m.graph, &*m.sampler as &dyn TextureSampler))
+        .collect();
+    let compute = format!(
+        "{RAY_HIT_WGSL}{COMPUTE_TRAVERSAL_WGSL}
+@group(2) @binding(0) var<storage, read> tlas: array<Node>;
+@group(2) @binding(1) var<storage, read> instances: array<Instance>;
+@group(2) @binding(2) var<storage, read> blas: array<Node>;
+@group(2) @binding(3) var<storage, read> triangles: array<Triangle>;
+{adapter}"
+    );
+    let hardware = format!(
+        "{RAY_HIT_WGSL}{HARDWARE_TRAVERSAL_WGSL}
+@group(2) @binding(0) var scene: acceleration_structure;
+{adapter}"
+    );
+    for (name, directives, scene) in [
+        ("compute path transport", "", compute),
+        (
+            "hardware path transport",
+            "enable wgpu_ray_query;",
+            hardware,
+        ),
+    ] {
+        let assembled = assemble_with_scene(&materials, directives, &scene).unwrap();
+        translate(name, &assembled.source);
+    }
+}
+
+#[test]
 fn every_raster_module_translates_to_all_backends() {
     for name in case_names() {
         let case = load(&name);

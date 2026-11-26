@@ -1079,6 +1079,11 @@ inputs, and [R7 tier budgets](../agents/tasks/203-rt-consistency.md). This is ou
   camera, light sampling, emission, BSDFs, transmission, environment and termination
   rules for supported inputs. Keep existing R20 input limitations explicit if still
   unsupported; do not replace those inputs with silent material or lighting approximations.
+- The shared WGSL integrator depends on four scene functions: closest intersection,
+  occlusion, hit geometry and hit IDs. A hit carries the primitive and instance keys
+  required by that scene implementation. R20 uses a flattened primitive key; R25 uses
+  local primitive and snapshot instance keys. The scene module owns its storage
+  declarations, and any WGSL extensions it uses are enabled before the material code.
 - One progressive sample index denotes one complete camera-path sample per active pixel.
   Continue the deterministic R20.2 per-pixel stream and pixel-filter index across batches.
   Changing batch boundaries does not change the sample sequence; resetting a view
