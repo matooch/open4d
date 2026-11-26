@@ -1201,7 +1201,24 @@ R24 direct shadows, and the R20/R25 GPU transport. This is our own design.
    a tinted shadow from a light beyond the blocker, and multiple history
    indices for non-delta sampling. This limit is for the new raw probe only.
    Remeasure unchanged S10 and strict R26 on the host once there is a runtime
-  change; shader extraction alone makes no performance or parity claim.
+   change; shader extraction alone makes no performance or parity claim.
+
+#### Live dispatch and invalidation
+
+- Use the inline signal when the prepared R23 scene exposes inline bindings
+  and the dispatch fits the device limits. On an unsupported dispatch, use
+  the existing batched estimator. No shadow-casting lights still bypass both.
+- Retain the R25 receiver attribute upload per view until meshes or instances
+  change. Use the same scene scale as the CPU surface evaluator. Compile the
+  shadow program by backend, exact material WGSL and bitmap layout count, but
+  bind the current frame's bitmap views from the same material assembly as the
+  raster passes. A same-slot bitmap replacement must not require new geometry
+  or a new pipeline.
+- Feed either raw signal through the same spatial filter and per-jitter
+  history. Do not accumulate a cancelled frame. For identical cropped edits,
+  warm output must equal cold output after invalidation, including changed
+  receiver geometry and same-slot bitmap contents. Strict R26 remains the
+  runtime acceptance; the raw probe's numeric allowance does not change it.
 
 ## R25 Progressive GPU path tracing (brief 202)
 

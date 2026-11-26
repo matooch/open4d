@@ -33,17 +33,20 @@ pub fn direct_shadow_wgsl(
     backend: crate::ray::BackendKind,
     materials: &[(&ShadingGraph, &dyn TextureSampler)],
 ) -> Result<Assembled, RenderError> {
+    let mut assembled = forge_render_gpu::shader::materials(materials, 1)?;
+    assembled.source = direct_shadow_source(backend, &assembled.source);
+    Ok(assembled)
+}
+
+pub(crate) fn direct_shadow_source(backend: crate::ray::BackendKind, materials: &str) -> String {
     use forge_render_gpu::{GEOMETRY_WGSL, LIGHT_SAMPLING_WGSL, RNG_WGSL, SURFACE_WGSL};
     let (directives, scene) = crate::ray::inline_ray_scene(backend);
-    let mut assembled = forge_render_gpu::shader::materials(materials, 1)?;
     let receiver = include_str!("receiver_geometry.wgsl");
     let shadow = include_str!("direct_shadow.wgsl");
-    assembled.source = format!(
-        "{directives}\n{}\n{RNG_WGSL}\n{GEOMETRY_WGSL}\n{SURFACE_WGSL}\n{LIGHT_SAMPLING_WGSL}\n\
-         {scene}\n{INSTANCE_GEOMETRY_WGSL}\n{receiver}\n{shadow}",
-        assembled.source
-    );
-    Ok(assembled)
+    format!(
+        "{directives}\n{materials}\n{RNG_WGSL}\n{GEOMETRY_WGSL}\n{SURFACE_WGSL}\n\
+         {LIGHT_SAMPLING_WGSL}\n{scene}\n{INSTANCE_GEOMETRY_WGSL}\n{receiver}\n{shadow}"
+    )
 }
 
 /// The `F_*` constants of the frame uniform, generated from [`crate::frame`].
@@ -66,8 +69,12 @@ pub fn assemble(
     materials: &[(&ShadingGraph, &dyn TextureSampler)],
 ) -> Result<Assembled, RenderError> {
     let mut out = forge_render_gpu::shader::materials(materials, BITMAP_GROUP)?;
-    out.source.push_str(&frame_constants());
-    out.source.push('\n');
-    out.source.push_str(RT_WGSL);
+    append_raster_passes(&mut out.source);
     Ok(out)
+}
+
+pub(crate) fn append_raster_passes(source: &mut String) {
+    source.push_str(&frame_constants());
+    source.push('\n');
+    source.push_str(RT_WGSL);
 }

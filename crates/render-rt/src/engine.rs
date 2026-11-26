@@ -18,7 +18,7 @@ use wgpu::util::DeviceExt;
 
 use crate::frame;
 use crate::framegraph::FrameGraph;
-use crate::hybrid::{AmbientGpu, Bounce, HybridView, PrimaryInput};
+use crate::hybrid::{AmbientGpu, Bounce, DirectShadowGpu, HybridView, PrimaryInput};
 use crate::ray::BackendKind;
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
 
@@ -962,7 +962,8 @@ impl RtEngine {
             .iter()
             .map(|m| (&m.graph, &*m.sampler as &dyn TextureSampler))
             .collect();
-        let assembled = crate::shader::assemble(&materials)?;
+        let assembled =
+            forge_render_gpu::shader::materials(&materials, crate::shader::BITMAP_GROUP)?;
         // R21.3: the lighting pass samples five textures of its own besides the bitmaps
         if assembled.resources.len() + 5
             > self.device.limits().max_sampled_textures_per_shader_stage as usize
@@ -973,7 +974,9 @@ impl RtEngine {
             )));
         }
         let bitmap_views = self.bitmap_views(&assembled.resources)?;
-        let source = assembled.source;
+        let mut source = assembled.source;
+        let material_source_len = source.len();
+        crate::shader::append_raster_passes(&mut source);
         let plans = shadow::plans_with_bounds(snapshot, geometry.bounds, geometry.scale)?;
         let split = settings
             .aovs
@@ -1559,7 +1562,21 @@ impl RtEngine {
                         Vec::new()
                     };
                     let shadows = if rt_shadows {
-                        let result = view.direct_shadows(snapshot, settings, input, control)?;
+                        let result = view.direct_shadows(
+                            snapshot,
+                            settings,
+                            input,
+                            control,
+                            Some(DirectShadowGpu {
+                                primary: AmbientGpu {
+                                    device,
+                                    queue,
+                                    textures: [&targets.g_views[0], &targets.g_views[1]],
+                                },
+                                materials: &program.source[..material_source_len],
+                                bitmaps: &bitmap_views,
+                            }),
+                        )?;
                         finish_phase(profile, device, "rt-shadows")?;
                         result
                     } else {

@@ -45,10 +45,13 @@ fn raster_geometry_is_resident_until_its_inputs_change() {
         lights: vec![light],
         ..Snapshot::default()
     };
-    let settings = RenderSettings {
+    let mut settings = RenderSettings {
+        region: Some([2, 1, 30, 29]),
         aovs: vec![Aov::Depth, Aov::Normal, Aov::ObjectId, Aov::MaterialId],
         ..RenderSettings::new(32, 32, 1)
     };
+    settings.hybrid.enabled = true;
+    settings.hybrid.shadows = true;
     let engine = new_engine();
     let render = |engine: &RtEngine, scene: &Snapshot| {
         engine
@@ -73,6 +76,7 @@ fn raster_geometry_is_resident_until_its_inputs_change() {
             .unwrap()
             .clone()
     };
+    let shadow = || engine.hybrid.lock().unwrap().shadow_residency().unwrap();
     let check = |scene: &Snapshot| {
         let warm = render(&engine, scene).unwrap();
         let cold = render(&new_engine(), scene).unwrap();
@@ -87,6 +91,7 @@ fn raster_geometry_is_resident_until_its_inputs_change() {
     assert!(first.aovs[&Aov::ObjectId].data.contains(&8.0));
     let initial = resident();
     let initial_program = program();
+    let initial_shadow = shadow();
     scene.camera.transform[12] += 35.0;
     let moved_camera = check(&scene);
     assert_ne!(
@@ -99,6 +104,7 @@ fn raster_geometry_is_resident_until_its_inputs_change() {
     assert_ne!(moved_camera.beauty.data, brighter.beauty.data);
     assert!(Arc::ptr_eq(&initial, &resident()));
     assert!(Arc::ptr_eq(&initial_program, &program()));
+    assert_eq!(initial_shadow, shadow());
     render(&engine.clone(), &scene).unwrap();
     assert!(Arc::ptr_eq(&initial_program, &program()));
     scene.materials[0].graph.nodes[0] = IrNode::Color([0.7, 0.6, 0.5]);
@@ -127,11 +133,15 @@ fn raster_geometry_is_resident_until_its_inputs_change() {
     let textured = check(&scene);
     assert_ne!(recolored.beauty.data, textured.beauty.data);
     let textured_program = program();
+    let textured_shadow = shadow();
+    assert_eq!(initial_shadow.0, textured_shadow.0);
+    assert_ne!(initial_shadow.1, textured_shadow.1);
     assert!(!Arc::ptr_eq(&recolored_program, &textured_program));
     assert_eq!(textured_program.bitmap_count, 1);
     scene.materials[0].sampler = bitmap([0.1, 0.2, 0.6]);
     assert_ne!(textured.beauty.data, check(&scene).beauty.data);
     assert!(Arc::ptr_eq(&textured_program, &program()));
+    assert_eq!(textured_shadow, shadow());
     scene.materials[0].graph.nodes[0] = IrNode::Color([0.7, 0.6, 0.5]);
     assert_eq!(recolored.beauty.data, check(&scene).beauty.data);
     assert!(!Arc::ptr_eq(&textured_program, &program()));
@@ -166,10 +176,14 @@ fn raster_geometry_is_resident_until_its_inputs_change() {
     );
     let transformed = resident();
     assert!(!Arc::ptr_eq(&initial, &transformed));
+    assert_ne!(initial_shadow.0, shadow().0);
+    let transformed_shadow = shadow();
     scene.meshes[0].positions[0][1] -= 20.0;
     check(&scene);
     let edited = resident();
     assert!(!Arc::ptr_eq(&transformed, &edited));
+    assert_ne!(transformed_shadow.0, shadow().0);
+    assert_eq!(transformed_shadow.1, shadow().1);
     scene.instances[0].object_id = 42;
     assert!(check(&scene).aovs[&Aov::ObjectId].data.contains(&43.0));
     assert!(!Arc::ptr_eq(&edited, &resident()));

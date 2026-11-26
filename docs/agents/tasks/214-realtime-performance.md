@@ -36,6 +36,22 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **GPU direct-shadow runtime:** Tier 2 now uses inline R23 visibility with
+  cached R25 receiver attributes and the current raster bitmap views. It
+  retains eight samples, the CPU spatial filter and per-jitter history, and
+  falls back to batched visibility if inline dispatch is unsupported. Cropped
+  warm and cold renders matched after geometry, material and bitmap edits.
+  Replacing a bitmap in the same slot reused the shadow pipeline and attributes.
+- Unchanged full-size S10, M5 Pro, actual Metal, all Tier 2 effects: the shadow
+  pass fell from **838.808 ms** to **48.862 ms**; total frame median fell from
+  **3829.127 ms / 0.261 fps** to **2734.881 ms / 0.366 fps**. Reflections
+  (**1309.754 ms**) and GI (**1330.511 ms**) now dominate; Tier 2 still misses 30 fps.
+- Strict R26 held **18/23**, **19/23**, and **23/23** against CPU on both Metal
+  and Compute, with the same nine pins and Metal-vs-Compute minima of exact,
+  165.12 dB, and 75.66 dB. Five required-GPU lib, hybrid and translation runs
+  passed. Runtime checkpoint gate: 2746 tests passed, zero failed;
+  `GATE: all passed`. Vulkan hardware was not exercised.
+
 - [Raw direct-shadow dispatch probe](../../specs/RENDER.md#r247-gpu-direct-shadow-visibility-brief-214):
   bound the existing R23 traversal scene, R25 receiver attributes and shared
   packed lights. Compute and Metal matched the unfiltered batched reference

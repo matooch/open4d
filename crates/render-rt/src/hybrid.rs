@@ -12,6 +12,7 @@ use glam::DVec3;
 
 use crate::ambient::{AmbientFrame, AmbientProgram};
 use crate::ray::{self, BackendKind, DeviceQueries, Ray, RtBackend};
+use direct_shadow::{DirectShadowBindings, DirectShadowFrame, DirectShadowProgram};
 
 const SHADOW_RAYS: usize = 8;
 const BOUNCE_RAYS: usize = 8;
@@ -23,6 +24,8 @@ const PIXELS_PER_BATCH: usize = 2048;
 pub(crate) struct HybridView {
     backend: Option<(BackendKind, Box<dyn DeviceQueries>)>,
     ambient_program: Option<AmbientProgram>,
+    shadow_program: Option<ShadowProgram>,
+    shadow_attributes: Option<wgpu::Buffer>,
     scene: Option<Snapshot>,
     geometry: Option<PrimaryGeometry>,
     settings: Option<RenderSettings>,
@@ -80,6 +83,19 @@ pub(crate) struct AmbientGpu<'a> {
     pub textures: [&'a wgpu::TextureView; 2],
 }
 
+pub(crate) struct DirectShadowGpu<'a> {
+    pub primary: AmbientGpu<'a>,
+    pub materials: &'a str,
+    pub bitmaps: &'a [wgpu::TextureView],
+}
+
+struct ShadowProgram {
+    kind: BackendKind,
+    materials: String,
+    bitmap_count: usize,
+    program: DirectShadowProgram,
+}
+
 impl HybridView {
     pub fn backend_kind(&self) -> Option<BackendKind> {
         self.backend.as_ref().map(|(kind, _)| *kind)
@@ -112,6 +128,7 @@ impl HybridView {
                 .1
                 .update_scene(snapshot)?;
             self.geometry = None;
+            self.shadow_attributes = None;
         }
         let same_scene = same_geometry
             && self.scene.as_ref().is_some_and(|old| {
@@ -274,6 +291,7 @@ impl HybridView {
         settings: &RenderSettings,
         input: PrimaryInput<'_>,
         control: &Control,
+        gpu: Option<DirectShadowGpu<'_>>,
     ) -> Result<Vec<[f32; 8]>, RenderError> {
         let lights: Vec<_> = lights::prepare(snapshot, settings.default_light)?
             .into_iter()
@@ -282,28 +300,123 @@ impl HybridView {
         if lights.is_empty() {
             return Ok(Vec::new());
         }
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
+        }
         if self.geometry.is_none() {
             self.geometry = Some(PrimaryGeometry::new(snapshot)?);
         }
         let geometry = self.geometry.as_ref().expect("prepared shading geometry");
-        let (_, backend) = self.backend.as_ref().expect("prepared ray backend");
+        let (kind, backend) = self.backend.as_ref().expect("prepared ray backend");
         let history = self
             .shadows
             .entry(input.jitter.map(f32::to_bits))
             .or_default();
-        let pixels = raw_direct_shadows(
-            (geometry, &**backend),
-            snapshot,
-            settings,
-            input,
-            &lights,
-            history.frames,
-            control,
-        )?;
+        let inline = match (gpu, backend.inline_scene()) {
+            (Some(gpu), Some(scene)) => (|| {
+                let DirectShadowGpu {
+                    primary:
+                        AmbientGpu {
+                            device,
+                            queue,
+                            textures,
+                        },
+                    materials,
+                    bitmaps,
+                } = gpu;
+                let storage_bindings = if *kind == BackendKind::Compute { 7 } else { 3 };
+                if device.limits().max_storage_buffers_per_shader_stage < storage_bindings {
+                    return Err(RenderError::Unsupported(
+                        "raw direct-shadow bindings exceed device limits".into(),
+                    ));
+                }
+                if self.shadow_attributes.is_none() {
+                    self.shadow_attributes = Some(crate::path_trace::attributes(
+                        device,
+                        snapshot,
+                        &geometry.scene,
+                    )?);
+                }
+                let attributes = self
+                    .shadow_attributes
+                    .as_ref()
+                    .expect("uploaded attributes");
+                if self.shadow_program.as_ref().is_none_or(|cached| {
+                    cached.kind != *kind
+                        || cached.materials != materials
+                        || cached.bitmap_count != bitmaps.len()
+                }) {
+                    // Only move the declarations. Both passes bind the same resource table.
+                    let group = crate::shader::BITMAP_GROUP;
+                    let source = materials
+                        .replace(&format!("@group({group}) @binding("), "@group(1) @binding(");
+                    let source = crate::shader::direct_shadow_source(*kind, &source);
+                    self.shadow_program = Some(ShadowProgram {
+                        kind: *kind,
+                        materials: materials.to_owned(),
+                        bitmap_count: bitmaps.len(),
+                        program: DirectShadowProgram::new(device, *kind, source, bitmaps.len()),
+                    });
+                }
+                self.shadow_program
+                    .as_ref()
+                    .expect("compiled shadow program")
+                    .program
+                    .read(
+                        (device, queue),
+                        DirectShadowBindings {
+                            scene,
+                            primary: textures,
+                            attributes,
+                            bitmaps,
+                            lights: &lights,
+                        },
+                        settings,
+                        DirectShadowFrame::new(
+                            snapshot,
+                            settings,
+                            input,
+                            geometry.scene.scale,
+                            history.frames,
+                            lights.len(),
+                        ),
+                    )
+            })(),
+            _ => Err(RenderError::Unsupported(
+                "no inline direct-shadow scene".into(),
+            )),
+        };
+        let pixels = match inline {
+            Err(RenderError::Unsupported(_)) => raw_direct_shadows(
+                (geometry, &**backend),
+                snapshot,
+                settings,
+                input,
+                &lights,
+                history.frames,
+                control,
+            )?,
+            result => result?,
+        };
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
+        }
         let width = settings.width as usize;
         let limit = geometry.filter_limit(snapshot, width);
-        history.accumulate(spatial_filter(width, &input, &pixels, limit));
+        let filtered = spatial_filter(width, &input, &pixels, limit);
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
+        }
+        history.accumulate(filtered);
         Ok(history.mean.clone())
+    }
+
+    #[cfg(test)]
+    pub fn shadow_residency(&self) -> Option<(wgpu::Buffer, wgpu::ComputePipeline)> {
+        Some((
+            self.shadow_attributes.as_ref()?.clone(),
+            self.shadow_program.as_ref()?.program.pipeline(),
+        ))
     }
 }
 
@@ -561,7 +674,6 @@ struct PrimaryGeometry {
     ends: Vec<usize>,
 }
 
-#[cfg(test)]
 #[path = "direct_shadow.rs"]
 mod direct_shadow;
 

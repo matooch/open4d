@@ -1,4 +1,4 @@
-//! Host dispatch of the raw R24.7 shadow signal, exercised by the standalone probe.
+//! Host dispatch of the raw R24.7 shadow signal.
 
 use bytemuck::{Pod, Zeroable};
 use forge_render_api::{RenderError, RenderSettings, Snapshot};
@@ -6,7 +6,6 @@ use forge_render_cpu::lights::PLight;
 use forge_render_gpu::{
     await_mapped, map_read,
     pack::{GpuLight, pack_light},
-    shader::Assembled,
 };
 use wgpu::util::DeviceExt;
 
@@ -67,7 +66,12 @@ pub(super) struct DirectShadowProgram {
 }
 
 impl DirectShadowProgram {
-    pub fn new(device: &wgpu::Device, kind: BackendKind, assembled: Assembled) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        kind: BackendKind,
+        source: String,
+        bitmap_count: usize,
+    ) -> Self {
         use wgpu::{BindingType as Binding, BufferBindingType as Buffer};
         let entry = |binding, ty| wgpu::BindGroupLayoutEntry {
             binding,
@@ -112,7 +116,7 @@ impl DirectShadowProgram {
                 entry(4, buffer(Buffer::Storage { read_only: false })),
             ]),
             layout(
-                &(0..assembled.resources.len() as u32)
+                &(0..bitmap_count as u32)
                     .map(|i| entry(i, texture))
                     .collect::<Vec<_>>(),
             ),
@@ -125,7 +129,7 @@ impl DirectShadowProgram {
         });
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("raw direct shadows"),
-            source: wgpu::ShaderSource::Wgsl(assembled.source.into()),
+            source: wgpu::ShaderSource::Wgsl(source.into()),
         });
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("raw direct shadows"),
@@ -136,6 +140,11 @@ impl DirectShadowProgram {
             cache: None,
         });
         Self { pipeline, layouts }
+    }
+
+    #[cfg(test)]
+    pub fn pipeline(&self) -> wgpu::ComputePipeline {
+        self.pipeline.clone()
     }
 
     pub fn read(
@@ -151,6 +160,13 @@ impl DirectShadowProgram {
         let storage_limit = limits
             .max_buffer_size
             .min(limits.max_storage_buffer_binding_size);
+        if bindings.lights.len().max(1) as u64
+            > storage_limit / std::mem::size_of::<GpuLight>() as u64
+        {
+            return Err(RenderError::Unsupported(
+                "raw direct-shadow lights exceed device limits".into(),
+            ));
+        }
         let size = size
             .checked_mul(32)
             .filter(|&bytes| bytes > 0 && bytes <= storage_limit);

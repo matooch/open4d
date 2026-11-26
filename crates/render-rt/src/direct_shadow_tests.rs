@@ -103,7 +103,7 @@ fn gpu_raw_direct_shadows_match_batched_reference() {
             .collect();
         let assembled = crate::shader::direct_shadow_wgsl(kind, &materials).unwrap();
         assert!(assembled.resources.is_empty());
-        let program = DirectShadowProgram::new(&device, kind, assembled);
+        let program = DirectShadowProgram::new(&device, kind, assembled.source, 0);
         let scene = backend.inline_scene().unwrap();
         let control = Control::new();
         for (name, input_lights) in [
