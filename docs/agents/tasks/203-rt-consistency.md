@@ -1,6 +1,6 @@
 # 203 · Consistency tests across render tiers
 
-Status: waiting: 198, 202 · Area: R · Depends on: 198, 202 · Observations: – (own design; material values from O29/O42/O43 through the shading IR) · Touches: tests, render-rt
+Status: in-progress (hermes) · Area: R · Depends on: 198, 202 · Observations: – (own design; material values from O29/O42/O43 through the shading IR) · Touches: tests, render-rt
 
 ## Goal
 One test suite that renders the O30/O43 scenes and the material set in every tier and compares to the CPU path tracer, with a PSNR budget per tier written in RENDER.md.

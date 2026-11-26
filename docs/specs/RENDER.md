@@ -1063,7 +1063,8 @@ and shading conventions in R7–R9. The hybrid renderer is our own design.
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),
 [D19](../roadmap/DECISIONS.md), the R9 CPU integrator and R20 GPU integrator,
 [O30](../parity/render-reference.md) and [O43](../parity/material-renders.md) for fixture
-inputs, and [R7 tier budgets](../agents/tasks/203-rt-consistency.md). This is our own design.
+inputs, and the [R26 tier budgets](#r26-cross-tier-consistency-roadmap-r7-brief-203).
+This is our own design.
 
 ### R25.1 Scene and transport
 
@@ -1131,7 +1132,7 @@ inputs, and [R7 tier budgets](../agents/tasks/203-rt-consistency.md). This is ou
 - Render the unmodified O30 scene and O43 material inputs using their existing
   Forge fixture builders. Compare to the Forge CPU tracer at the same camera, dimensions,
   sample budget and transport settings. Require Tier 3 beauty PSNR **≥ 35 dB** at a
-  fixed sample count, using R7's exposure normalization; record the sample count and
+  fixed sample count, using R26's exposure normalization; record the sample count and
   per-case results. Compare before tonemapping. Exercise shared-IR shader-node materials
   as well as parameter-only materials.
 - Test that one preview call produces a denoised frame, further static calls increase
@@ -1139,6 +1140,45 @@ inputs, and [R7 tier budgets](../agents/tasks/203-rt-consistency.md). This is ou
   view of the edited input. Verify raw final output does not depend on preview history.
 - Run on the selected Metal backend and on an explicit compute device, with no-adapter
   skips only as allowed by the GPU gate. Validate new WGSL on SPIR-V, MSL and HLSL.
+
+## R26 Cross-tier consistency (roadmap R7, brief 203)
+
+Sources: [D19](../roadmap/DECISIONS.md), the [real-time renderer design](../roadmap/areas/R-realtime.md),
+and the O30/O43 fixture inputs in [R14](#r14-parity-with-o30--o43-level-c). The
+fixtures exercise the O29 material defaults and O42 shader behavior through the
+shared IR (MATERIAL.md, SHADERS.md). This is a Forge-to-Forge comparison, not
+a comparison to the observed beauty PNGs.
+
+- Discover every O30/O43 render manifest through the existing CPU fixture
+  builder, including the parameter-only and shader-node material cases. Use
+  the unmodified snapshot, full frame at 320×240, and the R14 comparison settings
+  (16 samples, cubic filter width 2). The CPU tracer renders one reference per
+  case; raster tiers use their own sampling rather than replaying CPU samples.
+- Compare linear beauty RGB over the entire frame, before display post effects.
+  Fit one least-squares scalar for the candidate RGB using `compare_image`'s
+  exposure normalization. Use a fixed unit peak (`PSNR = -10 log10(MSE)`).
+  Record the score and fitted gain; never mask a case or choose a different
+  exposure per channel.
+- Tier 1 uses raster lighting and shadows; Tier 2 enables the four R24 effects
+  together; Tier 3 uses raw final transport, not denoised preview. Report the
+  first Tier 2 frame so this check does not depend on elapsed time or mutable
+  history from another scene.
+
+| Tier | Minimum exposure-normalized PSNR vs CPU |
+|---|---:|
+| 1 · Raster | 24 dB |
+| 2 · Hybrid | 28 dB |
+| 3 · Path trace | 35 dB |
+
+Run the same matrix on an explicit compute device in the GPU gate, and on the
+selected hardware RT backend where available. Where both are present, also
+compare each hardware result to its compute counterpart at the same tier budget.
+For the cross-host Metal vs Vulkan comparison, retain lossless linear beauty
+or compare it directly; separate PSNR scores against the CPU do not establish
+that the two hardware images meet the budget against each other. Match cases
+and render settings and use the same comparison, with Metal as the reference.
+A compute run is not evidence of hardware RT parity; record the actual backend
+and mark unavailable hardware runs pending.
 
 ## R13 Not done / follow-ups
 
