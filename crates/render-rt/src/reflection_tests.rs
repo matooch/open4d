@@ -1,5 +1,5 @@
 use super::direct_shadow_tests::texture_view;
-use super::reflection_probe::{ReflectionProbe, ReflectionProbeBindings, ReflectionProbeFrame};
+use super::reflection::{ReflectionBindings, ReflectionInput, ReflectionProgram};
 use super::*;
 use forge_core::Value;
 use forge_image::{AlphaMode, Image};
@@ -171,7 +171,7 @@ fn gpu_raw_reflections_match_batched_reference() {
             .collect();
         let assembled = crate::shader::reflection_wgsl(kind, &materials).unwrap();
         assert!(assembled.resources.is_empty());
-        let probe = ReflectionProbe::new(&device, kind, assembled.source, 0);
+        let probe = ReflectionProgram::new(&device, kind, assembled.source, 0);
         let mut reference = HybridView {
             geometry: Some(geometry),
             backend: Some((kind, backend)),
@@ -182,6 +182,7 @@ fn gpu_raw_reflections_match_batched_reference() {
         for (name, lighting, lights) in &scenarios {
             snapshot.environment.lighting = lighting.clone();
             snapshot.lights.clone_from(lights);
+            let prepared = lights::prepare(&snapshot, settings.default_light).unwrap();
             let mut first_emissive = None;
             for (phase, history) in [0, 3].into_iter().enumerate() {
                 reference.reflections.clear();
@@ -198,6 +199,7 @@ fn gpu_raw_reflections_match_batched_reference() {
                             ..input
                         },
                         &Control::new(),
+                        None,
                     )
                     .unwrap();
                 if let Some(previous) = first_emissive {
@@ -233,13 +235,14 @@ fn gpu_raw_reflections_match_batched_reference() {
                 let actual = probe
                     .read(
                         (&device, &queue),
-                        ReflectionProbeBindings {
+                        ReflectionBindings {
                             scene,
                             primary: [&views[0], &views[1]],
                             attributes: &attrs,
                             bitmaps: &[],
+                            lights: &prepared,
                         },
-                        ReflectionProbeFrame {
+                        ReflectionInput {
                             snapshot: &snapshot,
                             settings: &settings,
                             input,

@@ -18,7 +18,7 @@ use wgpu::util::DeviceExt;
 
 use crate::frame;
 use crate::framegraph::FrameGraph;
-use crate::hybrid::{AmbientGpu, Bounce, DirectShadowGpu, HybridView, PrimaryInput};
+use crate::hybrid::{AmbientGpu, Bounce, HybridView, MaterialGpu, PrimaryInput};
 use crate::ray::BackendKind;
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
 
@@ -1545,17 +1545,19 @@ impl RtEngine {
                         jitter,
                         epsilon: packed.scale.max(1e-6) * 1e-6,
                     };
+                    let primary_gpu = AmbientGpu {
+                        device,
+                        queue,
+                        textures: [&targets.g_views[0], &targets.g_views[1]],
+                    };
+                    let material_gpu = MaterialGpu {
+                        primary: primary_gpu,
+                        materials: &program.source[..material_source_len],
+                        bitmaps: &bitmap_views,
+                    };
                     let ao = if rt_ao {
-                        let result = view.ambient_visibility(
-                            settings,
-                            input,
-                            control,
-                            Some(AmbientGpu {
-                                device,
-                                queue,
-                                textures: [&targets.g_views[0], &targets.g_views[1]],
-                            }),
-                        )?;
+                        let result =
+                            view.ambient_visibility(settings, input, control, Some(primary_gpu))?;
                         finish_phase(profile, device, "rt-ao")?;
                         result
                     } else {
@@ -1567,15 +1569,7 @@ impl RtEngine {
                             settings,
                             input,
                             control,
-                            Some(DirectShadowGpu {
-                                primary: AmbientGpu {
-                                    device,
-                                    queue,
-                                    textures: [&targets.g_views[0], &targets.g_views[1]],
-                                },
-                                materials: &program.source[..material_source_len],
-                                bitmaps: &bitmap_views,
-                            }),
+                            Some(material_gpu),
                         )?;
                         finish_phase(profile, device, "rt-shadows")?;
                         result
@@ -1583,16 +1577,28 @@ impl RtEngine {
                         Vec::new()
                     };
                     let reflections = if rt_reflections {
-                        let result =
-                            view.indirect(Bounce::Reflection, snapshot, settings, input, control)?;
+                        let result = view.indirect(
+                            Bounce::Reflection,
+                            snapshot,
+                            settings,
+                            input,
+                            control,
+                            Some(material_gpu),
+                        )?;
                         finish_phase(profile, device, "rt-reflections")?;
                         result
                     } else {
                         Vec::new()
                     };
                     let gi = if rt_gi {
-                        let result =
-                            view.indirect(Bounce::Diffuse, snapshot, settings, input, control)?;
+                        let result = view.indirect(
+                            Bounce::Diffuse,
+                            snapshot,
+                            settings,
+                            input,
+                            control,
+                            None,
+                        )?;
                         finish_phase(profile, device, "rt-gi")?;
                         result
                     } else {

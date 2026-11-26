@@ -93,7 +93,7 @@ impl DirectShadowProgram {
 
     #[cfg(test)]
     pub fn pipeline(&self) -> wgpu::ComputePipeline {
-        self.raw.pipeline.clone()
+        self.raw.pipeline()
     }
 
     pub fn read(
@@ -150,6 +150,11 @@ pub(super) fn upload_lights(
 }
 
 impl RawSignalProgram {
+    #[cfg(test)]
+    pub fn pipeline(&self) -> wgpu::ComputePipeline {
+        self.pipeline.clone()
+    }
+
     pub fn new(
         device: &wgpu::Device,
         kind: BackendKind,

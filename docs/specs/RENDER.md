@@ -1283,6 +1283,17 @@ R24 reflections and the R7 opaque GGX specular lobe. This is our own design.
   Keep the CPU spatial filter, per-jitter history and batched fallback until
   live acceptance. Remeasure unchanged S10 and strict R26 only when enabling
   the live signal; this standalone allowance does not change R26.
+- In the live Tier 2 view, bind the raw reflection signal to the existing
+  inline R23 scene and the same resident R25 attributes as direct shadows.
+  Rebuild those attributes only when meshes or instances change. Cache the
+  pipeline by backend, assembled material source and bitmap count; always
+  bind the current raster bitmap views and current environment lighting.
+  Use the batched estimator if inline dispatch is unavailable or unsupported.
+  Both paths feed the same spatial filter and per-jitter history; cancelled
+  work must not accumulate. Verify cropped warm and cold reflections after
+  camera, light, geometry, material and same-slot bitmap edits, including a
+  visible change in the reflection AOV when the bitmap pixels change. Keep
+  the eight attempts and the strict R26 budgets unchanged.
 
 ## R25 Progressive GPU path tracing (brief 202)
 

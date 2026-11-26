@@ -13,6 +13,7 @@ use glam::DVec3;
 use crate::ambient::{AmbientFrame, AmbientProgram};
 use crate::ray::{self, BackendKind, DeviceQueries, Ray, RtBackend};
 use direct_shadow::{DirectShadowBindings, DirectShadowFrame, DirectShadowProgram};
+use reflection::{ReflectionBindings, ReflectionInput, ReflectionProgram};
 
 const SHADOW_RAYS: usize = 8;
 const BOUNCE_RAYS: usize = 8;
@@ -24,8 +25,9 @@ const PIXELS_PER_BATCH: usize = 2048;
 pub(crate) struct HybridView {
     backend: Option<(BackendKind, Box<dyn DeviceQueries>)>,
     ambient_program: Option<AmbientProgram>,
-    shadow_program: Option<ShadowProgram>,
-    shadow_attributes: Option<wgpu::Buffer>,
+    shadow_program: Option<MaterialProgram<DirectShadowProgram>>,
+    reflection_program: Option<MaterialProgram<ReflectionProgram>>,
+    attributes: Option<wgpu::Buffer>,
     scene: Option<Snapshot>,
     geometry: Option<PrimaryGeometry>,
     settings: Option<RenderSettings>,
@@ -77,23 +79,65 @@ pub(crate) struct PrimaryInput<'a> {
     pub epsilon: f64,
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct AmbientGpu<'a> {
     pub device: &'a wgpu::Device,
     pub queue: &'a wgpu::Queue,
     pub textures: [&'a wgpu::TextureView; 2],
 }
 
-pub(crate) struct DirectShadowGpu<'a> {
+#[derive(Clone, Copy)]
+pub(crate) struct MaterialGpu<'a> {
     pub primary: AmbientGpu<'a>,
     pub materials: &'a str,
     pub bitmaps: &'a [wgpu::TextureView],
 }
 
-struct ShadowProgram {
+struct MaterialProgram<P> {
     kind: BackendKind,
     materials: String,
     bitmap_count: usize,
-    program: DirectShadowProgram,
+    program: P,
+}
+
+impl<P> MaterialProgram<P> {
+    fn get<'a>(
+        cache: &'a mut Option<Self>,
+        kind: BackendKind,
+        gpu: MaterialGpu<'_>,
+        compile: impl FnOnce(&str) -> P,
+    ) -> &'a P {
+        if cache.as_ref().is_none_or(|cached| {
+            cached.kind != kind
+                || cached.materials != gpu.materials
+                || cached.bitmap_count != gpu.bitmaps.len()
+        }) {
+            // Only move the declarations. Both passes bind the same resource table.
+            let group = crate::shader::BITMAP_GROUP;
+            let source = gpu
+                .materials
+                .replace(&format!("@group({group}) @binding("), "@group(1) @binding(");
+            *cache = Some(Self {
+                kind,
+                materials: gpu.materials.to_owned(),
+                bitmap_count: gpu.bitmaps.len(),
+                program: compile(&source),
+            });
+        }
+        &cache.as_ref().expect("compiled material program").program
+    }
+}
+
+fn resident_attributes<'a>(
+    cache: &'a mut Option<wgpu::Buffer>,
+    device: &wgpu::Device,
+    snapshot: &Snapshot,
+    geometry: &Scene,
+) -> Result<&'a wgpu::Buffer, RenderError> {
+    if cache.is_none() {
+        *cache = Some(crate::path_trace::attributes(device, snapshot, geometry)?);
+    }
+    Ok(cache.as_ref().expect("uploaded attributes"))
 }
 
 impl HybridView {
@@ -128,7 +172,7 @@ impl HybridView {
                 .1
                 .update_scene(snapshot)?;
             self.geometry = None;
-            self.shadow_attributes = None;
+            self.attributes = None;
         }
         let same_scene = same_geometry
             && self.scene.as_ref().is_some_and(|old| {
@@ -291,7 +335,7 @@ impl HybridView {
         settings: &RenderSettings,
         input: PrimaryInput<'_>,
         control: &Control,
-        gpu: Option<DirectShadowGpu<'_>>,
+        gpu: Option<MaterialGpu<'_>>,
     ) -> Result<Vec<[f32; 8]>, RenderError> {
         let lights: Vec<_> = lights::prepare(snapshot, settings.default_light)?
             .into_iter()
@@ -314,15 +358,15 @@ impl HybridView {
             .or_default();
         let inline = match (gpu, backend.inline_scene()) {
             (Some(gpu), Some(scene)) => (|| {
-                let DirectShadowGpu {
+                let MaterialGpu {
                     primary:
                         AmbientGpu {
                             device,
                             queue,
                             textures,
                         },
-                    materials,
                     bitmaps,
+                    ..
                 } = gpu;
                 let storage_bindings = if *kind == BackendKind::Compute { 7 } else { 3 };
                 if device.limits().max_storage_buffers_per_shader_stage < storage_bindings {
@@ -330,57 +374,31 @@ impl HybridView {
                         "raw direct-shadow bindings exceed device limits".into(),
                     ));
                 }
-                if self.shadow_attributes.is_none() {
-                    self.shadow_attributes = Some(crate::path_trace::attributes(
-                        device,
+                let attributes =
+                    resident_attributes(&mut self.attributes, device, snapshot, &geometry.scene)?;
+                MaterialProgram::get(&mut self.shadow_program, *kind, gpu, |materials| {
+                    let source = crate::shader::direct_shadow_source(*kind, materials);
+                    DirectShadowProgram::new(device, *kind, source, bitmaps.len())
+                })
+                .read(
+                    (device, queue),
+                    DirectShadowBindings {
+                        scene,
+                        primary: textures,
+                        attributes,
+                        bitmaps,
+                        lights: &lights,
+                    },
+                    settings,
+                    DirectShadowFrame::new(
                         snapshot,
-                        &geometry.scene,
-                    )?);
-                }
-                let attributes = self
-                    .shadow_attributes
-                    .as_ref()
-                    .expect("uploaded attributes");
-                if self.shadow_program.as_ref().is_none_or(|cached| {
-                    cached.kind != *kind
-                        || cached.materials != materials
-                        || cached.bitmap_count != bitmaps.len()
-                }) {
-                    // Only move the declarations. Both passes bind the same resource table.
-                    let group = crate::shader::BITMAP_GROUP;
-                    let source = materials
-                        .replace(&format!("@group({group}) @binding("), "@group(1) @binding(");
-                    let source = crate::shader::direct_shadow_source(*kind, &source);
-                    self.shadow_program = Some(ShadowProgram {
-                        kind: *kind,
-                        materials: materials.to_owned(),
-                        bitmap_count: bitmaps.len(),
-                        program: DirectShadowProgram::new(device, *kind, source, bitmaps.len()),
-                    });
-                }
-                self.shadow_program
-                    .as_ref()
-                    .expect("compiled shadow program")
-                    .program
-                    .read(
-                        (device, queue),
-                        DirectShadowBindings {
-                            scene,
-                            primary: textures,
-                            attributes,
-                            bitmaps,
-                            lights: &lights,
-                        },
                         settings,
-                        DirectShadowFrame::new(
-                            snapshot,
-                            settings,
-                            input,
-                            geometry.scene.scale,
-                            history.frames,
-                            lights.len(),
-                        ),
-                    )
+                        input,
+                        geometry.scene.scale,
+                        history.frames,
+                        lights.len(),
+                    ),
+                )
             })(),
             _ => Err(RenderError::Unsupported(
                 "no inline direct-shadow scene".into(),
@@ -414,8 +432,16 @@ impl HybridView {
     #[cfg(test)]
     pub fn shadow_residency(&self) -> Option<(wgpu::Buffer, wgpu::ComputePipeline)> {
         Some((
-            self.shadow_attributes.as_ref()?.clone(),
+            self.attributes.as_ref()?.clone(),
             self.shadow_program.as_ref()?.program.pipeline(),
+        ))
+    }
+
+    #[cfg(test)]
+    pub fn reflection_residency(&self) -> Option<(wgpu::Buffer, wgpu::ComputePipeline)> {
+        Some((
+            self.attributes.as_ref()?.clone(),
+            self.reflection_program.as_ref()?.program.pipeline(),
         ))
     }
 }
@@ -505,12 +531,16 @@ impl HybridView {
         settings: &RenderSettings,
         input: PrimaryInput<'_>,
         control: &Control,
+        gpu: Option<MaterialGpu<'_>>,
     ) -> Result<Vec<[f32; 4]>, RenderError> {
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
+        }
         if self.geometry.is_none() {
             self.geometry = Some(PrimaryGeometry::new(snapshot)?);
         }
         let geometry = self.geometry.as_ref().expect("prepared shading geometry");
-        let (_, backend) = self.backend.as_ref().expect("prepared ray backend");
+        let (kind, backend) = self.backend.as_ref().expect("prepared ray backend");
         let lights = lights::prepare(snapshot, settings.default_light)?;
         let history = match bounce {
             Bounce::Reflection => &mut self.reflections,
@@ -518,92 +548,175 @@ impl HybridView {
         }
         .entry(input.jitter.map(f32::to_bits))
         .or_default();
-        let mut pixels = vec![[0.0; 4]; input.positions.len()];
-        let mut rays = Vec::with_capacity(PIXELS_PER_BATCH * BOUNCE_RAYS);
-        let mut samples = Vec::with_capacity(rays.capacity());
-        let mut secondary = Vec::with_capacity(rays.capacity());
-        let seed = settings.seed ^ u64::from(history.frames);
-        for first in (0..pixels.len()).step_by(PIXELS_PER_BATCH) {
-            if control.is_cancelled() {
-                return Err(RenderError::Cancelled);
-            }
-            let end = (first + PIXELS_PER_BATCH).min(pixels.len());
-            rays.clear();
-            samples.clear();
-            secondary.clear();
-            for i in (first..end).filter(|&i| input.positions[i][3] >= 0.5) {
-                let p = geometry.surface(snapshot, settings, &input, i);
-                let mut rng = Rng::new(seed, i as u64);
-                for sample in 0..BOUNCE_RAYS {
-                    let Some((wi, weight)) = bounce.sample(&p, &mut rng) else {
-                        continue;
-                    };
-                    if p.geometric_normal.dot(wi) <= 0.0 {
-                        continue;
-                    }
-                    rays.push(Ray {
-                        origin: p.position + p.geometric_normal * input.epsilon,
-                        direction: wi,
-                        t_max: f64::INFINITY,
-                    });
-                    samples.push((i, sample, weight / BOUNCE_RAYS as f64));
+        let inline = match (bounce, gpu, backend.inline_scene()) {
+            (Bounce::Reflection, Some(gpu), Some(scene)) => (|| {
+                let AmbientGpu {
+                    device,
+                    queue,
+                    textures,
+                } = gpu.primary;
+                let storage_bindings = if *kind == BackendKind::Compute { 7 } else { 3 };
+                let limits = device.limits();
+                if limits.max_storage_buffers_per_shader_stage < storage_bindings
+                    || gpu.bitmaps.len() + 3 > limits.max_sampled_textures_per_shader_stage as usize
+                {
+                    return Err(RenderError::Unsupported(
+                        "raw reflection bindings exceed device limits".into(),
+                    ));
                 }
-            }
-            for ((ray, &(i, sample, weight)), hit) in
-                rays.iter().zip(&samples).zip(backend.trace(&rays)?)
-            {
-                let radiance = if let Some(h) = hit {
-                    let geom = geometry.scene.geometry(
+                let attributes =
+                    resident_attributes(&mut self.attributes, device, snapshot, &geometry.scene)?;
+                MaterialProgram::get(&mut self.reflection_program, *kind, gpu, |materials| {
+                    let source = crate::shader::reflection_source(*kind, materials);
+                    ReflectionProgram::new(device, *kind, source, gpu.bitmaps.len())
+                })
+                .read(
+                    (device, queue),
+                    ReflectionBindings {
+                        scene,
+                        primary: textures,
+                        attributes,
+                        bitmaps: gpu.bitmaps,
+                        lights: &lights,
+                    },
+                    ReflectionInput {
                         snapshot,
-                        ray.origin,
-                        ray.direction,
-                        &Hit {
-                            t: h.t,
-                            inst: h.instance,
-                            tri: h.triangle,
-                            u: h.u,
-                            v: h.v,
-                        },
-                    );
-                    let p = geometry.shade(snapshot, geom, h.instance, -ray.direction);
-                    let emission = p.surface.emission;
-                    if !lights.is_empty() {
-                        secondary.push(Secondary {
-                            pixel: i,
-                            stream: (i * BOUNCE_RAYS + sample) as u64,
-                            weight,
-                            point: p,
-                        });
-                    }
-                    emission
-                } else {
-                    bounce.miss(snapshot, ray.direction)
-                };
-                add_rgb(&mut pixels[i], radiance * weight);
-            }
-            for (index, light) in lights.iter().enumerate() {
-                if control.is_cancelled() {
-                    return Err(RenderError::Cancelled);
-                }
-                add_secondary_direct(
-                    &**backend,
-                    light,
-                    &secondary,
-                    &mut pixels,
-                    seed ^ 0xed20e2d079fa645b ^ index as u64,
-                    input.epsilon,
-                )?;
-            }
+                        settings,
+                        input,
+                        scale: geometry.scene.scale,
+                        history: history.frames,
+                    },
+                )
+            })(),
+            _ => Err(RenderError::Unsupported(
+                "no inline reflection scene".into(),
+            )),
+        };
+        let pixels = match inline {
+            Err(RenderError::Unsupported(_)) => raw_indirect(
+                (geometry, &**backend),
+                bounce,
+                ReflectionInput {
+                    snapshot,
+                    settings,
+                    input,
+                    scale: geometry.scene.scale,
+                    history: history.frames,
+                },
+                &lights,
+                control,
+            )?,
+            result => result?,
+        };
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
         }
         let width = settings.width as usize;
-        history.accumulate(spatial_filter(
+        let filtered = spatial_filter(
             width,
             &input,
             &pixels,
             geometry.filter_limit(snapshot, width),
-        ));
+        );
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
+        }
+        history.accumulate(filtered);
         Ok(history.mean.clone())
     }
+}
+
+fn raw_indirect(
+    (geometry, backend): (&PrimaryGeometry, &dyn RtBackend),
+    bounce: Bounce,
+    ReflectionInput {
+        snapshot,
+        settings,
+        input,
+        history,
+        ..
+    }: ReflectionInput<'_>,
+    lights: &[lights::PLight],
+    control: &Control,
+) -> Result<Vec<[f32; 4]>, RenderError> {
+    let mut pixels = vec![[0.0; 4]; input.positions.len()];
+    let mut rays = Vec::with_capacity(PIXELS_PER_BATCH * BOUNCE_RAYS);
+    let mut samples = Vec::with_capacity(rays.capacity());
+    let mut secondary = Vec::with_capacity(rays.capacity());
+    let seed = settings.seed ^ u64::from(history);
+    for first in (0..pixels.len()).step_by(PIXELS_PER_BATCH) {
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
+        }
+        let end = (first + PIXELS_PER_BATCH).min(pixels.len());
+        rays.clear();
+        samples.clear();
+        secondary.clear();
+        for i in (first..end).filter(|&i| input.positions[i][3] >= 0.5) {
+            let p = geometry.surface(snapshot, settings, &input, i);
+            let mut rng = Rng::new(seed, i as u64);
+            for sample in 0..BOUNCE_RAYS {
+                let Some((wi, weight)) = bounce.sample(&p, &mut rng) else {
+                    continue;
+                };
+                if p.geometric_normal.dot(wi) <= 0.0 {
+                    continue;
+                }
+                rays.push(Ray {
+                    origin: p.position + p.geometric_normal * input.epsilon,
+                    direction: wi,
+                    t_max: f64::INFINITY,
+                });
+                samples.push((i, sample, weight / BOUNCE_RAYS as f64));
+            }
+        }
+        for ((ray, &(i, sample, weight)), hit) in
+            rays.iter().zip(&samples).zip(backend.trace(&rays)?)
+        {
+            let radiance = if let Some(h) = hit {
+                let geom = geometry.scene.geometry(
+                    snapshot,
+                    ray.origin,
+                    ray.direction,
+                    &Hit {
+                        t: h.t,
+                        inst: h.instance,
+                        tri: h.triangle,
+                        u: h.u,
+                        v: h.v,
+                    },
+                );
+                let p = geometry.shade(snapshot, geom, h.instance, -ray.direction);
+                let emission = p.surface.emission;
+                if !lights.is_empty() {
+                    secondary.push(Secondary {
+                        pixel: i,
+                        stream: (i * BOUNCE_RAYS + sample) as u64,
+                        weight,
+                        point: p,
+                    });
+                }
+                emission
+            } else {
+                bounce.miss(snapshot, ray.direction)
+            };
+            add_rgb(&mut pixels[i], radiance * weight);
+        }
+        for (index, light) in lights.iter().enumerate() {
+            if control.is_cancelled() {
+                return Err(RenderError::Cancelled);
+            }
+            add_secondary_direct(
+                backend,
+                light,
+                &secondary,
+                &mut pixels,
+                seed ^ 0xed20e2d079fa645b ^ index as u64,
+                input.epsilon,
+            )?;
+        }
+    }
+    Ok(pixels)
 }
 
 struct Secondary {
@@ -685,9 +798,8 @@ mod receiver_tests;
 #[path = "direct_shadow_tests.rs"]
 mod direct_shadow_tests;
 
-#[cfg(test)]
-#[path = "reflection_probe.rs"]
-mod reflection_probe;
+#[path = "reflection.rs"]
+mod reflection;
 
 #[cfg(test)]
 #[path = "reflection_tests.rs"]

@@ -18,18 +18,21 @@ pub fn reflection_wgsl(
     backend: crate::ray::BackendKind,
     materials: &[(&ShadingGraph, &dyn TextureSampler)],
 ) -> Result<Assembled, RenderError> {
-    use forge_render_gpu::{GEOMETRY_WGSL, LIGHT_SAMPLING_WGSL, RNG_WGSL, SURFACE_WGSL};
     let mut assembled = forge_render_gpu::shader::materials(materials, 1)?;
+    assembled.source = reflection_source(backend, &assembled.source);
+    Ok(assembled)
+}
+
+pub(crate) fn reflection_source(backend: crate::ray::BackendKind, materials: &str) -> String {
+    use forge_render_gpu::{GEOMETRY_WGSL, LIGHT_SAMPLING_WGSL, RNG_WGSL, SURFACE_WGSL};
     let (directives, scene) = crate::ray::inline_ray_scene(backend);
     let receiver = include_str!("receiver_geometry.wgsl");
     let reflection = include_str!("reflection_signal.wgsl");
-    assembled.source = format!(
-        "{directives}\n{}\n{RNG_WGSL}\n{GEOMETRY_WGSL}\n{SURFACE_WGSL}\n\
+    format!(
+        "{directives}\n{materials}\n{RNG_WGSL}\n{GEOMETRY_WGSL}\n{SURFACE_WGSL}\n\
          {LIGHT_SAMPLING_WGSL}\n{scene}\n{INSTANCE_GEOMETRY_WGSL}\n{receiver}\n\
-         {REFLECTION_SAMPLING_WGSL}\n{reflection}",
-        assembled.source
-    );
-    Ok(assembled)
+         {REFLECTION_SAMPLING_WGSL}\n{reflection}"
+    )
 }
 
 /// Raw R24.7 receiver helpers, with the attribute table at group 0, binding 0.

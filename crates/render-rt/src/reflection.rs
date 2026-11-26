@@ -1,8 +1,8 @@
-//! Numeric host probe for the standalone R24.8 signal; not a live effect.
+//! Host dispatch for the raw R24.8 reflection signal.
 
 use bytemuck::{Pod, Zeroable};
 use forge_render_api::{Lighting, RenderError, RenderSettings, Snapshot};
-use forge_render_cpu::lights;
+use forge_render_cpu::lights::PLight;
 
 use super::PrimaryInput;
 use super::direct_shadow::{RawSignalBindings, RawSignalProgram, upload_lights};
@@ -26,16 +26,17 @@ struct ReflectionFrame {
     _padding: [u32; 3],
 }
 
-pub(super) struct ReflectionProbe(RawSignalProgram);
+pub(super) struct ReflectionProgram(RawSignalProgram);
 
-pub(super) struct ReflectionProbeBindings<'a> {
+pub(super) struct ReflectionBindings<'a> {
     pub scene: InlineScene<'a>,
     pub primary: [&'a wgpu::TextureView; 2],
     pub attributes: &'a wgpu::Buffer,
     pub bitmaps: &'a [wgpu::TextureView],
+    pub lights: &'a [PLight],
 }
 
-pub(super) struct ReflectionProbeFrame<'a> {
+pub(super) struct ReflectionInput<'a> {
     pub snapshot: &'a Snapshot,
     pub settings: &'a RenderSettings,
     pub input: PrimaryInput<'a>,
@@ -43,7 +44,7 @@ pub(super) struct ReflectionProbeFrame<'a> {
     pub history: u32,
 }
 
-impl ReflectionProbe {
+impl ReflectionProgram {
     pub fn new(
         device: &wgpu::Device,
         kind: BackendKind,
@@ -60,25 +61,29 @@ impl ReflectionProbe {
         ))
     }
 
+    #[cfg(test)]
+    pub fn pipeline(&self) -> wgpu::ComputePipeline {
+        self.0.pipeline()
+    }
+
     pub fn read(
         &self,
         (device, queue): (&wgpu::Device, &wgpu::Queue),
-        bindings: ReflectionProbeBindings<'_>,
-        ReflectionProbeFrame {
+        bindings: ReflectionBindings<'_>,
+        ReflectionInput {
             snapshot,
             settings,
             input,
             scale,
             history,
-        }: ReflectionProbeFrame<'_>,
+        }: ReflectionInput<'_>,
     ) -> Result<Vec<[f32; 4]>, RenderError> {
         let (f, [x, y]) = snapshot
             .camera
             .pixel_frame(settings.width, settings.height)
             .unwrap_or_default();
         let [u, v, w, _] = snapshot.camera.matrix().as_mat4().to_cols_array_2d();
-        let prepared = lights::prepare(snapshot, settings.default_light)?;
-        let lights = upload_lights(device, &prepared)?;
+        let lights = upload_lights(device, bindings.lights)?;
         let mut frame = ReflectionFrame {
             camera: [u, v, w],
             film_scale: [f as f32, x as f32, y as f32, scale as f32],
@@ -87,7 +92,7 @@ impl ReflectionProbe {
             history,
             instance_count: snapshot.instances.len() as u32,
             epsilon: input.epsilon as f32,
-            light_count: prepared.len() as u32,
+            light_count: bindings.lights.len() as u32,
             ..ReflectionFrame::zeroed()
         };
         let pack = |[r, g, b]: [f64; 3], w: f64| [r as f32, g as f32, b as f32, w as f32];

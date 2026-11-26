@@ -36,6 +36,22 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **GPU reflection runtime:** Tier 2 uses inline R23 for the eight reflection
+  attempts and secondary direct lighting, sharing the resident R25 attributes
+  with direct shadows. Cropped warm and cold results matched after scene
+  edits. Same-slot bitmap replacement changed the specular AOV without
+  recompiling; switching off environment lighting cleared it without a pipeline
+  change. The spatial filter, per-jitter history and batched fallback remain.
+- Unchanged full-size S10 on M5 Pro, actual Metal, all Tier 2 effects:
+  reflections fell from **1309.754 ms** to **45.751 ms**, and total frame
+  median from **2734.881 ms / 0.366 fps** to **1297.222 ms / 0.771 fps**.
+  The batched GI pass (**1141.322 ms**) now dominates. Tier 2 still misses
+  30 fps; no Tier 1 changes in this slice.
+- Strict R26 retained **18/23**, **19/23** and **23/23** vs CPU on both Metal
+  and Compute with nine unchanged pins. The Metal/Compute minima were exact,
+  **163.56 dB** and **75.66 dB**. Five required-GPU lib, hybrid and shader
+  translation runs passed. Full gate: 2750 tests passed, `GATE: all passed`.
+
 - **Raw reflection secondary lighting:** inline Compute and Metal matched
   the batched CPU-shaded reference at two history seeds for finite, area and
   infinite lights, per-light lobe flags and tinted occlusion. The near
