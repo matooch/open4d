@@ -963,6 +963,19 @@ Source: [area R](../roadmap/areas/R-realtime.md), decision
    Test 10,000 clones of one mesh and a transform-only update that changes the hits
    without rebuilding geometry.
 
+### Secondary-hit visibility origin
+
+- For a visibility ray spawned at a secondary surface in R24, offset its world-space
+  hit position along the geometric normal on the side the ray leaves
+  (`dot(Ng, direction) < 0` selects `-Ng`). The offset distance is
+  `max(frame_epsilon, 64 * f32::EPSILON * max(abs(hit_position)))`, where the last
+  maximum is over the three components. Use this rule in the batched reference
+  and the inline Compute, Metal and Vulkan paths. The position-scaled term
+  provides room for f32 hit reconstruction and origin rounding even at grazing angles.
+- Keep the light's sampling and shading position unchanged. Use the same offset
+  distance in the finite light segment bound; do not increase the traversal's
+  global minimum hit distance or ignore triangles by ID.
+
 ### R23.1 Metal acceleration structures (brief 211)
 
 Sources: [area R](../roadmap/areas/R-realtime.md), D19, and
@@ -1273,13 +1286,15 @@ R24 reflections and the R7 opaque GGX specular lobe. This is our own design.
   evaluation. Orient Ng and Ns toward the returning ray, reject either
   light horizon, and apply diffuse/specular flags before weighting by the
   cosine, light sample weight and reflection throughput. For shadow-casting
-  lights, offset by Ng and clip to `max(0, distance*(1-1e-6)-epsilon)`;
+  lights, use the R23 secondary-hit origin and clip to
+  `max(0, distance*(1-1e-6)-offset_distance)`;
   blocked rays multiply RGB by `(1-density) + density*shadow_color`.
   Sum hit emission and miss lighting in attempt order, then secondary
   contributions in prepared-light order and attempt order, as on CPU.
   Extend the same raw numerical acceptance to finite, area and infinite
   lights, mixed lobe flags and tinted partial occlusion. Include a blocker
-  beyond a finite emitter, which must not shadow that sample.
+  beyond a finite emitter, which must not shadow that sample, and an
+  unobstructed shadow ray leaving its source plane at less than one degree.
   Keep the CPU spatial filter, per-jitter history and batched fallback until
   live acceptance. Remeasure unchanged S10 and strict R26 only when enabling
   the live signal; this standalone allowance does not change R26.

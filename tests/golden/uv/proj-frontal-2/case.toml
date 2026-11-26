@@ -1,0 +1,56 @@
+feature = "uv"
+observation = "docs/parity/uv-projection.md"
+description = "Sphere (defaults) made editable, default material applied as a texture tag, Projection Frontal around the document's scene camera, then Generate UVW Coordinates; camera recorded exactly (position, rotation H P B, focal length, sensor/film size, render resolution)"
+mesh = "mesh.obj"
+
+[params]
+source_object = "Sphere (defaults), made editable"
+
+[params.texture_tag]
+type = "texture"
+material = "Mat"
+projection_set = "Frontal"
+projection_after_generate = "UVW Mapping"
+camera_name = "Camera"
+camera_position = [600.0, 300.0, -600.0]
+camera_rotation_deg = [45.0, -19.45, 0.0]
+camera_kind = "scene"
+material_link = "Mat"
+selection = ""
+projection_display = "Simple"
+side = "Both"
+add_material = false
+tile = false
+seamless = false
+use_uvw_for_bump = true
+offset_u_percent = 0.0
+offset_v_percent = 0.0
+length_u_percent = 100.0
+length_v_percent = 100.0
+tiles_u = 1.0
+tiles_v = 1.0
+repetitions_u = 0.0
+repetitions_v = 0.0
+position = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+size = [100.0, 100.0, 100.0]
+
+[params.camera_optics]
+focal_length = 36.0
+sensor_size_film_gate = 36.0
+35mm_equiv_focal_length = " 36 mm"
+field_of_view_horizontal = 0.9272952180016123
+field_of_view_vertical = 0.5483349022393176
+zoom = 1.0
+film_offset_x = 0.0
+film_offset_y = 0.0
+focal_distance = 100.0
+
+[params.render]
+width = 1280
+height = 720
+fps = 30
+
+[import]
+scale = 1.0
+flip_z = false

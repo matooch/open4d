@@ -210,3 +210,107 @@ Stereoscopic, composition helpers, spherical camera, the DOF map and the physica
 effects (motion blur, lens distortion, vignetting, bokeh shape; brief 138 added projection
 parity and a thin-lens depth of field, RENDER.md R15), photometric and volumetric light parameters, object-shaped area lights, an explicit "render camera" selection (the first camera is used), per-light shadow
 softness radius.
+
+## S9 Null display (`forge.null`, brief 046)
+
+This file documents the scene helper objects drawn only in the viewport (camera, light, floor),
+so the Null's display options live here. Source: the observation
+[generators-3.md](../parity/generators-3.md), section "O20b observation" (Null display shapes,
+read through the bridge's `viewport_screenshot`, scale 0.785 px per unit, extents include about
+1-2 units of line width and a calibration bias of about 1.9 units on the centre). The Null
+still has no geometry: it contributes nothing to renders or exports (`null_never_contributes`),
+and a Null parent passes its children on as before (CORE.md section 4).
+
+### S9.1 Parameters
+
+Declared on the node type, so the Attribute panel, undo, animation and files derive from them. A
+file saved before this brief has no such params and loads with the defaults (CORE.md, "Missing
+params on known types are filled with defaults"); the file version does not change.
+
+| Id | Label | Kind, default | Range / options | Source |
+|---|---|---|---|---|
+| `shape` | Display | enum `dot` | `none, dot, locator, circle, rectangle, diamond, triangle, pentagon, hexagon, octagon, star, axis, cube, pyramid, sphere` | O20b parameter table (default Dot) |
+| `radius` | Radius | distance 10 | 0..1e20 | O20b (slider 0-100, step 1 is UI only) |
+| `aspect` | Aspect Ratio | float 1 | 0..1e20 | O20b (step 0.01) |
+| `orientation` | Orientation | enum `camera` | `camera, x, y, z` | O20b |
+| `display_color` | Display Color | enum `material` | `material, layer, automatic, custom` | O20b |
+| `color` | Color | color (1, 1, 1) | 0..1 per channel | O20b, the Color after Display Color |
+| `icon_color` | Icon Color | color (1, 0.9, 0.4) | 0..1 per channel | O20b, the Color after Icon Color; stored only, the object tree icon tint is not drawn (deferred) |
+| `xray` | X-Ray | bool false | | O20b; stored, **not drawn yet** (deferred, see S9.5) |
+
+Visible in Editor / Visible in Renderer (Default, On, Off) are the generic `object.*`
+visibility params every object has (CORE.md section 7); the Null needs nothing extra.
+
+### S9.2 The drawing frame
+
+Every shape is drawn centred on the Null in a plane with an in-plane horizontal axis `u`, a
+vertical axis `v` and a normal `n`. R is Radius, A is Aspect Ratio.
+
+| Orientation | u | v | n | Proof |
+|---|---|---|---|---|
+| `camera` | viewport camera right | viewport camera up | toward the viewer | Circle in Front and Top view is a full circle (diameter 201.3 = 2R + line width): it follows the view |
+| `x` | world Z | world Y | world X | circle is a vertical line in Front view (2.5 x 198.7), also vertical in Top: plane YZ |
+| `y` | world X | world Z | world Y | horizontal line in Front (198.7 x 2.5), a circle in Top: plane XZ |
+| `z` | world X | world Y | world Z | circle in Front, horizontal line in Top (198.7 x 1.3): plane XY |
+
+Which of the two in-plane axes is `v` for the X and Y rows is **own design, parity-pending O20b**
+(the circle used for the rows is symmetric): `v` is world Y for `x`, world Z for `y`, so a vertical
+shape stays up when the plane contains the up axis. Aspect multiplies `v` (below).
+
+A Null with a fixed orientation (`x`, `y`, `z`) is drawn in its local frame, so its world matrix
+(rotation, scale, position) moves the drawing (own design, parity-pending O20b: the observation
+used an untransformed Null). `camera` orientation is drawn at the Null's world position facing the
+viewport camera; rotation and scale of the Null do not turn it, and R is used as is.
+
+Aspect: **2D shapes** multiply the `v` coordinate by A (`Rectangle R50 AR2`: X 71.3 stays
+50 sqrt(2) = 70.7 + line width, Y 142.7 = 2 x 70.7 + line width). **3D shapes (cube, pyramid,
+sphere) ignore Aspect** (`Pyramid R50 AR2` was byte-identical to AR1 in Front and Top; a possible
+effect along the depth axis was not observable; own design, parity-pending O20b: ignoring it is
+the simplest rule that agrees with the one observation).
+
+### S9.3 Shapes, with points as (u, v) before the Aspect factor
+
+Segment counts are those observed; every closed outline is a loop of that many segments.
+
+| Shape | Drawn geometry | Proving measurement (R = 100) |
+|---|---|---|
+| `none` | nothing | no pixels beyond the Shape = None baseline |
+| `dot` | one point at the origin, drawn as a small marker (not a segment) | about 2.5 x 2.5 units (3-4 px), 1 point |
+| `locator` | two lines: (-R, 0)-(R, 0) and (0, -R)-(0, R) | 198.7 x 198.7, 2 lines |
+| `circle` | closed circle of radius R, **64 segments** (own design, parity-pending O20b: the count was not read; 64 is smooth up to the largest sizes without cost) | 201.3 x 201.3 (2R + line width), not filled |
+| `rectangle` | 4 corners (+-R/sqrt 2, +-R/sqrt 2): a square with its corners on the circle of radius R, side R sqrt 2 | 142.7 x 142.7 = 141.4 + line width |
+| `diamond` | vertices (R, 0), (0, R), (-R, 0), (0, -R) (rectangle turned 45 deg) | 198.7 x 198.7, 4 segments |
+| `triangle` | regular, circumradius R, vertices at 90, 210, 330 deg: (0, R), (-R sqrt3/2, -R/2), (R sqrt3/2, -R/2): vertex up, flat base | width 173.2 = R sqrt 3, y -50.3..98.7 (base at -R/2, apex R) |
+| `pentagon` | regular, circumradius R, vertices at 90 + 72k deg: vertex up, flat base | width 191.1 (2 R sin 72 = 190.2 + line), y -80.9..98.7 (base -R cos 36) |
+| `hexagon` | regular, circumradius R, vertices at 60k deg: left/right vertices, flat top and bottom | width 198.7, height 173.2 = R sqrt 3 |
+| `octagon` | regular, circumradius R, vertices at 22.5 + 45k deg: flat sides on the axes | 186.0 = 2 R cos 22.5 (184.8) + line width; vertices on the axes would give 198.7 |
+| `star` | 16 vertices alternating outer radius R at 90 + 45k deg and inner radius r at 112.5 + 45k deg, 16 segments (8 points). The outer tips fix the extent; **inner ratio r = R/2 is own design, parity-pending O20b** (not measurable from the extent) | 198.7 x 198.7, 16 segments |
+| `axis` | two open lines from the origin: (0, 0)-(R, 0) and (0, 0)-(0, R); nothing along -u or -v, no arrowheads | x 0..100.6, y -0.6..98.7, no changed pixels on -X or -Y |
+| `cube` | 12 edges of the cube of half side R in the frame (u, v, n), **depth 2R (own design, parity-pending O20b)** | front view: a square of side 2R (201.3) with no inner lines (the back edges coincide) |
+| `pyramid` | square base of half side R at n = -R (4 edges) and 4 edges from its corners to the apex (0, 0, +R): **8 segments**; apex toward the viewer on the normal (own design for the depth and apex direction, parity-pending O20b) | front view: the square (201.3) plus both diagonals meeting at the centre, 8 segments |
+| `sphere` | three great circles of radius R, 64 segments each, in the planes (u, v), (u, n) and (v, n) (own design: three circles is the simplest solid that gives the observed view, parity-pending O20b) | front view: a circle (201.3) plus a horizontal and a vertical diameter crossing at the centre |
+
+For the 3D shapes with orientation `camera` the frame is the **world axes** (u = X, v = Y,
+n = Z) transformed by the Null's matrix, not the camera's: a cube turning with the view would always
+look like a flat square (own design, parity-pending O20b; Front view agrees with the observation).
+
+### S9.4 Colour
+
+Lines are drawn in one colour: `material` (no material on a Null) and `automatic` use the
+object gizmo grey (`OBJECT_COLOR`), `layer` the object's layer colour (grey when it has none),
+`custom` the `color` param. A selected Null is drawn in the selection colour as the other
+gizmos are. Hidden objects (editor visibility, layer) draw nothing.
+
+### S9.5 Code and tests
+
+`forge_generators::null_display` holds the pure functions `null_display_lines(shape, radius,
+aspect, orientation, view) -> Vec<[DVec3; 2]>` and `null_display_points` (the Dot), the
+`NullShape` / `NullOrientation` enums and `null_display_data(scene, id)`. The scene overlay
+(`forge_ui::scene_overlay`) turns them into `DrawLine`s with the viewport camera's
+right/up/forward. Tests: `crates/generators/tests/null_display.rs` (extents, segment counts, centring,
+Aspect, Orientation, defaults, file round trip, an old file, no geometry from `evaluate`),
+`crates/io/tests/null_display.rs` (nothing exported), `crates/ui/tests/null_overlay.rs` (the overlay lines,
+colours, camera facing, visibility).
+
+Deferred: **X-Ray** (drawing through objects; the overlay line pipeline is depth tested and has
+no per-line flag) and the object tree icon tint from `icon_color`.

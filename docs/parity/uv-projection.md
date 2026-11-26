@@ -51,9 +51,10 @@ reports its projection as "UVW Mapping"; `case.toml` keeps both the projection t
 
 ## Follow-up (planner, after brief 127)
 
-| Case | Redo as | What was missing |
-|---|---|---|
-| proj-frontal | proj-frontal-2 | Record the camera exactly: position, rotation (H, P, B) read back, focal length, sensor/film size and render resolution, in `case.toml` |
+| Case | Redo as | What was missing | Result |
+|---|---|---|---|
+| proj-frontal | proj-frontal-2 | Record the camera exactly: position, rotation (H, P, B) read back, focal length, sensor/film size and render resolution, in `case.toml` | observed as `proj-frontal-2` 2026-11-26: the same scene rebuilt (Sphere defaults made editable, material `Mat`, Projection Frontal around the scene camera, Generate UVW Coordinates); the UV layer matches `proj-frontal` exactly (114 vt lines, first 0.529613 0.310567, same md5 of the vt block). Camera recorded in the new case.toml with read-back rows: name `Camera`, position (600, 300, -600), rotation H 45, P -19.45, B 0, Focal Length 36, Sensor Size (Film Gate) 36, 35mm Equiv. Focal Length: ` 36 mm`, Field of View (Horizontal) 0.9272952180016123, Field of View (Vertical) 0.5483349022393176, Zoom 1.0, Film Offset X 0.0, Film Offset Y 0.0, Focal Distance 100.0, render resolution 1280 x 720 at 30 fps. `golden info`: vertices 114 (unused 0), faces 128 (3-gons 32, 4-gons 96), bbox (-100, -100, -100) to (100, 100, 100), size (200, 200, 200), centre (0, 0, 0), normals 114, uvs 114. `golden check`: ok: 1118 cases. `forge-cleanroom`: ok.
+| proj-frontal-2 | proj-frontal-3 (planner, 2026-11-26) | The same scene and camera, but render resolution 720 x 720 (and, if quick, 1920 x 1080 as `proj-frontal-4`), each with the read-back camera rows of `proj-frontal-2`. A fit of `proj-frontal-2` leaves a horizontal-only term (u scale 0.999053, u offset -0.000253; v exact) that the recorded camera does not explain (UV.md U4): these show whether it follows the render width | |
 
 ## Notes
 

@@ -31,6 +31,7 @@ fn probe(@builtin(global_invocation_id) id: vec3<u32>) {
 
 #[test]
 fn gpu_raster_receiver_matches_cpu_primary_geometry() {
+    let _serial = crate::gpu_test_serial();
     let (device, queue) = match crate::request_default_device() {
         Ok(gpu) => gpu,
         Err(err) if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") => {

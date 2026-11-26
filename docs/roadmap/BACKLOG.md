@@ -43,7 +43,7 @@ implementers can avoid collisions.
 | 043 | [Boole R25 modes and numbering, Subdivision types, Symmetry planes](../agents/tasks/043-boole-subdivision-symmetry-r25.md) | C | – | done (Boole R25 strict numbering parity-pending) | generators, geometry |
 | 044 | [Shared Caps/Bevel tabs and Extrude R25 options](../agents/tasks/044-caps-bevel-tab.md) | C | 042 | done (parity-pending: Delaunay/Regular Grid caps, bevels pinned) | generators |
 | 045 | [Extrude R25 vertex order](../agents/tasks/045-extrude-r25-order.md) | C | 044 | done (parity-pending: larger outlines) | generators |
-| 046 | [Null display, Instance render modes, Connect weld options](../agents/tasks/046-null-instance-connect-options.md) | C | – | waiting: G8 (O20 follow-ups are in) | generators, viewport |
+| 046 | [Null display, Instance render modes, Connect weld options](../agents/tasks/046-null-instance-connect-options.md) | C | – | done (parity-pending: Null circle/sphere segment count, 3D shape depth, star inner radius, in-plane up axis for X/Y, Aspect on solids, X-Ray drawing; Instance modes and Connect weld verified against O20) | generators, core, ui |
 | 047 | [Camera, Light, Environment, Floor and Sky as scene objects](../agents/tasks/047-scene-objects-camera-light.md) | C | – | done (camera and light defaults equal O29 for all 9 light types; Environment/Floor/Sky are our design; stereo, composition helpers, volumetric light params not yet; render bridge and `forge render` use the scene objects; render settings stored in v12) | generators, core, viewport |
 | 048 | [Generators as clone and volume inputs (consumed-input rules)](../agents/tasks/048-generators-in-clone-volume-contexts.md) | C | 065, 081 | done | generators |
 | 049 | [Create menu organisation](../agents/tasks/049-create-menu-organisation.md) | C | 148 | done | ui, core |
@@ -211,4 +211,12 @@ implementers can avoid collisions.
 | 212 | [Vulkan hardware ray-tracing backend](../agents/tasks/212-vulkan-rt-backend.md) | R | 200 | done (parity-pending: RTX 3090 run) | render-rt |
 | 213 | [Close the Tier 1/2 quality gaps (pinned in R26)](../agents/tasks/213-raster-hybrid-quality.md) | R | 201, 203 | ready | render-rt |
 | 214 | [Make the real-time tiers real-time (S10 targets)](../agents/tasks/214-realtime-performance.md) | R | 204 | in-progress (hermes) | render-rt, render-gpu |
-| 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |
+| 215 | [Luau runtime and builder scripts](../agents/tasks/215-luau-runtime.md) | A, P | – | ready | luau (new), script, app, command, rpc, mcp |
+| 216 | [Behaviour tag, lifecycle and timeline mode](../agents/tasks/216-behaviour-tag.md) | P | 215 | ready | behaviour (new), luau, core, app |
+| 217 | [Input system: devices, input map, injection](../agents/tasks/217-input-system.md) | P | 216 | ready | input (new), ui, command |
+| 218 | [Input tracks: record, replay, Input node](../agents/tasks/218-input-tracks.md) | P | 217 | ready | input, anim, nodes, ui |
+| 219 | [Play mode in the editor](../agents/tasks/219-play-mode.md) | P | 217, 218 | ready | ui, behaviour, viewport |
+| 220 | [Bulk clone API, Luau effector, budgets](../agents/tasks/220-bulk-clone-api.md) | P, E | 216 | ready | behaviour, clone-engine |
+| 221 | [Rust behaviours: SDK, registration, native loading](../agents/tasks/221-rust-behaviours.md) | P | 216 | ready | behaviour, plugin |
+| 222 | [`forge play` runtime and S11 acceptance](../agents/tasks/222-s11-runtime.md) | P | 219, 220 | ready | apps/forge, tests, docs |
+| 185 | [v1.0 release checklist: S1–S11 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |

@@ -11,6 +11,7 @@ use glam::DMat4;
 
 #[test]
 fn gpu_bounce_spatial_matches_cpu_across_crop_and_workgroups() {
+    let _serial = crate::gpu_test_serial();
     use forge_render_gpu::{await_mapped, map_read};
     use wgpu::util::DeviceExt;
 
@@ -136,6 +137,7 @@ fn gpu_bounce_spatial_matches_cpu_across_crop_and_workgroups() {
 
 #[test]
 fn gpu_reduced_diffuse_reuses_only_compatible_absolute_quad_lanes() {
+    let _serial = crate::gpu_test_serial();
     let triangle =
         |r: f64, z| MeshData::new(vec![[-r, -r, z], [r, -r, z], [0., r, z]], vec![[0, 1, 2]]);
     let opaque = forge_material::Material::default();
@@ -362,6 +364,7 @@ fn gpu_reduced_diffuse_reuses_only_compatible_absolute_quad_lanes() {
 
 #[test]
 fn gpu_raw_diffuse_matches_batched_reference() {
+    let _serial = crate::gpu_test_serial();
     use super::diffuse_history::DiffuseHistoryProgram;
     use forge_render_gpu::{await_mapped, map_read};
 
@@ -826,7 +829,61 @@ fn gpu_raw_diffuse_matches_batched_reference() {
 }
 
 #[test]
+fn gpu_secondary_visibility_escapes_a_rounded_grazing_hit() {
+    let _serial = crate::gpu_test_serial();
+    // Model a hit reconstructed one f32 step behind the exit side of its face.
+    const PLANE: f32 = 4096.;
+    let p = DVec3::Z * f64::from(PLANE.next_up());
+    let direction = DVec3::new(1., 0., -0.01).normalize();
+    assert!(direction.dot(DVec3::Z).abs().asin().to_degrees() < 1.);
+    let epsilon = 1e-5;
+    let uncorrected = Ray {
+        origin: p - DVec3::Z * epsilon,
+        direction,
+        t_max: 1.,
+    };
+    let corrected = secondary_visibility_ray(p, DVec3::Z, direction, 1., epsilon);
+    let snapshot = Snapshot {
+        meshes: vec![MeshData::new(
+            vec![[-2., -2., 0.], [2., -2., 0.], [0., 2., 0.]],
+            vec![[0, 1, 2]],
+        )],
+        instances: vec![Instance::new(
+            0,
+            DMat4::from_translation(DVec3::Z * f64::from(PLANE)),
+            0,
+            1,
+        )],
+        materials: vec![MaterialData::new(
+            "probe",
+            forge_material::ir::compile(&forge_material::Material::default()),
+        )],
+        ..Snapshot::default()
+    };
+    for request in [crate::request_default_device, crate::request_rt_device] {
+        let (device, queue) = match request() {
+            Ok(gpu) => gpu,
+            Err(err) if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") => {
+                panic!("FORGE_REQUIRE_GPU=1 but no GPU: {err}");
+            }
+            Err(err) => {
+                eprintln!("skipping GPU test: {err}");
+                return;
+            }
+        };
+        let (kind, mut backend) = crate::ray::on_device(device, queue).unwrap();
+        backend.update_scene(&snapshot).unwrap();
+        assert_eq!(
+            backend.occluded(&[uncorrected, corrected]).unwrap(),
+            [true, false],
+            "{kind:?}",
+        );
+    }
+}
+
+#[test]
 fn gpu_raw_reflections_match_batched_reference() {
+    let _serial = crate::gpu_test_serial();
     let triangle = |radius: f64, z| {
         MeshData::new(
             vec![[-radius, -radius, z], [radius, -radius, z], [0., radius, z]],
@@ -993,7 +1050,8 @@ fn gpu_raw_reflections_match_batched_reference() {
             backend: Some((kind, backend)),
             ..HybridView::default()
         };
-        let mut near_controls = [[0.; 4]; 2];
+        let mut near_controls = [[[0.; 4]; 2]; 2];
+        let mut gpu_grazing_open = [[0.; 4]; 2];
         let mut far_controls = [[0.; 4]; 2];
         for (name, lighting, lights) in &scenarios {
             snapshot.environment.lighting = lighting.clone();
@@ -1025,10 +1083,11 @@ fn gpu_raw_reflections_match_batched_reference() {
                 }
                 first_emissive = Some(expected[emissive]);
                 match *name {
-                    "near-open" => near_controls[phase] = expected[dark],
+                    "near-open" => near_controls[phase] = [expected[dark], expected[emissive]],
                     "near" => assert_eq!(
-                        expected[dark], near_controls[phase],
-                        "blocker beyond emitter"
+                        [expected[dark], expected[emissive]],
+                        near_controls[phase],
+                        "blocker beyond emitter or grazing self-shadow"
                     ),
                     "far-open" => far_controls[phase] = expected[dark],
                     "far" => {
@@ -1070,6 +1129,18 @@ fn gpu_raw_reflections_match_batched_reference() {
                     )
                     .unwrap();
                 assert_eq!(actual.len(), expected.len());
+                // From the left emitter (z=.125, x<=-2) to the near light
+                // (z=.0625, x=4) every shadow ray leaves at less than 1°.
+                // Nothing lies between them, so enabling shadows must not
+                // change that emitter's raw signal, on any traversal.
+                match *name {
+                    "near-open" => gpu_grazing_open[phase] = actual[emissive],
+                    "near" => assert_eq!(
+                        actual[emissive], gpu_grazing_open[phase],
+                        "{kind:?} grazing emitter self-shadow at history {history}"
+                    ),
+                    _ => {}
+                }
                 for (i, (actual, expected)) in actual.iter().zip(expected).enumerate() {
                     if i != emissive
                         && (i != miss || matches!(lighting, Lighting::None))

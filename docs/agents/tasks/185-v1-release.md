@@ -1,9 +1,9 @@
-# 185 · v1.0 release checklist: S1–S10 on all three OS
+# 185 · v1.0 release checklist: S1–S11 on all three OS
 
 Status: ready · Area: N · Depends on: everything · Observations: – · Touches: all
 
 ## Goal
-Tag v1.0 when S1–S10 pass on Linux, macOS and Windows.
+Tag v1.0 when S1–S11 pass on Linux, macOS and Windows (S11 added 2026-11-26, area P, D21).
 
 ## Inputs
 - Area design: [../../roadmap/areas/N-platform.md](../../roadmap/areas/N-platform.md)

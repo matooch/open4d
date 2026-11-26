@@ -36,6 +36,16 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Planner review — grazing secondary visibility:** Merged the planner's
+  crate-wide GPU unit-test lock and applied it to the newer probes. The
+  batched reference and shared inline bounce shader now use the R23
+  position-scaled geometric-normal offset for secondary light visibility.
+  Compute and actual Metal passed the sub-degree open-light check and the
+  translated one-ULP case (unoffset ray blocked, corrected ray clear).
+  Five required-GPU unit, R24 hybrid and shader-translation runs passed;
+  strict R26 reproduced all 207 scores and left pins unchanged. The
+  original failure did not reproduce locally; Ubuntu lavapipe still
+  needs CI confirmation. `GATE: all passed` (2785 tests).
 - **Standalone GPU direct-shadow history:** On an odd 19×11 film, the
   shared R24.12 kernel converted compact shadow pairs into two padded
   planes, preserving both luminance channels. Metal matched the CPU
@@ -391,3 +401,25 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
   Compute and Metal with the same nine pins. Metal-vs-Compute minima were exact,
   165.12 dB, and 75.66 dB, respectively. No Vulkan hardware run.
 - GPU AO runtime checkpoint gate: 2741 tests passed, zero failed; `GATE: all passed`.
+
+## Review (planner, 2026-11-26)
+- Ubuntu CI (Mesa lavapipe) crashed with SIGSEGV in `forge-render-rt --lib`: the six GPU unit
+  tests in `src/` (scene cache, receiver, direct shadow, reflection, diffuse, AO) created devices
+  in parallel. Fixed on the planner branch: `crate::gpu_test_serial()` in `lib.rs`. **Every new
+  GPU unit test in `src/` takes it on its first line** (`let _serial = crate::gpu_test_serial();`),
+  per HERMES-IMPLEMENTER.md §5a; integration tests in `tests/` keep their per-file lock. Merge
+  `origin/main` into the 214 branch before the next push.
+- **Open, fix next (CI red on Ubuntu):** `hybrid::reflection_tests::gpu_raw_reflections_match_batched_reference`
+  fails on the GitHub Ubuntu runner, on the lavapipe **Vulkan** (hardware ray query) path only:
+  `Vulkan mode near history 0 pixel 28 channel 0: 0.29564372 vs 0.29637477`, which is outside
+  `2e-6 + 2e-4·|b|`. Compute passes on the same runner, and the test passes on the planner's
+  lavapipe (same Mesa 25.2.8, but a different CPU, AVX-512). Likely cause: `ray/hardware.wgsl`
+  traces with `t_min = 1e-12·speed`, so secondary rays rely only on the origin offset. In the "near"
+  scenario, the shadow ray from the emitter triangle's hit (z = 0.125) to the omni light at
+  z = 0.0625 grazes its own plane (slope ≈ 0.008), so a little f32 rounding self-shadows some
+  samples. The actual value is lower than the reference, which fits. Fix the cause: the same
+  secondary-ray origin rule (offset along the geometric normal, toward the side the ray leaves
+  by, scaled to the position's magnitude) on every backend. Write it into R23 first, and keep the
+  CPU reference on the same rule. Don't loosen the tolerance. To check without the runner, add a
+  regression case where a shadow ray leaves at an angle below 1° and is not self-shadowed on
+  Compute or Vulkan.

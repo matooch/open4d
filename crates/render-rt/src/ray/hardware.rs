@@ -294,6 +294,7 @@ mod tests {
 
     #[test]
     fn native_scene_replaces_only_edited_mesh_slots() {
+        let _serial = crate::gpu_test_serial();
         let (device, queue) = match crate::request_rt_device() {
             Ok(pair) => pair,
             Err(err) if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") => {

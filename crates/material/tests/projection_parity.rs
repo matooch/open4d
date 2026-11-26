@@ -17,8 +17,8 @@ const EXACT: &[&str] = &[
     "proj-cylindrical",
     "proj-cylindrical-offset",
 ];
-/// Built but different: the recorded camera does not reproduce the reference (UV.md U4).
-const KNOWN_MISMATCH: &[&str] = &["proj-frontal"];
+/// Built but different: a horizontal-only term the recorded camera does not explain (UV.md U4).
+const KNOWN_MISMATCH: &[&str] = &["proj-frontal", "proj-frontal-2"];
 
 type Parsed = (Vec<Vec<usize>>, Vec<[f64; 2]>, Vec<Vec<usize>>);
 

@@ -57,9 +57,12 @@ fn bounce_direct(h: BounceHit, l: GpuLight, seed: vec2<u32>, stream: vec2<u32>) 
     let r = select(vec3<f32>(0.0), f.fs, l.flags.w > 0.5);
     let value = (d + r) * (cos_i * s.weight) * h.weight;
     if l.params.z > 0.5 && any(value != vec3<f32>(0.0)) {
-        let epsilon = bounce_frame.epsilon;
-        let t_max = max(s.dist * (1.0 - 1e-6) - epsilon, 0.0);
-        if rt_closest(h.p + h.ng * epsilon, s.wi, t_max).ids.x != RT_MISS {
+        // R23: guard against rounding the reconstructed hit back onto its face.
+        let magnitude = max(abs(h.p.x), max(abs(h.p.y), abs(h.p.z)));
+        let offset = max(bounce_frame.epsilon, (64.0 * 0x1p-23) * magnitude);
+        // The geometric horizon check above already selects the +Ng exit side.
+        let t_max = max(s.dist * (1.0 - 1e-6) - offset, 0.0);
+        if rt_closest(h.p + h.ng * offset, s.wi, t_max).ids.x != RT_MISS {
             let density = l.params.w;
             return value * (vec3<f32>(1.0 - density) + l.shadow_color.xyz * density);
         }

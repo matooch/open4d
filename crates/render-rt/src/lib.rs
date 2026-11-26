@@ -18,6 +18,15 @@ pub use engine::{PassTiming, RtEngine};
 pub use framegraph::{FrameGraph, GraphError, Pass};
 pub use path_trace::{PathTraceEngine, PathTracePreview, PathTraceView, path_scene_wgsl};
 
+/// Unit tests that create a GPU device hold this for their whole run, so they never create
+/// devices or submit work in parallel (HERMES-IMPLEMENTER.md §5a; parallel device creation
+/// crashes Mesa lavapipe).
+#[cfg(test)]
+pub(crate) fn gpu_test_serial() -> std::sync::MutexGuard<'static, ()> {
+    static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    SERIAL.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 /// Requests the default adapter and device; `Err` carries the reason there is none.
 pub fn request_default_device() -> Result<(wgpu::Device, wgpu::Queue), String> {
     request_device(false)

@@ -92,3 +92,42 @@ design with statistical tests (DECISIONS D20). Try these, in order, and record w
 
 Cases: the form's baseline emitter (default settings) and the gravity case. Same frames, same
 seed. No per-particle data is needed, only the statistics above.
+
+### Observer result (2026-11-26, unattended run): both cases not capturable
+
+Tried in the follow-up order, one attempt at a time, scripted throughout (no dialog opened).
+
+1. **Alembic export: the export works, reading the points back does not.** Fresh document,
+   30 fps, Emitter alone (defaults) and Emitter + Gravity, both stepped frame 0 to 30 one
+   frame at a time; a single-frame Alembic archive written at frames 10, 20 and 30 with the
+   exporter options Particles, Particles (Geometry) and Points Only (Geometry) set to on
+   (scripted save with the scene-saver filter, no dialog). Sizes in bytes - defaults:
+   1716 / 1812 / 1908, gravity: 1716 / 1812 / 1908 (frames 10/20/30); the gravity files
+   differ from the defaults files byte for byte, so the force changed the cloud while the
+   counts stayed equal. Each file contains an AbcGeom_Points object named `EmitterCloud`
+   (strings in the file also show a `.velocities` property; no age property appears).
+   Re-import of the archive gives an `Alembic Generator` whose cache is a `TP Geometry`
+   object: it has no point access at all (`GetPointCount` / `GetAllPoints` do not exist on
+   it). The importer option Points = "As Polygon Object" was set on the plugin data and as
+   world plugin data and still yields TP Geometry; `Current State to Object` on the
+   generator produces an empty Null; the loaded document particle system reports
+   `NumParticles() = 0`; sending the TP get-particles message to the generator and to its
+   cache returns an empty container. No particle count, position, speed or age could be
+   read, so no statistics could be written.
+2. **Matrix object in Object mode:** the source link is settable (container assignment;
+   Mode reads back as Object), but the evaluated cache is null after stepping frames 0-10.
+   A control Matrix fed a Cube is null too, while an unconfigured Grid Matrix caches a
+   6400-point polygon, so evaluation works in general - Object mode yields nothing a
+   script can read here.
+3. **Tracer with the emitter as source:** the Trace Link accepts the emitter through
+   SetParameter with the user-interaction flag, but the Tracer cache is null after
+   stepping frames 0-10. No data.
+
+| Case | Result |
+| --- | --- |
+| defaults | not capturable: Alembic export succeeds and the file holds the particle points, but every script read path returns nothing (TP Geometry with no point API, empty particle system, empty TP messages); Matrix Object mode and Tracer both evaluate to an empty cache |
+| gravity | not capturable: same path and same failures as defaults (export ok and differs from the defaults files, re-import gives TP Geometry, NumParticles 0) |
+
+No golden folder and no samples were written: the statistics the form asks for could not
+be observed. The exporter recipe (which options, which filter, frame stepping) is in
+`~/forge-observer/notes.md` for a later run if a read path appears.

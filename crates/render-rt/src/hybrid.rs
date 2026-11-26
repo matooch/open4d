@@ -884,6 +884,27 @@ fn add_rgb(pixel: &mut [f32; 4], value: DVec3) {
     pixel.add_scaled(value.extend(0.0).to_array().map(|v| v as f32), 1.0);
 }
 
+fn secondary_visibility_ray(
+    position: DVec3,
+    geometric_normal: DVec3,
+    direction: DVec3,
+    distance: f64,
+    epsilon: f64,
+) -> Ray {
+    // The batched reference also sends f32 rays to the selected backend.
+    let offset = epsilon.max(64. * f64::from(f32::EPSILON) * position.abs().max_element());
+    let side = if geometric_normal.dot(direction) < 0. {
+        -1.
+    } else {
+        1.
+    };
+    Ray {
+        origin: position + geometric_normal * (side * offset),
+        direction,
+        t_max: (distance * (1. - 1e-6) - offset).max(0.),
+    }
+}
+
 fn add_secondary_direct(
     backend: &dyn RtBackend,
     light: &lights::PLight,
@@ -912,11 +933,13 @@ fn add_secondary_direct(
             continue;
         }
         if light.casts_shadow() {
-            rays.push(Ray {
-                origin: p.position + p.geometric_normal * epsilon,
-                direction: sample.wi,
-                t_max: (sample.dist * (1.0 - 1e-6) - epsilon).max(0.0),
-            });
+            rays.push(secondary_visibility_ray(
+                p.position,
+                p.geometric_normal,
+                sample.wi,
+                sample.dist,
+                epsilon,
+            ));
             contributions.push((s.pixel, value));
         } else {
             add_rgb(&mut pixels[s.pixel], value);
@@ -1132,8 +1155,6 @@ mod tests {
     use crate::ray::{RayHit, SceneStats};
     use std::sync::{Mutex, OnceLock};
 
-    static GPU_LOCK: Mutex<()> = Mutex::new(());
-
     fn gpu(hardware: bool) -> Option<(wgpu::Device, wgpu::Queue)> {
         type DeviceRequest = OnceLock<Result<(wgpu::Device, wgpu::Queue), String>>;
         static COMPUTE: DeviceRequest = OnceLock::new();
@@ -1157,7 +1178,7 @@ mod tests {
 
     #[test]
     fn gpu_history_matches_cpu_without_overwriting_previous_mean() {
-        let _guard = GPU_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _serial = crate::gpu_test_serial();
         let Some((device, queue)) = gpu(false) else {
             return;
         };
@@ -1324,10 +1345,10 @@ mod tests {
 
     #[test]
     fn gpu_shadow_history_copies_both_planes_and_restores_interleaved_cpu_order() {
+        let _serial = crate::gpu_test_serial();
         use forge_render_gpu::{await_mapped, map_read};
         use wgpu::{BufferUsages as Usage, util::DeviceExt};
 
-        let _guard = GPU_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let Some((device, queue)) = gpu(false) else {
             return;
         };
@@ -1457,10 +1478,10 @@ mod tests {
 
     #[test]
     fn gpu_raw_ao_matches_cpu_across_all_quad_phases() {
+        let _serial = crate::gpu_test_serial();
         use forge_render_api::{Instance, MaterialData, MeshData};
         use glam::DMat4;
 
-        let _guard = GPU_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         for hardware in [false, true] {
             let Some((device, queue)) = gpu(hardware) else {
                 return;
