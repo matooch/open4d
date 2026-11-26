@@ -24,11 +24,14 @@ Replace the screen-space approximations with ray-traced soft shadows (area light
 
 ## Report (implementer fills in)
 
-AO and shadow checkpoint, using controlled scenes with O43 `mat-red-matte`
-material and Forge CPU-traced references. First-frame linear beauty improves
+AO, shadows and reflections use controlled scenes with O43 `mat-red-matte`,
+`mat-glossy` and `mat-luminance` inputs and Forge CPU-traced references.
+First-frame linear beauty improves
 from 17.223 to 35.230 dB PSNR for AO and from 35.917 to 48.877 dB for area
-shadows on Metal and on the explicit compute fallback. Tests cover exact
+shadows, and from 26.092 to 37.885 dB for reflections, on both Metal and the
+explicit compute fallback. Tests cover exact
 Tier 1 fallback, SSAO replacement, zero AO radius, shadow lighting AOVs,
-unmodified non-shadow-casting lights, decreasing successive-frame delta and
-camera-change history invalidation for both effects. Reflections and GI
-remain to be implemented and checked; R24 is not done.
+unmodified non-shadow-casting lights, effective SSR replacement, reflection
+specular AOV placement, decreasing successive-frame delta and camera-change
+history invalidation for all three effects. GI remains to be implemented and
+checked; R24 is not done.

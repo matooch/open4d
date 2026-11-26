@@ -94,6 +94,8 @@ pub mod frame {
     pub const RT_AO_ON: usize = 108;
     /// Lighting reads sampled, ray-tested direct lighting for shadow-casting lights.
     pub const RT_SHADOWS_ON: usize = 109;
+    /// Lighting reads ray-traced specular radiance instead of raster environment specular.
+    pub const RT_REFLECTIONS_ON: usize = 110;
 
     pub const SLOTS: usize = 128;
 
@@ -148,5 +150,6 @@ pub mod frame {
         ("JITTER_Y", JITTER_Y),
         ("RT_AO_ON", RT_AO_ON),
         ("RT_SHADOWS_ON", RT_SHADOWS_ON),
+        ("RT_REFLECTIONS_ON", RT_REFLECTIONS_ON),
     ];
 }

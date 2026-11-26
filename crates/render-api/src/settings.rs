@@ -46,6 +46,8 @@ pub struct HybridSettings {
     pub enabled: bool,
     /// Replace shadow-casting lights' raster contribution with sampled RT lighting.
     pub shadows: bool,
+    /// Replace screen-space reflections and raster environment specular.
+    pub reflections: bool,
     /// Replace screen-space AO with ray-traced ambient visibility.
     pub ao: bool,
     /// Maximum AO ray distance in world units. Zero leaves ambient unchanged.
@@ -57,6 +59,7 @@ impl Default for HybridSettings {
         Self {
             enabled: false,
             shadows: false,
+            reflections: false,
             ao: false,
             ao_radius: 40.0,
         }

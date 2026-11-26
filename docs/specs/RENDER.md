@@ -1017,8 +1017,12 @@ and shading conventions in R7–R9. The hybrid renderer is our own design.
   visibility, including the R8 shadow density and tint, so blockers affect the
   direct term but not emission or environment.
 - Reflections sample the specular lobe around the reflected direction, using the
-  primary roughness and reflectance. Evaluate emission and direct light at a
-  secondary hit, or sample the environment on a miss.
+  primary roughness and reflectance. Use the R7 GGX half-vector distribution
+  and its conditional reflection PDF, with no diffuse-lobe selection factor.
+  Evaluate emission and direct light at a secondary hit, or sample the
+  environment on a miss. Put this radiance in the `Specular` AOV in place of
+  raster environment specular (keep non-replaced direct specular). Skip SSR
+  only when the ray-traced reflection term is available.
 - AO samples the cosine-weighted hemisphere up to the configured world-space AO
   radius. Apply the unoccluded fraction to the ambient term, not direct light or
   emission. A zero radius leaves ambient unchanged.
@@ -1045,6 +1049,8 @@ and shading conventions in R7–R9. The hybrid renderer is our own design.
   range for both scores and no fitted exposure gain. Compare GI against Tier 1
   without that bounce.
 - Test that each toggle is independent and that all effects off preserves Tier 1.
+  Check SSR replacement on a separate fixture where SSR actually changes the
+  Tier 1 image; both SSR settings must give the same first RT-reflection frame.
   On a static scene, compare successive linear frames: the late-frame difference
   must be lower than the early-frame difference. A camera change must discard the
   accumulated history. Check on Metal here and keep the tests runnable on the

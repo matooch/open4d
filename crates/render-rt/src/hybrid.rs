@@ -6,7 +6,7 @@ use std::sync::Arc;
 use forge_render_api::{Control, RenderError, RenderSettings, Snapshot};
 use forge_render_cpu::lights;
 use forge_render_cpu::sampling::{Rng, cosine_hemisphere, lum, power_heuristic, to_world};
-use forge_render_cpu::scene::Scene;
+use forge_render_cpu::scene::{Hit, HitGeom, Scene};
 use forge_render_cpu::surface::Surface;
 use glam::DVec3;
 
@@ -14,6 +14,7 @@ use crate::ray::{self, Ray, RtBackend};
 
 const AO_RAYS: usize = 8;
 const SHADOW_RAYS: usize = 8;
+const REFLECTION_RAYS: usize = 8;
 // At most 512 KiB each for ray input and hit output, well within supported
 // storage binding and compute dispatch limits.
 const PIXELS_PER_BATCH: usize = 2048;
@@ -27,6 +28,7 @@ pub(crate) struct HybridView {
     // Each raster TAA jitter has different primary visibility.
     ao: BTreeMap<[u32; 2], History<f32>>,
     shadows: BTreeMap<[u32; 2], History<[f32; 8]>>,
+    reflections: BTreeMap<[u32; 2], History<[f32; 4]>>,
 }
 
 #[derive(Default)]
@@ -47,6 +49,7 @@ impl HybridView {
     pub fn reset(&mut self) {
         self.ao.clear();
         self.shadows.clear();
+        self.reflections.clear();
     }
 
     pub fn prepare(
@@ -238,14 +241,177 @@ impl HybridView {
                 }
             }
         }
-        let limit = 3.0
-            * match snapshot.camera.projection {
-                forge_render_api::Projection::Orthographic { width: w } => w / width as f64,
-                _ => geometry.scene.scale / width as f64,
-            };
+        let limit = geometry.filter_limit(snapshot, width);
         history.accumulate(spatial_filter(width, &input, &pixels, limit));
         Ok(history.mean.clone())
     }
+
+    pub fn reflections(
+        &mut self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        input: PrimaryInput<'_>,
+        control: &Control,
+    ) -> Result<Vec<[f32; 4]>, RenderError> {
+        if self.geometry.is_none() {
+            self.geometry = Some(PrimaryGeometry::new(snapshot)?);
+        }
+        let geometry = self.geometry.as_ref().expect("prepared shading geometry");
+        let backend = self.backend.as_ref().expect("prepared ray backend");
+        let lights = lights::prepare(snapshot, settings.default_light)?;
+        let history = self
+            .reflections
+            .entry(input.jitter.map(f32::to_bits))
+            .or_default();
+        let mut pixels = vec![[0.0; 4]; input.positions.len()];
+        let mut rays = Vec::with_capacity(PIXELS_PER_BATCH * REFLECTION_RAYS);
+        let mut samples = Vec::with_capacity(rays.capacity());
+        let mut secondary = Vec::with_capacity(rays.capacity());
+        let seed = settings.seed ^ u64::from(history.frames);
+        for first in (0..pixels.len()).step_by(PIXELS_PER_BATCH) {
+            if control.is_cancelled() {
+                return Err(RenderError::Cancelled);
+            }
+            let end = (first + PIXELS_PER_BATCH).min(pixels.len());
+            rays.clear();
+            samples.clear();
+            secondary.clear();
+            for i in (first..end).filter(|&i| input.positions[i][3] >= 0.5) {
+                let p = geometry.surface(snapshot, settings, &input, i);
+                let mut rng = Rng::new(seed, i as u64);
+                for sample in 0..REFLECTION_RAYS {
+                    let Some((wi, weight)) = p.surface.sample_specular(p.normal, p.view, &mut rng)
+                    else {
+                        continue;
+                    };
+                    if p.geometric_normal.dot(wi) <= 0.0 {
+                        continue;
+                    }
+                    rays.push(Ray {
+                        origin: p.position + p.geometric_normal * input.epsilon,
+                        direction: wi,
+                        t_max: f64::INFINITY,
+                    });
+                    samples.push((i, sample, weight / REFLECTION_RAYS as f64));
+                }
+            }
+            for ((ray, &(i, sample, weight)), hit) in
+                rays.iter().zip(&samples).zip(backend.trace(&rays)?)
+            {
+                let radiance = if let Some(h) = hit {
+                    let geom = geometry.scene.geometry(
+                        snapshot,
+                        ray.origin,
+                        ray.direction,
+                        &Hit {
+                            t: h.t,
+                            inst: h.instance,
+                            tri: h.triangle,
+                            u: h.u,
+                            v: h.v,
+                        },
+                    );
+                    let p = geometry.shade(snapshot, geom, h.instance, -ray.direction);
+                    let emission = p.surface.emission;
+                    if !lights.is_empty() {
+                        secondary.push(Secondary {
+                            pixel: i,
+                            stream: (i * REFLECTION_RAYS + sample) as u64,
+                            weight,
+                            point: p,
+                        });
+                    }
+                    emission
+                } else {
+                    lights::env_radiance(&snapshot.environment.lighting, ray.direction)
+                };
+                add_rgb(&mut pixels[i], radiance * weight);
+            }
+            for (index, light) in lights.iter().enumerate() {
+                if control.is_cancelled() {
+                    return Err(RenderError::Cancelled);
+                }
+                add_secondary_direct(
+                    &**backend,
+                    light,
+                    &secondary,
+                    &mut pixels,
+                    seed ^ 0xed20e2d079fa645b ^ index as u64,
+                    input.epsilon,
+                )?;
+            }
+        }
+        let width = settings.width as usize;
+        history.accumulate(spatial_filter(
+            width,
+            &input,
+            &pixels,
+            geometry.filter_limit(snapshot, width),
+        ));
+        Ok(history.mean.clone())
+    }
+}
+
+struct Secondary {
+    pixel: usize,
+    stream: u64,
+    weight: DVec3,
+    point: PrimarySurface,
+}
+
+fn add_rgb(pixel: &mut [f32; 4], value: DVec3) {
+    pixel.add_scaled(value.extend(0.0).to_array().map(|v| v as f32), 1.0);
+}
+
+fn add_secondary_direct(
+    backend: &dyn RtBackend,
+    light: &lights::PLight,
+    secondary: &[Secondary],
+    pixels: &mut [[f32; 4]],
+    seed: u64,
+    epsilon: f64,
+) -> Result<(), RenderError> {
+    let mut rays = Vec::new();
+    let mut contributions = Vec::new();
+    for s in secondary {
+        let p = &s.point;
+        let Some(sample) = light.sample(p.position, &mut Rng::new(seed, s.stream)) else {
+            continue;
+        };
+        let cos = p.normal.dot(sample.wi);
+        if cos <= 0.0 || p.geometric_normal.dot(sample.wi) <= 0.0 {
+            continue;
+        }
+        let (d, r) = p.surface.eval(p.normal, p.view, sample.wi);
+        let value = ((if light.light.diffuse { d } else { DVec3::ZERO })
+            + if light.light.specular { r } else { DVec3::ZERO })
+            * (cos * sample.weight)
+            * s.weight;
+        if value == DVec3::ZERO {
+            continue;
+        }
+        if light.casts_shadow() {
+            rays.push(Ray {
+                origin: p.position + p.geometric_normal * epsilon,
+                direction: sample.wi,
+                t_max: (sample.dist * (1.0 - 1e-6) - epsilon).max(0.0),
+            });
+            contributions.push((s.pixel, value));
+        } else {
+            add_rgb(&mut pixels[s.pixel], value);
+        }
+    }
+    if !rays.is_empty() {
+        let density = light.light.shadow_density;
+        let tint = DVec3::splat(1.0 - density) + DVec3::from(light.light.shadow_color) * density;
+        for ((pixel, value), hit) in contributions.into_iter().zip(backend.trace(&rays)?) {
+            add_rgb(
+                &mut pixels[pixel],
+                if hit.is_some() { value * tint } else { value },
+            );
+        }
+    }
+    Ok(())
 }
 
 struct PrimaryGeometry {
@@ -288,7 +454,6 @@ impl PrimaryGeometry {
         let packed = g.normals[i][3] as usize - 1;
         let inst = self.ends.partition_point(|&end| end <= packed);
         let tri = packed - inst.checked_sub(1).map_or(0, |j| self.ends[j]);
-        let instance = &self.scene.insts[inst];
         let geom = self.scene.geometry_at(snap, position, inst, tri);
         let w = settings.width as usize;
         let (_, d) = snap.camera.ray(
@@ -297,8 +462,18 @@ impl PrimaryGeometry {
             settings.width,
             settings.height,
         );
-        let view = -d;
-        let mat = &snap.materials[instance.material];
+        self.shade(snap, geom, inst, -d)
+    }
+
+    fn filter_limit(&self, snapshot: &Snapshot, width: usize) -> f64 {
+        3.0 * match snapshot.camera.projection {
+            forge_render_api::Projection::Orthographic { width: w } => w / width as f64,
+            _ => self.scene.scale / width as f64,
+        }
+    }
+
+    fn shade(&self, snap: &Snapshot, geom: HitGeom, inst: usize, view: DVec3) -> PrimarySurface {
+        let mat = &snap.materials[self.scene.insts[inst].material];
         let surface = Surface::at(&mat.graph, &*mat.sampler, &geom, view, self.scene.scale);
         let sign = if geom.ng.dot(view) > 0.0 { 1.0 } else { -1.0 };
         let geometric_normal = geom.ng * sign;
@@ -309,7 +484,7 @@ impl PrimaryGeometry {
             n
         };
         PrimarySurface {
-            position,
+            position: geom.p,
             normal,
             geometric_normal,
             view,

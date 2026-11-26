@@ -692,8 +692,14 @@ fn shade_pixel(px: vec2<i32>, frag: vec2<f32>) -> Shaded {
             ao = ssao_at(p, n);
         }
         diffuse += sv.albedo * env_radiance(n) * ao;
-        let r = reflect(-view, n);
-        specular += sv.spec * env_radiance(normalize(r)) * ao;
+        if (fr(F_RT_REFLECTIONS_ON) < 0.5) {
+            let r = reflect(-view, n);
+            specular += sv.spec * env_radiance(normalize(r)) * ao;
+        }
+    }
+    if (fr(F_RT_REFLECTIONS_ON) > 0.5) {
+        let layer = select(0, 2, fr(F_RT_SHADOWS_ON) > 0.5) + select(0, 1, fr(F_RT_AO_ON) > 0.5);
+        specular += textureLoad(forge_lighting_src, px, layer, 0).xyz;
     }
     if (contribution_sum > 0.0) {
         out.shadow = clamp(visible_sum / contribution_sum, 0.0, 1.0);

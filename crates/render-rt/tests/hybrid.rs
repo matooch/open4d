@@ -4,7 +4,8 @@
 #[path = "../../render-cpu/tests/common/mod.rs"]
 mod common;
 
-use common::{centre_mean, diffuse, golden, plane};
+use common::{centre_mean, cube, diffuse, golden, material, plane};
+use forge_core::Value;
 use forge_render_api::*;
 use forge_render_cpu::CpuEngine;
 use forge_render_rt::{RtEngine, request_default_device, request_rt_device};
@@ -278,6 +279,109 @@ fn ray_traced_ao_improves_psnr_and_respects_the_tier_one_fallback() {
     });
 }
 
+#[test]
+fn ray_traced_reflections_improve_off_screen_psnr() {
+    with_gpu(|device, queue| {
+        let engine = RtEngine::with_device(device.clone(), queue.clone());
+        let scene = fixture(Effect::Reflections);
+        let target = reference(&scene);
+        let mut settings = Effect::Reflections.raster_settings();
+        settings.aovs = vec![Aov::Diffuse, Aov::Specular];
+        let render =
+            |settings: &RenderSettings| engine.render(&scene, settings, &Control::new()).unwrap();
+        let raster = render(&settings);
+        settings.hybrid.reflections = true;
+        assert_eq!(render(&settings).beauty.data, raster.beauty.data);
+        settings.hybrid.enabled = true;
+        let traced = render(&settings);
+        let baseline = psnr(&raster, &target);
+        let improved = psnr(&traced, &target);
+        assert!(
+            improved > baseline,
+            "reflections: {improved:.3} vs {baseline:.3} dB"
+        );
+        eprintln!("reflections: {baseline:.3} → {improved:.3} dB");
+        assert_eq!(
+            traced.aovs[&Aov::Diffuse].data,
+            raster.aovs[&Aov::Diffuse].data
+        );
+        for (beauty, specular) in traced
+            .beauty
+            .data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(traced.aovs[&Aov::Specular].data.as_chunks::<4>().0)
+        {
+            assert_eq!(beauty[..3], specular[..3]);
+        }
+    });
+}
+
+#[test]
+fn ray_traced_reflections_replace_effective_ssr() {
+    with_gpu(|device, queue| {
+        // An in-frame emitter, unlike the PSNR fixture, gives SSR a visible hit.
+        let eye = DVec3::new(0.0, 240.0, -420.0);
+        let forward = (DVec3::Y * 40.0 - eye).normalize();
+        let right = DVec3::Y.cross(forward).normalize();
+        let scene = Snapshot {
+            camera: Camera::new(
+                DMat4::from_cols(
+                    right.extend(0.0),
+                    forward.cross(right).extend(0.0),
+                    forward.extend(0.0),
+                    eye.extend(1.0),
+                ),
+                Projection::Perspective {
+                    focal_mm: 36.0,
+                    sensor_mm: 36.0,
+                    film_offset: [0.0; 2],
+                },
+            ),
+            meshes: vec![plane(400.0), cube(40.0)],
+            materials: vec![
+                material(&[
+                    ("color.color", Value::Color([0.15; 3])),
+                    ("enable.reflectance", Value::Bool(true)),
+                    ("reflectance.spec.width", Value::Float(0.2)),
+                ]),
+                o43_material("mat-luminance"),
+            ],
+            instances: vec![
+                Instance::new(0, DMat4::IDENTITY, 0, 1),
+                Instance::new(1, DMat4::from_translation(DVec3::Y * 120.0), 1, 2),
+            ],
+            environment: Environment {
+                lighting: Lighting::Constant {
+                    color: [0.02; 3],
+                    intensity: 1.0,
+                },
+                ..Environment::default()
+            },
+            ..Snapshot::default()
+        };
+        let render = |settings: &RenderSettings| {
+            RtEngine::with_device(device.clone(), queue.clone())
+                .render(&scene, settings, &Control::new())
+                .unwrap()
+        };
+        let mut settings = RenderSettings {
+            default_light: false,
+            ..RenderSettings::new(96, 72, 1)
+        };
+        let raster_no_ssr = render(&settings);
+        settings.post.ssr = true;
+        settings.post.ssr_steps = 32;
+        assert_ne!(render(&settings).beauty.data, raster_no_ssr.beauty.data);
+        settings.hybrid.enabled = true;
+        settings.hybrid.reflections = true;
+        let traced = render(&settings);
+        settings.post.ssr = false;
+        assert_eq!(traced.beauty.data, render(&settings).beauty.data);
+    });
+}
+
 fn frame_delta(a: &RenderOutput, b: &RenderOutput) -> f64 {
     a.beauty
         .data
@@ -297,6 +401,11 @@ fn ray_traced_shadows_converge_and_discard_history_after_camera_change() {
     converges_and_discards_history_after_camera_change(Effect::Shadows);
 }
 
+#[test]
+fn ray_traced_reflections_converge_and_discard_history_after_camera_change() {
+    converges_and_discards_history_after_camera_change(Effect::Reflections);
+}
+
 fn converges_and_discards_history_after_camera_change(effect: Effect) {
     with_gpu(|device, queue| {
         let engine = RtEngine::with_device(device.clone(), queue.clone());
@@ -305,6 +414,7 @@ fn converges_and_discards_history_after_camera_change(effect: Effect) {
         settings.hybrid.enabled = true;
         settings.hybrid.ao = matches!(effect, Effect::Ao);
         settings.hybrid.shadows = matches!(effect, Effect::Shadows);
+        settings.hybrid.reflections = matches!(effect, Effect::Reflections);
         settings.hybrid.ao_radius = AO_RADIUS;
 
         let mut previous = engine.render(&scene, &settings, &Control::new()).unwrap();
