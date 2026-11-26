@@ -6,6 +6,7 @@ use glam::{DMat4, DQuat};
 
 #[test]
 fn gpu_raw_direct_shadows_match_batched_reference() {
+    let _serial = crate::gpu_test_serial();
     let rotation = DQuat::from_rotation_y(std::f64::consts::PI);
     let emitter = |kind, z| {
         let mut light = Light::new(

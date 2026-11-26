@@ -11,6 +11,7 @@ use glam::DMat4;
 
 #[test]
 fn gpu_raw_diffuse_matches_batched_reference() {
+    let _serial = crate::gpu_test_serial();
     let triangle = |z| {
         MeshData::new(
             vec![[-1.8, -1.8, z], [1.8, -1.8, z], [0., 1.8, z]],
@@ -194,6 +195,7 @@ fn gpu_raw_diffuse_matches_batched_reference() {
 
 #[test]
 fn gpu_raw_reflections_match_batched_reference() {
+    let _serial = crate::gpu_test_serial();
     let triangle = |radius: f64, z| {
         MeshData::new(
             vec![[-radius, -radius, z], [radius, -radius, z], [0., radius, z]],

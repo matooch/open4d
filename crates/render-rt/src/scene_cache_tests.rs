@@ -7,6 +7,7 @@ use glam::DMat4;
 
 #[test]
 fn raster_geometry_is_resident_until_its_inputs_change() {
+    let _serial = crate::gpu_test_serial();
     let (device, queue) = match crate::request_default_device() {
         Ok(gpu) => gpu,
         Err(err) if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") => {

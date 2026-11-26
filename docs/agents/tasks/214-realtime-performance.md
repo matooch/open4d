@@ -249,3 +249,11 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
   Compute and Metal with the same nine pins. Metal-vs-Compute minima were exact,
   165.12 dB, and 75.66 dB, respectively. No Vulkan hardware run.
 - GPU AO runtime checkpoint gate: 2741 tests passed, zero failed; `GATE: all passed`.
+
+## Review (planner, 2026-11-26)
+- Ubuntu CI (Mesa lavapipe) crashed with SIGSEGV in `forge-render-rt --lib`: the six GPU unit
+  tests in `src/` (scene cache, receiver, direct shadow, reflection, diffuse, AO) created devices
+  in parallel. Fixed on the planner branch: `crate::gpu_test_serial()` in `lib.rs`. **Every new
+  GPU unit test in `src/` takes it on its first line** (`let _serial = crate::gpu_test_serial();`),
+  per HERMES-IMPLEMENTER.md §5a; integration tests in `tests/` keep their per-file lock. Merge
+  `origin/main` into the 214 branch before the next push.

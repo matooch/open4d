@@ -974,6 +974,7 @@ mod tests {
 
     #[test]
     fn gpu_raw_ao_matches_cpu_across_all_quad_phases() {
+        let _serial = crate::gpu_test_serial();
         use forge_render_api::{Instance, MaterialData, MeshData};
         use glam::DMat4;
 
