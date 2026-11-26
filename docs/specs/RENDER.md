@@ -1180,6 +1180,16 @@ R24 direct shadows, and the R20/R25 GPU transport. This is our own design.
   rays just short of finite emitters. Apply per-light shadow tint and density
   before reducing diffuse/specular and the unoccluded/occluded luminances.
   Leave the spatial filter and per-jitter history unchanged in the first port.
+- Share the R20/R25 material-to-surface and opaque BSDF functions, passing
+  scene scale explicitly for bump derivatives. The raw kernel evaluates the
+  live graph once per valid receiver, orients both normals toward the
+  geometric front face seen by the camera, and substitutes the oriented
+  geometric normal if the shading normal crosses it. Use one invocation per
+  absolute pixel, with one workgroup covering 8×8 pixels. Iterate the packed
+  shadow lights and their eight samples in order. Store two `vec4<f32>` rows
+  per pixel: `(diffuse RGB, unoccluded luminance)` and `(specular RGB, occluded
+  luminance)`. Clear/invalid receivers and frames without lights write zero;
+  no filter, temporal accumulation or raster composition runs in this kernel.
 - Before enabling the dispatch, compare its raw signal against the existing
   estimator for finite, area and infinite lights, including a cropped frame,
   distinct geometric/shading normals and both R23 backends available locally.

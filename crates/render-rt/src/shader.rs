@@ -28,6 +28,24 @@ pub fn ambient_visibility_wgsl(backend: crate::ray::BackendKind) -> String {
     format!("{directives}\n{scene}\n{rng}\n{ao}")
 }
 
+/// Raw R24.7 direct-shadow signal before spatial/temporal filtering.
+pub fn direct_shadow_wgsl(
+    backend: crate::ray::BackendKind,
+    materials: &[(&ShadingGraph, &dyn TextureSampler)],
+) -> Result<Assembled, RenderError> {
+    use forge_render_gpu::{GEOMETRY_WGSL, LIGHT_SAMPLING_WGSL, RNG_WGSL, SURFACE_WGSL};
+    let (directives, scene) = crate::ray::inline_ray_scene(backend);
+    let mut assembled = forge_render_gpu::shader::materials(materials, 1)?;
+    let receiver = include_str!("receiver_geometry.wgsl");
+    let shadow = include_str!("direct_shadow.wgsl");
+    assembled.source = format!(
+        "{directives}\n{}\n{RNG_WGSL}\n{GEOMETRY_WGSL}\n{SURFACE_WGSL}\n{LIGHT_SAMPLING_WGSL}\n\
+         {scene}\n{INSTANCE_GEOMETRY_WGSL}\n{receiver}\n{shadow}",
+        assembled.source
+    );
+    Ok(assembled)
+}
+
 /// The `F_*` constants of the frame uniform, generated from [`crate::frame`].
 pub fn frame_constants() -> String {
     let mut s = String::new();

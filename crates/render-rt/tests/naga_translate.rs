@@ -142,6 +142,31 @@ fn sample_shadow_light(@builtin(global_invocation_id) id: vec3<u32>) {
 }
 
 #[test]
+fn raw_direct_shadow_transport_translates_with_each_traversal() {
+    use forge_render_rt::{ray::BackendKind, shader::direct_shadow_wgsl};
+    let case = load("mat-bump-noise");
+    let materials: Vec<(&ShadingGraph, &dyn TextureSampler)> = case
+        .snapshot
+        .materials
+        .iter()
+        .map(|m| (&m.graph, &*m.sampler as &dyn TextureSampler))
+        .collect();
+    for backend in [
+        BackendKind::Compute,
+        BackendKind::Metal,
+        BackendKind::Vulkan,
+    ] {
+        let module = direct_shadow_wgsl(backend, &materials).unwrap();
+        let compiled = naga::front::wgsl::parse_str(&module.source)
+            .unwrap_or_else(|e| panic!("{backend:?}: {}", e.emit_to_string(&module.source)));
+        assert_eq!(compiled.entry_points.len(), 1);
+        assert_eq!(compiled.entry_points[0].name, "direct_shadow");
+        assert_eq!(compiled.entry_points[0].workgroup_size, [8, 8, 1]);
+        translate(&format!("{backend:?} direct shadows"), &module.source);
+    }
+}
+
+#[test]
 fn shared_path_transport_translates_with_every_backend() {
     use forge_render_gpu::shader::assemble_with_scene;
     use forge_render_rt::{path_scene_wgsl, ray::BackendKind};

@@ -36,6 +36,15 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- [Raw direct-shadow kernel checkpoint](../../specs/RENDER.md#r247-gpu-direct-shadow-visibility-brief-214):
+  assemble a standalone inline R23 shader that reconstructs and shades each
+  covered receiver, retains eight samples per prepared shadow light, and
+  writes the two unfiltered signal rows. R20/R25 and the new kernel share
+  the same material evaluation and BSDF code. Compute and hardware variants
+  translated to SPIR-V, MSL and HLSL in five consecutive runs. The kernel is
+  not dispatched by Tier 2 yet: GPU/CPU raw-signal comparison and new S10
+  measurements remain pending. Full gate: 2745 tests passed, zero failed;
+  `GATE: all passed`.
 - [Raw receiver checkpoint](../../specs/RENDER.md#r247-gpu-direct-shadow-visibility-brief-214):
   shared R25 geometry rows reconstruct the R6 receiver from the raster key,
   world position and jittered pixel centre without a flattened attribute table.
