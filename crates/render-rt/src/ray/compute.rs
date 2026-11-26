@@ -7,7 +7,22 @@ use wgpu::util::DeviceExt;
 
 use super::{Ray, RayHit, RtBackend, SceneStats};
 
-pub const COMPUTE_WGSL: &str = include_str!("compute.wgsl");
+/// Inline closest-hit kernel. The caller declares the `tlas`, `instances`, `blas`
+/// and `triangles` bindings and supplies the shared `RAY_HIT_WGSL` definitions.
+pub const COMPUTE_TRAVERSAL_WGSL: &str = include_str!("compute.wgsl");
+pub const COMPUTE_WGSL: &str = concat!(
+    include_str!("hit.wgsl"),
+    include_str!("compute.wgsl"),
+    "
+@group(0) @binding(0) var<storage, read> tlas: array<Node>;
+@group(0) @binding(1) var<storage, read> instances: array<Instance>;
+@group(0) @binding(2) var<storage, read> blas: array<Node>;
+@group(0) @binding(3) var<storage, read> triangles: array<Triangle>;
+@group(0) @binding(4) var<storage, read> queries: array<Query>;
+@group(0) @binding(5) var<storage, read_write> hits: array<RtHit>;
+",
+    include_str!("batch.wgsl"),
+);
 const END: u32 = u32::MAX;
 const WORKGROUP_SIZE: u32 = 64;
 
@@ -165,6 +180,14 @@ impl TopLevel {
         let tree = Bvh::build(&boxes);
         let mut nodes = Vec::new();
         append_nodes(&tree, &mut nodes, 0);
+        if nodes.is_empty() {
+            // An inline caller can trace without first checking the instance count.
+            // Following either link from this root terminates without visiting a BLAS.
+            nodes.push(Node {
+                meta: [END, 0, END, 0],
+                ..Node::zeroed()
+            });
+        }
         let ordered: Vec<_> = tree
             .prims()
             .iter()
@@ -304,7 +327,7 @@ impl RtBackend for ComputeBackend {
                 "ray query scene has not been built".into(),
             ));
         };
-        if rays.is_empty() || top.count == 0 {
+        if rays.is_empty() {
             return Ok(vec![None; rays.len()]);
         }
         self.dispatch.trace(

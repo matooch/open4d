@@ -6,8 +6,11 @@ mod hardware;
 use forge_render_api::{RenderError, Snapshot};
 use glam::DVec3;
 
-pub use compute::{COMPUTE_WGSL, ComputeBackend};
-pub use hardware::HARDWARE_WGSL;
+pub use compute::{COMPUTE_TRAVERSAL_WGSL, COMPUTE_WGSL, ComputeBackend};
+pub use hardware::{HARDWARE_TRAVERSAL_WGSL, HARDWARE_WGSL};
+
+/// Common hit result and miss sentinel used by both inline traversal kernels.
+pub const RAY_HIT_WGSL: &str = include_str!("ray/hit.wgsl");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendKind {

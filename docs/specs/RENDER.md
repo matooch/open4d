@@ -1071,6 +1071,10 @@ inputs, and [R7 tier budgets](../agents/tasks/203-rt-consistency.md). This is ou
   raster G-buffer. Use the R23 instanced scene and select hardware ray queries when
   available, with compute traversal otherwise. The two paths differ in traversal, not
   in the material or light model. Vulkan hardware availability is tracked in brief 212.
+- A GPU caller can query the same R23 scene with an origin, direction and exclusive
+  `t_max`, without a ray batch buffer or intermediate readback. Both implementations
+  return unscaled ray `t`, mesh-local primitive ID, snapshot instance ID and
+  barycentrics; a miss uses the reserved instance ID `0xffffffff`.
 - Use the shared shading IR (MATERIAL M3, REALTIME §§1–2) and preserve the R9/R20
   camera, light sampling, emission, BSDFs, transmission, environment and termination
   rules for supported inputs. Keep existing R20 input limitations explicit if still

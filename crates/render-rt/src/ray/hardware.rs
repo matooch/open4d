@@ -4,7 +4,20 @@ use wgpu::util::DeviceExt;
 
 use super::{Ray, RayHit, RtBackend, SceneStats, compute::QueryDispatch};
 
-pub const HARDWARE_WGSL: &str = include_str!("hardware.wgsl");
+/// Inline closest-hit kernel. The caller enables `wgpu_ray_query`, declares the
+/// `scene` acceleration structure and supplies the shared `RAY_HIT_WGSL` definitions.
+pub const HARDWARE_TRAVERSAL_WGSL: &str = include_str!("hardware.wgsl");
+pub const HARDWARE_WGSL: &str = concat!(
+    "enable wgpu_ray_query;\n",
+    include_str!("hit.wgsl"),
+    include_str!("hardware.wgsl"),
+    "
+@group(0) @binding(0) var scene: acceleration_structure;
+@group(0) @binding(1) var<storage, read> queries: array<Query>;
+@group(0) @binding(2) var<storage, read_write> hits: array<RtHit>;
+",
+    include_str!("batch.wgsl"),
+);
 
 struct MeshBlas {
     handle: wgpu::Blas,

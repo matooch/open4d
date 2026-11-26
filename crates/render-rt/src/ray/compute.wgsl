@@ -1,6 +1,5 @@
-// R23: threaded TLAS and BLAS traversal. Node layout follows R20.1; meta.z
+// R23: threaded TLAS and BLAS traversal. Node layout follows R20.1; links.z
 // links to the next subtree. Instance and triangle IDs stay mesh/snapshot-local.
-const END: u32 = 0xffffffffu;
 
 struct Node {
     lo: vec4<f32>,
@@ -17,22 +16,6 @@ struct Triangle {
     e2: vec4<f32>,
     ids: vec4<u32>,
 }
-struct Query {
-    origin: vec4<f32>, // w = t_max
-    direction: vec4<f32>,
-}
-struct Hit {
-    tuv: vec4<f32>,
-    ids: vec4<u32>,
-}
-
-@group(0) @binding(0) var<storage, read> tlas: array<Node>;
-@group(0) @binding(1) var<storage, read> instances: array<Instance>;
-@group(0) @binding(2) var<storage, read> blas: array<Node>;
-@group(0) @binding(3) var<storage, read> triangles: array<Triangle>;
-@group(0) @binding(4) var<storage, read> queries: array<Query>;
-@group(0) @binding(5) var<storage, read_write> hits: array<Hit>;
-
 fn box_hit(node: Node, o: vec3<f32>, d: vec3<f32>, t_max: f32) -> bool {
     var near = 0.0;
     var far = t_max;
@@ -73,12 +56,12 @@ fn triangle_hit(tri: Triangle, o: vec3<f32>, d: vec3<f32>, t_max: f32) -> vec3<f
     return vec3<f32>(t_max, 0.0, 0.0);
 }
 
-fn visit_mesh(inst: Instance, q: Query, previous: Hit) -> Hit {
-    let o = (inst.inverse * vec4<f32>(q.origin.xyz, 1.0)).xyz;
-    let d = (inst.inverse * vec4<f32>(q.direction.xyz, 0.0)).xyz;
+fn visit_mesh(inst: Instance, origin: vec3<f32>, direction: vec3<f32>, previous: RtHit) -> RtHit {
+    let o = (inst.inverse * vec4<f32>(origin, 1.0)).xyz;
+    let d = (inst.inverse * vec4<f32>(direction, 0.0)).xyz;
     var best = previous;
     var cursor = inst.ids.x;
-    while cursor != END {
+    while cursor != RT_MISS {
         let node = blas[cursor];
         cursor = node.links.z;
         if box_hit(node, o, d, best.tuv.x) {
@@ -89,7 +72,7 @@ fn visit_mesh(inst: Instance, q: Query, previous: Hit) -> Hit {
                     let tri = triangles[node.links.x + i];
                     let tuv = triangle_hit(tri, o, d, best.tuv.x);
                     if tuv.x < best.tuv.x {
-                        best = Hit(vec4<f32>(tuv, 0.0), vec4<u32>(inst.ids.y, tri.ids.x, 0u, 0u));
+                        best = RtHit(vec4<f32>(tuv, 0.0), vec4<u32>(inst.ids.y, tri.ids.x, 0u, 0u));
                     }
                 }
             }
@@ -98,26 +81,21 @@ fn visit_mesh(inst: Instance, q: Query, previous: Hit) -> Hit {
     return best;
 }
 
-@compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-    if id.x >= arrayLength(&queries) {
-        return;
-    }
-    let q = queries[id.x];
-    var best = Hit(vec4<f32>(q.origin.w, 0.0, 0.0, 0.0), vec4<u32>(END));
+fn rt_closest(origin: vec3<f32>, direction: vec3<f32>, t_max: f32) -> RtHit {
+    var best = rt_miss(t_max);
     var cursor = 0u;
-    while cursor != END {
+    while cursor != RT_MISS {
         let node = tlas[cursor];
         cursor = node.links.z;
-        if box_hit(node, q.origin.xyz, q.direction.xyz, best.tuv.x) {
+        if box_hit(node, origin, direction, best.tuv.x) {
             if node.links.y == 0u {
                 cursor = node.links.x;
             } else {
                 for (var i = 0u; i < node.links.y; i++) {
-                    best = visit_mesh(instances[node.links.x + i], q, best);
+                    best = visit_mesh(instances[node.links.x + i], origin, direction, best);
                 }
             }
         }
     }
-    hits[id.x] = best;
+    return best;
 }
