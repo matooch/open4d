@@ -1058,6 +1058,57 @@ and shading conventions in R7–R9. The hybrid renderer is our own design.
   accumulated history. Check on Metal here and keep the tests runnable on the
   compute fallback.
 
+## R25 Progressive GPU path tracing (brief 202)
+
+Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),
+[D19](../roadmap/DECISIONS.md), the R9 CPU integrator and R20 GPU integrator,
+[O30](../parity/render-reference.md) and [O43](../parity/material-renders.md) for fixture
+inputs, and [R7 tier budgets](../agents/tasks/203-rt-consistency.md). This is our own design.
+
+### R25.1 Scene and transport
+
+- Tier 3 traces primary and secondary paths through the render snapshot, not through the
+  raster G-buffer. Use the R23 instanced scene and select hardware ray queries when
+  available, with compute traversal otherwise. The two paths differ in traversal, not
+  in the material or light model. Vulkan hardware availability is tracked in brief 212.
+- Use the shared shading IR (MATERIAL M3, REALTIME §§1–2) and preserve the R9/R20
+  camera, light sampling, emission, BSDFs, transmission, environment and termination
+  rules for supported inputs. Keep existing R20 input limitations explicit if still
+  unsupported; do not replace those inputs with silent material or lighting approximations.
+- One progressive sample index denotes one complete camera-path sample per active pixel.
+  Continue the deterministic R20.2 per-pixel stream and pixel-filter index across batches.
+  Changing batch boundaries does not change the sample sequence; resetting a view
+  reproduces its first sample batch.
+
+### R25.2 Preview and final output
+
+- Each view owns linear HDR sample sums and counts. An unchanged render input continues
+  that history. A scene, camera, resolution, region or transport-setting edit discards
+  stale samples before drawing the next batch. Denoised pixels are never fed back into
+  the sums. Cancelled or failed work does not advance the committed sample count.
+- Return a denoised image with the first successful preview batch, including immediately
+  after a reset. Use an edge-aware spatial filter guided by primary-hit depth and normal;
+  treat hits and misses separately. Reduce filtering as more samples accumulate. “Within
+  one frame” is a preview delivery requirement, not a hardware timing target (R8).
+- Final-frame rendering uses the same transport for the requested sample budget under
+  the R4 event/cancellation contract, without inheriting any view's preview history.
+  Keep raw accumulated linear output available; display transforms do not alter the
+  accumulation or the parity comparison.
+
+### R25.3 Acceptance
+
+- Render the unmodified O30 scene and O43 material inputs using their existing
+  Forge fixture builders. Compare to the Forge CPU tracer at the same camera, dimensions,
+  sample budget and transport settings. Require Tier 3 beauty PSNR **≥ 35 dB** at a
+  fixed sample count, using R7's exposure normalization; record the sample count and
+  per-case results. Compare before tonemapping. Exercise shared-IR shader-node materials
+  as well as parameter-only materials.
+- Test that one preview call produces a denoised frame, further static calls increase
+  the sample count, and camera and scene edits produce the same first frame as a fresh
+  view of the edited input. Verify raw final output does not depend on preview history.
+- Run on the selected Metal backend and on an explicit compute device, with no-adapter
+  skips only as allowed by the GPU gate. Validate new WGSL on SPIR-V, MSL and HLSL.
+
 ## R13 Not done / follow-ups
 
 The material hosted in the document (brief 194), object-shaped area lights, falloff `Steps`, Sobol sampling,
