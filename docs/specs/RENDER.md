@@ -1078,6 +1078,253 @@ and shading conventions in R7–R9. The hybrid renderer is our own design.
   accumulated history. Check on Metal here and keep the tests runnable on the
   compute fallback.
 
+### R24.4 Reduced-rate ambient occlusion (brief 214)
+
+Source: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report).
+This is a preview approximation, not a change to the reference renderer.
+
+- Each frame, trace one cosine-weighted AO ray per representative of a
+  screen-aligned 2×2 quad. Rotate the candidate order by the AO history frame
+  modulo four. Seed each ray with the existing frame and absolute pixel
+  sequence; keep the configured world-space radius as its maximum distance.
+- Reconstruct visibility inside the quad only. A covered pixel with a valid
+  normal may reuse an earlier representative only when material index matches,
+  unit normals have dot product at least 0.95, world separation is at most
+  `0.15 × radius` and separation along either normal is at most `0.015 × radius`.
+  Compare directly to a traced representative, not through a chain of reused
+  pixels. Otherwise the pixel traces its own ray. Missing/cropped pixels do not
+  trace or receive a neighbouring visibility value. Odd dimensions use partial
+  quads; the quad alignment does not change with the crop.
+- Apply the existing 3×3 spatial visibility filter and per-jitter temporal
+  average after reconstruction. AO strength, zero-radius handling, the
+  camera-change reset and Tier 1 fallback are unchanged. No motion-vector
+  reprojection is claimed; reduced first-frame sample count trades variance
+  for less traversal work.
+- Check representative counts and reconstruction boundaries deterministically,
+  keep R24 estimator acceptance and the existing R26 thresholds and pins, and
+  record the full-size S10 Metal AO phase and frame medians.
+
+### R24.5 Visibility-only readback (brief 214)
+
+Source: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report).
+
+- AO and direct and secondary shadow rays request one occlusion flag per ray
+  in input order. GPU backends write one `u32` per ray instead of a full hit.
+  Use the same R23 opaque traversal, distance limits and miss rule as closest
+  hit, including for empty scenes. Do not transfer hit distances, IDs or
+  barycentrics to these callers. Reflection and GI bounce rays still need
+  full closest-hit data.
+- This is a transport optimization: ray counts, sample weights, history, and
+  images must not change. Check flags against closest-hit results on the same
+  backend, including finite rays, empty batches and partial workgroups.
+  Translate both GPU query entries and rerun R24, R26 and full-size S10.
+
+### R24.6 GPU ambient-visibility dispatch (brief 214)
+
+Source: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report).
+R24.4 remains the estimator contract.
+
+- Dispatch one invocation per absolute 2×2 quad. Load positions/materials
+  and normals from the two primary G-buffer textures. In rotated order,
+  retain past traced representatives in invocation-local state and write
+  raw visibility once per in-bounds pixel. Uncovered pixels and pixels
+  with invalid normals write one. No inter-invocation dependency or
+  intermediate ray list is needed.
+- Use the shared GPU PCG and cosine-hemisphere helpers with the same seed,
+  history frame and absolute pixel index as R24.4. Test inline R23 opaque
+  visibility at the configured finite radius, with the normal offset capped
+  at one percent of the radius. The GPU uses `f32` for geometric tests;
+  boundary rounding is not required to be bitwise identical to the CPU.
+- Validate this raw signal independently before using it for raster
+  composition. Check odd/cropped quads, all four rotation phases and
+  incompatible material, normal and depth neighbours. Translate the
+  complete Compute and hardware variants through SPIR-V, MSL and HLSL.
+- Frame integration preserves the existing spatial filter, per-jitter
+  history, cancellation and fallback. Measure full-size S10 and the
+  unchanged R26 acceptance before claiming any performance or quality result.
+
+### R24.7 GPU direct-shadow visibility (brief 214)
+
+Sources: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report),
+R24 direct shadows, and the R20/R25 GPU transport. This is our own design.
+
+- Share the packed light type and light sampler with R20/R25. The sampling
+  module must compile with the shared RNG and without transport-specific
+  bindings, scene traversal, or any path-tracing entry point. Moving the
+  sampler does not change Tier 3 light sampling or Tier 2 frame output.
+- For a future dispatch, keep only prepared shadow-casting lights, in
+  preparation order. Keep all eight samples and the existing stream
+  `absolute_pixel * shadow_light_count + shadow_light_index`, seeded with the
+  current history frame. Use the raster triangle key to recover the receiver;
+  don't substitute the G-buffer shading normal for its oriented geometric normal.
+- Rebuild receiver attributes as in R6/R25 from the mesh-local triangle and
+  its instance transform. In particular, interpolate local corner normals
+  before applying the inverse transpose; independently normalized raster
+  corner normals need not agree under nonuniform scale. Reconstruct the view
+  from the unjittered camera and the jitter-adjusted pixel centre; an
+  orthographic receiver does not look back toward a shared eye point.
+- Resolve the one-based G-buffer triangle key by finding the first
+  cumulative instance end greater than `key - 1`. Empty instances have
+  duplicate ends and must be skipped, and clear or out-of-range keys have
+  no receiver. Reuse the R25 attribute rows: store each cumulative end in
+  an unused normal row component rather than duplicating triangle data.
+  Inverse-transform the raster position and solve barycentrics in mesh-local
+  space as in R6. Return the raw, unoriented geometry and view before material
+  evaluation or camera-facing normal correction. Validate against the CPU
+  receiver on a cropped, jittered frame with shared meshes, mirrored and
+  nonuniform transforms, custom corner normals and film offset, using both
+  perspective and orthographic cameras. No visibility rays are needed for
+  this acceptance step.
+- Preserve the material evaluation, light lobe masks and MIS weights. Reject
+  samples below either normal; offset along the geometric normal and clip
+  rays just short of finite emitters. Apply per-light shadow tint and density
+  before reducing diffuse/specular and the unoccluded/occluded luminances.
+  Leave the spatial filter and per-jitter history unchanged in the first port.
+- Share the R20/R25 material-to-surface and opaque BSDF functions, passing
+  scene scale explicitly for bump derivatives. The raw kernel evaluates the
+  live graph once per valid receiver, orients both normals toward the
+  geometric front face seen by the camera, and substitutes the oriented
+  geometric normal if the shading normal crosses it. Use one invocation per
+  absolute pixel, with one workgroup covering 8×8 pixels. Iterate the packed
+  shadow lights and their eight samples in order. Store two `vec4<f32>` rows
+  per pixel: `(diffuse RGB, unoccluded luminance)` and `(specular RGB, occluded
+  luminance)`. Clear/invalid receivers and frames without lights write zero;
+  no filter, temporal accumulation or raster composition runs in this kernel.
+- Before enabling the dispatch, compare its raw signal against the existing
+   estimator for finite, area and infinite lights, including a cropped frame,
+   distinct geometric/shading normals and both R23 backends available locally.
+   The host probe binds the existing R23 scene and R25 attributes, prepared
+   light records and unfilterable float G-buffer views. Compare all eight
+   components against the unfiltered batched estimator within
+   `2e-6 + 2e-4 * abs(reference)` per component (f32 vs f64); require exact
+   zero for clear pixels. Include an opaque blocker beyond one finite light,
+   a tinted shadow from a light beyond the blocker, and multiple history
+   indices for non-delta sampling. This limit is for the new raw probe only.
+   Remeasure unchanged S10 and strict R26 on the host once there is a runtime
+   change; shader extraction alone makes no performance or parity claim.
+
+#### Live dispatch and invalidation
+
+- Use the inline signal when the prepared R23 scene exposes inline bindings
+  and the dispatch fits the device limits. On an unsupported dispatch, use
+  the existing batched estimator. No shadow-casting lights still bypass both.
+- Retain the R25 receiver attribute upload per view until meshes or instances
+  change. Use the same scene scale as the CPU surface evaluator. Compile the
+  shadow program by backend, exact material WGSL and bitmap layout count, but
+  bind the current frame's bitmap views from the same material assembly as the
+  raster passes. A same-slot bitmap replacement must not require new geometry
+  or a new pipeline.
+- Feed either raw signal through the same spatial filter and per-jitter
+  history. Do not accumulate a cancelled frame. For identical cropped edits,
+  warm output must equal cold output after invalidation, including changed
+  receiver geometry and same-slot bitmap contents. Strict R26 remains the
+  runtime acceptance; the raw probe's numeric allowance does not change it.
+
+### R24.8 GPU reflection signal (brief 214)
+
+Sources: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report),
+R24 reflections and the R7 opaque GGX specular lobe. This is our own design.
+
+- First validate the ray sampler in isolation. Use only the opaque specular
+  lobe, not the diffuse/specular mixture. For each absolute pixel, start
+  `Rng(seed XOR history_frame, absolute_pixel)` and attempt eight samples
+  in sequence. No specular lobe or a back-facing shading view consumes no
+  draws; otherwise consume exactly two draws per attempt, including rejected
+  attempts. Reject directions below either the shading or geometric normal.
+  A rejected attempt contributes zero and does not renumber later attempts.
+- Sample the GGX half-vector with `sin²(theta) = alpha²*u / ((1-u) + alpha²*u)`
+  and `cos²(theta) = (1-u) / ((1-u) + alpha²*u)`. This avoids subtracting
+  near-equal f32 values for narrow lobes. The accepted RGB throughput is
+  `f_s * cos(theta_i) / (8 * pdf_s)`. Cancel the common GGX distribution
+  term before dividing: use `spec * (1-trans) * G1(n·wi) * (G1(n·wo)/(n·wo))
+  * (wo·h)/(n·h) / 8`, with the same lower bound on `wo·h` as the CPU PDF.
+  Preserve the original unnormalized sum across attempts.
+- The standalone sampler takes oriented normals and a view direction, and
+  returns an accepted direction and throughput or an exact zero record.
+  Compare against the CPU f64 sampler within `2e-6 + 2e-4 * abs(reference)`
+  per component on deterministic fixtures away from horizon boundaries.
+  Include minimum roughness, a broad lobe, transmission, no specular lobe,
+  back-facing views, shading/geometric rejection and multiple history seeds.
+  Translate the probe to SPIR-V, MSL and HLSL before GPU testing.
+- The standalone transport kernel writes one raw RGB sum per absolute
+  pixel, with zero for uncovered pixels and invalid receiver keys. It
+  reconstructs the R24.7 receiver, traces accepted attempts with inline R23,
+  and shades hit emission from the R25 instance and barycentric attributes
+  using the same material scale as the receiver. The miss term uses scene
+  *lighting*, not the camera background. Match R24's CPU lookup: black,
+  constant, or smooth sky as in R20, and nearest-texel lat-long lookup
+  for a linear image (`u = fract((atan2(x,z)-rotation)/(2*pi))`,
+  `v = acos(clamp(y,-1,1))/pi`). Clamp the integer texel to the image
+  extent; do not filter or substitute a constant for an image.
+  This probe is not a live replacement. Compile it with both R23 traversals on
+  SPIR-V, MSL and HLSL before binding it in a numeric GPU probe.
+- Validate host dispatch on Compute and the available hardware backend
+  against the batched CPU-shaded estimator with no prepared lights. Use
+  isolated covered pixels so the CPU spatial filter has no neighbours,
+  and use fresh history for each reference seed. Compare raw RGB within
+  `2e-6 + 2e-4 * abs(reference)` per component, with exact zero outside
+  coverage and for invalid receiver keys. Exercise an emissive hit, a dark
+  hit, and misses under all four lighting modes at two history indices;
+  keep the crop origin independent of absolute pixel RNG streams.
+- Extend the raw transport with one sample per prepared light on hits and
+  no secondary MIS. Use `seed XOR history_frame XOR 0xed20e2d079fa645b
+  XOR light_index`, with stream `absolute_pixel * 8 + attempt`, including
+  gaps for rejected attempts. Reuse the R24.7 light sampler and R7 surface
+  evaluation. Orient Ng and Ns toward the returning ray, reject either
+  light horizon, and apply diffuse/specular flags before weighting by the
+  cosine, light sample weight and reflection throughput. For shadow-casting
+  lights, offset by Ng and clip to `max(0, distance*(1-1e-6)-epsilon)`;
+  blocked rays multiply RGB by `(1-density) + density*shadow_color`.
+  Sum hit emission and miss lighting in attempt order, then secondary
+  contributions in prepared-light order and attempt order, as on CPU.
+  Extend the same raw numerical acceptance to finite, area and infinite
+  lights, mixed lobe flags and tinted partial occlusion. Include a blocker
+  beyond a finite emitter, which must not shadow that sample.
+  Keep the CPU spatial filter, per-jitter history and batched fallback until
+  live acceptance. Remeasure unchanged S10 and strict R26 only when enabling
+  the live signal; this standalone allowance does not change R26.
+- In the live Tier 2 view, bind the raw reflection signal to the existing
+  inline R23 scene and the same resident R25 attributes as direct shadows.
+  Rebuild those attributes only when meshes or instances change. Cache the
+  pipeline by backend, assembled material source and bitmap count; always
+  bind the current raster bitmap views and current environment lighting.
+  Use the batched estimator if inline dispatch is unavailable or unsupported.
+  Both paths feed the same spatial filter and per-jitter history; cancelled
+  work must not accumulate. Verify cropped warm and cold reflections after
+  camera, light, geometry, material and same-slot bitmap edits, including a
+  visible change in the reflection AOV when the bitmap pixels change. Keep
+  the eight attempts and the strict R26 budgets unchanged.
+
+### R24.9 GPU diffuse GI signal (brief 214)
+
+Sources: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report),
+R24.2 diffuse bounce and R24.8 inline secondary lighting. This is our own design.
+
+- Use the R24.8 receiver, inline R23 traversal, R25 hit attributes and
+  secondary-light accumulation, but sample the diffuse lobe. From
+  `Rng(seed XOR history_frame, absolute_pixel)`, make eight attempts. A
+  back-facing shading view or all-zero `albedo * (1-trans)` consumes no
+  draws. Otherwise consume two draws for each cosine-hemisphere direction
+  in the shading frame, reject the geometric horizon, and weight an
+  accepted ray by `albedo * (1-trans) / 8` without renormalizing.
+- A diffuse miss is black regardless of environment lighting; the raw
+  diffuse shader has no environment texture binding. Accumulate hit
+  emission and secondary direct lighting in the same order as reflection,
+  with the same absolute attempt IDs, finite light clipping, tint and
+  lobe flags. Uncovered pixels and invalid receiver keys write exact zero.
+- First translate the standalone diffuse entry to SPIR-V, MSL and HLSL
+  with all R23 backend selections. Before enabling live GI, compare raw
+  Compute and hardware dispatch to the batched CPU-shaded diffuse estimator
+  on isolated receivers within the R24.8 raw allowance. Include black
+  misses under non-black environment lighting, emissive and lit secondary
+  hits, partial and full transmission, and two history indices. Leave
+  the live batched GI path, filtering and strict R26 budgets unchanged
+  until standalone numeric acceptance.
+- The host uses the same 160-byte bounce frame as reflection. For
+  diffuse it leaves the environment fields zero, omits group 0 binding
+  3 entirely and retains prepared lights at binding 5. Use the same
+  resident R23 scene and R25 attributes as the batched comparison.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),

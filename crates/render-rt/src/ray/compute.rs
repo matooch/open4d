@@ -20,6 +20,7 @@ pub const COMPUTE_WGSL: &str = concat!(
 @group(0) @binding(3) var<storage, read> triangles: array<Triangle>;
 @group(0) @binding(4) var<storage, read> queries: array<Query>;
 @group(0) @binding(5) var<storage, read_write> hits: array<RtHit>;
+@group(0) @binding(6) var<storage, read_write> blocked: array<u32>;
 ",
     include_str!("batch.wgsl"),
 );
@@ -265,8 +266,15 @@ impl ComputeBackend {
 pub(super) struct QueryDispatch {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
+    closest: QueryPipeline,
+    visibility: QueryPipeline,
+}
+
+struct QueryPipeline {
     pipeline: wgpu::ComputePipeline,
     layout: wgpu::BindGroupLayout,
+    // Visibility's output follows the closest-hit output slot in both shaders.
+    output_slot_offset: u32,
 }
 
 impl QueryDispatch {
@@ -280,23 +288,31 @@ impl QueryDispatch {
             label: Some("instanced ray queries"),
             source: wgpu::ShaderSource::Wgsl(source.into()),
         });
-        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("instanced ray queries"),
-            layout: None,
-            module: &module,
-            entry_point: Some("main"),
-            compilation_options: Default::default(),
-            cache: None,
-        });
+        let build = |entry_point| {
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("instanced ray queries"),
+                layout: None,
+                module: &module,
+                entry_point: Some(entry_point),
+                compilation_options: Default::default(),
+                cache: None,
+            })
+        };
+        let closest = build("main");
+        let visibility = build("visibility");
         if let Some(error) = pollster::block_on(errors.pop()) {
             return Err(RenderError::Settings(format!("ray query shader: {error}")));
         }
-        let layout = pipeline.get_bind_group_layout(0);
+        let with_layout = |pipeline: wgpu::ComputePipeline, output_slot_offset| QueryPipeline {
+            layout: pipeline.get_bind_group_layout(0),
+            pipeline,
+            output_slot_offset,
+        };
         Ok(Self {
             device,
             queue,
-            pipeline,
-            layout,
+            closest: with_layout(closest, 0),
+            visibility: with_layout(visibility, 1),
         })
     }
 }
@@ -337,11 +353,18 @@ impl RtBackend for ComputeBackend {
                 "ray query scene has not been built".into(),
             ));
         };
-        if rays.is_empty() {
-            return Ok(vec![None; rays.len()]);
-        }
         self.dispatch
             .trace(rays, buffers.map(wgpu::Buffer::as_entire_binding))
+    }
+
+    fn occluded(&self, rays: &[Ray]) -> Result<Vec<bool>, RenderError> {
+        let Some(buffers) = self.scene_buffers() else {
+            return Err(RenderError::Settings(
+                "ray query scene has not been built".into(),
+            ));
+        };
+        self.dispatch
+            .occluded(rays, buffers.map(wgpu::Buffer::as_entire_binding))
     }
 }
 
@@ -351,11 +374,37 @@ impl QueryDispatch {
         rays: &[Ray],
         scene: impl IntoIterator<Item = wgpu::BindingResource<'a>>,
     ) -> Result<Vec<Option<RayHit>>, RenderError> {
+        self.run(&self.closest, rays, scene, |hit: &Hit| {
+            (hit.ids[0] != END).then(|| RayHit {
+                t: f64::from(hit.tuv[0]),
+                u: f64::from(hit.tuv[1]),
+                v: f64::from(hit.tuv[2]),
+                instance: hit.ids[0] as usize,
+                triangle: hit.ids[1] as usize,
+            })
+        })
+    }
+
+    pub fn occluded<'a>(
+        &self,
+        rays: &[Ray],
+        scene: impl IntoIterator<Item = wgpu::BindingResource<'a>>,
+    ) -> Result<Vec<bool>, RenderError> {
+        self.run(&self.visibility, rays, scene, |flag: &u32| *flag != 0)
+    }
+
+    fn run<'a, Raw: Pod, T>(
+        &self,
+        pipeline: &QueryPipeline,
+        rays: &[Ray],
+        scene: impl IntoIterator<Item = wgpu::BindingResource<'a>>,
+        decode: impl Fn(&Raw) -> T,
+    ) -> Result<Vec<T>, RenderError> {
         if rays.is_empty() {
             return Ok(Vec::new());
         }
         let device = &self.device;
-        let size = (rays.len() * size_of::<Hit>()) as u64;
+        let size = (rays.len() * size_of::<Raw>()) as u64;
         check_size(device, "ray results", size)?;
         let groups = (rays.len() as u32).div_ceil(WORKGROUP_SIZE);
         if groups > device.limits().max_compute_workgroups_per_dimension {
@@ -396,21 +445,23 @@ impl QueryDispatch {
             })
             .collect::<Vec<_>>();
         let mut entries: Vec<wgpu::BindGroupEntry<'_>> = scene_entries;
-        for resource in [queries.as_entire_binding(), out.as_entire_binding()] {
-            entries.push(wgpu::BindGroupEntry {
-                binding: entries.len() as u32,
-                resource,
-            });
-        }
+        entries.push(wgpu::BindGroupEntry {
+            binding: entries.len() as u32,
+            resource: queries.as_entire_binding(),
+        });
+        entries.push(wgpu::BindGroupEntry {
+            binding: entries.len() as u32 + pipeline.output_slot_offset,
+            resource: out.as_entire_binding(),
+        });
         let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("ray queries"),
-            layout: &self.layout,
+            layout: &pipeline.layout,
             entries: &entries,
         });
         let mut encoder = device.create_command_encoder(&Default::default());
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
-            pass.set_pipeline(&self.pipeline);
+            pass.set_pipeline(&pipeline.pipeline);
             pass.set_bind_group(0, &group, &[]);
             pass.dispatch_workgroups(groups, 1, 1);
         }
@@ -422,17 +473,9 @@ impl QueryDispatch {
         let view = slice
             .get_mapped_range()
             .map_err(|e| RenderError::Output(format!("ray readback: {e}")))?;
-        Ok(bytemuck::cast_slice::<_, Hit>(&view)
+        Ok(bytemuck::cast_slice::<_, Raw>(&view)
             .iter()
-            .map(|hit| {
-                (hit.ids[0] != END).then(|| RayHit {
-                    t: f64::from(hit.tuv[0]),
-                    u: f64::from(hit.tuv[1]),
-                    v: f64::from(hit.tuv[2]),
-                    instance: hit.ids[0] as usize,
-                    triangle: hit.ids[1] as usize,
-                })
-            })
+            .map(decode)
             .collect())
     }
 }

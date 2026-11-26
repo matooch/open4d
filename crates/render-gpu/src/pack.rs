@@ -97,7 +97,8 @@ fn falloff_kind(f: Falloff) -> f32 {
     }
 }
 
-fn pack_light(l: &PLight) -> GpuLight {
+/// Encode a prepared light for the shared GPU light sampler.
+pub fn pack_light(l: &PLight) -> GpuLight {
     let g = &l.light;
     let (mut kind, mut shape_tag, mut shape, mut spot) = (0.0, 0.0, [0.0f32; 4], [0.0f32; 4]);
     let mut two_sided = 0.0;

@@ -163,3 +163,72 @@ diagnostics. The FPS target is reported separately; the optional baseline
 check returns a nonzero status on incompatible identity, missing timing, or
 regression and leaves the current JSON available for inspection. Hardware
 Vulkan is pending brief 212; a Tier 2 run does not substitute compute.
+
+### 6.1 Persistent scene data (brief 214)
+
+Sources: [brief 214 and its S10 baseline](../agents/tasks/214-realtime-performance.md),
+[CORE dirty evaluation and sharing](CORE.md), [wgpu buffer usages](https://docs.rs/wgpu/latest/wgpu/struct.BufferUsages.html).
+These are internal performance rules; they do not change the renderer's reference behavior.
+
+- Retain immutable geometry resources across renders on the same device. Separate mesh
+  data (positions, triangle indices, normals and UVs), instance data (mesh reference,
+  transform, material index and object ID), and frame inputs. Use the evaluated geometry
+  identity, not the document revision alone: animation can change a transform at the same
+  revision, and unrelated documents can have the same revision number. Shared immutable
+  data can use pointer identity; mutable snapshot data needs a value comparison unless
+  the producer supplies a trustworthy dirty marker.
+- A camera, light, environment, material graph or render-settings edit does not invalidate
+  mesh or instance resources. Per-frame validation must still catch invalid references,
+  e.g. after removal of a material. A transform edit updates the affected instance data
+  and RT top-level bounds; it does not rebuild unchanged mesh BLASes. Mesh edits invalidate
+  the affected mesh and its dependent instance bounds. Additions, removal and reordering
+  must not leave stale indices or IDs.
+- First checkpoint: keep the existing raster triangle layout but reuse its uploaded
+  buffer and precomputed shadow bounds while mesh and instance inputs match. This is
+  whole-geometry invalidation, not per-mesh instancing. Keep packing semantics, draw order
+  and all AOVs unchanged. Cached frames after edits must equal freshly rendered frames
+  for the same snapshot, including object and material IDs. Test reuse with a work count
+  or resource identity, not a wall-clock assertion. An exact match to previously validated
+  mesh inputs can skip scanning mesh indices and positions a second time; recheck instance
+  references and camera against the current frame. Validate changed geometry before upload.
+- Report unchanged-scene S10 per §6, with the same fixture and all four Tier 2 effects.
+  Separately report camera-only setup (target <5 ms); do not use this phase timing as a
+  substitute for frame throughput. Any Tier 2 estimator changes require their own R24
+  contract and a rerun of the R26 quality matrix before claiming a performance win.
+
+### 6.2 Demand-driven raster output (brief 214)
+
+Sources: [R21.6 raster outputs](RENDER.md#r216-outputs-aovs-and-limits),
+[R24 primary data](RENDER.md#r24-hybrid-ray-traced-effects), and the
+[S10 checkpoint](../agents/tasks/214-realtime-performance.md#report-implementer-fills-in).
+
+- Final output always reads the selected beauty attachment (lit or SSR). Read shadow
+  only for Shadow. Read G0 for Depth, Normal, Position, ObjectId, MaterialId, Shadow
+  or Emission, and G1 only for Normal or ObjectId. If hybrid already read primary
+  attachments, use those arrays rather than copying them again. The hybrid input
+  readback is independent of which output AOVs the caller requests.
+- Read both light-split attachments for Diffuse, Specular or Emission, and the
+  albedo attachment only for Albedo. Emission uses pre-postprocessing beauty.
+- Beauty and each AOV must match the same render with all AOVs requested, including
+  outside a crop. Preserve alpha metadata, statistics and the order and values of
+  callback events. Gather only the postprocessed crop rows for the Tile event,
+  and do not allocate a Tile payload if there is no callback. Beauty-only output
+   does not iterate over AOV pixels.
+
+### 6.3 Compiled raster programs (brief 214)
+
+Sources: [R21 raster tier](RENDER.md#r21-real-time-raster-engine),
+[wgpu pipeline layouts](https://docs.rs/wgpu/latest/wgpu/struct.PipelineLayoutDescriptor.html)
+and the [S10 setup target](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report).
+
+- Keep one successfully compiled raster program per engine/device, shared by engine
+  clones. Compare the complete assembled WGSL and the number of bitmap bindings; a
+  change in either replaces the program and its bind group layouts. A failed
+  compilation must not replace a valid entry.
+- Assembling the current materials and resolving and binding their current bitmap
+  views remain frame work. Identical WGSL does not imply identical texture content.
+  Camera, light, resolution and pass selection are not keys when source and layout
+  match. A frame may retain its program after another frame replaces the cache slot.
+- Check program identity without timing assertions and compare warm and cold
+  rendered output across material and bitmap edits. Measure full-size S10 and
+  camera-only setup separately, as in §6.1.

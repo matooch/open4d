@@ -73,8 +73,13 @@ impl Control {
     }
 
     pub fn emit(&self, e: RenderEvent) {
+        self.emit_with(|| e);
+    }
+
+    /// Construct the event only if there is a consumer for it.
+    pub fn emit_with(&self, event: impl FnOnce() -> RenderEvent) {
         if let Some(f) = &self.on_event {
-            f(&e);
+            f(&event());
         }
     }
 }

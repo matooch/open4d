@@ -126,6 +126,13 @@ impl Snapshot {
                 return bad(format!("mesh {i}: uvs must be 3 per triangle"));
             }
         }
+        self.validate_references_and_camera()
+    }
+
+    /// Validate instance references, transforms and camera when the mesh data have already
+    /// been validated and verified unchanged. Use [`Self::validate`] otherwise.
+    pub fn validate_references_and_camera(&self) -> Result<(), RenderError> {
+        let bad = |s: String| Err(RenderError::Snapshot(s));
         for (i, inst) in self.instances.iter().enumerate() {
             if inst.mesh >= self.meshes.len() {
                 return bad(format!("instance {i}: mesh {} out of range", inst.mesh));

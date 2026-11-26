@@ -9,18 +9,98 @@ use forge_image::{AlphaMode, Image};
 use forge_material::TextureSampler;
 use forge_material::ir::ShadingGraph;
 use forge_render_api::{
-    Aov, Background, Control, Lighting, Projection, RenderEngine, RenderError, RenderEvent,
-    RenderOutput, RenderSettings, RenderStats, Snapshot,
+    Aov, Background, Control, Instance, Lighting, MeshData, Projection, RenderEngine, RenderError,
+    RenderEvent, RenderOutput, RenderSettings, RenderStats, Snapshot,
 };
-use forge_render_gpu::pack::Packed;
+use forge_render_gpu::pack::{GpuLight, Packed};
 use glam::{DVec3, Mat4};
 use wgpu::util::DeviceExt;
 
 use crate::frame;
 use crate::framegraph::FrameGraph;
-use crate::hybrid::{Bounce, HybridView, PrimaryInput};
+use crate::hybrid::{AmbientGpu, Bounce, HybridView, MaterialGpu, PrimaryInput};
 use crate::ray::BackendKind;
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
+
+#[cfg(test)]
+#[path = "scene_cache_tests.rs"]
+mod scene_cache_tests;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OutputAttachment {
+    Beauty,
+    Shadow,
+    G0,
+    G1,
+    Diffuse,
+    Specular,
+    Albedo,
+}
+
+fn output_attachments(aovs: &[Aov], primary_read: bool) -> Vec<OutputAttachment> {
+    use OutputAttachment::*;
+    let mut attachments = vec![Beauty];
+    if aovs.contains(&Aov::Shadow) {
+        attachments.push(Shadow);
+    }
+    if !primary_read {
+        if aovs.iter().any(|a| {
+            matches!(
+                a,
+                Aov::Depth
+                    | Aov::Normal
+                    | Aov::Position
+                    | Aov::ObjectId
+                    | Aov::MaterialId
+                    | Aov::Shadow
+                    | Aov::Emission
+            )
+        }) {
+            attachments.push(G0);
+        }
+        if aovs
+            .iter()
+            .any(|a| matches!(a, Aov::Normal | Aov::ObjectId))
+        {
+            attachments.push(G1);
+        }
+    }
+    if aovs
+        .iter()
+        .any(|a| matches!(a, Aov::Diffuse | Aov::Specular | Aov::Emission))
+    {
+        attachments.extend([Diffuse, Specular]);
+    }
+    if aovs.contains(&Aov::Albedo) {
+        attachments.push(Albedo);
+    }
+    attachments
+}
+
+#[cfg(test)]
+#[test]
+fn raster_output_copies_only_requested_attachments() {
+    use OutputAttachment::*;
+    assert_eq!(output_attachments(&[], false), [Beauty]);
+    assert_eq!(output_attachments(&[], true), [Beauty]);
+    assert_eq!(
+        output_attachments(&[Aov::Shadow], false),
+        [Beauty, Shadow, G0]
+    );
+    assert_eq!(
+        output_attachments(&[Aov::ObjectId], false),
+        [Beauty, G0, G1]
+    );
+    assert_eq!(output_attachments(&[Aov::Albedo], false), [Beauty, Albedo]);
+    assert_eq!(
+        output_attachments(&[Aov::Shadow, Aov::Normal, Aov::Emission], true),
+        [Beauty, Shadow, Diffuse, Specular]
+    );
+    assert_eq!(
+        output_attachments(&[Aov::Emission], false),
+        [Beauty, G0, Diffuse, Specular]
+    );
+}
 
 /// Synchronized host time for a named render phase. Repeated phases (TAA) are summed.
 #[derive(Clone, Debug)]
@@ -100,7 +180,60 @@ impl ShadowGpu {
 pub struct RtEngine {
     device: wgpu::Device,
     queue: wgpu::Queue,
+    raster_scene: Arc<Mutex<Option<Arc<RasterScene>>>>,
+    raster_program: Arc<Mutex<Option<Arc<RasterProgram>>>>,
     hybrid: Arc<Mutex<HybridView>>,
+}
+
+struct RasterProgram {
+    source: String,
+    bitmap_count: usize,
+    geometry_layout: wgpu::BindGroupLayout,
+    lighting_layout: wgpu::BindGroupLayout,
+    bitmap_layout: wgpu::BindGroupLayout,
+    gbuffer: wgpu::RenderPipeline,
+    shadow_pipeline: wgpu::RenderPipeline,
+    lighting: wgpu::RenderPipeline,
+    split_pass: wgpu::RenderPipeline,
+    ssr_pass: wgpu::RenderPipeline,
+    albedo_pass: wgpu::RenderPipeline,
+}
+
+/// One immutable flat geometry upload. Do not retain the CPU copies of the packed triangles
+/// or unused BVH; only the object-ID AOV needs a CPU-side triangle-index lookup.
+struct RasterScene {
+    meshes: Vec<MeshData>,
+    instances: Vec<Instance>,
+    tris: wgpu::Buffer,
+    object_ids: Vec<f32>,
+    bounds: shadow::Bounds,
+    scale: f64,
+    triangles: usize,
+}
+
+impl RasterScene {
+    fn matches(&self, snapshot: &Snapshot) -> bool {
+        // Compare the packed inputs bit-for-bit, including signed zero in normal/UV data.
+        fn same_bytes<T: Pod>(a: &[T], b: &[T]) -> bool {
+            bytemuck::cast_slice::<_, u8>(a) == bytemuck::cast_slice::<_, u8>(b)
+        }
+        self.instances.len() == snapshot.instances.len()
+            && self
+                .instances
+                .iter()
+                .zip(&snapshot.instances)
+                .all(|(a, b)| {
+                    (a.mesh, a.material, a.object_id) == (b.mesh, b.material, b.object_id)
+                        && same_bytes(&a.transform, &b.transform)
+                })
+            && self.meshes.len() == snapshot.meshes.len()
+            && self.meshes.iter().zip(&snapshot.meshes).all(|(a, b)| {
+                same_bytes(&a.positions, &b.positions)
+                    && same_bytes(&a.triangles, &b.triangles)
+                    && same_bytes(&a.normals, &b.normals)
+                    && same_bytes(&a.uvs, &b.uvs)
+            })
+    }
 }
 
 /// One frame's targets (R21.3). Two G-buffer targets keep the pass inside Metal's 32-byte
@@ -136,8 +269,74 @@ impl RtEngine {
         RtEngine {
             device,
             queue,
+            raster_scene: Arc::default(),
+            raster_program: Arc::default(),
             hybrid: Arc::new(Mutex::new(HybridView::default())),
         }
+    }
+
+    fn compiled_raster_program(
+        &self,
+        source: String,
+        bitmap_count: usize,
+        compile: impl FnOnce(String, usize) -> Result<RasterProgram, RenderError>,
+    ) -> Result<Arc<RasterProgram>, RenderError> {
+        let mut cached = self
+            .raster_program
+            .lock()
+            .map_err(|_| RenderError::Unsupported("raster program cache lock poisoned".into()))?;
+        if let Some(program) = cached
+            .as_ref()
+            .filter(|program| program.bitmap_count == bitmap_count && program.source == source)
+        {
+            return Ok(Arc::clone(program));
+        }
+        let program = Arc::new(compile(source, bitmap_count)?);
+        *cached = Some(Arc::clone(&program));
+        Ok(program)
+    }
+
+    fn raster_geometry(
+        &self,
+        snapshot: &Snapshot,
+        default_light: bool,
+    ) -> Result<Arc<RasterScene>, RenderError> {
+        let mut cached = self
+            .raster_scene
+            .lock()
+            .map_err(|_| RenderError::Unsupported("raster scene cache lock poisoned".into()))?;
+        if let Some(scene) = cached.as_ref().filter(|scene| scene.matches(snapshot)) {
+            return Ok(Arc::clone(scene));
+        }
+        let packed = Packed::build(snapshot, default_light)?;
+        let contents = bytemuck::cast_slice(&packed.tris);
+        let limits = self.device.limits();
+        let limit = limits
+            .max_buffer_size
+            .min(limits.max_storage_buffer_binding_size);
+        if contents.len() as u64 > limit {
+            return Err(RenderError::Unsupported(format!(
+                "raster triangle buffer needs {} bytes; device limit is {limit}",
+                contents.len()
+            )));
+        }
+        let scene = Arc::new(RasterScene {
+            meshes: snapshot.meshes.clone(),
+            instances: snapshot.instances.clone(),
+            tris: self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("raster triangles"),
+                    contents,
+                    usage: wgpu::BufferUsages::STORAGE,
+                }),
+            object_ids: packed.tris.iter().map(|tri| tri.ids[1]).collect(),
+            bounds: shadow::scene_bounds(&packed),
+            scale: packed.scale,
+            triangles: packed.triangles,
+        });
+        *cached = Some(Arc::clone(&scene));
+        Ok(scene)
     }
 
     fn upload_hybrid(
@@ -735,19 +934,36 @@ impl RtEngine {
         profile: &mut Option<Profile>,
     ) -> Result<(RenderOutput, Option<BackendKind>), RenderError> {
         settings.validate()?;
-        snapshot.validate()?;
         if settings.depth_of_field {
+            snapshot.validate()?;
             return Err(RenderError::Unsupported(
                 "depth of field in the raster tier (RENDER.md R21.6)".into(),
             ));
         }
-        let packed = Packed::build(snapshot, settings.default_light)?;
+        snapshot.validate_references_and_camera()?;
+        let geometry = self.raster_geometry(snapshot, settings.default_light)?;
+        let packed = if snapshot.instances.is_empty() {
+            // The original flat packer does not prepare lighting for an empty scene.
+            Packed {
+                lights: vec![GpuLight::zeroed()],
+                scale: geometry.scale,
+                ..Packed::default()
+            }
+        } else {
+            Packed::frame_inputs(
+                snapshot,
+                settings.default_light,
+                geometry.scale,
+                geometry.triangles,
+            )?
+        };
         let materials: Vec<(&ShadingGraph, &dyn TextureSampler)> = snapshot
             .materials
             .iter()
             .map(|m| (&m.graph, &*m.sampler as &dyn TextureSampler))
             .collect();
-        let assembled = crate::shader::assemble(&materials)?;
+        let assembled =
+            forge_render_gpu::shader::materials(&materials, crate::shader::BITMAP_GROUP)?;
         // R21.3: the lighting pass samples five textures of its own besides the bitmaps
         if assembled.resources.len() + 5
             > self.device.limits().max_sampled_textures_per_shader_stage as usize
@@ -758,8 +974,10 @@ impl RtEngine {
             )));
         }
         let bitmap_views = self.bitmap_views(&assembled.resources)?;
-        let source = assembled.source;
-        let plans = shadow::plans(snapshot, &packed)?;
+        let mut source = assembled.source;
+        let material_source_len = source.len();
+        crate::shader::append_raster_passes(&mut source);
+        let plans = shadow::plans_with_bounds(snapshot, geometry.bounds, geometry.scale)?;
         let split = settings
             .aovs
             .iter()
@@ -874,210 +1092,246 @@ impl RtEngine {
             ..Default::default()
         });
 
-        let errors = device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("raster"),
-            source: wgpu::ShaderSource::Wgsl(source.into()),
-        });
-        let geometry_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("geometry"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+        let program =
+            self.compiled_raster_program(source, bitmap_views.len(), |source, bitmap_count| {
+                let errors = device.push_error_scope(wgpu::ErrorFilter::Validation);
+                let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("raster"),
+                    source: wgpu::ShaderSource::Wgsl(source.as_str().into()),
+                });
+                let geometry_layout =
+                    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: Some("geometry"),
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Uniform,
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                count: None,
+                            },
+                            storage_entry(1, true),
+                            storage_entry(2, true),
+                            storage_entry(3, true),
+                        ],
+                    });
+                let lighting_layout =
+                    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: Some("lighting"),
+                        entries: &[
+                            texture_entry(0, false),
+                            texture_entry(1, false),
+                            texture_entry(2, true),
+                            sampler_entry(3, true),
+                            texture_entry(4, false),
+                            sampler_entry(5, false),
+                            wgpu::BindGroupLayoutEntry {
+                                ty: wgpu::BindingType::Texture {
+                                    sample_type: wgpu::TextureSampleType::Float {
+                                        filterable: false,
+                                    },
+                                    view_dimension: wgpu::TextureViewDimension::D2Array,
+                                    multisampled: false,
+                                },
+                                ..texture_entry(6, false)
+                            },
+                        ],
+                    });
+                // R21.3: the shader-node bitmaps, one sampled texture per binding, in group 2
+                let bitmap_layout =
+                    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: Some("bitmaps"),
+                        entries: &(0..bitmap_count as u32)
+                            .map(|binding| texture_entry(binding, false))
+                            .collect::<Vec<_>>(),
+                    });
+                let pipeline_layout =
+                    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some("geometry"),
+                        bind_group_layouts: &[Some(&geometry_layout)],
+                        immediate_size: 0,
+                    });
+                let lighting_pipeline =
+                    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some("lighting"),
+                        bind_group_layouts: &[
+                            Some(&geometry_layout),
+                            Some(&lighting_layout),
+                            Some(&bitmap_layout),
+                        ],
+                        immediate_size: 0,
+                    });
+                let color_target = |format: wgpu::TextureFormat| {
+                    Some(wgpu::ColorTargetState {
+                        format,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })
+                };
+                let f = wgpu::TextureFormat::Rgba32Float;
+                let gbuffer = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("gbuffer"),
+                    layout: Some(&pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &module,
+                        entry_point: Some("vs_gbuffer"),
+                        compilation_options: Default::default(),
+                        buffers: &[],
                     },
-                    count: None,
-                },
-                storage_entry(1, true),
-                storage_entry(2, true),
-                storage_entry(3, true),
-            ],
-        });
-        let lighting_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("lighting"),
-            entries: &[
-                texture_entry(0, false),
-                texture_entry(1, false),
-                texture_entry(2, true),
-                sampler_entry(3, true),
-                texture_entry(4, false),
-                sampler_entry(5, false),
-                wgpu::BindGroupLayoutEntry {
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                        view_dimension: wgpu::TextureViewDimension::D2Array,
-                        multisampled: false,
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList,
+                        cull_mode: None,
+                        ..Default::default()
                     },
-                    ..texture_entry(6, false)
-                },
-            ],
-        });
-        // R21.3: the shader-node bitmaps, one sampled texture per binding, in group 2
-        let bitmap_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("bitmaps"),
-            entries: &(0..bitmap_views.len() as u32)
-                .map(|binding| texture_entry(binding, false))
-                .collect::<Vec<_>>(),
-        });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("geometry"),
-            bind_group_layouts: &[Some(&geometry_layout)],
-            immediate_size: 0,
-        });
-        let lighting_pipeline = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("lighting"),
-            bind_group_layouts: &[
-                Some(&geometry_layout),
-                Some(&lighting_layout),
-                Some(&bitmap_layout),
-            ],
-            immediate_size: 0,
-        });
-        let color_target = |format: wgpu::TextureFormat| {
-            Some(wgpu::ColorTargetState {
-                format,
-                blend: None,
-                write_mask: wgpu::ColorWrites::ALL,
-            })
-        };
-        let f = wgpu::TextureFormat::Rgba32Float;
-        let gbuffer = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("gbuffer"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("vs_gbuffer"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs_gbuffer"),
-                compilation_options: Default::default(),
-                targets: &[color_target(f), color_target(f)],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        let shadow_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("shadow"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("vs_shadow"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
-                stencil: Default::default(),
-                bias: wgpu::DepthBiasState {
-                    constant: 2,
-                    slope_scale: 2.0,
-                    clamp: 0.0,
-                },
-            }),
-            multisample: Default::default(),
-            fragment: None,
-            multiview_mask: None,
-            cache: None,
-        });
-        let fullscreen = |label: &str, entry: &str| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(label),
-                layout: Some(&lighting_pipeline),
-                vertex: wgpu::VertexState {
-                    module: &module,
-                    entry_point: Some("vs_full"),
-                    compilation_options: Default::default(),
-                    buffers: &[],
-                },
-                primitive: Default::default(),
-                depth_stencil: None,
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &module,
-                    entry_point: Some(entry),
-                    compilation_options: Default::default(),
-                    targets: &[color_target(f), color_target(f)],
-                }),
-                multiview_mask: None,
-                cache: None,
-            })
-        };
-        let lighting = fullscreen("lighting", "fs_light");
-        let split_pass = fullscreen("split", "fs_split");
-        // R22.3: one colour target, so its own pipeline descriptor
-        let ssr_pass = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("ssr"),
-            layout: Some(&lighting_pipeline),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("vs_full"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: Default::default(),
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs_ssr"),
-                compilation_options: Default::default(),
-                targets: &[color_target(f)],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        let albedo_pass = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("albedo"),
-            layout: Some(&lighting_pipeline),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("vs_full"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: Default::default(),
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs_albedo"),
-                compilation_options: Default::default(),
-                targets: &[color_target(f)],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        if let Some(e) = pollster::block_on(errors.pop()) {
-            return Err(RenderError::Settings(format!("GPU shader: {e}")));
-        }
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: wgpu::TextureFormat::Depth32Float,
+                        depth_write_enabled: Some(true),
+                        depth_compare: Some(wgpu::CompareFunction::Less),
+                        stencil: Default::default(),
+                        bias: Default::default(),
+                    }),
+                    multisample: Default::default(),
+                    fragment: Some(wgpu::FragmentState {
+                        module: &module,
+                        entry_point: Some("fs_gbuffer"),
+                        compilation_options: Default::default(),
+                        targets: &[color_target(f), color_target(f)],
+                    }),
+                    multiview_mask: None,
+                    cache: None,
+                });
+                let shadow_pipeline =
+                    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some("shadow"),
+                        layout: Some(&pipeline_layout),
+                        vertex: wgpu::VertexState {
+                            module: &module,
+                            entry_point: Some("vs_shadow"),
+                            compilation_options: Default::default(),
+                            buffers: &[],
+                        },
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::TriangleList,
+                            cull_mode: None,
+                            ..Default::default()
+                        },
+                        depth_stencil: Some(wgpu::DepthStencilState {
+                            format: wgpu::TextureFormat::Depth32Float,
+                            depth_write_enabled: Some(true),
+                            depth_compare: Some(wgpu::CompareFunction::Less),
+                            stencil: Default::default(),
+                            bias: wgpu::DepthBiasState {
+                                constant: 2,
+                                slope_scale: 2.0,
+                                clamp: 0.0,
+                            },
+                        }),
+                        multisample: Default::default(),
+                        fragment: None,
+                        multiview_mask: None,
+                        cache: None,
+                    });
+                let fullscreen = |label: &str, entry: &str| {
+                    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some(label),
+                        layout: Some(&lighting_pipeline),
+                        vertex: wgpu::VertexState {
+                            module: &module,
+                            entry_point: Some("vs_full"),
+                            compilation_options: Default::default(),
+                            buffers: &[],
+                        },
+                        primitive: Default::default(),
+                        depth_stencil: None,
+                        multisample: Default::default(),
+                        fragment: Some(wgpu::FragmentState {
+                            module: &module,
+                            entry_point: Some(entry),
+                            compilation_options: Default::default(),
+                            targets: &[color_target(f), color_target(f)],
+                        }),
+                        multiview_mask: None,
+                        cache: None,
+                    })
+                };
+                let lighting = fullscreen("lighting", "fs_light");
+                let split_pass = fullscreen("split", "fs_split");
+                // R22.3: one colour target, so its own pipeline descriptor
+                let ssr_pass = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("ssr"),
+                    layout: Some(&lighting_pipeline),
+                    vertex: wgpu::VertexState {
+                        module: &module,
+                        entry_point: Some("vs_full"),
+                        compilation_options: Default::default(),
+                        buffers: &[],
+                    },
+                    primitive: Default::default(),
+                    depth_stencil: None,
+                    multisample: Default::default(),
+                    fragment: Some(wgpu::FragmentState {
+                        module: &module,
+                        entry_point: Some("fs_ssr"),
+                        compilation_options: Default::default(),
+                        targets: &[color_target(f)],
+                    }),
+                    multiview_mask: None,
+                    cache: None,
+                });
+                let albedo_pass = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("albedo"),
+                    layout: Some(&lighting_pipeline),
+                    vertex: wgpu::VertexState {
+                        module: &module,
+                        entry_point: Some("vs_full"),
+                        compilation_options: Default::default(),
+                        buffers: &[],
+                    },
+                    primitive: Default::default(),
+                    depth_stencil: None,
+                    multisample: Default::default(),
+                    fragment: Some(wgpu::FragmentState {
+                        module: &module,
+                        entry_point: Some("fs_albedo"),
+                        compilation_options: Default::default(),
+                        targets: &[color_target(f)],
+                    }),
+                    multiview_mask: None,
+                    cache: None,
+                });
+                if let Some(e) = pollster::block_on(errors.pop()) {
+                    return Err(RenderError::Settings(format!("GPU shader: {e}")));
+                }
 
+                Ok(RasterProgram {
+                    source,
+                    bitmap_count,
+                    geometry_layout,
+                    lighting_layout,
+                    bitmap_layout,
+                    gbuffer,
+                    shadow_pipeline,
+                    lighting,
+                    split_pass,
+                    ssr_pass,
+                    albedo_pass,
+                })
+            })?;
+        let RasterProgram {
+            geometry_layout,
+            lighting_layout,
+            bitmap_layout,
+            gbuffer,
+            shadow_pipeline,
+            lighting,
+            split_pass,
+            ssr_pass,
+            albedo_pass,
+            ..
+        } = &*program;
         let frame_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("frame"),
             size: (frame::SLOTS * 16) as u64,
@@ -1089,11 +1343,6 @@ impl RtEngine {
         values[frame::JITTER_X] = jitter[0];
         values[frame::JITTER_Y] = jitter[1];
         queue.write_buffer(&frame_buf, 0, &frame_bytes(&values));
-        let tris = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("tris"),
-            contents: bytemuck::cast_slice(&packed.tris),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
         let lights = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("lights"),
             contents: bytemuck::cast_slice(&packed.lights),
@@ -1101,7 +1350,7 @@ impl RtEngine {
         });
         let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("geometry"),
-            layout: &geometry_layout,
+            layout: geometry_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -1109,7 +1358,7 @@ impl RtEngine {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: tris.as_entire_binding(),
+                    resource: geometry.tris.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
@@ -1123,7 +1372,7 @@ impl RtEngine {
         });
         let bitmap_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("bitmaps"),
-            layout: &bitmap_layout,
+            layout: bitmap_layout,
             entries: &bitmap_views
                 .iter()
                 .enumerate()
@@ -1136,7 +1385,7 @@ impl RtEngine {
         let lighting_bind = |source: &wgpu::TextureView| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("lighting"),
-                layout: &lighting_layout,
+                layout: lighting_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
@@ -1219,7 +1468,7 @@ impl RtEngine {
                     let y = (tile / ATLAS_X) * TILE_PX;
                     pass.set_viewport(x as f32, y as f32, TILE_PX as f32, TILE_PX as f32, 0.0, 1.0);
                     pass.set_scissor_rect(x, y, TILE_PX, TILE_PX);
-                    pass.set_pipeline(&shadow_pipeline);
+                    pass.set_pipeline(shadow_pipeline);
                     pass.set_bind_group(0, &bind, &[]);
                     pass.draw(0..vertex_count, 0..1);
                 }
@@ -1271,7 +1520,7 @@ impl RtEngine {
             });
             pass.set_viewport(0.0, 0.0, w as f32, h as f32, 0.0, 1.0);
             pass.set_scissor_rect(rx0, ry0, rx1 - rx0, ry1 - ry0);
-            pass.set_pipeline(&gbuffer);
+            pass.set_pipeline(gbuffer);
             pass.set_bind_group(0, &bind, &[]);
             pass.draw(0..vertex_count, 0..1);
             drop(pass);
@@ -1296,31 +1545,60 @@ impl RtEngine {
                         jitter,
                         epsilon: packed.scale.max(1e-6) * 1e-6,
                     };
+                    let primary_gpu = AmbientGpu {
+                        device,
+                        queue,
+                        textures: [&targets.g_views[0], &targets.g_views[1]],
+                    };
+                    let material_gpu = MaterialGpu {
+                        primary: primary_gpu,
+                        materials: &program.source[..material_source_len],
+                        bitmaps: &bitmap_views,
+                    };
                     let ao = if rt_ao {
-                        let result = view.ambient_visibility(settings, input, control)?;
+                        let result =
+                            view.ambient_visibility(settings, input, control, Some(primary_gpu))?;
                         finish_phase(profile, device, "rt-ao")?;
                         result
                     } else {
                         Vec::new()
                     };
                     let shadows = if rt_shadows {
-                        let result = view.direct_shadows(snapshot, settings, input, control)?;
+                        let result = view.direct_shadows(
+                            snapshot,
+                            settings,
+                            input,
+                            control,
+                            Some(material_gpu),
+                        )?;
                         finish_phase(profile, device, "rt-shadows")?;
                         result
                     } else {
                         Vec::new()
                     };
                     let reflections = if rt_reflections {
-                        let result =
-                            view.indirect(Bounce::Reflection, snapshot, settings, input, control)?;
+                        let result = view.indirect(
+                            Bounce::Reflection,
+                            snapshot,
+                            settings,
+                            input,
+                            control,
+                            Some(material_gpu),
+                        )?;
                         finish_phase(profile, device, "rt-reflections")?;
                         result
                     } else {
                         Vec::new()
                     };
                     let gi = if rt_gi {
-                        let result =
-                            view.indirect(Bounce::Diffuse, snapshot, settings, input, control)?;
+                        let result = view.indirect(
+                            Bounce::Diffuse,
+                            snapshot,
+                            settings,
+                            input,
+                            control,
+                            None,
+                        )?;
                         finish_phase(profile, device, "rt-gi")?;
                         result
                     } else {
@@ -1399,7 +1677,7 @@ impl RtEngine {
             };
         run_full(
             "lighting",
-            &lighting,
+            lighting,
             &[&targets.beauty_view, &targets.shadow_view],
         );
         finish_phase(profile, device, "lighting")?;
@@ -1430,7 +1708,7 @@ impl RtEngine {
                 });
                 pass.set_viewport(0.0, 0.0, w as f32, h as f32, 0.0, 1.0);
                 pass.set_scissor_rect(rx0, ry0, rx1 - rx0, ry1 - ry0);
-                pass.set_pipeline(&ssr_pass);
+                pass.set_pipeline(ssr_pass);
                 pass.set_bind_group(0, &bind, &[]);
                 pass.set_bind_group(1, &ssr_bind, &[]);
                 pass.set_bind_group(2, &bitmap_bind, &[]);
@@ -1448,7 +1726,7 @@ impl RtEngine {
             }
             run_full(
                 "split",
-                &split_pass,
+                split_pass,
                 &[&targets.split_views[0], &targets.split_views[1]],
             );
             finish_phase(profile, device, "split")?;
@@ -1457,64 +1735,47 @@ impl RtEngine {
             if control.is_cancelled() {
                 return Err(RenderError::Cancelled);
             }
-            run_full("albedo", &albedo_pass, &[&targets.albedo_view]);
+            run_full("albedo", albedo_pass, &[&targets.albedo_view]);
             finish_phase(profile, device, "albedo")?;
         }
 
-        // read back the beauty, the G-buffer and (when asked for) the light split
-        let mut order = vec![beauty_target, &targets.shadow];
-        if primary.is_none() {
-            order.extend([&targets.g[0], &targets.g[1]]);
+        use OutputAttachment::*;
+        let order = output_attachments(&settings.aovs, primary.is_some());
+        let textures: Vec<_> = order
+            .iter()
+            .map(|attachment| match attachment {
+                Beauty => beauty_target,
+                Shadow => &targets.shadow,
+                G0 => &targets.g[0],
+                G1 => &targets.g[1],
+                Diffuse => &targets.split[0],
+                Specular => &targets.split[1],
+                Albedo => &targets.albedo,
+            })
+            .collect();
+        let mut pixels: [_; Albedo as usize + 1] = std::array::from_fn(|_| None);
+        for (attachment, data) in order.into_iter().zip(self.read_rgba(&textures, w, h)?) {
+            pixels[attachment as usize] = Some(data);
         }
-        if split {
-            order.push(&targets.split[0]);
-            order.push(&targets.split[1]);
-        }
-        if albedo {
-            order.push(&targets.albedo);
-        }
-        let mut pixels = self.read_rgba(&order, w, h)?;
         if let Some(primary) = primary {
-            pixels.splice(2..2, primary);
+            for (attachment, data) in [G0, G1].into_iter().zip(primary) {
+                pixels[attachment as usize] = Some(data);
+            }
         }
-        let beauty_px = &pixels[0];
-        let shadow_px = &pixels[1];
-        let g0_px = &pixels[2];
-        let g1_px = &pixels[3];
-        let diffuse_px = if split { Some(&pixels[4]) } else { None };
-        let specular_px = if split { Some(&pixels[5]) } else { None };
-        let albedo_px = if albedo {
-            Some(&pixels[4 + usize::from(split) * 2])
-        } else {
-            None
+        let mut beauty_px = pixels[Beauty as usize].take().expect("beauty readback");
+        let pixel = |attachment: OutputAttachment, i: usize| {
+            pixels[attachment as usize].as_ref().expect("AOV readback")[i]
         };
-        // R22.4/R22.6: bloom and tone mapping on this subframe's linear beauty. The AOVs keep
-        // the linear values (they are data, not display colour).
-        let linear_px = beauty_px;
-        let mut beauty_px = beauty_px.clone();
-        if settings.post.bloom {
-            crate::post::bloom(&mut beauty_px, w, h, &settings.post);
-        }
-        if settings.post.tonemap {
-            crate::post::tonemap_image(&mut beauty_px, &settings.post);
-        }
-        let beauty_px = &beauty_px;
-        let mut beauty = Image::new(w, h, AlphaMode::Premultiplied);
         let mut aov_imgs: BTreeMap<Aov, Image> = settings
             .aovs
             .iter()
             .map(|a| (*a, Image::new(w, h, AlphaMode::Straight)))
             .collect();
         let eye = snapshot.camera.position();
-        for y in 0..h {
-            for x in 0..w {
-                let i = (y * w + x) as usize;
-                beauty.set_pixel(x, y, beauty_px[i]);
-                if aov_imgs.is_empty() {
-                    continue;
-                }
-                let g0 = g0_px[i];
-                let g1 = g1_px[i];
+        if !aov_imgs.is_empty() {
+            for (i, &b) in beauty_px.iter().enumerate() {
+                let (x, y) = (i as u32 % w, i as u32 / w);
+                let g0 = pixels[G0 as usize].as_ref().map_or([0.0; 4], |g| g[i]);
                 let hit = g0[3] > 0.5;
                 let alpha = if hit { 1.0 } else { 0.0 };
                 let p = [g0[0], g0[1], g0[2]];
@@ -1528,13 +1789,16 @@ impl RtEngine {
                             };
                             [d as f32, d as f32, d as f32, alpha]
                         }
-                        Aov::Normal => [g1[0], g1[1], g1[2], alpha],
-                        Aov::Albedo => albedo_px.map(|d| d[i]).unwrap_or([0.0; 4]),
+                        Aov::Normal => {
+                            let n = pixel(G1, i);
+                            [n[0], n[1], n[2], alpha]
+                        }
+                        Aov::Albedo => pixel(Albedo, i),
                         Aov::Position => [p[0], p[1], p[2], alpha],
                         Aov::ObjectId => {
                             // g1.w is the triangle index + 1 (R21.3)
                             let id = if hit {
-                                packed.tris[g1[3] as usize - 1].ids[1] + 1.0
+                                geometry.object_ids[pixel(G1, i)[3] as usize - 1] + 1.0
                             } else {
                                 0.0
                             };
@@ -1544,13 +1808,12 @@ impl RtEngine {
                             let id = g0[3];
                             [id, id, id, alpha]
                         }
-                        Aov::Shadow => [shadow_px[i][0], 1.0, 1.0, alpha],
-                        Aov::Diffuse => diffuse_px.map(|d| d[i]).unwrap_or([0.0; 4]),
-                        Aov::Specular => specular_px.map(|d| d[i]).unwrap_or([0.0; 4]),
+                        Aov::Shadow => [pixel(Shadow, i)[0], 1.0, 1.0, alpha],
+                        Aov::Diffuse => pixel(Diffuse, i),
+                        Aov::Specular => pixel(Specular, i),
                         Aov::Emission => {
-                            let d = diffuse_px.map(|d| d[i]).unwrap_or([0.0; 4]);
-                            let s = specular_px.map(|d| d[i]).unwrap_or([0.0; 4]);
-                            let b = linear_px[i];
+                            let d = pixel(Diffuse, i);
+                            let s = pixel(Specular, i);
                             [
                                 (b[0] - d[0] - s[0]).max(0.0),
                                 (b[1] - d[1] - s[1]).max(0.0),
@@ -1563,19 +1826,22 @@ impl RtEngine {
                 }
             }
         }
-        control.emit(RenderEvent::Tile {
+        // R22.4/R22.6: apply post to beauty only, after deriving the linear AOVs.
+        if settings.post.bloom {
+            crate::post::bloom(&mut beauty_px, w, h, &settings.post);
+        }
+        if settings.post.tonemap {
+            crate::post::tonemap_image(&mut beauty_px, &settings.post);
+        }
+        control.emit_with(|| RenderEvent::Tile {
             x: rx0,
             y: ry0,
             width: rx1 - rx0,
             height: ry1 - ry0,
-            rgba: beauty_px
-                .iter()
-                .enumerate()
-                .filter(|(i, _)| {
-                    let (x, y) = ((*i as u32) % w, (*i as u32) / w);
-                    x >= rx0 && x < rx1 && y >= ry0 && y < ry1
-                })
-                .flat_map(|(_, p)| *p)
+            rgba: (ry0..ry1)
+                .flat_map(|y| &beauty_px[(y * w + rx0) as usize..(y * w + rx1) as usize])
+                .flatten()
+                .copied()
                 .collect(),
         });
         control.emit(RenderEvent::Progress { done: 1, total: 1 });
@@ -1584,7 +1850,12 @@ impl RtEngine {
             RenderOutput {
                 width: w,
                 height: h,
-                beauty,
+                beauty: Image {
+                    width: w,
+                    height: h,
+                    data: beauty_px.into_flattened(),
+                    alpha: AlphaMode::Premultiplied,
+                },
                 aovs: aov_imgs,
                 stats: RenderStats {
                     triangles: packed.triangles,
