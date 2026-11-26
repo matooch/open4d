@@ -39,3 +39,21 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 - Step 1 contract: [persistent scene data](../../specs/PERFORMANCE.md#61-persistent-scene-data-brief-214).
 - Baseline gate: `GATE: 2735 tests passed, 0 failed`; `GATE: all passed`. No new S10
   measurements at the spec checkpoint.
+- Step 1 checkpoint: cache the flat raster upload, shadow bounds and CPU object-ID lookup
+  per engine/device. Reuse on exact mesh and instance input matches; revalidate references
+  and camera each frame. This is not per-mesh instancing or BLAS reuse on mesh edits.
+- Full-size S10, M5 Pro / Metal, unchanged 204 fixture and warm protocol, all four Tier 2
+  effects enabled with actual `BackendKind::Metal`. Separate camera-only series via
+  `FORGE_S10_CAMERA_SETUP=1` (alternating only camera X translation; same fixture).
+
+  | Tier | Frame median (ms) | fps | Setup (ms) | Camera-only setup (ms) |
+  | --- | ---: | ---: | ---: | ---: |
+  | 1 | 40.845 | 24.483 | 6.972 | 6.960 |
+  | 2 | 4586.251 | 0.218 | 7.443 | 7.274 |
+
+  Neither fps target nor the camera-only setup target is met. Tier 1 output alone took
+  29.338 ms in the profiled series. Tier 2 effects are still unbudgeted; do not interpret
+  these runs as passing the per-pass 10% regression check.
+- Cache acceptance passed five times with GPU required, including exact warm/cold
+  beauty and AOV equality and invalid-input rejection. Checkpoint gate: 2736 tests
+  passed, zero failed; `GATE: all passed`.

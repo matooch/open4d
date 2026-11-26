@@ -9,10 +9,10 @@ use forge_image::{AlphaMode, Image};
 use forge_material::TextureSampler;
 use forge_material::ir::ShadingGraph;
 use forge_render_api::{
-    Aov, Background, Control, Lighting, Projection, RenderEngine, RenderError, RenderEvent,
-    RenderOutput, RenderSettings, RenderStats, Snapshot,
+    Aov, Background, Control, Instance, Lighting, MeshData, Projection, RenderEngine, RenderError,
+    RenderEvent, RenderOutput, RenderSettings, RenderStats, Snapshot,
 };
-use forge_render_gpu::pack::Packed;
+use forge_render_gpu::pack::{GpuLight, Packed};
 use glam::{DVec3, Mat4};
 use wgpu::util::DeviceExt;
 
@@ -21,6 +21,10 @@ use crate::framegraph::FrameGraph;
 use crate::hybrid::{Bounce, HybridView, PrimaryInput};
 use crate::ray::BackendKind;
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
+
+#[cfg(test)]
+#[path = "scene_cache_tests.rs"]
+mod scene_cache_tests;
 
 /// Synchronized host time for a named render phase. Repeated phases (TAA) are summed.
 #[derive(Clone, Debug)]
@@ -100,7 +104,45 @@ impl ShadowGpu {
 pub struct RtEngine {
     device: wgpu::Device,
     queue: wgpu::Queue,
+    raster_scene: Arc<Mutex<Option<Arc<RasterScene>>>>,
     hybrid: Arc<Mutex<HybridView>>,
+}
+
+/// One immutable flat geometry upload. Do not retain the CPU copies of the packed triangles
+/// or unused BVH; only the object-ID AOV needs a CPU-side triangle-index lookup.
+struct RasterScene {
+    meshes: Vec<MeshData>,
+    instances: Vec<Instance>,
+    tris: wgpu::Buffer,
+    object_ids: Vec<f32>,
+    bounds: shadow::Bounds,
+    scale: f64,
+    triangles: usize,
+}
+
+impl RasterScene {
+    fn matches(&self, snapshot: &Snapshot) -> bool {
+        // Compare the packed inputs bit-for-bit, including signed zero in normal/UV data.
+        fn same_bytes<T: Pod>(a: &[T], b: &[T]) -> bool {
+            bytemuck::cast_slice::<_, u8>(a) == bytemuck::cast_slice::<_, u8>(b)
+        }
+        self.instances.len() == snapshot.instances.len()
+            && self
+                .instances
+                .iter()
+                .zip(&snapshot.instances)
+                .all(|(a, b)| {
+                    (a.mesh, a.material, a.object_id) == (b.mesh, b.material, b.object_id)
+                        && same_bytes(&a.transform, &b.transform)
+                })
+            && self.meshes.len() == snapshot.meshes.len()
+            && self.meshes.iter().zip(&snapshot.meshes).all(|(a, b)| {
+                same_bytes(&a.positions, &b.positions)
+                    && same_bytes(&a.triangles, &b.triangles)
+                    && same_bytes(&a.normals, &b.normals)
+                    && same_bytes(&a.uvs, &b.uvs)
+            })
+    }
 }
 
 /// One frame's targets (R21.3). Two G-buffer targets keep the pass inside Metal's 32-byte
@@ -136,8 +178,52 @@ impl RtEngine {
         RtEngine {
             device,
             queue,
+            raster_scene: Arc::default(),
             hybrid: Arc::new(Mutex::new(HybridView::default())),
         }
+    }
+
+    fn raster_geometry(
+        &self,
+        snapshot: &Snapshot,
+        default_light: bool,
+    ) -> Result<Arc<RasterScene>, RenderError> {
+        let mut cached = self
+            .raster_scene
+            .lock()
+            .map_err(|_| RenderError::Unsupported("raster scene cache lock poisoned".into()))?;
+        if let Some(scene) = cached.as_ref().filter(|scene| scene.matches(snapshot)) {
+            return Ok(Arc::clone(scene));
+        }
+        let packed = Packed::build(snapshot, default_light)?;
+        let contents = bytemuck::cast_slice(&packed.tris);
+        let limits = self.device.limits();
+        let limit = limits
+            .max_buffer_size
+            .min(limits.max_storage_buffer_binding_size);
+        if contents.len() as u64 > limit {
+            return Err(RenderError::Unsupported(format!(
+                "raster triangle buffer needs {} bytes; device limit is {limit}",
+                contents.len()
+            )));
+        }
+        let scene = Arc::new(RasterScene {
+            meshes: snapshot.meshes.clone(),
+            instances: snapshot.instances.clone(),
+            tris: self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("raster triangles"),
+                    contents,
+                    usage: wgpu::BufferUsages::STORAGE,
+                }),
+            object_ids: packed.tris.iter().map(|tri| tri.ids[1]).collect(),
+            bounds: shadow::scene_bounds(&packed),
+            scale: packed.scale,
+            triangles: packed.triangles,
+        });
+        *cached = Some(Arc::clone(&scene));
+        Ok(scene)
     }
 
     fn upload_hybrid(
@@ -735,13 +821,29 @@ impl RtEngine {
         profile: &mut Option<Profile>,
     ) -> Result<(RenderOutput, Option<BackendKind>), RenderError> {
         settings.validate()?;
-        snapshot.validate()?;
         if settings.depth_of_field {
+            snapshot.validate()?;
             return Err(RenderError::Unsupported(
                 "depth of field in the raster tier (RENDER.md R21.6)".into(),
             ));
         }
-        let packed = Packed::build(snapshot, settings.default_light)?;
+        snapshot.validate_references_and_camera()?;
+        let geometry = self.raster_geometry(snapshot, settings.default_light)?;
+        let packed = if snapshot.instances.is_empty() {
+            // The original flat packer does not prepare lighting for an empty scene.
+            Packed {
+                lights: vec![GpuLight::zeroed()],
+                scale: geometry.scale,
+                ..Packed::default()
+            }
+        } else {
+            Packed::frame_inputs(
+                snapshot,
+                settings.default_light,
+                geometry.scale,
+                geometry.triangles,
+            )?
+        };
         let materials: Vec<(&ShadingGraph, &dyn TextureSampler)> = snapshot
             .materials
             .iter()
@@ -759,7 +861,7 @@ impl RtEngine {
         }
         let bitmap_views = self.bitmap_views(&assembled.resources)?;
         let source = assembled.source;
-        let plans = shadow::plans(snapshot, &packed)?;
+        let plans = shadow::plans_with_bounds(snapshot, geometry.bounds, geometry.scale)?;
         let split = settings
             .aovs
             .iter()
@@ -1089,11 +1191,6 @@ impl RtEngine {
         values[frame::JITTER_X] = jitter[0];
         values[frame::JITTER_Y] = jitter[1];
         queue.write_buffer(&frame_buf, 0, &frame_bytes(&values));
-        let tris = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("tris"),
-            contents: bytemuck::cast_slice(&packed.tris),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
         let lights = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("lights"),
             contents: bytemuck::cast_slice(&packed.lights),
@@ -1109,7 +1206,7 @@ impl RtEngine {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: tris.as_entire_binding(),
+                    resource: geometry.tris.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
@@ -1534,7 +1631,7 @@ impl RtEngine {
                         Aov::ObjectId => {
                             // g1.w is the triangle index + 1 (R21.3)
                             let id = if hit {
-                                packed.tris[g1[3] as usize - 1].ids[1] + 1.0
+                                geometry.object_ids[g1[3] as usize - 1] + 1.0
                             } else {
                                 0.0
                             };

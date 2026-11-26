@@ -111,8 +111,9 @@ fn main() -> Result<()> {
         hybrid,
     };
     let mut timings =
-        survey.measure(RtEngine::with_device(device.clone(), queue.clone()), false)?;
-    for (name, samples) in survey.measure(RtEngine::with_device(device, queue), true)? {
+        survey.measure(&RtEngine::with_device(device.clone(), queue.clone()), false)?;
+    let profiled_engine = RtEngine::with_device(device, queue);
+    for (name, samples) in survey.measure(&profiled_engine, true)? {
         timings.insert(name, samples);
     }
     let current = Run {
@@ -137,6 +138,10 @@ fn main() -> Result<()> {
         info.backend,
         if fps >= target { "met" } else { "missed" }
     );
+    if std::env::var("FORGE_S10_CAMERA_SETUP").as_deref() == Ok("1") {
+        let setup = survey.measure_camera_setup(&profiled_engine)?;
+        println!("camera-only setup: {:9.3} ms", setup as f64 / 1e6);
+    }
     if let Some(baseline) = baseline {
         regression_check(&baseline, &current)?;
         println!("Same-machine baseline: no timing regressed by more than 10%");
@@ -152,7 +157,7 @@ struct Measurement<'a> {
 }
 
 impl Measurement<'_> {
-    fn measure(&self, engine: RtEngine, profiled: bool) -> Result<BTreeMap<String, Vec<u64>>> {
+    fn measure(&self, engine: &RtEngine, profiled: bool) -> Result<BTreeMap<String, Vec<u64>>> {
         let settings = settings(self.hybrid);
         let control = Control::default();
         let mut timings = BTreeMap::<String, Vec<u64>>::new();
@@ -204,6 +209,31 @@ impl Measurement<'_> {
             black_box(output);
         }
         Ok(timings)
+    }
+
+    fn measure_camera_setup(&self, engine: &RtEngine) -> Result<u64> {
+        let settings = settings(self.hybrid);
+        let control = Control::default();
+        let mut moved = self.snapshot.clone();
+        moved.camera.transform[12] += 10.0;
+        let mut setup = Vec::new();
+        // Keep this series separate from the unchanged-scene run and its JSON baseline.
+        for i in 0..WARMUPS + SAMPLES {
+            let snapshot = if i % 2 == 0 { &moved } else { self.snapshot };
+            let (output, backend, passes) =
+                engine.render_profiled(snapshot, &settings, &control)?;
+            self.check_frame(&output, backend, settings.width, settings.height)?;
+            if i >= WARMUPS {
+                let timing = passes
+                    .iter()
+                    .find(|pass| pass.name == "setup")
+                    .ok_or("missing camera-only setup timing")?;
+                setup.push(timing.elapsed.as_nanos().try_into()?);
+            }
+            black_box(output);
+        }
+        setup.sort_unstable();
+        Ok(setup[setup.len() / 2])
     }
 
     fn check_frame(

@@ -162,9 +162,16 @@ pub fn ortho_matrix(b: Basis, extent: f64, centre: [f64; 2], near: f64, far: f64
 
 /// The tile matrices of every shadow-casting light (R21.4).
 pub fn plans(snapshot: &Snapshot, packed: &Packed) -> Result<Vec<ShadowPlan>, RenderError> {
-    let bounds = scene_bounds(packed);
+    plans_with_bounds(snapshot, scene_bounds(packed), packed.scale)
+}
+
+pub(crate) fn plans_with_bounds(
+    snapshot: &Snapshot,
+    bounds: Bounds,
+    scale: f64,
+) -> Result<Vec<ShadowPlan>, RenderError> {
     let corners = bounds.corners();
-    let scale = packed.scale.max(1e-6);
+    let scale = scale.max(1e-6);
     let near = 0.01 * scale;
     let mut plans = Vec::new();
     let mut used = 0u32;

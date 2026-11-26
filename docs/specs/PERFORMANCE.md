@@ -188,7 +188,9 @@ These are internal performance rules; they do not change the renderer's referenc
   whole-geometry invalidation, not per-mesh instancing. Keep packing semantics, draw order
   and all AOVs unchanged. Cached frames after edits must equal freshly rendered frames
   for the same snapshot, including object and material IDs. Test reuse with a work count
-  or resource identity, not a wall-clock assertion.
+  or resource identity, not a wall-clock assertion. An exact match to previously validated
+  mesh inputs can skip scanning mesh indices and positions a second time; recheck instance
+  references and camera against the current frame. Validate changed geometry before upload.
 - Report unchanged-scene S10 per §6, with the same fixture and all four Tier 2 effects.
   Separately report camera-only setup (target <5 ms); do not use this phase timing as a
   substitute for frame throughput. Any Tier 2 estimator changes require their own R24
