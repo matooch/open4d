@@ -1090,6 +1090,12 @@ inputs, and [R7 tier budgets](../agents/tasks/203-rt-consistency.md). This is ou
   after a reset. Use an edge-aware spatial filter guided by primary-hit depth and normal;
   treat hits and misses separately. Reduce filtering as more samples accumulate. “Within
   one frame” is a preview delivery requirement, not a hardware timing target (R8).
+  The first filter is a 3×3 RGB average with weights 4 at the centre, 2 on axial
+  neighbours, and 1 on diagonals. Use a neighbour only when both guides are hits with
+  the same coverage, their unit normals have dot product ≥ 0.9, and their depths differ
+  by at most 5% of the nearer depth. Misses and inactive pixels are copied unchanged.
+  Blend the average into raw linear RGB with weight `1 / sqrt(samples)`; copy raw
+  alpha unchanged. Guides are separate from the colour being filtered.
 - Final-frame rendering uses the same transport for the requested sample budget under
   the R4 event/cancellation contract, without inheriting any view's preview history.
   Keep raw accumulated linear output available; display transforms do not alter the

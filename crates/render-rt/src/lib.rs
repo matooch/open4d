@@ -6,6 +6,7 @@
 mod engine;
 pub mod framegraph;
 mod hybrid;
+pub mod path_preview;
 pub mod post;
 pub mod ray;
 pub mod shader;
