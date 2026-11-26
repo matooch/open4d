@@ -92,8 +92,16 @@ projection set on the texture tag, then Generate UVW Coordinates). `forge_materi
   fit of all 114 vertices gives that form (residual 3e-6) with `ku = 0.99905`, heading 44.985 deg,
   bank 0.005 deg, so the recorded rotation (45, -19.45) and focal ratio do not reproduce the
   reference exactly. **Known mismatch**: with the recorded camera the largest corner error is
-  3.6e-4 (tolerance 1e-5); pinned. The cause (rounded recorded angles or an unrecorded film setting)
-  needs a re-observation with the camera's focal length, film size and exact rotation.
+  3.6e-4 (tolerance 1e-5); pinned. The re-observation `proj-frontal-2` (2026-11-26) recorded
+  the full camera (focal length 36, film gate 36, so the horizontal field of view is
+  2·atan(0.5) and the `1 / z` scale is exact; 1280 x 720) and gave UVs identical to
+  `proj-frontal`. A free fit of `u = ou + ku x_c / z_c`, `v = ov + kv y_c / z_c` with the
+  rotation free lands on the recorded rotation (H 45.0000, P -19.4498, B 0.0000), `kv` = 16/9 and
+  `ov` = 0.5 exactly, residual 6e-7, but `ku` = 0.999053 and `ou` = 0.499747. So the rotation,
+  position and vertical mapping are exact and the whole difference is a horizontal affine term
+  in `u` that no recorded camera setting explains (moving the camera instead leaves 9e-5). Both
+  cases stay pinned; the follow-up in [uv-projection.md](../parity/uv-projection.md) asks for
+  a capture at another render width to tell whether `ku` and `ou` follow the resolution.
 - **Unsupported** (`ProjectionError::Unsupported`): Spatial, UVW Mapping (identity, no data),
   Shrink Wrapping, Camera Mapping, a Frontal projection without a camera, (a non-default tag
   `rotation` or `position` is implemented but was not observed: **parity-pending**).

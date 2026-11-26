@@ -53,7 +53,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O36 | Constraints | [constraints.md](constraints.md) | `tests/golden/constraints/` samples + meshes | done (7 of 9 cases; see form) |
 | O37 | Pose Morph | [pose-morph.md](pose-morph.md) | `tests/golden/pose-morph/` meshes | blocked (strength track not scriptable; see form) |
 | O54 | Tags II | [tags-2.md](tags-2.md) | `tests/golden/tags-2/` | done |
-| O28 | UV coordinates and projection | [uv-projection.md](uv-projection.md) | `tests/golden/uv/` meshes | done (proj-frontal-2 observed 2026-11-26: camera recorded in case.toml, UVs identical to proj-frontal — see the form's Follow-up section) |
+| O28 | UV coordinates and projection | [uv-projection.md](uv-projection.md) | `tests/golden/uv/` meshes | partial: proj-frontal-2 observed 2026-11-26 (camera recorded, UVs identical to proj-frontal); open: proj-frontal-3 at 720 x 720 (Follow-up section) |
 | O29 | Scene, camera, light, material, render defaults | [scene-defaults.md](scene-defaults.md) | form only | done (2026-11-26: every form row carries a value or a recorded not-observed reason; the non-scalar custom controls and the default-light position stay not observed with their reasons in the form) |
 | O30 | Render references | [render-reference.md](render-reference.md) | `tests/golden/render/` PNG + meshes | partial (12 of 14 cases: 8 of 10 baseline plus all 4 follow-ups after briefs 136/137 — light-units, light-units-200, area-soft-2, checker-plane. Spot and infinite still render a fully black frame from a script; the two black-render folders are no longer in the tree — see the form) |
 | O43 | Material renders | [material-renders.md](material-renders.md) | `tests/golden/render/` PNG + meshes | done |
