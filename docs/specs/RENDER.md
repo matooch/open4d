@@ -1356,6 +1356,15 @@ R24.4 representative rotation and R24.9 diffuse transport. This is our own desig
   and the existing seed XOR history. Use the full opaque diffuse weight, not
   one eighth; keep the existing `absolute_pixel * 8` secondary light stream for
   attempt zero. Preserve black misses and secondary visibility and lighting.
+- The probe uses the R24.9 diffuse bindings and frame ABI without an
+  environment texture. Dispatch `ceil(width/2)` by `ceil(height/2)` logical
+  invocations in 8×8 workgroups. Allocate one output element for every
+  absolute film pixel. A crop does not shift the quad grid or the seed; the
+  primary textures carry the crop coverage.
+- Compare each phase on Compute and Metal to independently dispatched
+  isolated receivers at their original pixel coordinates. The test selects
+  the expected representatives independently from the shader and verifies
+  that varying per-lane radiance makes rotation and rejected reuse observable.
 - Translate this entry to SPIR-V, MSL and HLSL with each R23 selection. Before
   using it in Tier 2, check rotation, disjoint geometry and materials, depth
   and normal discontinuities, partial absolute quads and black miss/invalid

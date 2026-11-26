@@ -10,6 +10,232 @@ use forge_render_api::{
 use glam::DMat4;
 
 #[test]
+fn gpu_reduced_diffuse_reuses_only_compatible_absolute_quad_lanes() {
+    let triangle =
+        |r: f64, z| MeshData::new(vec![[-r, -r, z], [r, -r, z], [0., r, z]], vec![[0, 1, 2]]);
+    let opaque = forge_material::Material::default();
+    let mut emitter = opaque.clone();
+    emitter.set("enable.luminance", Value::Bool(true));
+    emitter.set("luminance.color", Value::Color([1.5, 0.6, 0.25]));
+    let mut light = Light::new(
+        LightKind::Omni,
+        DMat4::from_translation(DVec3::new(-0.3, 0.15, 0.1)),
+    );
+    light.specular = false;
+    let snapshot = Snapshot {
+        camera: Camera::from_hpb(
+            DVec3::Z * 5.,
+            [std::f64::consts::PI, 0., 0.],
+            Projection::Orthographic { width: 24. },
+        ),
+        meshes: vec![triangle(4., 0.), triangle(32., 0.25)],
+        instances: vec![
+            Instance::new(0, DMat4::IDENTITY, 0, 1),
+            Instance::new(0, DMat4::IDENTITY, 0, 2),
+            Instance::new(1, DMat4::IDENTITY, 1, 3),
+            Instance::new(0, DMat4::from_translation(DVec3::X * 128.), 0, 4),
+        ],
+        materials: [opaque, emitter]
+            .iter()
+            .map(|m| MaterialData::new("reduced diffuse probe", forge_material::ir::compile(m)))
+            .collect(),
+        lights: vec![light],
+        environment: forge_render_api::Environment {
+            lighting: Lighting::Constant {
+                color: [2., 3., 4.],
+                intensity: 10.,
+            },
+            ..Default::default()
+        },
+    };
+    let settings = RenderSettings {
+        width: 21,
+        height: 19,
+        region: Some([1, 1, 21, 19]),
+        seed: 0x1234_abcd_f00d_5678,
+        default_light: false,
+        ..Default::default()
+    };
+    let pixel = |x: usize, y: usize| y * settings.width as usize + x;
+    let mut positions = vec![[0.; 4]; pixel(0, settings.height as usize)];
+    let mut normals = positions.clone();
+    let mut classes = Vec::new();
+    for (x, y, labels) in [
+        (2, 2, [0, 0, 0, 0]),   // compatible, rotate all four lanes
+        (6, 2, [0, 1, 0, 1]),   // disjoint keys at the same positions
+        (10, 2, [0, 1, 0, 1]),  // disjoint G-buffer materials
+        (14, 2, [0, 1, 0, 1]),  // incompatible shading normals
+        (18, 2, [0, 1, 0, 1]),  // depth discontinuity inside world radius
+        (16, 16, [0, 1, 0, 1]), // world-distance rejection in a second workgroup
+    ] {
+        let mut buckets = [Vec::new(), Vec::new()];
+        for (lane, class) in labels.into_iter().enumerate() {
+            let i = pixel(x + lane % 2, y + lane / 2);
+            positions[i] = [0.075 * lane as f32, 0., 0., 1.];
+            normals[i] = [0., 0., 1., 1.];
+            if class == 1 {
+                match x {
+                    6 => normals[i][3] = 2.,
+                    10 => positions[i][3] = 2.,
+                    14 => normals[i][0] = 0.36,
+                    18 => positions[i][2] = 0.125,
+                    16 => positions[i][0] -= 0.9,
+                    _ => unreachable!(),
+                }
+            }
+            buckets[class].push((lane, i));
+        }
+        classes.extend(buckets.into_iter().filter(|bucket| !bucket.is_empty()));
+    }
+    // Single eligible lanes at the cropped top-left and odd film bottom-right.
+    for (lane, i) in [(3, pixel(1, 1)), (0, pixel(20, 18))] {
+        positions[i] = [0., 0., 0., 1.];
+        normals[i] = [0., 0., 1., 1.];
+        classes.push(vec![(lane, i)]);
+    }
+    for (i, x, key) in [(pixel(3, 13), 128., 4.), (pixel(2, 13), 0., 5.)] {
+        positions[i] = [x, 0., 0., 1.];
+        normals[i] = [0., 0., 1., key];
+    }
+    let frame = ReflectionInput {
+        snapshot: &snapshot,
+        settings: &settings,
+        input: PrimaryInput {
+            positions: &positions,
+            normals: &normals,
+            epsilon: 1e-5,
+            jitter: [-0.375, 0.25],
+        },
+        // Radius 0.6, with depth threshold 0.06, independent of fixture bounds.
+        scale: 40.,
+        history: 0,
+    };
+    let geometry = PrimaryGeometry::new(&snapshot).unwrap();
+    let prepared = lights::prepare(&snapshot, false).unwrap();
+    let materials: Vec<_> = snapshot
+        .materials
+        .iter()
+        .map(|m| (&m.graph, &*m.sampler as &dyn forge_material::TextureSampler))
+        .collect();
+    for request in [crate::request_default_device, crate::request_rt_device] {
+        let (device, queue) = match request() {
+            Ok(gpu) => gpu,
+            Err(err) if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") => {
+                panic!("FORGE_REQUIRE_GPU=1 but no GPU: {err}");
+            }
+            Err(err) => {
+                eprintln!("skipping GPU test: {err}");
+                return;
+            }
+        };
+        let (kind, mut backend) = ray::on_device(device.clone(), queue.clone()).unwrap();
+        assert_eq!(kind, ray::enabled_backend(&device));
+        eprintln!("reduced diffuse probe: {kind:?}");
+        backend.update_scene(&snapshot).unwrap();
+        let attrs = crate::path_trace::attributes(&device, &snapshot, &geometry.scene).unwrap();
+        let assembled = crate::shader::reduced_diffuse_wgsl(kind, &materials).unwrap();
+        assert!(assembled.resources.is_empty());
+        let probe = ReflectionProgram::new_reduced_diffuse(&device, kind, assembled.source, 0);
+        let views =
+            [&positions, &normals].map(|data| texture_view(&device, &queue, &settings, data));
+        let dispatch = |position_view, history, lights| {
+            probe
+                .read(
+                    (&device, &queue),
+                    ReflectionBindings {
+                        scene: backend.inline_scene().unwrap(),
+                        primary: [position_view, &views[1]],
+                        attributes: &attrs,
+                        bitmaps: &[],
+                        lights,
+                    },
+                    ReflectionInput { history, ..frame },
+                )
+                .unwrap()
+        };
+        let no_lights = dispatch(&views[0], 0, &[]);
+        let full_diffuse = crate::shader::diffuse_wgsl(kind, &materials).unwrap();
+        let full_probe = ReflectionProgram::new_diffuse(&device, kind, full_diffuse.source, 0);
+        let full_emission = full_probe
+            .read(
+                (&device, &queue),
+                ReflectionBindings {
+                    scene: backend.inline_scene().unwrap(),
+                    primary: [&views[0], &views[1]],
+                    attributes: &attrs,
+                    bitmaps: &[],
+                    lights: &[],
+                },
+                frame,
+            )
+            .unwrap();
+        let corner = pixel(20, 18);
+        assert!(full_emission[corner][0] > 0.1);
+        for (a, b) in no_lights[corner].into_iter().zip(full_emission[corner]) {
+            assert!((a - b).abs() <= 2e-6 + 2e-4 * b.abs(), "{a} vs {b}");
+        }
+        let mut isolated_positions = vec![[0.; 4]; positions.len()];
+        let isolated: Vec<_> = classes
+            .iter()
+            .flatten()
+            .map(|&(_, i)| {
+                isolated_positions[i] = positions[i];
+                let view = texture_view(&device, &queue, &settings, &isolated_positions);
+                isolated_positions[i] = [0.; 4];
+                (i, view)
+            })
+            .collect();
+        for history in 0..4u32 {
+            let actual = dispatch(&views[0], history, &prepared);
+            assert_eq!(actual.len(), positions.len());
+            let mut samples = vec![[0.; 4]; positions.len()];
+            for (i, view) in &isolated {
+                samples[*i] = dispatch(view, history, &prepared)[*i];
+            }
+            let mut expected = vec![[0.; 4]; positions.len()];
+            for class in &classes {
+                let &(_, representative) = class
+                    .iter()
+                    .min_by_key(|&&(lane, _)| (lane + 4 - history as usize) % 4)
+                    .unwrap();
+                for &(_, i) in class {
+                    assert!(samples[i][0] > 0.1, "{kind:?} phase {history} pixel {i}");
+                    expected[i] = samples[representative];
+                }
+            }
+            for (x, y, all) in [
+                (2, 2, true),
+                (6, 2, false),
+                (10, 2, false),
+                (14, 2, false),
+                (18, 2, false),
+                (16, 16, false),
+            ] {
+                let quad = [
+                    pixel(x, y),
+                    pixel(x + 1, y),
+                    pixel(x, y + 1),
+                    pixel(x + 1, y + 1),
+                ];
+                for (lane, &i) in quad.iter().enumerate() {
+                    for (other_lane, &j) in quad.iter().enumerate().skip(lane + 1) {
+                        if all || lane % 2 != other_lane % 2 {
+                            assert_ne!(
+                                samples[i], samples[j],
+                                "{kind:?} phase {history} fixture needs distinct samples at {i}, {j}"
+                            );
+                        }
+                    }
+                }
+            }
+            for (i, (a, b)) in actual.into_iter().zip(expected).enumerate() {
+                assert_eq!(a, b, "{kind:?} phase {history} pixel {i}");
+            }
+        }
+    }
+}
+
+#[test]
 fn gpu_raw_diffuse_matches_batched_reference() {
     let triangle = |z| {
         MeshData::new(

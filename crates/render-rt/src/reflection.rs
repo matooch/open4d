@@ -66,6 +66,26 @@ impl ReflectionProgram {
         Self::for_bounce(device, kind, source, bitmap_count, Bounce::Diffuse)
     }
 
+    #[cfg(test)]
+    pub fn new_reduced_diffuse(
+        device: &wgpu::Device,
+        kind: BackendKind,
+        source: String,
+        bitmap_count: usize,
+    ) -> Self {
+        Self(
+            RawSignalProgram::new(
+                device,
+                kind,
+                source,
+                bitmap_count,
+                "reduced_diffuse_signal",
+                SignalFrameLayout::ReducedDiffuse,
+            ),
+            Bounce::Diffuse,
+        )
+    }
+
     pub fn for_bounce(
         device: &wgpu::Device,
         kind: BackendKind,

@@ -76,14 +76,25 @@ pub(super) enum SignalFrameLayout {
     DirectShadow,
     Reflection,
     Diffuse,
+    #[cfg(test)]
+    ReducedDiffuse,
 }
 
 impl SignalFrameLayout {
     fn lights(self) -> u32 {
         match self {
             Self::DirectShadow => 3,
-            Self::Reflection | Self::Diffuse => 5,
+            _ => 5,
         }
+    }
+
+    fn groups(self, width: u32, height: u32) -> [u32; 2] {
+        let pixels_per_group = match self {
+            #[cfg(test)]
+            Self::ReducedDiffuse => 16, // 8×8 invocations over absolute 2×2 quads
+            _ => 8,
+        };
+        [width, height].map(|n| n.div_ceil(pixels_per_group))
     }
 }
 
@@ -274,7 +285,7 @@ impl RawSignalProgram {
         frame: &impl Pod,
     ) -> Result<Vec<T>, RenderError> {
         let size = u64::from(settings.width) * u64::from(settings.height);
-        let groups = [settings.width.div_ceil(8), settings.height.div_ceil(8)];
+        let groups = self.frame_layout.groups(settings.width, settings.height);
         let limits = device.limits();
         let storage_limit = limits
             .max_buffer_size
