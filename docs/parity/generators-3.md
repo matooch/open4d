@@ -334,3 +334,28 @@ Recovered the saved spline-mask/and readback and OBJ from the provider HTTP429 i
 Follow-up accounting: 26 new golden folders; 6 rows withheld or requiring a human; no unprocessed rows. Full working-tree validation still fails on the unrelated restrict-bend duplicate table, so these observations remain uncommitted. Isolated validation of the complete batch returned `ok: 73 cases`; clean-room and whitespace checks passed.
 
 Batch-02 follow-up timestamp (UTC): 2026-11-18T06:54:17.701036+00:00. The header date above records the earlier baseline, not this follow-up collection.
+
+## Follow-up (planner, 2026-11-26, brief 046): Null display, through `viewport_screenshot`
+
+The Null object's display is viewport-only, so there is no mesh to export. Observe it with the
+bridge's `viewport_screenshot` instead. Screenshots are for your own reading only: **do not
+commit them** (CLEANROOM.md). Record words and numbers in this form.
+
+Setup: an empty scene, one Null at the origin, the viewport in the **Front** orthographic
+view (then **Top** for the orientation rows), a known zoom so a world length can be measured
+in pixels (put a reference cube of size 200 next to it and measure both).
+
+1. **Display parameter**: read the Null's parameter list and record every Display option
+   name, plus Radius, Aspect Ratio, Orientation (and their defaults and ranges), and any
+   colour/visibility options.
+2. **Each shape** at Radius 100, Aspect Ratio 1, default orientation: screenshot, then write
+   what is drawn (lines or points, closed or open, how many segments or points, its extent in
+   world units measured against the reference cube, where it is centred, anything filled).
+3. **Radius 50 / Aspect Ratio 2** for one 2D shape (Rectangle or Circle) and one 3D shape
+   (Cube or Pyramid): which axis the aspect stretches, and the measured extents.
+4. **Each Orientation option** with the Circle (or Rectangle) shape: in which plane it lies
+   (check in Front and Top views), and whether "camera" orientation follows the view.
+5. If a shape cannot be read from a screenshot, say so in its row.
+
+Output: a table in this section (one row per Display option, plus the rows of steps 3–4).
+No golden folder is needed (nothing to export). Brief 046 is built from this table.
