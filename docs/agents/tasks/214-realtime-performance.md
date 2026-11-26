@@ -1,6 +1,6 @@
 # 214 · Make the real-time tiers real-time (S10 targets)
 
-Status: ready · Area: R · Depends on: 204 · Observations: – (own design) · Touches: render-rt, render-gpu
+Status: in-progress (hermes) · Area: R · Depends on: 204 · Observations: – (own design) · Touches: render-rt, render-gpu
 
 ## Goal
 Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 Pro (Metal):
@@ -36,9 +36,238 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: one acceptance test added (`s8_lookdev_area_light_camera_dof_material_and_aovs` in `apps/forge/tests/render.rs`) plus the manual `docs/manual/rendering.md`. This brief has no observation, so parity is N/A. macOS is the observed OS; the existing CI matrix (macOS, Linux, Windows) runs the same test, and each OS render is compared with `tests/acceptance/s8-reference.png`.
-- Rules derived (RENDER.md R19): the scene is built only through `forge new`/`forge cmd ... --save` (cube, Area light, physical camera, Standard material with noise on colour and fresnel on bump); the first camera and first light are used (R11, S5); `--dof` traces the thin lens, and changing only the focus distance changes the beauty; `--aov all` writes beauty plus ten passes; the same seed renders byte-identically; the object and material id passes hold background 0 plus a geometry id. The reference comparison requires each colour channel's mean within 1 dB and PSNR ≥ 30 dB.
-- Deviations from the design decisions: the brief says "a node material with noise and fresnel", but the node-graph material's registry has only colour, scalar, texture, mix and Surface nodes, so the scenario uses the Standard material's shader node tree (noise + fresnel) instead. Adding noise/fresnel graph nodes would be a materials change outside this tests/docs brief. The comparison uses a checked-in macOS reference because cross-OS artifacts are not otherwise available inside one test run.
-- Files changed: `apps/forge/tests/render.rs`, `tests/acceptance/s8-reference.png`, `docs/specs/RENDER.md` (R19), `docs/manual/rendering.md`, `docs/manual/SUMMARY.md`, `docs/roadmap/BACKLOG.md`.
-- Open questions: none. Regenerate the reference with `FORGE_S8_WRITE_REFERENCE=1` only when the scene changes intentionally.
-- The last lines of the gate output: `GATE: 2501 tests passed, 0 failed` and `GATE: all passed`.
+- **Raw diffuse GI dispatch:** Compute and actual Metal matched the batched
+  reference within the R24.8 raw allowance on cropped, isolated receivers
+  with two history indices. Emissive and directly lit secondary hits were
+  nonzero; half transmission halved the emission-only signal. Full
+  transmission, misses under HDR image lighting and invalid receivers
+  returned exact zero. Five required-GPU lib/hybrid/translation runs and the
+  full gate passed (2752 tests). Live Tier 2 GI is still batched, so there
+  is no new S10 measurement at this checkpoint.
+
+- [Raw diffuse GI kernel checkpoint](../../specs/RENDER.md#r249-gpu-diffuse-gi-signal-brief-214):
+  diffuse and reflection share inline receiver, hit and secondary-light code.
+  Diffuse makes eight cosine attempts and has no environment texture binding.
+  Compute, Metal and Vulkan selections translated to SPIR-V, MSL and HLSL.
+  Required-GPU lib, hybrid and translation suites passed five times; full gate:
+  2751 tests passed, `GATE: all passed`. This does not yet dispatch diffuse GI
+  on the GPU; no new S10 result.
+
+- **GPU reflection runtime:** Tier 2 uses inline R23 for the eight reflection
+  attempts and secondary direct lighting, sharing the resident R25 attributes
+  with direct shadows. Cropped warm and cold results matched after scene
+  edits. Same-slot bitmap replacement changed the specular AOV without
+  recompiling; switching off environment lighting cleared it without a pipeline
+  change. The spatial filter, per-jitter history and batched fallback remain.
+- Unchanged full-size S10 on M5 Pro, actual Metal, all Tier 2 effects:
+  reflections fell from **1309.754 ms** to **45.751 ms**, and total frame
+  median from **2734.881 ms / 0.366 fps** to **1297.222 ms / 0.771 fps**.
+  The batched GI pass (**1141.322 ms**) now dominates. Tier 2 still misses
+  30 fps; no Tier 1 changes in this slice.
+- Strict R26 retained **18/23**, **19/23** and **23/23** vs CPU on both Metal
+  and Compute with nine unchanged pins. The Metal/Compute minima were exact,
+  **163.56 dB** and **75.66 dB**. Five required-GPU lib, hybrid and shader
+  translation runs passed. Full gate: 2750 tests passed, `GATE: all passed`.
+
+- **Raw reflection secondary lighting:** inline Compute and Metal matched
+  the batched CPU-shaded reference at two history seeds for finite, area and
+  infinite lights, per-light lobe flags and tinted occlusion. The near
+  emitter matched its no-shadow control; the far emitter behind the same
+  blocker received the expected RGB tint. SPIR-V, MSL and HLSL translation
+  passed. This is still a standalone probe; no live reflection or S10 change.
+- **Raw reflection dispatch probe:** inline Compute and Metal matched the
+  batched CPU-shaded reference for emission, dark hits, and misses under
+  None, Constant, Sky, and rotated linear lat-long image lighting. The probe
+  also checked two history seeds and exact clears for uncovered pixels and
+  invalid receiver keys. Five required-GPU lib, hybrid and translation runs
+  passed; full gate: 2750 tests passed, `GATE: all passed`. Secondary direct
+  light and live integration are pending; no new S10 or R26 result.
+
+- [Raw reflection kernel checkpoint](../../specs/RENDER.md#r248-gpu-reflection-signal-brief-214):
+  the standalone shader reconstructs the receiver and sums inline R23 hit
+  emission or scene lighting on misses, including unfiltered lat-long
+  image lighting. The complete Compute and hardware variants translated to
+  SPIR-V, MSL and HLSL in five consecutive runs. Full gate: 2749 tests
+  passed, `GATE: all passed`. Numeric dispatch acceptance and secondary
+  direct light remain pending; no live Tier 2 change or new S10 measurement.
+
+- [Reflection sampler checkpoint](../../specs/RENDER.md#r248-gpu-reflection-signal-brief-214):
+  the standalone GPU sampler preserves the eight opaque GGX attempts, both
+  hemisphere checks, and their RNG stream. Metal directions and RGB weights
+  matched the CPU reference at minimum roughness and for a broad transmitting
+  lobe; rejected attempts were zero and the final PCG word matched exactly.
+  The probe translated to SPIR-V, MSL and HLSL. Five required-Metal runs
+  passed; full gate: 2748 tests passed, `GATE: all passed`. Tier 2 still
+  uses the batched reflection estimator; no new S10 measurement or R26 change.
+
+- **GPU direct-shadow runtime:** Tier 2 now uses inline R23 visibility with
+  cached R25 receiver attributes and the current raster bitmap views. It
+  retains eight samples, the CPU spatial filter and per-jitter history, and
+  falls back to batched visibility if inline dispatch is unsupported. Cropped
+  warm and cold renders matched after geometry, material and bitmap edits.
+  Replacing a bitmap in the same slot reused the shadow pipeline and attributes.
+- Unchanged full-size S10, M5 Pro, actual Metal, all Tier 2 effects: the shadow
+  pass fell from **838.808 ms** to **48.862 ms**; total frame median fell from
+  **3829.127 ms / 0.261 fps** to **2734.881 ms / 0.366 fps**. Reflections
+  (**1309.754 ms**) and GI (**1330.511 ms**) now dominate; Tier 2 still misses 30 fps.
+- Strict R26 held **18/23**, **19/23**, and **23/23** against CPU on both Metal
+  and Compute, with the same nine pins and Metal-vs-Compute minima of exact,
+  165.12 dB, and 75.66 dB. Five required-GPU lib, hybrid and translation runs
+  passed. Runtime checkpoint gate: 2746 tests passed, zero failed;
+  `GATE: all passed`. Vulkan hardware was not exercised.
+
+- [Raw direct-shadow dispatch probe](../../specs/RENDER.md#r247-gpu-direct-shadow-visibility-brief-214):
+  bound the existing R23 traversal scene, R25 receiver attributes and shared
+  packed lights. Compute and Metal matched the unfiltered batched reference
+  across all eight components for cropped finite, area, infinite and mixed
+  lights at two history indices. The probe also checked exact clears,
+  finite-emitter clipping, tinted occlusion and light lobe flags. The
+  required-GPU lib, hybrid and shader translation suites passed five times;
+  full gate: 2746 tests passed, `GATE: all passed`. Tier 2 still uses the
+  batched estimator, so there is no new S10 measurement.
+- [Raw direct-shadow kernel checkpoint](../../specs/RENDER.md#r247-gpu-direct-shadow-visibility-brief-214):
+  assemble a standalone inline R23 shader that reconstructs and shades each
+  covered receiver, retains eight samples per prepared shadow light, and
+  writes the two unfiltered signal rows. R20/R25 and the new kernel share
+  the same material evaluation and BSDF code. Compute and hardware variants
+  translated to SPIR-V, MSL and HLSL in five consecutive runs. The kernel is
+  not dispatched by Tier 2 yet: GPU/CPU raw-signal comparison and new S10
+  measurements remain pending. Full gate: 2745 tests passed, zero failed;
+  `GATE: all passed`.
+- [Raw receiver checkpoint](../../specs/RENDER.md#r247-gpu-direct-shadow-visibility-brief-214):
+  shared R25 geometry rows reconstruct the R6 receiver from the raster key,
+  world position and jittered pixel centre without a flattened attribute table.
+  The Metal probe matched CPU `PrimaryGeometry` on synthetic cropped inputs,
+  including clear and invalid keys, empty instances, shared mirrored/nonuniform
+  instances and both projections. The receiver translated to SPIR-V, MSL and
+  HLSL; the targeted suites passed five times. Strict R26 passed on Metal and
+  Compute with unchanged pins. The receiver is not yet used for Tier 2 shadow
+  dispatch; no new S10 measurement. Gate: 2744 tests passed, `GATE: all passed`.
+- [Direct-shadow sampling checkpoint](../../specs/RENDER.md#r247-gpu-direct-shadow-visibility-brief-214):
+  extracted the existing R20/R25 packed light sampler without changing its
+  formulas. The standalone sampler and full transport translated through
+  SPIR-V, MSL and HLSL in five consecutive test runs. Strict R26 passed
+  with actual Metal and Compute and the same nine pins. No Tier 2 runtime
+  change or new S10 throughput claim; receiver shading and inline dispatch
+  remain open. Gate: 2742 tests passed, zero failed; `GATE: all passed`.
+- Step 1 contract: [persistent scene data](../../specs/PERFORMANCE.md#61-persistent-scene-data-brief-214).
+- Baseline gate: `GATE: 2735 tests passed, 0 failed`; `GATE: all passed`. No new S10
+  measurements at the spec checkpoint.
+- Step 1 checkpoint: cache the flat raster upload, shadow bounds and CPU object-ID lookup
+  per engine/device. Reuse on exact mesh and instance input matches; revalidate references
+  and camera each frame. This is not per-mesh instancing or BLAS reuse on mesh edits.
+- Full-size S10, M5 Pro / Metal, unchanged 204 fixture and warm protocol, all four Tier 2
+  effects enabled with actual `BackendKind::Metal`. Separate camera-only series via
+  `FORGE_S10_CAMERA_SETUP=1` (alternating only camera X translation; same fixture).
+
+  | Tier | Frame median (ms) | fps | Setup (ms) | Camera-only setup (ms) |
+  | --- | ---: | ---: | ---: | ---: |
+  | 1 | 40.845 | 24.483 | 6.972 | 6.960 |
+  | 2 | 4586.251 | 0.218 | 7.443 | 7.274 |
+
+  Neither fps target nor the camera-only setup target is met. Tier 1 output alone took
+  29.338 ms in the profiled series. Tier 2 effects are still unbudgeted; do not interpret
+  these runs as passing the per-pass 10% regression check.
+- Cache acceptance passed five times with GPU required, including exact warm/cold
+  beauty and AOV equality and invalid-input rejection. Checkpoint gate: 2736 tests
+  passed, zero failed; `GATE: all passed`.
+- [Output checkpoint](../../specs/PERFORMANCE.md#62-demand-driven-raster-output-brief-214):
+  copy only requested attachments, retain hybrid primary readbacks, and construct
+  cropped Tile payloads only for callbacks. Five required-GPU runs passed exact
+  cropped beauty, AOV and event comparisons, with bloom and tone mapping enabled.
+  Same full-size S10 protocol on M5 Pro / Metal:
+
+  | Tier | Frame median (ms) | fps | Setup (ms) | Camera-only setup (ms) | Output (ms) |
+  | --- | ---: | ---: | ---: | ---: | ---: |
+  | 1 | 13.963 | 71.620 | 5.871 | 5.943 | 3.359 |
+  | 2 | 4318.308 | 0.232 | 6.889 | 7.094 | 3.599 |
+
+  Tier 1 met 60 fps in this run (previously 24.483 fps). Camera-only setup still
+  exceeds 5 ms. Tier 2 used actual Metal with all four effects and missed 30 fps.
+  This checkpoint does not change any effect estimator or R26 budget. Gate:
+  2738 tests passed, zero failed; `GATE: all passed`.
+- [Compiled program checkpoint](../../specs/PERFORMANCE.md#63-compiled-raster-programs-brief-214):
+  retain the raster pipelines and layouts while assembled WGSL and bitmap binding
+  count match. Bitmap pixels remain live per frame. Five required-GPU runs passed
+  the raster cache, hybrid, and shader translation tests; cached and fresh output
+  compared exactly after camera, light, graph, and bitmap edits.
+
+  | Tier | Frame median (ms) | fps | Setup (ms) | Camera-only setup (ms) |
+  | --- | ---: | ---: | ---: | ---: |
+  | 1 | 9.966 | 100.339 | 2.013 | 2.230 |
+  | 2 | 4380.789 | 0.228 | 3.116 | 3.106 |
+
+  Same full-size M5 Pro / Metal protocol; Tier 2 used actual Metal with all
+  four effects. Tier 1 and camera-only setup meet their targets in this run.
+  Per-mesh invalidation and the Tier 2 throughput target remain open. Gate:
+  2738 tests passed, zero failed; `GATE: all passed`.
+- [AO budget checkpoint](../../specs/RENDER.md#r244-reduced-rate-ambient-occlusion-brief-214):
+  one finite-radius ray per rotating 2×2 representative, with independent
+  rays where material, normal or depth cannot support reuse. The existing
+  spatial filter and per-jitter history remain. Five required-GPU lib and
+  hybrid runs passed, including recorded ray count, odd/cropped coverage,
+  reconstruction, camera reset, fallback, and convergence.
+- Full-size S10 Tier 2, all four effects and actual Metal on M5 Pro:
+  AO **407.894 ms**, down from 622.286 ms (34.5%); uninstrumented frame
+  **4204.666 ms / 0.238 fps**, down from 4380.789 ms. Its 30 fps target is
+  still missed. This checkpoint changes no Tier 1 estimator.
+- R26 O30/O43 matrix at unchanged settings: Tier 1 **18/23**, Tier 2
+  **19/23**, Tier 3 **23/23** against CPU on both Compute and Metal;
+  the same nine pins remain. Worst Metal-vs-Compute scores were exact,
+  165.12 dB and 75.66 dB respectively. No Vulkan hardware run.
+- AO checkpoint gate: 2739 tests passed, zero failed; `GATE: all passed`.
+- [Visibility readback checkpoint](../../specs/RENDER.md#r245-visibility-only-readback-brief-214):
+  AO and both types of shadow query return 4 bytes per ray instead of a
+  32-byte hit record. Bounce rays still return full hits. Five required-Metal
+  test runs passed, including visibility vs. closest-hit checks on Compute and
+  Metal, and shader translation to SPIR-V, MSL and HLSL. The strict R26 matrix
+  passed on both backends with the same nine pins.
+- Full-size S10 Tier 2 on M5 Pro with actual Metal: AO **394.190 ms** and
+  shadows **838.808 ms** (previously 407.894 and 864.245 ms). The uninstrumented
+  median was **4238.415 ms / 0.236 fps**, slightly slower than 4204.666 ms;
+  this run does not show a frame-rate gain. The change saves readback bytes
+  but does not reduce traversal work or eliminate CPU/GPU synchronization.
+- Visibility checkpoint gate: 2739 tests passed, zero failed; `GATE: all passed`.
+- [GPU AO kernel checkpoint](../../specs/RENDER.md#r246-gpu-ambient-visibility-dispatch-brief-214):
+  the raw visibility shader reads primary textures and runs inline traversal and
+  quad reconstruction without a ray list. Five translation runs passed for
+   Compute and hardware variants (SPIR-V, MSL and HLSL). At this checkpoint there
+   was no host dispatch or new S10 or R26 result. Checkpoint gate:
+   2740 tests passed, zero failed; `GATE: all passed`.
+- **GPU AO runtime:** the engine binds its existing R23 scene and G-buffer directly
+  and reads back one raw float per pixel for the unchanged CPU spatial filter
+  and per-jitter history. It uses the batched R24.4 path if there is no inline
+  scene binding or the output exceeds dispatch limits. Five required-GPU runs
+  passed, including exact raw visibility on Compute and Metal across all four
+  phases on an odd-sized fixture with cleared and incompatible neighbours.
+- Full-size S10 Tier 2 on M5 Pro, actual Metal, all effects: AO **16.738 ms**
+  (previously 394.190 ms); the uninstrumented median was **3829.127 ms /
+  0.261 fps** (previously 4238.415 ms / 0.236 fps). CPU filtering and signal upload
+  remain, along with CPU orchestration for the other effects. Tier 2 still misses
+  30 fps.
+- Strict R26 retained **18/23**, **19/23**, and **23/23** against CPU on both
+  Compute and Metal with the same nine pins. Metal-vs-Compute minima were exact,
+  165.12 dB, and 75.66 dB, respectively. No Vulkan hardware run.
+- GPU AO runtime checkpoint gate: 2741 tests passed, zero failed; `GATE: all passed`.
+
+## Review (planner, 2026-11-26)
+- Ubuntu CI (Mesa lavapipe) crashed with SIGSEGV in `forge-render-rt --lib`: the six GPU unit
+  tests in `src/` (scene cache, receiver, direct shadow, reflection, diffuse, AO) created devices
+  in parallel. Fixed on the planner branch: `crate::gpu_test_serial()` in `lib.rs`. **Every new
+  GPU unit test in `src/` takes it on its first line** (`let _serial = crate::gpu_test_serial();`),
+  per HERMES-IMPLEMENTER.md §5a; integration tests in `tests/` keep their per-file lock. Merge
+  `origin/main` into the 214 branch before the next push.
+- **Open, fix next (CI red on Ubuntu):** `hybrid::reflection_tests::gpu_raw_reflections_match_batched_reference`
+  fails on the GitHub Ubuntu runner, on the lavapipe **Vulkan** (hardware ray query) path only:
+  `Vulkan mode near history 0 pixel 28 channel 0: 0.29564372 vs 0.29637477`, which is outside
+  `2e-6 + 2e-4·|b|`. Compute passes on the same runner, and the test passes on the planner's
+  lavapipe (same Mesa 25.2.8, but a different CPU, AVX-512). Likely cause: `ray/hardware.wgsl`
+  traces with `t_min = 1e-12·speed`, so secondary rays rely only on the origin offset. In the "near"
+  scenario, the shadow ray from the emitter triangle's hit (z = 0.125) to the omni light at
+  z = 0.0625 grazes its own plane (slope ≈ 0.008), so a little f32 rounding self-shadows some
+  samples. The actual value is lower than the reference, which fits. Fix the cause: the same
+  secondary-ray origin rule (offset along the geometric normal, toward the side the ray leaves
+  by, scaled to the position's magnitude) on every backend. Write it into R23 first, and keep the
+  CPU reference on the same rule. Don't loosen the tolerance. To check without the runner, add a
+  regression case where a shadow ray leaves at an angle below 1° and is not self-shadowed on
+  Compute or Vulkan.

@@ -13,6 +13,28 @@ pub use hardware::{HARDWARE_TRAVERSAL_WGSL, HARDWARE_WGSL};
 /// Common hit result and miss sentinel used by both inline traversal kernels.
 pub const RAY_HIT_WGSL: &str = include_str!("ray/hit.wgsl");
 
+/// Inline R23 declarations shared by the path transport and hybrid effects.
+pub(crate) fn inline_ray_scene(backend: BackendKind) -> (&'static str, String) {
+    let (directives, traversal, bindings) = match backend {
+        BackendKind::Compute => (
+            "",
+            COMPUTE_TRAVERSAL_WGSL,
+            "
+@group(2) @binding(0) var<storage, read> tlas: array<Node>;
+@group(2) @binding(1) var<storage, read> instances: array<Instance>;
+@group(2) @binding(2) var<storage, read> blas: array<Node>;
+@group(2) @binding(3) var<storage, read> triangles: array<Triangle>;
+",
+        ),
+        BackendKind::Metal | BackendKind::Vulkan => (
+            "enable wgpu_ray_query;",
+            HARDWARE_TRAVERSAL_WGSL,
+            "\n@group(2) @binding(0) var scene: acceleration_structure;\n",
+        ),
+    };
+    (directives, format!("{RAY_HIT_WGSL}\n{traversal}{bindings}"))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendKind {
     Compute,
@@ -40,7 +62,8 @@ pub fn request_backend(
     allow_hardware: bool,
 ) -> Result<(BackendKind, Box<dyn RtBackend>), RenderError> {
     let (device, queue) = request_device(adapter, allow_hardware)?;
-    on_device(device, queue)
+    let (kind, backend) = on_device(device, queue)?;
+    Ok((kind, backend))
 }
 
 pub(crate) fn request_device(
@@ -76,7 +99,7 @@ pub(crate) fn enabled_backend(device: &wgpu::Device) -> BackendKind {
 pub(crate) fn on_device(
     device: wgpu::Device,
     queue: wgpu::Queue,
-) -> Result<(BackendKind, Box<dyn RtBackend>), RenderError> {
+) -> Result<(BackendKind, Box<dyn DeviceQueries>), RenderError> {
     let kind = enabled_backend(&device);
     if kind != BackendKind::Compute
         && let Ok(native) = hardware::HardwareBackend::new(device.clone(), queue.clone())
@@ -87,6 +110,30 @@ pub(crate) fn on_device(
         BackendKind::Compute,
         Box::new(ComputeBackend::new(device, queue)?),
     ))
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum InlineScene<'a> {
+    Compute([&'a wgpu::Buffer; 4]),
+    Hardware(&'a wgpu::Tlas),
+}
+
+pub(crate) trait DeviceQueries: RtBackend {
+    fn inline_scene(&self) -> Option<InlineScene<'_>> {
+        None
+    }
+}
+
+impl DeviceQueries for ComputeBackend {
+    fn inline_scene(&self) -> Option<InlineScene<'_>> {
+        self.scene_buffers().map(InlineScene::Compute)
+    }
+}
+
+impl DeviceQueries for HardwareBackend {
+    fn inline_scene(&self) -> Option<InlineScene<'_>> {
+        self.tlas().map(InlineScene::Hardware)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -121,5 +168,9 @@ pub trait RtBackend: Send {
     fn update_scene(&mut self, snapshot: &Snapshot) -> Result<(), RenderError>;
     /// Returns one hit or miss per ray, in input order.
     fn trace(&self, rays: &[Ray]) -> Result<Vec<Option<RayHit>>, RenderError>;
+    /// Returns whether each ray is blocked, in input order.
+    fn occluded(&self, rays: &[Ray]) -> Result<Vec<bool>, RenderError> {
+        Ok(self.trace(rays)?.iter().map(Option::is_some).collect())
+    }
     fn stats(&self) -> SceneStats;
 }

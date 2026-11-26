@@ -8,6 +8,100 @@ use forge_render_gpu::shader::Assembled;
 
 /// The passes of R21.2–R21.5.
 pub const RT_WGSL: &str = include_str!("rt.wgsl");
+pub(crate) const INSTANCE_GEOMETRY_WGSL: &str = include_str!("instance_geometry.wgsl");
+
+/// R24.8 opaque reflection sampler; requires the shared RNG and surface WGSL.
+pub const REFLECTION_SAMPLING_WGSL: &str = include_str!("reflection_sampling.wgsl");
+
+/// Raw R24.8 reflection signal before spatial/temporal filtering.
+pub fn reflection_wgsl(
+    backend: crate::ray::BackendKind,
+    materials: &[(&ShadingGraph, &dyn TextureSampler)],
+) -> Result<Assembled, RenderError> {
+    let mut assembled = forge_render_gpu::shader::materials(materials, 1)?;
+    assembled.source = reflection_source(backend, &assembled.source);
+    Ok(assembled)
+}
+
+pub(crate) fn reflection_source(backend: crate::ray::BackendKind, materials: &str) -> String {
+    bounce_source(
+        backend,
+        materials,
+        REFLECTION_SAMPLING_WGSL,
+        include_str!("reflection_signal.wgsl"),
+    )
+}
+
+/// Raw R24.9 diffuse GI signal before spatial/temporal filtering.
+pub fn diffuse_wgsl(
+    backend: crate::ray::BackendKind,
+    materials: &[(&ShadingGraph, &dyn TextureSampler)],
+) -> Result<Assembled, RenderError> {
+    let mut assembled = forge_render_gpu::shader::materials(materials, 1)?;
+    assembled.source = bounce_source(
+        backend,
+        &assembled.source,
+        "",
+        include_str!("diffuse_signal.wgsl"),
+    );
+    Ok(assembled)
+}
+
+fn bounce_source(
+    backend: crate::ray::BackendKind,
+    materials: &str,
+    sampler: &str,
+    lobe: &str,
+) -> String {
+    use forge_render_gpu::{GEOMETRY_WGSL, LIGHT_SAMPLING_WGSL, RNG_WGSL, SURFACE_WGSL};
+    let (directives, scene) = crate::ray::inline_ray_scene(backend);
+    let receiver = include_str!("receiver_geometry.wgsl");
+    let transport = include_str!("bounce_signal.wgsl");
+    format!(
+        "{directives}\n{materials}\n{RNG_WGSL}\n{GEOMETRY_WGSL}\n{SURFACE_WGSL}\n\
+         {LIGHT_SAMPLING_WGSL}\n{scene}\n{INSTANCE_GEOMETRY_WGSL}\n{receiver}\n\
+         {sampler}\n{transport}\n{lobe}"
+    )
+}
+
+/// Raw R24.7 receiver helpers, with the attribute table at group 0, binding 0.
+pub fn receiver_geometry_wgsl() -> String {
+    let geometry = forge_render_gpu::GEOMETRY_WGSL;
+    let receiver = include_str!("receiver_geometry.wgsl");
+    format!(
+        "{geometry}\n@group(0) @binding(0) var<storage, read> path_attributes: array<vec4<f32>>;\n\
+         {INSTANCE_GEOMETRY_WGSL}\n{receiver}"
+    )
+}
+
+/// Raw R24.6 visibility and reconstruction; spatial and temporal filtering are separate.
+pub fn ambient_visibility_wgsl(backend: crate::ray::BackendKind) -> String {
+    let (directives, scene) = crate::ray::inline_ray_scene(backend);
+    let rng = forge_render_gpu::RNG_WGSL;
+    let ao = include_str!("ambient_visibility.wgsl");
+    format!("{directives}\n{scene}\n{rng}\n{ao}")
+}
+
+/// Raw R24.7 direct-shadow signal before spatial/temporal filtering.
+pub fn direct_shadow_wgsl(
+    backend: crate::ray::BackendKind,
+    materials: &[(&ShadingGraph, &dyn TextureSampler)],
+) -> Result<Assembled, RenderError> {
+    let mut assembled = forge_render_gpu::shader::materials(materials, 1)?;
+    assembled.source = direct_shadow_source(backend, &assembled.source);
+    Ok(assembled)
+}
+
+pub(crate) fn direct_shadow_source(backend: crate::ray::BackendKind, materials: &str) -> String {
+    use forge_render_gpu::{GEOMETRY_WGSL, LIGHT_SAMPLING_WGSL, RNG_WGSL, SURFACE_WGSL};
+    let (directives, scene) = crate::ray::inline_ray_scene(backend);
+    let receiver = include_str!("receiver_geometry.wgsl");
+    let shadow = include_str!("direct_shadow.wgsl");
+    format!(
+        "{directives}\n{materials}\n{RNG_WGSL}\n{GEOMETRY_WGSL}\n{SURFACE_WGSL}\n\
+         {LIGHT_SAMPLING_WGSL}\n{scene}\n{INSTANCE_GEOMETRY_WGSL}\n{receiver}\n{shadow}"
+    )
+}
 
 /// The `F_*` constants of the frame uniform, generated from [`crate::frame`].
 pub fn frame_constants() -> String {
@@ -29,8 +123,12 @@ pub fn assemble(
     materials: &[(&ShadingGraph, &dyn TextureSampler)],
 ) -> Result<Assembled, RenderError> {
     let mut out = forge_render_gpu::shader::materials(materials, BITMAP_GROUP)?;
-    out.source.push_str(&frame_constants());
-    out.source.push('\n');
-    out.source.push_str(RT_WGSL);
+    append_raster_passes(&mut out.source);
     Ok(out)
+}
+
+pub(crate) fn append_raster_passes(source: &mut String) {
+    source.push_str(&frame_constants());
+    source.push('\n');
+    source.push_str(RT_WGSL);
 }

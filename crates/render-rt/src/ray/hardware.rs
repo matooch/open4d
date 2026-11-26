@@ -15,6 +15,7 @@ pub const HARDWARE_WGSL: &str = concat!(
 @group(0) @binding(0) var scene: acceleration_structure;
 @group(0) @binding(1) var<storage, read> queries: array<Query>;
 @group(0) @binding(2) var<storage, read_write> hits: array<RtHit>;
+@group(0) @binding(3) var<storage, read_write> blocked: array<u32>;
 ",
     include_str!("batch.wgsl"),
 );
@@ -229,6 +230,18 @@ impl RtBackend for HardwareBackend {
         match &self.top {
             Some(top) => self.dispatch.trace(rays, [top.as_binding()]),
             None => Ok(vec![None; rays.len()]),
+        }
+    }
+
+    fn occluded(&self, rays: &[Ray]) -> Result<Vec<bool>, RenderError> {
+        if self.stats.tlas_updates == 0 {
+            return Err(RenderError::Settings(
+                "ray query scene has not been built".into(),
+            ));
+        }
+        match &self.top {
+            Some(top) => self.dispatch.occluded(rays, [top.as_binding()]),
+            None => Ok(vec![false; rays.len()]),
         }
     }
 

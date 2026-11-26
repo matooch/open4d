@@ -210,5 +210,13 @@ implementers can avoid collisions.
 | 211 | [Metal hardware ray-tracing backend](../agents/tasks/211-metal-rt-backend.md) | R | 200 | done | render-rt |
 | 212 | [Vulkan hardware ray-tracing backend](../agents/tasks/212-vulkan-rt-backend.md) | R | 200 | done (parity-pending: RTX 3090 run) | render-rt |
 | 213 | [Close the Tier 1/2 quality gaps (pinned in R26)](../agents/tasks/213-raster-hybrid-quality.md) | R | 201, 203 | ready | render-rt |
-| 214 | [Make the real-time tiers real-time (S10 targets)](../agents/tasks/214-realtime-performance.md) | R | 204 | ready | render-rt, render-gpu |
-| 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |
+| 214 | [Make the real-time tiers real-time (S10 targets)](../agents/tasks/214-realtime-performance.md) | R | 204 | in-progress (hermes) | render-rt, render-gpu |
+| 215 | [Luau runtime and builder scripts](../agents/tasks/215-luau-runtime.md) | A, P | – | ready | luau (new), script, app, command, rpc, mcp |
+| 216 | [Behaviour tag, lifecycle and timeline mode](../agents/tasks/216-behaviour-tag.md) | P | 215 | ready | behaviour (new), luau, core, app |
+| 217 | [Input system: devices, input map, injection](../agents/tasks/217-input-system.md) | P | 216 | ready | input (new), ui, command |
+| 218 | [Input tracks: record, replay, Input node](../agents/tasks/218-input-tracks.md) | P | 217 | ready | input, anim, nodes, ui |
+| 219 | [Play mode in the editor](../agents/tasks/219-play-mode.md) | P | 217, 218 | ready | ui, behaviour, viewport |
+| 220 | [Bulk clone API, Luau effector, budgets](../agents/tasks/220-bulk-clone-api.md) | P, E | 216 | ready | behaviour, clone-engine |
+| 221 | [Rust behaviours: SDK, registration, native loading](../agents/tasks/221-rust-behaviours.md) | P | 216 | ready | behaviour, plugin |
+| 222 | [`forge play` runtime and S11 acceptance](../agents/tasks/222-s11-runtime.md) | P | 219, 220 | ready | apps/forge, tests, docs |
+| 185 | [v1.0 release checklist: S1–S11 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |

@@ -57,6 +57,7 @@ headless in CI; the rest are recorded as UI test scripts plus one manual run per
 | S8 | Look-dev: area light, physical camera with depth of field, a node material with noise and fresnel, CPU render with AOVs |
 | S9 | Exchange: import FBX/glTF/Alembic exported from the reference app; geometry and animation match the reference within tolerance |
 | S10 | Robustness: open a scene with 1 M polygons and 10 k clones, stay interactive (≥ 20 fps viewport on a mid-range GPU), no crash in a 30-minute fuzzed UI session |
+| S11 | Behaviours and live input: a Luau-built cloner scene with a stateful behaviour driven by gamepad and MIDI (injected), played live, recorded, rendered 0–240 byte-identically twice, scrubbed with no change (area P, BEHAVIOURS.md §10) |
 
 ## Areas
 
@@ -84,6 +85,7 @@ Each area file holds:
 | M · File exchange | [areas/M-io.md](areas/M-io.md) | 163–172 | G, H |
 | N · Platforms, packaging, performance, docs | [areas/N-platform.md](areas/N-platform.md) | 173–185 | all |
 | R · Real-time GPU renderer (raster, hybrid ray tracing, real-time path tracing; node materials) | [areas/R-realtime.md](areas/R-realtime.md) | 197–204 | J, K |
+| P · Behaviours, live input, play mode (Luau and Rust scripts, D21) | [areas/P-behaviours.md](areas/P-behaviours.md) | 215–222 | A, H, E, R |
 
 ## Order of work
 
