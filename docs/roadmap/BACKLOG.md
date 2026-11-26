@@ -213,7 +213,7 @@ implementers can avoid collisions.
 | 214 | [Make the real-time tiers real-time (S10 targets)](../agents/tasks/214-realtime-performance.md) | R | 204 | in-progress (hermes) | render-rt, render-gpu |
 | 223 | [Viewport navigation 1 / 2 / 3 and tool keys E / R / T](../agents/tasks/223-nav-tool-keys.md) | L | 153, 152 | done | ui, viewport |
 | 224 | [Keyframe button toggles (click removes an existing key)](../agents/tasks/224-keyframe-toggle.md) | L | 090, 150 | done | ui, anim |
-| 225 | [One place to switch model / point / edge / polygon mode](../agents/tasks/225-single-mode-ui.md) | L | 147, 032 | in-progress (planner subagent) | ui |
+| 225 | [One place to switch model / point / edge / polygon mode](../agents/tasks/225-single-mode-ui.md) | L | 147, 032 | done | ui |
 | 226 | [Dockable panels (egui_dock)](../agents/tasks/226-docking.md) | L | 147 | ready | ui, studio |
 | 227 | [Icon set and reference-style menus, command bar and tool palette](../agents/tasks/227-icons-command-layout.md) | L | 147, 225 | ready | ui |
 | 228 | [Clone toolset at the top level](../agents/tasks/228-mograph-top-level.md) | L | 079, 227 | ready | ui |

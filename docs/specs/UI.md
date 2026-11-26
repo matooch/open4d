@@ -195,8 +195,13 @@ changes nothing, no selection while a digit is held, the wheel zooms toward the 
 Undo: camera moves, frames and view switches are **not** undo steps (the camera is view state,
 not document state; COMMANDS.md §6). Gestures and `view.*` commands never touch the history.
 
-Component modes (EDITABLE.md §2): the header of the viewport holds four toggle buttons
-"Model", "Points", "Edges", "Polygons" (`EditorState.mode`). With a component target, left
+Component modes (EDITABLE.md §2): `EditorState.mode` is switched in **one place** (owner note N6,
+decision D22): the four "Mode" buttons at the top of the left tool palette (§11: Objects, Pts,
+Edg, Pol; the selected one is drawn selected) and the Alt+1 .. Alt+4 keys of the key map (§14.2).
+The viewport header used to repeat the four buttons as "Model", "Points", "Edges", "Polygons";
+that duplicate is removed (brief 225). Which one stays follows G1 item 8, still unanswered:
+**parity-pending G1**, our choice is the palette, which the owner's note names as the place of
+the tools. The header keeps the Soft / symmetry bar, shown while a component mode is on. With a component target, left
 click and left drag (not on a gizmo handle) select components instead of objects, and the
 target is drawn with its points / edges / polygon outlines and selected components in the
 component selection colour (§8); the panel rebuilds its GPU meshes when the revision, the
@@ -361,7 +366,9 @@ History (`edit.undo`, `edit.redo`, `object.delete`); Objects (`object.create` fo
 `select.invert`, `select.grow`, `select.shrink`); Modeling (`mesh.extrude`,
 `mesh.extrude_inner`, `mesh.bevel`, `mesh.subdivide`, `mesh.triangulate`, `mesh.optimize`,
 `mesh.reverse_normals`, run with the stored selection and default settings). The
-`select.mode` and `view.shading` buttons show as selected for the current value. A failed
+`select.mode` and `view.shading` buttons show as selected for the current value. The Mode group
+is the only mode switch in the default layout (§6.1, owner note N6): no other panel, bar or menu
+repeats it; a test counts the widgets per mode. A failed
 command goes to the status bar like any other.
 
 Snapping and axis mode exist as commands (`snap.*`, `edit.axis_mode`, MANIPULATE.md §6–7) and as Edit menu entries; they are not palette buttons yet.

@@ -1518,25 +1518,13 @@ impl Editor {
     }
 
     fn viewport_ui(&mut self, ui: &mut Ui, rs: Option<&egui_wgpu::RenderState>) {
-        // header: what a click selects (EDITABLE.md §2.6)
+        // header: the soft-selection bar of the component modes and the render toggle. The
+        // modes themselves are switched in the tool palette only (UI.md §6.1, owner note N6).
         ui.horizontal(|ui| {
-            for mode in EditMode::ALL {
-                let on = self.state.mode == mode;
-                if ui
-                    .add(egui::Button::new(mode.label()).selected(on))
-                    .clicked()
-                {
-                    self.run((
-                        "select.mode",
-                        json!({"mode": forge_command::ModeArg::from(mode)}),
-                    ));
-                }
-            }
             if self.state.mode != EditMode::Model {
-                ui.separator();
                 self.component_bar(ui);
+                ui.separator();
             }
-            ui.separator();
             // what the panes draw: the shaded scene or the real-time tier (UI.md §6.3).
             // UI state only: no undo entry, no document change.
             let render = self.state.display == DisplayMode::Render;

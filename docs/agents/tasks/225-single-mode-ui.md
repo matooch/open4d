@@ -1,6 +1,6 @@
 # 225 · One place to switch model / point / edge / polygon mode
 
-Status: ready · Area: L · Depends on: 147, 032 · Observations: owner notes (GUI-SESSIONS.md), G1/G2/G5 · Touches: ui
+Status: done (parity-pending: G1 item 8 placement) · Area: L · Depends on: 147, 032 · Observations: owner notes (GUI-SESSIONS.md), G1/G2/G5 · Touches: ui
 
 ## Goal
 Remove the duplicate component-mode interface, keeping one, placed where the reference has it (owner note N6, G1 item 8).
@@ -24,3 +24,8 @@ Sources: owner notes N1–N8 and GUI sessions G1/G2/G5 in [../../parity/GUI-SESS
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+
+- Spec: UI.md §6.1 (component modes paragraph) and §11 (Mode group is the only switch), EDITABLE.md §2.6.
+- The two interfaces found: (1) the left tool palette's "Mode" button group (`layout::tool_palette()`, drawn by `tool_palette_ui`: "[] Objects", ". Pts", "/ Edg", "\\ Pol", running `select.mode`); (2) the viewport header's four toggle buttons "Model", "Points", "Edges", "Polygons" (`Editor::viewport_ui`, running the same command). No menu or command-bar entry carried the modes; the Alt+1 .. Alt+4 key-map bindings are the keyboard route and stay.
+- Kept: the palette's buttons (G1 item 8 is unanswered; `parity-pending G1`). Removed: the viewport header's four buttons. The header still shows the Soft / symmetry bar in component modes and the Render toggle.
+- Tests: `components.rs` `header_buttons_switch_the_mode` replaced by `palette_buttons_switch_the_mode` (palette clicks and Alt+1..4 keys); new `there_is_exactly_one_widget_per_mode` (one button per mode in the palette, no "Model"/"Points"/"Edges"/"Polygons" buttons, the command bar has no `select.mode`, the palette has four). `s3_chair`, `layout`, `hud`, `keymap` unchanged and green. 5 runs of components.rs green; clippy clean.

@@ -628,20 +628,67 @@ fn harness(st: EditorState) -> Harness<'static, Editor> {
 }
 
 #[test]
-fn header_buttons_switch_the_mode() {
+fn palette_buttons_switch_the_mode() {
+    // owner note N6 (UI.md §6.1, §11): the palette's Mode group is the one switch
     let (st, id) = setup(EditMode::Model);
     let mut h = harness(st);
     for (label, mode) in [
-        ("Points", EditMode::Points),
-        ("Edges", EditMode::Edges),
-        ("Polygons", EditMode::Polys),
-        ("Model", EditMode::Model),
+        (". Pts", EditMode::Points),
+        ("/ Edg", EditMode::Edges),
+        ("\\ Pol", EditMode::Polys),
+        ("[] Objects", EditMode::Model),
     ] {
         h.get_by_label(label).click();
         h.run();
         assert_eq!(h.state().state.mode, mode, "{label}");
     }
     assert_eq!(h.state().state.selection.active, Some(id));
+    // the keys still work
+    for (key, mode) in [
+        (Key::Num2, EditMode::Points),
+        (Key::Num3, EditMode::Edges),
+        (Key::Num4, EditMode::Polys),
+        (Key::Num1, EditMode::Model),
+    ] {
+        h.key_press_modifiers(Modifiers::ALT, key);
+        h.run();
+        assert_eq!(h.state().state.mode, mode, "Alt+{key:?}");
+    }
+}
+
+#[test]
+fn there_is_exactly_one_widget_per_mode() {
+    use egui::accesskit::Role;
+    let (st, _) = setup(EditMode::Points);
+    let h = harness(st);
+    // one button per mode, all in the palette ...
+    for label in [". Pts", "/ Edg", "\\ Pol", "[] Objects"] {
+        assert_eq!(
+            h.query_all_by_role_and_label(Role::Button, label).count(),
+            1,
+            "{label}"
+        );
+    }
+    // ... and none of the old header buttons or any other mode label
+    for label in ["Model", "Points", "Edges", "Polygons"] {
+        assert_eq!(
+            h.query_all_by_role_and_label(Role::Button, label).count(),
+            0,
+            "a second {label} button"
+        );
+    }
+    // the palette is the only bar that holds mode commands
+    let modes = |groups: Vec<forge_ui::layout::ButtonGroup>| {
+        groups
+            .iter()
+            .flat_map(|g| &g.buttons)
+            .filter(|b| b.command == "select.mode")
+            .count()
+    };
+    assert_eq!(modes(forge_ui::layout::tool_palette()), 4);
+    assert_eq!(modes(forge_ui::layout::command_bar()), 0);
+    // the component bar still shows in a component mode
+    h.get_by_label("Soft");
 }
 
 #[test]
