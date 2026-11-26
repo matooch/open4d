@@ -140,6 +140,10 @@ Sources: [S10](../roadmap/README.md), [R8 and the reference machines](../roadmap
   Missing baseline passes and incompatible run identities are errors, not
   skipped comparisons. Keep this same-machine check separate from the existing
   CI CPU budgets and from the absolute fps targets.
+- Use two independent series per tier (uninstrumented frames, then profiled
+  frames), each with its own engine, two warm-up frames and five timed frames.
+  Output nanosecond medians as integers for comparison; use a caller-supplied
+  machine label to distinguish hosts with identical adapter names.
 - Device limits are part of the result: request sufficient limits where the
   adapter advertises them, and report unsupported workloads explicitly rather
   than attempting an invalid GPU allocation. The current flattened raster
