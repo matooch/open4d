@@ -11,8 +11,14 @@ pub use engine::{
 
 /// The deterministic RNG and sampling helpers (R20.2), for tests of the WGSL directly.
 pub const RNG_WGSL: &str = include_str!("rng.wgsl");
+/// Packed light and emitter sampling; requires only [`RNG_WGSL`] (R24.7).
+pub const LIGHT_SAMPLING_WGSL: &str = include_str!("light_sampling.wgsl");
 /// The BVH walk, lights, surfaces and integrator (R20.1, R20.2).
-pub const TRACE_WGSL: &str = concat!(include_str!("trace.wgsl"), include_str!("flat_scene.wgsl"));
+pub const TRACE_WGSL: &str = concat!(
+    include_str!("light_sampling.wgsl"),
+    include_str!("trace.wgsl"),
+    include_str!("flat_scene.wgsl")
+);
 
 /// Requests the default adapter and device; `Err` carries the reason there is none.
 pub fn request_default_device() -> Result<(wgpu::Device, wgpu::Queue), String> {

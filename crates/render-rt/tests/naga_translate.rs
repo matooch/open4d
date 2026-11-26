@@ -100,6 +100,25 @@ fn ambient_visibility_transport_translates_with_each_traversal() {
 }
 
 #[test]
+fn direct_shadow_light_sampling_has_no_path_transport_dependency() {
+    use forge_render_gpu::{LIGHT_SAMPLING_WGSL, RNG_WGSL};
+    let entry = "
+@group(0) @binding(0) var<storage, read> lights: array<GpuLight>;
+@group(0) @binding(1) var<storage, read_write> samples: array<vec4<f32>>;
+@compute @workgroup_size(1)
+fn sample_shadow_light(@builtin(global_invocation_id) id: vec3<u32>) {
+    var rng = rng_new(vec2<u32>(0u), vec2<u32>(id.x, 0u));
+    let s = light_sample(lights[id.x], vec3<f32>(1.0, 2.0, 3.0), &rng);
+    samples[id.x] = select(vec4<f32>(0.0), vec4<f32>(s.wi, s.dist), s.ok);
+}
+";
+    translate(
+        "standalone direct-shadow light sampling",
+        &format!("{RNG_WGSL}\n{LIGHT_SAMPLING_WGSL}\n{entry}"),
+    );
+}
+
+#[test]
 fn shared_path_transport_translates_with_every_backend() {
     use forge_render_gpu::shader::assemble_with_scene;
     use forge_render_rt::{path_scene_wgsl, ray::BackendKind};

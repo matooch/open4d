@@ -36,6 +36,13 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- [Direct-shadow sampling checkpoint](../../specs/RENDER.md#r247-gpu-direct-shadow-visibility-brief-214):
+  extracted the existing R20/R25 packed light sampler without changing its
+  formulas. The standalone sampler and full transport translated through
+  SPIR-V, MSL and HLSL in five consecutive test runs. Strict R26 passed
+  with actual Metal and Compute and the same nine pins. No Tier 2 runtime
+  change or new S10 throughput claim; receiver shading and inline dispatch
+  remain open. Gate: 2742 tests passed, zero failed; `GATE: all passed`.
 - Step 1 contract: [persistent scene data](../../specs/PERFORMANCE.md#61-persistent-scene-data-brief-214).
 - Baseline gate: `GATE: 2735 tests passed, 0 failed`; `GATE: all passed`. No new S10
   measurements at the spec checkpoint.

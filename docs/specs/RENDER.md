@@ -1143,6 +1143,37 @@ R24.4 remains the estimator contract.
   history, cancellation and fallback. Measure full-size S10 and the
   unchanged R26 acceptance before claiming any performance or quality result.
 
+### R24.7 GPU direct-shadow visibility (brief 214)
+
+Sources: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report),
+R24 direct shadows, and the R20/R25 GPU transport. This is our own design.
+
+- Share the packed light type and light sampler with R20/R25. The sampling
+  module must compile with the shared RNG and without transport-specific
+  bindings, scene traversal, or any path-tracing entry point. Moving the
+  sampler does not change Tier 3 light sampling or Tier 2 frame output.
+- For a future dispatch, keep only prepared shadow-casting lights, in
+  preparation order. Keep all eight samples and the existing stream
+  `absolute_pixel * shadow_light_count + shadow_light_index`, seeded with the
+  current history frame. Use the raster triangle key to recover the receiver;
+  don't substitute the G-buffer shading normal for its oriented geometric normal.
+- Rebuild receiver attributes as in R6/R25 from the mesh-local triangle and
+  its instance transform. In particular, interpolate local corner normals
+  before applying the inverse transpose; independently normalized raster
+  corner normals need not agree under nonuniform scale. Reconstruct the view
+  from the unjittered camera and the jitter-adjusted pixel centre; an
+  orthographic receiver does not look back toward a shared eye point.
+- Preserve the material evaluation, light lobe masks and MIS weights. Reject
+  samples below either normal; offset along the geometric normal and clip
+  rays just short of finite emitters. Apply per-light shadow tint and density
+  before reducing diffuse/specular and the unoccluded/occluded luminances.
+  Leave the spatial filter and per-jitter history unchanged in the first port.
+- Before enabling the dispatch, compare its raw signal against the existing
+  estimator for finite, area and infinite lights, including a cropped frame,
+  distinct geometric/shading normals and both R23 backends available locally.
+  Remeasure unchanged S10 and strict R26 on the host once there is a runtime
+  change; shader extraction alone makes no performance or parity claim.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),
