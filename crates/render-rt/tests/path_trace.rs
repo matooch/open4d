@@ -19,6 +19,20 @@ use std::sync::Mutex;
 type Device = (wgpu::Device, wgpu::Queue);
 static DEVICES: Mutex<Option<Vec<Device>>> = Mutex::new(None);
 
+fn device_backend(device: &wgpu::Device) -> BackendKind {
+    if !device
+        .features()
+        .contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY)
+    {
+        return BackendKind::Compute;
+    }
+    match device.adapter_info().backend {
+        wgpu::Backend::Metal => BackendKind::Metal,
+        wgpu::Backend::Vulkan => BackendKind::Vulkan,
+        _ => BackendKind::Compute,
+    }
+}
+
 fn with_devices<T>(run: impl FnMut(&Device) -> T) -> Vec<T> {
     let mut slot = DEVICES.lock().unwrap_or_else(|e| e.into_inner());
     let devices = slot.get_or_insert_with(|| match request_rt_device() {
@@ -56,14 +70,7 @@ fn compare(snapshot: &Snapshot, settings: &RenderSettings, aovs: &[Aov]) -> Vec<
                 .unwrap()
         });
         let engine = PathTraceEngine::with_device(device.clone(), queue.clone());
-        let expected = if device
-            .features()
-            .contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY)
-        {
-            BackendKind::Metal
-        } else {
-            BackendKind::Compute
-        };
+        let expected = device_backend(device);
         let (gpu, backend) = engine
             .render_with_backend(snapshot, settings, &Control::new())
             .unwrap();
@@ -319,10 +326,8 @@ fn o30_and_o43_cross_tier_consistency() {
             assert_eq!(raster_backend, None, "{name}: raster used RT");
             assert_eq!(hybrid_backend, Some(backend), "{name}: hybrid backend");
             assert_eq!(
-                backend != BackendKind::Compute,
-                device
-                    .features()
-                    .contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY),
+                backend,
+                device_backend(device),
                 "{name}: unexpected fallback or ray-query device"
             );
             if !exercised.contains(&backend) {

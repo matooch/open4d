@@ -48,7 +48,7 @@ pub(crate) fn request_device(
     allow_hardware: bool,
 ) -> Result<(wgpu::Device, wgpu::Queue), RenderError> {
     if allow_hardware
-        && preferred_backend(adapter.get_info().backend, adapter.features()) == BackendKind::Metal
+        && preferred_backend(adapter.get_info().backend, adapter.features()) != BackendKind::Compute
     {
         let desc = wgpu::DeviceDescriptor {
             required_features: wgpu::Features::EXPERIMENTAL_RAY_QUERY,
@@ -68,16 +68,20 @@ pub(crate) fn request_device(
     Ok((device, queue))
 }
 
+/// Device features are what was enabled, not everything the adapter supports.
+pub(crate) fn enabled_backend(device: &wgpu::Device) -> BackendKind {
+    preferred_backend(device.adapter_info().backend, device.features())
+}
+
 pub(crate) fn on_device(
     device: wgpu::Device,
     queue: wgpu::Queue,
 ) -> Result<(BackendKind, Box<dyn RtBackend>), RenderError> {
-    if device
-        .features()
-        .contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY)
+    let kind = enabled_backend(&device);
+    if kind != BackendKind::Compute
         && let Ok(native) = hardware::HardwareBackend::new(device.clone(), queue.clone())
     {
-        return Ok((BackendKind::Metal, Box::new(native)));
+        return Ok((kind, Box::new(native)));
     }
     Ok((
         BackendKind::Compute,

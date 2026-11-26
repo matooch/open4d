@@ -49,8 +49,7 @@ fn main() -> Result<()> {
         "compute" => Some(BackendKind::Compute),
         _ => {
             let kind = preferred_backend(info.backend, adapter.features());
-            // Vulkan hardware device/backend setup is implemented in brief 212.
-            if kind != BackendKind::Metal {
+            if kind == BackendKind::Compute {
                 return Err(format!(
                     "hardware Tier 2 unavailable on {:?}: {}",
                     info.backend, info.name
@@ -83,7 +82,10 @@ fn main() -> Result<()> {
         },
         ..Default::default()
     };
-    if expected_backend == Some(BackendKind::Metal) {
+    if matches!(
+        expected_backend,
+        Some(BackendKind::Metal | BackendKind::Vulkan)
+    ) {
         desc.required_limits = desc
             .required_limits
             .using_acceleration_structure_values(advertised);

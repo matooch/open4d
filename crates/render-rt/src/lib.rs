@@ -22,7 +22,7 @@ pub fn request_default_device() -> Result<(wgpu::Device, wgpu::Queue), String> {
     request_device(false)
 }
 
-/// Requests Metal ray queries where available; other adapters use compute.
+/// Requests Metal or Vulkan ray queries where available; otherwise uses compute.
 pub fn request_rt_device() -> Result<(wgpu::Device, wgpu::Queue), String> {
     request_device(true)
 }

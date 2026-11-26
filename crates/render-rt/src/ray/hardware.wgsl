@@ -1,4 +1,4 @@
-// R23.1: closest opaque triangle in wgpu's hardware acceleration structures.
+// R23.1–2: closest opaque triangle in wgpu's hardware acceleration structures.
 fn rt_closest(origin: vec3<f32>, direction: vec3<f32>, t_max: f32) -> RtHit {
     let speed = length(direction);
     if !(speed > 0.0 && t_max > 1e-12) {

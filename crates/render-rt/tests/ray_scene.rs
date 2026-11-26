@@ -138,11 +138,13 @@ fn ray(x: f64, y: f64, t_max: f64) -> Ray {
 #[test]
 fn available_ray_backends_match_and_update_only_tlas_for_moving_clones() {
     // This is the only GPU test in this file: one adapter, sequential device work.
+    let require_vulkan = std::env::var("FORGE_REQUIRE_VULKAN_RT").as_deref() == Ok("1");
     let instance =
         wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
     let adapter = match pollster::block_on(instance.request_adapter(&Default::default())) {
         Ok(adapter) => adapter,
         Err(reason) => {
+            assert!(!require_vulkan, "Vulkan RT required but no GPU: {reason}");
             assert_ne!(
                 std::env::var("FORGE_REQUIRE_GPU").as_deref(),
                 Ok("1"),
@@ -152,21 +154,27 @@ fn available_ray_backends_match_and_update_only_tlas_for_moving_clones() {
             return;
         }
     };
+    let expected_kind = preferred_backend(adapter.get_info().backend, adapter.features());
+    if require_vulkan {
+        assert_eq!(
+            expected_kind,
+            BackendKind::Vulkan,
+            "Vulkan RT required on the selected adapter: {:?}",
+            adapter.get_info()
+        );
+    } else if expected_kind != BackendKind::Vulkan {
+        eprintln!("skipping Vulkan hardware comparison: no selected Vulkan RT adapter");
+    }
     let (kind, mut compute) = request_backend(&adapter, false).unwrap();
     assert_eq!(kind, BackendKind::Compute);
     let expected = exercise_instanced_queries(compute.as_mut());
     drop(compute);
 
     let (kind, mut selected) = request_backend(&adapter, true).unwrap();
-    let has_metal =
-        preferred_backend(adapter.get_info().backend, adapter.features()) == BackendKind::Metal;
-    assert_eq!(
-        kind,
-        if has_metal {
-            BackendKind::Metal
-        } else {
-            BackendKind::Compute
-        }
+    assert_eq!(kind, expected_kind);
+    eprintln!(
+        "comparing {kind:?} on {} against Compute",
+        adapter.get_info().name
     );
     let actual = exercise_instanced_queries(selected.as_mut());
     assert_eq!(actual.len(), expected.len());

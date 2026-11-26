@@ -112,7 +112,7 @@ fn attributes(
 
 enum Traversal {
     Compute(ComputeBackend),
-    Hardware(HardwareBackend),
+    Hardware(BackendKind, HardwareBackend),
 }
 
 impl Traversal {
@@ -121,9 +121,8 @@ impl Traversal {
         queue: &wgpu::Queue,
         snap: &Snapshot,
     ) -> Result<Self, RenderError> {
-        if device
-            .features()
-            .contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY)
+        let kind = crate::ray::enabled_backend(device);
+        if kind != BackendKind::Compute
             && snap
                 .instances
                 .iter()
@@ -132,7 +131,7 @@ impl Traversal {
         {
             hardware.update_scene(snap)?;
             if hardware.tlas().is_some() {
-                return Ok(Self::Hardware(hardware));
+                return Ok(Self::Hardware(kind, hardware));
             }
         }
         let mut compute = ComputeBackend::new(device.clone(), queue.clone())?;
@@ -161,8 +160,8 @@ impl Traversal {
                     .map(|(i, buf)| (i as u32, storage, buf.as_entire_binding()))
                     .collect::<Vec<_>>(),
             ),
-            Self::Hardware(hardware) => (
-                BackendKind::Metal,
+            Self::Hardware(kind, hardware) => (
+                *kind,
                 vec![(
                     0,
                     wgpu::BindingType::AccelerationStructure {

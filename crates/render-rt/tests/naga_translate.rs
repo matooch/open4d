@@ -85,7 +85,7 @@ fn path(@builtin(global_invocation_id) id: vec3<u32>) {
 }
 
 #[test]
-fn shared_path_transport_translates_with_both_inline_traversals() {
+fn shared_path_transport_translates_with_every_backend() {
     use forge_render_gpu::shader::assemble_with_scene;
     use forge_render_rt::{path_scene_wgsl, ray::BackendKind};
     let case = load("mat-bump-noise");
@@ -95,7 +95,11 @@ fn shared_path_transport_translates_with_both_inline_traversals() {
         .iter()
         .map(|m| (&m.graph, &*m.sampler as &dyn TextureSampler))
         .collect();
-    for backend in [BackendKind::Compute, BackendKind::Metal] {
+    for backend in [
+        BackendKind::Compute,
+        BackendKind::Metal,
+        BackendKind::Vulkan,
+    ] {
         let (directives, scene) = path_scene_wgsl(backend);
         let assembled = assemble_with_scene(&materials, directives, &scene).unwrap();
         translate(&format!("{backend:?} path transport"), &assembled.source);
