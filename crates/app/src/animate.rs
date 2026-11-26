@@ -240,6 +240,35 @@ fn recordable(scene: &Scene, id: NodeId) -> bool {
     })
 }
 
+/// The keys a Record at `frame` would overwrite when they all exist already: every
+/// recordable node of `ids` has a key on each of the 9 record tracks at `frame`. Empty when
+/// there is no recordable node or any of the keys is missing (ANIM.md §2.5a: the Record
+/// button then adds; with the full set it removes exactly these keys).
+pub fn recorded_keys_here(
+    scene: &Scene,
+    ids: &[NodeId],
+    frame: i64,
+    fps: u32,
+) -> Vec<(NodeId, String, f64)> {
+    let mut found = Vec::new();
+    for id in ids.iter().copied().filter(|id| recordable(scene, *id)) {
+        let Some(node) = scene.node(id) else {
+            return Vec::new();
+        };
+        for track_key in RECORD_TRACKS {
+            let hit = node
+                .tracks
+                .get(track_key)
+                .and_then(|t| key_index(t, frame, fps).map(|i| t.keys[i].time));
+            let Some(time) = hit else {
+                return Vec::new();
+            };
+            found.push((id, track_key.to_string(), time));
+        }
+    }
+    found
+}
+
 /// Command Record: keys the current evaluated transform of `ids` on the 9 tracks at the
 /// current frame, one undo step. Returns the number of keys written.
 pub fn record_keys(doc: &mut Document, ids: &[NodeId], ctx: &AnimCtx) -> Result<usize, String> {

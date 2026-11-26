@@ -26,8 +26,10 @@ writes a key automatically. Use the `key.*` and `timeline.*` commands from scrip
 Animated values are shown at the current frame; editing always targets the stored scene,
 and dragging starts from the animated value, so objects do not jump.
 
-The diamond beside a keyable Attributes row adds or updates the row's keys. Right-click it
-to delete the row's keys at this frame or jump to its previous or next key. With Auto-Key
+The diamond beside a keyable Attributes row adds a key at the current frame; when the row
+already has a key at this frame, clicking it removes that key (one undo step). Right-click it
+to add or update, delete the row's keys at this frame, or jump to its previous or next key. The
+timeline's Record button toggles the same way for the selection's position, scale and rotation. With Auto-Key
 off, a change to an already animated row on a single selected object is a draft: click the
 changed diamond to apply it. Moving to another frame discards the draft.
 

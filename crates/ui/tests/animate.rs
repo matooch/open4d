@@ -827,6 +827,54 @@ fn clicking_record_shows_the_key_markers_in_the_attributes_panel() {
 }
 
 #[test]
+fn the_record_button_toggles_the_nine_record_keys() {
+    // owner note N3 (UI.md §12): key-all adds, then removes, in one undo step each
+    let mut st = state();
+    let id = create(&mut st, "forge.null");
+    st.selection.click(id);
+    let mut h = harness_with(st);
+    h.run();
+    let n = undo_len(&h.state().state);
+    h.get_by_label("Record").click();
+    h.run();
+    assert_eq!(tracks(&h.state().state, id).len(), 9);
+    assert_eq!(undo_len(&h.state().state), n + 1);
+
+    // an unrelated key at this frame stays when the record keys go
+    execute(
+        &mut h.state_mut().state,
+        "key.set",
+        json!({"node": id.0, "track": "transform.pos.x", "frame": 5, "value": 3.0}),
+    )
+    .unwrap();
+    h.run();
+    h.get_by_label("Record").click();
+    h.run();
+    assert_eq!(undo_len(&h.state().state), n + 3);
+    // the frame-5 key keeps pos.x alive, the other eight tracks lost their only key
+    assert_eq!(tracks(&h.state().state, id), ["transform.pos.x"]);
+    assert_eq!(keys(&h.state().state, id, "transform.pos.x").len(), 1);
+
+    // undo brings all nine back; undo again leaves the first record only
+    execute(&mut h.state_mut().state, "edit.undo", json!({})).unwrap();
+    h.run();
+    assert_eq!(tracks(&h.state().state, id).len(), 9);
+
+    // a partly keyed frame adds (the missing keys) instead of removing
+    execute(
+        &mut h.state_mut().state,
+        "key.delete",
+        json!({"keys": [{"node": id.0, "track": "transform.scale.z", "frame": 0.0}]}),
+    )
+    .unwrap();
+    h.run();
+    assert_eq!(tracks(&h.state().state, id).len(), 8);
+    h.get_by_label("Record").click();
+    h.run();
+    assert_eq!(tracks(&h.state().state, id).len(), 9);
+}
+
+#[test]
 fn shortcuts_record_autokey_and_frame_steps() {
     let mut st = state();
     let id = create(&mut st, "forge.null");

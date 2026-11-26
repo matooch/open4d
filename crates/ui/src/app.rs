@@ -2932,8 +2932,31 @@ impl Editor {
             if ui.button(if playing { "Stop" } else { "Play" }).clicked() {
                 cmds.push(cmd("timeline.toggle_play"));
             }
-            if ui.button("Record").clicked() {
-                cmds.push(cmd("key.record"));
+            // key-all toggles (UI.md §12, owner note N3): when every record key of the
+            // selection is here already, the button is selected and removes them
+            let recorded = forge_app::animate::recorded_keys_here(
+                self.state.doc.scene(),
+                &ids,
+                self.state.timeline.current,
+                settings.fps,
+            );
+            let remove = !recorded.is_empty();
+            if ui
+                .add(egui::Button::new("Record").selected(remove))
+                .clicked()
+            {
+                if remove {
+                    let fps = f64::from(settings.fps);
+                    let keys: Vec<serde_json::Value> = recorded
+                        .iter()
+                        .map(|(id, track, time)| {
+                            json!({"node": id.0, "track": track, "frame": time * fps})
+                        })
+                        .collect();
+                    cmds.push(("key.delete", json!({"keys": keys})));
+                } else {
+                    cmds.push(cmd("key.record"));
+                }
             }
             let mut auto = self.state.autokey;
             if ui.checkbox(&mut auto, "Auto-Key").clicked() {
