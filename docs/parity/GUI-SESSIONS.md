@@ -16,6 +16,27 @@ You can also do a sitting **with an observer session's help**:
 2. The observer, using `viewport_screenshot` through the bridge, describes what changed.
 3. You confirm the description.
 
+## Owner notes after first hands-on use (2026-11-26)
+
+Recorded by the planner from the owner's message. These are black-box observations of the
+reference app's behaviour, in the owner's own words. They answer parts of G1, G2 and G5 and
+**take precedence over our earlier own-design choices** (decision D22).
+
+| # | Observation (owner) | Answers | Replaces |
+|---|---|---|---|
+| N1 | Viewport navigation: hold **1** + left-drag = pan (move), hold **2** + left-drag = zoom, hold **3** + left-drag = orbit. "One of the best features of the reference app and a main criteria." | G2 | UI.md §6.1 hold keys X / C / V |
+| N2 | **E** = move, **R** = rotate, **T** = scale (tool / gizmo) | G2 | W / E / R |
+| N3 | Clicking a parameter's keyframe button when a key exists at the current frame removes that key (not only through the context menu) | G5 | add-only click |
+| N4 | The clone toolset (Cloner and its family) is reachable from the top level of the UI, not buried in a submenu | G1 | Create menu only |
+| N5 | Docking: panels are dockable (drag a panel to another place, split, tab) | G1 | fixed six-area dock |
+| N6 | Model / point / edge / polygon mode is set in **one** place, the way the reference does it; our editor has two interfaces for it | G1, G2 | duplicate mode UI |
+| N7 | The object manager shows clearly that an object is a child (hierarchy cues) and separates rows more, so the tree is easier to read | G1 | UI.md §13 rows |
+| N8 | Buttons are laid out like the reference (menus and layout) and show **icons** for their action | G1 | text buttons |
+
+Still open for the owner's sitting: the exact layout (G1 items 1, 4, 5 and the new G1 items 7–9),
+the full key list (G2), and what the shading keys are, now that 1 / 2 / 3 are navigation (G2 new
+item).
+
 ## G1 · Layout and managers
 1. Reset to the Standard layout. List the panels in each area of the window (top, left
    column, centre, right top, right bottom, bottom strip), left to right and top to bottom.
@@ -33,6 +54,16 @@ You can also do a sitting **with an observer session's help**:
    - where the content browser opens by default and its tabs or top-level folders;
    - how many files File > Open Recent keeps, and whether opening one moves it to the top;
    - whether a saved preset of a selection keeps links to objects outside the selection.
+
+7. **Object manager rows** (N7): how a child is shown (indent per level in pixels, lines or
+   brackets joining parent and child, the fold arrow), how rows are separated (lines,
+   alternating shades, spacing), what is on a row from left to right (icon, name, tags, the
+   two dots, the tick).
+8. **Modes** (N6): where model / point / edge / polygon mode is switched (which bar, which
+   order), and whether a menu also has it.
+9. **Clone toolset at the top level** (N4): where the Cloner, Matrix, Fracture, effectors and
+   fields are reached (a menu bar menu, a command bar button with a drop-down, or both), and the
+   order of the items.
 
 ## G2 · Shortcuts and navigation
 1. For each of these, the key it uses (write "none" if none):
