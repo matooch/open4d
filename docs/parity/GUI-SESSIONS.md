@@ -196,5 +196,30 @@ Each item names the form row it fills. Record the result in that form, as usual.
 5. **O32/O33** `subtract`, `intersect`, `points-source` and `vdb-export` (volumes.md, volumes-2.md):
    these need a dialog or a GUI-only mode.
 
+## G10 · Look, scale and full menus (a Cowork session may do this; owner, 2026-11-26)
+Set the window to **1920 x 1080**, OS display scaling 100 % (or note the scaling), the Standard
+layout, the default theme. Measure in screen pixels from your own screenshots, then delete them.
+1. **Panel geometry:** each panel's position and size (x, y, width, height) and as a percentage
+   of the window; the splitter widths; which panels share an area as tabs.
+2. **Density:** the menu bar height; the command bar button size and icon size, and the gap
+   between groups; the tool palette button size; the object manager row height and indent per
+   level; the attribute manager row height, label column width, tab bar height and tab button
+   size; the timeline height; the body text size (cap height in pixels) and whether labels are
+   bold anywhere.
+3. **Structure cues:** separators (lines, gaps, shading), group headers (style, fold arrows),
+   how the active tab or tool is shown, how hover is shown, tooltips (delay, what they show).
+4. **Menus, complete:** every menu bar menu, every item and **every submenu**, in order, with
+   separators (`---`), the shortcut shown beside an item, and `…` items that open a dialog. The
+   same for the right-click menus of the object manager, the viewport (no selection, an object,
+   points in point mode) and the timeline.
+5. **Command bar and tool palette:** each button in order, its tooltip text, whether it has a
+   drop-down (and that drop-down's items in order), described in words (never draw or trace an
+   icon).
+6. **Viewport chrome:** the viewport's own menu bar or header (its menus and items), the axis
+   widget, the HUD text, the grid look, how the selected object is highlighted.
+7. **Overall feel:** in a few sentences, what makes the layout feel the way it does (dense or
+   airy, flat or bevelled, contrast, where the eye goes first). No colour values: we keep our own
+   palette (D22).
+
 ## Answers
 (The owner fills this in, per session, with the date.)

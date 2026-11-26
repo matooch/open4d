@@ -405,11 +405,31 @@ string is empty with a hint, a colour has a "mixed" note, a list shows the activ
 Other widgets show the active object's value. A set applies to all selected objects in one
 undo step; a vec3 component edit keeps each object's other components.
 
-Key indicators (097): every row whose descriptor supports key tracks has a 12 px
-button left of the label. A faint outline means no tracks, an accent outline means
-animated elsewhere, a filled accent means a key here, and a warning fill means an
-uncommitted edit. Click to add/update a key for the active object's row; the context
-menu also deletes the row's keys here and jumps to its previous/next keyed frame.
+Key indicators (097, toggle by brief 224, owner note N3): every row whose descriptor supports key
+tracks has a 12 px button left of the label. A faint outline means no tracks, an accent outline
+means animated elsewhere, a filled accent means a key here, and a warning fill means an
+uncommitted edit. What a click does depends on the state (`RowKeys::click`):
+
+| State | Click |
+|---|---|
+| unkeyed (no track) | adds a key of the row's current value (`key.set_parameter`; a Vec3 keys all three components) |
+| animated (a track, no key at this frame, so also a frame between keys) | adds a key here |
+| changed (uncommitted edit; a key may or may not exist here) | adds or updates the key with the edited value |
+| keyed (a key at this frame on any of the row's tracks, no uncommitted edit) | **removes** the keys of the row here through `key.delete`, one undo step; a Vec3 loses every component key at this frame together |
+
+The state is computed from the scene every frame, so the button shows the new state in the frame
+after the click, with no further input. Removing
+the last key of a track removes the track (the `key.delete` rule, ANIM.md "key.delete {keys}"); the row then shows
+unkeyed again. **Parity-pending G5:** the reference may keep an empty track; ours never has one
+(`Track::validate` refuses an empty track). The context menu is unchanged: "Add / Update Key on
+Parameter", "Delete Key on Parameter" (enabled when a key is here), and the previous / next
+keyed frame entries.
+
+The timeline's "Record" button (the key-all button of the selection, ANIM.md §2.3) toggles the
+same way: when every recordable selected node already has a key on all 9 record tracks at the
+current frame, the button is drawn selected and a click removes exactly those keys (`key.delete`,
+one undo step, other parameters' keys are kept); otherwise it runs `key.record`. The `K` key and
+the Animate menu's "Record Active Objects" stay add / update. "Delete Keys" is unchanged.
 Vector and colour rows key their three component tracks together. This is an own
 design based on [G4](../parity/GUI-SESSIONS.md#g4--attribute-manager-widgets-and-field-lists)
 and is **parity-pending**.
