@@ -213,4 +213,22 @@ Sources: [R21.6 raster outputs](RENDER.md#r216-outputs-aovs-and-limits),
   outside a crop. Preserve alpha metadata, statistics and the order and values of
   callback events. Gather only the postprocessed crop rows for the Tile event,
   and do not allocate a Tile payload if there is no callback. Beauty-only output
-  does not iterate over AOV pixels.
+   does not iterate over AOV pixels.
+
+### 6.3 Compiled raster programs (brief 214)
+
+Sources: [R21 raster tier](RENDER.md#r21-real-time-raster-engine),
+[wgpu pipeline layouts](https://docs.rs/wgpu/latest/wgpu/struct.PipelineLayoutDescriptor.html)
+and the [S10 setup target](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report).
+
+- Keep one successfully compiled raster program per engine/device, shared by engine
+  clones. Compare the complete assembled WGSL and the number of bitmap bindings; a
+  change in either replaces the program and its bind group layouts. A failed
+  compilation must not replace a valid entry.
+- Assembling the current materials and resolving and binding their current bitmap
+  views remain frame work. Identical WGSL does not imply identical texture content.
+  Camera, light, resolution and pass selection are not keys when source and layout
+  match. A frame may retain its program after another frame replaces the cache slot.
+- Check program identity without timing assertions and compare warm and cold
+  rendered output across material and bitmap edits. Measure full-size S10 and
+  camera-only setup separately, as in §6.1.

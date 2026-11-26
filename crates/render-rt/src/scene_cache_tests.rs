@@ -1,6 +1,8 @@
 use super::*;
 use forge_material::ir::{Diffuse, DiffuseModel, IrNode, Outputs};
 use forge_render_api::{Instance, Light, LightKind, MaterialData, MeshData, ShadowMode};
+use forge_shaders::ShaderSet;
+use forge_shaders::shader::{Bitmap, Shader};
 use glam::DMat4;
 
 #[test]
@@ -62,6 +64,15 @@ fn raster_geometry_is_resident_until_its_inputs_change() {
             .unwrap()
             .clone()
     };
+    let program = || {
+        engine
+            .raster_program
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .clone()
+    };
     let check = |scene: &Snapshot| {
         let warm = render(&engine, scene).unwrap();
         let cold = render(&new_engine(), scene).unwrap();
@@ -75,6 +86,7 @@ fn raster_geometry_is_resident_until_its_inputs_change() {
     let first = check(&scene);
     assert!(first.aovs[&Aov::ObjectId].data.contains(&8.0));
     let initial = resident();
+    let initial_program = program();
     scene.camera.transform[12] += 35.0;
     let moved_camera = check(&scene);
     assert_ne!(
@@ -86,10 +98,44 @@ fn raster_geometry_is_resident_until_its_inputs_change() {
     let brighter = check(&scene);
     assert_ne!(moved_camera.beauty.data, brighter.beauty.data);
     assert!(Arc::ptr_eq(&initial, &resident()));
+    assert!(Arc::ptr_eq(&initial_program, &program()));
+    render(&engine.clone(), &scene).unwrap();
+    assert!(Arc::ptr_eq(&initial_program, &program()));
     scene.materials[0].graph.nodes[0] = IrNode::Color([0.7, 0.6, 0.5]);
     let recolored = check(&scene);
     assert_ne!(brighter.beauty.data, recolored.beauty.data);
     assert!(Arc::ptr_eq(&initial, &resident()));
+    let recolored_program = program();
+    assert!(!Arc::ptr_eq(&initial_program, &recolored_program));
+
+    let bitmap = |rgb: [f32; 3]| {
+        let mut set = ShaderSet::default();
+        let mut image = Image::new(1, 1, AlphaMode::Straight);
+        image.set_pixel(0, 0, [rgb[0], rgb[1], rgb[2], 1.0]);
+        set.shaders.insert(
+            "color".into(),
+            Shader::Bitmap(Bitmap {
+                image: Arc::new(image),
+                repeat: true,
+                interpolate: false,
+            }),
+        );
+        Arc::new(set)
+    };
+    scene.materials[0].graph.nodes[0] = IrNode::Texture("color".into());
+    scene.materials[0].sampler = bitmap([0.6, 0.2, 0.1]);
+    let textured = check(&scene);
+    assert_ne!(recolored.beauty.data, textured.beauty.data);
+    let textured_program = program();
+    assert!(!Arc::ptr_eq(&recolored_program, &textured_program));
+    assert_eq!(textured_program.bitmap_count, 1);
+    scene.materials[0].sampler = bitmap([0.1, 0.2, 0.6]);
+    assert_ne!(textured.beauty.data, check(&scene).beauty.data);
+    assert!(Arc::ptr_eq(&textured_program, &program()));
+    scene.materials[0].graph.nodes[0] = IrNode::Color([0.7, 0.6, 0.5]);
+    assert_eq!(recolored.beauty.data, check(&scene).beauty.data);
+    assert!(!Arc::ptr_eq(&textured_program, &program()));
+    assert_eq!(program().bitmap_count, 0);
     let materials = std::mem::take(&mut scene.materials);
     assert!(matches!(
         render(&engine, &scene),

@@ -181,7 +181,22 @@ pub struct RtEngine {
     device: wgpu::Device,
     queue: wgpu::Queue,
     raster_scene: Arc<Mutex<Option<Arc<RasterScene>>>>,
+    raster_program: Arc<Mutex<Option<Arc<RasterProgram>>>>,
     hybrid: Arc<Mutex<HybridView>>,
+}
+
+struct RasterProgram {
+    source: String,
+    bitmap_count: usize,
+    geometry_layout: wgpu::BindGroupLayout,
+    lighting_layout: wgpu::BindGroupLayout,
+    bitmap_layout: wgpu::BindGroupLayout,
+    gbuffer: wgpu::RenderPipeline,
+    shadow_pipeline: wgpu::RenderPipeline,
+    lighting: wgpu::RenderPipeline,
+    split_pass: wgpu::RenderPipeline,
+    ssr_pass: wgpu::RenderPipeline,
+    albedo_pass: wgpu::RenderPipeline,
 }
 
 /// One immutable flat geometry upload. Do not retain the CPU copies of the packed triangles
@@ -255,8 +270,30 @@ impl RtEngine {
             device,
             queue,
             raster_scene: Arc::default(),
+            raster_program: Arc::default(),
             hybrid: Arc::new(Mutex::new(HybridView::default())),
         }
+    }
+
+    fn compiled_raster_program(
+        &self,
+        source: String,
+        bitmap_count: usize,
+        compile: impl FnOnce(String, usize) -> Result<RasterProgram, RenderError>,
+    ) -> Result<Arc<RasterProgram>, RenderError> {
+        let mut cached = self
+            .raster_program
+            .lock()
+            .map_err(|_| RenderError::Unsupported("raster program cache lock poisoned".into()))?;
+        if let Some(program) = cached
+            .as_ref()
+            .filter(|program| program.bitmap_count == bitmap_count && program.source == source)
+        {
+            return Ok(Arc::clone(program));
+        }
+        let program = Arc::new(compile(source, bitmap_count)?);
+        *cached = Some(Arc::clone(&program));
+        Ok(program)
     }
 
     fn raster_geometry(
@@ -1052,210 +1089,246 @@ impl RtEngine {
             ..Default::default()
         });
 
-        let errors = device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("raster"),
-            source: wgpu::ShaderSource::Wgsl(source.into()),
-        });
-        let geometry_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("geometry"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+        let program =
+            self.compiled_raster_program(source, bitmap_views.len(), |source, bitmap_count| {
+                let errors = device.push_error_scope(wgpu::ErrorFilter::Validation);
+                let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some("raster"),
+                    source: wgpu::ShaderSource::Wgsl(source.as_str().into()),
+                });
+                let geometry_layout =
+                    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: Some("geometry"),
+                        entries: &[
+                            wgpu::BindGroupLayoutEntry {
+                                binding: 0,
+                                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                                ty: wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Uniform,
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                },
+                                count: None,
+                            },
+                            storage_entry(1, true),
+                            storage_entry(2, true),
+                            storage_entry(3, true),
+                        ],
+                    });
+                let lighting_layout =
+                    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: Some("lighting"),
+                        entries: &[
+                            texture_entry(0, false),
+                            texture_entry(1, false),
+                            texture_entry(2, true),
+                            sampler_entry(3, true),
+                            texture_entry(4, false),
+                            sampler_entry(5, false),
+                            wgpu::BindGroupLayoutEntry {
+                                ty: wgpu::BindingType::Texture {
+                                    sample_type: wgpu::TextureSampleType::Float {
+                                        filterable: false,
+                                    },
+                                    view_dimension: wgpu::TextureViewDimension::D2Array,
+                                    multisampled: false,
+                                },
+                                ..texture_entry(6, false)
+                            },
+                        ],
+                    });
+                // R21.3: the shader-node bitmaps, one sampled texture per binding, in group 2
+                let bitmap_layout =
+                    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: Some("bitmaps"),
+                        entries: &(0..bitmap_count as u32)
+                            .map(|binding| texture_entry(binding, false))
+                            .collect::<Vec<_>>(),
+                    });
+                let pipeline_layout =
+                    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some("geometry"),
+                        bind_group_layouts: &[Some(&geometry_layout)],
+                        immediate_size: 0,
+                    });
+                let lighting_pipeline =
+                    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some("lighting"),
+                        bind_group_layouts: &[
+                            Some(&geometry_layout),
+                            Some(&lighting_layout),
+                            Some(&bitmap_layout),
+                        ],
+                        immediate_size: 0,
+                    });
+                let color_target = |format: wgpu::TextureFormat| {
+                    Some(wgpu::ColorTargetState {
+                        format,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })
+                };
+                let f = wgpu::TextureFormat::Rgba32Float;
+                let gbuffer = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("gbuffer"),
+                    layout: Some(&pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &module,
+                        entry_point: Some("vs_gbuffer"),
+                        compilation_options: Default::default(),
+                        buffers: &[],
                     },
-                    count: None,
-                },
-                storage_entry(1, true),
-                storage_entry(2, true),
-                storage_entry(3, true),
-            ],
-        });
-        let lighting_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("lighting"),
-            entries: &[
-                texture_entry(0, false),
-                texture_entry(1, false),
-                texture_entry(2, true),
-                sampler_entry(3, true),
-                texture_entry(4, false),
-                sampler_entry(5, false),
-                wgpu::BindGroupLayoutEntry {
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                        view_dimension: wgpu::TextureViewDimension::D2Array,
-                        multisampled: false,
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList,
+                        cull_mode: None,
+                        ..Default::default()
                     },
-                    ..texture_entry(6, false)
-                },
-            ],
-        });
-        // R21.3: the shader-node bitmaps, one sampled texture per binding, in group 2
-        let bitmap_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("bitmaps"),
-            entries: &(0..bitmap_views.len() as u32)
-                .map(|binding| texture_entry(binding, false))
-                .collect::<Vec<_>>(),
-        });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("geometry"),
-            bind_group_layouts: &[Some(&geometry_layout)],
-            immediate_size: 0,
-        });
-        let lighting_pipeline = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("lighting"),
-            bind_group_layouts: &[
-                Some(&geometry_layout),
-                Some(&lighting_layout),
-                Some(&bitmap_layout),
-            ],
-            immediate_size: 0,
-        });
-        let color_target = |format: wgpu::TextureFormat| {
-            Some(wgpu::ColorTargetState {
-                format,
-                blend: None,
-                write_mask: wgpu::ColorWrites::ALL,
-            })
-        };
-        let f = wgpu::TextureFormat::Rgba32Float;
-        let gbuffer = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("gbuffer"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("vs_gbuffer"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs_gbuffer"),
-                compilation_options: Default::default(),
-                targets: &[color_target(f), color_target(f)],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        let shadow_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("shadow"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("vs_shadow"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
-                stencil: Default::default(),
-                bias: wgpu::DepthBiasState {
-                    constant: 2,
-                    slope_scale: 2.0,
-                    clamp: 0.0,
-                },
-            }),
-            multisample: Default::default(),
-            fragment: None,
-            multiview_mask: None,
-            cache: None,
-        });
-        let fullscreen = |label: &str, entry: &str| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(label),
-                layout: Some(&lighting_pipeline),
-                vertex: wgpu::VertexState {
-                    module: &module,
-                    entry_point: Some("vs_full"),
-                    compilation_options: Default::default(),
-                    buffers: &[],
-                },
-                primitive: Default::default(),
-                depth_stencil: None,
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &module,
-                    entry_point: Some(entry),
-                    compilation_options: Default::default(),
-                    targets: &[color_target(f), color_target(f)],
-                }),
-                multiview_mask: None,
-                cache: None,
-            })
-        };
-        let lighting = fullscreen("lighting", "fs_light");
-        let split_pass = fullscreen("split", "fs_split");
-        // R22.3: one colour target, so its own pipeline descriptor
-        let ssr_pass = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("ssr"),
-            layout: Some(&lighting_pipeline),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("vs_full"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: Default::default(),
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs_ssr"),
-                compilation_options: Default::default(),
-                targets: &[color_target(f)],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        let albedo_pass = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("albedo"),
-            layout: Some(&lighting_pipeline),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("vs_full"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: Default::default(),
-            depth_stencil: None,
-            multisample: Default::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs_albedo"),
-                compilation_options: Default::default(),
-                targets: &[color_target(f)],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        if let Some(e) = pollster::block_on(errors.pop()) {
-            return Err(RenderError::Settings(format!("GPU shader: {e}")));
-        }
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: wgpu::TextureFormat::Depth32Float,
+                        depth_write_enabled: Some(true),
+                        depth_compare: Some(wgpu::CompareFunction::Less),
+                        stencil: Default::default(),
+                        bias: Default::default(),
+                    }),
+                    multisample: Default::default(),
+                    fragment: Some(wgpu::FragmentState {
+                        module: &module,
+                        entry_point: Some("fs_gbuffer"),
+                        compilation_options: Default::default(),
+                        targets: &[color_target(f), color_target(f)],
+                    }),
+                    multiview_mask: None,
+                    cache: None,
+                });
+                let shadow_pipeline =
+                    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some("shadow"),
+                        layout: Some(&pipeline_layout),
+                        vertex: wgpu::VertexState {
+                            module: &module,
+                            entry_point: Some("vs_shadow"),
+                            compilation_options: Default::default(),
+                            buffers: &[],
+                        },
+                        primitive: wgpu::PrimitiveState {
+                            topology: wgpu::PrimitiveTopology::TriangleList,
+                            cull_mode: None,
+                            ..Default::default()
+                        },
+                        depth_stencil: Some(wgpu::DepthStencilState {
+                            format: wgpu::TextureFormat::Depth32Float,
+                            depth_write_enabled: Some(true),
+                            depth_compare: Some(wgpu::CompareFunction::Less),
+                            stencil: Default::default(),
+                            bias: wgpu::DepthBiasState {
+                                constant: 2,
+                                slope_scale: 2.0,
+                                clamp: 0.0,
+                            },
+                        }),
+                        multisample: Default::default(),
+                        fragment: None,
+                        multiview_mask: None,
+                        cache: None,
+                    });
+                let fullscreen = |label: &str, entry: &str| {
+                    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some(label),
+                        layout: Some(&lighting_pipeline),
+                        vertex: wgpu::VertexState {
+                            module: &module,
+                            entry_point: Some("vs_full"),
+                            compilation_options: Default::default(),
+                            buffers: &[],
+                        },
+                        primitive: Default::default(),
+                        depth_stencil: None,
+                        multisample: Default::default(),
+                        fragment: Some(wgpu::FragmentState {
+                            module: &module,
+                            entry_point: Some(entry),
+                            compilation_options: Default::default(),
+                            targets: &[color_target(f), color_target(f)],
+                        }),
+                        multiview_mask: None,
+                        cache: None,
+                    })
+                };
+                let lighting = fullscreen("lighting", "fs_light");
+                let split_pass = fullscreen("split", "fs_split");
+                // R22.3: one colour target, so its own pipeline descriptor
+                let ssr_pass = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("ssr"),
+                    layout: Some(&lighting_pipeline),
+                    vertex: wgpu::VertexState {
+                        module: &module,
+                        entry_point: Some("vs_full"),
+                        compilation_options: Default::default(),
+                        buffers: &[],
+                    },
+                    primitive: Default::default(),
+                    depth_stencil: None,
+                    multisample: Default::default(),
+                    fragment: Some(wgpu::FragmentState {
+                        module: &module,
+                        entry_point: Some("fs_ssr"),
+                        compilation_options: Default::default(),
+                        targets: &[color_target(f)],
+                    }),
+                    multiview_mask: None,
+                    cache: None,
+                });
+                let albedo_pass = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("albedo"),
+                    layout: Some(&lighting_pipeline),
+                    vertex: wgpu::VertexState {
+                        module: &module,
+                        entry_point: Some("vs_full"),
+                        compilation_options: Default::default(),
+                        buffers: &[],
+                    },
+                    primitive: Default::default(),
+                    depth_stencil: None,
+                    multisample: Default::default(),
+                    fragment: Some(wgpu::FragmentState {
+                        module: &module,
+                        entry_point: Some("fs_albedo"),
+                        compilation_options: Default::default(),
+                        targets: &[color_target(f)],
+                    }),
+                    multiview_mask: None,
+                    cache: None,
+                });
+                if let Some(e) = pollster::block_on(errors.pop()) {
+                    return Err(RenderError::Settings(format!("GPU shader: {e}")));
+                }
 
+                Ok(RasterProgram {
+                    source,
+                    bitmap_count,
+                    geometry_layout,
+                    lighting_layout,
+                    bitmap_layout,
+                    gbuffer,
+                    shadow_pipeline,
+                    lighting,
+                    split_pass,
+                    ssr_pass,
+                    albedo_pass,
+                })
+            })?;
+        let RasterProgram {
+            geometry_layout,
+            lighting_layout,
+            bitmap_layout,
+            gbuffer,
+            shadow_pipeline,
+            lighting,
+            split_pass,
+            ssr_pass,
+            albedo_pass,
+            ..
+        } = &*program;
         let frame_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("frame"),
             size: (frame::SLOTS * 16) as u64,
@@ -1274,7 +1347,7 @@ impl RtEngine {
         });
         let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("geometry"),
-            layout: &geometry_layout,
+            layout: geometry_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -1296,7 +1369,7 @@ impl RtEngine {
         });
         let bitmap_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("bitmaps"),
-            layout: &bitmap_layout,
+            layout: bitmap_layout,
             entries: &bitmap_views
                 .iter()
                 .enumerate()
@@ -1309,7 +1382,7 @@ impl RtEngine {
         let lighting_bind = |source: &wgpu::TextureView| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("lighting"),
-                layout: &lighting_layout,
+                layout: lighting_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
@@ -1392,7 +1465,7 @@ impl RtEngine {
                     let y = (tile / ATLAS_X) * TILE_PX;
                     pass.set_viewport(x as f32, y as f32, TILE_PX as f32, TILE_PX as f32, 0.0, 1.0);
                     pass.set_scissor_rect(x, y, TILE_PX, TILE_PX);
-                    pass.set_pipeline(&shadow_pipeline);
+                    pass.set_pipeline(shadow_pipeline);
                     pass.set_bind_group(0, &bind, &[]);
                     pass.draw(0..vertex_count, 0..1);
                 }
@@ -1444,7 +1517,7 @@ impl RtEngine {
             });
             pass.set_viewport(0.0, 0.0, w as f32, h as f32, 0.0, 1.0);
             pass.set_scissor_rect(rx0, ry0, rx1 - rx0, ry1 - ry0);
-            pass.set_pipeline(&gbuffer);
+            pass.set_pipeline(gbuffer);
             pass.set_bind_group(0, &bind, &[]);
             pass.draw(0..vertex_count, 0..1);
             drop(pass);
@@ -1572,7 +1645,7 @@ impl RtEngine {
             };
         run_full(
             "lighting",
-            &lighting,
+            lighting,
             &[&targets.beauty_view, &targets.shadow_view],
         );
         finish_phase(profile, device, "lighting")?;
@@ -1603,7 +1676,7 @@ impl RtEngine {
                 });
                 pass.set_viewport(0.0, 0.0, w as f32, h as f32, 0.0, 1.0);
                 pass.set_scissor_rect(rx0, ry0, rx1 - rx0, ry1 - ry0);
-                pass.set_pipeline(&ssr_pass);
+                pass.set_pipeline(ssr_pass);
                 pass.set_bind_group(0, &bind, &[]);
                 pass.set_bind_group(1, &ssr_bind, &[]);
                 pass.set_bind_group(2, &bitmap_bind, &[]);
@@ -1621,7 +1694,7 @@ impl RtEngine {
             }
             run_full(
                 "split",
-                &split_pass,
+                split_pass,
                 &[&targets.split_views[0], &targets.split_views[1]],
             );
             finish_phase(profile, device, "split")?;
@@ -1630,7 +1703,7 @@ impl RtEngine {
             if control.is_cancelled() {
                 return Err(RenderError::Cancelled);
             }
-            run_full("albedo", &albedo_pass, &[&targets.albedo_view]);
+            run_full("albedo", albedo_pass, &[&targets.albedo_view]);
             finish_phase(profile, device, "albedo")?;
         }
 

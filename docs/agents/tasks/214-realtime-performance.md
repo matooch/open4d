@@ -72,3 +72,18 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
   exceeds 5 ms. Tier 2 used actual Metal with all four effects and missed 30 fps.
   This checkpoint does not change any effect estimator or R26 budget. Gate:
   2738 tests passed, zero failed; `GATE: all passed`.
+- [Compiled program checkpoint](../../specs/PERFORMANCE.md#63-compiled-raster-programs-brief-214):
+  retain the raster pipelines and layouts while assembled WGSL and bitmap binding
+  count match. Bitmap pixels remain live per frame. Five required-GPU runs passed
+  the raster cache, hybrid, and shader translation tests; cached and fresh output
+  compared exactly after camera, light, graph, and bitmap edits.
+
+  | Tier | Frame median (ms) | fps | Setup (ms) | Camera-only setup (ms) |
+  | --- | ---: | ---: | ---: | ---: |
+  | 1 | 9.966 | 100.339 | 2.013 | 2.230 |
+  | 2 | 4380.789 | 0.228 | 3.116 | 3.106 |
+
+  Same full-size M5 Pro / Metal protocol; Tier 2 used actual Metal with all
+  four effects. Tier 1 and camera-only setup meet their targets in this run.
+  Per-mesh invalidation and the Tier 2 throughput target remain open. Gate:
+  2738 tests passed, zero failed; `GATE: all passed`.
