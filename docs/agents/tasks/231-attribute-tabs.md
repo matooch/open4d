@@ -1,6 +1,6 @@
 # 231 · Attribute manager: settings divided into tabs and groups, like the reference
 
-Status: waiting (O64, which waits for the owner's licence confirmation; fallback: G1 item 3 by the owner) · Area: L · Depends on: 150, O64 · Observations: owner note N9 (GUI-SESSIONS.md), O64 [attribute-tabs.md](../../parity/attribute-tabs.md) · Touches: core, generators, modifiers, clone-engine, fields, rig, dynamics, material, volume, ui
+Status: waiting (O64) · Area: L · Depends on: 150, O64 · Observations: owner note N9 (GUI-SESSIONS.md), O64 [attribute-tabs.md](../../parity/attribute-tabs.md) · Touches: core, generators, modifiers, clone-engine, fields, rig, dynamics, material, volume, ui
 
 ## Goal
 Not every setting sits at the same level. Each object's settings are divided into tabs (and
