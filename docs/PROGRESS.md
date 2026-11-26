@@ -10,7 +10,7 @@ linked files win.
 
 | | Now |
 |---|---|
-| Implementation briefs | **199 of 204 done** (98 %) · 4 ready · 1 waiting |
+| Implementation briefs | **200 of 204 done** (98 %) · 4 ready |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
 | Acceptance scenarios | S1–S9 pass (S6 with own-design Pose Morph, parity-pending) · S10 needs a measurement |
@@ -41,7 +41,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 |---|---|---|
 | A · Automation (CLI, RPC, MCP, scripting) | 9 / 9 | – |
 | B · Modeling tools, selections, splines | 18 / 18 | Interactive feel (GUI session G3) |
-| C · Primitives and generators | 16 / 17 | 046 Null/Instance display (waits on GUI session G8) |
+| C · Primitives and generators | 17 / 17 | Parity-pending: Null display own-design details (O20b), X-Ray drawing |
 | D · Deformers and fields | 15 / 15 | Parity-pending: Bevel deformer rounding, Displacer UVW, Polygon Reduction positions |
 | E · Clone toolset (MoGraph) | 17 / 17 | – |
 | F · Volumes | 10 / 10 | – |
@@ -62,7 +62,7 @@ Run 9 finished: ray tracing (200, 211, 201, 202, 203, 204, 212).
 1. 214 · Real-time performance: persistent GPU scene, RT effect budgets (S10 targets)
 2. 213 · Tier 1/2 quality gaps (mat-glossy specular under hybrid shadows)
 
-Then only 210 (DX12 shadows, your Windows PC), 046 (GUI session G8) and 185 (v1.0 release) remain.
+Then only 210 (DX12 shadows, your Windows PC) and 185 (v1.0 release) remain.
 
 ## Blocked: waiting on you (owner)
 

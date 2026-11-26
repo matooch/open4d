@@ -158,6 +158,69 @@ fn valid_param_id(id: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '.')
 }
 
+/// Display shape ids of the Null, in menu order (docs/specs/SCENE-OBJECTS.md S9.1).
+pub const NULL_SHAPES: [(&str, &str); 15] = [
+    ("none", "None"),
+    ("dot", "Dot"),
+    ("locator", "Locator"),
+    ("circle", "Circle"),
+    ("rectangle", "Rectangle"),
+    ("diamond", "Diamond"),
+    ("triangle", "Triangle"),
+    ("pentagon", "Pentagon"),
+    ("hexagon", "Hexagon"),
+    ("octagon", "Octagon"),
+    ("star", "Star"),
+    ("axis", "Axis"),
+    ("cube", "Cube"),
+    ("pyramid", "Pyramid"),
+    ("sphere", "Sphere"),
+];
+
+/// `forge.null`: no geometry, only a viewport display (SCENE-OBJECTS.md S9, observation O20b).
+pub fn null_type() -> NodeType {
+    let g = "Object";
+    NodeType::new("forge.null", "Null", crate::Category::Object)
+        .param(ParamDesc::enumeration("shape", "Display", "dot", &NULL_SHAPES).group(g))
+        .param(
+            ParamDesc::float("radius", "Radius", 10.0)
+                .range(0.0, 1.0e20)
+                .unit(crate::Unit::Distance)
+                .group(g),
+        )
+        .param(
+            ParamDesc::float("aspect", "Aspect Ratio", 1.0)
+                .range(0.0, 1.0e20)
+                .group(g),
+        )
+        .param(
+            ParamDesc::enumeration(
+                "orientation",
+                "Orientation",
+                "camera",
+                &[("camera", "Camera"), ("x", "X"), ("y", "Y"), ("z", "Z")],
+            )
+            .group(g),
+        )
+        .param(
+            ParamDesc::enumeration(
+                "display_color",
+                "Display Color",
+                "material",
+                &[
+                    ("material", "Material"),
+                    ("layer", "Layer"),
+                    ("automatic", "Automatic"),
+                    ("custom", "Custom"),
+                ],
+            )
+            .group(g),
+        )
+        .param(ParamDesc::color("color", "Color", [1.0, 1.0, 1.0]).group(g))
+        .param(ParamDesc::color("icon_color", "Icon Color", [1.0, 0.9, 0.4]).group(g))
+        .param(ParamDesc::bool("xray", "X-Ray", false).group(g))
+}
+
 impl Registry {
     pub fn new() -> Registry {
         Registry::default()
@@ -166,8 +229,7 @@ impl Registry {
     /// Registry with the core built-in types (`forge.null`).
     pub fn with_builtins() -> Registry {
         let mut r = Registry::new();
-        r.register(NodeType::new("forge.null", "Null", crate::Category::Object))
-            .expect("built-ins are valid");
+        r.register(null_type()).expect("built-ins are valid");
         r.register(crate::smoothing::node_type())
             .expect("built-ins are valid");
         for ty in [

@@ -28,7 +28,9 @@ pub use param::{
     EnumOption, LinkRow, MeshData, ParamDesc, ParamError, ParamKind, RangeValue, UiHint, Unit,
     Value,
 };
-pub use registry::{Category, NodeEvaluator, NodeType, Plugin, Registry, RegistryError};
+pub use registry::{
+    Category, NULL_SHAPES, NodeEvaluator, NodeType, Plugin, Registry, RegistryError,
+};
 pub use render_config::{RenderConfig, RenderFilter};
 pub use scene::{Node, NodeId, Scene, SceneSettings};
 pub use time::{Marker, PlayMode, TimeConfig, TimeDisplay};

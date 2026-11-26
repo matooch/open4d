@@ -16,6 +16,7 @@ mod landscape;
 mod lathe;
 pub mod metaball;
 mod modeling;
+pub mod null_display;
 mod oil_tank;
 mod plane;
 mod platonic;

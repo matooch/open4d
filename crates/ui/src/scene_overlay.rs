@@ -12,9 +12,15 @@ use forge_viewport::camera::Camera;
 use forge_viewport::curves::DrawLine;
 use forge_viewport::render::Palette;
 use forge_viewport::rig::{BoneStyle, JointDraw, JointStyle, joint_lines, weight_overlay};
+use forge_viewport::scene_view::OBJECT_COLOR;
 use forge_viewport::volume::{BOX_COLOR, box_lines};
 use forge_volume::{MESHER, Preview, PreviewWorker};
 use glam::DVec3;
+
+use forge_generators::null_display::{
+    NullColorMode, NullData, NullShape, ViewFrame, follows_view, null_display_lines,
+    null_display_points, null_objects,
+};
 
 /// Cells along the longest axis of the box preview the editor asks for.
 pub const EDITOR_PREVIEW_CELLS: u32 = forge_volume::DEFAULT_PREVIEW_CELLS;
@@ -36,6 +42,68 @@ pub struct SceneOverlay {
     pub volume: Vec<DrawLine>,
     /// World-space gizmos of camera, light and floor objects (SCENE-OBJECTS.md S7).
     pub objects: Vec<DrawLine>,
+    /// The Nulls the editor shows, with whether each is selected (SCENE-OBJECTS.md S9). Their
+    /// lines depend on the viewport camera, so they are made in [`SceneOverlay::lines`].
+    pub nulls: Vec<(NullData, bool)>,
+}
+
+/// Half length of the Dot's cross, in pixels.
+const DOT_HALF_PIXELS: f64 = 2.0;
+
+/// The lines of one Null (S9): its shape in the right frame, placed by the Null's world
+/// matrix, or by the viewport camera at the Null's position for a camera-facing flat shape.
+fn null_lines(
+    n: &NullData,
+    selected: bool,
+    pal: &Palette,
+    cam: &Camera,
+    size: [f64; 2],
+) -> Vec<DrawLine> {
+    let color = if selected {
+        pal.selection
+    } else {
+        match n.color_mode {
+            NullColorMode::Custom => n.color.map(|c| c as f32),
+            NullColorMode::Layer => n.layer_color.map_or(OBJECT_COLOR, |c| c.map(|c| c as f32)),
+            NullColorMode::Material | NullColorMode::Automatic => OBJECT_COLOR,
+        }
+    };
+    let view = ViewFrame {
+        right: cam.right_world(),
+        up: cam.up_world(),
+        toward: -cam.forward_world(),
+    };
+    let origin = n.world.w_axis.truncate();
+    let place = |p: DVec3| {
+        if follows_view(n.shape, n.orientation) {
+            origin + p
+        } else {
+            n.world.transform_point3(p)
+        }
+    };
+    let mut out: Vec<DrawLine> =
+        null_display_lines(n.shape, n.radius, n.aspect, n.orientation, &view)
+            .into_iter()
+            .map(|s| DrawLine {
+                a: place(s[0]),
+                b: place(s[1]),
+                color,
+            })
+            .collect();
+    if n.shape == NullShape::Dot {
+        let h = DOT_HALF_PIXELS * cam.world_per_pixel(size[1].max(1.0));
+        for p in null_display_points(n.shape) {
+            let c = place(p);
+            for axis in [view.right, view.up] {
+                out.push(DrawLine {
+                    a: c - axis * h,
+                    b: c + axis * h,
+                    color,
+                });
+            }
+        }
+    }
+    out
 }
 
 fn enum_param<'a>(scene: &'a Scene, id: NodeId, key: &str) -> &'a str {
@@ -105,6 +173,14 @@ impl SceneOverlay {
             ));
         }
         out.objects = object_lines(scene, selected);
+        out.nulls = null_objects(scene)
+            .into_iter()
+            .filter(|n| forge_core::visibility::editor_visible(scene, n.node))
+            .map(|n| {
+                let sel = selected.contains(&n.node);
+                (n, sel)
+            })
+            .collect();
         for joint in selected.iter().filter(|j| is_joint(scene, **j)) {
             out.weights
                 .extend(weight_markers(scene, &nodes, *joint, ctx));
@@ -123,6 +199,9 @@ impl SceneOverlay {
         }
         out.extend(self.volume.iter().copied());
         out.extend(self.objects.iter().copied());
+        for (n, selected) in &self.nulls {
+            out.extend(null_lines(n, *selected, pal, cam, size));
+        }
         out
     }
 }
@@ -138,9 +217,7 @@ const FLOOR_CELLS: usize = 10;
 /// The gizmo lines of the scene's cameras, lights and floors that the editor shows.
 fn object_lines(scene: &Scene, selected: &BTreeSet<NodeId>) -> Vec<DrawLine> {
     use forge_generators::scene_objects::{AreaKind, Lens as ObjLens, LightShape, scene_objects};
-    use forge_viewport::scene_view::{
-        Lens, LightGizmo, OBJECT_COLOR, camera_lines, floor_lines, light_lines,
-    };
+    use forge_viewport::scene_view::{Lens, LightGizmo, camera_lines, floor_lines, light_lines};
     let objs = scene_objects(scene);
     let aspect = scene
         .render_config()

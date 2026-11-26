@@ -86,6 +86,10 @@ the scene export holds the reference cube and the instance cube, 16 points, 12 f
 the weld); the scripted cases export the whole scene, so the test adds the reference's mesh before
 the instance's. Multi-Instance was not observed.
 
+Brief 046 check: `instance/render-instance` and `connect/tolerance-in` are read by `generators_parity`
+(Connect weld on/off, tolerance and the move-to-later-point rule; Instance mode names). The Null's display
+shapes are viewport-only and specified in [SCENE-OBJECTS.md](SCENE-OBJECTS.md) S9.
+
 ## 5. Spline inputs
 
 Extrude and lathe take their first spline child, sweep its first two (profile, path),
