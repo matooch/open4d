@@ -217,7 +217,7 @@ implementers can avoid collisions.
 | 226 | [Dockable panels (egui_dock)](../agents/tasks/226-docking.md) | L | 147 | ready | ui, studio |
 | 227 | [Icon set and reference-style menus, command bar and tool palette](../agents/tasks/227-icons-command-layout.md) | L | 147, 225 | ready | ui |
 | 228 | [Clone toolset at the top level](../agents/tasks/228-mograph-top-level.md) | L | 079, 227 | ready | ui |
-| 229 | [Object manager hierarchy cues and row separation](../agents/tasks/229-object-manager-visuals.md) | L | 149 | in-progress (planner subagent) | ui |
+| 229 | [Object manager hierarchy cues and row separation](../agents/tasks/229-object-manager-visuals.md) | L | 149 | done | ui |
 | 230 | [Script Manager: scene lookup and context search](../agents/tasks/230-script-lookup.md) | L | 160, 215 | ready | ui, script, luau |
 | 231 | [Attribute manager: settings divided into tabs and groups](../agents/tasks/231-attribute-tabs.md) | L | 150, O64 | waiting (O64) | core, generators, ui, all node crates |
 | 215 | [Luau runtime and builder scripts](../agents/tasks/215-luau-runtime.md) | A, P | – | ready | luau (new), script, app, command, rpc, mcp |

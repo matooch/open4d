@@ -459,7 +459,7 @@ agent gets the same behaviour. Each user gesture is one undo step.
 
 ### 13.1 Columns (left to right, parity-pending)
 
-1. Expand arrow (`+` / `-`, only for rows with children), indented 14 px per depth.
+1. Expand arrow (a painted triangle, only for rows with children), indented 18 px per depth (§13.1a).
 2. Name (type label as a weak suffix), renamed in place.
 3. Editor dot, Render dot, Enable tick.
 4. Tags: one weak `[label]` per tag on the host.
@@ -474,6 +474,44 @@ Render visibility is stored and resolved the same way (`render_visible`) but hon
 the render bridge is a follow-up (the renderer does not read it yet).
 Accessibility labels (used by the tests): `Editor visibility: <name>`, `Render visibility:
 <name>`, `Enabled: <name>`.
+
+### 13.1a Row geometry and hierarchy cues (brief 229, owner note N7, **parity-pending G1 item 7**)
+
+Owner note N7 asks that a child is clearly shown as a child and that rows are separated more.
+G1 item 7 (pixel numbers, lines or brackets, shading) is unanswered, so the numbers below are
+ours; they live in one place, `tree::METRICS` and the pure functions `tree::row_layout`,
+`tree::connectors`, `tree::connector_segments`, `tree::drop_mark` and `tree::row_colours`,
+which replace the earlier 14 px indent and `+` / `-` text buttons (§13.1 item 1).
+
+| Quantity | Value |
+|---|---|
+| Row height | 22 px (was about 18 px plus 3 px item spacing) |
+| Gap between rows | 0 px: rows touch, so every y in the list belongs to a row (drop zones, §13.3) |
+| Indent per depth level | 18 px; the row of depth `d` starts at `x = 18 d` |
+| Fold arrow cell | 16 px wide, at the start of the row's own column, `x = 18 d .. 18 d + 16`, full row height as the click target |
+| Fold arrow glyph | a filled triangle about 8 px: pointing right when collapsed, down when expanded; only on rows with children |
+| Connector lines | 1 px, colour `guide` |
+| Separator | 1 px line along the bottom edge of every row, colour `separator` |
+| Alternating shade | rows with an odd index in the visible list are filled with `alt`; the selected row keeps the selection fill |
+
+Connectors (`connectors(rows)` gives, per row, `trunks: Vec<bool>` of length `depth`, from the
+visible depth sequence alone): an ancestor at depth `k` has a **trunk**, a vertical line at
+`x = 18 k + 8` (the centre of that ancestor's arrow cell), which runs down through the rows of
+its subtree. Row `i` of depth `d > 0`: for `k < d - 1`, `trunks[k]` is true when a later row of
+depth `k + 1` follows before the list returns to a depth `<= k`, and a full-height vertical is
+drawn at the trunk of `k`; the **elbow** is at `k = d - 1`: a vertical from the row's top to its
+vertical centre, continuing to the bottom when `trunks[d - 1]` is true (a later sibling exists),
+then a horizontal at the vertical centre from the trunk to `x = 18 d` (the arrow cell) for a row
+with children or to `x = 18 d + 14` for a leaf. Root rows (depth 0) have no connector. Rows of
+the search result (§13.5) use the same rules over their own depth sequence; a layer with the
+manager off (§22) does not appear, its children move up one level, the rules read depths only.
+
+Colours come from the theme tokens (`row_colours(theme)`), so all three themes follow
+(§24.1): `guide` is `weak_text` mixed 75 % into `panel`, `separator` is `weak_text` mixed 18 % into
+`panel`, `alt` is `faint` mixed 55 % into `panel`. The guide keeps at least 3:1 contrast against
+both `panel` and `alt` in dark, light and high-contrast (tested). The per-type icon of brief
+227 goes between the arrow cell and the name when that brief lands; it adds a 16 px cell and does
+not change the numbers above.
 
 ### 13.2 Selection (pure, `tree::click_selection`)
 
@@ -496,7 +534,13 @@ dropping on a moved node, or into/next to a descendant of a moved node (a cycle)
 `After` = right after it, except an expanded row with children: `After` then means first
 child (the position the line is drawn at). The empty area below the rows = root list, last.
 The drop runs `object.move` (`nodes` in visible order, `parent`, `index`). A drag hover
-shows an insertion line (Before/After) or a row highlight (Into). Dragging is disabled while a
+shows what the drop does (`tree::drop_mark`): **Into** fills the whole hovered row with the accent
+colour at 25 % alpha and outlines it 1.5 px (the row becomes the parent); **Before / After**
+draw a 2 px line across the row's bottom or top edge with a filled 3 px dot at its left end,
+placed at the indent of the depth the nodes would land at (`Before`: the row's depth; `After`:
+the row's depth, or one deeper for an expanded row with children, whose first child it becomes).
+So a line with the dot at the row's own indent means "next to this row", a dot one level deeper
+means "first child", and a filled row means "inside". Dragging is disabled while a
 search filter is active. Moving keeps local transforms, like `object.reparent`.
 
 ### 13.4 Rename

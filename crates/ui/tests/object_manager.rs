@@ -497,6 +497,190 @@ fn visibility_and_enable_commands_validate_and_undo() {
     assert_eq!(visibility::own(s.doc.scene(), a).1, Vis::Default);
 }
 
+// ---- hierarchy cues and row geometry (brief 229, owner note N7, UI.md 13.1a) ----------
+
+use forge_ui::tree::{
+    Connector, DropMark, METRICS, connector_segments, connectors, drop_mark, row_colours,
+    row_layout, trunk_x,
+};
+
+/// Roots `R` (children `P` (children `Q1`, `Q2`) and `S`) and `T`, all expanded.
+fn three_levels(s: &mut EditorState) -> Vec<NodeId> {
+    let mk = |s: &mut EditorState, name: &str| {
+        let id = create(s, "forge.null");
+        execute(s, "object.rename", json!({"node": id.0, "name": name})).unwrap();
+        id
+    };
+    let ids: Vec<NodeId> = ["R", "P", "Q1", "Q2", "S", "T"]
+        .iter()
+        .map(|n| mk(s, n))
+        .collect();
+    for (child, parent) in [(1, 0), (2, 1), (3, 1), (4, 0)] {
+        execute(
+            s,
+            "object.reparent",
+            json!({"node": ids[child].0, "parent": ids[parent].0}),
+        )
+        .unwrap();
+    }
+    s.expanded.extend([ids[0], ids[1]]);
+    ids
+}
+
+#[test]
+fn row_geometry_numbers_are_fixed() {
+    assert_eq!(METRICS.row_height, 22.0);
+    assert_eq!(METRICS.indent, 18.0);
+    assert_eq!(METRICS.arrow_width, 16.0);
+    let l0 = row_layout(0);
+    assert_eq!((l0.start, l0.arrow), (0.0, (0.0, 16.0)));
+    let l2 = row_layout(2);
+    assert_eq!((l2.start, l2.arrow), (36.0, (36.0, 52.0)));
+    // the trunk of a level is the centre of that level's arrow cell
+    assert_eq!(trunk_x(0), 8.0);
+    assert_eq!(trunk_x(2), 44.0);
+    assert_eq!(l2.parent_trunk, Some(trunk_x(1)));
+    assert_eq!(l0.parent_trunk, None);
+    // a child starts further right than its parent, by exactly one indent
+    for d in 0..6 {
+        assert_eq!(
+            row_layout(d + 1).start - row_layout(d).start,
+            METRICS.indent
+        );
+    }
+}
+
+#[test]
+fn connectors_follow_the_visible_depth_sequence() {
+    let mut s = state();
+    let ids = three_levels(&mut s);
+    let rs = rows(&s);
+    let order: Vec<&str> = rs.iter().map(|r| r.name.as_str()).collect();
+    assert_eq!(order, ["R", "P", "Q1", "Q2", "S", "T"]);
+    let got: Vec<Vec<bool>> = connectors(&rs).into_iter().map(|c| c.trunks).collect();
+    assert_eq!(
+        got,
+        vec![
+            vec![],            // R: root
+            vec![true],        // P: S follows at its level
+            vec![true, true],  // Q1: S follows under R, Q2 follows under P
+            vec![true, false], // Q2: last child of P, S still follows under R
+            vec![false],       // S: last child of R
+            vec![],            // T: root
+        ]
+    );
+    // a collapsed subtree has no rows, so no lines
+    s.expanded.remove(&ids[1]);
+    let rs = rows(&s);
+    let got: Vec<Vec<bool>> = connectors(&rs).into_iter().map(|c| c.trunks).collect();
+    assert_eq!(got, vec![vec![], vec![true], vec![false], vec![]]);
+    assert!(connectors(&[]).is_empty());
+}
+
+/// The segments of a row as text, `x0,y0-x1,y1`, for exact comparison.
+fn seg_text(depth: usize, has_children: bool, trunks: &[bool]) -> Vec<String> {
+    connector_segments(depth, has_children, trunks)
+        .iter()
+        .map(|([x0, y0], [x1, y1])| format!("{x0},{y0}-{x1},{y1}"))
+        .collect()
+}
+
+#[test]
+fn the_three_level_tree_draws_these_connector_lines() {
+    // snapshot of the line geometry of the sample tree R, P, Q1, Q2, S, T (22 px rows)
+    let mut s = state();
+    three_levels(&mut s);
+    let rs = rows(&s);
+    let cs: Vec<Connector> = connectors(&rs);
+    let snap: Vec<(String, Vec<String>)> = rs
+        .iter()
+        .zip(&cs)
+        .map(|(r, c)| (r.name.clone(), seg_text(r.depth, r.has_children, &c.trunks)))
+        .collect();
+    // P has children: its horizontal stops at its arrow cell (18); Q1 / Q2 / S are leaves:
+    // their horizontals stop 14 px into their own cell (50 = 36 + 14, 32 = 18 + 14)
+    let want: Vec<(String, Vec<String>)> = [
+        ("R", vec![]),
+        ("P", vec!["8,0-8,22", "8,11-18,11"]),
+        ("Q1", vec!["8,0-8,22", "26,0-26,22", "26,11-50,11"]),
+        ("Q2", vec!["8,0-8,22", "26,0-26,11", "26,11-50,11"]),
+        ("S", vec!["8,0-8,11", "8,11-32,11"]),
+        ("T", vec![]),
+    ]
+    .into_iter()
+    .map(|(n, v)| (n.to_string(), v.into_iter().map(String::from).collect()))
+    .collect();
+    assert_eq!(snap, want);
+}
+
+#[test]
+fn drop_marks_tell_between_rows_from_inside_a_row() {
+    let mut s = state();
+    three_levels(&mut s);
+    let rs = rows(&s);
+    let by = |n: &str| rs.iter().find(|r| r.name == n).unwrap();
+    // onto a row: inside it
+    assert_eq!(drop_mark(by("P"), DropZone::Into), DropMark::Into);
+    // between rows: a line at the row's own depth ...
+    assert_eq!(
+        drop_mark(by("Q1"), DropZone::Before),
+        DropMark::Line {
+            depth: 2,
+            below: false
+        }
+    );
+    assert_eq!(
+        drop_mark(by("Q2"), DropZone::After),
+        DropMark::Line {
+            depth: 2,
+            below: true
+        }
+    );
+    // ... except below an expanded row with children, where the node becomes its first child
+    assert_eq!(
+        drop_mark(by("P"), DropZone::After),
+        DropMark::Line {
+            depth: 2,
+            below: true
+        }
+    );
+    assert_eq!(
+        drop_mark(by("R"), DropZone::After),
+        DropMark::Line {
+            depth: 1,
+            below: true
+        }
+    );
+    // a leaf or a collapsed row stays at its depth
+    assert_eq!(
+        drop_mark(by("T"), DropZone::After),
+        DropMark::Line {
+            depth: 0,
+            below: true
+        }
+    );
+}
+
+#[test]
+fn row_colours_stay_readable_in_every_theme() {
+    use forge_ui::theme::{Theme, ThemeKind, contrast};
+    for kind in ThemeKind::ALL {
+        let theme = Theme::of(kind);
+        let c = row_colours(&theme);
+        // the guide is a visible non-text element on both row shades
+        for bg in [theme.panel, c.alt] {
+            let ratio = contrast(c.guide, bg);
+            assert!(ratio >= 3.0, "{kind:?}: guide {ratio:.2}:1");
+        }
+        // alternating rows differ from plain rows, and the separator from both
+        assert_ne!(c.alt, theme.panel, "{kind:?}");
+        assert_ne!(c.separator, theme.panel, "{kind:?}");
+        assert_ne!(c.separator, c.alt, "{kind:?}");
+        // the text stays readable on the shaded row
+        assert!(contrast(theme.text, c.alt) >= 4.5, "{kind:?}");
+    }
+}
+
 // ---- egui_kittest -------------------------------------------------------------------
 
 fn harness() -> Harness<'static, Editor> {
@@ -799,4 +983,47 @@ fn dragging_a_row_onto_an_attribute_link_field_sets_the_link() {
         st(&h).doc.scene().param(b1, "target"),
         Some(&Value::Link(Some(target)))
     );
+}
+
+#[test]
+fn children_are_nested_connected_and_rows_are_separated_in_the_panel() {
+    let mut st = state();
+    three_levels(&mut st);
+    st.selection.clear();
+    let mut h = Harness::builder()
+        .with_size([1280.0, 1800.0])
+        .build_ui_state(|ui, e: &mut Editor| e.show(ui, None), Editor::new(st));
+    h.run();
+    // the names indent by exactly one level per depth
+    let x = |h: &Harness<'_, Editor>, n: &str| h.get_by_label(n).rect().min.x;
+    let step = x(&h, "P") - x(&h, "R");
+    assert_eq!(step, METRICS.indent, "R -> P");
+    assert_eq!(x(&h, "Q1") - x(&h, "P"), METRICS.indent, "P -> Q1");
+    assert_eq!(x(&h, "Q2"), x(&h, "Q1"));
+    assert_eq!(x(&h, "T"), x(&h, "R"));
+    // rows are one row height apart and touch (no gap)
+    let y = |h: &Harness<'_, Editor>, n: &str| h.get_by_label(n).rect().center().y;
+    for (a, b) in [
+        ("R", "P"),
+        ("P", "Q1"),
+        ("Q1", "Q2"),
+        ("Q2", "S"),
+        ("S", "T"),
+    ] {
+        assert_eq!(y(&h, b) - y(&h, a), METRICS.row_height, "{a} -> {b}");
+    }
+    // fold arrows exist for rows with children only, and fold
+    for name in ["R", "P"] {
+        h.get_by_label(&format!("Collapse: {name}"));
+    }
+    for name in ["Q1", "Q2", "S", "T"] {
+        assert!(h.query_by_label(&format!("Collapse: {name}")).is_none());
+        assert!(h.query_by_label(&format!("Expand: {name}")).is_none());
+    }
+    h.get_by_label("Collapse: P").click();
+    h.run();
+    assert!(h.query_by_label("Q1").is_none());
+    h.get_by_label("Expand: P").click();
+    h.run();
+    h.get_by_label("Q1");
 }
