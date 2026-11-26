@@ -45,10 +45,10 @@ fn translate(name: &str, source: &str) {
 }
 
 #[test]
-fn diffuse_spatial_reconstruction_translates_to_all_backends() {
+fn bounce_spatial_reconstruction_translates_to_all_backends() {
     translate(
         "diffuse spatial reconstruction",
-        forge_render_rt::shader::DIFFUSE_SPATIAL_WGSL,
+        forge_render_rt::shader::BOUNCE_SPATIAL_WGSL,
     );
 }
 

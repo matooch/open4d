@@ -1,20 +1,20 @@
-//! GPU spatial reconstruction of the eight-attempt Tier 2 diffuse signal (R24.11).
+//! GPU spatial reconstruction of eight-attempt Tier 2 bounce signals (R24.11).
 
 use wgpu::util::DeviceExt;
 
-const LABEL: &str = "Tier 2 diffuse spatial";
+const LABEL: &str = "Tier 2 bounce spatial";
 
-pub(super) struct DiffuseSpatialProgram {
+pub(super) struct BounceSpatialProgram {
     pipeline: wgpu::ComputePipeline,
     layout: wgpu::BindGroupLayout,
 }
 
-pub(super) struct DiffuseSpatialPass<'a> {
-    program: &'a DiffuseSpatialProgram,
+pub(super) struct BounceSpatialPass<'a> {
+    program: &'a BounceSpatialProgram,
     thresholds: [f32; 4],
 }
 
-impl DiffuseSpatialProgram {
+impl BounceSpatialProgram {
     pub fn new(device: &wgpu::Device) -> Self {
         use wgpu::{BindingType, BufferBindingType};
         let buffer = |ty| BindingType::Buffer {
@@ -50,28 +50,28 @@ impl DiffuseSpatialProgram {
         });
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(LABEL),
-            source: wgpu::ShaderSource::Wgsl(crate::shader::DIFFUSE_SPATIAL_WGSL.into()),
+            source: wgpu::ShaderSource::Wgsl(crate::shader::BOUNCE_SPATIAL_WGSL.into()),
         });
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some(LABEL),
             layout: Some(&pipeline_layout),
             module: &module,
-            entry_point: Some("diffuse_spatial"),
+            entry_point: Some("bounce_spatial"),
             compilation_options: Default::default(),
             cache: None,
         });
         Self { pipeline, layout }
     }
 
-    pub fn pass(&self, limit: f64) -> DiffuseSpatialPass<'_> {
-        DiffuseSpatialPass {
+    pub fn pass(&self, limit: f64) -> BounceSpatialPass<'_> {
+        BounceSpatialPass {
             program: self,
             thresholds: [(limit * limit) as f32, (limit * 0.1) as f32, 0., 0.],
         }
     }
 }
 
-impl DiffuseSpatialPass<'_> {
+impl BounceSpatialPass<'_> {
     pub fn encode(
         self,
         device: &wgpu::Device,

@@ -12,7 +12,7 @@ use glam::DVec3;
 
 use crate::ambient::{AmbientFrame, AmbientProgram};
 use crate::ray::{self, BackendKind, DeviceQueries, Ray, RtBackend};
-use diffuse_spatial::DiffuseSpatialProgram;
+use bounce_spatial::BounceSpatialProgram;
 use direct_shadow::{DirectShadowBindings, DirectShadowFrame, DirectShadowProgram};
 use reflection::{BounceEntry, ReflectionBindings, ReflectionInput, ReflectionProgram};
 
@@ -29,7 +29,7 @@ pub(crate) struct HybridView {
     shadow_program: Option<MaterialProgram<DirectShadowProgram>>,
     reflection_program: Option<MaterialProgram<ReflectionProgram>>,
     diffuse_program: Option<MaterialProgram<ReflectionProgram>>,
-    diffuse_spatial: Option<DiffuseSpatialProgram>,
+    bounce_spatial: Option<BounceSpatialProgram>,
     attributes: Option<wgpu::Buffer>,
     scene: Option<Snapshot>,
     geometry: Option<PrimaryGeometry>,
@@ -609,10 +609,10 @@ impl HybridView {
                     bitmaps: gpu.bitmaps,
                     lights: &lights,
                 };
-                if matches!(entry, BounceEntry::Diffuse { reduced: false }) {
+                if !matches!(entry, BounceEntry::Diffuse { reduced: true }) {
                     let spatial = self
-                        .diffuse_spatial
-                        .get_or_insert_with(|| DiffuseSpatialProgram::new(device));
+                        .bounce_spatial
+                        .get_or_insert_with(|| BounceSpatialProgram::new(device));
                     program
                         .read_spatial((device, queue), bindings, frame, spatial.pass(limit))
                         .map(|pixels| (pixels, true))
@@ -811,8 +811,8 @@ struct PrimaryGeometry {
 #[path = "direct_shadow.rs"]
 mod direct_shadow;
 
-#[path = "diffuse_spatial.rs"]
-mod diffuse_spatial;
+#[path = "bounce_spatial.rs"]
+mod bounce_spatial;
 
 #[cfg(test)]
 #[path = "receiver_tests.rs"]

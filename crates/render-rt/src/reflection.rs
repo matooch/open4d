@@ -5,7 +5,7 @@ use forge_render_api::{Lighting, RenderError, RenderSettings, Snapshot};
 use forge_render_cpu::lights::PLight;
 
 use super::direct_shadow::{RawSignalBindings, RawSignalProgram, SignalFrameLayout, upload_lights};
-use super::{Bounce, PrimaryInput, diffuse_spatial::DiffuseSpatialPass};
+use super::{Bounce, PrimaryInput, bounce_spatial::BounceSpatialPass};
 use crate::ray::{BackendKind, InlineScene};
 
 #[repr(C)]
@@ -156,7 +156,7 @@ impl ReflectionProgram {
         gpu: (&wgpu::Device, &wgpu::Queue),
         bindings: ReflectionBindings<'_>,
         input: ReflectionInput<'_>,
-        spatial: DiffuseSpatialPass<'_>,
+        spatial: BounceSpatialPass<'_>,
     ) -> Result<Vec<[f32; 4]>, RenderError> {
         self.read_signal(gpu, bindings, input, Some(spatial))
     }
@@ -172,7 +172,7 @@ impl ReflectionProgram {
             scale,
             history,
         }: ReflectionInput<'_>,
-        spatial: Option<DiffuseSpatialPass<'_>>,
+        spatial: Option<BounceSpatialPass<'_>>,
     ) -> Result<Vec<[f32; 4]>, RenderError> {
         let (f, [x, y]) = snapshot
             .camera

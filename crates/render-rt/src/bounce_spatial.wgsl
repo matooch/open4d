@@ -1,4 +1,4 @@
-// R24.11: filter an already evaluated diffuse signal without mapping it.
+// R24.11: filter an already evaluated bounce signal without mapping it.
 struct SpatialLimits {
     distance_squared: f32,
     depth: f32,
@@ -12,7 +12,7 @@ struct SpatialLimits {
 @group(0) @binding(4) var<storage, read_write> spatial_filtered: array<vec4<f32>>;
 
 @compute @workgroup_size(8, 8)
-fn diffuse_spatial(@builtin(global_invocation_id) id: vec3<u32>) {
+fn bounce_spatial(@builtin(global_invocation_id) id: vec3<u32>) {
     let film = textureDimensions(spatial_positions);
     if any(id.xy >= film) { return; }
     let center = vec2<i32>(id.xy);

@@ -10,7 +10,7 @@ use forge_render_api::{
 use glam::DMat4;
 
 #[test]
-fn gpu_diffuse_spatial_matches_cpu_across_crop_and_workgroups() {
+fn gpu_bounce_spatial_matches_cpu_across_crop_and_workgroups() {
     use forge_render_gpu::{await_mapped, map_read};
     use wgpu::util::DeviceExt;
 
@@ -107,7 +107,7 @@ fn gpu_diffuse_spatial_matches_cpu_across_crop_and_workgroups() {
         mapped_at_creation: false,
     });
     let mut encoder = device.create_command_encoder(&Default::default());
-    let filtered = DiffuseSpatialProgram::new(&device).pass(1.).encode(
+    let filtered = BounceSpatialProgram::new(&device).pass(1.).encode(
         &device,
         &mut encoder,
         [&views[0], &views[1]],
@@ -485,7 +485,7 @@ fn gpu_raw_diffuse_matches_batched_reference() {
         let assembled = crate::shader::diffuse_wgsl(kind, &materials).unwrap();
         assert!(assembled.resources.is_empty());
         let probe = ReflectionProgram::new_diffuse(&device, kind, assembled.source, 0);
-        let spatial = DiffuseSpatialProgram::new(&device);
+        let spatial = BounceSpatialProgram::new(&device);
         for lights in [vec![], vec![light]] {
             snapshot.lights = lights;
             let prepared = lights::prepare(&snapshot, false).unwrap();
@@ -846,6 +846,113 @@ fn gpu_raw_reflections_match_batched_reference() {
                                 "{kind:?} mode {name} history {history} pixel {i} channel {j}: {a} vs {b}"
                             );
                         }
+                    }
+                }
+            }
+        }
+
+        // A covered invalid neighbour has black transport but shares the
+        // emissive pixel's spatial guide. Its blend distinguishes one pass
+        // from zero or two, independently of the batched numeric reference.
+        let neighbour = emissive + 1;
+        let mut positions = positions;
+        let mut normals = normals;
+        positions[neighbour] = positions[emissive];
+        positions[neighbour][0] += 0.125;
+        normals[neighbour] = normals[invalid_end];
+        let views =
+            [&positions, &normals].map(|data| texture_view(&device, &queue, &settings, data));
+        let source = forge_render_gpu::shader::materials(&materials, 1).unwrap();
+        let gpu = MaterialGpu {
+            primary: AmbientGpu {
+                device: &device,
+                queue: &queue,
+                textures: [&views[0], &views[1]],
+            },
+            materials: &source.source,
+            bitmaps: &[],
+        };
+        let mut snapshot = snapshot.clone();
+        snapshot.environment.lighting = scenarios[3].1.clone();
+        let prepared = lights::prepare(&snapshot, settings.default_light).unwrap();
+        reference.reflections.clear();
+        for (projection, jitter) in [
+            (snapshot.camera.projection, [-0.375, 0.25]),
+            (
+                Projection::Perspective {
+                    focal_mm: 40.,
+                    sensor_mm: 36.,
+                    film_offset: [0.; 2],
+                },
+                [0.25, -0.125],
+            ),
+        ] {
+            snapshot.camera.projection = projection;
+            let input = PrimaryInput {
+                positions: &positions,
+                normals: &normals,
+                jitter,
+                ..input
+            };
+            let width = settings.width as usize;
+            let limit = reference
+                .geometry
+                .as_ref()
+                .unwrap()
+                .filter_limit(&snapshot, width);
+            let mut expected = History::default();
+            for history in 0..2 {
+                let raw = probe
+                    .read(
+                        (&device, &queue),
+                        ReflectionBindings {
+                            scene: reference
+                                .backend
+                                .as_ref()
+                                .unwrap()
+                                .1
+                                .inline_scene()
+                                .unwrap(),
+                            primary: gpu.primary.textures,
+                            attributes: &attrs,
+                            bitmaps: &[],
+                            lights: &prepared,
+                        },
+                        ReflectionInput {
+                            snapshot: &snapshot,
+                            settings: &settings,
+                            input,
+                            scale,
+                            history,
+                        },
+                    )
+                    .unwrap();
+                let once = spatial_filter(width, &input, &raw, limit);
+                let twice = spatial_filter(width, &input, &once, limit);
+                assert_ne!(raw[emissive], once[emissive]);
+                assert_ne!(once[emissive], twice[emissive]);
+                expected.accumulate(once);
+                let live = reference
+                    .indirect(
+                        Bounce::Reflection,
+                        &snapshot,
+                        &settings,
+                        input,
+                        &Control::new(),
+                        Some(gpu),
+                    )
+                    .unwrap();
+                assert!(
+                    reference.bounce_spatial.is_some(),
+                    "live reflection must filter before readback"
+                );
+                assert_eq!(live.len(), expected.mean.len());
+                for (i, (a, b)) in live.into_iter().zip(&expected.mean).enumerate() {
+                    for (a, &b) in a.into_iter().zip(b) {
+                        assert!(
+                            (a - b).abs() <= 2e-6 * b.abs().max(1.),
+                            "{kind:?} history {history} filtered reflection pixel {i}: {a} vs {b}"
+                        );
                     }
                 }
             }

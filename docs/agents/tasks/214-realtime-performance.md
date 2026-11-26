@@ -36,6 +36,16 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Live GPU reflection spatial reconstruction:** Inline reflections now share
+  the R24.11 spatial pipeline with diffuse GI. Cropped HDR reflection output
+  matched one CPU filter pass before per-jitter history on Compute and
+  Metal, across both camera projections and two history frames per jitter.
+  Raw probes and the batched fallback are unchanged. R24 hybrid tests
+  passed; strict R26 held at 18/19/23 of 23 against CPU with all nine pins
+  unchanged, and Metal-vs-Compute minima were exact/161.24/75.66 dB.
+  On unchanged full-size Metal S10, reflections fell from 46.043 to 34.954
+  ms and Tier 2 frame time from 172.353 to 161.447 ms (5.802 to 6.194 fps).
+  The 30 fps target is still unmet. `GATE: all passed` (2757 tests).
 - **Live GPU diffuse spatial reconstruction:** The eight-attempt GI transport
   and spatial filter now share one encoder; only the filtered buffer is
   mapped. Batched fallback still filters on the CPU. On cropped guides,

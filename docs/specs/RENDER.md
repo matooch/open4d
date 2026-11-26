@@ -1381,12 +1381,12 @@ quality assertions to pass. The candidate passed R26 on Compute and Metal
 with unchanged pins, but failed the R24 emissive-bounce PSNR improvement
 assertion; the default remains the eight-attempt inline estimator.
 
-### R24.11 GPU diffuse spatial reconstruction (brief 214)
+### R24.11 GPU bounce spatial reconstruction (brief 214)
 
 Sources: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report)
 and the R24.3 spatial filter. This is our own design.
 
-- In a second compute pass, read the full-resolution eight-attempt diffuse
+- In a second compute pass, read the full-resolution eight-attempt bounce
   signal directly from GPU storage. Write a separate buffer; never filter
   in place or change the eight samples. Use absolute film coordinates,
   including when the raster output is cropped.
@@ -1416,12 +1416,12 @@ and the R24.3 spatial filter. This is our own design.
   Live adoption requires the strict R26 matrix and existing R24 hybrid
   quality assertions, with unchanged CPU fallback and per-jitter history.
   This pass does not change the estimator, history or final composition.
-- Cache the spatial pipeline per hybrid view. On the inline eight-attempt
-  diffuse path, encode transport and spatial reconstruction in separate
+- Share one spatial pipeline per hybrid view between inline reflection and
+  diffuse GI. Encode transport and spatial reconstruction in separate
   passes of one command encoder and copy only the filtered signal to staging.
   Feed that result directly into per-jitter history; do not run the CPU
-  spatial filter a second time. Reflection, raw probes and batched fallback
-  continue to read raw data and retain their existing filter behavior.
+  spatial filter a second time. Raw probes and the unadopted reduced-rate
+  candidate still read raw data; batched fallback retains CPU filtering.
 - Compare the chained GPU result with one CPU spatial pass over the same
   raw inline output. Exercise cropped absolute coordinates, both camera
   projections and different jitter/history inputs, with a signal that
