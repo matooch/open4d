@@ -64,6 +64,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O40b | Particles via export (D20): read particle statistics without the particle API | [particles.md](particles.md) Follow-up | `tests/golden/particles/` samples | not capturable (2026-11-26: Alembic export holds the particle points but no scriptable read path returns them; Matrix Object mode and Tracer caches are null - see the form) |
 | O41 | Soft bodies and connectors | [soft-bodies.md](soft-bodies.md) | done (8 of 10 cases observed, the other 2 not observed with reasons in their rows — spring-stiff-2 and hinge-offset need creation commands that could not be resolved safely; see the form) |
 | O10 | Selection and tool behaviour in the GUI | (form comes with batch 10) | form only | gui-only |
+| O64 | Attribute manager tabs and groups per type (owner note, brief 231): scripted walk of each type's parameter description | [attribute-tabs.md](attribute-tabs.md) | form only | todo |
 | G1 | GUI session: layout and managers | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G1 | answers in GUI-SESSIONS.md | gui-only |
 | G2 | GUI session: shortcuts and navigation | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G2 | answers in GUI-SESSIONS.md | gui-only |
 | G3 | GUI session: interactive modeling and selection | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G3 | answers in GUI-SESSIONS.md | gui-only |

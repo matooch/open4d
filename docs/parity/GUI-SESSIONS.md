@@ -32,6 +32,7 @@ reference app's behaviour, in the owner's own words. They answer parts of G1, G2
 | N6 | Model / point / edge / polygon mode is set in **one** place, the way the reference does it; our editor has two interfaces for it | G1, G2 | duplicate mode UI |
 | N7 | The object manager shows clearly that an object is a child (hierarchy cues) and separates rows more, so the tree is easier to read | G1 | UI.md §13 rows |
 | N8 | Buttons are laid out like the reference (menus and layout) and show **icons** for their action | G1 | text buttons |
+| N9 | In the inspector (attribute manager), not every setting is at the same level: the reference divides settings into **tabs** (and groups) | G1 item 3, O64 | one flat list per object |
 
 Still open for the owner's sitting: the exact layout (G1 items 1, 4, 5 and the new G1 items 7–9),
 the full key list (G2), and what the shading keys are, now that 1 / 2 / 3 are navigation (G2 new

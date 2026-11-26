@@ -46,7 +46,7 @@ merged run 9 there (check `git branch -r --contains a96496a`), otherwise from
 
 Then the UI round from the owner's first hands-on use (D22, GUI-SESSIONS.md owner notes), one branch per brief:
 
-- [223](tasks/223-nav-tool-keys.md), [224](tasks/224-keyframe-toggle.md), [225](tasks/225-single-mode-ui.md), [229](tasks/229-object-manager-visuals.md), [226](tasks/226-docking.md), [227](tasks/227-icons-command-layout.md), [228](tasks/228-mograph-top-level.md) (230 comes after 215)
+- [223](tasks/223-nav-tool-keys.md), [224](tasks/224-keyframe-toggle.md), [225](tasks/225-single-mode-ui.md), [229](tasks/229-object-manager-visuals.md), [226](tasks/226-docking.md), [227](tasks/227-icons-command-layout.md), [228](tasks/228-mograph-top-level.md), then [231](tasks/231-attribute-tabs.md) once its BACKLOG row says `ready` (it waits for observation O64) (230 comes after 215)
 
 Then area P (behaviours, BEHAVIOURS.md, D21), one branch per brief, each from the previous one:
 
