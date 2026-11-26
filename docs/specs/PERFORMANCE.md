@@ -149,3 +149,17 @@ Sources: [S10](../roadmap/README.md), [R8 and the reference machines](../roadmap
   than attempting an invalid GPU allocation. The current flattened raster
   triangle table alone needs 373,120,000 bytes at this scale (176 × 2,120,000);
   default storage binding limits cannot be assumed sufficient.
+
+Run on an idle reference machine, using a separate baseline and output file:
+
+```sh
+WGPU_BACKEND=metal cargo bench -p forge-render-rt --bench s10 -- m5-pro tier1 tier1-baseline.json
+WGPU_BACKEND=metal cargo bench -p forge-render-rt --bench s10 -- m5-pro tier2 tier2-baseline.json
+WGPU_BACKEND=metal cargo bench -p forge-render-rt --bench s10 -- m5-pro tier2 tier2-current.json tier2-baseline.json
+```
+
+Use `compute` in place of `tier2` to explicitly allow the compute backend for
+diagnostics. The FPS target is reported separately; the optional baseline
+check returns a nonzero status on incompatible identity, missing timing, or
+regression and leaves the current JSON available for inspection. Hardware
+Vulkan is pending brief 212; a Tier 2 run does not substitute compute.
