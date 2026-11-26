@@ -31,7 +31,7 @@ pub(crate) struct HybridView {
     reflection_program: Option<MaterialProgram<ReflectionProgram>>,
     diffuse_program: Option<MaterialProgram<ReflectionProgram>>,
     bounce_spatial: Option<BounceSpatialProgram>,
-    diffuse_history: Option<DiffuseHistoryProgram>,
+    bounce_history: Option<DiffuseHistoryProgram>,
     attributes: Option<wgpu::Buffer>,
     scene: Option<Snapshot>,
     geometry: Option<PrimaryGeometry>,
@@ -100,12 +100,12 @@ impl BounceHistory {
     }
 }
 
-pub(crate) enum DiffuseSignal {
+pub(crate) enum BounceSignal {
     Cpu(Vec<[f32; 4]>),
     Gpu(DiffuseHistory),
 }
 
-impl DiffuseSignal {
+impl BounceSignal {
     pub fn is_empty(&self) -> bool {
         matches!(self, Self::Cpu(pixels) if pixels.is_empty())
     }
@@ -585,11 +585,8 @@ impl HybridView {
         input: PrimaryInput<'_>,
         control: &Control,
         gpu: Option<MaterialGpu<'_>>,
-    ) -> Result<Vec<[f32; 4]>, RenderError> {
-        match self.indirect(Bounce::Reflection, snapshot, settings, input, control, gpu)? {
-            DiffuseSignal::Cpu(pixels) => Ok(pixels),
-            DiffuseSignal::Gpu(_) => unreachable!("reflection history is CPU only"),
-        }
+    ) -> Result<BounceSignal, RenderError> {
+        self.indirect(Bounce::Reflection, snapshot, settings, input, control, gpu)
     }
 
     pub fn diffuse(
@@ -599,7 +596,7 @@ impl HybridView {
         input: PrimaryInput<'_>,
         control: &Control,
         gpu: Option<MaterialGpu<'_>>,
-    ) -> Result<DiffuseSignal, RenderError> {
+    ) -> Result<BounceSignal, RenderError> {
         self.indirect(Bounce::Diffuse, snapshot, settings, input, control, gpu)
     }
 
@@ -611,7 +608,7 @@ impl HybridView {
         input: PrimaryInput<'_>,
         control: &Control,
         gpu: Option<MaterialGpu<'_>>,
-    ) -> Result<DiffuseSignal, RenderError> {
+    ) -> Result<BounceSignal, RenderError> {
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
@@ -681,9 +678,7 @@ impl HybridView {
                     let spatial = self
                         .bounce_spatial
                         .get_or_insert_with(|| BounceSpatialProgram::new(device));
-                    if matches!(bounce, Bounce::Diffuse)
-                        && (frame.history == 0 || matches!(history, BounceHistory::Gpu { .. }))
-                    {
+                    if frame.history == 0 || matches!(history, BounceHistory::Gpu { .. }) {
                         let mut encoder = device.create_command_encoder(&Default::default());
                         let filtered = program.encode(
                             (device, queue),
@@ -693,7 +688,7 @@ impl HybridView {
                             Some(spatial.pass(limit)),
                         )?;
                         let program = self
-                            .diffuse_history
+                            .bounce_history
                             .get_or_insert_with(|| DiffuseHistoryProgram::new(device));
                         let previous = match history {
                             BounceHistory::Gpu { mean, .. } => Some(&*mean),
@@ -716,7 +711,7 @@ impl HybridView {
                                     device: device.clone(),
                                     queue: queue.clone(),
                                 };
-                                return Ok((DiffuseSignal::Gpu(mean), true));
+                                return Ok((BounceSignal::Gpu(mean), true));
                             }
                             Err(RenderError::Unsupported(_)) => {}
                             Err(e) => return Err(e),
@@ -724,18 +719,18 @@ impl HybridView {
                     }
                     program
                         .read_spatial((device, queue), bindings(), frame, spatial.pass(limit))
-                        .map(|pixels| (DiffuseSignal::Cpu(pixels), true))
+                        .map(|pixels| (BounceSignal::Cpu(pixels), true))
                 } else {
                     program
                         .read((device, queue), bindings(), frame)
-                        .map(|pixels| (DiffuseSignal::Cpu(pixels), false))
+                        .map(|pixels| (BounceSignal::Cpu(pixels), false))
                 }
             })(),
             _ => Err(RenderError::Unsupported("no inline bounce scene".into())),
         };
         let (signal, spatial_done) = match inline {
             Err(RenderError::Unsupported(_)) => (
-                DiffuseSignal::Cpu(raw_indirect(
+                BounceSignal::Cpu(raw_indirect(
                     (geometry, &**backend),
                     bounce,
                     frame,
@@ -746,7 +741,7 @@ impl HybridView {
             ),
             result => result?,
         };
-        let DiffuseSignal::Cpu(pixels) = signal else {
+        let BounceSignal::Cpu(pixels) = signal else {
             return Ok(signal);
         };
         if control.is_cancelled() {
@@ -781,7 +776,7 @@ impl HybridView {
             unreachable!("CPU history after fallback");
         };
         history.accumulate(filtered);
-        Ok(DiffuseSignal::Cpu(history.mean.clone()))
+        Ok(BounceSignal::Cpu(history.mean.clone()))
     }
 }
 

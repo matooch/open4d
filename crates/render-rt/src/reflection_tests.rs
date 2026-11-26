@@ -793,12 +793,12 @@ fn gpu_raw_diffuse_matches_batched_reference() {
             };
             history.accumulate(filtered);
             let mean = match signal {
-                DiffuseSignal::Gpu(mean) => {
+                BounceSignal::Gpu(mean) => {
                     assert!(should_reside);
                     assert_eq!(mean.frames(), history.frames);
                     mean.read_mean(&device, &queue).unwrap()
                 }
-                DiffuseSignal::Cpu(mean) => {
+                BounceSignal::Cpu(mean) => {
                     assert!(!should_reside);
                     mean
                 }
@@ -815,7 +815,7 @@ fn gpu_raw_diffuse_matches_batched_reference() {
             }
         }
         live.reset();
-        let DiffuseSignal::Gpu(mean) = live
+        let BounceSignal::Gpu(mean) = live
             .diffuse(&snapshot, &settings, input, &control, Some(gpu))
             .unwrap()
         else {
@@ -1002,7 +1002,7 @@ fn gpu_raw_reflections_match_batched_reference() {
             let mut first_emissive = None;
             for (phase, history) in [0, 3].into_iter().enumerate() {
                 reference.reflections.clear();
-                let expected = reference
+                let BounceSignal::Cpu(expected) = reference
                     .reflections(
                         &snapshot,
                         &RenderSettings {
@@ -1016,7 +1016,10 @@ fn gpu_raw_reflections_match_batched_reference() {
                         &Control::new(),
                         None,
                     )
-                    .unwrap();
+                    .unwrap()
+                else {
+                    panic!("batched reflection reference must return CPU pixels");
+                };
                 if let Some(previous) = first_emissive {
                     assert_ne!(expected[emissive], previous, "history must vary the signal");
                 }
@@ -1113,9 +1116,11 @@ fn gpu_raw_reflections_match_batched_reference() {
         };
         let mut snapshot = snapshot.clone();
         snapshot.environment.lighting = scenarios[3].1.clone();
+        snapshot.lights = scenarios[11].2.clone();
         let prepared = lights::prepare(&snapshot, settings.default_light).unwrap();
         reference.reflections.clear();
-        for (projection, jitter) in [
+        let reset_snapshot = snapshot.clone();
+        let cameras = [
             (snapshot.camera.projection, [-0.375, 0.25]),
             (
                 Projection::Perspective {
@@ -1125,70 +1130,119 @@ fn gpu_raw_reflections_match_batched_reference() {
                 },
                 [0.25, -0.125],
             ),
+        ];
+        let mut expected = [History::default(), History::default()];
+        let control = Control::new();
+        let cancelled = Control::new();
+        cancelled.cancel();
+        for (key, inline, cancel) in [
+            (0, true, false),
+            (1, true, false),
+            (0, true, true),
+            (0, true, false),
+            (1, false, false),
+            (1, true, false),
         ] {
+            let (projection, jitter) = cameras[key];
             snapshot.camera.projection = projection;
             let input = PrimaryInput {
-                positions: &positions,
+                positions: if inline { &positions } else { &valid_positions },
                 normals: &normals,
                 jitter,
                 ..input
             };
+            let result = reference.reflections(
+                &snapshot,
+                &settings,
+                input,
+                if cancel { &cancelled } else { &control },
+                inline.then_some(gpu),
+            );
+            if cancel {
+                assert!(matches!(result, Err(RenderError::Cancelled)));
+                continue;
+            }
+            let signal = result.unwrap();
             let width = settings.width as usize;
-            let limit = reference
-                .geometry
-                .as_ref()
-                .unwrap()
-                .filter_limit(&snapshot, width);
-            let mut expected = History::default();
-            for history in 0..2 {
-                let raw = probe
+            let geometry = reference.geometry.as_ref().unwrap();
+            let backend = &*reference.backend.as_ref().unwrap().1;
+            let limit = geometry.filter_limit(&snapshot, width);
+            let history = &mut expected[key];
+            let frame = ReflectionInput {
+                snapshot: &snapshot,
+                settings: &settings,
+                input,
+                scale,
+                history: history.frames,
+            };
+            let raw = if inline {
+                probe
                     .read(
                         (&device, &queue),
                         ReflectionBindings {
-                            scene: reference
-                                .backend
-                                .as_ref()
-                                .unwrap()
-                                .1
-                                .inline_scene()
-                                .unwrap(),
+                            scene: backend.inline_scene().unwrap(),
                             primary: gpu.primary.textures,
                             attributes: &attrs,
                             bitmaps: &[],
                             lights: &prepared,
                         },
-                        ReflectionInput {
-                            snapshot: &snapshot,
-                            settings: &settings,
-                            input,
-                            scale,
-                            history,
-                        },
+                        frame,
                     )
-                    .unwrap();
-                let once = spatial_filter(width, &input, &raw, limit);
+                    .unwrap()
+            } else {
+                raw_indirect(
+                    (geometry, backend),
+                    Bounce::Reflection,
+                    frame,
+                    &prepared,
+                    &control,
+                )
+                .unwrap()
+            };
+            let once = spatial_filter(width, &input, &raw, limit);
+            if inline {
                 let twice = spatial_filter(width, &input, &once, limit);
                 assert_ne!(raw[emissive], once[emissive]);
                 assert_ne!(once[emissive], twice[emissive]);
-                expected.accumulate(once);
-                let live = reference
-                    .reflections(&snapshot, &settings, input, &Control::new(), Some(gpu))
-                    .unwrap();
-                assert!(
-                    reference.bounce_spatial.is_some(),
-                    "live reflection must filter before readback"
-                );
-                assert_eq!(live.len(), expected.mean.len());
-                for (i, (a, b)) in live.into_iter().zip(&expected.mean).enumerate() {
-                    for (a, &b) in a.into_iter().zip(b) {
-                        assert!(
-                            (a - b).abs() <= 2e-6 * b.abs().max(1.),
-                            "{kind:?} history {history} filtered reflection pixel {i}: {a} vs {b}"
-                        );
-                    }
+            }
+            assert!(raw[miss][0] > 2e-6, "HDR miss must contribute");
+            history.accumulate(once);
+            let resident = &reference.reflections[&jitter.map(f32::to_bits)];
+            assert_eq!(resident.frames(), history.frames);
+            let live = match signal {
+                BounceSignal::Gpu(mean) => {
+                    assert!(key == 0 || history.frames == 1);
+                    assert!(matches!(resident, BounceHistory::Gpu { .. }));
+                    mean.read_mean(&device, &queue).unwrap()
+                }
+                BounceSignal::Cpu(mean) => {
+                    assert!(
+                        key == 1 && history.frames > 1,
+                        "reflection must reside on GPU"
+                    );
+                    assert!(matches!(resident, BounceHistory::Cpu(_)));
+                    mean
+                }
+            };
+            assert_eq!(live.len(), history.mean.len());
+            for (i, (a, b)) in live.into_iter().zip(&history.mean).enumerate() {
+                for (a, &b) in a.into_iter().zip(b) {
+                    assert!(
+                        (a - b).abs() <= 2e-6 * b.abs().max(1.),
+                        "{kind:?} jitter {key} frame {} pixel {i}: {a} vs {b}",
+                        history.frames
+                    );
                 }
             }
         }
+        reference.reset();
+        reference
+            .reflections(&reset_snapshot, &settings, input, &control, Some(gpu))
+            .unwrap();
+        assert!(matches!(
+            &reference.reflections[&input.jitter.map(f32::to_bits)],
+            BounceHistory::Gpu { mean, .. } if mean.frames() == 1
+        ));
     }
 }
 #[test]

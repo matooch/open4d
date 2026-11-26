@@ -36,6 +36,20 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Live GPU reflection history:** Inline reflections and GI share a
+  history pipeline but retain independent per-jitter means. Both resident
+  means copy into their compact lighting layers in one submission. Cropped
+  HDR transport with secondary lighting matched the CPU mean on Compute
+  and actual Metal across jitters, cancellation, fallback and reset.
+  Five required-GPU runs passed the renderer unit, R24 hybrid and shader
+  translation tests. Strict R26 reproduced all 207 score and pin lines
+  with nine unchanged pins per backend. Unchanged full-size Metal S10
+  improved from 131.357 ms / 7.613 fps to 122.748 ms / **8.147 fps** on
+  the repeat (reflections 35.335 → 32.429 ms, upload 17.927 → 15.070 ms).
+  The first run measured 123.929 ms / 8.069 fps but flagged lighting
+  (2.348 vs 1.970 ms); the repeat was 1.988 ms and passed the same
+  baseline check. The 30 fps target remains unmet. `GATE: all passed`
+  (2760 tests).
 - **Live GPU diffuse history:** Inline GI keeps spatial reconstruction and
   its per-jitter mean on the GPU and copies the padded mean directly into
   the compact lighting array. The primary guide readback is still needed.

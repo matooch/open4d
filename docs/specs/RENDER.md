@@ -1509,6 +1509,25 @@ This is our own design.
   through a fallback and reset. Keep the R24 quality and R26 cross-tier
   tests unchanged and remeasure the unchanged S10 fixture.
 
+#### Live Tier 2 reflection history
+
+- Apply the same padded single-RGBA history to supported inline
+  reflections, after their existing eight-attempt transport and spatial
+  reconstruction. Keep the HDR environment and secondary lighting inputs.
+  Reflections and GI share the history pipeline, not the accepted means or
+  counts. Each effect retains its own exact jitter keys, cancellation,
+  reset and GPU-to-CPU continuity rules.
+- Preserve compact layer order: two shadow layers when present, then AO,
+  reflection and GI when present. CPU signals upload to their assigned
+  layers; encode all resident bounce copies in one submission, after
+  queueing CPU writes. A lone reflection occupies layer zero, and AO
+  alone still uses R32Float. Profile reflection history under
+  `rt-reflections` and composition under `hybrid-upload`.
+- Check cropped odd-width reflections against CPU history across distinct
+  jitters, including HDR, cancellation, fallback and reset. Keep the
+  existing R24 mixed and isolated AOV comparisons and strict R26 limits,
+  then remeasure unchanged S10.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),

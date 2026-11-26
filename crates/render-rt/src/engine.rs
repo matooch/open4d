@@ -18,7 +18,7 @@ use wgpu::util::DeviceExt;
 
 use crate::frame;
 use crate::framegraph::FrameGraph;
-use crate::hybrid::{AmbientGpu, DiffuseSignal, HybridView, MaterialGpu, PrimaryInput};
+use crate::hybrid::{AmbientGpu, BounceSignal, HybridView, MaterialGpu, PrimaryInput};
 use crate::ray::BackendKind;
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
 
@@ -345,8 +345,8 @@ impl RtEngine {
         h: u32,
         shadows: &[[f32; 8]],
         ao: &[f32],
-        reflections: &[[f32; 4]],
-        gi: &DiffuseSignal,
+        reflections: &BounceSignal,
+        gi: &BounceSignal,
     ) -> wgpu::TextureView {
         let layer_count = 2 * u32::from(!shadows.is_empty())
             + u32::from(!ao.is_empty())
@@ -409,24 +409,26 @@ impl RtEngine {
                 16,
             );
         }
-        if !reflections.is_empty() {
-            write_layer(
-                shadow_layers as u32 + u32::from(!ao.is_empty()),
-                bytemuck::cast_slice(reflections),
-                16,
-            );
+        let mut encoder = None;
+        let first_bounce_layer = shadow_layers as u32 + u32::from(!ao.is_empty());
+        for (offset, signal) in [reflections, gi]
+            .into_iter()
+            .filter(|signal| !signal.is_empty())
+            .enumerate()
+        {
+            let layer = first_bounce_layer + offset as u32;
+            match signal {
+                BounceSignal::Cpu(pixels) => write_layer(layer, bytemuck::cast_slice(pixels), 16),
+                BounceSignal::Gpu(mean) => {
+                    let encoder = encoder.get_or_insert_with(|| {
+                        self.device.create_command_encoder(&Default::default())
+                    });
+                    mean.copy_to_layer(encoder, &texture, layer);
+                }
+            }
         }
-        let gi_layer = layer_count - u32::from(!gi.is_empty());
-        match gi {
-            DiffuseSignal::Cpu(pixels) if !pixels.is_empty() => {
-                write_layer(gi_layer, bytemuck::cast_slice(pixels), 16);
-            }
-            DiffuseSignal::Gpu(mean) => {
-                let mut encoder = self.device.create_command_encoder(&Default::default());
-                mean.copy_to_layer(&mut encoder, &texture, gi_layer);
-                self.queue.submit([encoder.finish()]);
-            }
-            DiffuseSignal::Cpu(_) => {}
+        if let Some(encoder) = encoder {
+            self.queue.submit([encoder.finish()]);
         }
         lighting_source_view(&texture)
     }
@@ -1590,7 +1592,7 @@ impl RtEngine {
                         finish_phase(profile, device, "rt-reflections")?;
                         result
                     } else {
-                        Vec::new()
+                        BounceSignal::Cpu(Vec::new())
                     };
                     let gi = if rt_gi {
                         let result =
@@ -1598,7 +1600,7 @@ impl RtEngine {
                         finish_phase(profile, device, "rt-gi")?;
                         result
                     } else {
-                        DiffuseSignal::Cpu(Vec::new())
+                        BounceSignal::Cpu(Vec::new())
                     };
                     primary = Some(g);
                     Ok((shadows, ao, reflections, gi))
@@ -1617,7 +1619,11 @@ impl RtEngine {
                     values[frame::RT_GI_ON] = u32::from(!gi.is_empty()) as f32;
                     queue.write_buffer(&frame_buf, 0, &frame_bytes(&values));
                     let texture = self.upload_hybrid(w, h, &shadows, &ao, &reflections, &gi);
-                    if profile.is_some() && !matches!(gi, DiffuseSignal::Gpu(_)) {
+                    if profile.is_some()
+                        && ![&reflections, &gi]
+                            .into_iter()
+                            .any(|signal| matches!(signal, BounceSignal::Gpu(_)))
+                    {
                         queue.submit([]);
                     }
                     finish_phase(profile, device, "hybrid-upload")?;
