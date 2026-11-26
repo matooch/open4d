@@ -821,6 +821,10 @@ mod direct_shadow;
 mod bounce_spatial;
 
 #[cfg(test)]
+#[path = "diffuse_history.rs"]
+mod diffuse_history;
+
+#[cfg(test)]
 #[path = "receiver_tests.rs"]
 mod receiver_tests;
 

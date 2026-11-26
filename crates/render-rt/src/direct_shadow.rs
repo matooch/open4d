@@ -307,14 +307,31 @@ impl RawSignalProgram {
         settings: &RenderSettings,
         frame: &impl Pod,
     ) -> Result<Vec<T>, RenderError> {
+        let mut encoder = device.create_command_encoder(&Default::default());
+        let output = self.encode(device, &mut encoder, bindings, settings, frame)?;
+        read_encoded((device, queue), encoder, &output)
+    }
+
+    pub fn encode(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        bindings: RawSignalBindings<'_>,
+        settings: &RenderSettings,
+        frame: &impl Pod,
+    ) -> Result<wgpu::Buffer, RenderError> {
         let size = u64::from(settings.width) * u64::from(settings.height);
         let groups = self.frame_layout.groups(settings.width, settings.height);
         let limits = device.limits();
         let storage_limit = limits
             .max_buffer_size
             .min(limits.max_storage_buffer_binding_size);
+        let bytes_per_pixel = match self.frame_layout {
+            SignalFrameLayout::DirectShadow => 32,
+            _ => 16,
+        };
         let size = size
-            .checked_mul(std::mem::size_of::<T>() as u64)
+            .checked_mul(bytes_per_pixel)
             .filter(|&bytes| bytes > 0 && bytes <= storage_limit);
         let Some(size) = size.filter(|_| {
             groups
@@ -347,7 +364,6 @@ impl RawSignalProgram {
                     wgpu::BufferUsages::empty()
                 },
         );
-        let staging = alloc(wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ);
         let bind = |group: usize, entries: &[wgpu::BindGroupEntry<'_>]| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some(self.label),
@@ -409,7 +425,6 @@ impl RawSignalProgram {
             resource: bindings.attributes.as_entire_binding(),
         });
         let scene_bind = bind(2, &scene);
-        let mut encoder = device.create_command_encoder(&Default::default());
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
             pass.set_pipeline(&self.pipeline);
@@ -418,22 +433,36 @@ impl RawSignalProgram {
             pass.set_bind_group(2, &scene_bind, &[]);
             pass.dispatch_workgroups(groups[0], groups[1], 1);
         }
-        let filtered = bindings.spatial.map(|spatial| {
-            spatial.encode(
+        Ok(match bindings.spatial {
+            Some(spatial) => spatial.encode(
                 device,
-                &mut encoder,
+                encoder,
                 bindings.primary,
                 &signal,
                 [settings.width, settings.height],
-            )
-        });
-        encoder.copy_buffer_to_buffer(filtered.as_ref().unwrap_or(&signal), 0, &staging, 0, size);
-        queue.submit([encoder.finish()]);
-        let slice = staging.slice(..);
-        await_mapped(device, &map_read(&slice))?;
-        let mapped = slice
-            .get_mapped_range()
-            .map_err(|err| RenderError::Output(err.to_string()))?;
-        Ok(bytemuck::cast_slice(&mapped).to_vec())
+            ),
+            None => signal,
+        })
     }
+}
+
+pub(super) fn read_encoded<T: Pod>(
+    (device, queue): (&wgpu::Device, &wgpu::Queue),
+    mut encoder: wgpu::CommandEncoder,
+    output: &wgpu::Buffer,
+) -> Result<Vec<T>, RenderError> {
+    let staging = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("Tier 2 signal readback"),
+        size: output.size(),
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    encoder.copy_buffer_to_buffer(output, 0, &staging, 0, output.size());
+    queue.submit([encoder.finish()]);
+    let slice = staging.slice(..);
+    await_mapped(device, &map_read(&slice))?;
+    let mapped = slice
+        .get_mapped_range()
+        .map_err(|err| RenderError::Output(err.to_string()))?;
+    Ok(bytemuck::cast_slice(&mapped).to_vec())
 }

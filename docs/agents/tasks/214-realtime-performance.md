@@ -36,6 +36,15 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **GPU history layer-copy probe:** Split raw signal encoding from staging
+  readback. On Compute and actual Metal, two diffuse frames on a cropped
+  13×11 film matched CPU spatial filtering and accumulation after a
+  GPU-only transport → filter → history → RGBA32Float array-layer copy.
+  The neighbouring layer was untouched, black pixels stayed exact, and
+  oversized history requests were rejected before encoding. Five
+  required-GPU lib, hybrid and shader-translation runs passed;
+  `GATE: all passed` (2760 tests). Live GI still uses the existing
+  readback path; no new S10 measurement.
 - **Standalone GPU diffuse history:** R24.12 matched CPU accumulation on
   Metal on a 19×11 film, including bit-exact first-frame samples, zero
   row padding, an abandoned update and a saturated frame count. The shader

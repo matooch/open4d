@@ -362,6 +362,9 @@ fn gpu_reduced_diffuse_reuses_only_compatible_absolute_quad_lanes() {
 
 #[test]
 fn gpu_raw_diffuse_matches_batched_reference() {
+    use super::diffuse_history::DiffuseHistoryProgram;
+    use forge_render_gpu::{await_mapped, map_read};
+
     let triangle = |z| {
         MeshData::new(
             vec![[-1.8, -1.8, z], [1.8, -1.8, z], [0., 1.8, z]],
@@ -486,10 +489,13 @@ fn gpu_raw_diffuse_matches_batched_reference() {
         assert!(assembled.resources.is_empty());
         let probe = ReflectionProgram::new_diffuse(&device, kind, assembled.source, 0);
         let spatial = BounceSpatialProgram::new(&device);
+        let temporal = DiffuseHistoryProgram::new(&device);
         for lights in [vec![], vec![light]] {
             snapshot.lights = lights;
             let prepared = lights::prepare(&snapshot, false).unwrap();
             let mut first_lit = None;
+            let mut accepted = None;
+            let mut cpu_history = History::default();
             for history in [0, 3] {
                 snapshot.camera.projection = if history == 0 {
                     Projection::Orthographic { width: 24. }
@@ -546,7 +552,7 @@ fn gpu_raw_diffuse_matches_batched_reference() {
                     .read_spatial((&device, &queue), bindings(), frame, spatial.pass(limit))
                     .unwrap();
                 assert_eq!(filtered.len(), once.len());
-                for (i, (a, b)) in filtered.into_iter().zip(once).enumerate() {
+                for (i, (a, b)) in filtered.into_iter().zip(once.iter().copied()).enumerate() {
                     for (a, b) in a.into_iter().zip(b) {
                         assert!(
                             (a - b).abs() <= 2e-6 * b.abs().max(1.),
@@ -554,6 +560,108 @@ fn gpu_raw_diffuse_matches_batched_reference() {
                         );
                     }
                 }
+                let previous_lit = cpu_history.mean.get(lit).copied();
+                let current_lit = once[lit];
+                cpu_history.accumulate(once);
+                if let Some(previous) = previous_lit.filter(|_| !prepared.is_empty()) {
+                    assert_ne!(cpu_history.mean[lit], previous);
+                    assert_ne!(cpu_history.mean[lit], current_lit);
+                }
+                let film = [settings.width, settings.height];
+                let extent = wgpu::Extent3d {
+                    width: film[0],
+                    height: film[1],
+                    depth_or_array_layers: 2,
+                };
+                let layers = device.create_texture(&wgpu::TextureDescriptor {
+                    label: None,
+                    size: extent,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba32Float,
+                    usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                });
+                let sentinel = [91.0_f32, -7., 23., 3.];
+                queue.write_texture(
+                    layers.as_image_copy(),
+                    bytemuck::cast_slice(&[sentinel; 143]),
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(film[0] * 16),
+                        rows_per_image: None,
+                    },
+                    wgpu::Extent3d {
+                        depth_or_array_layers: 1,
+                        ..extent
+                    },
+                );
+                let pitch = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+                assert!(film[0] * 16 < pitch, "fixture must have padded rows");
+                let staging = device.create_buffer(&wgpu::BufferDescriptor {
+                    label: None,
+                    size: u64::from(pitch * film[1] * 2),
+                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                    mapped_at_creation: false,
+                });
+                let mut encoder = device.create_command_encoder(&Default::default());
+                let signal = probe
+                    .encode(
+                        (&device, &queue),
+                        &mut encoder,
+                        bindings(),
+                        frame,
+                        Some(spatial.pass(limit)),
+                    )
+                    .unwrap();
+                if history == 0 {
+                    for invalid_film in [[0, film[1]], [u32::MAX, film[1]], [film[0], u32::MAX]] {
+                        assert!(matches!(
+                            temporal.encode(&device, &mut encoder, invalid_film, &signal, None),
+                            Err(RenderError::Unsupported(_)),
+                        ));
+                    }
+                }
+                let pending = temporal
+                    .encode(&device, &mut encoder, film, &signal, accepted.as_ref())
+                    .unwrap();
+                assert_eq!(pending.frames(), cpu_history.frames);
+                pending.copy_to_layer(&mut encoder, &layers, 1);
+                encoder.copy_texture_to_buffer(
+                    layers.as_image_copy(),
+                    wgpu::TexelCopyBufferInfo {
+                        buffer: &staging,
+                        layout: wgpu::TexelCopyBufferLayout {
+                            offset: 0,
+                            bytes_per_row: Some(pitch),
+                            rows_per_image: Some(film[1]),
+                        },
+                    },
+                    extent,
+                );
+                queue.submit([encoder.finish()]);
+                let slice = staging.slice(..);
+                await_mapped(&device, &map_read(&slice)).unwrap();
+                let mapped = slice.get_mapped_range().unwrap();
+                let copied: &[[f32; 4]] = bytemuck::cast_slice(&mapped);
+                let stride = pitch as usize / 16;
+                let (untouched, copied) = copied.split_at(stride * film[1] as usize);
+                assert_eq!(cpu_history.mean[0], [0.; 4], "outside the crop");
+                for (i, &expected) in cpu_history.mean.iter().enumerate() {
+                    let j = i / width * stride + i % width;
+                    assert_eq!(untouched[j], sentinel, "neighbouring layer pixel {i}");
+                    if expected == [0.; 4] {
+                        assert_eq!(copied[j], expected, "black/crop pixel {i}");
+                    }
+                    for (a, b) in copied[j].into_iter().zip(expected) {
+                        assert!(
+                            (a - b).abs() <= 2e-6 * b.abs().max(1.),
+                            "{kind:?} history layer frame {history} pixel {i}: {a} vs {b}"
+                        );
+                    }
+                }
+                accepted = Some(pending);
                 assert!(expected[emissive][0] > 0.1);
                 if prepared.is_empty() {
                     for (a, b) in expected[partial][..3].iter().zip(&expected[emissive][..3]) {

@@ -4,7 +4,9 @@ use bytemuck::{Pod, Zeroable};
 use forge_render_api::{Lighting, RenderError, RenderSettings, Snapshot};
 use forge_render_cpu::lights::PLight;
 
-use super::direct_shadow::{RawSignalBindings, RawSignalProgram, SignalFrameLayout, upload_lights};
+use super::direct_shadow::{
+    RawSignalBindings, RawSignalProgram, SignalFrameLayout, read_encoded, upload_lights,
+};
 use super::{Bounce, PrimaryInput, bounce_spatial::BounceSpatialPass};
 use crate::ray::{BackendKind, InlineScene};
 
@@ -163,7 +165,20 @@ impl ReflectionProgram {
 
     fn read_signal(
         &self,
+        gpu: (&wgpu::Device, &wgpu::Queue),
+        bindings: ReflectionBindings<'_>,
+        frame: ReflectionInput<'_>,
+        spatial: Option<BounceSpatialPass<'_>>,
+    ) -> Result<Vec<[f32; 4]>, RenderError> {
+        let mut encoder = gpu.0.create_command_encoder(&Default::default());
+        let output = self.encode(gpu, &mut encoder, bindings, frame, spatial)?;
+        read_encoded(gpu, encoder, &output)
+    }
+
+    pub fn encode(
+        &self,
         (device, queue): (&wgpu::Device, &wgpu::Queue),
+        encoder: &mut wgpu::CommandEncoder,
         bindings: ReflectionBindings<'_>,
         ReflectionInput {
             snapshot,
@@ -173,7 +188,7 @@ impl ReflectionProgram {
             history,
         }: ReflectionInput<'_>,
         spatial: Option<BounceSpatialPass<'_>>,
-    ) -> Result<Vec<[f32; 4]>, RenderError> {
+    ) -> Result<wgpu::Buffer, RenderError> {
         let (f, [x, y]) = snapshot
             .camera
             .pixel_frame(settings.width, settings.height)
@@ -200,8 +215,9 @@ impl ReflectionProgram {
             )?),
             BounceEntry::Diffuse { .. } => None,
         };
-        self.0.read(
-            (device, queue),
+        self.0.encode(
+            device,
+            encoder,
             RawSignalBindings {
                 scene: bindings.scene,
                 primary: bindings.primary,

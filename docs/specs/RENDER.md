@@ -1469,6 +1469,23 @@ This is our own design.
   arithmetic, using a distinct relative check for the small nonzero
   change from a zero mean at the saturated count.
 
+- The encoder-oriented signal path returns a compact GPU storage buffer,
+  after optional R24.11 reconstruction, without submitting or mapping it.
+  The synchronous read path copies that same output to staging. Signal
+  stride is fixed by the dispatch layout: two RGBA lanes for direct
+  shadows and one for bounce signals.
+- Encode the R24.12 update from the compact signal, then copy its padded
+  result to one caller-selected RGBA32Float array layer. Copy the full
+  film from the origin, not the padding or a crop-relative rectangle.
+  Neither operation submits commands, and copying does not change the
+  accepted mean or other array layers. Reject padded allocations or
+  dispatch counts above device limits before encoding the update.
+- On an odd-width cropped film, compare two prepared diffuse transport
+  frames chained through one spatial pass, history and the layer copy
+  against CPU spatial filtering and history. Check the untouched
+  neighbouring layer and out-of-crop pixels. Run the probe on Compute
+  and the selected RT backend before changing live composition.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),
