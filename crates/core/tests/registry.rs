@@ -14,17 +14,32 @@ fn builtins_contain_null() {
     let null = r.get("forge.null").expect("null registered");
     assert_eq!(null.category, Category::Object);
     assert_eq!(null.label, "Null");
-    assert_eq!(
-        null.params.len(),
-        7,
-        "transform params and object state params only"
-    );
+    // transform params, object state params, then the display params of SCENE-OBJECTS.md S9
+    assert_eq!(null.params.len(), 7 + 8);
     assert!(
         null.params[..3]
             .iter()
             .all(|p| p.id.starts_with("transform."))
     );
-    assert!(null.params[3..].iter().all(|p| p.id.starts_with("object.")));
+    assert!(
+        null.params[3..7]
+            .iter()
+            .all(|p| p.id.starts_with("object."))
+    );
+    let display: Vec<&str> = null.params[7..].iter().map(|p| p.id.as_str()).collect();
+    assert_eq!(
+        display,
+        [
+            "shape",
+            "radius",
+            "aspect",
+            "orientation",
+            "display_color",
+            "color",
+            "icon_color",
+            "xray"
+        ]
+    );
     assert!(Registry::new().get("forge.null").is_none());
 }
 
