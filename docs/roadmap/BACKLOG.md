@@ -116,7 +116,7 @@ implementers can avoid collisions.
 | 116 | [Dynamics on clones](../agents/tasks/116-dynamics-on-clones.md) | I | 115, 065 | done (parity-pending: clone drift and edge balance are engine-specific) | dynamics, clone-engine |
 | 117 | [Connectors and springs](../agents/tasks/117-connectors-springs.md) | I | 115 | done (parity-pending: connector axis choice, spring stiffness scale) | dynamics |
 | 118 | [Soft bodies (PBD)](../agents/tasks/118-soft-bodies.md) | I | 115 | done (resting height pinned: the reference sinks through the plane; constants parity-pending) | dynamics |
-| 119 | [Particle emitter and particle data](../agents/tasks/119-particle-emitter.md) | I | 050 | ready (own design, D20) | dynamics |
+| 119 | [Particle emitter and particle data](../agents/tasks/119-particle-emitter.md) | I | 050 | done (parity-pending: O40, own design D20) | dynamics |
 | 120 | [Forces: gravity, wind, attractor, deflector, friction, turbulence, rotation](../agents/tasks/120-forces.md) | I | 119, 115, 063 | ready (own design, D20) | dynamics |
 | 121 | [Particles in the clone toolset and volumes](../agents/tasks/121-particles-in-clones-volumes.md) | I | 119, 076, 081 | ready | dynamics, clone-engine, volume |
 | 122 | [Bake to keys and cache tags; dynamics UI](../agents/tasks/122-dynamics-bake-ui.md) | I | 115, 093 | done | dynamics, ui |

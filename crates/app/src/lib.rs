@@ -50,6 +50,7 @@ pub fn default_registry() -> Result<Registry, RegistryError> {
     registry.install(&Deformers)?;
     registry.install(&CloneToolset)?;
     registry.install(&forge_dynamics::DynamicsToolset)?;
+    registry.install(&forge_particles::ParticleToolset)?;
     registry.install(&FieldToolset)?;
     registry.install(&forge_nodes::NodesToolset)?;
     registry.install(&forge_rig::Rig)?;

@@ -1489,6 +1489,7 @@ dependencies = [
  "forge-nodes",
  "forge-noise",
  "forge-parity-harness",
+ "forge-particles",
  "forge-platform",
  "forge-rig",
  "forge-shaders",
@@ -1793,6 +1794,19 @@ dependencies = [
  "serde_json",
  "tempfile",
  "toml",
+]
+
+[[package]]
+name = "forge-particles"
+version = "0.1.0"
+dependencies = [
+ "forge-anim",
+ "forge-clone-engine",
+ "forge-core",
+ "forge-fields",
+ "forge-noise",
+ "glam 0.34.1",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
