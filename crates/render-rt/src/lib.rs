@@ -13,7 +13,7 @@ pub mod ray;
 pub mod shader;
 pub mod shadow;
 
-pub use engine::RtEngine;
+pub use engine::{PassTiming, RtEngine};
 pub use framegraph::{FrameGraph, GraphError, Pass};
 pub use path_trace::{PathTraceEngine, PathTracePreview, PathTraceView, path_scene_wgsl};
 

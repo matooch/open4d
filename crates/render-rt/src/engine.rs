@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use bytemuck::{Pod, Zeroable};
 use forge_image::{AlphaMode, Image};
@@ -20,6 +21,45 @@ use crate::framegraph::FrameGraph;
 use crate::hybrid::{Bounce, HybridView, PrimaryInput};
 use crate::ray::BackendKind;
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
+
+/// Synchronized host time for a named render phase. Repeated phases (TAA) are summed.
+#[derive(Clone, Debug)]
+pub struct PassTiming {
+    pub name: &'static str,
+    pub elapsed: Duration,
+}
+
+struct Profile {
+    start: Instant,
+    passes: Vec<PassTiming>,
+}
+
+fn wait_for_gpu(device: &wgpu::Device) -> Result<(), RenderError> {
+    device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .map_err(|e| RenderError::Output(format!("pass timing GPU wait: {e}")))?;
+    Ok(())
+}
+
+/// No submits, waits or clock reads in the ordinary render path.
+fn finish_phase(
+    profile: &mut Option<Profile>,
+    device: &wgpu::Device,
+    name: &'static str,
+) -> Result<(), RenderError> {
+    if let Some(profile) = profile {
+        wait_for_gpu(device)?;
+        let now = Instant::now();
+        let elapsed = now - profile.start;
+        if let Some(pass) = profile.passes.iter_mut().find(|pass| pass.name == name) {
+            pass.elapsed += elapsed;
+        } else {
+            profile.passes.push(PassTiming { name, elapsed });
+        }
+        profile.start = now;
+    }
+    Ok(())
+}
 
 /// One shadow map descriptor, 416 bytes (R21.4).
 #[repr(C)]
@@ -605,6 +645,33 @@ impl RtEngine {
         settings: &RenderSettings,
         control: &Control,
     ) -> Result<(RenderOutput, Option<BackendKind>), RenderError> {
+        self.render_frame(snapshot, settings, control, &mut None)
+    }
+
+    /// Run the ordinary frame with synchronized phase boundaries for benchmarking.
+    /// Use an otherwise idle device; timings are wall times, not GPU timestamps.
+    pub fn render_profiled(
+        &self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        control: &Control,
+    ) -> Result<(RenderOutput, Option<BackendKind>, Vec<PassTiming>), RenderError> {
+        wait_for_gpu(&self.device)?;
+        let mut profile = Some(Profile {
+            start: Instant::now(),
+            passes: Vec::new(),
+        });
+        let (output, backend) = self.render_frame(snapshot, settings, control, &mut profile)?;
+        Ok((output, backend, profile.unwrap().passes))
+    }
+
+    fn render_frame(
+        &self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        control: &Control,
+        profile: &mut Option<Profile>,
+    ) -> Result<(RenderOutput, Option<BackendKind>), RenderError> {
         settings.validate()?;
         if !settings.hybrid.enabled
             || !(settings.hybrid.ao
@@ -633,7 +700,7 @@ impl RtEngine {
                     return Err(RenderError::Cancelled);
                 }
                 let jitter = crate::post::halton_jitter(j as u32 + 1);
-                let (out, used) = self.render_with(snapshot, &sub, control, jitter)?;
+                let (out, used) = self.render_with(snapshot, &sub, control, jitter, profile)?;
                 if j == 0 {
                     backend = used;
                 } else if backend != used {
@@ -642,6 +709,7 @@ impl RtEngine {
                 let pixels: Vec<[f32; 4]> = out.beauty.data.as_chunks::<4>().0.to_vec();
                 crate::post::accumulate(&mut acc, &pixels, n);
                 last = Some(out);
+                finish_phase(profile, &self.device, "taa-resolve")?;
             }
             let mut out = last.expect("at least one subframe");
             if let Some(mut mean) = acc {
@@ -653,9 +721,10 @@ impl RtEngine {
                 }
                 out.beauty.data = mean.iter().flat_map(|p| p.iter().copied()).collect();
             }
+            finish_phase(profile, &self.device, "taa-resolve")?;
             return Ok((out, backend));
         }
-        self.render_with(snapshot, settings, control, [0.0, 0.0])
+        self.render_with(snapshot, settings, control, [0.0, 0.0], profile)
     }
     fn render_with(
         &self,
@@ -663,6 +732,7 @@ impl RtEngine {
         settings: &RenderSettings,
         control: &Control,
         jitter: [f32; 2],
+        profile: &mut Option<Profile>,
     ) -> Result<(RenderOutput, Option<BackendKind>), RenderError> {
         settings.validate()?;
         snapshot.validate()?;
@@ -1106,6 +1176,11 @@ impl RtEngine {
             height: h,
             tiles: 1,
         });
+        if profile.is_some() {
+            // Submit pending texture writes so their execution is charged to setup.
+            queue.submit([]);
+        }
+        finish_phase(profile, device, "setup")?;
 
         // shadow tiles: one submit per tile, since the matrix lives in the frame uniform
         let vertex_count = (packed.triangles * 3) as u32;
@@ -1150,6 +1225,9 @@ impl RtEngine {
                 }
                 queue.submit([enc.finish()]);
             }
+        }
+        if !plans.is_empty() {
+            finish_phase(profile, device, "shadow-atlas")?;
         }
 
         if control.is_cancelled() {
@@ -1199,6 +1277,7 @@ impl RtEngine {
             drop(pass);
             queue.submit([enc.finish()]);
         }
+        finish_phase(profile, device, "g-buffer")?;
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
@@ -1210,6 +1289,7 @@ impl RtEngine {
                 .prepare(snapshot, settings, device, queue)
                 .and_then(|()| {
                     let g = self.read_rgba(&[&targets.g[0], &targets.g[1]], w, h)?;
+                    finish_phase(profile, device, "hybrid-primary")?;
                     let input = PrimaryInput {
                         positions: &g[0],
                         normals: &g[1],
@@ -1217,22 +1297,32 @@ impl RtEngine {
                         epsilon: packed.scale.max(1e-6) * 1e-6,
                     };
                     let ao = if rt_ao {
-                        view.ambient_visibility(settings, input, control)?
+                        let result = view.ambient_visibility(settings, input, control)?;
+                        finish_phase(profile, device, "rt-ao")?;
+                        result
                     } else {
                         Vec::new()
                     };
                     let shadows = if rt_shadows {
-                        view.direct_shadows(snapshot, settings, input, control)?
+                        let result = view.direct_shadows(snapshot, settings, input, control)?;
+                        finish_phase(profile, device, "rt-shadows")?;
+                        result
                     } else {
                         Vec::new()
                     };
                     let reflections = if rt_reflections {
-                        view.indirect(Bounce::Reflection, snapshot, settings, input, control)?
+                        let result =
+                            view.indirect(Bounce::Reflection, snapshot, settings, input, control)?;
+                        finish_phase(profile, device, "rt-reflections")?;
+                        result
                     } else {
                         Vec::new()
                     };
                     let gi = if rt_gi {
-                        view.indirect(Bounce::Diffuse, snapshot, settings, input, control)?
+                        let result =
+                            view.indirect(Bounce::Diffuse, snapshot, settings, input, control)?;
+                        finish_phase(profile, device, "rt-gi")?;
+                        result
                     } else {
                         Vec::new()
                     };
@@ -1252,7 +1342,12 @@ impl RtEngine {
                     values[frame::RT_REFLECTIONS_ON] = u32::from(!reflections.is_empty()) as f32;
                     values[frame::RT_GI_ON] = u32::from(!gi.is_empty()) as f32;
                     queue.write_buffer(&frame_buf, 0, &frame_bytes(&values));
-                    Some(self.upload_hybrid(w, h, &shadows, &ao, &reflections, &gi))
+                    let texture = self.upload_hybrid(w, h, &shadows, &ao, &reflections, &gi);
+                    if profile.is_some() {
+                        queue.submit([]);
+                    }
+                    finish_phase(profile, device, "hybrid-upload")?;
+                    Some(texture)
                 }
                 Ok(_) => None,
                 Err(RenderError::Unsupported(_)) => {
@@ -1307,6 +1402,7 @@ impl RtEngine {
             &lighting,
             &[&targets.beauty_view, &targets.shadow_view],
         );
+        finish_phase(profile, device, "lighting")?;
         // R22.3: screen-space reflections, reading the lit beauty into their own target
         let beauty_target = if settings.post.ssr && values[frame::RT_REFLECTIONS_ON] == 0.0 {
             if control.is_cancelled() {
@@ -1341,6 +1437,7 @@ impl RtEngine {
                 pass.draw(0..3, 0..1);
             }
             queue.submit([enc.finish()]);
+            finish_phase(profile, device, "ssr")?;
             &targets.beauty_ssr
         } else {
             &targets.beauty
@@ -1354,12 +1451,14 @@ impl RtEngine {
                 &split_pass,
                 &[&targets.split_views[0], &targets.split_views[1]],
             );
+            finish_phase(profile, device, "split")?;
         }
         if albedo {
             if control.is_cancelled() {
                 return Err(RenderError::Cancelled);
             }
             run_full("albedo", &albedo_pass, &[&targets.albedo_view]);
+            finish_phase(profile, device, "albedo")?;
         }
 
         // read back the beauty, the G-buffer and (when asked for) the light split
@@ -1481,7 +1580,7 @@ impl RtEngine {
         });
         control.emit(RenderEvent::Progress { done: 1, total: 1 });
         control.emit(RenderEvent::Finished);
-        Ok((
+        let result = (
             RenderOutput {
                 width: w,
                 height: h,
@@ -1496,6 +1595,8 @@ impl RtEngine {
                 },
             },
             used_backend,
-        ))
+        );
+        finish_phase(profile, device, "output")?;
+        Ok(result)
     }
 }

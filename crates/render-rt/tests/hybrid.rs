@@ -173,6 +173,57 @@ fn with_gpu(test: impl FnOnce(&wgpu::Device, &wgpu::Queue)) {
 }
 
 #[test]
+fn synchronized_profiling_preserves_render_and_names_executed_passes() {
+    with_gpu(|device, queue| {
+        let scene = fixture(Effect::Shadows);
+        for hybrid in [false, true] {
+            let settings = RenderSettings {
+                aovs: vec![Aov::Diffuse, Aov::Albedo, Aov::ObjectId],
+                hybrid: HybridSettings {
+                    enabled: hybrid,
+                    ao: true,
+                    shadows: true,
+                    reflections: true,
+                    gi: true,
+                    ..HybridSettings::default()
+                },
+                ..Effect::Shadows.raster_settings()
+            };
+            let engine = || RtEngine::with_device(device.clone(), queue.clone());
+            let (normal, normal_backend) = engine()
+                .render_with_backend(&scene, &settings, &Control::new())
+                .unwrap();
+            let (profiled, backend, passes) = engine()
+                .render_profiled(&scene, &settings, &Control::new())
+                .unwrap();
+            assert_eq!(backend, normal_backend);
+            assert_eq!(backend.is_some(), hybrid);
+            assert_eq!(normal.beauty.data, profiled.beauty.data);
+            assert_eq!(normal.aovs.len(), profiled.aovs.len());
+            for (aov, image) in normal.aovs {
+                assert_eq!(image.data, profiled.aovs[&aov].data, "{aov:?}");
+            }
+            let mut expected = vec!["setup", "shadow-atlas", "g-buffer"];
+            if hybrid {
+                expected.extend([
+                    "hybrid-primary",
+                    "rt-ao",
+                    "rt-shadows",
+                    "rt-reflections",
+                    "rt-gi",
+                    "hybrid-upload",
+                ]);
+            }
+            expected.extend(["lighting", "split", "albedo", "output"]);
+            assert_eq!(
+                passes.iter().map(|pass| pass.name).collect::<Vec<_>>(),
+                expected
+            );
+        }
+    });
+}
+
+#[test]
 fn tier_one_has_a_measurable_error_against_each_cpu_reference() {
     with_gpu(|device, queue| {
         let engine = RtEngine::with_device(device.clone(), queue.clone());
