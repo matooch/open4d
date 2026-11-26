@@ -1440,6 +1440,35 @@ and the R24.3 spatial filter. This is our own design.
   Preserve the eight shadow samples, no-light bypass, CPU fallback, and
   per-jitter history after spatial filtering.
 
+### R24.12 GPU diffuse history (brief 214)
+
+Sources: the R24 per-jitter temporal mean and
+[S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report).
+This is our own design.
+
+- The standalone pass consumes one spatially filtered RGBA signal in
+  compact, full-film row order. The previous and next means use full-film
+  rows padded to the GPU buffer-to-texture copy alignment (16 RGBA32F
+  pixels per 256 bytes). The pass explicitly zeros row padding. It
+  does not re-test coverage or operate in crop-relative coordinates.
+- The host passes the film size, padded stride, previous frame count and
+  f32 weight in a 32-byte uniform. The next frame count is the previous
+  count plus one with u32 saturation; weight is its f32 reciprocal,
+  matching CPU history. When the previous count is zero, copy the
+  filtered sample unchanged, without reading the previous mean.
+  Otherwise compute `previous + (filtered - previous) * weight` in all
+  four lanes.
+- Write to a separate buffer usable as a subsequent history input and
+  as a texture copy source. An unadopted result must not modify the
+  accepted mean. Live integration will own separate histories by exact
+  jitter and retain the current invalidation and fallback rules.
+- Translate to SPIR-V, MSL and HLSL. Compare on a non-aligned film
+  spanning multiple workgroups, with exact first-frame samples, zero
+  row padding, an unadopted update and a saturated count. Compare
+  accumulated values within `2e-6 * max(1, abs(expected))` for f32
+  arithmetic, using a distinct relative check for the small nonzero
+  change from a zero mean at the saturated count.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),

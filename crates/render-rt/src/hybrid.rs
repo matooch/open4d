@@ -1000,23 +1000,197 @@ fn spatial_filter<T: Signal>(width: usize, g: &PrimaryInput<'_>, mask: &[T], lim
 mod tests {
     use super::*;
     use crate::ray::{RayHit, SceneStats};
-    use std::sync::Mutex;
+    use std::sync::{Mutex, OnceLock};
+
+    static GPU_LOCK: Mutex<()> = Mutex::new(());
+
+    fn gpu(hardware: bool) -> Option<(wgpu::Device, wgpu::Queue)> {
+        type DeviceRequest = OnceLock<Result<(wgpu::Device, wgpu::Queue), String>>;
+        static COMPUTE: DeviceRequest = OnceLock::new();
+        static HARDWARE: DeviceRequest = OnceLock::new();
+        let result = if hardware {
+            HARDWARE.get_or_init(crate::request_rt_device)
+        } else {
+            COMPUTE.get_or_init(crate::request_default_device)
+        };
+        match result {
+            Ok(gpu) => Some(gpu.clone()),
+            Err(err) if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") => {
+                panic!("FORGE_REQUIRE_GPU=1 but no GPU: {err}");
+            }
+            Err(err) => {
+                eprintln!("skipping GPU test: {err}");
+                None
+            }
+        }
+    }
+
+    #[test]
+    fn gpu_diffuse_history_matches_cpu_without_overwriting_previous_mean() {
+        use forge_render_gpu::{await_mapped, map_read};
+        use wgpu::{BufferUsages as Usage, util::DeviceExt};
+
+        let _guard = GPU_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let Some((device, queue)) = gpu(false) else {
+            return;
+        };
+        const W: usize = 19;
+        const H: usize = 11;
+        const STRIDE: usize = W.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize / 16);
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(crate::shader::DIFFUSE_HISTORY_WGSL.into()),
+        });
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: None,
+            layout: None,
+            module: &module,
+            entry_point: Some("diffuse_history"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+        let layout = pipeline.get_bind_group_layout(0);
+        let init = |contents: &[u8], usage| {
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents,
+                usage,
+            })
+        };
+        let dirty = vec![[123.0_f32; 4]; STRIDE * H];
+        let dirty = bytemuck::cast_slice(&dirty);
+        let initial = init(dirty, Usage::STORAGE);
+        let frames: Vec<Vec<[f32; 4]>> = [0.0, 512.0, -3.0, 9.0, 2.0]
+            .into_iter()
+            .map(|shift| {
+                (0..W * H)
+                    .map(|i| {
+                        if shift == 0.0 && i % W == W - 1 {
+                            [0.0; 4]
+                        } else {
+                            let v = (i as f32 - 93.0) * 0.125;
+                            [v + shift, -2.0 * v - shift, shift - v, v * 0.25 + shift]
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
+        let size = dirty.len() as u64;
+        // Order: first, abandoned, second, third, saturated. Third reads second;
+        // both second and saturated read first, even after the abandoned dispatch.
+        let steps = [
+            (None, 0_u32),
+            (Some(0), 1),
+            (Some(0), 1),
+            (Some(2), 2),
+            (Some(0), u32::MAX),
+        ];
+        let staging = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: size * steps.len() as u64,
+            usage: Usage::COPY_DST | Usage::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = device.create_command_encoder(&Default::default());
+        let mut outputs = Vec::new();
+        let mut references: Vec<History<[f32; 4]>> = Vec::new();
+        for (i, (parent, count)) in steps.into_iter().enumerate() {
+            let weight = 1.0 / count.saturating_add(1) as f32;
+            let params = [
+                W as u32,
+                H as u32,
+                STRIDE as u32,
+                count,
+                weight.to_bits(),
+                0,
+                0,
+                0,
+            ];
+            let uniform = init(bytemuck::bytes_of(&params), Usage::UNIFORM);
+            let input = init(bytemuck::cast_slice(&frames[i]), Usage::STORAGE);
+            let output = init(dirty, Usage::STORAGE | Usage::COPY_SRC);
+            let buffers = [
+                &uniform,
+                &input,
+                parent.map_or(&initial, |p| &outputs[p]),
+                &output,
+            ];
+            let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &layout,
+                entries: &std::array::from_fn::<_, 4, _>(|slot| wgpu::BindGroupEntry {
+                    binding: slot as u32,
+                    resource: buffers[slot].as_entire_binding(),
+                }),
+            });
+            {
+                let mut pass = encoder.begin_compute_pass(&Default::default());
+                pass.set_pipeline(&pipeline);
+                pass.set_bind_group(0, &group, &[]);
+                pass.dispatch_workgroups((STRIDE as u32).div_ceil(8), (H as u32).div_ceil(8), 1);
+            }
+            let mut history = History {
+                frames: count,
+                mean: parent.map_or_else(Vec::new, |p| references[p].mean.clone()),
+            };
+            history.accumulate(frames[i].clone());
+            assert_eq!(history.frames, count.saturating_add(1));
+            references.push(history);
+            outputs.push(output);
+        }
+        for (i, output) in outputs.iter().enumerate() {
+            encoder.copy_buffer_to_buffer(output, 0, &staging, i as u64 * size, size);
+        }
+        queue.submit([encoder.finish()]);
+        let slice = staging.slice(..);
+        await_mapped(&device, &map_read(&slice)).unwrap();
+        let mapped = slice.get_mapped_range().unwrap();
+        let actual: &[[f32; 4]] = bytemuck::cast_slice(&mapped);
+        assert_eq!(actual.len(), references.len() * STRIDE * H);
+        for (i, (rows, cpu)) in actual
+            .as_chunks::<{ STRIDE * H }>()
+            .0
+            .iter()
+            .zip(&references)
+            .enumerate()
+        {
+            for (y, row) in rows.as_chunks::<STRIDE>().0.iter().enumerate() {
+                for (x, pixel) in row.iter().enumerate() {
+                    if x >= W {
+                        assert_eq!(pixel.map(f32::to_bits), [0; 4], "padding at {x},{y}");
+                        continue;
+                    }
+                    let expected = cpu.mean[y * W + x];
+                    if i == 0 {
+                        assert_eq!(pixel.map(f32::to_bits), expected.map(f32::to_bits));
+                    } else {
+                        for (&sample, expected) in pixel.iter().zip(expected) {
+                            let scale = if i == 4 && x == W - 1 {
+                                assert_ne!(expected, 0.0);
+                                expected.abs()
+                            } else {
+                                expected.abs().max(1.0)
+                            };
+                            assert!(
+                                (sample - expected).abs() <= 2e-6 * scale,
+                                "history {i} at {x},{y}: {sample} != {expected}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn gpu_raw_ao_matches_cpu_across_all_quad_phases() {
         use forge_render_api::{Instance, MaterialData, MeshData};
         use glam::DMat4;
 
-        for request in [crate::request_default_device, crate::request_rt_device] {
-            let (device, queue) = match request() {
-                Ok(gpu) => gpu,
-                Err(err) if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") => {
-                    panic!("FORGE_REQUIRE_GPU=1 but no GPU: {err}");
-                }
-                Err(err) => {
-                    eprintln!("skipping GPU test: {err}");
-                    return;
-                }
+        let _guard = GPU_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        for hardware in [false, true] {
+            let Some((device, queue)) = gpu(hardware) else {
+                return;
             };
             let snapshot = Snapshot {
                 meshes: vec![MeshData::new(

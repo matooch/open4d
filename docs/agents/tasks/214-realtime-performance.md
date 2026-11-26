@@ -36,6 +36,12 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Standalone GPU diffuse history:** R24.12 matched CPU accumulation on
+  Metal on a 19×11 film, including bit-exact first-frame samples, zero
+  row padding, an abandoned update and a saturated frame count. The shader
+  translated to SPIR-V, MSL and HLSL. Five required-GPU lib and
+  translation runs passed; `GATE: all passed` (2760 tests). No live
+  dispatch or S10 change.
 - **Selective native BLAS residency:** Editing one mesh slot now replaces
   only that slot's BLAS and input buffers; the replacement TLAS uses both
   new and resident handles. Actual Metal retained one of two populated

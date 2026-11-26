@@ -16,6 +16,9 @@ pub const REFLECTION_SAMPLING_WGSL: &str = include_str!("reflection_sampling.wgs
 /// Standalone R24.11 spatial reconstruction of full-resolution bounce and shadow signals.
 pub const BOUNCE_SPATIAL_WGSL: &str = include_str!("bounce_spatial.wgsl");
 
+/// Standalone R24.12 temporal mean of a spatially filtered diffuse signal.
+pub const DIFFUSE_HISTORY_WGSL: &str = include_str!("diffuse_history.wgsl");
+
 /// Raw R24.8 reflection signal before spatial/temporal filtering.
 pub fn reflection_wgsl(
     backend: crate::ray::BackendKind,

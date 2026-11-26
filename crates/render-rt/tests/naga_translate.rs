@@ -53,6 +53,14 @@ fn bounce_spatial_reconstruction_translates_to_all_backends() {
 }
 
 #[test]
+fn diffuse_history_translates_to_all_backends() {
+    translate(
+        "diffuse history",
+        forge_render_rt::shader::DIFFUSE_HISTORY_WGSL,
+    );
+}
+
+#[test]
 fn hardware_ray_queries_translate_to_all_backends() {
     translate("hardware ray queries", forge_render_rt::ray::HARDWARE_WGSL);
 }
