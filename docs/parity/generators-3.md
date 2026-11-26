@@ -359,3 +359,76 @@ in pixels (put a reference cube of size 200 next to it and measure both).
 
 Output: a table in this section (one row per Display option, plus the rows of steps 3–4).
 No golden folder is needed (nothing to export). Brief 046 is built from this table.
+
+### O20b observation (observer, 2026-11-26): Null display shapes
+
+Setup: empty scene, one Null at the origin, reference Cube (Size 200 x 200 x 200) at
+(400, 0, 0), view set to Front orthographic (and Top for the orientation rows) through a
+scene camera, because the bridge could not switch the editor view directly. Scale
+calibrated from the reference cube: 0.785 px per world unit at 800 x 450 (cube measured
+157 px wide), world origin at pixel (398, 224.5). Every shape was captured with
+`viewport_screenshot` and measured as the pixel difference against a Shape = None
+baseline of the same view; extents include about 1-2 units of line width. Screenshots
+live in the observer workspace, not in the repo.
+
+Parameters read on a fresh Null (Attribute Manager labels):
+
+| Parameter | Default | Options / range |
+| --- | --- | --- |
+| Shape | Dot | None, Dot, Locator, Circle, Rectangle, Diamond, Triangle, Pentagon, Hexagon, Octagon, Star, Axis, Cube, Pyramid, Sphere |
+| Radius | 10 | min 0, max 1e20, slider 0-100, step 1 |
+| Aspect Ratio | 1 | min 0, max 1e20, step 0.01 |
+| Orientation | Camera | Camera, X, Y, Z |
+| Display Color | Material | Material, Layer, Automatic, Custom |
+| Color (after Icon Color) | (1, 0.9, 0.4) | 0-1 RGB, step 0.01 |
+| Color (after Display Color) | (1, 1, 1) | 0-1 RGB, step 0.01 |
+| X-Ray | off | boolean (0/1) |
+| Visible in Editor | Default | Default, On, Off |
+| Visible in Renderer | Default | Default, On, Off |
+
+Step 2 - each Display option at Radius 100, Aspect Ratio 1, Orientation Camera, Front view:
+
+| Display option | What is drawn | Measured extent (world units) | Segments / points | Centred |
+| --- | --- | --- | --- | --- |
+| None | nothing beyond the usual origin marker | - | - | - |
+| Dot | a single point at the origin | about 2.5 x 2.5 (3-4 px) | 1 point | origin |
+| Locator | full cross: one horizontal and one vertical line through the origin | 198.7 x 198.7 (both axes -100..+100) | 2 lines | origin |
+| Circle | closed circle, thin outline, not filled | 201.3 x 201.3 (diameter 200) | polyline, many segments (not counted) | origin |
+| Rectangle | closed axis-aligned square, corners on the radius circle (side about R*sqrt(2)) | 142.7 x 142.7 | 4 | origin |
+| Diamond | closed square rotated 45 deg, vertices at +-100 | 198.7 x 198.7 | 4 | origin |
+| Triangle | closed, one vertex up, flat base below | width 173.2, height 150.3, y -50.3..+98.7 | 3 | origin (bbox centre y +24.2) |
+| Pentagon | closed, vertex up, flat base below | width 191.1, height 180.9, y -80.9..+98.7 | 5 | origin |
+| Hexagon | closed, vertices left/right, flat top and bottom | width 198.7, height 173.2 (y +-86.0) | 6 | origin |
+| Octagon | closed regular octagon | 186.0 x 186.0 | 8 | origin |
+| Star | closed 8-point star, outline, not filled | 198.7 x 198.7 | 16 | origin |
+| Axis | two arms starting at the origin: +X to +100.6 and +Y to +98.7; no changed pixels along -X or -Y | x 0..+100.6, y -0.6..+98.7 | 2 open lines | arms start at the origin |
+| Cube | square outline, side 2R, no inner lines in this view | 201.3 x 201.3 | 4 | origin |
+| Pyramid | square outline plus both diagonals meeting at the centre | 201.3 x 201.3 | 8 | origin |
+| Sphere | circle outline plus horizontal and vertical diameters crossing at the centre | 201.3 x 201.3 | circle (not counted) + 2 lines | origin |
+
+All bounding boxes are centred within 1.9 units (1.5 px, calibration bias) of the
+origin, i.e. every shape is drawn centred on the Null.
+
+Step 3 - Radius 50, Aspect Ratio 2, Front view (plus a Top view check for the 3D shape):
+
+| Case | Measured extent | Finding |
+| --- | --- | --- |
+| Rectangle, R50, AR2 | X 71.3, Y 142.7 | Aspect multiplies the vertical (Y) axis: X is unchanged from AR1 (50*sqrt(2) about 70.7), Y is doubled (2 x 70.7 about 141.4) |
+| Pyramid, R50, AR2 | Front 101.9 x 101.9, Top 101.9 x 101.9 | Screenshot is byte-identical to the R50 / AR1 control, so Aspect Ratio produced no measurable change in X, Y or Z; any effect along the local depth axis is not observable in these views |
+
+Step 4 - Circle, R100, AR1, each Orientation, Front and Top views (in Top view the
+screen vertical axis is world Z):
+
+| Orientation | Front view | Top view | Plane the circle lies in |
+| --- | --- | --- | --- |
+| Camera | circle, diameter 201.3 | circle, diameter 201.3 | always faces the current view |
+| X | vertical line, 2.5 x 198.7 | vertical line, 1.3 x 198.7 | YZ |
+| Y | horizontal line, 198.7 x 2.5 | circle, diameter 201.3 | XZ |
+| Z | circle, diameter 201.3 | horizontal line, 198.7 x 1.3 | XY |
+
+Notes: the bridge could not switch the editor view (writing the view projection was not
+visible in the viewport), so the Front and Top views were produced with a scene camera
+set to the Front / Top projection; the view label in each screenshot was used to confirm
+which view a capture shows. Segment counts for polygons are read from the screenshots;
+the circle and sphere circumferences were not counted. No golden folder (nothing to
+export).

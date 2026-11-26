@@ -33,7 +33,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O18 | Primitives III | [primitives-3.md](primitives-3.md) | `tests/golden/<object>/` meshes | done |
 | O58 | Modeling tools III (020/021 follow-ups) | [modeling-tools-3.md](modeling-tools-3.md) | `tests/golden/modeling-tools/` meshes | partial |
 | O20 | Generators III | [generators-3.md](generators-3.md) | done (baseline 59 of 59; all 32 follow-up rows resolved — 26 observed, 6 with recorded verdicts in their rows — see the form) |
-| O20b | Null display shapes via `viewport_screenshot` (brief 046) | [generators-3.md](generators-3.md) Follow-up 2026-11-26 | form table only (no golden) | todo |
+| O20b | Null display shapes via `viewport_screenshot` (brief 046) | [generators-3.md](generators-3.md) Follow-up 2026-11-26 | form table only (no golden) | done |
 | O19 | Deformers III | [deformers-3.md](deformers-3.md) | `tests/golden/<deformer>/` meshes | partial |
 | O45 | Deformers IV | [deformers-4.md](deformers-4.md) | partial (31 follow-up rows observed earlier; the outstanding 27 carry their recorded not-observed or needs-a-human verdicts in the table — see the form) |
 | O46 | Spline tools and editable splines | [spline-tools.md](spline-tools.md) | `tests/golden/spline-tools/` meshes | partial |
