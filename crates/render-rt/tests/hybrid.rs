@@ -224,6 +224,97 @@ fn synchronized_profiling_preserves_render_and_names_executed_passes() {
 }
 
 #[test]
+fn optional_aovs_preserve_cropped_beauty_and_events() {
+    const ALL: [Aov; 10] = [
+        Aov::Depth,
+        Aov::Normal,
+        Aov::Albedo,
+        Aov::Position,
+        Aov::ObjectId,
+        Aov::MaterialId,
+        Aov::Shadow,
+        Aov::Diffuse,
+        Aov::Specular,
+        Aov::Emission,
+    ];
+    with_gpu(|device, queue| {
+        let scene = fixture(Effect::Shadows);
+        let crop = [3, 7, SIZE - 2, SIZE - 5];
+        let engine = || RtEngine::with_device(device.clone(), queue.clone());
+        for hybrid in [false, true] {
+            let settings = RenderSettings {
+                region: Some(crop),
+                aovs: ALL.to_vec(),
+                post: PostSettings {
+                    bloom: true,
+                    tonemap: true,
+                    ..PostSettings::default()
+                },
+                hybrid: HybridSettings {
+                    enabled: hybrid,
+                    shadows: true,
+                    ..HybridSettings::default()
+                },
+                ..Effect::Shadows.raster_settings()
+            };
+            let full = engine().render(&scene, &settings, &Control::new()).unwrap();
+            assert!(full.aovs[&Aov::ObjectId].data.iter().any(|&v| v > 0.0));
+            for aov in std::iter::once(None).chain(ALL.map(Some)) {
+                let events = std::sync::Arc::new(Mutex::new(Vec::new()));
+                let sink = events.clone();
+                let control = Control::with_events(move |e| sink.lock().unwrap().push(e.clone()));
+                let actual = engine()
+                    .render(
+                        &scene,
+                        &RenderSettings {
+                            aovs: aov.into_iter().collect(),
+                            ..settings.clone()
+                        },
+                        &control,
+                    )
+                    .unwrap();
+                assert_eq!(actual.beauty.data, full.beauty.data);
+                assert_eq!(actual.beauty.alpha, full.beauty.alpha);
+                assert_eq!(actual.stats.samples, full.stats.samples);
+                assert_eq!(actual.aovs.len(), usize::from(aov.is_some()));
+                if let Some(aov) = aov {
+                    assert_eq!(actual.aovs[&aov].data, full.aovs[&aov].data, "{aov:?}");
+                    assert_eq!(actual.aovs[&aov].alpha, full.aovs[&aov].alpha);
+                }
+                let [x, y, x1, y1] = crop;
+                let rgba = (y..y1)
+                    .flat_map(|row| {
+                        full.beauty.data
+                            [((row * SIZE + x) * 4) as usize..((row * SIZE + x1) * 4) as usize]
+                            .iter()
+                            .copied()
+                    })
+                    .collect();
+                assert_eq!(
+                    *events.lock().unwrap(),
+                    [
+                        RenderEvent::Started {
+                            width: SIZE,
+                            height: SIZE,
+                            tiles: 1
+                        },
+                        RenderEvent::Tile {
+                            x,
+                            y,
+                            width: x1 - x,
+                            height: y1 - y,
+                            rgba
+                        },
+                        RenderEvent::Progress { done: 1, total: 1 },
+                        RenderEvent::Finished,
+                    ]
+                );
+            }
+        }
+    });
+}
+
+#[test]
 fn tier_one_has_a_measurable_error_against_each_cpu_reference() {
     with_gpu(|device, queue| {
         let engine = RtEngine::with_device(device.clone(), queue.clone());

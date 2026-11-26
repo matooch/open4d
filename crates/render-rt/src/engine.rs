@@ -26,6 +26,82 @@ use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
 #[path = "scene_cache_tests.rs"]
 mod scene_cache_tests;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OutputAttachment {
+    Beauty,
+    Shadow,
+    G0,
+    G1,
+    Diffuse,
+    Specular,
+    Albedo,
+}
+
+fn output_attachments(aovs: &[Aov], primary_read: bool) -> Vec<OutputAttachment> {
+    use OutputAttachment::*;
+    let mut attachments = vec![Beauty];
+    if aovs.contains(&Aov::Shadow) {
+        attachments.push(Shadow);
+    }
+    if !primary_read {
+        if aovs.iter().any(|a| {
+            matches!(
+                a,
+                Aov::Depth
+                    | Aov::Normal
+                    | Aov::Position
+                    | Aov::ObjectId
+                    | Aov::MaterialId
+                    | Aov::Shadow
+                    | Aov::Emission
+            )
+        }) {
+            attachments.push(G0);
+        }
+        if aovs
+            .iter()
+            .any(|a| matches!(a, Aov::Normal | Aov::ObjectId))
+        {
+            attachments.push(G1);
+        }
+    }
+    if aovs
+        .iter()
+        .any(|a| matches!(a, Aov::Diffuse | Aov::Specular | Aov::Emission))
+    {
+        attachments.extend([Diffuse, Specular]);
+    }
+    if aovs.contains(&Aov::Albedo) {
+        attachments.push(Albedo);
+    }
+    attachments
+}
+
+#[cfg(test)]
+#[test]
+fn raster_output_copies_only_requested_attachments() {
+    use OutputAttachment::*;
+    assert_eq!(output_attachments(&[], false), [Beauty]);
+    assert_eq!(output_attachments(&[], true), [Beauty]);
+    assert_eq!(
+        output_attachments(&[Aov::Shadow], false),
+        [Beauty, Shadow, G0]
+    );
+    assert_eq!(
+        output_attachments(&[Aov::ObjectId], false),
+        [Beauty, G0, G1]
+    );
+    assert_eq!(output_attachments(&[Aov::Albedo], false), [Beauty, Albedo]);
+    assert_eq!(
+        output_attachments(&[Aov::Shadow, Aov::Normal, Aov::Emission], true),
+        [Beauty, Shadow, Diffuse, Specular]
+    );
+    assert_eq!(
+        output_attachments(&[Aov::Emission], false),
+        [Beauty, G0, Diffuse, Specular]
+    );
+}
+
 /// Synchronized host time for a named render phase. Repeated phases (TAA) are summed.
 #[derive(Clone, Debug)]
 pub struct PassTiming {
@@ -1558,60 +1634,43 @@ impl RtEngine {
             finish_phase(profile, device, "albedo")?;
         }
 
-        // read back the beauty, the G-buffer and (when asked for) the light split
-        let mut order = vec![beauty_target, &targets.shadow];
-        if primary.is_none() {
-            order.extend([&targets.g[0], &targets.g[1]]);
+        use OutputAttachment::*;
+        let order = output_attachments(&settings.aovs, primary.is_some());
+        let textures: Vec<_> = order
+            .iter()
+            .map(|attachment| match attachment {
+                Beauty => beauty_target,
+                Shadow => &targets.shadow,
+                G0 => &targets.g[0],
+                G1 => &targets.g[1],
+                Diffuse => &targets.split[0],
+                Specular => &targets.split[1],
+                Albedo => &targets.albedo,
+            })
+            .collect();
+        let mut pixels: [_; Albedo as usize + 1] = std::array::from_fn(|_| None);
+        for (attachment, data) in order.into_iter().zip(self.read_rgba(&textures, w, h)?) {
+            pixels[attachment as usize] = Some(data);
         }
-        if split {
-            order.push(&targets.split[0]);
-            order.push(&targets.split[1]);
-        }
-        if albedo {
-            order.push(&targets.albedo);
-        }
-        let mut pixels = self.read_rgba(&order, w, h)?;
         if let Some(primary) = primary {
-            pixels.splice(2..2, primary);
+            for (attachment, data) in [G0, G1].into_iter().zip(primary) {
+                pixels[attachment as usize] = Some(data);
+            }
         }
-        let beauty_px = &pixels[0];
-        let shadow_px = &pixels[1];
-        let g0_px = &pixels[2];
-        let g1_px = &pixels[3];
-        let diffuse_px = if split { Some(&pixels[4]) } else { None };
-        let specular_px = if split { Some(&pixels[5]) } else { None };
-        let albedo_px = if albedo {
-            Some(&pixels[4 + usize::from(split) * 2])
-        } else {
-            None
+        let mut beauty_px = pixels[Beauty as usize].take().expect("beauty readback");
+        let pixel = |attachment: OutputAttachment, i: usize| {
+            pixels[attachment as usize].as_ref().expect("AOV readback")[i]
         };
-        // R22.4/R22.6: bloom and tone mapping on this subframe's linear beauty. The AOVs keep
-        // the linear values (they are data, not display colour).
-        let linear_px = beauty_px;
-        let mut beauty_px = beauty_px.clone();
-        if settings.post.bloom {
-            crate::post::bloom(&mut beauty_px, w, h, &settings.post);
-        }
-        if settings.post.tonemap {
-            crate::post::tonemap_image(&mut beauty_px, &settings.post);
-        }
-        let beauty_px = &beauty_px;
-        let mut beauty = Image::new(w, h, AlphaMode::Premultiplied);
         let mut aov_imgs: BTreeMap<Aov, Image> = settings
             .aovs
             .iter()
             .map(|a| (*a, Image::new(w, h, AlphaMode::Straight)))
             .collect();
         let eye = snapshot.camera.position();
-        for y in 0..h {
-            for x in 0..w {
-                let i = (y * w + x) as usize;
-                beauty.set_pixel(x, y, beauty_px[i]);
-                if aov_imgs.is_empty() {
-                    continue;
-                }
-                let g0 = g0_px[i];
-                let g1 = g1_px[i];
+        if !aov_imgs.is_empty() {
+            for (i, &b) in beauty_px.iter().enumerate() {
+                let (x, y) = (i as u32 % w, i as u32 / w);
+                let g0 = pixels[G0 as usize].as_ref().map_or([0.0; 4], |g| g[i]);
                 let hit = g0[3] > 0.5;
                 let alpha = if hit { 1.0 } else { 0.0 };
                 let p = [g0[0], g0[1], g0[2]];
@@ -1625,13 +1684,16 @@ impl RtEngine {
                             };
                             [d as f32, d as f32, d as f32, alpha]
                         }
-                        Aov::Normal => [g1[0], g1[1], g1[2], alpha],
-                        Aov::Albedo => albedo_px.map(|d| d[i]).unwrap_or([0.0; 4]),
+                        Aov::Normal => {
+                            let n = pixel(G1, i);
+                            [n[0], n[1], n[2], alpha]
+                        }
+                        Aov::Albedo => pixel(Albedo, i),
                         Aov::Position => [p[0], p[1], p[2], alpha],
                         Aov::ObjectId => {
                             // g1.w is the triangle index + 1 (R21.3)
                             let id = if hit {
-                                geometry.object_ids[g1[3] as usize - 1] + 1.0
+                                geometry.object_ids[pixel(G1, i)[3] as usize - 1] + 1.0
                             } else {
                                 0.0
                             };
@@ -1641,13 +1703,12 @@ impl RtEngine {
                             let id = g0[3];
                             [id, id, id, alpha]
                         }
-                        Aov::Shadow => [shadow_px[i][0], 1.0, 1.0, alpha],
-                        Aov::Diffuse => diffuse_px.map(|d| d[i]).unwrap_or([0.0; 4]),
-                        Aov::Specular => specular_px.map(|d| d[i]).unwrap_or([0.0; 4]),
+                        Aov::Shadow => [pixel(Shadow, i)[0], 1.0, 1.0, alpha],
+                        Aov::Diffuse => pixel(Diffuse, i),
+                        Aov::Specular => pixel(Specular, i),
                         Aov::Emission => {
-                            let d = diffuse_px.map(|d| d[i]).unwrap_or([0.0; 4]);
-                            let s = specular_px.map(|d| d[i]).unwrap_or([0.0; 4]);
-                            let b = linear_px[i];
+                            let d = pixel(Diffuse, i);
+                            let s = pixel(Specular, i);
                             [
                                 (b[0] - d[0] - s[0]).max(0.0),
                                 (b[1] - d[1] - s[1]).max(0.0),
@@ -1660,19 +1721,22 @@ impl RtEngine {
                 }
             }
         }
-        control.emit(RenderEvent::Tile {
+        // R22.4/R22.6: apply post to beauty only, after deriving the linear AOVs.
+        if settings.post.bloom {
+            crate::post::bloom(&mut beauty_px, w, h, &settings.post);
+        }
+        if settings.post.tonemap {
+            crate::post::tonemap_image(&mut beauty_px, &settings.post);
+        }
+        control.emit_with(|| RenderEvent::Tile {
             x: rx0,
             y: ry0,
             width: rx1 - rx0,
             height: ry1 - ry0,
-            rgba: beauty_px
-                .iter()
-                .enumerate()
-                .filter(|(i, _)| {
-                    let (x, y) = ((*i as u32) % w, (*i as u32) / w);
-                    x >= rx0 && x < rx1 && y >= ry0 && y < ry1
-                })
-                .flat_map(|(_, p)| *p)
+            rgba: (ry0..ry1)
+                .flat_map(|y| &beauty_px[(y * w + rx0) as usize..(y * w + rx1) as usize])
+                .flatten()
+                .copied()
                 .collect(),
         });
         control.emit(RenderEvent::Progress { done: 1, total: 1 });
@@ -1681,7 +1745,12 @@ impl RtEngine {
             RenderOutput {
                 width: w,
                 height: h,
-                beauty,
+                beauty: Image {
+                    width: w,
+                    height: h,
+                    data: beauty_px.into_flattened(),
+                    alpha: AlphaMode::Premultiplied,
+                },
                 aovs: aov_imgs,
                 stats: RenderStats {
                     triangles: packed.triangles,

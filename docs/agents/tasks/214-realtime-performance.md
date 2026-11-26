@@ -57,3 +57,18 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 - Cache acceptance passed five times with GPU required, including exact warm/cold
   beauty and AOV equality and invalid-input rejection. Checkpoint gate: 2736 tests
   passed, zero failed; `GATE: all passed`.
+- [Output checkpoint](../../specs/PERFORMANCE.md#62-demand-driven-raster-output-brief-214):
+  copy only requested attachments, retain hybrid primary readbacks, and construct
+  cropped Tile payloads only for callbacks. Five required-GPU runs passed exact
+  cropped beauty, AOV and event comparisons, with bloom and tone mapping enabled.
+  Same full-size S10 protocol on M5 Pro / Metal:
+
+  | Tier | Frame median (ms) | fps | Setup (ms) | Camera-only setup (ms) | Output (ms) |
+  | --- | ---: | ---: | ---: | ---: | ---: |
+  | 1 | 13.963 | 71.620 | 5.871 | 5.943 | 3.359 |
+  | 2 | 4318.308 | 0.232 | 6.889 | 7.094 | 3.599 |
+
+  Tier 1 met 60 fps in this run (previously 24.483 fps). Camera-only setup still
+  exceeds 5 ms. Tier 2 used actual Metal with all four effects and missed 30 fps.
+  This checkpoint does not change any effect estimator or R26 budget. Gate:
+  2738 tests passed, zero failed; `GATE: all passed`.

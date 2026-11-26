@@ -195,3 +195,22 @@ These are internal performance rules; they do not change the renderer's referenc
   Separately report camera-only setup (target <5 ms); do not use this phase timing as a
   substitute for frame throughput. Any Tier 2 estimator changes require their own R24
   contract and a rerun of the R26 quality matrix before claiming a performance win.
+
+### 6.2 Demand-driven raster output (brief 214)
+
+Sources: [R21.6 raster outputs](RENDER.md#r216-outputs-aovs-and-limits),
+[R24 primary data](RENDER.md#r24-hybrid-ray-traced-effects), and the
+[S10 checkpoint](../agents/tasks/214-realtime-performance.md#report-implementer-fills-in).
+
+- Final output always reads the selected beauty attachment (lit or SSR). Read shadow
+  only for Shadow. Read G0 for Depth, Normal, Position, ObjectId, MaterialId, Shadow
+  or Emission, and G1 only for Normal or ObjectId. If hybrid already read primary
+  attachments, use those arrays rather than copying them again. The hybrid input
+  readback is independent of which output AOVs the caller requests.
+- Read both light-split attachments for Diffuse, Specular or Emission, and the
+  albedo attachment only for Albedo. Emission uses pre-postprocessing beauty.
+- Beauty and each AOV must match the same render with all AOVs requested, including
+  outside a crop. Preserve alpha metadata, statistics and the order and values of
+  callback events. Gather only the postprocessed crop rows for the Tile event,
+  and do not allocate a Tile payload if there is no callback. Beauty-only output
+  does not iterate over AOV pixels.
