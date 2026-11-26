@@ -142,6 +142,78 @@ fn aovs_match_the_cpu() {
     }
 }
 
+/// R25.1: a dispatch boundary must not change the path sequence or raw sums.
+#[test]
+fn split_sample_dispatches_preserve_beauty_and_aovs() {
+    let _serial = serial();
+    let Some((device, queue)) = gpu() else {
+        return;
+    };
+    let engine = GpuEngine::with_device(device, queue);
+    let case = load("area-soft");
+    let mut settings = image_parity::settings(
+        (48, 36),
+        vec![
+            Aov::Depth,
+            Aov::Normal,
+            Aov::Albedo,
+            Aov::Position,
+            Aov::ObjectId,
+            Aov::MaterialId,
+            Aov::Shadow,
+            Aov::Diffuse,
+            Aov::Specular,
+            Aov::Emission,
+        ],
+    );
+    settings.samples = 7;
+    settings.tile = 13;
+    settings.region = Some([3, 2, 40, 31]);
+    let render = |engine: &GpuEngine, settings: &RenderSettings| {
+        engine
+            .render(&case.snapshot, settings, &Control::new())
+            .unwrap()
+    };
+    let whole = render(&engine, &settings);
+    let first = render(
+        &engine,
+        &RenderSettings {
+            samples: 1,
+            ..settings.clone()
+        },
+    );
+    assert!(
+        whole.beauty != first.beauty,
+        "fixture must vary with sampling"
+    );
+    let assert_same_bits = |whole: &forge_image::Image, split: &forge_image::Image, label| {
+        assert_eq!((whole.width, whole.height), (split.width, split.height));
+        assert_eq!(whole.data.len(), split.data.len());
+        for (channel, (a, b)) in whole.data.iter().zip(&split.data).enumerate() {
+            assert_eq!(a.to_bits(), b.to_bits(), "{label}, channel {channel}");
+        }
+    };
+    for batch in [1, 3] {
+        let split = render(
+            &engine
+                .clone()
+                .with_submission_budget(37)
+                .with_sample_batch_size(batch),
+            &settings,
+        );
+        assert_same_bits(
+            &whole.beauty,
+            &split.beauty,
+            format!("beauty, batch {batch}"),
+        );
+        assert_eq!(whole.aovs.len(), split.aovs.len());
+        for (aov, image) in &whole.aovs {
+            assert_same_bits(image, &split.aovs[aov], format!("{aov:?}, batch {batch}"));
+        }
+        assert_eq!(whole.stats.samples, split.stats.samples);
+    }
+}
+
 /// R4 with the GPU engine: one `Tile` per tile, the tiles rebuild the image, cancel stops.
 #[test]
 fn events_and_cancel() {

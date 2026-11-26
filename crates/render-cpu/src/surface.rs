@@ -173,10 +173,38 @@ impl Surface {
             return 0.0;
         }
         let ps = self.lobe_probability();
+        (1.0 - ps) * nl / PI + ps * self.specular_pdf(n, wo, wi)
+    }
+
+    fn specular_pdf(&self, n: DVec3, wo: DVec3, wi: DVec3) -> f64 {
         let h = (wo + wi).normalize_or_zero();
         let nh = n.dot(h).max(0.0);
         let vh = wo.dot(h).max(1e-9);
-        (1.0 - ps) * nl / PI + ps * self.ggx_d(nh) * nh / (4.0 * vh)
+        self.ggx_d(nh) * nh / (4.0 * vh)
+    }
+
+    fn reflect_ggx(&self, n: DVec3, wo: DVec3, (u1, u2): (f64, f64)) -> DVec3 {
+        let a2 = self.alpha * self.alpha;
+        let cos_t = ((1.0 - u2) / (1.0 + (a2 - 1.0) * u2)).sqrt();
+        let sin_t = (1.0 - cos_t * cos_t).max(0.0).sqrt();
+        let phi = 2.0 * PI * u1;
+        let h = to_world(n, DVec3::new(sin_t * phi.cos(), sin_t * phi.sin(), cos_t));
+        (2.0 * wo.dot(h) * h - wo).normalize_or_zero()
+    }
+
+    /// Sample just the opaque specular lobe: direction and `f_s cos / pdf_s`.
+    pub fn sample_specular(&self, n: DVec3, wo: DVec3, rng: &mut Rng) -> Option<(DVec3, DVec3)> {
+        if self.spec == DVec3::ZERO || n.dot(wo) <= 0.0 {
+            return None;
+        }
+        let wi = self.reflect_ggx(n, wo, rng.f2());
+        let nl = n.dot(wi);
+        if nl <= 0.0 {
+            return None;
+        }
+        let pdf = self.specular_pdf(n, wo, wi);
+        let fs = self.eval(n, wo, wi).1;
+        (pdf > 0.0).then(|| (wi, fs * (nl / pdf)))
     }
 
     /// Samples the opaque part: direction, weight `f cos / pdf` per channel, pdf and lobe.
@@ -194,16 +222,7 @@ impl Surface {
         };
         let wi = match lobe {
             Lobe::Diffuse => to_world(n, cosine_hemisphere(rng.f2())),
-            Lobe::Specular => {
-                let (u1, u2) = rng.f2();
-                let a2 = self.alpha * self.alpha;
-                let cos_t = ((1.0 - u2) / (1.0 + (a2 - 1.0) * u2)).sqrt();
-                let sin_t = (1.0 - cos_t * cos_t).max(0.0).sqrt();
-                let phi = 2.0 * PI * u1;
-                let h = to_world(n, DVec3::new(sin_t * phi.cos(), sin_t * phi.sin(), cos_t));
-                let wi = 2.0 * wo.dot(h) * h - wo;
-                wi.normalize_or_zero()
-            }
+            Lobe::Specular => self.reflect_ggx(n, wo, rng.f2()),
         };
         let nl = n.dot(wi);
         if nl <= 0.0 || wi == DVec3::ZERO {

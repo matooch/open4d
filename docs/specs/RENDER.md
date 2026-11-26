@@ -551,9 +551,9 @@ required (`FORGE_REQUIRE_GPU=1`) in the gate.
   lens draw and `trace_path` (area-light hits, emission, NEE + MIS, dielectric branch,
   Russian roulette at depth 3, `clamp`) keep the CPU's order of RNG calls.
 - Arithmetic is `f32`; the acceptance rule is the image comparison of R20.3, not bit identity.
-- Tiles: one dispatch per render tile, `(tile.width, tile.height, 1)` invocations of 1 pixel
-  each; `Started`, `Tile`, `Progress`, `Finished` and `Control::cancel` behave as R4 (cancel is
-  checked between tiles, a cancelled render returns `RenderError::Cancelled`).
+- Tiles are reported once each; each dispatch has one invocation per pixel of a row band
+  (R20.4). `Started`, `Tile`, `Progress`, `Finished` and `Control::cancel` behave as R4 (cancel
+  is checked between dispatches, a cancelled render returns `RenderError::Cancelled`).
 
 ### R20.3 Parity rule
 
@@ -583,7 +583,7 @@ sub-field passed as an argument, so `acc_add` takes a pointer to the whole `Trac
 - `threads`, `tile` and the region are CPU-side scheduling only; a `region` renders its own
   rectangle into the full-size image exactly as R2.
 
-**Submission budget (R20.4, from Windows CI).** A graphics driver's watchdog (about 2 s per submission on Windows) resets the device when one submission runs too long; on the software DX12 adapter the heaviest O30 material (`mat-bump-noise`: noise evaluated several times per hit for bump) at 320 x 240 / 16 spp did exactly that. The compute engine therefore never submits a whole tile at once: a tile is dispatched in **bands of rows**, one submission (and one bounded wait) per band, where a band holds `max(1, SUBMISSION_BUDGET / (spp * tile_width))` rows, i.e. at most `SUBMISSION_BUDGET` = 4096 pixels x samples (one full row of the tile is the floor). `GpuEngine::with_submission_budget(n)` overrides it. The frame uniform carries the band's first row (`TY`) and height (`TILE_H`); the shader keys the per-pixel RNG on the pixel's absolute `(x, y)` (R20.2), never on the dispatch, so **the image does not depend on the budget**: a band is the same pixels computed in the same order of RNG calls. The `cpu_vs_gpu` PSNR per case is unchanged (e.g. `mat-bump-noise` 83.26 dB, `mat-glossy` 65.49 dB on lavapipe), and the test `the_submission_budget_does_not_change_the_image` renders with a budget of 1 (one row per submission), the default and an unbounded budget (one submission per tile) and requires identical bytes in beauty and AOVs. Samples of one pixel are not split further (the RNG is one sequential stream per pixel, R20.2); a single row of `tile` pixels at very high spp stays one submission.
+**Submission budget (R20.4, from Windows CI).** A graphics driver's watchdog (about 2 s per submission on Windows) resets the device when one submission runs too long; on the software DX12 adapter the heaviest O30 material (`mat-bump-noise`: noise evaluated several times per hit for bump) at 320 x 240 / 16 spp did exactly that. The compute engine dispatches each tile in **bands of rows**. The budget is 4096 pixels × samples per submission, with one full row as the floor. `GpuEngine::with_submission_budget(n)` overrides it. By default there is one submission per band; `with_sample_batch_size(n)` also splits the per-pixel sample loop across submissions (R25.1). The frame uniform carries the band's first row (`TY`) and height (`TILE_H`); the shader keys the per-pixel RNG on the pixel's absolute `(x, y)` (R20.2), never on the dispatch. The raw beauty and AOVs are independent of the band budget and sample batch size (`the_submission_budget_does_not_change_the_image` and `split_sample_dispatches_preserve_beauty_and_aovs`).
 
 **Readback never panics (R20, R21).** The map callback of a readback stores its `Result` in a shared slot instead of unwrapping it; after the bounded wait the engine reads the slot and returns `RenderError::Output("GPU readback failed (device lost or out of memory): ...")`. A poll made while other threads poll the same device can return before this thread's callback ran, so the wait repeats until the slot is filled or `GPU_WAIT_TIMEOUT` passes (seen: `BufferAsyncError` panic on Windows CI after the device was reset).
 
@@ -940,6 +940,285 @@ image. A background worker with latest-snapshot cancellation is a performance fo
   are byte-identical to a render without it.
 - `crates/ui/tests/render_mode.rs` (kittest, no GPU needed): the View menu switches to Render and
   back, the document's undo depth and revision do not change, and the post toggles are UI state.
+
+## R23 Instanced ray queries (brief 200)
+
+Source: [area R](../roadmap/areas/R-realtime.md), decision
+[D19](../roadmap/DECISIONS.md), and R20.1's compute BVH. This is our own design.
+
+- `RtBackend` builds or updates a scene from a render snapshot and traces batches of
+  world-space rays. A ray carries an origin, direction and upper bound on its parameter.
+  Misses have no hit record; hits return the nearest parameter `t`, snapshot instance
+  index, mesh-local triangle index, and barycentric weights `u`, `v` for vertices 1 and 2.
+  Directions need not be unit-length; inverse instance transforms do not normalize them.
+- Each indexed mesh has one object-space BLAS, shared by its instances. A world-space
+  TLAS references the BLAS and inverse transform of each instance. Update the TLAS once
+  per scene update; a transform-only update reuses the existing BLAS buffers. The
+  compute fallback uses the R20.1 binary BVH layout and visits TLAS then BLAS in WGSL.
+- Backend preference is Metal RT on a Metal adapter with ray queries, Vulkan ray query
+  on a Vulkan adapter with that feature, otherwise compute. Brief 200 ships compute;
+  briefs 211 and 212 add the hardware implementations.
+- Compare GPU queries against the independent CPU tracer: exact hit/miss and IDs, and
+  absolute error at most `1e-4` for `t`, `u` and `v`. Fixtures avoid equal-distance ties.
+   Test 10,000 clones of one mesh and a transform-only update that changes the hits
+   without rebuilding geometry.
+
+### R23.1 Metal acceleration structures (brief 211)
+
+Sources: [area R](../roadmap/areas/R-realtime.md), D19, and
+[wgpu acceleration structures](https://docs.rs/wgpu/30.0.1/wgpu/struct.CommandEncoder.html#method.build_acceleration_structures).
+
+- On Metal, request wgpu's experimental ray-query feature only when the adapter
+  advertises it. If the feature is absent or the hardware device request fails, use
+  the compute backend. Vulkan hardware selection is implemented separately in 212.
+- Build one native triangle BLAS per nonempty mesh and a TLAS over their transformed
+  instances. Rebuild the TLAS on a scene update; keep the BLAS handles and their geometry
+  when only transforms change. Preserve original snapshot instance IDs even when empty
+  instances are skipped, and report the mesh-local primitive index.
+- Query the nearest opaque, double-sided triangle. Preserve the world-ray parameter
+  for non-unit directions and return the R23 barycentric convention. Empty scenes
+  return misses without a hardware dispatch. Compare with compute on the R23 scene
+  using the same exact IDs and `1e-4` bounds, including after a transform-only update.
+
+### R23.2 Vulkan acceleration structures (brief 212)
+
+Sources: [area R](../roadmap/areas/R-realtime.md), D19, and
+[wgpu ray-query support](https://docs.rs/wgpu/30.0.1/wgpu/struct.Features.html#associatedconstant.EXPERIMENTAL_RAY_QUERY).
+
+- Use wgpu's existing hardware traversal and acceleration structures for Vulkan.
+  Wgpu exposes the feature on Vulkan when the adapter supports the requisite
+  acceleration structures and ray queries. No separate device or native `ash`
+  dispatcher is needed for the R23 contract.
+- Request the feature and acceleration-structure limits on capable Metal or
+  Vulkan adapters. If hardware is disabled, unsupported or cannot be initialized,
+  select compute. On an existing device, require both a supported API and the
+  enabled feature. Report the API of the traversal actually used by batch queries,
+  hybrid effects and Tier 3; do not report hardware if the renderer used compute.
+- Apply the same R23.1 geometry, ID, two-sided hit, parameter and update rules.
+  Compare Vulkan queries against compute at the unchanged R23 bounds, before
+  and after a transform-only update. Skip when Vulkan ray queries are unavailable
+  unless the run explicitly requires Vulkan hardware. Keep the RTX 3090 runtime
+  result parity-pending until observed.
+
+## R24 Hybrid ray-traced effects (brief 201)
+
+Sources: [area R](../roadmap/areas/R-realtime.md), [D19](../roadmap/DECISIONS.md),
+[O43](../parity/material-renders.md) for material inputs only, and the integrator
+and shading conventions in R7–R9. The hybrid renderer is our own design.
+
+### R24.1 Tier selection and composition
+
+- Keep raster primary visibility and the R21 material inputs. There are four
+  independently selectable effects: RT shadows, reflections, AO and diffuse GI,
+  all off by default. With RT disabled, all four effects off, or no usable
+  ray backend, use the unmodified Tier 1 path, including its post settings.
+- Use the selected R23 backend for all ray batches (Metal ray queries or compute;
+  Vulkan hardware queries follow in brief 212). Update its acceleration structures
+  when the scene changes. Split large ray batches to respect backend dispatch
+  limits. Hit shading takes instance, triangle and barycentrics from R23 and
+  evaluates the snapshot's shared shading IR, not a separate set of material
+  parameters. Primary background pixels retain the raster background.
+- Replace the selected lighting term in linear HDR, before bloom and tone mapping.
+  RT shadows replace shadow-map visibility, RT reflections replace SSR, and RT
+  AO replaces SSAO. The replaced approximation must not also be applied. Disabled
+  effects keep the corresponding Tier 1 behavior. GI adds a diffuse bounce; it
+  does not re-add primary direct lighting.
+
+### R24.2 Ray estimators
+
+- Use deterministic per-pixel, per-frame sample sequences. Offset ray origins
+  toward their outgoing hemisphere to avoid self-hits. Shadow and AO rays are
+  visibility queries; reflection and GI rays use the nearest surface hit.
+  R23 intersects opaque triangles: transmissive and alpha-cutout visibility
+  are not part of R24.
+- For a shadowed light, trace to the sampled light position or along the direction
+  to an infinite light. Area lights sample their emitting surface using R8; terminate
+  finite rays just before the light sample. Weight each light sample by its own
+  visibility, including the R8 shadow density and tint, so blockers affect the
+  direct term but not emission or environment.
+- Reflections sample the specular lobe around the reflected direction, using the
+  primary roughness and reflectance. Use the R7 GGX half-vector distribution
+  and its conditional reflection PDF, with no diffuse-lobe selection factor.
+  Evaluate emission and direct light at a secondary hit, or sample the
+  environment on a miss. Put this radiance in the `Specular` AOV in place of
+  raster environment specular (keep non-replaced direct specular). Skip SSR
+  only when the ray-traced reflection term is available.
+- AO samples the cosine-weighted hemisphere up to the configured world-space AO
+  radius. Apply the unoccluded fraction to the ambient term, not direct light or
+  emission. A zero radius leaves ambient unchanged.
+- GI samples the cosine-weighted hemisphere. A visible secondary surface supplies
+  its emissive and directly lit radiance, weighted by the primary diffuse
+  BSDF times cosine over PDF (`albedo × (1 − transmission)` for R7 Lambert).
+  Add the result to `Diffuse` without replacing primary direct or ambient
+  lighting. There are no additional indirect bounces; a miss adds zero because
+  the raster environment already supplies the diffuse sky term.
+
+### R24.3 Denoising and acceptance
+
+- Keep temporal history per view and per effect. Accumulate repeated frames of
+  an unchanged scene and camera; invalidate history on scene, camera, size or
+  estimator-setting changes. Do not blend invalid history into a new frame.
+  Spatial filtering respects primary surface position/depth and normals to avoid
+  blending across silhouettes or distinct surfaces. Filter the effect signals,
+  not the entire raster beauty.
+- Compare linear beauty against a deterministic, higher-sample Forge CPU render
+  with the same camera, geometry, lights and O43 material values. Load the O43
+  inputs without editing the golden files. The original material-only setups
+  do not isolate all four estimators; controlled extensions add an area-light
+  blocker, an off-screen reflector target, finite-radius occluding geometry
+  and a diffuse bounce receiver. In each fixture enable only the effect under
+  test and require strictly higher PSNR than Tier 1, using the same fixed image
+  range for both scores and no fitted exposure gain. Compare GI against Tier 1
+  without that bounce.
+- Test that each toggle is independent and that all effects off preserves Tier 1.
+  Check SSR replacement on a separate fixture where SSR actually changes the
+  Tier 1 image; both SSR settings must give the same first RT-reflection frame.
+  On a static scene, compare successive linear frames: the late-frame difference
+  must be lower than the early-frame difference. A camera change must discard the
+  accumulated history. Check on Metal here and keep the tests runnable on the
+  compute fallback.
+
+## R25 Progressive GPU path tracing (brief 202)
+
+Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),
+[D19](../roadmap/DECISIONS.md), the R9 CPU integrator and R20 GPU integrator,
+[O30](../parity/render-reference.md) and [O43](../parity/material-renders.md) for fixture
+inputs, and the [R26 tier budgets](#r26-cross-tier-consistency-roadmap-r7-brief-203).
+This is our own design.
+
+### R25.1 Scene and transport
+
+- Tier 3 traces primary and secondary paths through the render snapshot, not through the
+  raster G-buffer. Use the R23 instanced scene and select hardware ray queries when
+  available, with compute traversal otherwise. The two paths differ in traversal, not
+  in the material or light model. Vulkan hardware availability is tracked in brief 212.
+- A GPU caller can query the same R23 scene with an origin, direction and exclusive
+  `t_max`, without a ray batch buffer or intermediate readback. Both implementations
+  return unscaled ray `t`, mesh-local primitive ID, snapshot instance ID and
+  barycentrics; a miss uses the reserved instance ID `0xffffffff`.
+- Use the shared shading IR (MATERIAL M3, REALTIME §§1–2) and preserve the R9/R20
+  camera, light sampling, emission, BSDFs, transmission, environment and termination
+  rules for supported inputs. Keep existing R20 input limitations explicit if still
+  unsupported; do not replace those inputs with silent material or lighting approximations.
+- The shared WGSL integrator depends on four scene functions: closest intersection,
+  occlusion, hit geometry and hit IDs. A hit carries the primitive and instance keys
+  required by that scene implementation. R20 uses a flattened primitive key; R25 uses
+  local primitive and snapshot instance keys. The scene module owns its storage
+  declarations, and any WGSL extensions it uses are enabled before the material code.
+- Store shading attributes once per mesh-local triangle. Index the transform and ID
+  rows by snapshot instance ID, not by TLAS order. Apply the inverse transpose to the
+  local face normal (with R6 winding correction) and to the interpolated local shading
+  normal; align the two world normals as in R6. Transform corner positions to world
+  space for bump mapping and leave UVW in its authored space. In particular, mirrored
+  instances do not reverse the local outward normal.
+- One progressive sample index denotes one complete camera-path sample per active pixel.
+  Continue the deterministic R20.2 per-pixel stream and pixel-filter index across batches.
+  Changing batch boundaries does not change the sample sequence; resetting a view
+  reproduces its first sample batch.
+- Keep the unnormalised colour and AOV sums, coverage and hit counts, first valid hit's IDs,
+  pixel-filter offset seed and PCG state across dispatches. Normalise by the total sample
+  count only when resolving output. For the same device and transport inputs, a split
+  dispatch must produce bit-identical raw beauty and AOVs to a single dispatch.
+
+### R25.2 Preview and final output
+
+- Each view owns linear HDR sample sums and counts. An unchanged render input continues
+  that history. A scene, camera, resolution, region or transport-setting edit discards
+  stale samples before drawing the next batch. Denoised pixels are never fed back into
+  the sums. Cancelled or failed work does not advance the committed sample count.
+  The batch size is additional samples per pixel, not the history's total. Shading
+  graphs compare by value and texture samplers by shared immutable identity. A
+  successful batch atomically replaces the view's previous GPU state.
+- Return a denoised image with the first successful preview batch, including immediately
+  after a reset. Use an edge-aware spatial filter guided by primary-hit depth and normal;
+  treat hits and misses separately. Reduce filtering as more samples accumulate. “Within
+  one frame” is a preview delivery requirement, not a hardware timing target (R8).
+  The first filter is a 3×3 RGB average with weights 4 at the centre, 2 on axial
+  neighbours, and 1 on diagonals. Use a neighbour only when both guides are hits with
+  the same coverage, their unit normals have dot product ≥ 0.9, and their depths differ
+  by at most 5% of the nearer depth. Misses and inactive pixels are copied unchanged.
+  Blend the average into raw linear RGB with weight `1 / sqrt(samples)`; copy raw
+  alpha unchanged. Guides are separate from the colour being filtered.
+  Trace an unjittered pinhole ray through each active pixel centre for the guide.
+  Use positive primary-hit distance and the world shading normal; a guide never
+  advances the sample RNG or takes part in the AOV sums.
+- Final-frame rendering uses the same transport for the requested sample budget under
+  the R4 event/cancellation contract, without inheriting any view's preview history.
+  Keep raw accumulated linear output available; display transforms do not alter the
+  accumulation or the parity comparison.
+
+### R25.3 Acceptance
+
+- Render the unmodified O30 scene and O43 material inputs using their existing
+  Forge fixture builders. Compare to the Forge CPU tracer at the same camera, dimensions,
+  sample budget and transport settings. Require Tier 3 beauty PSNR **≥ 35 dB** at a
+  fixed sample count, using R26's exposure normalization; record the sample count and
+  per-case results. Compare before tonemapping. Exercise shared-IR shader-node materials
+  as well as parameter-only materials.
+- Test that one preview call produces a denoised frame, further static calls increase
+  the sample count, and camera and scene edits produce the same first frame as a fresh
+  view of the edited input. Verify raw final output does not depend on preview history.
+- Run on the selected Metal backend and on an explicit compute device, with no-adapter
+  skips only as allowed by the GPU gate. Validate new WGSL on SPIR-V, MSL and HLSL.
+
+## R26 Cross-tier consistency (roadmap R7, brief 203)
+
+Sources: [D19](../roadmap/DECISIONS.md), the [real-time renderer design](../roadmap/areas/R-realtime.md),
+and the O30/O43 fixture inputs in [R14](#r14-parity-with-o30--o43-level-c). The
+fixtures exercise the O29 material defaults and O42 shader behavior through the
+shared IR (MATERIAL.md, SHADERS.md). This is a Forge-to-Forge comparison, not
+a comparison to the observed beauty PNGs.
+
+- Discover every O30/O43 render manifest through the existing CPU fixture
+  builder, including the parameter-only and shader-node material cases. Use
+  the unmodified snapshot, full frame at 320×240, and the R14 comparison settings
+  (16 samples, cubic filter width 2). The CPU tracer renders one reference per
+  case; raster tiers use their own sampling rather than replaying CPU samples.
+- Compare linear beauty RGB over the entire frame, before display post effects.
+  Fit one least-squares scalar for the candidate RGB using `compare_image`'s
+  exposure normalization. Use a fixed unit peak (`PSNR = -10 log10(MSE)`).
+  Record the score and fitted gain; never mask a case or choose a different
+  exposure per channel.
+- Tier 1 uses raster lighting and shadows; Tier 2 enables the four R24 effects
+  together; Tier 3 uses raw final transport, not denoised preview. Report the
+  first Tier 2 frame so this check does not depend on elapsed time or mutable
+  history from another scene.
+
+| Tier | Minimum exposure-normalized PSNR vs CPU |
+|---|---:|
+| 1 · Raster | 24 dB |
+| 2 · Hybrid | 28 dB |
+| 3 · Path trace | 35 dB |
+
+Run the same matrix on an explicit compute device in the GPU gate, and on the
+selected hardware RT backend where available. Where both are present, also
+compare each hardware result to its compute counterpart at the same tier budget.
+For the cross-host Metal vs Vulkan comparison, retain lossless linear beauty
+or compare it directly; separate PSNR scores against the CPU do not establish
+that the two hardware images meet the budget against each other. Match cases
+and render settings and use the same comparison, with Metal as the reference.
+A compute run is not evidence of hardware RT parity; record the actual backend
+and mark unavailable hardware runs pending.
+
+The test pins only the observed below-budget CPU comparisons on Compute and
+Metal. It still renders and scores those cases, and fails on a new miss or
+when a pinned case passes (remove its pin after checking the result). No
+hardware-to-hardware miss is pinned.
+
+| Pinned cases | Tiers | Diagnostic evidence |
+|---|---|---|
+| `cube-plane`, `omni`, `omni-shadow` | 1, 2 | Single-effect runs show most of the Tier 2 improvement in diffuse GI; replacing direct shadows alone leaves the beauty scores nearly unchanged. The first hybrid frame still misses at 27.17 / 26.44 / 26.44 dB. Four TAA jitters do not bring Tier 2 above budget. |
+| `mat-bump-noise` | 1 | The raster normal AOV scores 14.52 dB vs CPU; the beauty miss (23.40 dB) persists with four TAA jitters. Replacing direct lighting for the casting light raises beauty to 34.49 dB without changing the reported raster normal AOV. |
+| `mat-glossy` | 1, 2 | Diffuse is about 49.7 dB in both tiers but the narrow direct specular highlight differs. Hybrid shadows alone reproduce the full hybrid miss (5.16 dB); the other three effects alone leave the raster score unchanged (12.64 dB). |
+
+Backend evidence is per frame: Tier 1 has no ray backend; Tier 2 reports the
+backend that supplied its applied hybrid signals (not merely an initialized
+device); Tier 3 reports the traversal it used.
+For the owner-run pair, `FORGE_R26_METAL_IMAGES` names a directory of
+row-major linear RGB `f32` little-endian files. The Metal test writes one
+file per case and tier. The Vulkan test reads those files and compares them
+at the same budgets, without exceptions. `FORGE_R26_HARDWARE` requires the
+named backend in both ray-traced tiers so a fallback cannot pass this check.
 
 ## R13 Not done / follow-ups
 

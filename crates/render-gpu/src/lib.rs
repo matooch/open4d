@@ -4,12 +4,15 @@ mod engine;
 pub mod pack;
 pub mod shader;
 
-pub use engine::{GpuEngine, MapSlot, SUBMISSION_BUDGET, await_mapped, map_read};
+pub use engine::{
+    BoundScene, GpuEngine, MapSlot, SUBMISSION_BUDGET, TransportHistory, TransportPreview,
+    await_mapped, map_read,
+};
 
 /// The deterministic RNG and sampling helpers (R20.2), for tests of the WGSL directly.
 pub const RNG_WGSL: &str = include_str!("rng.wgsl");
 /// The BVH walk, lights, surfaces and integrator (R20.1, R20.2).
-pub const TRACE_WGSL: &str = include_str!("trace.wgsl");
+pub const TRACE_WGSL: &str = concat!(include_str!("trace.wgsl"), include_str!("flat_scene.wgsl"));
 
 /// Requests the default adapter and device; `Err` carries the reason there is none.
 pub fn request_default_device() -> Result<(wgpu::Device, wgpu::Queue), String> {
@@ -32,7 +35,8 @@ pub mod frame {
     pub const RY1: usize = 5;
     pub const TX: usize = 6;
     pub const TY: usize = 7;
-    pub const SAMPLES: usize = 8;
+    /// Total samples to resolve, bitcast into the slot.
+    pub const SAMPLE_TOTAL: usize = 8;
     pub const MAX_DEPTH: usize = 9;
     pub const SEED_LO: usize = 10;
     pub const SEED_HI: usize = 11;
@@ -76,6 +80,10 @@ pub mod frame {
     pub const SCALE: usize = 63;
     /// Ten AOV tags, `Aov` as a `u32` bitcast into the float slot.
     pub const AOV_TAG: usize = 64;
+    /// Inclusive/exclusive sample indices for this dispatch, bitcast into the slots.
+    pub const SAMPLE_START: usize = 74;
+    pub const SAMPLE_END: usize = 75;
+    pub const PREVIEW: usize = 76;
 
     pub const SLOTS: usize = 96;
 
@@ -89,7 +97,7 @@ pub mod frame {
         ("RY1", RY1),
         ("TX", TX),
         ("TY", TY),
-        ("SAMPLES", SAMPLES),
+        ("SAMPLE_TOTAL", SAMPLE_TOTAL),
         ("MAX_DEPTH", MAX_DEPTH),
         ("SEED_LO", SEED_LO),
         ("SEED_HI", SEED_HI),
@@ -131,6 +139,9 @@ pub mod frame {
         ("STRIDE", STRIDE),
         ("SCALE", SCALE),
         ("AOV_TAG", AOV_TAG),
+        ("SAMPLE_START", SAMPLE_START),
+        ("SAMPLE_END", SAMPLE_END),
+        ("PREVIEW", PREVIEW),
     ];
 }
 
