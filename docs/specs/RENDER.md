@@ -1246,6 +1246,19 @@ R24 reflections and the R7 opaque GGX specular lobe. This is our own design.
   Include minimum roughness, a broad lobe, transmission, no specular lobe,
   back-facing views, shading/geometric rejection and multiple history seeds.
   Translate the probe to SPIR-V, MSL and HLSL before GPU testing.
+- The standalone transport kernel writes one raw RGB sum per absolute
+  pixel, with zero for uncovered pixels and invalid receiver keys. It
+  reconstructs the R24.7 receiver, traces accepted attempts with inline R23,
+  and shades hit emission from the R25 instance and barycentric attributes
+  using the same material scale as the receiver. The miss term uses scene
+  *lighting*, not the camera background. Match R24's CPU lookup: black,
+  constant, or smooth sky as in R20, and nearest-texel lat-long lookup
+  for a linear image (`u = fract((atan2(x,z)-rotation)/(2*pi))`,
+  `v = acos(clamp(y,-1,1))/pi`). Clamp the integer texel to the image
+  extent; do not filter or substitute a constant for an image.
+  The standalone kernel omits secondary direct light and is not a live
+  replacement. Compile the complete kernel with both R23 traversals on
+  SPIR-V, MSL and HLSL before binding it in a numeric GPU probe.
 - A later dispatch will recover the R24.7 receiver, offset valid rays along
   its geometric normal, and use inline R23 closest hits. Preserve the
   environment on misses and emission plus the existing one sample per

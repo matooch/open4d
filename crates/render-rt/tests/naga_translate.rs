@@ -167,6 +167,31 @@ fn raw_direct_shadow_transport_translates_with_each_traversal() {
 }
 
 #[test]
+fn raw_reflection_transport_translates_with_each_traversal() {
+    use forge_render_rt::{ray::BackendKind, shader::reflection_wgsl};
+    let case = load("mat-bump-noise");
+    let materials: Vec<(&ShadingGraph, &dyn TextureSampler)> = case
+        .snapshot
+        .materials
+        .iter()
+        .map(|m| (&m.graph, &*m.sampler as &dyn TextureSampler))
+        .collect();
+    for backend in [
+        BackendKind::Compute,
+        BackendKind::Metal,
+        BackendKind::Vulkan,
+    ] {
+        let module = reflection_wgsl(backend, &materials).unwrap();
+        let compiled = naga::front::wgsl::parse_str(&module.source)
+            .unwrap_or_else(|e| panic!("{backend:?}: {}", e.emit_to_string(&module.source)));
+        assert_eq!(compiled.entry_points.len(), 1);
+        assert_eq!(compiled.entry_points[0].name, "reflection_signal");
+        assert_eq!(compiled.entry_points[0].workgroup_size, [8, 8, 1]);
+        translate(&format!("{backend:?} raw reflection"), &module.source);
+    }
+}
+
+#[test]
 fn reflection_sampler_translates_to_all_backends() {
     translate("reflection sampler", &reflection_probe_source());
 }

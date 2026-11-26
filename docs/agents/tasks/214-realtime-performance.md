@@ -36,6 +36,14 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- [Raw reflection kernel checkpoint](../../specs/RENDER.md#r248-gpu-reflection-signal-brief-214):
+  the standalone shader reconstructs the receiver and sums inline R23 hit
+  emission or scene lighting on misses, including unfiltered lat-long
+  image lighting. The complete Compute and hardware variants translated to
+  SPIR-V, MSL and HLSL in five consecutive runs. Full gate: 2749 tests
+  passed, `GATE: all passed`. Numeric dispatch acceptance and secondary
+  direct light remain pending; no live Tier 2 change or new S10 measurement.
+
 - [Reflection sampler checkpoint](../../specs/RENDER.md#r248-gpu-reflection-signal-brief-214):
   the standalone GPU sampler preserves the eight opaque GGX attempts, both
   hemisphere checks, and their RNG stream. Metal directions and RGB weights
