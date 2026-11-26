@@ -254,3 +254,15 @@ aborted unexpectedly", while every other family compiled. Rule: the workspace en
 always selects DXC on Windows x86_64 and FXC is never used. The `WGPU_DX12_COMPILER` environment
 variable can still override it for debugging. Windows on ARM has no static DXC; it falls back
 to a DLL or FXC (not a supported release target). Licence and packaging: docs/RELEASING.md.
+
+## 4. GPU ray-query scene
+
+See [RENDER.md R23](RENDER.md#r23-instanced-ray-queries-brief-200).
+
+## 5. Hybrid ray-traced effects
+
+See [RENDER.md R24](RENDER.md#r24-hybrid-ray-traced-effects-brief-201).
+
+## 6. Progressive GPU path tracing
+
+See [RENDER.md R25](RENDER.md#r25-progressive-gpu-path-tracing-brief-202).

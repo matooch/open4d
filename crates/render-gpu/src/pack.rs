@@ -202,6 +202,31 @@ fn empty_tri() -> Tri {
 }
 
 impl Packed {
+    /// Frame metadata and lights for a caller that binds its own scene geometry.
+    pub fn frame_inputs(
+        snap: &Snapshot,
+        default_light: bool,
+        scale: f64,
+        triangles: usize,
+    ) -> Result<Self, RenderError> {
+        let mut lights: Vec<_> = prepare(snap, default_light)?
+            .iter()
+            .map(pack_light)
+            .collect();
+        let light_count = lights.len();
+        if lights.is_empty() {
+            lights.push(empty_light());
+        }
+        Ok(Self {
+            lights,
+            light_count,
+            scale,
+            triangles,
+            instances: snap.instances.len(),
+            ..Self::default()
+        })
+    }
+
     /// World-space triangles, the BVH over them and the prepared lights (R20.1).
     pub fn build(snap: &Snapshot, default_light: bool) -> Result<Packed, RenderError> {
         let scene = Scene::build(snap)?;
@@ -300,25 +325,11 @@ impl Packed {
         if prims.is_empty() {
             prims.push(0);
         }
-        let lights: Vec<GpuLight> = prepare(snap, default_light)?
-            .iter()
-            .map(pack_light)
-            .collect();
-        let light_count = lights.len();
-        let lights = if lights.is_empty() {
-            vec![empty_light()]
-        } else {
-            lights
-        };
         Ok(Packed {
             tris,
             nodes,
             prims,
-            lights,
-            light_count,
-            scale: scene.scale,
-            triangles,
-            instances: snap.instances.len(),
+            ..Self::frame_inputs(snap, default_light, scene.scale, triangles)?
         })
     }
 }
@@ -344,7 +355,7 @@ pub fn frame_base(
     frame[f::RY0] = y0 as f32;
     frame[f::RX1] = x1 as f32;
     frame[f::RY1] = y1 as f32;
-    frame[f::SAMPLES] = settings.samples as f32;
+    frame[f::SAMPLE_TOTAL] = f32::from_bits(settings.samples);
     frame[f::MAX_DEPTH] = settings.max_depth as f32;
     frame[f::SEED_LO] = f32::from_bits(settings.seed as u32);
     frame[f::SEED_HI] = f32::from_bits((settings.seed >> 32) as u32);

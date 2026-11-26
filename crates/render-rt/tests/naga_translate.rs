@@ -24,7 +24,10 @@ fn translate(name: &str, source: &str) {
     let mut out = String::new();
     hlsl::Writer::new(
         &mut out,
-        &hlsl::Options::default(),
+        &hlsl::Options {
+            shader_model: hlsl::ShaderModel::V6_5,
+            ..Default::default()
+        },
         &hlsl::PipelineOptions::default(),
     )
     .write(&module, &info, None)
@@ -32,10 +35,75 @@ fn translate(name: &str, source: &str) {
     msl::write_string(
         &module,
         &info,
-        &msl::Options::default(),
+        &msl::Options {
+            lang_version: (2, 4),
+            ..Default::default()
+        },
         &msl::PipelineOptions::default(),
     )
     .unwrap_or_else(|e| panic!("{name}: MSL: {e:?}"));
+}
+
+#[test]
+fn hardware_ray_queries_translate_to_all_backends() {
+    translate("hardware ray queries", forge_render_rt::ray::HARDWARE_WGSL);
+}
+
+#[test]
+fn instanced_ray_compute_translates_to_all_backends() {
+    translate("instanced ray queries", forge_render_rt::ray::COMPUTE_WGSL);
+}
+
+#[test]
+fn both_traversals_can_be_called_inline_without_ray_batch_bindings() {
+    use forge_render_rt::ray::{COMPUTE_TRAVERSAL_WGSL, HARDWARE_TRAVERSAL_WGSL, RAY_HIT_WGSL};
+    let inline = "
+@group(1) @binding(0) var<storage, read_write> result: array<RtHit>;
+@compute @workgroup_size(1)
+fn path(@builtin(global_invocation_id) id: vec3<u32>) {
+    let o = vec3<f32>(f32(id.x), 0.0, -1.0);
+    let d = vec3<f32>(0.0, 0.0, 2.0);
+    let primary = rt_closest(o, d, 100.0);
+    result[id.x] = rt_closest(o + d * primary.tuv.x, -d, 50.0);
+}
+";
+    let compute = format!(
+        "{RAY_HIT_WGSL}{COMPUTE_TRAVERSAL_WGSL}
+@group(2) @binding(0) var<storage, read> tlas: array<Node>;
+@group(2) @binding(1) var<storage, read> instances: array<Instance>;
+@group(2) @binding(2) var<storage, read> blas: array<Node>;
+@group(2) @binding(3) var<storage, read> triangles: array<Triangle>;
+{inline}"
+    );
+    translate("inline compute traversal", &compute);
+    let hardware = format!(
+        "enable wgpu_ray_query;\n{RAY_HIT_WGSL}{HARDWARE_TRAVERSAL_WGSL}
+@group(2) @binding(0) var scene: acceleration_structure;
+{inline}"
+    );
+    translate("inline hardware traversal", &hardware);
+}
+
+#[test]
+fn shared_path_transport_translates_with_every_backend() {
+    use forge_render_gpu::shader::assemble_with_scene;
+    use forge_render_rt::{path_scene_wgsl, ray::BackendKind};
+    let case = load("mat-bump-noise");
+    let materials: Vec<(&ShadingGraph, &dyn TextureSampler)> = case
+        .snapshot
+        .materials
+        .iter()
+        .map(|m| (&m.graph, &*m.sampler as &dyn TextureSampler))
+        .collect();
+    for backend in [
+        BackendKind::Compute,
+        BackendKind::Metal,
+        BackendKind::Vulkan,
+    ] {
+        let (directives, scene) = path_scene_wgsl(backend);
+        let assembled = assemble_with_scene(&materials, directives, &scene).unwrap();
+        translate(&format!("{backend:?} path transport"), &assembled.source);
+    }
 }
 
 #[test]

@@ -1,6 +1,6 @@
 # 211 · Metal hardware ray-tracing backend (part 2 of 200)
 
-Status: ready · Area: R · Depends on: 200 · Observations: – (own design) · Touches: render-rt (or render-rt-native)
+Status: done · Area: R · Depends on: 200 · Observations: – (own design) · Touches: render-rt
 
 ## Goal
 Implement `RtBackend` (R23, brief 200) with **Metal ray tracing** (acceleration structures and
@@ -8,10 +8,10 @@ intersection queries): through wgpu's experimental ray-query support on Metal if
 the R23 trait, otherwise per D19 with a narrow `objc2-metal` backend behind the same trait.
 
 ## Done when
-- [ ] On the Mac (M5 Pro), Metal RT hits equal the compute backend's on the R23 test scene
+- [x] On the Mac (M5 Pro), Metal RT hits equal the compute backend's on the R23 test scene
       (same ids; t and barycentrics within 1e-4); skipped without Metal RT.
-- [ ] Feature detection picks Metal RT where available and falls back to compute otherwise.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] Feature detection picks Metal RT where available and falls back to compute otherwise.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Inputs
 - Brief 200 (RtBackend trait, compute backend, test scene) and RENDER.md R23; decision D19
@@ -24,10 +24,19 @@ the R23 trait, otherwise per D19 with a narrow `objc2-metal` backend behind the 
 4. Commit with a summary line, what you did and the parity result, then a `Co-Authored-By:` trailer naming your model.
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
-## Report (implementer fills in)
-- Result: one acceptance test added (`s8_lookdev_area_light_camera_dof_material_and_aovs` in `apps/forge/tests/render.rs`) plus the manual `docs/manual/rendering.md`. This brief has no observation, so parity is N/A. macOS is the observed OS; the existing CI matrix (macOS, Linux, Windows) runs the same test, and each OS render is compared with `tests/acceptance/s8-reference.png`.
-- Rules derived (RENDER.md R19): the scene is built only through `forge new`/`forge cmd ... --save` (cube, Area light, physical camera, Standard material with noise on colour and fresnel on bump); the first camera and first light are used (R11, S5); `--dof` traces the thin lens, and changing only the focus distance changes the beauty; `--aov all` writes beauty plus ten passes; the same seed renders byte-identically; the object and material id passes hold background 0 plus a geometry id. The reference comparison requires each colour channel's mean within 1 dB and PSNR ≥ 30 dB.
-- Deviations from the design decisions: the brief says "a node material with noise and fresnel", but the node-graph material's registry has only colour, scalar, texture, mix and Surface nodes, so the scenario uses the Standard material's shader node tree (noise + fresnel) instead. Adding noise/fresnel graph nodes would be a materials change outside this tests/docs brief. The comparison uses a checked-in macOS reference because cross-OS artifacts are not otherwise available inside one test run.
-- Files changed: `apps/forge/tests/render.rs`, `tests/acceptance/s8-reference.png`, `docs/specs/RENDER.md` (R19), `docs/manual/rendering.md`, `docs/manual/SUMMARY.md`, `docs/roadmap/BACKLOG.md`.
-- Open questions: none. Regenerate the reference with `FORGE_S8_WRITE_REFERENCE=1` only when the scene changes intentionally.
-- The last lines of the gate output: `GATE: 2501 tests passed, 0 failed` and `GATE: all passed`.
+## Report
+- Result: five GPU-required runs on the Apple M5 Pro selected Metal and agreed with
+  compute and the CPU reference on all 276 ray results per run. Hit/miss and IDs
+  matched exactly; `t`, `u` and `v` stayed within `1e-4`. Verified one BLAS for
+  10,000 clones, BLAS reuse when moving a clone, and sparse and empty snapshots.
+- Implementation (RENDER.md R23.1): wgpu's Metal ray queries cover the trait,
+  so no native dependency was added. The factory requests compute when Metal
+  ray queries are unavailable, the experimental device request fails, or
+  hardware is explicitly disabled. The acceptance test also executes that
+  explicit compute path. Naga translated the hardware shader to SPIR-V, MSL and HLSL.
+- Parity: no reference observations or golden cases apply. The fixture avoids
+  equal-distance ties, as R23 specifies. Vulkan hardware remains brief 212.
+- Files: `crates/render-rt/src/ray.rs`, `crates/render-rt/src/ray/`,
+  `crates/render-rt/tests/ray_scene.rs`, `crates/render-rt/tests/naga_translate.rs`,
+  `docs/specs/RENDER.md`, and the backlog and task brief.
+- Gate: `GATE: 2664 tests passed, 0 failed`; `GATE: all passed`.

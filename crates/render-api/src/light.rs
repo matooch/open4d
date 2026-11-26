@@ -103,7 +103,7 @@ impl Light {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Lighting {
     None,
     /// Uniform radiance.
@@ -133,7 +133,7 @@ pub enum Background {
     Environment,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
     pub background: Background,
     pub lighting: Lighting,

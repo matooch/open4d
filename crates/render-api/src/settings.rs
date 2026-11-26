@@ -36,6 +36,37 @@ pub struct RenderSettings {
     /// Post effects of the real-time raster tier (RENDER.md R22). Off by default, so the other
     /// engines and the R21 parity tests are unchanged; they ignore the field.
     pub post: PostSettings,
+    /// Optional ray-traced effects for the real-time engine (RENDER.md R24).
+    pub hybrid: HybridSettings,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HybridSettings {
+    /// Master switch. When off, use the raster approximations.
+    pub enabled: bool,
+    /// Replace shadow-casting lights' raster contribution with sampled RT lighting.
+    pub shadows: bool,
+    /// Replace screen-space reflections and raster environment specular.
+    pub reflections: bool,
+    /// Replace screen-space AO with ray-traced ambient visibility.
+    pub ao: bool,
+    /// Maximum AO ray distance in world units. Zero leaves ambient unchanged.
+    pub ao_radius: f64,
+    /// Add one ray-traced diffuse bounce to raster lighting.
+    pub gi: bool,
+}
+
+impl Default for HybridSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            shadows: false,
+            reflections: false,
+            ao: false,
+            ao_radius: 40.0,
+            gi: false,
+        }
+    }
 }
 
 /// The tier-1 post chain (RENDER.md R22.1). Every effect is its own toggle, all off by default;
@@ -138,6 +169,7 @@ impl Default for RenderSettings {
             threads: None,
             depth_of_field: false,
             post: PostSettings::default(),
+            hybrid: HybridSettings::default(),
         }
     }
 }
@@ -175,6 +207,12 @@ impl RenderSettings {
             return bad("threads must be at least 1");
         }
         self.post.validate()?;
+        if self.hybrid.enabled
+            && self.hybrid.ao
+            && !(self.hybrid.ao_radius >= 0.0 && self.hybrid.ao_radius.is_finite())
+        {
+            return bad("the ray-traced AO radius must be nonnegative and finite");
+        }
         Ok(())
     }
 }

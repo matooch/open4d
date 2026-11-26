@@ -1,6 +1,8 @@
 //! The raster engine: resources, passes, readback and outputs (docs/specs/RENDER.md R21).
 
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use bytemuck::{Pod, Zeroable};
 use forge_image::{AlphaMode, Image};
@@ -16,7 +18,48 @@ use wgpu::util::DeviceExt;
 
 use crate::frame;
 use crate::framegraph::FrameGraph;
+use crate::hybrid::{Bounce, HybridView, PrimaryInput};
+use crate::ray::BackendKind;
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
+
+/// Synchronized host time for a named render phase. Repeated phases (TAA) are summed.
+#[derive(Clone, Debug)]
+pub struct PassTiming {
+    pub name: &'static str,
+    pub elapsed: Duration,
+}
+
+struct Profile {
+    start: Instant,
+    passes: Vec<PassTiming>,
+}
+
+fn wait_for_gpu(device: &wgpu::Device) -> Result<(), RenderError> {
+    device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .map_err(|e| RenderError::Output(format!("pass timing GPU wait: {e}")))?;
+    Ok(())
+}
+
+/// No submits, waits or clock reads in the ordinary render path.
+fn finish_phase(
+    profile: &mut Option<Profile>,
+    device: &wgpu::Device,
+    name: &'static str,
+) -> Result<(), RenderError> {
+    if let Some(profile) = profile {
+        wait_for_gpu(device)?;
+        let now = Instant::now();
+        let elapsed = now - profile.start;
+        if let Some(pass) = profile.passes.iter_mut().find(|pass| pass.name == name) {
+            pass.elapsed += elapsed;
+        } else {
+            profile.passes.push(PassTiming { name, elapsed });
+        }
+        profile.start = now;
+    }
+    Ok(())
+}
 
 /// One shadow map descriptor, 416 bytes (R21.4).
 #[repr(C)]
@@ -57,6 +100,7 @@ impl ShadowGpu {
 pub struct RtEngine {
     device: wgpu::Device,
     queue: wgpu::Queue,
+    hybrid: Arc<Mutex<HybridView>>,
 }
 
 /// One frame's targets (R21.3). Two G-buffer targets keep the pass inside Metal's 32-byte
@@ -83,13 +127,181 @@ struct Targets {
 impl RtEngine {
     /// The default adapter; `Err` carries the reason there is none.
     pub fn new() -> Result<RtEngine, RenderError> {
-        let (device, queue) = crate::request_default_device()
+        let (device, queue) = crate::request_rt_device()
             .map_err(|e| RenderError::Unsupported(format!("no GPU adapter: {e}")))?;
-        Ok(RtEngine { device, queue })
+        Ok(Self::with_device(device, queue))
     }
 
     pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> RtEngine {
-        RtEngine { device, queue }
+        RtEngine {
+            device,
+            queue,
+            hybrid: Arc::new(Mutex::new(HybridView::default())),
+        }
+    }
+
+    fn upload_hybrid(
+        &self,
+        w: u32,
+        h: u32,
+        shadows: &[[f32; 8]],
+        ao: &[f32],
+        reflections: &[[f32; 4]],
+        gi: &[[f32; 4]],
+    ) -> wgpu::TextureView {
+        let layer_count = 2 * u32::from(!shadows.is_empty())
+            + u32::from(!ao.is_empty())
+            + u32::from(!reflections.is_empty())
+            + u32::from(!gi.is_empty());
+        let ao_only = layer_count == 1 && !ao.is_empty();
+        let size = wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: layer_count,
+        };
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("ray-traced lighting"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: if ao_only {
+                wgpu::TextureFormat::R32Float
+            } else {
+                wgpu::TextureFormat::Rgba32Float
+            },
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let write_layer = |index, bytes: &[u8], bytes_per_pixel| {
+            let mut copy = texture.as_image_copy();
+            copy.origin.z = index;
+            self.queue.write_texture(
+                copy,
+                bytes,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(w * bytes_per_pixel),
+                    rows_per_image: Some(h),
+                },
+                wgpu::Extent3d {
+                    depth_or_array_layers: 1,
+                    ..size
+                },
+            );
+        };
+        if ao_only {
+            write_layer(0, bytemuck::cast_slice(ao), 4);
+            return lighting_source_view(&texture);
+        }
+        let shadow_layers = if shadows.is_empty() { 0 } else { 2 };
+        for layer in 0..shadow_layers {
+            let start = layer * 4;
+            let pixels: Vec<[f32; 4]> = shadows
+                .iter()
+                .map(|p| p[start..][..4].try_into().expect("four layer channels"))
+                .collect();
+            write_layer(layer as u32, bytemuck::cast_slice(&pixels), 16);
+        }
+        if !ao.is_empty() {
+            write_layer(
+                shadow_layers as u32,
+                bytemuck::cast_slice(&ao.iter().map(|&a| [a, 0.0, 0.0, 0.0]).collect::<Vec<_>>()),
+                16,
+            );
+        }
+        if !reflections.is_empty() {
+            write_layer(
+                shadow_layers as u32 + u32::from(!ao.is_empty()),
+                bytemuck::cast_slice(reflections),
+                16,
+            );
+        }
+        if !gi.is_empty() {
+            write_layer(
+                shadow_layers as u32
+                    + u32::from(!ao.is_empty())
+                    + u32::from(!reflections.is_empty()),
+                bytemuck::cast_slice(gi),
+                16,
+            );
+        }
+        lighting_source_view(&texture)
+    }
+
+    fn read_rgba(
+        &self,
+        textures: &[&wgpu::Texture],
+        w: u32,
+        h: u32,
+    ) -> Result<Vec<Vec<[f32; 4]>>, RenderError> {
+        let row_bytes = w * 16;
+        let stride = row_bytes.div_ceil(256) * 256;
+        let bytes = u64::from(stride) * u64::from(h);
+        let size = wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        };
+        let mut enc = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("readback"),
+            });
+        let mut staging = Vec::with_capacity(textures.len());
+        for t in textures {
+            let buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("staging"),
+                size: bytes,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            enc.copy_texture_to_buffer(
+                t.as_image_copy(),
+                wgpu::TexelCopyBufferInfo {
+                    buffer: &buf,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(stride),
+                        rows_per_image: Some(h),
+                    },
+                },
+                size,
+            );
+            staging.push(buf);
+        }
+        self.queue.submit([enc.finish()]);
+        let slots: Vec<_> = staging
+            .iter()
+            .map(|buf| forge_render_gpu::map_read(&buf.slice(..)))
+            .collect();
+        for slot in &slots {
+            forge_render_gpu::await_mapped(&self.device, slot)?;
+        }
+        staging
+            .iter()
+            .map(|buf| {
+                let data = buf
+                    .slice(..)
+                    .get_mapped_range()
+                    .map_err(|e| RenderError::Output(format!("GPU readback: {e}")))?;
+                let mut out = Vec::with_capacity((w * h) as usize);
+                for row in data.chunks_exact(stride as usize) {
+                    out.extend(
+                        row[..row_bytes as usize]
+                            .as_chunks::<16>()
+                            .0
+                            .iter()
+                            .map(|b| {
+                                std::array::from_fn(|i| f32::from_le_bytes(b.as_chunks::<4>().0[i]))
+                            }),
+                    );
+                }
+                drop(data);
+                buf.unmap();
+                Ok(out)
+            })
+            .collect()
     }
 
     /// Uploads each bitmap as an `Rgba32Float` texture, the way the path tracer does
@@ -317,7 +529,14 @@ fn frame_base(
 }
 
 /// The passes this engine registers, in order (R21.1).
-fn frame_pass_graph(shadow_count: usize, split: bool, albedo: bool, ssr: bool) -> FrameGraph {
+fn frame_pass_graph(
+    shadow_count: usize,
+    split: bool,
+    albedo: bool,
+    ssr: bool,
+    rt_ao: bool,
+    rt_shadows: bool,
+) -> FrameGraph {
     let mut g = FrameGraph::new();
     g.input("tris");
     let names: Vec<String> = (0..shadow_count).map(|i| format!("shadow:{i}")).collect();
@@ -327,13 +546,21 @@ fn frame_pass_graph(shadow_count: usize, split: bool, albedo: bool, ssr: bool) -
     g.add("gbuffer", &["tris"], &["g0", "g1", "depth"]);
     let mut reads = vec!["g0", "g1", "depth"];
     reads.extend(names.iter().map(|s| s.as_str()));
+    if rt_ao {
+        g.add("ray_ao", &["g0", "g1", "tris"], &["ao_mask"]);
+        reads.push("ao_mask");
+    }
+    if rt_shadows {
+        g.add("ray_shadows", &["g0", "g1", "tris"], &["ray_direct"]);
+        reads.push("ray_direct");
+    }
     g.add("lighting", &reads, &["beauty", "shadow"]);
     if ssr {
         // R22.3: the reflections read the lit beauty and write its own target
         g.add("ssr", &["beauty", "g0", "g1"], &["beauty_ssr"]);
     }
     if split {
-        g.add("split", &["g0", "g1"], &["diffuse", "specular"]);
+        g.add("split", &reads, &["diffuse", "specular"]);
     }
     if albedo {
         g.add("albedo", &["g0", "g1"], &["albedo"]);
@@ -372,6 +599,13 @@ fn texture_entry(binding: u32, depth: bool) -> wgpu::BindGroupLayoutEntry {
     }
 }
 
+fn lighting_source_view(texture: &wgpu::Texture) -> wgpu::TextureView {
+    texture.create_view(&wgpu::TextureViewDescriptor {
+        dimension: Some(wgpu::TextureViewDimension::D2Array),
+        ..Default::default()
+    })
+}
+
 fn sampler_entry(binding: u32, comparison: bool) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
@@ -396,7 +630,60 @@ impl RenderEngine for RtEngine {
         settings: &RenderSettings,
         control: &Control,
     ) -> Result<RenderOutput, RenderError> {
+        self.render_with_backend(snapshot, settings, control)
+            .map(|(output, _)| output)
+    }
+}
+
+impl RtEngine {
+    /// Render and report the ray backend that supplied the applied hybrid signals.
+    /// Raster-only frames (including fallbacks) report `None`. With TAA, every
+    /// subframe must use the same ray backend for it to be reported.
+    pub fn render_with_backend(
+        &self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        control: &Control,
+    ) -> Result<(RenderOutput, Option<BackendKind>), RenderError> {
+        self.render_frame(snapshot, settings, control, &mut None)
+    }
+
+    /// Run the ordinary frame with synchronized phase boundaries for benchmarking.
+    /// Use an otherwise idle device; timings are wall times, not GPU timestamps.
+    pub fn render_profiled(
+        &self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        control: &Control,
+    ) -> Result<(RenderOutput, Option<BackendKind>, Vec<PassTiming>), RenderError> {
+        wait_for_gpu(&self.device)?;
+        let mut profile = Some(Profile {
+            start: Instant::now(),
+            passes: Vec::new(),
+        });
+        let (output, backend) = self.render_frame(snapshot, settings, control, &mut profile)?;
+        Ok((output, backend, profile.unwrap().passes))
+    }
+
+    fn render_frame(
+        &self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        control: &Control,
+        profile: &mut Option<Profile>,
+    ) -> Result<(RenderOutput, Option<BackendKind>), RenderError> {
         settings.validate()?;
+        if !settings.hybrid.enabled
+            || !(settings.hybrid.ao
+                || settings.hybrid.shadows
+                || settings.hybrid.reflections
+                || settings.hybrid.gi)
+        {
+            self.hybrid
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .reset();
+        }
         // R22.5: TAA averages `taa_samples` jittered subframes in linear radiance and takes
         // the display effects once, on the mean; a subframe keeps its own events.
         if settings.post.taa && settings.post.taa_samples > 1 {
@@ -407,15 +694,22 @@ impl RenderEngine for RtEngine {
             let n = settings.post.taa_samples as usize;
             let mut acc: Option<Vec<[f32; 4]>> = None;
             let mut last: Option<RenderOutput> = None;
+            let mut backend = None;
             for j in 0..n {
                 if control.is_cancelled() {
                     return Err(RenderError::Cancelled);
                 }
                 let jitter = crate::post::halton_jitter(j as u32 + 1);
-                let out = self.render_with(snapshot, &sub, control, jitter)?;
+                let (out, used) = self.render_with(snapshot, &sub, control, jitter, profile)?;
+                if j == 0 {
+                    backend = used;
+                } else if backend != used {
+                    backend = None;
+                }
                 let pixels: Vec<[f32; 4]> = out.beauty.data.as_chunks::<4>().0.to_vec();
                 crate::post::accumulate(&mut acc, &pixels, n);
                 last = Some(out);
+                finish_phase(profile, &self.device, "taa-resolve")?;
             }
             let mut out = last.expect("at least one subframe");
             if let Some(mut mean) = acc {
@@ -427,20 +721,19 @@ impl RenderEngine for RtEngine {
                 }
                 out.beauty.data = mean.iter().flat_map(|p| p.iter().copied()).collect();
             }
-            return Ok(out);
+            finish_phase(profile, &self.device, "taa-resolve")?;
+            return Ok((out, backend));
         }
-        self.render_with(snapshot, settings, control, [0.0, 0.0])
+        self.render_with(snapshot, settings, control, [0.0, 0.0], profile)
     }
-}
-
-impl RtEngine {
     fn render_with(
         &self,
         snapshot: &Snapshot,
         settings: &RenderSettings,
         control: &Control,
         jitter: [f32; 2],
-    ) -> Result<RenderOutput, RenderError> {
+        profile: &mut Option<Profile>,
+    ) -> Result<(RenderOutput, Option<BackendKind>), RenderError> {
         settings.validate()?;
         snapshot.validate()?;
         if settings.depth_of_field {
@@ -472,7 +765,18 @@ impl RtEngine {
             .iter()
             .any(|a| matches!(a, Aov::Diffuse | Aov::Specular | Aov::Emission));
         let albedo = settings.aovs.contains(&Aov::Albedo);
-        let graph = frame_pass_graph(plans.len(), split, albedo, settings.post.ssr);
+        let rt_ao = settings.hybrid.enabled && settings.hybrid.ao;
+        let rt_shadows = settings.hybrid.enabled && settings.hybrid.shadows;
+        let rt_reflections = settings.hybrid.enabled && settings.hybrid.reflections;
+        let rt_gi = settings.hybrid.enabled && settings.hybrid.gi;
+        let graph = frame_pass_graph(
+            plans.len(),
+            split,
+            albedo,
+            settings.post.ssr,
+            rt_ao,
+            rt_shadows,
+        );
         graph
             .validate()
             .map_err(|e| RenderError::Settings(format!("frame graph: {e}")))?;
@@ -602,7 +906,14 @@ impl RtEngine {
                 sampler_entry(3, true),
                 texture_entry(4, false),
                 sampler_entry(5, false),
-                texture_entry(6, false),
+                wgpu::BindGroupLayoutEntry {
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    ..texture_entry(6, false)
+                },
             ],
         });
         // R21.3: the shader-node bitmaps, one sampled texture per binding, in group 2
@@ -822,48 +1133,54 @@ impl RtEngine {
                 })
                 .collect::<Vec<_>>(),
         });
-        let lit_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("lighting"),
-            layout: &lighting_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&targets.g_views[0]),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&targets.g_views[1]),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&atlas_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::Sampler(&shadow_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::TextureView(&env_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: wgpu::BindingResource::Sampler(&env_sampler),
-                },
-                // the lighting pass does not read the beauty source; the SSR pass binds the
-                // lit beauty here (R22.3), so both share one bind group layout
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: wgpu::BindingResource::TextureView(&targets.g_views[0]),
-                },
-            ],
-        });
+        let lighting_bind = |source: &wgpu::TextureView| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("lighting"),
+                layout: &lighting_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&targets.g_views[0]),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&targets.g_views[1]),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(&atlas_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::Sampler(&shadow_sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(&env_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::Sampler(&env_sampler),
+                    },
+                    // Lighting reads optional RT signals; SSR reads lit beauty at layer 0.
+                    wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: wgpu::BindingResource::TextureView(source),
+                    },
+                ],
+            })
+        };
 
         control.emit(RenderEvent::Started {
             width: w,
             height: h,
             tiles: 1,
         });
+        if profile.is_some() {
+            // Submit pending texture writes so their execution is charged to setup.
+            queue.submit([]);
+        }
+        finish_phase(profile, device, "setup")?;
 
         // shadow tiles: one submit per tile, since the matrix lives in the frame uniform
         let vertex_count = (packed.triangles * 3) as u32;
@@ -908,6 +1225,9 @@ impl RtEngine {
                 }
                 queue.submit([enc.finish()]);
             }
+        }
+        if !plans.is_empty() {
+            finish_phase(profile, device, "shadow-atlas")?;
         }
 
         if control.is_cancelled() {
@@ -957,9 +1277,90 @@ impl RtEngine {
             drop(pass);
             queue.submit([enc.finish()]);
         }
+        finish_phase(profile, device, "g-buffer")?;
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
+        let mut primary = None;
+        let mut used_backend = None;
+        let hybrid_view = if rt_ao || rt_shadows || rt_reflections || rt_gi {
+            let mut view = self.hybrid.lock().unwrap_or_else(|e| e.into_inner());
+            let signals = view
+                .prepare(snapshot, settings, device, queue)
+                .and_then(|()| {
+                    let g = self.read_rgba(&[&targets.g[0], &targets.g[1]], w, h)?;
+                    finish_phase(profile, device, "hybrid-primary")?;
+                    let input = PrimaryInput {
+                        positions: &g[0],
+                        normals: &g[1],
+                        jitter,
+                        epsilon: packed.scale.max(1e-6) * 1e-6,
+                    };
+                    let ao = if rt_ao {
+                        let result = view.ambient_visibility(settings, input, control)?;
+                        finish_phase(profile, device, "rt-ao")?;
+                        result
+                    } else {
+                        Vec::new()
+                    };
+                    let shadows = if rt_shadows {
+                        let result = view.direct_shadows(snapshot, settings, input, control)?;
+                        finish_phase(profile, device, "rt-shadows")?;
+                        result
+                    } else {
+                        Vec::new()
+                    };
+                    let reflections = if rt_reflections {
+                        let result =
+                            view.indirect(Bounce::Reflection, snapshot, settings, input, control)?;
+                        finish_phase(profile, device, "rt-reflections")?;
+                        result
+                    } else {
+                        Vec::new()
+                    };
+                    let gi = if rt_gi {
+                        let result =
+                            view.indirect(Bounce::Diffuse, snapshot, settings, input, control)?;
+                        finish_phase(profile, device, "rt-gi")?;
+                        result
+                    } else {
+                        Vec::new()
+                    };
+                    primary = Some(g);
+                    Ok((shadows, ao, reflections, gi))
+                });
+            match signals {
+                Ok((shadows, ao, reflections, gi))
+                    if !shadows.is_empty()
+                        || !ao.is_empty()
+                        || !reflections.is_empty()
+                        || !gi.is_empty() =>
+                {
+                    used_backend = view.backend_kind();
+                    values[frame::RT_AO_ON] = u32::from(!ao.is_empty()) as f32;
+                    values[frame::RT_SHADOWS_ON] = u32::from(!shadows.is_empty()) as f32;
+                    values[frame::RT_REFLECTIONS_ON] = u32::from(!reflections.is_empty()) as f32;
+                    values[frame::RT_GI_ON] = u32::from(!gi.is_empty()) as f32;
+                    queue.write_buffer(&frame_buf, 0, &frame_bytes(&values));
+                    let texture = self.upload_hybrid(w, h, &shadows, &ao, &reflections, &gi);
+                    if profile.is_some() {
+                        queue.submit([]);
+                    }
+                    finish_phase(profile, device, "hybrid-upload")?;
+                    Some(texture)
+                }
+                Ok(_) => None,
+                Err(RenderError::Unsupported(_)) => {
+                    view.reset();
+                    None
+                }
+                Err(e) => return Err(e),
+            }
+        } else {
+            None
+        };
+        let placeholder = lighting_source_view(&targets.g[0]);
+        let lit_bind = lighting_bind(hybrid_view.as_ref().unwrap_or(&placeholder));
         let run_full =
             |label: &str, pipeline: &wgpu::RenderPipeline, views: &[&wgpu::TextureView]| {
                 let mut enc = device
@@ -1001,45 +1402,13 @@ impl RtEngine {
             &lighting,
             &[&targets.beauty_view, &targets.shadow_view],
         );
+        finish_phase(profile, device, "lighting")?;
         // R22.3: screen-space reflections, reading the lit beauty into their own target
-        let beauty_target = if settings.post.ssr {
+        let beauty_target = if settings.post.ssr && values[frame::RT_REFLECTIONS_ON] == 0.0 {
             if control.is_cancelled() {
                 return Err(RenderError::Cancelled);
             }
-            let ssr_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("ssr"),
-                layout: &lighting_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&targets.g_views[0]),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&targets.g_views[1]),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::TextureView(&atlas_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::Sampler(&shadow_sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: wgpu::BindingResource::TextureView(&env_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 5,
-                        resource: wgpu::BindingResource::Sampler(&env_sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 6,
-                        resource: wgpu::BindingResource::TextureView(&targets.beauty_view),
-                    },
-                ],
-            });
+            let ssr_bind = lighting_bind(&lighting_source_view(&targets.beauty));
             let mut enc = device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("ssr") });
             {
@@ -1068,6 +1437,7 @@ impl RtEngine {
                 pass.draw(0..3, 0..1);
             }
             queue.submit([enc.finish()]);
+            finish_phase(profile, device, "ssr")?;
             &targets.beauty_ssr
         } else {
             &targets.beauty
@@ -1081,17 +1451,21 @@ impl RtEngine {
                 &split_pass,
                 &[&targets.split_views[0], &targets.split_views[1]],
             );
+            finish_phase(profile, device, "split")?;
         }
         if albedo {
             if control.is_cancelled() {
                 return Err(RenderError::Cancelled);
             }
             run_full("albedo", &albedo_pass, &[&targets.albedo_view]);
+            finish_phase(profile, device, "albedo")?;
         }
 
         // read back the beauty, the G-buffer and (when asked for) the light split
-        let mut order: Vec<&wgpu::Texture> =
-            vec![beauty_target, &targets.shadow, &targets.g[0], &targets.g[1]];
+        let mut order = vec![beauty_target, &targets.shadow];
+        if primary.is_none() {
+            order.extend([&targets.g[0], &targets.g[1]]);
+        }
         if split {
             order.push(&targets.split[0]);
             order.push(&targets.split[1]);
@@ -1099,65 +1473,9 @@ impl RtEngine {
         if albedo {
             order.push(&targets.albedo);
         }
-        let row_bytes = w * 16;
-        let stride = row_bytes.div_ceil(256) * 256;
-        let bytes = stride as u64 * h as u64;
-        let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("readback"),
-        });
-        let mut staging = Vec::new();
-        for t in &order {
-            let buf = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("staging"),
-                size: bytes,
-                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            enc.copy_texture_to_buffer(
-                t.as_image_copy(),
-                wgpu::TexelCopyBufferInfo {
-                    buffer: &buf,
-                    layout: wgpu::TexelCopyBufferLayout {
-                        offset: 0,
-                        bytes_per_row: Some(stride),
-                        rows_per_image: Some(h),
-                    },
-                },
-                wgpu::Extent3d {
-                    width: w,
-                    height: h,
-                    depth_or_array_layers: 1,
-                },
-            );
-            staging.push(buf);
-        }
-        queue.submit([enc.finish()]);
-        let mut pixels: Vec<Vec<[f32; 4]>> = Vec::new();
-        let slots: Vec<_> = staging
-            .iter()
-            .map(|buf| forge_render_gpu::map_read(&buf.slice(..)))
-            .collect();
-        for slot in &slots {
-            forge_render_gpu::await_mapped(device, slot)?;
-        }
-        for buf in &staging {
-            let slice = buf.slice(..);
-            let data = slice
-                .get_mapped_range()
-                .map_err(|e| RenderError::Output(format!("GPU readback: {e}")))?;
-            let mut out = Vec::with_capacity((w * h) as usize);
-            for y in 0..h as usize {
-                let row = &data[y * stride as usize..y * stride as usize + row_bytes as usize];
-                for b in row.as_chunks::<16>().0 {
-                    let f = |k: usize| {
-                        f32::from_le_bytes([b[k * 4], b[k * 4 + 1], b[k * 4 + 2], b[k * 4 + 3]])
-                    };
-                    out.push([f(0), f(1), f(2), f(3)]);
-                }
-            }
-            pixels.push(out);
-            drop(data);
-            buf.unmap();
+        let mut pixels = self.read_rgba(&order, w, h)?;
+        if let Some(primary) = primary {
+            pixels.splice(2..2, primary);
         }
         let beauty_px = &pixels[0];
         let shadow_px = &pixels[1];
@@ -1262,18 +1580,23 @@ impl RtEngine {
         });
         control.emit(RenderEvent::Progress { done: 1, total: 1 });
         control.emit(RenderEvent::Finished);
-        Ok(RenderOutput {
-            width: w,
-            height: h,
-            beauty,
-            aovs: aov_imgs,
-            stats: RenderStats {
-                triangles: packed.triangles,
-                instances: packed.instances,
-                tiles: 1,
-                samples: (rx1 - rx0) as u64 * (ry1 - ry0) as u64,
-                ignored_channels: forge_render_cpu::ignored_channels(snapshot),
+        let result = (
+            RenderOutput {
+                width: w,
+                height: h,
+                beauty,
+                aovs: aov_imgs,
+                stats: RenderStats {
+                    triangles: packed.triangles,
+                    instances: packed.instances,
+                    tiles: 1,
+                    samples: (rx1 - rx0) as u64 * (ry1 - ry0) as u64,
+                    ignored_channels: forge_render_cpu::ignored_channels(snapshot),
+                },
             },
-        })
+            used_backend,
+        );
+        finish_phase(profile, device, "output")?;
+        Ok(result)
     }
 }

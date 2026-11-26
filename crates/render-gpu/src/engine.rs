@@ -13,6 +13,14 @@ use wgpu::util::DeviceExt;
 use crate::frame;
 use crate::pack::{Packed, frame_base};
 
+/// A replacement for the flattened R20 scene, with its resources in group 2.
+pub struct BoundScene<'a> {
+    pub directives: &'a str,
+    pub source: &'a str,
+    pub layout: &'a wgpu::BindGroupLayout,
+    pub bind: &'a wgpu::BindGroup,
+}
+
 /// A wgpu compute path tracer. Create it with [`GpuEngine::new`], or share a device with
 /// [`GpuEngine::with_device`].
 #[derive(Clone)]
@@ -21,11 +29,15 @@ pub struct GpuEngine {
     queue: wgpu::Queue,
     /// Most pixel-samples (pixels x samples per pixel) one submission may hold (R20.4).
     submission_budget: u64,
+    sample_batch_size: u32,
 }
 
 /// Default for [`GpuEngine::submission_budget`]: small enough that a slow software device
 /// finishes one submission well inside a driver watchdog (about 2 s on Windows).
 pub const SUBMISSION_BUDGET: u64 = 4096;
+
+// WGSL PixelState array stride.
+const PIXEL_STATE_BYTES: u64 = 160;
 
 /// The result of one `map_async`, stored by its callback (which never panics).
 pub type MapSlot = Arc<Mutex<Option<Result<(), wgpu::BufferAsyncError>>>>;
@@ -89,6 +101,28 @@ struct TileOut {
     h: u32,
     beauty: Vec<[f32; 4]>,
     aovs: Vec<Vec<[f32; 4]>>,
+    guides: Vec<[f32; 4]>,
+}
+
+/// Ordered GPU pixel sums. Only reuse with the same device, scene and transport settings
+/// (except for the additional sample count).
+#[derive(Clone, Default)]
+pub struct TransportHistory {
+    settings: Option<RenderSettings>,
+    samples: u32,
+    tiles: Vec<wgpu::Buffer>,
+}
+
+impl TransportHistory {
+    pub fn samples(&self) -> u32 {
+        self.samples
+    }
+}
+
+pub struct TransportPreview {
+    pub raw: RenderOutput,
+    /// Row-major world normal and depth; depth is zero outside the crop and -1 on a miss.
+    pub guides: Vec<[f32; 4]>,
 }
 
 /// `(x, y, w, h)` of every tile of the render region (R2).
@@ -114,11 +148,7 @@ impl GpuEngine {
     pub fn new() -> Result<GpuEngine, RenderError> {
         let (device, queue) = crate::request_default_device()
             .map_err(|e| RenderError::Unsupported(format!("no GPU adapter: {e}")))?;
-        Ok(GpuEngine {
-            device,
-            queue,
-            submission_budget: SUBMISSION_BUDGET,
-        })
+        Ok(Self::with_device(device, queue))
     }
 
     pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> GpuEngine {
@@ -126,6 +156,7 @@ impl GpuEngine {
             device,
             queue,
             submission_budget: SUBMISSION_BUDGET,
+            sample_batch_size: u32::MAX,
         }
     }
 
@@ -133,6 +164,13 @@ impl GpuEngine {
     /// always dispatched). The image does not depend on it (R20.4).
     pub fn with_submission_budget(mut self, pixel_samples: u64) -> GpuEngine {
         self.submission_budget = pixel_samples.max(1);
+        self
+    }
+
+    /// Limits samples per pixel in one dispatch; ordered pixel sums carry over between
+    /// batches, so the final raw image is unchanged (R25.1).
+    pub fn with_sample_batch_size(mut self, samples: u32) -> GpuEngine {
+        self.sample_batch_size = samples.max(1);
         self
     }
 
@@ -180,39 +218,62 @@ impl GpuEngine {
             .collect()
     }
 
-    fn shader_buffers(
-        &self,
-        packed: &Packed,
-    ) -> (wgpu::Buffer, wgpu::Buffer, wgpu::Buffer, wgpu::Buffer) {
-        let make = |label: &str, bytes: &[u8]| {
-            self.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some(label),
-                    contents: bytes,
-                    usage: wgpu::BufferUsages::STORAGE,
-                })
-        };
-        (
-            make("tris", bytemuck::cast_slice(&packed.tris)),
-            make("nodes", bytemuck::cast_slice(&packed.nodes)),
-            make("prims", bytemuck::cast_slice(&packed.prims)),
-            make("lights", bytemuck::cast_slice(&packed.lights)),
-        )
-    }
-}
-
-impl RenderEngine for GpuEngine {
-    fn id(&self) -> &str {
-        "forge.render.gpu"
+    fn storage_buffer(&self, label: &str, bytes: &[u8]) -> wgpu::Buffer {
+        self.device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(label),
+                contents: bytes,
+                usage: wgpu::BufferUsages::STORAGE,
+            })
     }
 
-    fn render(
+    /// Runs the shared transport with either a supplied instanced scene or the R20 flat scene.
+    /// `packed` supplies lights and frame inputs; its geometry is used only for the flat scene.
+    pub fn render_transport(
         &self,
         snapshot: &Snapshot,
         settings: &RenderSettings,
         control: &Control,
+        packed: &Packed,
+        scene: Option<BoundScene<'_>>,
     ) -> Result<RenderOutput, RenderError> {
+        self.run_transport(snapshot, settings, control, packed, scene, None)
+            .map(|frame| frame.raw)
+    }
+
+    /// Advance a view by `settings.samples`. Replace history only on success.
+    pub fn preview_transport(
+        &self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        control: &Control,
+        packed: &Packed,
+        scene: BoundScene<'_>,
+        history: &mut TransportHistory,
+    ) -> Result<TransportPreview, RenderError> {
+        self.run_transport(
+            snapshot,
+            settings,
+            control,
+            packed,
+            Some(scene),
+            Some(history),
+        )
+    }
+
+    fn run_transport(
+        &self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        control: &Control,
+        packed: &Packed,
+        scene: Option<BoundScene<'_>>,
+        history: Option<&mut TransportHistory>,
+    ) -> Result<TransportPreview, RenderError> {
         settings.validate()?;
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
+        }
         if matches!(
             snapshot.environment.lighting,
             forge_render_api::Lighting::Image { .. }
@@ -221,11 +282,26 @@ impl RenderEngine for GpuEngine {
                 "image environments on the GPU (RENDER.md R16, R20.4)".into(),
             ));
         }
-        let packed = Packed::build(snapshot, settings.default_light)?;
+        let preview = history.is_some();
+        let mut settings = settings.clone();
+        if preview {
+            settings.tile = settings.tile.min(128);
+        }
+        let added = settings.samples;
+        let mut key = settings.clone();
+        key.samples = 1;
+        let previous = history
+            .as_deref()
+            .filter(|h| h.settings.as_ref() == Some(&key));
+        let first_sample = previous.map_or(0, |h| h.samples);
+        settings.samples = first_sample
+            .checked_add(added)
+            .ok_or_else(|| RenderError::Settings("progressive sample count exceeds u32".into()))?;
+        let settings = &settings;
         let mut wanted: Vec<Aov> = settings.aovs.clone();
         wanted.sort();
         wanted.dedup();
-        let stride = 1 + wanted.len();
+        let stride = 1 + wanted.len() + usize::from(preview);
 
         let materials: Vec<(
             &forge_material::ShadingGraph,
@@ -235,35 +311,14 @@ impl RenderEngine for GpuEngine {
             .iter()
             .map(|m| (&m.graph, &*m.sampler as &dyn forge_material::TextureSampler))
             .collect();
-        let assembled = crate::shader::assemble(&materials)?;
+        let assembled = if let Some(scene) = &scene {
+            crate::shader::assemble_with_scene(&materials, scene.directives, scene.source)?
+        } else {
+            crate::shader::assemble(&materials)?
+        };
         let source = assembled.source;
 
         let device = &self.device;
-        let errors = device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("path tracer"),
-            source: wgpu::ShaderSource::Wgsl(source.into()),
-        });
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("path tracer"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                storage_entry(1, true),
-                storage_entry(2, true),
-                storage_entry(3, true),
-                storage_entry(4, true),
-                storage_entry(5, false),
-            ],
-        });
         if assembled.resources.len()
             > device.limits().max_sampled_textures_per_shader_stage as usize
         {
@@ -272,6 +327,33 @@ impl RenderEngine for GpuEngine {
                 assembled.resources.len()
             )));
         }
+        let errors = device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("path tracer"),
+            source: wgpu::ShaderSource::Wgsl(source.into()),
+        });
+        let mut frame_entries = vec![
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            storage_entry(4, true),
+            storage_entry(5, false),
+            storage_entry(6, false),
+        ];
+        if scene.is_none() {
+            frame_entries.extend((1..=3).map(|b| storage_entry(b, true)));
+        }
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("path tracer"),
+            entries: &frame_entries,
+        });
         let layout1 = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("bitmaps"),
             entries: &(0..assembled.resources.len() as u32)
@@ -287,12 +369,16 @@ impl RenderEngine for GpuEngine {
                 })
                 .collect::<Vec<_>>(),
         });
+        let mut layouts = vec![Some(&layout), Some(&layout1)];
+        if let Some(scene) = &scene {
+            layouts.push(Some(scene.layout));
+        }
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("path tracer"),
             layout: Some(
                 &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: None,
-                    bind_group_layouts: &[Some(&layout), Some(&layout1)],
+                    bind_group_layouts: &layouts,
                     immediate_size: 0,
                 }),
             ),
@@ -305,16 +391,46 @@ impl RenderEngine for GpuEngine {
             return Err(RenderError::Settings(format!("GPU shader: {e}")));
         }
 
-        let (tris, nodes, prims, lights) = self.shader_buffers(&packed);
+        let lights = self.storage_buffer("lights", bytemuck::cast_slice(&packed.lights));
+        let flat = scene.is_none().then(|| {
+            [
+                self.storage_buffer("tris", bytemuck::cast_slice(&packed.tris)),
+                self.storage_buffer("nodes", bytemuck::cast_slice(&packed.nodes)),
+                self.storage_buffer("prims", bytemuck::cast_slice(&packed.prims)),
+            ]
+        });
         let frame_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("frame"),
             size: (frame::SLOTS * 16) as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let base = frame_base(snapshot, settings, &packed, &wanted, stride);
+        let mut base = frame_base(snapshot, settings, packed, &wanted, stride);
+        base[frame::PREVIEW] = if preview { 1.0 } else { 0.0 };
 
         let tiles = tiles_of(settings);
+        let batch_size = self.sample_batch_size.min(added);
+        let use_state = preview || batch_size < added;
+        let max_row_width = tiles.iter().map(|tile| tile.2 as u64).max().unwrap_or(1);
+        let limits = device.limits();
+        let state_capacity = if use_state {
+            let limit = limits
+                .max_storage_buffer_binding_size
+                .min(limits.max_buffer_size)
+                / PIXEL_STATE_BYTES;
+            if max_row_width > limit {
+                return Err(RenderError::Unsupported(
+                    "one row of pixel state exceeds the GPU storage binding limit".into(),
+                ));
+            }
+            (self.submission_budget / batch_size as u64)
+                .max(max_row_width)
+                .min(limit)
+                .min(settings.tile as u64 * settings.tile as u64)
+        } else {
+            // Single-batch dispatches don't access the state buffer.
+            1
+        };
         control.emit(RenderEvent::Started {
             width: settings.width,
             height: settings.height,
@@ -334,35 +450,44 @@ impl RenderEngine for GpuEngine {
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let pixel_states = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("sample batch state"),
+            size: state_capacity * PIXEL_STATE_BYTES,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let mut frame_bindings = vec![
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: frame_buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: lights.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: out.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: pixel_states.as_entire_binding(),
+            },
+        ];
+        if let Some(flat) = &flat {
+            frame_bindings.extend((1..=3).zip(flat).map(|(binding, buffer)| {
+                wgpu::BindGroupEntry {
+                    binding,
+                    resource: buffer.as_entire_binding(),
+                }
+            }));
+        }
         let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: frame_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: tris.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: nodes.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: prims.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: lights.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: out.as_entire_binding(),
-                },
-            ],
+            entries: &frame_bindings,
         });
 
         let views = self.bitmap_views(&assembled.resources)?;
@@ -379,6 +504,7 @@ impl RenderEngine for GpuEngine {
                 .collect::<Vec<_>>(),
         });
 
+        let mut pending = Vec::new();
         let mut outs: Vec<TileOut> = Vec::with_capacity(tiles.len());
         for (i, &(tx, ty, tw, th)) in tiles.iter().enumerate() {
             if control.is_cancelled() {
@@ -390,39 +516,85 @@ impl RenderEngine for GpuEngine {
             frame[frame::TILE_W] = tw as f32;
             frame[frame::TILE_H] = th as f32;
             let bytes = tw as u64 * th as u64 * stride as u64 * 16;
-            // One submission per band of rows: pixels x samples of a band stay under the
-            // budget, so a slow device's watchdog never sees a long dispatch (R20.4).
-            let rows_per_band = (self.submission_budget
-                / (settings.samples.max(1) as u64 * tw as u64))
-                .max(1) as u32;
+            // Each dispatch covers one sample batch of a row band (R20.4, R25.1).
+            let rows_per_band = (self.submission_budget / (batch_size as u64 * tw as u64)).max(1);
+            let rows_per_band = if use_state {
+                rows_per_band.min(state_capacity / tw as u64)
+            } else {
+                rows_per_band
+            }
+            .min(th as u64) as u32;
+            let next_state = preview.then(|| {
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("pending preview tile"),
+                    size: u64::from(tw) * u64::from(th) * PIXEL_STATE_BYTES,
+                    usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                })
+            });
             let mut row = 0u32;
             while row < th {
-                if control.is_cancelled() {
-                    return Err(RenderError::Cancelled);
-                }
                 let rows = rows_per_band.min(th - row);
                 let mut frame = frame;
                 frame[frame::TY] = (ty + row) as f32;
                 frame[frame::TILE_H] = rows as f32;
-                self.queue.write_buffer(&frame_buf, 0, &frame_bytes(&frame));
-                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("tile"),
-                });
-                {
-                    let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                        label: Some("tile"),
-                        timestamp_writes: None,
-                    });
-                    pass.set_pipeline(&pipeline);
-                    pass.set_bind_group(0, &bind, &[]);
-                    pass.set_bind_group(1, &bind1, &[]);
-                    pass.dispatch_workgroups(tw.div_ceil(8), rows.div_ceil(8), 1);
+                let state_offset = u64::from(row) * u64::from(tw) * PIXEL_STATE_BYTES;
+                let state_bytes = u64::from(rows) * u64::from(tw) * PIXEL_STATE_BYTES;
+                let mut sample = first_sample;
+                while sample < settings.samples {
+                    if control.is_cancelled() {
+                        return Err(RenderError::Cancelled);
+                    }
+                    let end = sample + batch_size.min(settings.samples - sample);
+                    frame[frame::SAMPLE_START] = f32::from_bits(sample);
+                    frame[frame::SAMPLE_END] = f32::from_bits(end);
+                    self.queue.write_buffer(&frame_buf, 0, &frame_bytes(&frame));
+                    let mut encoder =
+                        device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("tile"),
+                        });
+                    if sample == first_sample
+                        && let Some(history) = previous
+                    {
+                        encoder.copy_buffer_to_buffer(
+                            &history.tiles[i],
+                            state_offset,
+                            &pixel_states,
+                            0,
+                            state_bytes,
+                        );
+                    }
+                    {
+                        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                            label: Some("tile"),
+                            timestamp_writes: None,
+                        });
+                        pass.set_pipeline(&pipeline);
+                        pass.set_bind_group(0, &bind, &[]);
+                        pass.set_bind_group(1, &bind1, &[]);
+                        if let Some(scene) = &scene {
+                            pass.set_bind_group(2, scene.bind, &[]);
+                        }
+                        pass.dispatch_workgroups(tw.div_ceil(8), rows.div_ceil(8), 1);
+                    }
+                    if end == settings.samples {
+                        let band_bytes = tw as u64 * rows as u64 * stride as u64 * 16;
+                        let band_at = tw as u64 * row as u64 * stride as u64 * 16;
+                        encoder.copy_buffer_to_buffer(&out, 0, &staging, band_at, band_bytes);
+                        if let Some(next_state) = &next_state {
+                            encoder.copy_buffer_to_buffer(
+                                &pixel_states,
+                                0,
+                                next_state,
+                                state_offset,
+                                state_bytes,
+                            );
+                        }
+                    }
+                    self.queue.submit([encoder.finish()]);
+                    wait_for_gpu(device)?;
+                    sample = end;
                 }
-                let band_bytes = tw as u64 * rows as u64 * stride as u64 * 16;
-                let band_at = tw as u64 * row as u64 * stride as u64 * 16;
-                encoder.copy_buffer_to_buffer(&out, 0, &staging, band_at, band_bytes);
-                self.queue.submit([encoder.finish()]);
-                wait_for_gpu(device)?;
                 row += rows;
             }
             let slice = staging.slice(..bytes);
@@ -446,12 +618,17 @@ impl RenderEngine for GpuEngine {
             staging.unmap();
             let mut beauty = Vec::with_capacity((tw * th) as usize);
             let mut aovs = vec![Vec::with_capacity((tw * th) as usize); wanted.len()];
+            let mut guides = Vec::new();
             for p in 0..(tw * th) as usize {
                 beauty.push(values[p * stride]);
                 for (k, a) in aovs.iter_mut().enumerate() {
                     a.push(values[p * stride + 1 + k]);
                 }
+                if preview {
+                    guides.push(values[(p + 1) * stride - 1]);
+                }
             }
+            pending.extend(next_state);
             control.emit(RenderEvent::Tile {
                 x: tx,
                 y: ty,
@@ -470,7 +647,11 @@ impl RenderEngine for GpuEngine {
                 h: th,
                 beauty,
                 aovs,
+                guides,
             });
+        }
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
         }
         control.emit(RenderEvent::Finished);
 
@@ -484,11 +665,20 @@ impl RenderEngine for GpuEngine {
                 )
             })
             .collect();
+        let mut guides = if preview {
+            vec![[0.0; 4]; beauty.data.len() / 4]
+        } else {
+            Vec::new()
+        };
         for t in &outs {
             for j in 0..t.h {
                 for i in 0..t.w {
                     let k = (j * t.w + i) as usize;
                     beauty.set_pixel(t.x + i, t.y + j, t.beauty[k]);
+                    if preview {
+                        let p = (t.y + j) as usize * settings.width as usize + (t.x + i) as usize;
+                        guides[p] = t.guides[k];
+                    }
                     for (a, img) in wanted.iter().zip(t.aovs.iter()) {
                         if let Some(im) = aov_imgs.get_mut(a) {
                             im.set_pixel(t.x + i, t.y + j, img[k]);
@@ -501,7 +691,17 @@ impl RenderEngine for GpuEngine {
             settings
                 .region
                 .unwrap_or([0, 0, settings.width, settings.height]);
-        Ok(RenderOutput {
+        if let Some(history) = history {
+            if control.is_cancelled() {
+                return Err(RenderError::Cancelled);
+            }
+            *history = TransportHistory {
+                settings: Some(key),
+                samples: settings.samples,
+                tiles: pending,
+            };
+        }
+        let raw = RenderOutput {
             width: settings.width,
             height: settings.height,
             beauty,
@@ -513,7 +713,24 @@ impl RenderEngine for GpuEngine {
                 samples: (rx1 - rx0) as u64 * (ry1 - ry0) as u64 * settings.samples as u64,
                 ignored_channels: forge_render_cpu::ignored_channels(snapshot),
             },
-        })
+        };
+        Ok(TransportPreview { raw, guides })
+    }
+}
+
+impl RenderEngine for GpuEngine {
+    fn id(&self) -> &str {
+        "forge.render.gpu"
+    }
+
+    fn render(
+        &self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        control: &Control,
+    ) -> Result<RenderOutput, RenderError> {
+        let packed = Packed::build(snapshot, settings.default_light)?;
+        self.render_transport(snapshot, settings, control, &packed, None)
     }
 }
 

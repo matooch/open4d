@@ -101,11 +101,30 @@ pub fn materials(
 pub fn assemble(
     materials_in: &[(&ShadingGraph, &dyn TextureSampler)],
 ) -> Result<Assembled, RenderError> {
+    assemble_with_scene(materials_in, "", include_str!("flat_scene.wgsl"))
+}
+
+/// Builds the R20 transport with a replacement scene module (R25.1).
+///
+/// `directives` contains WGSL enable directives, if any. `scene` provides
+/// `scene_intersect`, `scene_occluded`, `scene_geometry` and `scene_ids`
+/// (material index and object ID, in that order), plus their scene bindings.
+pub fn assemble_with_scene(
+    materials_in: &[(&ShadingGraph, &dyn TextureSampler)],
+    directives: &str,
+    scene: &str,
+) -> Result<Assembled, RenderError> {
     let mut assembled = materials(materials_in, 1)?;
+    if !directives.is_empty() {
+        assembled.source.insert(0, '\n');
+        assembled.source.insert_str(0, directives);
+    }
     assembled.source.push_str(&frame_constants());
     assembled.source.push_str(crate::RNG_WGSL);
     assembled.source.push('\n');
-    assembled.source.push_str(crate::TRACE_WGSL);
+    assembled.source.push_str(include_str!("trace.wgsl"));
+    assembled.source.push('\n');
+    assembled.source.push_str(scene);
     Ok(assembled)
 }
 

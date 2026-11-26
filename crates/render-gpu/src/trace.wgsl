@@ -2,26 +2,6 @@
 // forge_render_cpu::{scene, lights, surface, integrator, engine} in the same order, so the
 // two images agree sample for sample up to f32 rounding.
 
-struct Tri {
-    p0: vec4<f32>,
-    e1: vec4<f32>,
-    e2: vec4<f32>,
-    ng: vec4<f32>,
-    n0: vec4<f32>,
-    n1: vec4<f32>,
-    n2: vec4<f32>,
-    u0: vec4<f32>,
-    u1: vec4<f32>,
-    u2: vec4<f32>,
-    ids: vec4<f32>,
-};
-
-struct Node {
-    bounds_min: vec4<f32>,
-    bounds_max: vec4<f32>,
-    link: vec4<u32>,
-};
-
 struct GpuLight {
     pos_radius: vec4<f32>,
     axis_kind: vec4<f32>,
@@ -36,9 +16,6 @@ struct GpuLight {
 };
 
 @group(0) @binding(0) var<uniform> forge_frame: array<vec4<f32>, 96>;
-@group(0) @binding(1) var<storage, read> forge_tris: array<Tri>;
-@group(0) @binding(2) var<storage, read> forge_nodes: array<Node>;
-@group(0) @binding(3) var<storage, read> forge_prims: array<u32>;
 @group(0) @binding(4) var<storage, read> forge_lights: array<GpuLight>;
 @group(0) @binding(5) var<storage, read_write> forge_out: array<vec4<f32>>;
 
@@ -124,6 +101,7 @@ struct Hit {
     found: bool,
     t: f32,
     tri: u32,
+    instance: u32,
     u: f32,
     v: f32,
 };
@@ -133,110 +111,10 @@ fn empty_hit() -> Hit {
     h.found = false;
     h.t = 1e30;
     h.tri = 0u;
+    h.instance = 0xffffffffu;
     h.u = 0.0;
     h.v = 0.0;
     return h;
-}
-
-fn box_hit(bmin: vec3<f32>, bmax: vec3<f32>, o: vec3<f32>, inv: vec3<f32>, tmax: f32) -> bool {
-    let t0 = (bmin - o) * inv;
-    let t1 = (bmax - o) * inv;
-    let a = min(t0, t1);
-    let b = max(t0, t1);
-    let tn = max(max(a.x, max(a.y, a.z)), 0.0);
-    let tf = min(min(b.x, min(b.y, b.z)), tmax);
-    return tn <= tf;
-}
-
-fn tri_hit(idx: u32, o: vec3<f32>, d: vec3<f32>, tmax: f32) -> Hit {
-    var h = empty_hit();
-    h.tri = idx;
-    let tri = forge_tris[idx];
-    let e1 = tri.e1.xyz;
-    let e2 = tri.e2.xyz;
-    let pv = cross(d, e2);
-    let det = dot(e1, pv);
-    if (abs(det) < 1e-18) {
-        return h;
-    }
-    let inv = 1.0 / det;
-    let tv = o - tri.p0.xyz;
-    let u = dot(tv, pv) * inv;
-    if (u < 0.0 || u > 1.0) {
-        return h;
-    }
-    let qv = cross(tv, e1);
-    let v = dot(d, qv) * inv;
-    if (v < 0.0 || u + v > 1.0) {
-        return h;
-    }
-    let t = dot(e2, qv) * inv;
-    if (t > 1e-12 && t < tmax) {
-        h.found = true;
-        h.t = t;
-        h.u = u;
-        h.v = v;
-        h.t = t;
-    }
-    return h;
-}
-
-fn scene_intersect(o: vec3<f32>, d: vec3<f32>, tmax_in: f32, any: bool) -> Hit {
-    var best = empty_hit();
-    var tmax = tmax_in;
-    best.t = tmax_in;
-    if (arrayLength(&forge_nodes) == 0u) {
-        return best;
-    }
-    let inv = vec3<f32>(1.0) / d;
-    var stack: array<u32, 128>;
-    var sp = 0u;
-    var cur = 0u;
-    loop {
-        let n = forge_nodes[cur];
-        if (box_hit(n.bounds_min.xyz, n.bounds_max.xyz, o, inv, tmax)) {
-            if (n.link.y > 0u) {
-                for (var k = n.link.x; k < n.link.x + n.link.y; k = k + 1u) {
-                    let h = tri_hit(forge_prims[k], o, d, tmax);
-                    if (h.found) {
-                        tmax = h.t;
-                        best = h;
-                        if (any) {
-                            return best;
-                        }
-                    }
-                }
-            } else {
-                let l = n.link.x;
-                let lb = forge_nodes[l];
-                let rb = forge_nodes[l + 1u];
-                let dl = dot(lb.bounds_min.xyz + lb.bounds_max.xyz - o * 2.0, lb.bounds_min.xyz + lb.bounds_max.xyz - o * 2.0);
-                let dr = dot(rb.bounds_min.xyz + rb.bounds_max.xyz - o * 2.0, rb.bounds_min.xyz + rb.bounds_max.xyz - o * 2.0);
-                var near = l;
-                var far = l + 1u;
-                if (dr < dl) {
-                    near = l + 1u;
-                    far = l;
-                }
-                if (sp < 128u) {
-                    stack[sp] = far;
-                    sp = sp + 1u;
-                }
-                cur = near;
-                continue;
-            }
-        }
-        if (sp == 0u) {
-            return best;
-        }
-        sp = sp - 1u;
-        cur = stack[sp];
-    }
-    return best;
-}
-
-fn scene_occluded(o: vec3<f32>, d: vec3<f32>, tmax: f32) -> bool {
-    return scene_intersect(o, d, tmax, true).found;
 }
 
 struct Geom {
@@ -248,35 +126,6 @@ struct Geom {
     corners: array<vec3<f32>, 3>,
     corner_uvw: array<vec3<f32>, 3>,
 };
-
-fn scene_geometry(o: vec3<f32>, d: vec3<f32>, h: Hit) -> Geom {
-    let tri = forge_tris[h.tri];
-    let w = 1.0 - h.u - h.v;
-    var g: Geom;
-    g.p = o + d * h.t;
-    g.ng = tri.ng.xyz;
-    if (tri.n0.w == 0.0) {
-        g.ns = g.ng;
-    } else {
-        var ns = tri.n0.xyz * w + tri.n1.xyz * h.u + tri.n2.xyz * h.v;
-        if (dot(ns, ns) <= 0.0) {
-            ns = g.ng;
-        }
-        g.ns = normalize(ns);
-        if (dot(g.ns, g.ng) < 0.0) {
-            g.ns = -g.ns;
-        }
-    }
-    g.corner_uvw[0] = tri.u0.xyz;
-    g.corner_uvw[1] = tri.u1.xyz;
-    g.corner_uvw[2] = tri.u2.xyz;
-    g.uvw = tri.u0.xyz * w + tri.u1.xyz * h.u + tri.u2.xyz * h.v;
-    g.closed = tri.ids.w > 0.5;
-    g.corners[0] = tri.p0.xyz;
-    g.corners[1] = tri.p0.xyz + tri.e1.xyz;
-    g.corners[2] = tri.p0.xyz + tri.e2.xyz;
-    return g;
-}
 
 fn uvw_at(g: Geom, p: vec3<f32>) -> vec3<f32> {
     let a = g.corners[0];
@@ -833,7 +682,7 @@ fn trace_path(o_in: vec3<f32>, d_in: vec3<f32>, rng: ptr<function, Rng>) -> Trac
     let lights = arrayLength(&forge_lights);
 
     for (var depth = 0u; depth < max_depth; depth = depth + 1u) {
-        let hit = scene_intersect(o, d, 1e30, false);
+        let hit = scene_intersect(o, d, 1e30);
         var tmax = 1e30;
         if (hit.found) {
             tmax = hit.t;
@@ -882,8 +731,9 @@ fn trace_path(o_in: vec3<f32>, d_in: vec3<f32>, rng: ptr<function, Rng>) -> Trac
             break;
         }
         let g = scene_geometry(o, d, hit);
-        let mat_ix = u32(forge_tris[hit.tri].ids.x);
-        let object_id = forge_tris[hit.tri].ids.y;
+        let ids = scene_ids(hit);
+        let mat_ix = u32(ids.x);
+        let object_id = ids.y;
         let wo = -d;
         let front = dot(g.ng, wo) > 0.0;
         let ngv = select(-g.ng, g.ng, front);
@@ -1116,44 +966,42 @@ fn aov_tag(k: u32) -> u32 {
     return bitcast<u32>(fr(F_AOV_TAG + k));
 }
 
-@compute @workgroup_size(8, 8, 1)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let tw = u32(fr(F_TILE_W) + 0.5);
-    let th = u32(fr(F_TILE_H) + 0.5);
-    if (gid.x >= tw || gid.y >= th) {
-        return;
-    }
-    let x = u32(fr(F_TX) + 0.5) + gid.x;
-    let y = u32(fr(F_TY) + 0.5) + gid.y;
-    let stride = u32(fr(F_STRIDE) + 0.5);
-    let aovs = u32(fr(F_AOV_COUNT) + 0.5);
-    let base = (gid.y * tw + gid.x) * stride;
-    let n = u32(fr(F_SAMPLES) + 0.5);
+// Storage stride: 160 bytes. No bools (not host-shareable) or averaged outputs.
+struct PixelState {
+    acc: Acc,
+    normal_sum: vec3<f32>,
+    depth_sum: f32,
+    albedo_sum: vec3<f32>,
+    vis: f32,
+    pos_sum: vec3<f32>,
+    tot: f32,
+    rng: Rng,
+    sxy: vec2<f32>,
+    first_ids: vec2<f32>,
+    hits: u32,
+    cover: u32,
+};
+
+@group(0) @binding(6) var<storage, read_write> pixel_states: array<PixelState>;
+
+fn new_pixel(x: u32, y: u32) -> PixelState {
+    var p: PixelState;
     let seed_w = vec2<u32>(bitcast<u32>(fr(F_SEED_LO)), bitcast<u32>(fr(F_SEED_HI)));
     let pix = splitmix(u64_xor(seed_w, splitmix(vec2<u32>(y, x))));
     var rng = rng_new(pix, u64_shr(pix, 17u));
-    let sxy = rng_f2(&rng);
+    p.sxy = rng_f2(&rng);
+    p.rng = rng;
+    return p;
+}
 
-    var acc: Acc;
-    acc.rgb = vec3<f32>(0.0);
-    acc.diffuse = vec3<f32>(0.0);
-    acc.specular = vec3<f32>(0.0);
-    acc.emission = vec3<f32>(0.0);
-    var hits = 0u;
-    var vis = 0.0;
-    var tot = 0.0;
-    var cover = 0u;
-    var depth_sum = 0.0;
-    var normal_sum = vec3<f32>(0.0);
-    var albedo_sum = vec3<f32>(0.0);
-    var pos_sum = vec3<f32>(0.0);
-    var first_ok = false;
-    var first = Sample();
+fn advance_pixel(previous: PixelState, x: u32, y: u32, start: u32, end: u32) -> PixelState {
+    var p = previous;
+    var rng = p.rng;
     let dof = fr(F_APERTURE_PRESENT) > 0.5;
-    for (var i = 0u; i < n; i = i + 1u) {
+    for (var i = start; i < end; i = i + 1u) {
         let u = vec2<f32>(
-            fract(sxy.x + 0.5 + f32(i) * 0.7548776662466927),
-            fract(sxy.y + 0.5 + f32(i) * 0.5698402909980532),
+            fract(p.sxy.x + 0.5 + f32(i) * 0.7548776662466927),
+            fract(p.sxy.y + 0.5 + f32(i) * 0.5698402909980532),
         );
         let off = filter_offset(u32(fr(F_FILTER) + 0.5), fr(F_FILTER_WIDTH), u, &rng);
         let px = f32(x) + 0.5 + off.x;
@@ -1169,58 +1017,104 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (!(all(t.acc.rgb == t.acc.rgb))) {
             continue;
         }
-        acc.rgb = acc.rgb + t.acc.rgb;
-        acc.diffuse = acc.diffuse + t.acc.diffuse;
-        acc.specular = acc.specular + t.acc.specular;
-        acc.emission = acc.emission + t.acc.emission;
-        tot = tot + s.shadow_total;
-        vis = vis + s.shadow_visible;
+        p.acc.rgb = p.acc.rgb + t.acc.rgb;
+        p.acc.diffuse = p.acc.diffuse + t.acc.diffuse;
+        p.acc.specular = p.acc.specular + t.acc.specular;
+        p.acc.emission = p.acc.emission + t.acc.emission;
+        p.tot = p.tot + s.shadow_total;
+        p.vis = p.vis + s.shadow_visible;
         if (s.covered) {
-            cover = cover + 1u;
+            p.cover = p.cover + 1u;
         }
         if (s.covered && s.depth > 0.0) {
-            hits = hits + 1u;
-            depth_sum = depth_sum + s.depth;
-            normal_sum = normal_sum + s.normal;
-            albedo_sum = albedo_sum + s.albedo;
-            pos_sum = pos_sum + s.position;
-            if (!first_ok) {
-                first_ok = true;
-                first = s;
+            if (p.hits == 0u) {
+                p.first_ids = vec2<f32>(s.object_id, s.material_id);
             }
+            p.hits = p.hits + 1u;
+            p.depth_sum = p.depth_sum + s.depth;
+            p.normal_sum = p.normal_sum + s.normal;
+            p.albedo_sum = p.albedo_sum + s.albedo;
+            p.pos_sum = p.pos_sum + s.position;
         }
     }
-    let inv = 1.0 / f32(n);
-    let alpha = f32(cover) * inv;
-    forge_out[base] = vec4<f32>(acc.rgb * inv, alpha);
-    let hinv = select(0.0, 1.0 / f32(hits), hits > 0u);
+    p.rng = rng;
+    return p;
+}
+
+fn resolve_pixel(p: PixelState, base: u32, samples: u32) {
+    let inv = 1.0 / f32(samples);
+    let alpha = f32(p.cover) * inv;
+    forge_out[base] = vec4<f32>(p.acc.rgb * inv, alpha);
+    let hinv = select(0.0, 1.0 / f32(p.hits), p.hits > 0u);
+    let aovs = u32(fr(F_AOV_COUNT) + 0.5);
     for (var k = 0u; k < aovs; k = k + 1u) {
         let tag = aov_tag(k);
         var v = vec3<f32>(0.0);
         if (tag == 0u) {
-            v = vec3<f32>(depth_sum * hinv);
+            v = vec3<f32>(p.depth_sum * hinv);
         } else if (tag == 1u) {
-            v = normal_sum * hinv;
+            v = p.normal_sum * hinv;
             if (dot(v, v) > 0.0) {
                 v = normalize(v);
             }
         } else if (tag == 2u) {
-            v = albedo_sum * hinv;
+            v = p.albedo_sum * hinv;
         } else if (tag == 3u) {
-            v = pos_sum * hinv;
+            v = p.pos_sum * hinv;
         } else if (tag == 4u) {
-            v = vec3<f32>(select(0.0, first.object_id, first_ok));
+            v = vec3<f32>(p.first_ids.x);
         } else if (tag == 5u) {
-            v = vec3<f32>(select(0.0, first.material_id, first_ok));
+            v = vec3<f32>(p.first_ids.y);
         } else if (tag == 6u) {
-            v = vec3<f32>(select(1.0, vis / tot, tot > 0.0));
+            v = vec3<f32>(select(1.0, p.vis / p.tot, p.tot > 0.0));
         } else if (tag == 7u) {
-            v = acc.diffuse * inv;
+            v = p.acc.diffuse * inv;
         } else if (tag == 8u) {
-            v = acc.specular * inv;
+            v = p.acc.specular * inv;
         } else {
-            v = acc.emission * inv;
+            v = p.acc.emission * inv;
         }
         forge_out[base + 1u + k] = vec4<f32>(v, alpha);
+    }
+}
+
+@compute @workgroup_size(8, 8, 1)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let tw = u32(fr(F_TILE_W) + 0.5);
+    let th = u32(fr(F_TILE_H) + 0.5);
+    if (gid.x >= tw || gid.y >= th) {
+        return;
+    }
+    let x = u32(fr(F_TX) + 0.5) + gid.x;
+    let y = u32(fr(F_TY) + 0.5) + gid.y;
+    let pixel = gid.y * tw + gid.x;
+    let start = bitcast<u32>(fr(F_SAMPLE_START));
+    let end = bitcast<u32>(fr(F_SAMPLE_END));
+    var p: PixelState;
+    if (start == 0u) {
+        p = new_pixel(x, y);
+    } else {
+        p = pixel_states[pixel];
+    }
+    p = advance_pixel(p, x, y, start, end);
+    let more = end < bitcast<u32>(fr(F_SAMPLE_TOTAL));
+    let preview = fr(F_PREVIEW) != 0.0;
+    if (more || preview) {
+        pixel_states[pixel] = p;
+    }
+    if (!more) {
+        let stride = u32(fr(F_STRIDE) + 0.5);
+        let base = pixel * stride;
+        resolve_pixel(p, base, end);
+        if (preview) {
+            let ray = camera_ray(f32(x) + 0.5, f32(y) + 0.5);
+            let hit = scene_intersect(ray.o, ray.d, 1e30);
+            var guide = vec4<f32>(0.0, 0.0, 0.0, -1.0);
+            if (hit.found && hit.t > 0.0) {
+                let g = scene_geometry(ray.o, ray.d, hit);
+                guide = vec4<f32>(g.ns, hit.t);
+            }
+            forge_out[base + stride - 1u] = guide;
+        }
     }
 }

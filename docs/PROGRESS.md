@@ -4,13 +4,13 @@ One page to check where the project stands. The planner updates it after every m
 Details live in the files linked at the bottom; when this page and those files disagree, the
 linked files win.
 
-**Last updated:** 2026-11-25, after Hermes run 8 (205, 206, 142, 198, 199) and the planner follow-ups (207, 208, the GPU tracer Vulkan fix and shader nodes).
+**Last updated:** 2026-11-26, after Hermes run 9 (ray tracing: 200, 211, 201–204, 212), particles (119–121) and Pose Morph/S6.
 
 ## At a glance
 
 | | Now |
 |---|---|
-| Implementation briefs | **192 of 202 done** (95 %) · 3 ready · 7 waiting |
+| Implementation briefs | **199 of 204 done** (98 %) · 4 ready · 1 waiting |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
 | Acceptance scenarios | S1–S9 pass (S6 with own-design Pose Morph, parity-pending) · S10 needs a measurement |
@@ -33,7 +33,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | S7 | Animation polish: dope sheet, broken/weighted tangents, easing, loop | ✅ passes | – |
 | S8 | Look-dev: area light, DOF camera, node material, CPU render + AOVs | ✅ passes (146) | Cross-OS reference check confirmed by CI |
 | S9 | Import FBX / glTF / Alembic from the reference app, matches | ✅ passes (171): 6 cases × FBX, GLB, Alembic, STL through the CLI | glTF skinned-arm poses at f15/f30 pinned KNOWN_MISMATCH (≤ 5e-4) |
-| S10 | 1 M polygons + 10 k clones, ≥ 20 fps, 30-min fuzz without crash | 🟡 benchmarks exist (181) | A measured run on a real GPU (your M5 Pro / RTX 3090) |
+| S10 | 1 M polygons + 10 k clones, ≥ 20 fps, 30-min fuzz without crash | 🔴 measured (204): M5 Pro Tier 1 0.86 fps, Tier 2 0.21 fps | Brief 214 (persistent GPU scene, RT effect budgets); RTX 3090 run |
 
 ## Areas
 
@@ -53,25 +53,16 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | L · UI and UX | 16 / 16 | Hands-on checks in GUI sessions G1, G2, G4 |
 | M · File exchange | 12 / 12 | Done: S9 passes (171). Open: glTF skin-pose KNOWN_MISMATCH, PLY/USD/morph not observed |
 | N · Platform, packaging, docs | 13 / 14 | 185 v1.0 release checklist (last) |
-| R · Real-time GPU renderer | 6 / 10 | Done: 197, 207 (shaders → WGSL), 142 (GPU path tracer, 23/23 O30 vs CPU), 198 (real-time raster), 199 (post effects, viewport Render mode), 209 (shader nodes in raster, one material compile path for both GPU engines). Left: 200–204 (ray tracing on Metal + Vulkan) |
+| R · Real-time GPU renderer | 13 / 16 | All three tiers built: raster + post (198, 199), hybrid RT (201), real-time path tracing (202), RT on Metal (211) and Vulkan (212, matches compute on lavapipe; RTX 3090 run pending), cross-tier tests (203), S10 benchmark (204). **Open: 214 performance** (S10 on M5 Pro: Tier 1 0.86 fps of 60, Tier 2 0.21 of 30; CPU scene packing dominates), 213 Tier 1/2 quality gaps (mat-glossy), 210 DX12 shadows |
 
-## Next implementer run (run 9: ray tracing)
+## Next implementer run (run 10)
 
-Queue and rules: [agents/HERMES-IMPLEMENTER.md](agents/HERMES-IMPLEMENTER.md) §2.
+Run 9 finished: ray tracing (200, 211, 201, 202, 203, 204, 212).
 
-Run 8 finished: 205 S4, 206 S5, 142 GPU path tracer, 198 real-time raster, 199 post effects and the viewport Render mode.
+1. 214 · Real-time performance: persistent GPU scene, RT effect budgets (S10 targets)
+2. 213 · Tier 1/2 quality gaps (mat-glossy specular under hybrid shadows)
 
-1. 200 · R4 part 1: `RtBackend` trait, instanced scene, compute backend
-1b. 211 · Metal hardware ray tracing (M5 Pro)
-2. 201 · R5: hybrid ray-traced shadows, reflections, AO, GI
-3. 202 · R6: real-time path tracing with denoising
-4. 203 · R7: consistency tests against the CPU path tracer
-5. 204 · R8: performance targets
-6. 212 · Vulkan hardware ray tracing (RTX 3090 run is yours)
-
-Use a strong model for this run (Kimi K2.7 Code or GPT-6.2 Sol). 209 (shader nodes in the raster engine) is small and can go to a planner subagent.
-
-Overnight: `scripts/hermes-loop.sh docs/agents/prompts/implementer-opencode.txt` restarts the implementer in fresh sessions until the queue is done (HERMES-IMPLEMENTER.md §2b).
+Then only 210 (DX12 shadows, your Windows PC), 046 (GUI session G8) and 185 (v1.0 release) remain.
 
 ## Blocked: waiting on you (owner)
 

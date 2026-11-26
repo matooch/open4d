@@ -56,6 +56,33 @@ fn every_module_the_engine_builds_translates_to_all_backends() {
 }
 
 #[test]
+fn transport_accepts_a_scene_without_flattened_bindings() {
+    // Empty-scene implementation with no triangle, BVH or primitive buffers.
+    let scene = r#"
+fn scene_intersect(o: vec3<f32>, d: vec3<f32>, tmax: f32) -> Hit {
+    var h = empty_hit();
+    h.t = tmax;
+    return h;
+}
+fn scene_occluded(o: vec3<f32>, d: vec3<f32>, tmax: f32) -> bool {
+    return false;
+}
+fn scene_geometry(o: vec3<f32>, d: vec3<f32>, h: Hit) -> Geom {
+    var g: Geom;
+    return g;
+}
+fn scene_ids(h: Hit) -> vec2<f32> {
+    return vec2<f32>(0.0);
+}
+"#;
+    let compiled = forge_render_gpu::shader::assemble_with_scene(&[], "", scene).unwrap();
+    assert!(!compiled.source.contains("forge_tris"));
+    assert!(!compiled.source.contains("forge_nodes"));
+    assert!(!compiled.source.contains("forge_prims"));
+    translate("transport with a replacement scene", &compiled.source);
+}
+
+#[test]
 fn shader_node_modules_translate_to_all_backends() {
     use forge_core::Value;
     use forge_material::{Material, compile};

@@ -5,21 +5,35 @@
 
 mod engine;
 pub mod framegraph;
+mod hybrid;
+pub mod path_preview;
+mod path_trace;
 pub mod post;
+pub mod ray;
 pub mod shader;
 pub mod shadow;
 
-pub use engine::RtEngine;
+pub use engine::{PassTiming, RtEngine};
 pub use framegraph::{FrameGraph, GraphError, Pass};
+pub use path_trace::{PathTraceEngine, PathTracePreview, PathTraceView, path_scene_wgsl};
 
 /// Requests the default adapter and device; `Err` carries the reason there is none.
 pub fn request_default_device() -> Result<(wgpu::Device, wgpu::Queue), String> {
+    request_device(false)
+}
+
+/// Requests Metal or Vulkan ray queries where available; otherwise uses compute.
+pub fn request_rt_device() -> Result<(wgpu::Device, wgpu::Queue), String> {
+    request_device(true)
+}
+
+fn request_device(allow_hardware: bool) -> Result<(wgpu::Device, wgpu::Queue), String> {
     let instance =
         wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
     let adapter =
         pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
             .map_err(|e| e.to_string())?;
-    pollster::block_on(adapter.request_device(&Default::default())).map_err(|e| e.to_string())
+    ray::request_device(&adapter, allow_hardware).map_err(|e| e.to_string())
 }
 
 /// Slots of the frame uniform (`array<vec4<f32>, 128>`), one number per entry; the shader
@@ -79,6 +93,14 @@ pub mod frame {
     /// Post: the subpixel jitter of a TAA subframe, in pixels (R22.5).
     pub const JITTER_X: usize = 106;
     pub const JITTER_Y: usize = 107;
+    /// Lighting reads the ray-traced AO mask instead of evaluating SSAO.
+    pub const RT_AO_ON: usize = 108;
+    /// Lighting reads sampled, ray-tested direct lighting for shadow-casting lights.
+    pub const RT_SHADOWS_ON: usize = 109;
+    /// Lighting reads ray-traced specular radiance instead of raster environment specular.
+    pub const RT_REFLECTIONS_ON: usize = 110;
+    /// Lighting reads a one-bounce diffuse contribution in addition to raster lighting.
+    pub const RT_GI_ON: usize = 111;
 
     pub const SLOTS: usize = 128;
 
@@ -131,5 +153,9 @@ pub mod frame {
         ("SSR_STEPS", SSR_STEPS),
         ("JITTER_X", JITTER_X),
         ("JITTER_Y", JITTER_Y),
+        ("RT_AO_ON", RT_AO_ON),
+        ("RT_SHADOWS_ON", RT_SHADOWS_ON),
+        ("RT_REFLECTIONS_ON", RT_REFLECTIONS_ON),
+        ("RT_GI_ON", RT_GI_ON),
     ];
 }

@@ -24,7 +24,13 @@ forge-generators = { path = "../generators" }
 forge-image = { path = "../image" }
 forge-parity-harness = { path = "../parity-harness" }
 forge-shaders = { path = "../shaders" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 toml = "1"
+
+[[bench]]
+name = "s10"
+harness = false
 
 [lints]
 workspace = true
