@@ -142,6 +142,16 @@ impl DiffuseHistory {
         self.frames
     }
 
+    pub fn read_shadow_mean(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<Vec<[f32; 8]>, RenderError> {
+        assert_eq!(self.planes, 2);
+        let rgba = self.read_mean(device, queue)?;
+        Ok(bytemuck::cast_slice(&rgba).to_vec())
+    }
+
     pub fn read_mean(
         &self,
         device: &wgpu::Device,

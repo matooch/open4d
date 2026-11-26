@@ -14,7 +14,7 @@ use crate::ambient::{AmbientFrame, AmbientProgram};
 use crate::ray::{self, BackendKind, DeviceQueries, Ray, RtBackend};
 use bounce_spatial::BounceSpatialProgram;
 use diffuse_history::{DiffuseHistory, DiffuseHistoryProgram};
-use direct_shadow::{DirectShadowBindings, DirectShadowFrame, DirectShadowProgram};
+use direct_shadow::{DirectShadowBindings, DirectShadowFrame, DirectShadowProgram, read_encoded};
 use reflection::{BounceEntry, ReflectionBindings, ReflectionInput, ReflectionProgram};
 
 const SHADOW_RAYS: usize = 8;
@@ -38,7 +38,7 @@ pub(crate) struct HybridView {
     settings: Option<RenderSettings>,
     // Each raster TAA jitter has different primary visibility.
     ao: BTreeMap<[u32; 2], History<f32>>,
-    shadows: BTreeMap<[u32; 2], History<[f32; 8]>>,
+    shadows: BTreeMap<[u32; 2], SignalHistory<[f32; 8]>>,
     reflections: BTreeMap<[u32; 2], BounceHistory>,
     gi: BTreeMap<[u32; 2], BounceHistory>,
 }
@@ -76,8 +76,12 @@ struct History<T> {
     mean: Vec<T>,
 }
 
-enum BounceHistory {
-    Cpu(History<[f32; 4]>),
+type BounceHistory = SignalHistory<[f32; 4]>;
+pub(crate) type BounceSignal = HybridSignal<[f32; 4]>;
+pub(crate) type ShadowSignal = HybridSignal<[f32; 8]>;
+
+enum SignalHistory<T> {
+    Cpu(History<T>),
     Gpu {
         mean: DiffuseHistory,
         device: wgpu::Device,
@@ -85,13 +89,13 @@ enum BounceHistory {
     },
 }
 
-impl Default for BounceHistory {
+impl<T: Default> Default for SignalHistory<T> {
     fn default() -> Self {
         Self::Cpu(History::default())
     }
 }
 
-impl BounceHistory {
+impl<T> SignalHistory<T> {
     fn frames(&self) -> u32 {
         match self {
             Self::Cpu(history) => history.frames,
@@ -100,12 +104,12 @@ impl BounceHistory {
     }
 }
 
-pub(crate) enum BounceSignal {
-    Cpu(Vec<[f32; 4]>),
+pub(crate) enum HybridSignal<T> {
+    Cpu(Vec<T>),
     Gpu(DiffuseHistory),
 }
 
-impl BounceSignal {
+impl<T> HybridSignal<T> {
     pub fn is_empty(&self) -> bool {
         matches!(self, Self::Cpu(pixels) if pixels.is_empty())
     }
@@ -376,13 +380,13 @@ impl HybridView {
         input: PrimaryInput<'_>,
         control: &Control,
         gpu: Option<MaterialGpu<'_>>,
-    ) -> Result<Vec<[f32; 8]>, RenderError> {
+    ) -> Result<ShadowSignal, RenderError> {
         let lights: Vec<_> = lights::prepare(snapshot, settings.default_light)?
             .into_iter()
             .filter(lights::PLight::casts_shadow)
             .collect();
         if lights.is_empty() {
-            return Ok(Vec::new());
+            return Ok(ShadowSignal::Cpu(Vec::new()));
         }
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
@@ -421,36 +425,76 @@ impl HybridView {
                 let spatial = self
                     .bounce_spatial
                     .get_or_insert_with(|| BounceSpatialProgram::new(device));
-                MaterialProgram::get(&mut self.shadow_program, *kind, gpu, |materials| {
-                    let source = crate::shader::direct_shadow_source(*kind, materials);
-                    DirectShadowProgram::new(device, *kind, source, bitmaps.len())
-                })
-                .read_spatial(
-                    (device, queue),
-                    DirectShadowBindings {
-                        scene,
-                        primary: textures,
-                        attributes,
-                        bitmaps,
-                        lights: &lights,
-                    },
+                let program =
+                    MaterialProgram::get(&mut self.shadow_program, *kind, gpu, |materials| {
+                        let source = crate::shader::direct_shadow_source(*kind, materials);
+                        DirectShadowProgram::new(device, *kind, source, bitmaps.len())
+                    });
+                let bindings = DirectShadowBindings {
+                    scene,
+                    primary: textures,
+                    attributes,
+                    bitmaps,
+                    lights: &lights,
+                };
+                let frame = DirectShadowFrame::new(
+                    snapshot,
                     settings,
-                    DirectShadowFrame::new(
-                        snapshot,
-                        settings,
-                        input,
-                        geometry.scene.scale,
-                        history.frames,
-                        lights.len(),
-                    ),
-                    spatial.shadow_pass(limit),
-                )
+                    input,
+                    geometry.scene.scale,
+                    history.frames(),
+                    lights.len(),
+                );
+                let mut encoder = device.create_command_encoder(&Default::default());
+                let filtered = program.encode(
+                    device,
+                    &mut encoder,
+                    bindings,
+                    settings,
+                    frame,
+                    Some(spatial.shadow_pass(limit)),
+                )?;
+                if let SignalHistory::Gpu { .. } | SignalHistory::Cpu(History { frames: 0, .. }) =
+                    history
+                {
+                    let program = self
+                        .bounce_history
+                        .get_or_insert_with(|| DiffuseHistoryProgram::new(device));
+                    let previous = match history {
+                        SignalHistory::Gpu { mean, .. } => Some(&*mean),
+                        SignalHistory::Cpu(_) => None,
+                    };
+                    match program.encode_planes(
+                        device,
+                        &mut encoder,
+                        [settings.width, settings.height],
+                        &filtered,
+                        previous,
+                        2,
+                    ) {
+                        Ok(mean) => {
+                            if control.is_cancelled() {
+                                return Err(RenderError::Cancelled);
+                            }
+                            queue.submit([encoder.finish()]);
+                            *history = SignalHistory::Gpu {
+                                mean: mean.clone(),
+                                device: device.clone(),
+                                queue: queue.clone(),
+                            };
+                            return Ok(ShadowSignal::Gpu(mean));
+                        }
+                        Err(RenderError::Unsupported(_)) => {}
+                        Err(e) => return Err(e),
+                    }
+                }
+                read_encoded((device, queue), encoder, &filtered).map(ShadowSignal::Cpu)
             })(),
             _ => Err(RenderError::Unsupported(
                 "no inline direct-shadow scene".into(),
             )),
         };
-        let filtered = match inline {
+        let signal = match inline {
             Err(RenderError::Unsupported(_)) => {
                 let pixels = raw_direct_shadows(
                     (geometry, &**backend),
@@ -458,21 +502,42 @@ impl HybridView {
                     settings,
                     input,
                     &lights,
-                    history.frames,
+                    history.frames(),
                     control,
                 )?;
                 if control.is_cancelled() {
                     return Err(RenderError::Cancelled);
                 }
-                spatial_filter(width, &input, &pixels, limit)
+                ShadowSignal::Cpu(spatial_filter(width, &input, &pixels, limit))
             }
             result => result?,
+        };
+        let ShadowSignal::Cpu(filtered) = signal else {
+            return Ok(signal);
         };
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
+        if let SignalHistory::Gpu {
+            mean,
+            device,
+            queue,
+        } = history
+        {
+            let cpu = History {
+                frames: mean.frames(),
+                mean: mean.read_shadow_mean(device, queue)?,
+            };
+            if control.is_cancelled() {
+                return Err(RenderError::Cancelled);
+            }
+            *history = SignalHistory::Cpu(cpu);
+        }
+        let SignalHistory::Cpu(history) = history else {
+            unreachable!("CPU shadow history after fallback");
+        };
         history.accumulate(filtered);
-        Ok(history.mean.clone())
+        Ok(ShadowSignal::Cpu(history.mean.clone()))
     }
 
     #[cfg(test)]

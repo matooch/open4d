@@ -1563,6 +1563,25 @@ This is our own design.
   untouched surrounding layers and zero padding using the R24.12
   arithmetic limits above. Translate the shared module on all backends.
 
+#### Live Tier 2 direct-shadow history
+
+- Chain inline eight-attempt transport, one R24.11 spatial pass and the
+  two-plane R24.12 update in one encoder. Keep one accepted count per
+  exact jitter, independent of other effects. Cancelled frames and
+  shadowless lights do not advance history. Keep existing reset keys.
+- On fallback, use the accepted count for the next transport seed and
+  restore the accepted interleaved mean once before the CPU update.
+  Keep CPU history for that jitter until reset; inline filtering can
+  still supply samples to it. Preserve the batched CPU reconstruction.
+- Copy resident diffuse and specular shadow planes to compact layers
+  zero and one in the same submission as other resident lighting copies,
+  after queueing CPU writes. AO and bounce layer positions, shadow
+  enablement and both luminance channels are unchanged. Charge the
+  history submission to `rt-shadows` and the copies to `hybrid-upload`.
+- Verify the cropped odd-width path across interleaved jitters,
+  cancellation, fallback and reset. Retain the existing mixed AOV
+  comparisons and strict R26 budgets, then measure unchanged S10.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),

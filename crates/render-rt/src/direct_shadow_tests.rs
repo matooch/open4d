@@ -238,6 +238,108 @@ fn gpu_raw_direct_shadows_match_batched_reference() {
                 previous = Some(actual[98]);
             }
         }
+        let views =
+            [&positions, &normals].map(|data| texture_view(&device, &queue, &settings, data));
+        let source = forge_render_gpu::shader::materials(&materials, 1).unwrap();
+        let gpu = MaterialGpu {
+            primary: AmbientGpu {
+                device: &device,
+                queue: &queue,
+                textures: [&views[0], &views[1]],
+            },
+            materials: &source.source,
+            bitmaps: &[],
+        };
+        let mut live = HybridView::default();
+        live.prepare(&snapshot, &settings, &device, &queue).unwrap();
+        let prepared: Vec<_> = lights::prepare(&snapshot, false)
+            .unwrap()
+            .into_iter()
+            .filter(lights::PLight::casts_shadow)
+            .collect();
+        let mut reference: [History<[f32; 8]>; 2] = Default::default();
+        let cancelled = Control::new();
+        cancelled.cancel();
+        for (i, use_gpu, resident, stop) in [
+            (0, true, true, false),
+            (1, true, true, false),
+            (0, true, true, true),
+            (0, true, true, false),
+            (0, false, false, false),
+            (1, true, true, false),
+            (0, true, false, false),
+        ] {
+            let input = PrimaryInput {
+                jitter: if i == 0 { input.jitter } else { [0.25, -0.375] },
+                ..input
+            };
+            let actual = live.direct_shadows(
+                &snapshot,
+                &settings,
+                input,
+                if stop { &cancelled } else { &control },
+                use_gpu.then_some(gpu),
+            );
+            if stop {
+                assert!(matches!(actual, Err(RenderError::Cancelled)));
+                continue;
+            }
+            let history = &mut reference[i];
+            let raw = raw_direct_shadows(
+                (&geometry, &*backend),
+                &snapshot,
+                &settings,
+                input,
+                &prepared,
+                history.frames,
+                &control,
+            )
+            .unwrap();
+            let width = settings.width as usize;
+            history.accumulate(spatial_filter(
+                width,
+                &input,
+                &raw,
+                geometry.filter_limit(&snapshot, width),
+            ));
+            let actual = match actual.unwrap() {
+                ShadowSignal::Gpu(mean) => {
+                    assert!(resident);
+                    assert_eq!(mean.frames(), history.frames);
+                    mean.read_shadow_mean(&device, &queue).unwrap()
+                }
+                ShadowSignal::Cpu(mean) => {
+                    assert!(!resident, "{kind:?} unexpectedly staged a resident shadow");
+                    mean
+                }
+            };
+            assert_eq!(actual.len(), history.mean.len());
+            assert_eq!(actual[32], [0.; 8]);
+            assert!(actual[98][3] > actual[98][7] && actual[98][7] > 0.);
+            for (actual, expected) in actual.iter().zip(&history.mean) {
+                for (&a, &b) in actual.iter().zip(expected) {
+                    assert!(
+                        (a - b).abs() <= 2e-6 + 2e-4 * b.abs(),
+                        "{kind:?} jitter {i} frame {}: {a} vs {b}",
+                        history.frames
+                    );
+                }
+            }
+        }
+        live.reset();
+        assert!(matches!(
+            live.direct_shadows(&snapshot, &settings, input, &control, Some(gpu))
+                .unwrap(),
+            ShadowSignal::Gpu(mean) if mean.frames() == 1
+        ));
+        snapshot.lights = vec![no_shadow];
+        live.prepare(&snapshot, &settings, &device, &queue).unwrap();
+        assert!(
+            live.direct_shadows(&snapshot, &settings, input, &control, Some(gpu))
+                .unwrap()
+                .is_empty()
+        );
+        assert!(live.shadows.is_empty());
     }
 }
 

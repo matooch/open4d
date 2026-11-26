@@ -18,7 +18,9 @@ use wgpu::util::DeviceExt;
 
 use crate::frame;
 use crate::framegraph::FrameGraph;
-use crate::hybrid::{AmbientGpu, BounceSignal, HybridView, MaterialGpu, PrimaryInput};
+use crate::hybrid::{
+    AmbientGpu, BounceSignal, HybridView, MaterialGpu, PrimaryInput, ShadowSignal,
+};
 use crate::ray::BackendKind;
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
 
@@ -343,7 +345,7 @@ impl RtEngine {
         &self,
         w: u32,
         h: u32,
-        shadows: &[[f32; 8]],
+        shadows: &ShadowSignal,
         ao: &[f32],
         reflections: &BounceSignal,
         gi: &BounceSignal,
@@ -393,24 +395,34 @@ impl RtEngine {
             write_layer(0, bytemuck::cast_slice(ao), 4);
             return lighting_source_view(&texture);
         }
-        let shadow_layers = if shadows.is_empty() { 0 } else { 2 };
-        for layer in 0..shadow_layers {
-            let start = layer * 4;
-            let pixels: Vec<[f32; 4]> = shadows
-                .iter()
-                .map(|p| p[start..][..4].try_into().expect("four layer channels"))
-                .collect();
-            write_layer(layer as u32, bytemuck::cast_slice(&pixels), 16);
+        let mut encoder = None;
+        let copy_encoder = || self.device.create_command_encoder(&Default::default());
+        let shadow_layers = 2 * u32::from(!shadows.is_empty());
+        match shadows {
+            ShadowSignal::Cpu(shadows) => {
+                for layer in 0..shadow_layers {
+                    let start = layer as usize * 4;
+                    let pixels: Vec<[f32; 4]> = shadows
+                        .iter()
+                        .map(|p| p[start..][..4].try_into().expect("four layer channels"))
+                        .collect();
+                    write_layer(layer, bytemuck::cast_slice(&pixels), 16);
+                }
+            }
+            ShadowSignal::Gpu(mean) => {
+                let encoder = encoder.get_or_insert_with(copy_encoder);
+                mean.copy_plane_to_layer(encoder, &texture, 0, 0);
+                mean.copy_plane_to_layer(encoder, &texture, 1, 1);
+            }
         }
         if !ao.is_empty() {
             write_layer(
-                shadow_layers as u32,
+                shadow_layers,
                 bytemuck::cast_slice(&ao.iter().map(|&a| [a, 0.0, 0.0, 0.0]).collect::<Vec<_>>()),
                 16,
             );
         }
-        let mut encoder = None;
-        let first_bounce_layer = shadow_layers as u32 + u32::from(!ao.is_empty());
+        let first_bounce_layer = shadow_layers + u32::from(!ao.is_empty());
         for (offset, signal) in [reflections, gi]
             .into_iter()
             .filter(|signal| !signal.is_empty())
@@ -420,9 +432,7 @@ impl RtEngine {
             match signal {
                 BounceSignal::Cpu(pixels) => write_layer(layer, bytemuck::cast_slice(pixels), 16),
                 BounceSignal::Gpu(mean) => {
-                    let encoder = encoder.get_or_insert_with(|| {
-                        self.device.create_command_encoder(&Default::default())
-                    });
+                    let encoder = encoder.get_or_insert_with(copy_encoder);
                     mean.copy_to_layer(encoder, &texture, layer);
                 }
             }
@@ -1579,7 +1589,7 @@ impl RtEngine {
                         finish_phase(profile, device, "rt-shadows")?;
                         result
                     } else {
-                        Vec::new()
+                        ShadowSignal::Cpu(Vec::new())
                     };
                     let reflections = if rt_reflections {
                         let result = view.reflections(
@@ -1620,6 +1630,7 @@ impl RtEngine {
                     queue.write_buffer(&frame_buf, 0, &frame_bytes(&values));
                     let texture = self.upload_hybrid(w, h, &shadows, &ao, &reflections, &gi);
                     if profile.is_some()
+                        && !matches!(shadows, ShadowSignal::Gpu(_))
                         && ![&reflections, &gi]
                             .into_iter()
                             .any(|signal| matches!(signal, BounceSignal::Gpu(_)))

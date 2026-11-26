@@ -141,6 +141,7 @@ impl DirectShadowProgram {
         self.read_impl((device, queue), bindings, settings, frame, None)
     }
 
+    #[cfg(test)]
     pub fn read_spatial(
         &self,
         gpu: (&wgpu::Device, &wgpu::Queue),
@@ -152,6 +153,7 @@ impl DirectShadowProgram {
         self.read_impl(gpu, bindings, settings, frame, Some(spatial))
     }
 
+    #[cfg(test)]
     fn read_impl(
         &self,
         (device, queue): (&wgpu::Device, &wgpu::Queue),
@@ -160,9 +162,24 @@ impl DirectShadowProgram {
         frame: DirectShadowFrame,
         spatial: Option<BounceSpatialPass<'_>>,
     ) -> Result<Vec<[f32; 8]>, RenderError> {
+        let mut encoder = device.create_command_encoder(&Default::default());
+        let output = self.encode(device, &mut encoder, bindings, settings, frame, spatial)?;
+        read_encoded((device, queue), encoder, &output)
+    }
+
+    pub fn encode(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        bindings: DirectShadowBindings<'_>,
+        settings: &RenderSettings,
+        frame: DirectShadowFrame,
+        spatial: Option<BounceSpatialPass<'_>>,
+    ) -> Result<wgpu::Buffer, RenderError> {
         let lights = upload_lights(device, bindings.lights)?;
-        self.raw.read(
-            (device, queue),
+        self.raw.encode(
+            device,
+            encoder,
             RawSignalBindings {
                 scene: bindings.scene,
                 primary: bindings.primary,
@@ -298,18 +315,6 @@ impl RawSignalProgram {
             label,
             frame_layout,
         }
-    }
-
-    pub fn read<T: Pod>(
-        &self,
-        (device, queue): (&wgpu::Device, &wgpu::Queue),
-        bindings: RawSignalBindings<'_>,
-        settings: &RenderSettings,
-        frame: &impl Pod,
-    ) -> Result<Vec<T>, RenderError> {
-        let mut encoder = device.create_command_encoder(&Default::default());
-        let output = self.encode(device, &mut encoder, bindings, settings, frame)?;
-        read_encoded((device, queue), encoder, &output)
     }
 
     pub fn encode(

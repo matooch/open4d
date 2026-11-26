@@ -36,6 +36,18 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Live GPU direct-shadow history:** Inline shadows now keep both padded
+  planes on the GPU and copy them into compact layers zero and one in
+  the same submission as resident bounce layers. The cropped probe
+  matched the batched reference on Compute and actual Metal across
+  interleaved jitters, cancellation, fallback and reset, including both
+  luminance channels. Five required-GPU unit, R24 hybrid and translation
+  runs passed. Strict R26 reproduced all 207 score lines with unchanged
+  pins. Unchanged full-size Metal S10 improved from 122.748 ms /
+  8.147 fps to 115.322 ms / **8.671 fps** (shadows 25.988 → 21.773 ms,
+  upload 15.070 → 8.184 ms). No measured phase exceeded the baseline
+  regression limit. Tier 2 still misses 30 fps. `GATE: all passed`
+  (2785 tests).
 - **Planner review — grazing secondary visibility:** Merged the planner's
   crate-wide GPU unit-test lock and applied it to the newer probes. The
   batched reference and shared inline bounce shader now use the R23
