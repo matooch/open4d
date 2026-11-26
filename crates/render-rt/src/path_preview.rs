@@ -34,7 +34,7 @@ impl PrimaryGuide {
     }
 }
 
-/// Filter a completed batch's linear, straight-alpha mean without mutating it.
+/// Filter a completed batch's linear mean without mutating it or changing alpha mode.
 /// `guides` contains one row-major primary guide per pixel, including inactive pixels.
 pub fn denoise(raw: &Image, guides: &[PrimaryGuide], samples: u32) -> Result<Image, RenderError> {
     let width = raw.width as usize;

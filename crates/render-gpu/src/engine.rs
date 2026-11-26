@@ -101,6 +101,28 @@ struct TileOut {
     h: u32,
     beauty: Vec<[f32; 4]>,
     aovs: Vec<Vec<[f32; 4]>>,
+    guides: Vec<[f32; 4]>,
+}
+
+/// Ordered GPU pixel sums. Only reuse with the same device, scene and transport settings
+/// (except for the additional sample count).
+#[derive(Clone, Default)]
+pub struct TransportHistory {
+    settings: Option<RenderSettings>,
+    samples: u32,
+    tiles: Vec<wgpu::Buffer>,
+}
+
+impl TransportHistory {
+    pub fn samples(&self) -> u32 {
+        self.samples
+    }
+}
+
+pub struct TransportPreview {
+    pub raw: RenderOutput,
+    /// Row-major world normal and depth; depth is zero outside the crop and -1 on a miss.
+    pub guides: Vec<[f32; 4]>,
 }
 
 /// `(x, y, w, h)` of every tile of the render region (R2).
@@ -215,6 +237,39 @@ impl GpuEngine {
         packed: &Packed,
         scene: Option<BoundScene<'_>>,
     ) -> Result<RenderOutput, RenderError> {
+        self.run_transport(snapshot, settings, control, packed, scene, None)
+            .map(|frame| frame.raw)
+    }
+
+    /// Advance a view by `settings.samples`. Replace history only on success.
+    pub fn preview_transport(
+        &self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        control: &Control,
+        packed: &Packed,
+        scene: BoundScene<'_>,
+        history: &mut TransportHistory,
+    ) -> Result<TransportPreview, RenderError> {
+        self.run_transport(
+            snapshot,
+            settings,
+            control,
+            packed,
+            Some(scene),
+            Some(history),
+        )
+    }
+
+    fn run_transport(
+        &self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        control: &Control,
+        packed: &Packed,
+        scene: Option<BoundScene<'_>>,
+        history: Option<&mut TransportHistory>,
+    ) -> Result<TransportPreview, RenderError> {
         settings.validate()?;
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
@@ -227,10 +282,26 @@ impl GpuEngine {
                 "image environments on the GPU (RENDER.md R16, R20.4)".into(),
             ));
         }
+        let preview = history.is_some();
+        let mut settings = settings.clone();
+        if preview {
+            settings.tile = settings.tile.min(128);
+        }
+        let added = settings.samples;
+        let mut key = settings.clone();
+        key.samples = 1;
+        let previous = history
+            .as_deref()
+            .filter(|h| h.settings.as_ref() == Some(&key));
+        let first_sample = previous.map_or(0, |h| h.samples);
+        settings.samples = first_sample
+            .checked_add(added)
+            .ok_or_else(|| RenderError::Settings("progressive sample count exceeds u32".into()))?;
+        let settings = &settings;
         let mut wanted: Vec<Aov> = settings.aovs.clone();
         wanted.sort();
         wanted.dedup();
-        let stride = 1 + wanted.len();
+        let stride = 1 + wanted.len() + usize::from(preview);
 
         let materials: Vec<(
             &forge_material::ShadingGraph,
@@ -334,14 +405,15 @@ impl GpuEngine {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let base = frame_base(snapshot, settings, packed, &wanted, stride);
+        let mut base = frame_base(snapshot, settings, packed, &wanted, stride);
+        base[frame::PREVIEW] = if preview { 1.0 } else { 0.0 };
 
         let tiles = tiles_of(settings);
-        let batch_size = self.sample_batch_size.min(settings.samples);
-        let splitting = batch_size < settings.samples;
+        let batch_size = self.sample_batch_size.min(added);
+        let use_state = preview || batch_size < added;
         let max_row_width = tiles.iter().map(|tile| tile.2 as u64).max().unwrap_or(1);
         let limits = device.limits();
-        let state_capacity = if splitting {
+        let state_capacity = if use_state {
             let limit = limits
                 .max_storage_buffer_binding_size
                 .min(limits.max_buffer_size)
@@ -381,7 +453,9 @@ impl GpuEngine {
         let pixel_states = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("sample batch state"),
             size: state_capacity * PIXEL_STATE_BYTES,
-            usage: wgpu::BufferUsages::STORAGE,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
         let mut frame_bindings = vec![
@@ -430,6 +504,7 @@ impl GpuEngine {
                 .collect::<Vec<_>>(),
         });
 
+        let mut pending = Vec::new();
         let mut outs: Vec<TileOut> = Vec::with_capacity(tiles.len());
         for (i, &(tx, ty, tw, th)) in tiles.iter().enumerate() {
             if control.is_cancelled() {
@@ -443,19 +518,29 @@ impl GpuEngine {
             let bytes = tw as u64 * th as u64 * stride as u64 * 16;
             // Each dispatch covers one sample batch of a row band (R20.4, R25.1).
             let rows_per_band = (self.submission_budget / (batch_size as u64 * tw as u64)).max(1);
-            let rows_per_band = if splitting {
+            let rows_per_band = if use_state {
                 rows_per_band.min(state_capacity / tw as u64)
             } else {
                 rows_per_band
             }
             .min(th as u64) as u32;
+            let next_state = preview.then(|| {
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("pending preview tile"),
+                    size: u64::from(tw) * u64::from(th) * PIXEL_STATE_BYTES,
+                    usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                })
+            });
             let mut row = 0u32;
             while row < th {
                 let rows = rows_per_band.min(th - row);
                 let mut frame = frame;
                 frame[frame::TY] = (ty + row) as f32;
                 frame[frame::TILE_H] = rows as f32;
-                let mut sample = 0;
+                let state_offset = u64::from(row) * u64::from(tw) * PIXEL_STATE_BYTES;
+                let state_bytes = u64::from(rows) * u64::from(tw) * PIXEL_STATE_BYTES;
+                let mut sample = first_sample;
                 while sample < settings.samples {
                     if control.is_cancelled() {
                         return Err(RenderError::Cancelled);
@@ -468,6 +553,17 @@ impl GpuEngine {
                         device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                             label: Some("tile"),
                         });
+                    if sample == first_sample
+                        && let Some(history) = previous
+                    {
+                        encoder.copy_buffer_to_buffer(
+                            &history.tiles[i],
+                            state_offset,
+                            &pixel_states,
+                            0,
+                            state_bytes,
+                        );
+                    }
                     {
                         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                             label: Some("tile"),
@@ -485,6 +581,15 @@ impl GpuEngine {
                         let band_bytes = tw as u64 * rows as u64 * stride as u64 * 16;
                         let band_at = tw as u64 * row as u64 * stride as u64 * 16;
                         encoder.copy_buffer_to_buffer(&out, 0, &staging, band_at, band_bytes);
+                        if let Some(next_state) = &next_state {
+                            encoder.copy_buffer_to_buffer(
+                                &pixel_states,
+                                0,
+                                next_state,
+                                state_offset,
+                                state_bytes,
+                            );
+                        }
                     }
                     self.queue.submit([encoder.finish()]);
                     wait_for_gpu(device)?;
@@ -513,12 +618,17 @@ impl GpuEngine {
             staging.unmap();
             let mut beauty = Vec::with_capacity((tw * th) as usize);
             let mut aovs = vec![Vec::with_capacity((tw * th) as usize); wanted.len()];
+            let mut guides = Vec::new();
             for p in 0..(tw * th) as usize {
                 beauty.push(values[p * stride]);
                 for (k, a) in aovs.iter_mut().enumerate() {
                     a.push(values[p * stride + 1 + k]);
                 }
+                if preview {
+                    guides.push(values[(p + 1) * stride - 1]);
+                }
             }
+            pending.extend(next_state);
             control.emit(RenderEvent::Tile {
                 x: tx,
                 y: ty,
@@ -537,7 +647,11 @@ impl GpuEngine {
                 h: th,
                 beauty,
                 aovs,
+                guides,
             });
+        }
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
         }
         control.emit(RenderEvent::Finished);
 
@@ -551,11 +665,20 @@ impl GpuEngine {
                 )
             })
             .collect();
+        let mut guides = if preview {
+            vec![[0.0; 4]; beauty.data.len() / 4]
+        } else {
+            Vec::new()
+        };
         for t in &outs {
             for j in 0..t.h {
                 for i in 0..t.w {
                     let k = (j * t.w + i) as usize;
                     beauty.set_pixel(t.x + i, t.y + j, t.beauty[k]);
+                    if preview {
+                        let p = (t.y + j) as usize * settings.width as usize + (t.x + i) as usize;
+                        guides[p] = t.guides[k];
+                    }
                     for (a, img) in wanted.iter().zip(t.aovs.iter()) {
                         if let Some(im) = aov_imgs.get_mut(a) {
                             im.set_pixel(t.x + i, t.y + j, img[k]);
@@ -568,7 +691,17 @@ impl GpuEngine {
             settings
                 .region
                 .unwrap_or([0, 0, settings.width, settings.height]);
-        Ok(RenderOutput {
+        if let Some(history) = history {
+            if control.is_cancelled() {
+                return Err(RenderError::Cancelled);
+            }
+            *history = TransportHistory {
+                settings: Some(key),
+                samples: settings.samples,
+                tiles: pending,
+            };
+        }
+        let raw = RenderOutput {
             width: settings.width,
             height: settings.height,
             beauty,
@@ -580,7 +713,8 @@ impl GpuEngine {
                 samples: (rx1 - rx0) as u64 * (ry1 - ry0) as u64 * settings.samples as u64,
                 ignored_channels: forge_render_cpu::ignored_channels(snapshot),
             },
-        })
+        };
+        Ok(TransportPreview { raw, guides })
     }
 }
 

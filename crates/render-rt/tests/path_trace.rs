@@ -16,7 +16,7 @@ use std::sync::Mutex;
 type Device = (wgpu::Device, wgpu::Queue);
 static DEVICES: Mutex<Option<Vec<Device>>> = Mutex::new(None);
 
-fn compare(snapshot: &Snapshot, settings: &RenderSettings, aovs: &[Aov]) -> Vec<RenderOutput> {
+fn with_devices<T>(run: impl FnMut(&Device) -> T) -> Vec<T> {
     let mut slot = DEVICES.lock().unwrap_or_else(|e| e.into_inner());
     let devices = slot.get_or_insert_with(|| match request_rt_device() {
         Ok(selected)
@@ -39,42 +39,193 @@ fn compare(snapshot: &Snapshot, settings: &RenderSettings, aovs: &[Aov]) -> Vec<
             Vec::new()
         }
     });
-    if devices.is_empty() {
-        return Vec::new();
-    }
-    let cpu = CpuEngine::new()
-        .render(snapshot, settings, &Control::new())
-        .unwrap();
+    devices.iter().map(run).collect()
+}
+
+fn compare(snapshot: &Snapshot, settings: &RenderSettings, aovs: &[Aov]) -> Vec<RenderOutput> {
+    // Don't build the reference on machines where the device check skips the test.
+    let cpu = std::cell::OnceCell::new();
     let compare_options = CompareOptions::default();
-    devices
-        .iter()
-        .map(|(device, queue)| {
-            let engine = PathTraceEngine::with_device(device.clone(), queue.clone());
-            let expected = if device
-                .features()
-                .contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY)
-            {
-                BackendKind::Metal
-            } else {
-                BackendKind::Compute
-            };
-            let (gpu, backend) = engine
-                .render_with_backend(snapshot, settings, &Control::new())
-                .unwrap();
-            assert_eq!(backend, expected);
-            let check = |label, a: &[f32], b: &[f32]| {
-                let image = |rgba| ImageBuf::from_rgba(settings.width, settings.height, rgba);
-                let report = compare_image(&image(a), &image(b), &compare_options).unwrap();
-                eprintln!("{backend:?} {label}: {:.2} dB", report.psnr);
-                assert!(report.psnr >= 35.0, "{backend:?} {label}: {report:?}");
-            };
-            check("beauty", &cpu.beauty.data, &gpu.beauty.data);
-            for aov in aovs {
-                check(aov.name(), &cpu.aovs[aov].data, &gpu.aovs[aov].data);
+    with_devices(|(device, queue)| {
+        let cpu = cpu.get_or_init(|| {
+            CpuEngine::new()
+                .render(snapshot, settings, &Control::new())
+                .unwrap()
+        });
+        let engine = PathTraceEngine::with_device(device.clone(), queue.clone());
+        let expected = if device
+            .features()
+            .contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY)
+        {
+            BackendKind::Metal
+        } else {
+            BackendKind::Compute
+        };
+        let (gpu, backend) = engine
+            .render_with_backend(snapshot, settings, &Control::new())
+            .unwrap();
+        assert_eq!(backend, expected);
+        let check = |label, a: &[f32], b: &[f32]| {
+            let image = |rgba| ImageBuf::from_rgba(settings.width, settings.height, rgba);
+            let report = compare_image(&image(a), &image(b), &compare_options).unwrap();
+            eprintln!("{backend:?} {label}: {:.2} dB", report.psnr);
+            assert!(report.psnr >= 35.0, "{backend:?} {label}: {report:?}");
+        };
+        check("beauty", &cpu.beauty.data, &gpu.beauty.data);
+        for aov in aovs {
+            check(aov.name(), &cpu.aovs[aov].data, &gpu.aovs[aov].data);
+        }
+        gpu
+    })
+}
+
+fn same_raw(a: &RenderOutput, b: &RenderOutput) {
+    let same_bits = |a: &[f32], b: &[f32]| {
+        a.iter()
+            .map(|v| v.to_bits())
+            .eq(b.iter().map(|v| v.to_bits()))
+    };
+    assert!(same_bits(&a.beauty.data, &b.beauty.data), "beauty");
+    assert_eq!(a.aovs.len(), b.aovs.len());
+    for (kind, image) in &a.aovs {
+        assert!(same_bits(&image.data, &b.aovs[kind].data), "{kind:?}");
+    }
+}
+
+#[test]
+fn preview_accumulates_ordered_samples_and_filters_the_first_frame() {
+    with_devices(|(device, queue)| {
+        let engine = PathTraceEngine::with_device(device.clone(), queue.clone());
+        let snapshot = load("area-soft").snapshot;
+        let mut settings = image_parity::settings(
+            (39, 31),
+            vec![
+                Aov::Diffuse,
+                Aov::Shadow,
+                Aov::Depth,
+                Aov::Normal,
+                Aov::ObjectId,
+            ],
+        );
+        settings.region = Some([3, 4, 36, 29]);
+        settings.tile = 12;
+        let final_frame = engine
+            .render(&snapshot, &settings, &Control::new())
+            .unwrap();
+        let mut view = engine.preview_view();
+        let first = view
+            .render_batch(&snapshot, &settings, 1, &Control::new())
+            .unwrap();
+        assert_eq!(first.samples, 1);
+        assert_ne!(first.raw.beauty.data, first.denoised.data);
+        assert_eq!(first.denoised.pixel(0, 0), [0.0; 4]);
+        assert!(
+            first.raw.beauty.data.iter().skip(3).step_by(4).eq(first
+                .denoised
+                .data
+                .iter()
+                .skip(3)
+                .step_by(4))
+        );
+
+        let independent = engine
+            .preview_view()
+            .render_batch(&snapshot, &settings, 1, &Control::new())
+            .unwrap();
+        same_raw(&first.raw, &independent.raw);
+        assert_eq!(first.denoised.data, independent.denoised.data);
+        same_raw(
+            &final_frame,
+            &engine
+                .render(&snapshot, &settings, &Control::new())
+                .unwrap(),
+        );
+
+        settings.samples = 7; // The preview uses its explicit batch size, not the final budget.
+        let second = view
+            .render_batch(&snapshot, &settings, 3, &Control::new())
+            .unwrap();
+        assert_eq!(second.samples, 4);
+        assert_ne!(first.raw.beauty.data, second.raw.beauty.data);
+        let whole = engine
+            .preview_view()
+            .render_batch(&snapshot, &settings, 4, &Control::new())
+            .unwrap();
+        same_raw(&second.raw, &whole.raw);
+        assert_eq!(second.denoised.data, whole.denoised.data);
+        settings.samples = 4;
+        same_raw(
+            &second.raw,
+            &engine
+                .render(&snapshot, &settings, &Control::new())
+                .unwrap(),
+        );
+    });
+}
+
+#[test]
+fn preview_resets_on_edits_and_cancellation_does_not_commit() {
+    use std::sync::{Arc, OnceLock};
+
+    with_devices(|(device, queue)| {
+        let engine = PathTraceEngine::with_device(device.clone(), queue.clone());
+        let mut snapshot = load("area-soft").snapshot;
+        let mut settings = image_parity::settings((40, 32), vec![Aov::ObjectId]);
+        settings.tile = 16;
+        let mut view = engine.preview_view();
+        view.render_batch(&snapshot, &settings, 2, &Control::new())
+            .unwrap();
+
+        let shared = Arc::new(OnceLock::<Control>::new());
+        let from_event = Arc::downgrade(&shared);
+        let cancelled = Control::with_events(move |event| {
+            if matches!(event, RenderEvent::Tile { .. }) {
+                from_event.upgrade().unwrap().get().unwrap().cancel();
             }
-            gpu
-        })
-        .collect()
+        });
+        assert!(shared.set(cancelled.clone()).is_ok());
+        assert!(matches!(
+            view.render_batch(&snapshot, &settings, 8, &cancelled),
+            Err(RenderError::Cancelled)
+        ));
+        let mut broken = snapshot.clone();
+        broken.instances[0].mesh = broken.meshes.len();
+        assert!(matches!(
+            view.render_batch(&broken, &settings, 8, &Control::new()),
+            Err(RenderError::Snapshot(_))
+        ));
+        let retained = view
+            .render_batch(&snapshot, &settings, 1, &Control::new())
+            .unwrap();
+        assert_eq!(retained.samples, 3);
+        let fresh = |snapshot: &Snapshot, settings: &RenderSettings, n| {
+            engine
+                .preview_view()
+                .render_batch(snapshot, settings, n, &Control::new())
+                .unwrap()
+        };
+        same_raw(&retained.raw, &fresh(&snapshot, &settings, 3).raw);
+
+        let check_reset = |view: &mut _, snapshot: &Snapshot, settings: &RenderSettings| {
+            // An edit is immediately visible and does not retain the previous raw or filtered image.
+            let view: &mut forge_render_rt::PathTraceView<'_> = view;
+            let reset = view
+                .render_batch(snapshot, settings, 1, &Control::new())
+                .unwrap();
+            let expected = fresh(snapshot, settings, 1);
+            assert_eq!(reset.samples, 1);
+            same_raw(&reset.raw, &expected.raw);
+            assert_eq!(reset.denoised.data, expected.denoised.data);
+        };
+        snapshot.camera.transform[12] += 0.25;
+        check_reset(&mut view, &snapshot, &settings);
+        snapshot.lights.clear();
+        check_reset(&mut view, &snapshot, &settings);
+        settings.region = Some([2, 3, 25, 27]);
+        check_reset(&mut view, &snapshot, &settings);
+        settings.seed += 1;
+        check_reset(&mut view, &snapshot, &settings);
+    });
 }
 
 #[test]

@@ -1097,9 +1097,24 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         p = pixel_states[pixel];
     }
     p = advance_pixel(p, x, y, start, end);
-    if (end < bitcast<u32>(fr(F_SAMPLE_TOTAL))) {
+    let more = end < bitcast<u32>(fr(F_SAMPLE_TOTAL));
+    let preview = fr(F_PREVIEW) != 0.0;
+    if (more || preview) {
         pixel_states[pixel] = p;
-    } else {
-        resolve_pixel(p, pixel * u32(fr(F_STRIDE) + 0.5), end);
+    }
+    if (!more) {
+        let stride = u32(fr(F_STRIDE) + 0.5);
+        let base = pixel * stride;
+        resolve_pixel(p, base, end);
+        if (preview) {
+            let ray = camera_ray(f32(x) + 0.5, f32(y) + 0.5);
+            let hit = scene_intersect(ray.o, ray.d, 1e30);
+            var guide = vec4<f32>(0.0, 0.0, 0.0, -1.0);
+            if (hit.found && hit.t > 0.0) {
+                let g = scene_geometry(ray.o, ray.d, hit);
+                guide = vec4<f32>(g.ns, hit.t);
+            }
+            forge_out[base + stride - 1u] = guide;
+        }
     }
 }

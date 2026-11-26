@@ -4,7 +4,10 @@ mod engine;
 pub mod pack;
 pub mod shader;
 
-pub use engine::{BoundScene, GpuEngine, MapSlot, SUBMISSION_BUDGET, await_mapped, map_read};
+pub use engine::{
+    BoundScene, GpuEngine, MapSlot, SUBMISSION_BUDGET, TransportHistory, TransportPreview,
+    await_mapped, map_read,
+};
 
 /// The deterministic RNG and sampling helpers (R20.2), for tests of the WGSL directly.
 pub const RNG_WGSL: &str = include_str!("rng.wgsl");
@@ -80,6 +83,7 @@ pub mod frame {
     /// Inclusive/exclusive sample indices for this dispatch, bitcast into the slots.
     pub const SAMPLE_START: usize = 74;
     pub const SAMPLE_END: usize = 75;
+    pub const PREVIEW: usize = 76;
 
     pub const SLOTS: usize = 96;
 
@@ -137,6 +141,7 @@ pub mod frame {
         ("AOV_TAG", AOV_TAG),
         ("SAMPLE_START", SAMPLE_START),
         ("SAMPLE_END", SAMPLE_END),
+        ("PREVIEW", PREVIEW),
     ];
 }
 

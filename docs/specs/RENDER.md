@@ -1105,6 +1105,9 @@ inputs, and [R7 tier budgets](../agents/tasks/203-rt-consistency.md). This is ou
   that history. A scene, camera, resolution, region or transport-setting edit discards
   stale samples before drawing the next batch. Denoised pixels are never fed back into
   the sums. Cancelled or failed work does not advance the committed sample count.
+  The batch size is additional samples per pixel, not the history's total. Shading
+  graphs compare by value and texture samplers by shared immutable identity. A
+  successful batch atomically replaces the view's previous GPU state.
 - Return a denoised image with the first successful preview batch, including immediately
   after a reset. Use an edge-aware spatial filter guided by primary-hit depth and normal;
   treat hits and misses separately. Reduce filtering as more samples accumulate. “Within
@@ -1115,6 +1118,9 @@ inputs, and [R7 tier budgets](../agents/tasks/203-rt-consistency.md). This is ou
   by at most 5% of the nearer depth. Misses and inactive pixels are copied unchanged.
   Blend the average into raw linear RGB with weight `1 / sqrt(samples)`; copy raw
   alpha unchanged. Guides are separate from the colour being filtered.
+  Trace an unjittered pinhole ray through each active pixel centre for the guide.
+  Use positive primary-hit distance and the world shading normal; a guide never
+  advances the sample RNG or takes part in the AOV sums.
 - Final-frame rendering uses the same transport for the requested sample budget under
   the R4 event/cancellation contract, without inheriting any view's preview history.
   Keep raw accumulated linear output available; display transforms do not alter the

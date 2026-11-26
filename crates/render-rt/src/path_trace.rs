@@ -1,13 +1,16 @@
-//! Tier 3 raw rendering: R23 traversal with the shared R20 integrator (R25.1).
+//! Tier 3 final frames and per-view previews (R25).
 
+use forge_image::Image;
 use forge_render_api::{
     Control, RenderEngine, RenderError, RenderOutput, RenderSettings, Snapshot,
 };
 use forge_render_cpu::scene::Scene;
-use forge_render_gpu::{BoundScene, GpuEngine, pack::Packed};
+use forge_render_gpu::{BoundScene, GpuEngine, TransportHistory, pack::Packed};
 use glam::{DVec3, DVec4};
+use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
+use crate::path_preview::{PrimaryGuide, denoise};
 use crate::ray::{
     BackendKind, COMPUTE_TRAVERSAL_WGSL, ComputeBackend, HARDWARE_TRAVERSAL_WGSL, HardwareBackend,
     RAY_HIT_WGSL, RtBackend,
@@ -200,6 +203,26 @@ pub struct PathTraceEngine {
     transport: GpuEngine,
 }
 
+struct PathScene {
+    kind: BackendKind,
+    inputs: Packed,
+    layout: wgpu::BindGroupLayout,
+    bind: wgpu::BindGroup,
+    directives: &'static str,
+    source: String,
+}
+
+impl PathScene {
+    fn bound(&self) -> BoundScene<'_> {
+        BoundScene {
+            directives: self.directives,
+            source: &self.source,
+            layout: &self.layout,
+            bind: &self.bind,
+        }
+    }
+}
+
 impl PathTraceEngine {
     pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> Self {
         let transport = GpuEngine::with_device(device.clone(), queue.clone());
@@ -208,6 +231,32 @@ impl PathTraceEngine {
             queue,
             transport,
         }
+    }
+
+    fn prepare(&self, snapshot: &Snapshot, default_light: bool) -> Result<PathScene, RenderError> {
+        let geometry = Scene::build(snapshot)?;
+        let attrs = attributes(&self.device, snapshot, &geometry)?;
+        let inputs = Packed::frame_inputs(
+            snapshot,
+            default_light,
+            geometry.scale,
+            snapshot
+                .instances
+                .iter()
+                .map(|i| snapshot.meshes[i.mesh].triangles.len())
+                .sum(),
+        )?;
+        let traversal = Traversal::build(&self.device, &self.queue, snapshot)?;
+        let (kind, layout, bind) = traversal.bind(&self.device, &attrs);
+        let (directives, source) = path_scene_wgsl(kind);
+        Ok(PathScene {
+            kind,
+            inputs,
+            directives,
+            source,
+            layout,
+            bind,
+        })
     }
 
     /// Renders raw linear output and reports the traversal actually used.
@@ -221,31 +270,117 @@ impl PathTraceEngine {
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
-        let geometry = Scene::build(snapshot)?;
-        let attrs = attributes(&self.device, snapshot, &geometry)?;
-        let inputs = Packed::frame_inputs(
+        let scene = self.prepare(snapshot, settings.default_light)?;
+        let output = self.transport.render_transport(
             snapshot,
-            settings.default_light,
-            geometry.scale,
-            snapshot
-                .instances
-                .iter()
-                .map(|i| snapshot.meshes[i.mesh].triangles.len())
-                .sum(),
+            settings,
+            control,
+            &scene.inputs,
+            Some(scene.bound()),
         )?;
-        let traversal = Traversal::build(&self.device, &self.queue, snapshot)?;
-        let (kind, layout, bind) = traversal.bind(&self.device, &attrs);
-        let (directives, source) = path_scene_wgsl(kind);
-        let bound = BoundScene {
-            directives,
-            source: &source,
-            layout: &layout,
-            bind: &bind,
+        Ok((output, scene.kind))
+    }
+
+    /// Start an independent preview. Final renders do not read or modify this view.
+    pub fn preview_view(&self) -> PathTraceView<'_> {
+        PathTraceView {
+            engine: self,
+            scene: None,
+            history: TransportHistory::default(),
+        }
+    }
+}
+
+/// A completed progressive frame. Only raw samples contribute to later frames.
+pub struct PathTracePreview {
+    pub raw: RenderOutput,
+    pub denoised: Image,
+    pub samples: u32,
+    pub backend: BackendKind,
+}
+
+/// Accumulation and prepared scene owned by a single Tier 3 view.
+pub struct PathTraceView<'a> {
+    engine: &'a PathTraceEngine,
+    scene: Option<(Snapshot, bool, PathScene)>,
+    history: TransportHistory,
+}
+
+fn same_snapshot(a: &Snapshot, b: &Snapshot) -> bool {
+    a.meshes == b.meshes
+        && a.instances == b.instances
+        && a.camera == b.camera
+        && a.environment == b.environment
+        && a.lights == b.lights
+        && a.materials.len() == b.materials.len()
+        && a.materials
+            .iter()
+            .zip(&b.materials)
+            .all(|(a, b)| a.graph == b.graph && Arc::ptr_eq(&a.sampler, &b.sampler))
+}
+
+impl PathTraceView<'_> {
+    /// Render `samples` additional samples per pixel, ignoring `settings.samples`.
+    /// A cancelled or failed batch leaves the previously committed frame intact.
+    pub fn render_batch(
+        &mut self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        samples: u32,
+        control: &Control,
+    ) -> Result<PathTracePreview, RenderError> {
+        let mut settings = settings.clone();
+        settings.samples = samples;
+        settings.validate()?;
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
+        }
+        let cached = self.scene.as_ref().filter(|(prior, default_light, _)| {
+            *default_light == settings.default_light && same_snapshot(prior, snapshot)
+        });
+        let mut pending = None;
+        let (scene, mut history) = if let Some((_, _, scene)) = cached {
+            (scene, self.history.clone())
+        } else {
+            let scene = pending.insert(self.engine.prepare(snapshot, settings.default_light)?);
+            (&*scene, TransportHistory::default())
         };
-        let output =
-            self.transport
-                .render_transport(snapshot, settings, control, &inputs, Some(bound))?;
-        Ok((output, kind))
+        let backend = scene.kind;
+        let preview = self.engine.transport.preview_transport(
+            snapshot,
+            &settings,
+            control,
+            &scene.inputs,
+            scene.bound(),
+            &mut history,
+        )?;
+        let guides: Vec<_> = preview
+            .guides
+            .into_iter()
+            .map(|[x, y, z, depth]| match depth {
+                0.0 => PrimaryGuide::Inactive,
+                d if d > 0.0 => PrimaryGuide::Hit {
+                    depth,
+                    normal: [x, y, z],
+                },
+                _ => PrimaryGuide::Miss,
+            })
+            .collect();
+        let denoised = denoise(&preview.raw.beauty, &guides, history.samples())?;
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
+        }
+        if let Some(scene) = pending {
+            self.scene = Some((snapshot.clone(), settings.default_light, scene));
+        }
+        let samples = history.samples();
+        self.history = history;
+        Ok(PathTracePreview {
+            raw: preview.raw,
+            denoised,
+            samples,
+            backend,
+        })
     }
 }
 
