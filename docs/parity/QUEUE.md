@@ -33,7 +33,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O18 | Primitives III | [primitives-3.md](primitives-3.md) | `tests/golden/<object>/` meshes | done |
 | O58 | Modeling tools III (020/021 follow-ups) | [modeling-tools-3.md](modeling-tools-3.md) | `tests/golden/modeling-tools/` meshes | partial |
 | O20 | Generators III | [generators-3.md](generators-3.md) | done (baseline 59 of 59; all 32 follow-up rows resolved — 26 observed, 6 with recorded verdicts in their rows — see the form) |
-| O20b | Null display shapes via `viewport_screenshot` (brief 046) | [generators-3.md](generators-3.md) Follow-up 2026-11-26 | form table only (no golden) | todo |
+| O20b | Null display shapes via `viewport_screenshot` (brief 046) | [generators-3.md](generators-3.md) Follow-up 2026-11-26 | form table only (no golden) | done |
 | O19 | Deformers III | [deformers-3.md](deformers-3.md) | `tests/golden/<deformer>/` meshes | partial |
 | O45 | Deformers IV | [deformers-4.md](deformers-4.md) | partial (31 follow-up rows observed earlier; the outstanding 27 carry their recorded not-observed or needs-a-human verdicts in the table — see the form) |
 | O46 | Spline tools and editable splines | [spline-tools.md](spline-tools.md) | `tests/golden/spline-tools/` meshes | partial |
@@ -43,7 +43,7 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O42 | Shaders on a UV grid | [shaders.md](shaders.md) | `tests/golden/shaders/` samples | partial (17 of 19 cases; noise-perlin needs a Perlin type this build does not offer, layer-multiply needs a GUI-built layer stack — see the form) |
 | O27 | Animation II (tracks, tags) | [animation-2.md](animation-2.md) | `tests/golden/animation-2/` samples | done |
 | O38 | F-curves: tangents and behaviours | [fcurves.md](fcurves.md) | `tests/golden/keyframes/` samples | done (16 observable cases: 12 baseline plus the 4 follow-ups — linear-to-spline-2, broken-2, before-offset, before-oscillate observed 2026-11-21; zero angle, zero length and ease-in stay not observed with written reasons) |
-| O53 | Animation III: more track types | [animation-3.md](animation-3.md) | partial (7 of 11 baseline observed; the generator-param-2 redo not observed: hand-built keys collapse to one key on the curve and the record command writes no track on the deformer parameter — see the form) |
+| O53 | Animation III: more track types | [animation-3.md](animation-3.md) | done (2026-11-26: 7 of 11 baseline observed; bool-track, enum-track, link-track and pla plus the generator-param-2 redo carry their recorded not-observed reasons in the form) |
 | O31 | Clone-toolset generators II | [clone-generators-2.md](clone-generators-2.md) | partial (8 of 10 cases: the turtle-2 follow-up observed 2026-11-21 — premise and rules now recorded; Voronoi Fracture and Tracer could not be baked — see the form) |
 | O50 | Clone toolset III | [clone-toolset-3.md](clone-toolset-3.md) | done (3 of 3 follow-ups observed 2026-11-21 — reset-coords-off-2, linear-rstep-2, order-iterate-2; baseline as before: 44 of 49 rows, the 5 needing a human or a GUI step stay not observed — see the form) |
 | O32 | Volume builder and mesher | [volumes.md](volumes.md) | `tests/golden/volumes/` meshes | observed (10 of 12 cases; subtract/intersect not scriptable) |
@@ -53,15 +53,15 @@ missing, reason in the form), `blocked` (nothing could be done, reason in the fo
 | O36 | Constraints | [constraints.md](constraints.md) | `tests/golden/constraints/` samples + meshes | done (7 of 9 cases; see form) |
 | O37 | Pose Morph | [pose-morph.md](pose-morph.md) | `tests/golden/pose-morph/` meshes | blocked (strength track not scriptable; see form) |
 | O54 | Tags II | [tags-2.md](tags-2.md) | `tests/golden/tags-2/` | done |
-| O28 | UV coordinates and projection | [uv-projection.md](uv-projection.md) | `tests/golden/uv/` meshes | todo (1 follow-up case; see the form's Follow-up section) — before: done |
-| O29 | Scene, camera, light, material, render defaults | [scene-defaults.md](scene-defaults.md) | form only | partial |
+| O28 | UV coordinates and projection | [uv-projection.md](uv-projection.md) | `tests/golden/uv/` meshes | done (proj-frontal-2 observed 2026-11-26: camera recorded in case.toml, UVs identical to proj-frontal — see the form's Follow-up section) |
+| O29 | Scene, camera, light, material, render defaults | [scene-defaults.md](scene-defaults.md) | form only | done (2026-11-26: every form row carries a value or a recorded not-observed reason; the non-scalar custom controls and the default-light position stay not observed with their reasons in the form) |
 | O30 | Render references | [render-reference.md](render-reference.md) | `tests/golden/render/` PNG + meshes | partial (12 of 14 cases: 8 of 10 baseline plus all 4 follow-ups after briefs 136/137 — light-units, light-units-200, area-soft-2, checker-plane. Spot and infinite still render a fully black frame from a script; the two black-render folders are no longer in the tree — see the form) |
 | O43 | Material renders | [material-renders.md](material-renders.md) | `tests/golden/render/` PNG + meshes | done |
 | O57 | Camera projection | [camera.md](camera.md) | `tests/golden/camera/` PNG + meshes | partial (8 of 14 cases: the brief-138 follow-ups default-2, aspect-square-2, film-offset-y and ortho-zoom-2 are observed, focal-100-2 renders one white colour at 100 mm; sensor and dof still not scriptable, the original default / focal-100 / aspect-square are superseded by the -2 redos — see the form) |
 | O44 | Exchange references (FBX, glTF, Alembic, STL, PLY) | [exchange.md](exchange.md) | `tests/golden/exchange/` | done (morph not observed) |
 | O39 | Dynamics: rigid bodies | [dynamics.md](dynamics.md) | done (12 of 13 cases: 8 baseline plus the 4 follow-ups — bounce-combine-0, bounce-combine-50, clones-fall-2, collision-noise-0 observed 2026-11-21; gravity-half still not observed — scene gravity not reachable from a script) |
 | O40 | Particles and forces | [particles.md](particles.md) | `tests/golden/particles/` samples + meshes | blocked (0 of 10 cases: the emitter exposes no particle list to a script, so no position, velocity or age can be read - see the form) |
-| O40b | Particles via export (D20): read particle statistics without the particle API | [particles.md](particles.md) Follow-up | `tests/golden/particles/` samples | todo |
+| O40b | Particles via export (D20): read particle statistics without the particle API | [particles.md](particles.md) Follow-up | `tests/golden/particles/` samples | not capturable (2026-11-26: Alembic export holds the particle points but no scriptable read path returns them; Matrix Object mode and Tracer caches are null - see the form) |
 | O41 | Soft bodies and connectors | [soft-bodies.md](soft-bodies.md) | done (8 of 10 cases observed, the other 2 not observed with reasons in their rows — spring-stiff-2 and hinge-offset need creation commands that could not be resolved safely; see the form) |
 | O10 | Selection and tool behaviour in the GUI | (form comes with batch 10) | form only | gui-only |
 | G1 | GUI session: layout and managers | [GUI-SESSIONS.md](GUI-SESSIONS.md) §G1 | answers in GUI-SESSIONS.md | gui-only |
