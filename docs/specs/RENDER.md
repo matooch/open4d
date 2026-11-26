@@ -1200,10 +1200,15 @@ and render settings and use the same comparison, with Metal as the reference.
 A compute run is not evidence of hardware RT parity; record the actual backend
 and mark unavailable hardware runs pending.
 
-The test pins only the observed below-budget CPU comparisons on Compute and
-Metal. It still renders and scores those cases, and fails on a new miss or
-when a pinned case passes (remove its pin after checking the result). No
-hardware-to-hardware miss is pinned.
+The test pins the observed below-budget CPU comparisons per case and tier, on
+every backend: the misses come from the tier's algorithm, and each hardware
+result must also match its compute counterpart at the tier budget, which
+catches any backend difference. (First observed on Compute and Metal; the Vulkan
+ray-query path on Linux CI's lavapipe gives images identical to compute for
+Tiers 1 and 2 and within ~66–152 dB for Tier 3, so the same pins apply.) It still
+renders and scores those cases, and fails on a new miss or when a pinned case
+passes (remove its pin after checking the result). No hardware-to-hardware
+miss is pinned. The pinned Tier 1/2 gaps are open work: brief 213.
 
 | Pinned cases | Tiers | Diagnostic evidence |
 |---|---|---|

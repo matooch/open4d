@@ -25,7 +25,7 @@ Work only on briefs in the queue below, top to bottom, skipping ones whose Statu
 ### Queue (the planner edits this list)
 
 Done: 193, 195, 196, 049, 110, 106, 164 (+ follow-up), 066, 168, 071, 062, 078, 077, 075, 092,
-097, 122, 167, 145, 099, 132, 131, 140, 141, 124, 134, 129, 155, 146, 040, 054, 170, 197, 205, 206 (merged after planner review). 207 was done by a planner subagent: skip it.
+097, 122, 167, 145, 099, 132, 131, 140, 141, 124, 134, 129, 155, 146, 040, 054, 170, 197, 205, 206, 142, 198, 199, 200, 211, 201, 202, 203, 204, 212 (merged after planner review). 207 was done by a planner subagent: skip it.
 Also done by the planner (not yours): 165, 166 (FBX import/export).
 
 Overnight queue (2026-11-24, run 8). **Stack the branches:** start each brief from the
@@ -37,17 +37,12 @@ current branch at the start of each brief as well.
 Already done: 146, 040, 054, 170, 197, 205, 206, 142, 198, 199 (Hermes); 207, 208 and the 142
 follow-ups (Vulkan fix, shader-node materials in the path tracer) by planner subagents.
 
-Run 9 queue (ray tracing; use a strong model, e.g. Kimi K2.7 Code or GPT-6.2 Sol). Start 200 from
-`origin/main` once the planner has merged 199 there (check `git branch -r --contains 34713d5`),
-otherwise from `hermes/199-realtime-post` with `origin/main` merged in:
+Run 10 queue (2026-11-26; use a strong model). Start from `origin/main` once the planner has
+merged run 9 there (check `git branch -r --contains a96496a`), otherwise from
+`hermes/212-vulkan-rt-backend` with `origin/main` merged in:
 
-1. [200](tasks/200-gpu-scene-rt.md) · R4 part 1: `RtBackend` trait, instanced scene, compute backend (split 2026-11-25; four steps, commit each)
-1b. [211](tasks/211-metal-rt-backend.md) · R4 part 2: Metal hardware ray tracing (your M5 Pro)
-2. [201](tasks/201-hybrid-rt.md) · R5: hybrid ray-traced shadows, reflections, AO, GI
-3. [202](tasks/202-realtime-pathtrace.md) · R6: real-time path tracing with denoising
-4. [203](tasks/203-rt-consistency.md) · R7: consistency tests of every tier against the CPU path tracer
-5. [204](tasks/204-rt-performance.md) · R8: performance targets and benchmarks
-6. [212](tasks/212-vulkan-rt-backend.md) · R4 part 3: Vulkan hardware ray tracing (compiles everywhere; the RTX 3090 run is the owner's)
+1. [214](tasks/214-realtime-performance.md) · Real-time performance: persistent GPU scene, then RT effect budgets; measure S10 on the M5 Pro after each step
+2. [213](tasks/213-raster-hybrid-quality.md) · Tier 1/2 quality gaps (mat-glossy first)
 
 Briefs 198–204 show `waiting` in BACKLOG only on briefs earlier in this queue; on a stacked branch
 those are done, so start them in order. GPU tests run on the Mac's Metal adapter (M5 Pro); keep them

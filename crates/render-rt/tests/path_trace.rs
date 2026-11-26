@@ -343,8 +343,10 @@ fn o30_and_o43_cross_tier_consistency() {
                     cpu,
                     image,
                     budget,
-                    matches!(backend, BackendKind::Compute | BackendKind::Metal)
-                        && KNOWN_MISMATCH.contains(&(name.as_str(), tier)),
+                    // The pins describe the tier's algorithm, not a backend: every hardware
+                    // result is also compared to its compute counterpart below at the tier's
+                    // budget (Vulkan on lavapipe matches compute exactly, Tier 1/2 inf dB).
+                    KNOWN_MISMATCH.contains(&(name.as_str(), tier)),
                 );
                 if let Some(baseline) = &compute {
                     let baseline: &[ImageBuf; 3] = baseline;
