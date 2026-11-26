@@ -104,16 +104,6 @@ fn empty_hit() -> Hit {
     return h;
 }
 
-struct Geom {
-    p: vec3<f32>,
-    ng: vec3<f32>,
-    ns: vec3<f32>,
-    uvw: vec3<f32>,
-    closed: bool,
-    corners: array<vec3<f32>, 3>,
-    corner_uvw: array<vec3<f32>, 3>,
-};
-
 fn uvw_at(g: Geom, p: vec3<f32>) -> vec3<f32> {
     let a = g.corners[0];
     let e1 = g.corners[1] - a;

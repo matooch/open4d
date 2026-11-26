@@ -124,6 +124,8 @@ pub fn assemble_with_scene(
     assembled.source.push('\n');
     assembled.source.push_str(crate::LIGHT_SAMPLING_WGSL);
     assembled.source.push('\n');
+    assembled.source.push_str(crate::GEOMETRY_WGSL);
+    assembled.source.push('\n');
     assembled.source.push_str(include_str!("trace.wgsl"));
     assembled.source.push('\n');
     assembled.source.push_str(scene);

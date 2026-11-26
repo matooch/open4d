@@ -538,6 +538,10 @@ struct PrimaryGeometry {
     ends: Vec<usize>,
 }
 
+#[cfg(test)]
+#[path = "receiver_tests.rs"]
+mod receiver_tests;
+
 struct PrimarySurface {
     position: DVec3,
     normal: DVec3,

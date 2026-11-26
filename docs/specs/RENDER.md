@@ -1163,6 +1163,18 @@ R24 direct shadows, and the R20/R25 GPU transport. This is our own design.
   corner normals need not agree under nonuniform scale. Reconstruct the view
   from the unjittered camera and the jitter-adjusted pixel centre; an
   orthographic receiver does not look back toward a shared eye point.
+- Resolve the one-based G-buffer triangle key by finding the first
+  cumulative instance end greater than `key - 1`. Empty instances have
+  duplicate ends and must be skipped, and clear or out-of-range keys have
+  no receiver. Reuse the R25 attribute rows: store each cumulative end in
+  an unused normal row component rather than duplicating triangle data.
+  Inverse-transform the raster position and solve barycentrics in mesh-local
+  space as in R6. Return the raw, unoriented geometry and view before material
+  evaluation or camera-facing normal correction. Validate against the CPU
+  receiver on a cropped, jittered frame with shared meshes, mirrored and
+  nonuniform transforms, custom corner normals and film offset, using both
+  perspective and orthographic cameras. No visibility rays are needed for
+  this acceptance step.
 - Preserve the material evaluation, light lobe masks and MIS weights. Reject
   samples below either normal; offset along the geometric normal and clip
   rays just short of finite emitters. Apply per-light shadow tint and density

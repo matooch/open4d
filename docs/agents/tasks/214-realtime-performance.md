@@ -36,6 +36,15 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- [Raw receiver checkpoint](../../specs/RENDER.md#r247-gpu-direct-shadow-visibility-brief-214):
+  shared R25 geometry rows reconstruct the R6 receiver from the raster key,
+  world position and jittered pixel centre without a flattened attribute table.
+  The Metal probe matched CPU `PrimaryGeometry` on synthetic cropped inputs,
+  including clear and invalid keys, empty instances, shared mirrored/nonuniform
+  instances and both projections. The receiver translated to SPIR-V, MSL and
+  HLSL; the targeted suites passed five times. Strict R26 passed on Metal and
+  Compute with unchanged pins. The receiver is not yet used for Tier 2 shadow
+  dispatch; no new S10 measurement. Gate: 2744 tests passed, `GATE: all passed`.
 - [Direct-shadow sampling checkpoint](../../specs/RENDER.md#r247-gpu-direct-shadow-visibility-brief-214):
   extracted the existing R20/R25 packed light sampler without changing its
   formulas. The standalone sampler and full transport translated through

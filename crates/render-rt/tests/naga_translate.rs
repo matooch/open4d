@@ -100,6 +100,29 @@ fn ambient_visibility_transport_translates_with_each_traversal() {
 }
 
 #[test]
+fn raw_raster_receiver_translates_without_path_transport() {
+    let entry = "
+@group(0) @binding(1) var<storage, read_write> out: array<vec4<f32>>;
+@compute @workgroup_size(1)
+fn receiver_probe(@builtin(global_invocation_id) id: vec3<u32>) {
+    let ids = receiver_triangle(id.x + 1u, arrayLength(&out));
+    if ids.x < arrayLength(&out) {
+        let g = receiver_geometry(out[id.x].xyz, ids);
+        let view = receiver_view(vec2<f32>(id.xy), vec2<f32>(0.125), g.uvw,
+            mat3x3<f32>(g.corners[0], g.corners[1], g.corners[2]));
+        out[id.x] = vec4<f32>(g.ns + g.ng + view, f32(g.closed));
+    }
+}";
+    translate(
+        "raw raster receiver",
+        &format!(
+            "{}{entry}",
+            forge_render_rt::shader::receiver_geometry_wgsl()
+        ),
+    );
+}
+
+#[test]
 fn direct_shadow_light_sampling_has_no_path_transport_dependency() {
     use forge_render_gpu::{LIGHT_SAMPLING_WGSL, RNG_WGSL};
     let entry = "

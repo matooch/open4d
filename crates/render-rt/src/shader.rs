@@ -8,6 +8,17 @@ use forge_render_gpu::shader::Assembled;
 
 /// The passes of R21.2–R21.5.
 pub const RT_WGSL: &str = include_str!("rt.wgsl");
+pub(crate) const INSTANCE_GEOMETRY_WGSL: &str = include_str!("instance_geometry.wgsl");
+
+/// Raw R24.7 receiver helpers, with the attribute table at group 0, binding 0.
+pub fn receiver_geometry_wgsl() -> String {
+    let geometry = forge_render_gpu::GEOMETRY_WGSL;
+    let receiver = include_str!("receiver_geometry.wgsl");
+    format!(
+        "{geometry}\n@group(0) @binding(0) var<storage, read> path_attributes: array<vec4<f32>>;\n\
+         {INSTANCE_GEOMETRY_WGSL}\n{receiver}"
+    )
+}
 
 /// Raw R24.6 visibility and reconstruction; spatial and temporal filtering are separate.
 pub fn ambient_visibility_wgsl(backend: crate::ray::BackendKind) -> String {
