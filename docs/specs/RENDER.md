@@ -980,6 +980,26 @@ Sources: [area R](../roadmap/areas/R-realtime.md), D19, and
   return misses without a hardware dispatch. Compare with compute on the R23 scene
   using the same exact IDs and `1e-4` bounds, including after a transform-only update.
 
+### R23.2 Vulkan acceleration structures (brief 212)
+
+Sources: [area R](../roadmap/areas/R-realtime.md), D19, and
+[wgpu ray-query support](https://docs.rs/wgpu/30.0.1/wgpu/struct.Features.html#associatedconstant.EXPERIMENTAL_RAY_QUERY).
+
+- Use wgpu's existing hardware traversal and acceleration structures for Vulkan.
+  Wgpu exposes the feature on Vulkan when the adapter supports the requisite
+  acceleration structures and ray queries. No separate device or native `ash`
+  dispatcher is needed for the R23 contract.
+- Request the feature and acceleration-structure limits on capable Metal or
+  Vulkan adapters. If hardware is disabled, unsupported or cannot be initialized,
+  select compute. On an existing device, require both a supported API and the
+  enabled feature. Report the API of the traversal actually used by batch queries,
+  hybrid effects and Tier 3; do not report hardware if the renderer used compute.
+- Apply the same R23.1 geometry, ID, two-sided hit, parameter and update rules.
+  Compare Vulkan queries against compute at the unchanged R23 bounds, before
+  and after a transform-only update. Skip when Vulkan ray queries are unavailable
+  unless the run explicitly requires Vulkan hardware. Keep the RTX 3090 runtime
+  result parity-pending until observed.
+
 ## R24 Hybrid ray-traced effects (brief 201)
 
 Sources: [area R](../roadmap/areas/R-realtime.md), [D19](../roadmap/DECISIONS.md),
