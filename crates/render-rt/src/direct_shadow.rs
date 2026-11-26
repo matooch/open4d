@@ -9,7 +9,7 @@ use forge_render_gpu::{
 };
 use wgpu::util::DeviceExt;
 
-use super::PrimaryInput;
+use super::{PrimaryInput, diffuse_spatial::DiffuseSpatialPass};
 use crate::ray::{BackendKind, InlineScene};
 
 #[repr(C)]
@@ -103,6 +103,7 @@ pub(super) struct RawSignalBindings<'a> {
     pub bitmaps: &'a [wgpu::TextureView],
     pub lights: &'a wgpu::Buffer,
     pub environment: Option<&'a wgpu::TextureView>,
+    pub spatial: Option<DiffuseSpatialPass<'a>>,
 }
 
 impl DirectShadowProgram {
@@ -146,6 +147,7 @@ impl DirectShadowProgram {
                 bitmaps: bindings.bitmaps,
                 lights: &lights,
                 environment: None,
+                spatial: None,
             },
             settings,
             &frame,
@@ -314,7 +316,14 @@ impl RawSignalProgram {
                 mapped_at_creation: false,
             })
         };
-        let signal = alloc(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
+        let signal = alloc(
+            wgpu::BufferUsages::STORAGE
+                | if bindings.spatial.is_none() {
+                    wgpu::BufferUsages::COPY_SRC
+                } else {
+                    wgpu::BufferUsages::empty()
+                },
+        );
         let staging = alloc(wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ);
         let bind = |group: usize, entries: &[wgpu::BindGroupEntry<'_>]| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -386,7 +395,17 @@ impl RawSignalProgram {
             pass.set_bind_group(2, &scene_bind, &[]);
             pass.dispatch_workgroups(groups[0], groups[1], 1);
         }
-        encoder.copy_buffer_to_buffer(&signal, 0, &staging, 0, size);
+        let filtered = bindings.spatial.map(|spatial| {
+            debug_assert!(matches!(self.frame_layout, SignalFrameLayout::Diffuse));
+            spatial.encode(
+                device,
+                &mut encoder,
+                bindings.primary,
+                &signal,
+                [settings.width, settings.height],
+            )
+        });
+        encoder.copy_buffer_to_buffer(filtered.as_ref().unwrap_or(&signal), 0, &staging, 0, size);
         queue.submit([encoder.finish()]);
         let slice = staging.slice(..);
         await_mapped(device, &map_read(&slice))?;

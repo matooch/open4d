@@ -5,7 +5,7 @@ use forge_render_api::{Lighting, RenderError, RenderSettings, Snapshot};
 use forge_render_cpu::lights::PLight;
 
 use super::direct_shadow::{RawSignalBindings, RawSignalProgram, SignalFrameLayout, upload_lights};
-use super::{Bounce, PrimaryInput};
+use super::{Bounce, PrimaryInput, diffuse_spatial::DiffuseSpatialPass};
 use crate::ray::{BackendKind, InlineScene};
 
 #[repr(C)]
@@ -144,6 +144,25 @@ impl ReflectionProgram {
 
     pub fn read(
         &self,
+        gpu: (&wgpu::Device, &wgpu::Queue),
+        bindings: ReflectionBindings<'_>,
+        input: ReflectionInput<'_>,
+    ) -> Result<Vec<[f32; 4]>, RenderError> {
+        self.read_signal(gpu, bindings, input, None)
+    }
+
+    pub fn read_spatial(
+        &self,
+        gpu: (&wgpu::Device, &wgpu::Queue),
+        bindings: ReflectionBindings<'_>,
+        input: ReflectionInput<'_>,
+        spatial: DiffuseSpatialPass<'_>,
+    ) -> Result<Vec<[f32; 4]>, RenderError> {
+        self.read_signal(gpu, bindings, input, Some(spatial))
+    }
+
+    fn read_signal(
+        &self,
         (device, queue): (&wgpu::Device, &wgpu::Queue),
         bindings: ReflectionBindings<'_>,
         ReflectionInput {
@@ -153,6 +172,7 @@ impl ReflectionProgram {
             scale,
             history,
         }: ReflectionInput<'_>,
+        spatial: Option<DiffuseSpatialPass<'_>>,
     ) -> Result<Vec<[f32; 4]>, RenderError> {
         let (f, [x, y]) = snapshot
             .camera
@@ -189,6 +209,7 @@ impl ReflectionProgram {
                 bitmaps: bindings.bitmaps,
                 lights: &lights,
                 environment: environment.as_ref(),
+                spatial,
             },
             settings,
             &frame,

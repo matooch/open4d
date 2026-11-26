@@ -12,6 +12,7 @@ use glam::DVec3;
 
 use crate::ambient::{AmbientFrame, AmbientProgram};
 use crate::ray::{self, BackendKind, DeviceQueries, Ray, RtBackend};
+use diffuse_spatial::DiffuseSpatialProgram;
 use direct_shadow::{DirectShadowBindings, DirectShadowFrame, DirectShadowProgram};
 use reflection::{BounceEntry, ReflectionBindings, ReflectionInput, ReflectionProgram};
 
@@ -28,6 +29,7 @@ pub(crate) struct HybridView {
     shadow_program: Option<MaterialProgram<DirectShadowProgram>>,
     reflection_program: Option<MaterialProgram<ReflectionProgram>>,
     diffuse_program: Option<MaterialProgram<ReflectionProgram>>,
+    diffuse_spatial: Option<DiffuseSpatialProgram>,
     attributes: Option<wgpu::Buffer>,
     scene: Option<Snapshot>,
     geometry: Option<PrimaryGeometry>,
@@ -557,6 +559,15 @@ impl HybridView {
         }
         .entry(input.jitter.map(f32::to_bits))
         .or_default();
+        let width = settings.width as usize;
+        let limit = geometry.filter_limit(snapshot, width);
+        let frame = ReflectionInput {
+            snapshot,
+            settings,
+            input,
+            scale: geometry.scene.scale,
+            history: history.frames,
+        };
         let inline = match (gpu, backend.inline_scene()) {
             (Some(gpu), Some(scene)) => (|| {
                 let AmbientGpu {
@@ -582,7 +593,7 @@ impl HybridView {
                     Bounce::Diffuse => &mut self.diffuse_program,
                 };
                 let entry = BounceEntry::live(bounce);
-                MaterialProgram::get(cache, *kind, gpu, |materials| {
+                let program = MaterialProgram::get(cache, *kind, gpu, |materials| {
                     ReflectionProgram::for_entry(
                         device,
                         *kind,
@@ -590,53 +601,44 @@ impl HybridView {
                         gpu.bitmaps.len(),
                         entry,
                     )
-                })
-                .read(
-                    (device, queue),
-                    ReflectionBindings {
-                        scene,
-                        primary: textures,
-                        attributes,
-                        bitmaps: gpu.bitmaps,
-                        lights: &lights,
-                    },
-                    ReflectionInput {
-                        snapshot,
-                        settings,
-                        input,
-                        scale: geometry.scene.scale,
-                        history: history.frames,
-                    },
-                )
+                });
+                let bindings = ReflectionBindings {
+                    scene,
+                    primary: textures,
+                    attributes,
+                    bitmaps: gpu.bitmaps,
+                    lights: &lights,
+                };
+                if matches!(entry, BounceEntry::Diffuse { reduced: false }) {
+                    let spatial = self
+                        .diffuse_spatial
+                        .get_or_insert_with(|| DiffuseSpatialProgram::new(device));
+                    program
+                        .read_spatial((device, queue), bindings, frame, spatial.pass(limit))
+                        .map(|pixels| (pixels, true))
+                } else {
+                    program
+                        .read((device, queue), bindings, frame)
+                        .map(|pixels| (pixels, false))
+                }
             })(),
             _ => Err(RenderError::Unsupported("no inline bounce scene".into())),
         };
-        let pixels = match inline {
-            Err(RenderError::Unsupported(_)) => raw_indirect(
-                (geometry, &**backend),
-                bounce,
-                ReflectionInput {
-                    snapshot,
-                    settings,
-                    input,
-                    scale: geometry.scene.scale,
-                    history: history.frames,
-                },
-                &lights,
-                control,
-            )?,
+        let (pixels, spatial_done) = match inline {
+            Err(RenderError::Unsupported(_)) => (
+                raw_indirect((geometry, &**backend), bounce, frame, &lights, control)?,
+                false,
+            ),
             result => result?,
         };
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
-        let width = settings.width as usize;
-        let filtered = spatial_filter(
-            width,
-            &input,
-            &pixels,
-            geometry.filter_limit(snapshot, width),
-        );
+        let filtered = if spatial_done {
+            pixels
+        } else {
+            spatial_filter(width, &input, &pixels, limit)
+        };
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
@@ -808,6 +810,9 @@ struct PrimaryGeometry {
 
 #[path = "direct_shadow.rs"]
 mod direct_shadow;
+
+#[path = "diffuse_spatial.rs"]
+mod diffuse_spatial;
 
 #[cfg(test)]
 #[path = "receiver_tests.rs"]

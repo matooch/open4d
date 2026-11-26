@@ -1416,6 +1416,16 @@ and the R24.3 spatial filter. This is our own design.
   Live adoption requires the strict R26 matrix and existing R24 hybrid
   quality assertions, with unchanged CPU fallback and per-jitter history.
   This pass does not change the estimator, history or final composition.
+- Cache the spatial pipeline per hybrid view. On the inline eight-attempt
+  diffuse path, encode transport and spatial reconstruction in separate
+  passes of one command encoder and copy only the filtered signal to staging.
+  Feed that result directly into per-jitter history; do not run the CPU
+  spatial filter a second time. Reflection, raw probes and batched fallback
+  continue to read raw data and retain their existing filter behavior.
+- Compare the chained GPU result with one CPU spatial pass over the same
+  raw inline output. Exercise cropped absolute coordinates, both camera
+  projections and different jitter/history inputs, with a signal that
+  changes under filtering and would change again under a second pass.
 
 ## R25 Progressive GPU path tracing (brief 202)
 

@@ -99,91 +99,21 @@ fn gpu_diffuse_spatial_matches_cpu_across_crop_and_workgroups() {
             usage,
         })
     };
-    let thresholds = init(
-        wgpu::BufferUsages::UNIFORM,
-        bytemuck::bytes_of(&[1_f32, 0.1, 0., 0.]),
-    );
     let signal = init(wgpu::BufferUsages::STORAGE, bytemuck::cast_slice(&raw));
-    let alloc = |usage| {
-        device.create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: signal.size(),
-            usage,
-            mapped_at_creation: false,
-        })
-    };
-    let filtered = alloc(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
-    let staging = alloc(wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ);
-    use wgpu::{BindingType, BufferBindingType};
-    let buffer = |ty| BindingType::Buffer {
-        ty,
-        has_dynamic_offset: false,
-        min_binding_size: None,
-    };
-    let texture = BindingType::Texture {
-        sample_type: wgpu::TextureSampleType::Float { filterable: false },
-        view_dimension: wgpu::TextureViewDimension::D2,
-        multisampled: false,
-    };
-    let types = [
-        buffer(BufferBindingType::Uniform),
-        texture,
-        texture,
-        buffer(BufferBindingType::Storage { read_only: true }),
-        buffer(BufferBindingType::Storage { read_only: false }),
-    ];
-    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+    let staging = device.create_buffer(&wgpu::BufferDescriptor {
         label: None,
-        entries: &std::array::from_fn::<_, 5, _>(|i| wgpu::BindGroupLayoutEntry {
-            binding: i as u32,
-            visibility: wgpu::ShaderStages::COMPUTE,
-            ty: types[i],
-            count: None,
-        }),
-    });
-    let resources = [
-        thresholds.as_entire_binding(),
-        wgpu::BindingResource::TextureView(&views[0]),
-        wgpu::BindingResource::TextureView(&views[1]),
-        signal.as_entire_binding(),
-        filtered.as_entire_binding(),
-    ];
-    let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
-        layout: &layout,
-        entries: &resources
-            .into_iter()
-            .enumerate()
-            .map(|(binding, resource)| wgpu::BindGroupEntry {
-                binding: binding as u32,
-                resource,
-            })
-            .collect::<Vec<_>>(),
-    });
-    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: None,
-        bind_group_layouts: &[Some(&layout)],
-        immediate_size: 0,
-    });
-    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: None,
-        source: wgpu::ShaderSource::Wgsl(crate::shader::DIFFUSE_SPATIAL_WGSL.into()),
-    });
-    let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: None,
-        layout: Some(&pipeline_layout),
-        module: &module,
-        entry_point: Some("diffuse_spatial"),
-        compilation_options: Default::default(),
-        cache: None,
+        size: signal.size(),
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
     });
     let mut encoder = device.create_command_encoder(&Default::default());
-    {
-        let mut pass = encoder.begin_compute_pass(&Default::default());
-        pass.set_pipeline(&pipeline);
-        pass.set_bind_group(0, &bind, &[]);
-        pass.dispatch_workgroups(w.div_ceil(8), h.div_ceil(8), 1);
-    }
+    let filtered = DiffuseSpatialProgram::new(&device).pass(1.).encode(
+        &device,
+        &mut encoder,
+        [&views[0], &views[1]],
+        &signal,
+        [w, h],
+    );
     encoder.copy_buffer_to_buffer(&filtered, 0, &staging, 0, signal.size());
     queue.submit([encoder.finish()]);
     let slice = staging.slice(..);
@@ -515,6 +445,12 @@ fn gpu_raw_diffuse_matches_batched_reference() {
     gpu_positions[invalid] = [0., 0., 0., 1.];
     let mut gpu_normals = normals;
     gpu_normals[invalid] = [0., 0., 1., snapshot.instances.len() as f32 + 1.];
+    // A covered neighbour with no valid triangle contributes black transport,
+    // but remains compatible with the emissive receiver in the spatial guide.
+    let neighbour = emissive + 1;
+    gpu_positions[neighbour] = gpu_positions[emissive];
+    gpu_positions[neighbour][0] += 0.125;
+    gpu_normals[neighbour] = gpu_normals[invalid];
     let mut light = Light::new(
         LightKind::Omni,
         DMat4::from_translation(DVec3::new(-4., 0., 0.03125)),
@@ -549,11 +485,29 @@ fn gpu_raw_diffuse_matches_batched_reference() {
         let assembled = crate::shader::diffuse_wgsl(kind, &materials).unwrap();
         assert!(assembled.resources.is_empty());
         let probe = ReflectionProgram::new_diffuse(&device, kind, assembled.source, 0);
+        let spatial = DiffuseSpatialProgram::new(&device);
         for lights in [vec![], vec![light]] {
             snapshot.lights = lights;
             let prepared = lights::prepare(&snapshot, false).unwrap();
             let mut first_lit = None;
             for history in [0, 3] {
+                snapshot.camera.projection = if history == 0 {
+                    Projection::Orthographic { width: 24. }
+                } else {
+                    Projection::Perspective {
+                        focal_mm: 40.,
+                        sensor_mm: 36.,
+                        film_offset: [0.; 2],
+                    }
+                };
+                let input = PrimaryInput {
+                    jitter: if history == 0 {
+                        input.jitter
+                    } else {
+                        [0.25, -0.125]
+                    },
+                    ..input
+                };
                 let frame = ReflectionInput {
                     snapshot: &snapshot,
                     settings: &settings,
@@ -569,19 +523,37 @@ fn gpu_raw_diffuse_matches_batched_reference() {
                     &Control::new(),
                 )
                 .unwrap();
-                let actual = probe
-                    .read(
-                        (&device, &queue),
-                        ReflectionBindings {
-                            scene: backend.inline_scene().unwrap(),
-                            primary: [&views[0], &views[1]],
-                            attributes: &attrs,
-                            bitmaps: &[],
-                            lights: &prepared,
-                        },
-                        frame,
-                    )
+                let bindings = || ReflectionBindings {
+                    scene: backend.inline_scene().unwrap(),
+                    primary: [&views[0], &views[1]],
+                    attributes: &attrs,
+                    bitmaps: &[],
+                    lights: &prepared,
+                };
+                let actual = probe.read((&device, &queue), bindings(), frame).unwrap();
+                let limit = geometry.filter_limit(&snapshot, settings.width as usize);
+                let width = settings.width as usize;
+                let guide = PrimaryInput {
+                    positions: &gpu_positions,
+                    normals: &gpu_normals,
+                    ..input
+                };
+                let once = spatial_filter(width, &guide, &actual, limit);
+                let twice = spatial_filter(width, &guide, &once, limit);
+                assert_ne!(actual[emissive], once[emissive]);
+                assert_ne!(once[emissive], twice[emissive]);
+                let filtered = probe
+                    .read_spatial((&device, &queue), bindings(), frame, spatial.pass(limit))
                     .unwrap();
+                assert_eq!(filtered.len(), once.len());
+                for (i, (a, b)) in filtered.into_iter().zip(once).enumerate() {
+                    for (a, b) in a.into_iter().zip(b) {
+                        assert!(
+                            (a - b).abs() <= 2e-6 * b.abs().max(1.),
+                            "{kind:?} history {history} filtered pixel {i}: {a} vs {b}"
+                        );
+                    }
+                }
                 assert!(expected[emissive][0] > 0.1);
                 if prepared.is_empty() {
                     for (a, b) in expected[partial][..3].iter().zip(&expected[emissive][..3]) {
