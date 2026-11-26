@@ -1528,6 +1528,26 @@ This is our own design.
   existing R24 mixed and isolated AOV comparisons and strict R26 limits,
   then remeasure unchanged S10.
 
+#### Standalone direct-shadow history
+
+- Extend the R24.12 pass to accept R24.11's compact interleaved shadow
+  pairs. Plane 0 carries diffuse RGB and unoccluded luminance; plane 1
+  carries specular RGB and occluded luminance. Dispatch one Z slice per
+  plane. Read `current[2 * pixel + plane]` and write separate padded
+  full-film planes with the same row pitch as the single-lane path.
+  Both planes share one accepted frame count; all channels accumulate
+  independently with the unchanged weight and saturation rules.
+- Check total allocation, binding and shader index limits across both
+  planes. Zero padding independently and copy each plane directly to
+  its assigned RGBA32Float layer. Fallback readback removes padding
+  and restores the interleaved CPU order. Leave live shadow history and
+  composition unchanged until the standalone path is verified.
+- On an odd film, compare first and subsequent accepted samples against
+  the existing CPU history, including both luminance channels, black
+  pixels and an abandoned update. Verify each plane's copied layer,
+  untouched surrounding layers and zero padding using the R24.12
+  arithmetic limits above. Translate the shared module on all backends.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),

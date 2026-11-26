@@ -3,7 +3,7 @@
 use forge_render_api::RenderError;
 use wgpu::util::DeviceExt;
 
-const LABEL: &str = "Tier 2 diffuse history";
+const LABEL: &str = "Tier 2 RGBA history";
 const PIXEL_BYTES: u32 = 16;
 
 pub(super) struct DiffuseHistoryProgram(wgpu::ComputePipeline);
@@ -13,6 +13,7 @@ pub(crate) struct DiffuseHistory {
     mean: wgpu::Buffer,
     film: [u32; 2],
     pitch: u32,
+    planes: u32,
     frames: u32,
 }
 
@@ -42,24 +43,38 @@ impl DiffuseHistoryProgram {
         filtered: &wgpu::Buffer,
         previous: Option<&DiffuseHistory>,
     ) -> Result<DiffuseHistory, RenderError> {
+        self.encode_planes(device, encoder, film, filtered, previous, 1)
+    }
+
+    pub fn encode_planes(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        film: [u32; 2],
+        filtered: &wgpu::Buffer,
+        previous: Option<&DiffuseHistory>,
+        planes: u32,
+    ) -> Result<DiffuseHistory, RenderError> {
+        assert!(matches!(planes, 1 | 2));
         let [width, height] = film;
         let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
         let limits = device.limits();
-        let unsupported =
-            || RenderError::Unsupported("diffuse history exceeds device limits".into());
+        let unsupported = || RenderError::Unsupported("RGBA history exceeds device limits".into());
         let pitch = width
             .div_ceil(alignment / PIXEL_BYTES)
             .checked_mul(alignment)
             .ok_or_else(unsupported)?;
         let stride = pitch / PIXEL_BYTES;
-        let size = u64::from(pitch) * u64::from(height);
-        let groups = [stride.div_ceil(8), height.div_ceil(8)];
+        let size = (u64::from(pitch) * u64::from(height))
+            .checked_mul(u64::from(planes))
+            .ok_or_else(unsupported)?;
+        let groups = [stride.div_ceil(8), height.div_ceil(8), planes];
         if size == 0
             || size
                 > limits
                     .max_buffer_size
                     .min(limits.max_storage_buffer_binding_size)
-            || u64::from(stride) * u64::from(height) > u64::from(u32::MAX)
+            || size / u64::from(PIXEL_BYTES) > u64::from(u32::MAX)
             || groups
                 .iter()
                 .any(|&n| n > limits.max_compute_workgroups_per_dimension)
@@ -68,10 +83,10 @@ impl DiffuseHistoryProgram {
         }
         assert_eq!(
             filtered.size(),
-            u64::from(width) * u64::from(height) * u64::from(PIXEL_BYTES),
-            "history input must be compact RGBA32Float"
+            u64::from(width) * u64::from(height) * u64::from(PIXEL_BYTES * planes),
+            "history input must be compact interleaved RGBA32Float"
         );
-        assert!(previous.is_none_or(|p| p.film == film));
+        assert!(previous.is_none_or(|p| p.film == film && p.planes == planes));
         let frames = previous.map_or(0, |p| p.frames);
         let next = frames.saturating_add(1);
         let params = [
@@ -80,7 +95,7 @@ impl DiffuseHistoryProgram {
             stride,
             frames,
             (1. / next as f32).to_bits(),
-            0,
+            planes,
             0,
             0,
         ];
@@ -110,12 +125,13 @@ impl DiffuseHistoryProgram {
             let mut pass = encoder.begin_compute_pass(&Default::default());
             pass.set_pipeline(&self.0);
             pass.set_bind_group(0, &group, &[]);
-            pass.dispatch_workgroups(groups[0], groups[1], 1);
+            pass.dispatch_workgroups(groups[0], groups[1], groups[2]);
         }
         Ok(DiffuseHistory {
             mean,
             film,
             pitch,
+            planes,
             frames: next,
         })
     }
@@ -132,7 +148,7 @@ impl DiffuseHistory {
         queue: &wgpu::Queue,
     ) -> Result<Vec<[f32; 4]>, RenderError> {
         let staging = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("diffuse history fallback"),
+            label: Some("RGBA history fallback"),
             size: self.mean.size(),
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
@@ -146,6 +162,19 @@ impl DiffuseHistory {
             .get_mapped_range()
             .map_err(|err| RenderError::Output(err.to_string()))?;
         let row = (self.film[0] * PIXEL_BYTES) as usize;
+        if self.planes == 2 {
+            let (first, second) = bytes.split_at(self.plane_bytes() as usize);
+            let pitch = self.pitch as usize;
+            return Ok(first
+                .chunks_exact(pitch)
+                .zip(second.chunks_exact(pitch))
+                .flat_map(|(a, b)| {
+                    let a = bytemuck::cast_slice::<u8, [f32; 4]>(&a[..row]);
+                    let b = bytemuck::cast_slice::<u8, [f32; 4]>(&b[..row]);
+                    a.iter().zip(b).flat_map(|(&a, &b)| [a, b])
+                })
+                .collect());
+        }
         Ok(bytes
             .chunks_exact(self.pitch as usize)
             .flat_map(|padded| bytemuck::cast_slice::<u8, [f32; 4]>(&padded[..row]))
@@ -159,6 +188,21 @@ impl DiffuseHistory {
         texture: &wgpu::Texture,
         layer: u32,
     ) {
+        self.copy_plane_to_layer(encoder, texture, 0, layer);
+    }
+
+    fn plane_bytes(&self) -> u64 {
+        u64::from(self.pitch) * u64::from(self.film[1])
+    }
+
+    pub fn copy_plane_to_layer(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        texture: &wgpu::Texture,
+        plane: u32,
+        layer: u32,
+    ) {
+        assert!(plane < self.planes);
         let [width, height] = self.film;
         let mut dst = texture.as_image_copy();
         dst.origin.z = layer;
@@ -166,7 +210,7 @@ impl DiffuseHistory {
             wgpu::TexelCopyBufferInfo {
                 buffer: &self.mean,
                 layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
+                    offset: u64::from(plane) * self.plane_bytes(),
                     bytes_per_row: Some(self.pitch),
                     rows_per_image: Some(height),
                 },

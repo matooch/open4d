@@ -1,10 +1,10 @@
-// R24.12: update one full-film signal, leaving the accepted history untouched.
+// R24.12: update full-film planes, leaving the accepted history untouched.
 struct HistoryParams {
     film: vec2<u32>,
     stride: u32,
     frames: u32,
     weight: f32,
-    _pad0: u32,
+    planes: u32,
     _pad1: u32,
     _pad2: u32,
 }
@@ -16,15 +16,15 @@ struct HistoryParams {
 
 @compute @workgroup_size(8, 8)
 fn diffuse_history(@builtin(global_invocation_id) id: vec3<u32>) {
-    if id.x >= params.stride || id.y >= params.film.y {
+    if id.x >= params.stride || id.y >= params.film.y || id.z >= params.planes {
         return;
     }
-    let history_index = id.y * params.stride + id.x;
+    let history_index = (id.z * params.film.y + id.y) * params.stride + id.x;
     if id.x >= params.film.x {
         next[history_index] = vec4<f32>(0.0);
         return;
     }
-    let sample = filtered[id.y * params.film.x + id.x];
+    let sample = filtered[(id.y * params.film.x + id.x) * params.planes + id.z];
     if params.frames == 0u {
         next[history_index] = sample;
     } else {

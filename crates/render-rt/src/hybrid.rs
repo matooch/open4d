@@ -1156,14 +1156,20 @@ mod tests {
     }
 
     #[test]
-    fn gpu_diffuse_history_matches_cpu_without_overwriting_previous_mean() {
-        use forge_render_gpu::{await_mapped, map_read};
-        use wgpu::{BufferUsages as Usage, util::DeviceExt};
-
+    fn gpu_history_matches_cpu_without_overwriting_previous_mean() {
         let _guard = GPU_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let Some((device, queue)) = gpu(false) else {
             return;
         };
+        for planes in [1, 2] {
+            check_gpu_history(&device, &queue, planes);
+        }
+    }
+
+    fn check_gpu_history(device: &wgpu::Device, queue: &wgpu::Queue, planes: usize) {
+        use forge_render_gpu::{await_mapped, map_read};
+        use wgpu::{BufferUsages as Usage, util::DeviceExt};
+
         const W: usize = 19;
         const H: usize = 11;
         const STRIDE: usize = W.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize / 16);
@@ -1187,15 +1193,16 @@ mod tests {
                 usage,
             })
         };
-        let dirty = vec![[123.0_f32; 4]; STRIDE * H];
+        let padded_pixels = planes * STRIDE * H;
+        let dirty = vec![[123.0_f32; 4]; padded_pixels];
         let dirty = bytemuck::cast_slice(&dirty);
         let initial = init(dirty, Usage::STORAGE);
         let frames: Vec<Vec<[f32; 4]>> = [0.0, 512.0, -3.0, 9.0, 2.0]
             .into_iter()
             .map(|shift| {
-                (0..W * H)
+                (0..planes * W * H)
                     .map(|i| {
-                        if shift == 0.0 && i % W == W - 1 {
+                        if shift == 0.0 && (i / planes) % W == W - 1 {
                             [0.0; 4]
                         } else {
                             let v = (i as f32 - 93.0) * 0.125;
@@ -1232,7 +1239,7 @@ mod tests {
                 STRIDE as u32,
                 count,
                 weight.to_bits(),
-                0,
+                planes as u32,
                 0,
                 0,
             ];
@@ -1257,7 +1264,11 @@ mod tests {
                 let mut pass = encoder.begin_compute_pass(&Default::default());
                 pass.set_pipeline(&pipeline);
                 pass.set_bind_group(0, &group, &[]);
-                pass.dispatch_workgroups((STRIDE as u32).div_ceil(8), (H as u32).div_ceil(8), 1);
+                pass.dispatch_workgroups(
+                    (STRIDE as u32).div_ceil(8),
+                    (H as u32).div_ceil(8),
+                    planes as u32,
+                );
             }
             let mut history = History {
                 frames: count,
@@ -1273,24 +1284,23 @@ mod tests {
         }
         queue.submit([encoder.finish()]);
         let slice = staging.slice(..);
-        await_mapped(&device, &map_read(&slice)).unwrap();
+        await_mapped(device, &map_read(&slice)).unwrap();
         let mapped = slice.get_mapped_range().unwrap();
         let actual: &[[f32; 4]] = bytemuck::cast_slice(&mapped);
-        assert_eq!(actual.len(), references.len() * STRIDE * H);
+        assert_eq!(actual.len(), references.len() * padded_pixels);
         for (i, (rows, cpu)) in actual
-            .as_chunks::<{ STRIDE * H }>()
-            .0
-            .iter()
+            .chunks_exact(padded_pixels)
             .zip(&references)
             .enumerate()
         {
-            for (y, row) in rows.as_chunks::<STRIDE>().0.iter().enumerate() {
+            for (row_index, row) in rows.as_chunks::<STRIDE>().0.iter().enumerate() {
+                let (plane, y) = (row_index / H, row_index % H);
                 for (x, pixel) in row.iter().enumerate() {
                     if x >= W {
                         assert_eq!(pixel.map(f32::to_bits), [0; 4], "padding at {x},{y}");
                         continue;
                     }
-                    let expected = cpu.mean[y * W + x];
+                    let expected = cpu.mean[planes * (y * W + x) + plane];
                     if i == 0 {
                         assert_eq!(pixel.map(f32::to_bits), expected.map(f32::to_bits));
                     } else {
@@ -1309,6 +1319,139 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn gpu_shadow_history_copies_both_planes_and_restores_interleaved_cpu_order() {
+        use forge_render_gpu::{await_mapped, map_read};
+        use wgpu::{BufferUsages as Usage, util::DeviceExt};
+
+        let _guard = GPU_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let Some((device, queue)) = gpu(false) else {
+            return;
+        };
+        const W: usize = 19;
+        const H: usize = 11;
+        const STRIDE: usize = W.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize / 16);
+        const PLANE: usize = STRIDE * H;
+        let film = [W as u32, H as u32];
+        let extent = wgpu::Extent3d {
+            width: film[0],
+            height: film[1],
+            depth_or_array_layers: 4,
+        };
+        let layers = device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba32Float,
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let sentinels = [[91.0_f32, -7., 23., 3.], [17., 22., -3., 12.]];
+        for (layer, value) in [0, 3].into_iter().zip(sentinels) {
+            let mut dst = layers.as_image_copy();
+            dst.origin.z = layer;
+            queue.write_texture(
+                dst,
+                bytemuck::cast_slice(&[value; W * H]),
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(film[0] * 16),
+                    rows_per_image: None,
+                },
+                wgpu::Extent3d {
+                    depth_or_array_layers: 1,
+                    ..extent
+                },
+            );
+        }
+        let program = DiffuseHistoryProgram::new(&device);
+        let mut encoder = device.create_command_encoder(&Default::default());
+        let mut reference = History::default();
+        let mut accepted = None;
+        for shift in [0., 128., 2.] {
+            let samples: Vec<[f32; 4]> = (0..W * H)
+                .flat_map(|i| {
+                    let x = i as f32 * 0.125;
+                    if i % W == W - 1 {
+                        [[0.; 4]; 2]
+                    } else {
+                        [
+                            [x, x + shift, 3., 2. + shift],
+                            [x + 10., 5., x, 1. + x + 2. * shift],
+                        ]
+                    }
+                })
+                .collect();
+            let signal = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(&samples),
+                usage: Usage::STORAGE,
+            });
+            if shift == 0. {
+                let alignment = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+                let max_pitch = u32::MAX / alignment * alignment;
+                for invalid_film in [[0, film[1]], [max_pitch / 16, u32::MAX]] {
+                    assert!(matches!(
+                        program.encode_planes(
+                            &device,
+                            &mut encoder,
+                            invalid_film,
+                            &signal,
+                            None,
+                            2
+                        ),
+                        Err(RenderError::Unsupported(_)),
+                    ));
+                }
+            }
+            let pending = program
+                .encode_planes(&device, &mut encoder, film, &signal, accepted.as_ref(), 2)
+                .unwrap();
+            if shift != 128. {
+                reference.accumulate(samples);
+                assert_eq!(pending.frames(), reference.frames);
+                accepted = Some(pending);
+            }
+        }
+        let accepted = accepted.unwrap();
+        accepted.copy_plane_to_layer(&mut encoder, &layers, 0, 1);
+        accepted.copy_plane_to_layer(&mut encoder, &layers, 1, 2);
+        let staging = device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: (4 * PLANE * 16) as u64,
+            usage: Usage::COPY_DST | Usage::MAP_READ,
+            mapped_at_creation: false,
+        });
+        encoder.copy_texture_to_buffer(
+            layers.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &staging,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some((STRIDE * 16) as u32),
+                    rows_per_image: Some(film[1]),
+                },
+            },
+            extent,
+        );
+        queue.submit([encoder.finish()]);
+        let slice = staging.slice(..);
+        await_mapped(&device, &map_read(&slice)).unwrap();
+        let mapped = slice.get_mapped_range().unwrap();
+        let copied: &[[f32; 4]] = bytemuck::cast_slice(&mapped);
+        let fallback = accepted.read_mean(&device, &queue).unwrap();
+        assert_eq!(fallback, reference.mean);
+        for (i, pair) in reference.mean.as_chunks::<2>().0.iter().enumerate() {
+            let pixel = i / W * STRIDE + i % W;
+            assert_eq!(copied[pixel], sentinels[0]);
+            assert_eq!(copied[PLANE + pixel], pair[0]);
+            assert_eq!(copied[2 * PLANE + pixel], pair[1]);
+            assert_eq!(copied[3 * PLANE + pixel], sentinels[1]);
         }
     }
 

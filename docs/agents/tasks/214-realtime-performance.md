@@ -36,6 +36,15 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Standalone GPU direct-shadow history:** On an odd 19×11 film, the
+  shared R24.12 kernel converted compact shadow pairs into two padded
+  planes, preserving both luminance channels. Metal matched the CPU
+  history across first, abandoned, subsequent and saturated updates.
+  Direct copies preserved the surrounding lighting layers; fallback
+  restored interleaved pairs. Five required-GPU renderer unit, R24 hybrid
+  and shader-translation runs passed. Live shadow dispatch is unchanged;
+  no new S10 measurement was taken for the standalone probe.
+  `GATE: all passed` (2761 tests).
 - **Live GPU reflection history:** Inline reflections and GI share a
   history pipeline but retain independent per-jitter means. Both resident
   means copy into their compact lighting layers in one submission. Cropped
