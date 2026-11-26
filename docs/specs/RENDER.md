@@ -1078,6 +1078,32 @@ and shading conventions in R7–R9. The hybrid renderer is our own design.
   accumulated history. Check on Metal here and keep the tests runnable on the
   compute fallback.
 
+### R24.4 Reduced-rate ambient occlusion (brief 214)
+
+Source: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report).
+This is a preview approximation, not a change to the reference renderer.
+
+- Each frame, trace one cosine-weighted AO ray per representative of a
+  screen-aligned 2×2 quad. Rotate the candidate order by the AO history frame
+  modulo four. Seed each ray with the existing frame and absolute pixel
+  sequence; keep the configured world-space radius as its maximum distance.
+- Reconstruct visibility inside the quad only. A covered pixel with a valid
+  normal may reuse an earlier representative only when material index matches,
+  unit normals have dot product at least 0.95, world separation is at most
+  `0.15 × radius` and separation along either normal is at most `0.015 × radius`.
+  Compare directly to a traced representative, not through a chain of reused
+  pixels. Otherwise the pixel traces its own ray. Missing/cropped pixels do not
+  trace or receive a neighbouring visibility value. Odd dimensions use partial
+  quads; the quad alignment does not change with the crop.
+- Apply the existing 3×3 spatial visibility filter and per-jitter temporal
+  average after reconstruction. AO strength, zero-radius handling, the
+  camera-change reset and Tier 1 fallback are unchanged. No motion-vector
+  reprojection is claimed; reduced first-frame sample count trades variance
+  for less traversal work.
+- Check representative counts and reconstruction boundaries deterministically,
+  keep R24 estimator acceptance and the existing R26 thresholds and pins, and
+  record the full-size S10 Metal AO phase and frame medians.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),

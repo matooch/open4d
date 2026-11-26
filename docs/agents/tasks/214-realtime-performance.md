@@ -87,3 +87,18 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
   four effects. Tier 1 and camera-only setup meet their targets in this run.
   Per-mesh invalidation and the Tier 2 throughput target remain open. Gate:
   2738 tests passed, zero failed; `GATE: all passed`.
+- [AO budget checkpoint](../../specs/RENDER.md#r244-reduced-rate-ambient-occlusion-brief-214):
+  one finite-radius ray per rotating 2×2 representative, with independent
+  rays where material, normal or depth cannot support reuse. The existing
+  spatial filter and per-jitter history remain. Five required-GPU lib and
+  hybrid runs passed, including recorded ray count, odd/cropped coverage,
+  reconstruction, camera reset, fallback, and convergence.
+- Full-size S10 Tier 2, all four effects and actual Metal on M5 Pro:
+  AO **407.894 ms**, down from 622.286 ms (34.5%); uninstrumented frame
+  **4204.666 ms / 0.238 fps**, down from 4380.789 ms. Its 30 fps target is
+  still missed. This checkpoint changes no Tier 1 estimator.
+- R26 O30/O43 matrix at unchanged settings: Tier 1 **18/23**, Tier 2
+  **19/23**, Tier 3 **23/23** against CPU on both Compute and Metal;
+  the same nine pins remain. Worst Metal-vs-Compute scores were exact,
+  165.12 dB and 75.66 dB respectively. No Vulkan hardware run.
+- AO checkpoint gate: 2739 tests passed, zero failed; `GATE: all passed`.

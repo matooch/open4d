@@ -12,7 +12,6 @@ use glam::DVec3;
 
 use crate::ray::{self, BackendKind, Ray, RtBackend};
 
-const AO_RAYS: usize = 8;
 const SHADOW_RAYS: usize = 8;
 const BOUNCE_RAYS: usize = 8;
 // At most 512 KiB each for ray input and hit output, well within supported
@@ -141,42 +140,74 @@ impl HybridView {
         }
         let (_, backend) = self.backend.as_ref().expect("prepared ray backend");
         let history = self.ao.entry(input.jitter.map(f32::to_bits)).or_default();
-        let mut rays = Vec::with_capacity(PIXELS_PER_BATCH * AO_RAYS);
-        let mut active = Vec::with_capacity(PIXELS_PER_BATCH);
-        for first in (0..visibility.len()).step_by(PIXELS_PER_BATCH) {
+        let width = settings.width as usize;
+        let height = settings.height as usize;
+        let quad_width = width.div_ceil(2);
+        let quads = quad_width * height.div_ceil(2);
+        let quads_per_batch = PIXELS_PER_BATCH / 4;
+        let phase = history.frames as usize % 4;
+        let limit = radius * 0.15;
+        let epsilon = input.epsilon.min(radius * 0.01);
+        let mut rays = Vec::with_capacity(PIXELS_PER_BATCH);
+        let mut receivers = Vec::with_capacity(PIXELS_PER_BATCH);
+        for first in (0..quads).step_by(quads_per_batch) {
             if control.is_cancelled() {
                 return Err(RenderError::Cancelled);
             }
-            let end = (first + PIXELS_PER_BATCH).min(visibility.len());
             rays.clear();
-            active.clear();
-            for i in first..end {
-                if input.positions[i][3] < 0.5 {
-                    continue;
-                }
-                let p = xyz(input.positions[i]);
-                let n = xyz(input.normals[i]).normalize_or_zero();
-                if n == DVec3::ZERO {
-                    continue;
-                }
-                active.push(i);
-                let mut rng = Rng::new(settings.seed ^ u64::from(history.frames), i as u64);
-                for _ in 0..AO_RAYS {
-                    rays.push(Ray {
-                        origin: p + n * input.epsilon.min(radius * 0.01),
-                        direction: to_world(n, cosine_hemisphere(rng.f2())),
-                        t_max: radius,
+            receivers.clear();
+            for quad in first..(first + quads_per_batch).min(quads) {
+                let x = 2 * (quad % quad_width);
+                let y = 2 * (quad / quad_width);
+                let mut representatives = [None; 4];
+                for (order, lane) in (phase..phase + 4).map(|lane| lane % 4).enumerate() {
+                    let px = x + lane % 2;
+                    let py = y + lane / 2;
+                    if px >= width || py >= height {
+                        continue;
+                    }
+                    let i = py * width + px;
+                    let material = input.positions[i][3];
+                    let n = xyz(input.normals[i]).normalize_or_zero();
+                    if material < 0.5 || n == DVec3::ZERO {
+                        continue;
+                    }
+                    let p = xyz(input.positions[i]);
+                    let existing = representatives.iter().flatten().find_map(
+                        |&(other_p, other_n, other_material, ray)| {
+                            let delta: DVec3 = p - other_p;
+                            (material == other_material
+                                && n.dot(other_n) >= 0.95
+                                && delta.length_squared() <= limit * limit
+                                && delta.dot(n).abs() <= limit * 0.1
+                                && delta.dot(other_n).abs() <= limit * 0.1)
+                                .then_some(ray)
+                        },
+                    );
+                    let ray = existing.unwrap_or_else(|| {
+                        let ray = rays.len();
+                        representatives[order] = Some((p, n, material, ray));
+                        let mut rng = Rng::new(settings.seed ^ u64::from(history.frames), i as u64);
+                        rays.push(Ray {
+                            origin: p + n * epsilon,
+                            direction: to_world(n, cosine_hemisphere(rng.f2())),
+                            t_max: radius,
+                        });
+                        ray
                     });
+                    receivers.push((i, ray));
                 }
             }
             let hits = backend.trace(&rays)?;
-            for (&i, hits) in active.iter().zip(hits.as_chunks::<AO_RAYS>().0) {
-                let open = hits.iter().filter(|hit| hit.is_none()).count();
-                visibility[i] = open as f32 / AO_RAYS as f32;
+            for &(i, ray) in &receivers {
+                visibility[i] = if hits[ray].is_none() { 1.0 } else { 0.0 };
             }
         }
 
-        let filtered = spatial_filter(settings.width as usize, &input, &visibility, radius * 0.15);
+        let filtered = spatial_filter(width, &input, &visibility, limit);
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
+        }
         history.accumulate(filtered);
         let strength = settings.post.ssao_strength as f32;
         Ok(history
@@ -615,4 +646,113 @@ fn spatial_filter<T: Signal>(width: usize, g: &PrimaryInput<'_>, mask: &[T], lim
             sum.scale(weight.recip())
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ray::{RayHit, SceneStats};
+    use std::sync::Mutex;
+
+    struct RecordingBackend(Arc<Mutex<Vec<Ray>>>);
+
+    impl RtBackend for RecordingBackend {
+        fn update_scene(&mut self, _: &Snapshot) -> Result<(), RenderError> {
+            Ok(())
+        }
+
+        fn trace(&self, rays: &[Ray]) -> Result<Vec<Option<RayHit>>, RenderError> {
+            self.0.lock().unwrap().extend_from_slice(rays);
+            Ok(rays
+                .iter()
+                .map(|ray| {
+                    (ray.origin.x < 0.015).then_some(RayHit {
+                        t: 0.5,
+                        instance: 0,
+                        triangle: 0,
+                        u: 0.0,
+                        v: 0.0,
+                    })
+                })
+                .collect())
+        }
+
+        fn stats(&self) -> SceneStats {
+            SceneStats::default()
+        }
+    }
+
+    #[test]
+    fn ao_reuses_only_compatible_representatives_in_absolute_partial_quads() {
+        let recorded = Arc::new(Mutex::new(Vec::new()));
+        let mut view = HybridView {
+            backend: Some((
+                BackendKind::Compute,
+                Box::new(RecordingBackend(recorded.clone())),
+            )),
+            ..HybridView::default()
+        };
+        let mut settings = RenderSettings {
+            width: 3,
+            height: 3,
+            ..RenderSettings::default()
+        };
+        settings.hybrid.ao_radius = 1.0;
+        settings.post.ssao_strength = 1.0;
+        let positions = [
+            [0.00, 0.00, 0.00, 1.0],
+            [0.01, 0.00, 0.00, 1.0], // Reuse within the same surface.
+            [0.00; 4],               // No coverage at the partial right quad's origin.
+            [0.02, 0.01, 0.03, 1.0], // Depth discontinuity at the same material.
+            [0.03, 0.01, 0.00, 2.0], // Material boundary.
+            [0.04, 0.01, 0.00, 1.0], // First covered pixel in partial right quad.
+            [0.05, 0.02, 0.00, 1.0],
+            [0.06, 0.02, 0.00, 1.0], // Normal discontinuity.
+            [0.07, 0.02, 0.00, 1.0], // Invalid normal.
+        ];
+        let mut normals = [[0.0, 0.0, 1.0, 1.0]; 9];
+        normals[7] = [1.0, 0.0, 0.0, 1.0];
+        normals[8] = [0.0; 4];
+        let epsilon = 0.000001;
+        let input = PrimaryInput {
+            positions: &positions,
+            normals: &normals,
+            jitter: [0.0; 2],
+            epsilon,
+        };
+        let check_rays = |expected: &[usize]| {
+            let rays = std::mem::take(&mut *recorded.lock().unwrap());
+            assert_eq!(rays.len(), expected.len());
+            for (ray, &i) in rays.iter().zip(expected.iter()) {
+                let n = xyz(normals[i]);
+                assert_eq!(ray.origin, xyz(positions[i]) + n * epsilon);
+                assert_eq!(ray.t_max, 1.0);
+                assert!(ray.direction.dot(n) > 0.0);
+            }
+        };
+
+        let visibility = view
+            .ambient_visibility(&settings, input, &Control::new())
+            .unwrap();
+        check_rays(&[0, 3, 4, 5, 6, 7]);
+        // The full-resolution spatial filter still blends pixels 1 and 5
+        // across quads; neither material nor depth/normal boundaries blend.
+        assert_eq!(
+            visibility,
+            [0.0, 0.25, 1.0, 1.0, 1.0, 2.0 / 3.0, 1.0, 1.0, 1.0]
+        );
+
+        view.ambient_visibility(&settings, input, &Control::new())
+            .unwrap();
+        check_rays(&[1, 3, 4, 5, 7, 6]);
+
+        let cancelled = Control::new();
+        cancelled.cancel();
+        assert!(matches!(
+            view.ambient_visibility(&settings, input, &cancelled),
+            Err(RenderError::Cancelled)
+        ));
+        check_rays(&[]);
+        assert_eq!(view.ao[&[0; 2]].frames, 2);
+    }
 }
