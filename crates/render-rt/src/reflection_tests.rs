@@ -690,6 +690,138 @@ fn gpu_raw_diffuse_matches_batched_reference() {
                 }
             }
         }
+        snapshot.camera.projection = Projection::Orthographic { width: 24. };
+        let prepared = lights::prepare(&snapshot, false).unwrap();
+        let source = forge_render_gpu::shader::materials(&materials, 1).unwrap();
+        let gpu = MaterialGpu {
+            primary: AmbientGpu {
+                device: &device,
+                queue: &queue,
+                textures: [&views[0], &views[1]],
+            },
+            materials: &source.source,
+            bitmaps: &[],
+        };
+        let mut live = HybridView {
+            backend: Some((kind, backend)),
+            geometry: Some(geometry),
+            ..HybridView::default()
+        };
+        let width = settings.width as usize;
+        let limit = live
+            .geometry
+            .as_ref()
+            .unwrap()
+            .filter_limit(&snapshot, width);
+        let mut expected = [History::default(), History::default()];
+        let control = Control::new();
+        let cancelled = Control::new();
+        cancelled.cancel();
+        for (key, inline, should_reside, cancel) in [
+            (0, true, true, false),
+            (1, true, true, false),
+            (0, true, true, true),
+            (0, true, true, false),
+            (1, false, false, false),
+            (0, true, true, false),
+            (1, true, false, false),
+        ] {
+            let input = PrimaryInput {
+                jitter: if key == 0 {
+                    input.jitter
+                } else {
+                    [0.25, -0.125]
+                },
+                ..input
+            };
+            let signal = live.diffuse(
+                &snapshot,
+                &settings,
+                input,
+                if cancel { &cancelled } else { &control },
+                inline.then_some(gpu),
+            );
+            if cancel {
+                assert!(matches!(signal, Err(RenderError::Cancelled)));
+                continue;
+            }
+            let signal = signal.unwrap();
+            let (kind, backend) = live.backend.as_ref().unwrap();
+            let geometry = live.geometry.as_ref().unwrap();
+            let history = &mut expected[key];
+            let frame = ReflectionInput {
+                snapshot: &snapshot,
+                settings: &settings,
+                input,
+                scale: geometry.scene.scale,
+                history: history.frames,
+            };
+            let filtered = if inline {
+                let raw = probe
+                    .read(
+                        (&device, &queue),
+                        ReflectionBindings {
+                            scene: backend.inline_scene().unwrap(),
+                            primary: gpu.primary.textures,
+                            attributes: &attrs,
+                            bitmaps: &[],
+                            lights: &prepared,
+                        },
+                        frame,
+                    )
+                    .unwrap();
+                spatial_filter(
+                    width,
+                    &PrimaryInput {
+                        positions: &gpu_positions,
+                        normals: &gpu_normals,
+                        ..input
+                    },
+                    &raw,
+                    limit,
+                )
+            } else {
+                let raw = raw_indirect(
+                    (geometry, &**backend),
+                    Bounce::Diffuse,
+                    frame,
+                    &prepared,
+                    &control,
+                )
+                .unwrap();
+                spatial_filter(width, &input, &raw, limit)
+            };
+            history.accumulate(filtered);
+            let mean = match signal {
+                DiffuseSignal::Gpu(mean) => {
+                    assert!(should_reside);
+                    assert_eq!(mean.frames(), history.frames);
+                    mean.read_mean(&device, &queue).unwrap()
+                }
+                DiffuseSignal::Cpu(mean) => {
+                    assert!(!should_reside);
+                    mean
+                }
+            };
+            assert_eq!(mean.len(), history.mean.len());
+            for (i, (a, b)) in mean.into_iter().zip(&history.mean).enumerate() {
+                for (a, &b) in a.into_iter().zip(b) {
+                    assert!(
+                        (a - b).abs() <= 2e-6 * b.abs().max(1.),
+                        "{kind:?} jitter {key} frame {} pixel {i}: {a} vs {b}",
+                        history.frames
+                    );
+                }
+            }
+        }
+        live.reset();
+        let DiffuseSignal::Gpu(mean) = live
+            .diffuse(&snapshot, &settings, input, &control, Some(gpu))
+            .unwrap()
+        else {
+            panic!("reset must let GI use the GPU again");
+        };
+        assert_eq!(mean.frames(), 1);
     }
 }
 
@@ -871,8 +1003,7 @@ fn gpu_raw_reflections_match_batched_reference() {
             for (phase, history) in [0, 3].into_iter().enumerate() {
                 reference.reflections.clear();
                 let expected = reference
-                    .indirect(
-                        Bounce::Reflection,
+                    .reflections(
                         &snapshot,
                         &RenderSettings {
                             seed: settings.seed ^ u64::from(history),
@@ -1041,14 +1172,7 @@ fn gpu_raw_reflections_match_batched_reference() {
                 assert_ne!(once[emissive], twice[emissive]);
                 expected.accumulate(once);
                 let live = reference
-                    .indirect(
-                        Bounce::Reflection,
-                        &snapshot,
-                        &settings,
-                        input,
-                        &Control::new(),
-                        Some(gpu),
-                    )
+                    .reflections(&snapshot, &settings, input, &Control::new(), Some(gpu))
                     .unwrap();
                 assert!(
                     reference.bounce_spatial.is_some(),

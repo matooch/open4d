@@ -18,7 +18,7 @@ use wgpu::util::DeviceExt;
 
 use crate::frame;
 use crate::framegraph::FrameGraph;
-use crate::hybrid::{AmbientGpu, Bounce, HybridView, MaterialGpu, PrimaryInput};
+use crate::hybrid::{AmbientGpu, DiffuseSignal, HybridView, MaterialGpu, PrimaryInput};
 use crate::ray::BackendKind;
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
 
@@ -346,7 +346,7 @@ impl RtEngine {
         shadows: &[[f32; 8]],
         ao: &[f32],
         reflections: &[[f32; 4]],
-        gi: &[[f32; 4]],
+        gi: &DiffuseSignal,
     ) -> wgpu::TextureView {
         let layer_count = 2 * u32::from(!shadows.is_empty())
             + u32::from(!ao.is_empty())
@@ -416,14 +416,17 @@ impl RtEngine {
                 16,
             );
         }
-        if !gi.is_empty() {
-            write_layer(
-                shadow_layers as u32
-                    + u32::from(!ao.is_empty())
-                    + u32::from(!reflections.is_empty()),
-                bytemuck::cast_slice(gi),
-                16,
-            );
+        let gi_layer = layer_count - u32::from(!gi.is_empty());
+        match gi {
+            DiffuseSignal::Cpu(pixels) if !pixels.is_empty() => {
+                write_layer(gi_layer, bytemuck::cast_slice(pixels), 16);
+            }
+            DiffuseSignal::Gpu(mean) => {
+                let mut encoder = self.device.create_command_encoder(&Default::default());
+                mean.copy_to_layer(&mut encoder, &texture, gi_layer);
+                self.queue.submit([encoder.finish()]);
+            }
+            DiffuseSignal::Cpu(_) => {}
         }
         lighting_source_view(&texture)
     }
@@ -1577,8 +1580,7 @@ impl RtEngine {
                         Vec::new()
                     };
                     let reflections = if rt_reflections {
-                        let result = view.indirect(
-                            Bounce::Reflection,
+                        let result = view.reflections(
                             snapshot,
                             settings,
                             input,
@@ -1591,18 +1593,12 @@ impl RtEngine {
                         Vec::new()
                     };
                     let gi = if rt_gi {
-                        let result = view.indirect(
-                            Bounce::Diffuse,
-                            snapshot,
-                            settings,
-                            input,
-                            control,
-                            Some(material_gpu),
-                        )?;
+                        let result =
+                            view.diffuse(snapshot, settings, input, control, Some(material_gpu))?;
                         finish_phase(profile, device, "rt-gi")?;
                         result
                     } else {
-                        Vec::new()
+                        DiffuseSignal::Cpu(Vec::new())
                     };
                     primary = Some(g);
                     Ok((shadows, ao, reflections, gi))
@@ -1621,7 +1617,7 @@ impl RtEngine {
                     values[frame::RT_GI_ON] = u32::from(!gi.is_empty()) as f32;
                     queue.write_buffer(&frame_buf, 0, &frame_bytes(&values));
                     let texture = self.upload_hybrid(w, h, &shadows, &ao, &reflections, &gi);
-                    if profile.is_some() {
+                    if profile.is_some() && !matches!(gi, DiffuseSignal::Gpu(_)) {
                         queue.submit([]);
                     }
                     finish_phase(profile, device, "hybrid-upload")?;

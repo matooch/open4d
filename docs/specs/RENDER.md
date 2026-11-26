@@ -1486,6 +1486,29 @@ This is our own design.
   neighbouring layer and out-of-crop pixels. Run the probe on Compute
   and the selected RT backend before changing live composition.
 
+#### Live Tier 2 diffuse history
+
+- For supported eight-attempt inline GI, encode transport, spatial
+  reconstruction and the padded mean in one submission. Adopt the new
+  mean only after the existing cancellation check; the previous buffer
+  stays unchanged. Do not map the mean on this route. Keep the CPU primary
+  guide readback for other effects, AOVs and fallback.
+- Each exact jitter key has one accepted mean and count, on GPU or CPU,
+  with the existing scene/settings resets. Seed transport with the accepted
+  count. If inline history becomes unsupported, read and de-pad the
+  accepted GPU mean once before accumulating the fallback frame. Once a
+  jitter has accepted a CPU frame, keep its mean on the CPU until reset;
+  inline transport and spatial reconstruction can still feed that mean.
+- Copy resident GI to the final compact RGBA32Float lighting layer, after
+  the present shadows (two layers), AO and reflection. GI alone is layer
+  zero. Determine GI availability from the signal, not CPU byte count.
+  Keep the AO-only R32Float path. Profile the GI submission under `rt-gi`
+  and the layer copy under `hybrid-upload`.
+- With cropped odd-width transport, interleave jitter keys, compare
+  accepted means against the existing reference and verify continuity
+  through a fallback and reset. Keep the R24 quality and R26 cross-tier
+  tests unchanged and remeasure the unchanged S10 fixture.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),

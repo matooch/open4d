@@ -36,6 +36,17 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Live GPU diffuse history:** Inline GI keeps spatial reconstruction and
+  its per-jitter mean on the GPU and copies the padded mean directly into
+  the compact lighting array. The primary guide readback is still needed.
+  On Compute and actual Metal, the cropped acceptance matched the reference
+  across interleaved jitters, cancellation, GPU-to-CPU fallback and reset.
+  R24 GI quality, convergence and mixed-layer composition passed in five
+  required-GPU runs; strict R26 reproduced all 207 reported scores with
+  nine unchanged pins per backend. Unchanged full-size Metal S10 improved
+  from 150.069 to **131.357 ms** (6.664 to **7.613 fps**); GI went from
+  36.756 to 34.955 ms and hybrid upload from 20.651 to 17.927 ms. The
+  30 fps target remains unmet. `GATE: all passed` (2760 tests).
 - **GPU history layer-copy probe:** Split raw signal encoding from staging
   readback. On Compute and actual Metal, two diffuse frames on a cropped
   13×11 film matched CPU spatial filtering and accumulation after a
@@ -43,8 +54,8 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
   The neighbouring layer was untouched, black pixels stayed exact, and
   oversized history requests were rejected before encoding. Five
   required-GPU lib, hybrid and shader-translation runs passed;
-  `GATE: all passed` (2760 tests). Live GI still uses the existing
-  readback path; no new S10 measurement.
+  `GATE: all passed` (2760 tests). This probe did not change live GI or S10;
+  the subsequent live integration is recorded above.
 - **Standalone GPU diffuse history:** R24.12 matched CPU accumulation on
   Metal on a 19×11 film, including bit-exact first-frame samples, zero
   row padding, an abandoned update and a saturated frame count. The shader

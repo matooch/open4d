@@ -13,6 +13,7 @@ use glam::DVec3;
 use crate::ambient::{AmbientFrame, AmbientProgram};
 use crate::ray::{self, BackendKind, DeviceQueries, Ray, RtBackend};
 use bounce_spatial::BounceSpatialProgram;
+use diffuse_history::{DiffuseHistory, DiffuseHistoryProgram};
 use direct_shadow::{DirectShadowBindings, DirectShadowFrame, DirectShadowProgram};
 use reflection::{BounceEntry, ReflectionBindings, ReflectionInput, ReflectionProgram};
 
@@ -30,6 +31,7 @@ pub(crate) struct HybridView {
     reflection_program: Option<MaterialProgram<ReflectionProgram>>,
     diffuse_program: Option<MaterialProgram<ReflectionProgram>>,
     bounce_spatial: Option<BounceSpatialProgram>,
+    diffuse_history: Option<DiffuseHistoryProgram>,
     attributes: Option<wgpu::Buffer>,
     scene: Option<Snapshot>,
     geometry: Option<PrimaryGeometry>,
@@ -37,8 +39,8 @@ pub(crate) struct HybridView {
     // Each raster TAA jitter has different primary visibility.
     ao: BTreeMap<[u32; 2], History<f32>>,
     shadows: BTreeMap<[u32; 2], History<[f32; 8]>>,
-    reflections: BTreeMap<[u32; 2], History<[f32; 4]>>,
-    gi: BTreeMap<[u32; 2], History<[f32; 4]>>,
+    reflections: BTreeMap<[u32; 2], BounceHistory>,
+    gi: BTreeMap<[u32; 2], BounceHistory>,
 }
 
 #[derive(Clone, Copy)]
@@ -72,6 +74,41 @@ impl Bounce {
 struct History<T> {
     frames: u32,
     mean: Vec<T>,
+}
+
+enum BounceHistory {
+    Cpu(History<[f32; 4]>),
+    Gpu {
+        mean: DiffuseHistory,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+    },
+}
+
+impl Default for BounceHistory {
+    fn default() -> Self {
+        Self::Cpu(History::default())
+    }
+}
+
+impl BounceHistory {
+    fn frames(&self) -> u32 {
+        match self {
+            Self::Cpu(history) => history.frames,
+            Self::Gpu { mean, .. } => mean.frames(),
+        }
+    }
+}
+
+pub(crate) enum DiffuseSignal {
+    Cpu(Vec<[f32; 4]>),
+    Gpu(DiffuseHistory),
+}
+
+impl DiffuseSignal {
+    pub fn is_empty(&self) -> bool {
+        matches!(self, Self::Cpu(pixels) if pixels.is_empty())
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -541,7 +578,32 @@ fn raw_direct_shadows(
 }
 
 impl HybridView {
-    pub fn indirect(
+    pub fn reflections(
+        &mut self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        input: PrimaryInput<'_>,
+        control: &Control,
+        gpu: Option<MaterialGpu<'_>>,
+    ) -> Result<Vec<[f32; 4]>, RenderError> {
+        match self.indirect(Bounce::Reflection, snapshot, settings, input, control, gpu)? {
+            DiffuseSignal::Cpu(pixels) => Ok(pixels),
+            DiffuseSignal::Gpu(_) => unreachable!("reflection history is CPU only"),
+        }
+    }
+
+    pub fn diffuse(
+        &mut self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        input: PrimaryInput<'_>,
+        control: &Control,
+        gpu: Option<MaterialGpu<'_>>,
+    ) -> Result<DiffuseSignal, RenderError> {
+        self.indirect(Bounce::Diffuse, snapshot, settings, input, control, gpu)
+    }
+
+    fn indirect(
         &mut self,
         bounce: Bounce,
         snapshot: &Snapshot,
@@ -549,7 +611,7 @@ impl HybridView {
         input: PrimaryInput<'_>,
         control: &Control,
         gpu: Option<MaterialGpu<'_>>,
-    ) -> Result<Vec<[f32; 4]>, RenderError> {
+    ) -> Result<DiffuseSignal, RenderError> {
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
@@ -572,7 +634,7 @@ impl HybridView {
             settings,
             input,
             scale: geometry.scene.scale,
-            history: history.frames,
+            history: history.frames(),
         };
         let inline = match (gpu, backend.inline_scene()) {
             (Some(gpu), Some(scene)) => (|| {
@@ -608,7 +670,7 @@ impl HybridView {
                         entry,
                     )
                 });
-                let bindings = ReflectionBindings {
+                let bindings = || ReflectionBindings {
                     scene,
                     primary: textures,
                     attributes,
@@ -619,23 +681,73 @@ impl HybridView {
                     let spatial = self
                         .bounce_spatial
                         .get_or_insert_with(|| BounceSpatialProgram::new(device));
+                    if matches!(bounce, Bounce::Diffuse)
+                        && (frame.history == 0 || matches!(history, BounceHistory::Gpu { .. }))
+                    {
+                        let mut encoder = device.create_command_encoder(&Default::default());
+                        let filtered = program.encode(
+                            (device, queue),
+                            &mut encoder,
+                            bindings(),
+                            frame,
+                            Some(spatial.pass(limit)),
+                        )?;
+                        let program = self
+                            .diffuse_history
+                            .get_or_insert_with(|| DiffuseHistoryProgram::new(device));
+                        let previous = match history {
+                            BounceHistory::Gpu { mean, .. } => Some(&*mean),
+                            BounceHistory::Cpu(_) => None,
+                        };
+                        match program.encode(
+                            device,
+                            &mut encoder,
+                            [settings.width, settings.height],
+                            &filtered,
+                            previous,
+                        ) {
+                            Ok(mean) => {
+                                if control.is_cancelled() {
+                                    return Err(RenderError::Cancelled);
+                                }
+                                queue.submit([encoder.finish()]);
+                                *history = BounceHistory::Gpu {
+                                    mean: mean.clone(),
+                                    device: device.clone(),
+                                    queue: queue.clone(),
+                                };
+                                return Ok((DiffuseSignal::Gpu(mean), true));
+                            }
+                            Err(RenderError::Unsupported(_)) => {}
+                            Err(e) => return Err(e),
+                        }
+                    }
                     program
-                        .read_spatial((device, queue), bindings, frame, spatial.pass(limit))
-                        .map(|pixels| (pixels, true))
+                        .read_spatial((device, queue), bindings(), frame, spatial.pass(limit))
+                        .map(|pixels| (DiffuseSignal::Cpu(pixels), true))
                 } else {
                     program
-                        .read((device, queue), bindings, frame)
-                        .map(|pixels| (pixels, false))
+                        .read((device, queue), bindings(), frame)
+                        .map(|pixels| (DiffuseSignal::Cpu(pixels), false))
                 }
             })(),
             _ => Err(RenderError::Unsupported("no inline bounce scene".into())),
         };
-        let (pixels, spatial_done) = match inline {
+        let (signal, spatial_done) = match inline {
             Err(RenderError::Unsupported(_)) => (
-                raw_indirect((geometry, &**backend), bounce, frame, &lights, control)?,
+                DiffuseSignal::Cpu(raw_indirect(
+                    (geometry, &**backend),
+                    bounce,
+                    frame,
+                    &lights,
+                    control,
+                )?),
                 false,
             ),
             result => result?,
+        };
+        let DiffuseSignal::Cpu(pixels) = signal else {
+            return Ok(signal);
         };
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
@@ -648,8 +760,28 @@ impl HybridView {
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
+        // Move the accepted mean to the CPU only when adopting a fallback
+        // frame, even if inline GPU inputs are unavailable to this call.
+        if let BounceHistory::Gpu {
+            mean,
+            device,
+            queue,
+        } = history
+        {
+            let cpu = History {
+                frames: mean.frames(),
+                mean: mean.read_mean(device, queue)?,
+            };
+            if control.is_cancelled() {
+                return Err(RenderError::Cancelled);
+            }
+            *history = BounceHistory::Cpu(cpu);
+        }
+        let BounceHistory::Cpu(history) = history else {
+            unreachable!("CPU history after fallback");
+        };
         history.accumulate(filtered);
-        Ok(history.mean.clone())
+        Ok(DiffuseSignal::Cpu(history.mean.clone()))
     }
 }
 
@@ -820,7 +952,6 @@ mod direct_shadow;
 #[path = "bounce_spatial.rs"]
 mod bounce_spatial;
 
-#[cfg(test)]
 #[path = "diffuse_history.rs"]
 mod diffuse_history;
 

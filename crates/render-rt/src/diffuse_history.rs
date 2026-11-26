@@ -8,7 +8,8 @@ const PIXEL_BYTES: u32 = 16;
 
 pub(super) struct DiffuseHistoryProgram(wgpu::ComputePipeline);
 
-pub(super) struct DiffuseHistory {
+#[derive(Clone)]
+pub(crate) struct DiffuseHistory {
     mean: wgpu::Buffer,
     film: [u32; 2],
     pitch: u32,
@@ -123,6 +124,33 @@ impl DiffuseHistoryProgram {
 impl DiffuseHistory {
     pub fn frames(&self) -> u32 {
         self.frames
+    }
+
+    pub fn read_mean(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<Vec<[f32; 4]>, RenderError> {
+        let staging = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("diffuse history fallback"),
+            size: self.mean.size(),
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let mut encoder = device.create_command_encoder(&Default::default());
+        encoder.copy_buffer_to_buffer(&self.mean, 0, &staging, 0, self.mean.size());
+        queue.submit([encoder.finish()]);
+        let slice = staging.slice(..);
+        forge_render_gpu::await_mapped(device, &forge_render_gpu::map_read(&slice))?;
+        let bytes = slice
+            .get_mapped_range()
+            .map_err(|err| RenderError::Output(err.to_string()))?;
+        let row = (self.film[0] * PIXEL_BYTES) as usize;
+        Ok(bytes
+            .chunks_exact(self.pitch as usize)
+            .flat_map(|padded| bytemuck::cast_slice::<u8, [f32; 4]>(&padded[..row]))
+            .copied()
+            .collect())
     }
 
     pub fn copy_to_layer(
