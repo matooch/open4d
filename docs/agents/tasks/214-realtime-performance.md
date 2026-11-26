@@ -36,6 +36,15 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Raw diffuse GI dispatch:** Compute and actual Metal matched the batched
+  reference within the R24.8 raw allowance on cropped, isolated receivers
+  with two history indices. Emissive and directly lit secondary hits were
+  nonzero; half transmission halved the emission-only signal. Full
+  transmission, misses under HDR image lighting and invalid receivers
+  returned exact zero. Five required-GPU lib/hybrid/translation runs and the
+  full gate passed (2752 tests). Live Tier 2 GI is still batched, so there
+  is no new S10 measurement at this checkpoint.
+
 - [Raw diffuse GI kernel checkpoint](../../specs/RENDER.md#r249-gpu-diffuse-gi-signal-brief-214):
   diffuse and reflection share inline receiver, hit and secondary-light code.
   Diffuse makes eight cosine attempts and has no environment texture binding.

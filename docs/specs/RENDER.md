@@ -1320,6 +1320,10 @@ R24.2 diffuse bounce and R24.8 inline secondary lighting. This is our own design
   hits, partial and full transmission, and two history indices. Leave
   the live batched GI path, filtering and strict R26 budgets unchanged
   until standalone numeric acceptance.
+- The host uses the same 160-byte bounce frame as reflection. For
+  diffuse it leaves the environment fields zero, omits group 0 binding
+  3 entirely and retains prepared lights at binding 5. Use the same
+  resident R23 scene and R25 attributes as the batched comparison.
 
 ## R25 Progressive GPU path tracing (brief 202)
 

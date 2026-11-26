@@ -68,6 +68,23 @@ pub(super) struct RawSignalProgram {
     pipeline: wgpu::ComputePipeline,
     layouts: [wgpu::BindGroupLayout; 3],
     label: &'static str,
+    frame_layout: SignalFrameLayout,
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum SignalFrameLayout {
+    DirectShadow,
+    Reflection,
+    Diffuse,
+}
+
+impl SignalFrameLayout {
+    fn lights(self) -> u32 {
+        match self {
+            Self::DirectShadow => 3,
+            Self::Reflection | Self::Diffuse => 5,
+        }
+    }
 }
 
 pub(super) struct RawSignalBindings<'a> {
@@ -87,7 +104,14 @@ impl DirectShadowProgram {
         bitmap_count: usize,
     ) -> Self {
         Self {
-            raw: RawSignalProgram::new(device, kind, source, bitmap_count, "direct_shadow", false),
+            raw: RawSignalProgram::new(
+                device,
+                kind,
+                source,
+                bitmap_count,
+                "direct_shadow",
+                SignalFrameLayout::DirectShadow,
+            ),
         }
     }
 
@@ -161,7 +185,7 @@ impl RawSignalProgram {
         source: String,
         bitmap_count: usize,
         label: &'static str,
-        has_environment: bool,
+        frame_layout: SignalFrameLayout,
     ) -> Self {
         use wgpu::{BindingType as Binding, BufferBindingType as Buffer};
         let entry = |binding, ty| wgpu::BindGroupLayoutEntry {
@@ -202,11 +226,11 @@ impl RawSignalProgram {
             entry(0, buffer(Buffer::Uniform)),
             entry(1, texture),
             entry(2, texture),
-            entry(3, if has_environment { texture } else { storage }),
             entry(4, buffer(Buffer::Storage { read_only: false })),
+            entry(frame_layout.lights(), storage),
         ];
-        if has_environment {
-            frame.push(entry(5, storage));
+        if matches!(frame_layout, SignalFrameLayout::Reflection) {
+            frame.push(entry(3, texture));
         }
         let layouts = [
             layout(&frame),
@@ -238,6 +262,7 @@ impl RawSignalProgram {
             pipeline,
             layouts,
             label,
+            frame_layout,
         }
     }
 
@@ -303,19 +328,26 @@ impl RawSignalProgram {
                     .collect::<Vec<_>>(),
             )
         };
-        let mut frame = vec![
-            uniform.as_entire_binding(),
-            texture(bindings.primary[0]),
-            texture(bindings.primary[1]),
-            bindings
-                .environment
-                .map_or_else(|| bindings.lights.as_entire_binding(), texture),
-            signal.as_entire_binding(),
-        ];
-        if bindings.environment.is_some() {
-            frame.push(bindings.lights.as_entire_binding());
+        let mut frame: Vec<_> = [
+            (0, uniform.as_entire_binding()),
+            (1, texture(bindings.primary[0])),
+            (2, texture(bindings.primary[1])),
+            (4, signal.as_entire_binding()),
+            (
+                self.frame_layout.lights(),
+                bindings.lights.as_entire_binding(),
+            ),
+        ]
+        .into_iter()
+        .map(|(binding, resource)| wgpu::BindGroupEntry { binding, resource })
+        .collect();
+        if let Some(environment) = bindings.environment {
+            frame.push(wgpu::BindGroupEntry {
+                binding: 3,
+                resource: texture(environment),
+            });
         }
-        let frame_bind = sequential(frame, 0);
+        let frame_bind = bind(0, &frame);
         let bitmap_bind = sequential(bindings.bitmaps.iter().map(texture).collect(), 1);
         let mut scene: Vec<_> = match bindings.scene {
             InlineScene::Compute(buffers) => buffers
