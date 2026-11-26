@@ -36,6 +36,21 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Live GPU diffuse GI:** Tier 2 now dispatches the eight diffuse attempts
+  inline, sharing resident geometry with reflections and shadows while
+  retaining the CPU spatial filter, per-jitter history and batched fallback.
+  Cropped warm and cold pixels matched after edits. Same-slot bitmap
+  replacement changed the indirect-only diffuse AOV without recompiling.
+- Unchanged full-size S10 on the M5 Pro (actual Metal): GI fell from
+  **1141.322 ms** to **48.420 ms** and the frame median from
+  **1297.222 ms / 0.771 fps** to **186.042 ms / 5.375 fps**. Tier 2 still
+  misses 30 fps; GI, reflections, shadows, and signal transfer remain
+  substantial. No Tier 1 behavior changed.
+- Strict R26 retained **18/23**, **19/23** and **23/23** vs CPU on both Metal
+  and Compute, with nine unchanged pins. Metal/Compute minima were exact,
+  **161.24 dB** and **75.66 dB**. Five required-GPU lib, hybrid and shader
+  translation runs passed. Full gate: 2752 tests passed, `GATE: all passed`.
+
 - **Raw diffuse GI dispatch:** Compute and actual Metal matched the batched
   reference within the R24.8 raw allowance on cropped, isolated receivers
   with two history indices. Emissive and directly lit secondary hits were

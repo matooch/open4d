@@ -27,6 +27,7 @@ pub(crate) struct HybridView {
     ambient_program: Option<AmbientProgram>,
     shadow_program: Option<MaterialProgram<DirectShadowProgram>>,
     reflection_program: Option<MaterialProgram<ReflectionProgram>>,
+    diffuse_program: Option<MaterialProgram<ReflectionProgram>>,
     attributes: Option<wgpu::Buffer>,
     scene: Option<Snapshot>,
     geometry: Option<PrimaryGeometry>,
@@ -444,6 +445,14 @@ impl HybridView {
             self.reflection_program.as_ref()?.program.pipeline(),
         ))
     }
+
+    #[cfg(test)]
+    pub fn diffuse_residency(&self) -> Option<(wgpu::Buffer, wgpu::ComputePipeline)> {
+        Some((
+            self.attributes.as_ref()?.clone(),
+            self.diffuse_program.as_ref()?.program.pipeline(),
+        ))
+    }
 }
 
 fn raw_direct_shadows(
@@ -548,8 +557,8 @@ impl HybridView {
         }
         .entry(input.jitter.map(f32::to_bits))
         .or_default();
-        let inline = match (bounce, gpu, backend.inline_scene()) {
-            (Bounce::Reflection, Some(gpu), Some(scene)) => (|| {
+        let inline = match (gpu, backend.inline_scene()) {
+            (Some(gpu), Some(scene)) => (|| {
                 let AmbientGpu {
                     device,
                     queue,
@@ -557,18 +566,27 @@ impl HybridView {
                 } = gpu.primary;
                 let storage_bindings = if *kind == BackendKind::Compute { 7 } else { 3 };
                 let limits = device.limits();
+                let frame_textures = 2 + usize::from(matches!(bounce, Bounce::Reflection));
                 if limits.max_storage_buffers_per_shader_stage < storage_bindings
-                    || gpu.bitmaps.len() + 3 > limits.max_sampled_textures_per_shader_stage as usize
+                    || gpu.bitmaps.len() + frame_textures
+                        > limits.max_sampled_textures_per_shader_stage as usize
                 {
                     return Err(RenderError::Unsupported(
-                        "raw reflection bindings exceed device limits".into(),
+                        "raw bounce bindings exceed device limits".into(),
                     ));
                 }
                 let attributes =
                     resident_attributes(&mut self.attributes, device, snapshot, &geometry.scene)?;
-                MaterialProgram::get(&mut self.reflection_program, *kind, gpu, |materials| {
-                    let source = crate::shader::reflection_source(*kind, materials);
-                    ReflectionProgram::new(device, *kind, source, gpu.bitmaps.len())
+                let cache = match bounce {
+                    Bounce::Reflection => &mut self.reflection_program,
+                    Bounce::Diffuse => &mut self.diffuse_program,
+                };
+                MaterialProgram::get(cache, *kind, gpu, |materials| {
+                    let source = match bounce {
+                        Bounce::Reflection => crate::shader::reflection_source(*kind, materials),
+                        Bounce::Diffuse => crate::shader::diffuse_source(*kind, materials),
+                    };
+                    ReflectionProgram::for_bounce(device, *kind, source, gpu.bitmaps.len(), bounce)
                 })
                 .read(
                     (device, queue),
@@ -588,9 +606,7 @@ impl HybridView {
                     },
                 )
             })(),
-            _ => Err(RenderError::Unsupported(
-                "no inline reflection scene".into(),
-            )),
+            _ => Err(RenderError::Unsupported("no inline bounce scene".into())),
         };
         let pixels = match inline {
             Err(RenderError::Unsupported(_)) => raw_indirect(

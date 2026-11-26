@@ -38,13 +38,12 @@ pub fn diffuse_wgsl(
     materials: &[(&ShadingGraph, &dyn TextureSampler)],
 ) -> Result<Assembled, RenderError> {
     let mut assembled = forge_render_gpu::shader::materials(materials, 1)?;
-    assembled.source = bounce_source(
-        backend,
-        &assembled.source,
-        "",
-        include_str!("diffuse_signal.wgsl"),
-    );
+    assembled.source = diffuse_source(backend, &assembled.source);
     Ok(assembled)
+}
+
+pub(crate) fn diffuse_source(backend: crate::ray::BackendKind, materials: &str) -> String {
+    bounce_source(backend, materials, "", include_str!("diffuse_signal.wgsl"))
 }
 
 fn bounce_source(

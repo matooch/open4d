@@ -1597,7 +1597,7 @@ impl RtEngine {
                             settings,
                             input,
                             control,
-                            None,
+                            Some(material_gpu),
                         )?;
                         finish_phase(profile, device, "rt-gi")?;
                         result

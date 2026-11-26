@@ -1324,6 +1324,17 @@ R24.2 diffuse bounce and R24.8 inline secondary lighting. This is our own design
   diffuse it leaves the environment fields zero, omits group 0 binding
   3 entirely and retains prepared lights at binding 5. Use the same
   resident R23 scene and R25 attributes as the batched comparison.
+- After raw acceptance, Tier 2 dispatches diffuse GI with the same resident
+  R25 attributes as direct shadows and reflections, but with a separate
+  pipeline keyed by backend, material source and bitmap count. Bind current
+  raster bitmap views; do not bind or upload environment lighting for GI.
+  Use the existing batched fallback for unavailable or unsupported inline
+  dispatch. Both paths retain the same spatial filter, per-jitter history
+  and cancellation checks. Verify cropped warm and cold output after scene
+  edits, resource reuse across camera/light/bitmap-content changes, and a
+  visible diffuse AOV change from same-slot bitmap replacement on an
+  indirectly lit receiver. Keep all eight attempts, rerun strict R26 and
+  measure unchanged full-size S10 on Metal.
 
 ## R25 Progressive GPU path tracing (brief 202)
 

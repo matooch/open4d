@@ -46,6 +46,7 @@ pub(super) struct ReflectionInput<'a> {
 }
 
 impl ReflectionProgram {
+    #[cfg(test)]
     pub fn new(
         device: &wgpu::Device,
         kind: BackendKind,
@@ -65,7 +66,7 @@ impl ReflectionProgram {
         Self::for_bounce(device, kind, source, bitmap_count, Bounce::Diffuse)
     }
 
-    fn for_bounce(
+    pub fn for_bounce(
         device: &wgpu::Device,
         kind: BackendKind,
         source: String,
