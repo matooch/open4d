@@ -210,5 +210,5 @@ implementers can avoid collisions.
 | 211 | [Metal hardware ray-tracing backend](../agents/tasks/211-metal-rt-backend.md) | R | 200 | done | render-rt |
 | 212 | [Vulkan hardware ray-tracing backend](../agents/tasks/212-vulkan-rt-backend.md) | R | 200 | done (parity-pending: RTX 3090 run) | render-rt |
 | 213 | [Close the Tier 1/2 quality gaps (pinned in R26)](../agents/tasks/213-raster-hybrid-quality.md) | R | 201, 203 | ready | render-rt |
-| 214 | [Make the real-time tiers real-time (S10 targets)](../agents/tasks/214-realtime-performance.md) | R | 204 | ready | render-rt, render-gpu |
+| 214 | [Make the real-time tiers real-time (S10 targets)](../agents/tasks/214-realtime-performance.md) | R | 204 | in-progress (hermes) | render-rt, render-gpu |
 | 185 | [v1.0 release checklist: S1–S10 on all three OS](../agents/tasks/185-v1-release.md) | N | everything | ready | all |

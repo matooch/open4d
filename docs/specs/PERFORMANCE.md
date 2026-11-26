@@ -163,3 +163,33 @@ diagnostics. The FPS target is reported separately; the optional baseline
 check returns a nonzero status on incompatible identity, missing timing, or
 regression and leaves the current JSON available for inspection. Hardware
 Vulkan is pending brief 212; a Tier 2 run does not substitute compute.
+
+### 6.1 Persistent scene data (brief 214)
+
+Sources: [brief 214 and its S10 baseline](../agents/tasks/214-realtime-performance.md),
+[CORE dirty evaluation and sharing](CORE.md), [wgpu buffer usages](https://docs.rs/wgpu/latest/wgpu/struct.BufferUsages.html).
+These are internal performance rules; they do not change the renderer's reference behavior.
+
+- Retain immutable geometry resources across renders on the same device. Separate mesh
+  data (positions, triangle indices, normals and UVs), instance data (mesh reference,
+  transform, material index and object ID), and frame inputs. Use the evaluated geometry
+  identity, not the document revision alone: animation can change a transform at the same
+  revision, and unrelated documents can have the same revision number. Shared immutable
+  data can use pointer identity; mutable snapshot data needs a value comparison unless
+  the producer supplies a trustworthy dirty marker.
+- A camera, light, environment, material graph or render-settings edit does not invalidate
+  mesh or instance resources. Per-frame validation must still catch invalid references,
+  e.g. after removal of a material. A transform edit updates the affected instance data
+  and RT top-level bounds; it does not rebuild unchanged mesh BLASes. Mesh edits invalidate
+  the affected mesh and its dependent instance bounds. Additions, removal and reordering
+  must not leave stale indices or IDs.
+- First checkpoint: keep the existing raster triangle layout but reuse its uploaded
+  buffer and precomputed shadow bounds while mesh and instance inputs match. This is
+  whole-geometry invalidation, not per-mesh instancing. Keep packing semantics, draw order
+  and all AOVs unchanged. Cached frames after edits must equal freshly rendered frames
+  for the same snapshot, including object and material IDs. Test reuse with a work count
+  or resource identity, not a wall-clock assertion.
+- Report unchanged-scene S10 per §6, with the same fixture and all four Tier 2 effects.
+  Separately report camera-only setup (target <5 ms); do not use this phase timing as a
+  substitute for frame throughput. Any Tier 2 estimator changes require their own R24
+  contract and a rerun of the R26 quality matrix before claiming a performance win.
