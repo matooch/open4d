@@ -198,9 +198,9 @@ impl HybridView {
                     receivers.push((i, ray));
                 }
             }
-            let hits = backend.trace(&rays)?;
+            let blocked = backend.occluded(&rays)?;
             for &(i, ray) in &receivers {
-                visibility[i] = if hits[ray].is_none() { 1.0 } else { 0.0 };
+                visibility[i] = if blocked[ray] { 0.0 } else { 1.0 };
             }
         }
 
@@ -294,8 +294,8 @@ impl HybridView {
                         });
                     }
                 }
-                for ((i, d, s), hit) in samples.iter().zip(backend.trace(&rays)?) {
-                    let factor = if hit.is_some() { occluded } else { DVec3::ONE };
+                for ((i, d, s), blocked) in samples.iter().zip(backend.occluded(&rays)?) {
+                    let factor = if blocked { occluded } else { DVec3::ONE };
                     let [dr, dg, db] = (*d * factor).to_array();
                     let [sr, sg, sb] = (*s * factor).to_array();
                     let total = *d + *s;
@@ -471,10 +471,10 @@ fn add_secondary_direct(
     if !rays.is_empty() {
         let density = light.light.shadow_density;
         let tint = DVec3::splat(1.0 - density) + DVec3::from(light.light.shadow_color) * density;
-        for ((pixel, value), hit) in contributions.into_iter().zip(backend.trace(&rays)?) {
+        for ((pixel, value), blocked) in contributions.into_iter().zip(backend.occluded(&rays)?) {
             add_rgb(
                 &mut pixels[pixel],
-                if hit.is_some() { value * tint } else { value },
+                if blocked { value * tint } else { value },
             );
         }
     }

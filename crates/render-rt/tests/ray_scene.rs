@@ -106,6 +106,10 @@ fn backend_preference_requires_both_the_api_and_ray_queries() {
 fn compare(backend: &dyn RtBackend, frame: &Snapshot, rays: &[Ray]) -> Vec<Option<RayHit>> {
     let cpu = Scene::build(frame).unwrap();
     let hits = backend.trace(rays).unwrap();
+    assert_eq!(
+        backend.occluded(rays).unwrap(),
+        hits.iter().map(Option::is_some).collect::<Vec<_>>()
+    );
     assert_eq!(hits.len(), rays.len());
     for (i, (ray, &got)) in rays.iter().zip(&hits).enumerate() {
         let want = cpu.intersect(ray.origin, ray.direction, ray.t_max);
@@ -255,6 +259,7 @@ fn exercise_instanced_queries(backend: &mut dyn RtBackend) -> Vec<Option<RayHit>
         }
     );
     assert!(backend.trace(&[]).unwrap().is_empty());
+    assert!(backend.occluded(&[]).unwrap().is_empty());
 
     // A second mesh starts at a nonzero BLAS offset and needs interior nodes.
     // Leaving an empty mesh between the two also tests sparse mesh indices.

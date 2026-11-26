@@ -121,5 +121,9 @@ pub trait RtBackend: Send {
     fn update_scene(&mut self, snapshot: &Snapshot) -> Result<(), RenderError>;
     /// Returns one hit or miss per ray, in input order.
     fn trace(&self, rays: &[Ray]) -> Result<Vec<Option<RayHit>>, RenderError>;
+    /// Returns whether each ray is blocked, in input order.
+    fn occluded(&self, rays: &[Ray]) -> Result<Vec<bool>, RenderError> {
+        Ok(self.trace(rays)?.iter().map(Option::is_some).collect())
+    }
     fn stats(&self) -> SceneStats;
 }

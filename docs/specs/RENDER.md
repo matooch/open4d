@@ -1104,6 +1104,21 @@ This is a preview approximation, not a change to the reference renderer.
   keep R24 estimator acceptance and the existing R26 thresholds and pins, and
   record the full-size S10 Metal AO phase and frame medians.
 
+### R24.5 Visibility-only readback (brief 214)
+
+Source: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report).
+
+- AO and direct and secondary shadow rays request one occlusion flag per ray
+  in input order. GPU backends write one `u32` per ray instead of a full hit.
+  Use the same R23 opaque traversal, distance limits and miss rule as closest
+  hit, including for empty scenes. Do not transfer hit distances, IDs or
+  barycentrics to these callers. Reflection and GI bounce rays still need
+  full closest-hit data.
+- This is a transport optimization: ray counts, sample weights, history, and
+  images must not change. Check flags against closest-hit results on the same
+  backend, including finite rays, empty batches and partial workgroups.
+  Translate both GPU query entries and rerun R24, R26 and full-size S10.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),

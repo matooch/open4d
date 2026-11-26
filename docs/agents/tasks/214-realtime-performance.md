@@ -102,3 +102,15 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
   the same nine pins remain. Worst Metal-vs-Compute scores were exact,
   165.12 dB and 75.66 dB respectively. No Vulkan hardware run.
 - AO checkpoint gate: 2739 tests passed, zero failed; `GATE: all passed`.
+- [Visibility readback checkpoint](../../specs/RENDER.md#r245-visibility-only-readback-brief-214):
+  AO and both types of shadow query return 4 bytes per ray instead of a
+  32-byte hit record. Bounce rays still return full hits. Five required-Metal
+  test runs passed, including visibility vs. closest-hit checks on Compute and
+  Metal, and shader translation to SPIR-V, MSL and HLSL. The strict R26 matrix
+  passed on both backends with the same nine pins.
+- Full-size S10 Tier 2 on M5 Pro with actual Metal: AO **394.190 ms** and
+  shadows **838.808 ms** (previously 407.894 and 864.245 ms). The uninstrumented
+  median was **4238.415 ms / 0.236 fps**, slightly slower than 4204.666 ms;
+  this run does not show a frame-rate gain. The change saves readback bytes
+  but does not reduce traversal work or eliminate CPU/GPU synchronization.
+- Visibility checkpoint gate: 2739 tests passed, zero failed; `GATE: all passed`.
