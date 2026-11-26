@@ -167,6 +167,199 @@ fn raw_direct_shadow_transport_translates_with_each_traversal() {
 }
 
 #[test]
+fn reflection_sampler_translates_to_all_backends() {
+    translate("reflection sampler", &reflection_probe_source());
+}
+
+fn reflection_probe_source() -> String {
+    let graph = compile(&Material::default());
+    let mat =
+        forge_render_gpu::shader::materials(&[(&graph, &forge_material::ir::White)], 1).unwrap();
+    let fns = forge_render_rt::shader::REFLECTION_SAMPLING_WGSL;
+    let rng = forge_render_gpu::RNG_WGSL;
+    let geometry = forge_render_gpu::GEOMETRY_WGSL;
+    let surface = forge_render_gpu::SURFACE_WGSL;
+    format!(
+        "{}\n{rng}\n{geometry}\n{surface}\n{fns}\n{}",
+        mat.source,
+        r"
+@group(0) @binding(0) var<storage, read> inputs: array<vec4<u32>>;
+@group(0) @binding(1) var<storage, read_write> output: array<vec4<u32>>;
+
+@compute @workgroup_size(1)
+fn probe(@builtin(global_invocation_id) id: vec3<u32>) {
+    let b = id.x * 6u;
+    let key = inputs[b + 5u];
+    let n = bitcast<vec4<f32>>(inputs[b]).xyz;
+    let ng = bitcast<vec4<f32>>(inputs[b + 1u]).xyz;
+    let wo = bitcast<vec4<f32>>(inputs[b + 2u]).xyz;
+    let spec_alpha = bitcast<vec4<f32>>(inputs[b + 3u]);
+    var rng = rng_new(key.xy ^ vec2<u32>(key.w, 0u), vec2<u32>(key.z, 0u));
+    var m: Mat;
+    m.spec = spec_alpha.xyz;
+    m.alpha = spec_alpha.w;
+    m.trans = bitcast<vec4<f32>>(inputs[b + 4u]).xyz;
+    // A nonzero diffuse lobe must not enter the reflection sampler.
+    m.albedo = vec3<f32>(0.6);
+    for (var i = 0u; i < REFLECTION_SAMPLES; i += 1u) {
+        let s = reflection_sample(m, n, ng, wo, &rng);
+        let dst = id.x * 17u + i * 2u;
+        output[dst] = vec4<u32>(bitcast<vec3<u32>>(s.direction), u32(s.accepted));
+        output[dst + 1u] = bitcast<vec4<u32>>(vec4<f32>(s.weight, 0.0));
+    }
+    output[id.x * 17u + 16u] = vec4<u32>(rng_next(&rng), 0u, 0u, 0u);
+}"
+    )
+}
+
+#[test]
+fn gpu_reflection_sampler_matches_cpu_directions_weights_and_stream() {
+    use forge_render_cpu::{sampling::Rng, surface::Surface};
+    use forge_render_gpu::{await_mapped, map_read};
+    use glam::DVec3;
+    use wgpu::util::DeviceExt;
+
+    let (device, queue) = match forge_render_rt::request_default_device() {
+        Ok(gpu) => gpu,
+        Err(err) if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") => {
+            panic!("FORGE_REQUIRE_GPU=1 but no GPU: {err}");
+        }
+        Err(err) => {
+            eprintln!("skipping GPU test: {err}");
+            return;
+        }
+    };
+    let n = DVec3::Z;
+    let view = DVec3::new(0.6, 0.0, 0.8);
+    let tilted = DVec3::new(0.8, 0.0, 0.6);
+    let spec = DVec3::new(0.8, 0.3, 0.1);
+    let trans = DVec3::new(0.0, 0.25, 1.0);
+    let seed = 0x1234_abcd_8642_ace0_u64;
+    let pack = |v: DVec3, w| [v.x as f32, v.y as f32, v.z as f32, w].map(f32::to_bits);
+    let mut rows = Vec::new();
+    let mut expected = Vec::new();
+    let mut rejections = [0; 2];
+    for history in [0_u32, 9] {
+        for (n, ng, wo, alpha, specular) in [
+            (tilted, tilted, view, 0.02_f64.powi(2), spec),
+            (n, tilted, view, 0.8, spec),
+            (n, n, -view, 0.35, spec),
+            (n, n, view, 0.35, DVec3::ZERO),
+        ] {
+            let pixel = 1920 * 257 + 139 + expected.len() as u32;
+            rows.extend([
+                pack(n, 0.),
+                pack(ng, 0.),
+                pack(wo, 0.),
+                pack(specular, alpha as f32),
+                pack(trans, 0.),
+                [seed as u32, (seed >> 32) as u32, pixel, history],
+            ]);
+            let surface = Surface {
+                albedo: DVec3::splat(0.6),
+                spec: specular,
+                alpha,
+                emission: DVec3::ZERO,
+                trans,
+                ior: 1.5,
+                n,
+            };
+            let mut rng = Rng::new(seed ^ u64::from(history), u64::from(pixel));
+            let samples: [_; 8] =
+                std::array::from_fn(|_| match surface.sample_specular(n, wo, &mut rng) {
+                    Some((wi, weight)) if ng.dot(wi) > 0.0 => Some((wi, weight / 8.0)),
+                    Some(_) => {
+                        rejections[0] += 1;
+                        None
+                    }
+                    None => {
+                        rejections[1] += usize::from(specular != DVec3::ZERO && n.dot(wo) > 0.0);
+                        None
+                    }
+                });
+            expected.push((samples, rng.next_u32()));
+        }
+    }
+    assert!(rejections.into_iter().all(|count| count > 0));
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("reflection sampler probe"),
+        source: wgpu::ShaderSource::Wgsl(reflection_probe_source().into()),
+    });
+    let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: None,
+        layout: None,
+        module: &shader,
+        entry_point: Some("probe"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+    let input = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: None,
+        contents: bytemuck::cast_slice(&rows),
+        usage: wgpu::BufferUsages::STORAGE,
+    });
+    let size = expected.len() as u64 * 17 * 16;
+    let buffer = |usage| {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size,
+            usage,
+            mapped_at_creation: false,
+        })
+    };
+    let output = buffer(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
+    let read = buffer(wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST);
+    let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &pipeline.get_bind_group_layout(0),
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: input.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: output.as_entire_binding(),
+            },
+        ],
+    });
+    let mut encoder = device.create_command_encoder(&Default::default());
+    {
+        let mut pass = encoder.begin_compute_pass(&Default::default());
+        pass.set_pipeline(&pipeline);
+        pass.set_bind_group(0, &group, &[]);
+        pass.dispatch_workgroups(expected.len() as u32, 1, 1);
+    }
+    encoder.copy_buffer_to_buffer(&output, 0, &read, 0, size);
+    queue.submit([encoder.finish()]);
+    let slice = read.slice(..);
+    await_mapped(&device, &map_read(&slice)).unwrap();
+    let mapped = slice.get_mapped_range().unwrap();
+    let actual: &[[u32; 4]] = bytemuck::cast_slice(&mapped);
+    for (fixture, (samples, rng_tail)) in expected.into_iter().enumerate() {
+        let rows = &actual[fixture * 17..][..17];
+        assert_eq!(rows[16][0], rng_tail, "fixture {fixture} RNG");
+        for (attempt, (sample, pair)) in
+            samples.into_iter().zip(rows.as_chunks::<2>().0).enumerate()
+        {
+            let Some((wi, weight)) = sample else {
+                assert_eq!(pair, &[[0; 4]; 2], "fixture {fixture}, attempt {attempt}");
+                continue;
+            };
+            assert_eq!(pair[0][3], 1, "fixture {fixture}, attempt {attempt}");
+            for (gpu, cpu) in pair.iter().zip([wi, weight]) {
+                for (gpu, cpu) in gpu.map(f32::from_bits).into_iter().zip(cpu.to_array()) {
+                    assert!(
+                        (f64::from(gpu) - cpu).abs() <= 2e-6 + 2e-4 * cpu.abs(),
+                        "fixture {fixture}, attempt {attempt}: {gpu} != {cpu}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn shared_path_transport_translates_with_every_backend() {
     use forge_render_gpu::shader::assemble_with_scene;
     use forge_render_rt::{path_scene_wgsl, ray::BackendKind};

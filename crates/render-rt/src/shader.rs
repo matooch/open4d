@@ -10,6 +10,9 @@ use forge_render_gpu::shader::Assembled;
 pub const RT_WGSL: &str = include_str!("rt.wgsl");
 pub(crate) const INSTANCE_GEOMETRY_WGSL: &str = include_str!("instance_geometry.wgsl");
 
+/// R24.8 opaque reflection sampler; requires the shared RNG and surface WGSL.
+pub const REFLECTION_SAMPLING_WGSL: &str = include_str!("reflection_sampling.wgsl");
+
 /// Raw R24.7 receiver helpers, with the attribute table at group 0, binding 0.
 pub fn receiver_geometry_wgsl() -> String {
     let geometry = forge_render_gpu::GEOMETRY_WGSL;

@@ -1220,6 +1220,41 @@ R24 direct shadows, and the R20/R25 GPU transport. This is our own design.
   receiver geometry and same-slot bitmap contents. Strict R26 remains the
   runtime acceptance; the raw probe's numeric allowance does not change it.
 
+### R24.8 GPU reflection signal (brief 214)
+
+Sources: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report),
+R24 reflections and the R7 opaque GGX specular lobe. This is our own design.
+
+- First validate the ray sampler in isolation. Use only the opaque specular
+  lobe, not the diffuse/specular mixture. For each absolute pixel, start
+  `Rng(seed XOR history_frame, absolute_pixel)` and attempt eight samples
+  in sequence. No specular lobe or a back-facing shading view consumes no
+  draws; otherwise consume exactly two draws per attempt, including rejected
+  attempts. Reject directions below either the shading or geometric normal.
+  A rejected attempt contributes zero and does not renumber later attempts.
+- Sample the GGX half-vector with `sin²(theta) = alpha²*u / ((1-u) + alpha²*u)`
+  and `cos²(theta) = (1-u) / ((1-u) + alpha²*u)`. This avoids subtracting
+  near-equal f32 values for narrow lobes. The accepted RGB throughput is
+  `f_s * cos(theta_i) / (8 * pdf_s)`. Cancel the common GGX distribution
+  term before dividing: use `spec * (1-trans) * G1(n·wi) * (G1(n·wo)/(n·wo))
+  * (wo·h)/(n·h) / 8`, with the same lower bound on `wo·h` as the CPU PDF.
+  Preserve the original unnormalized sum across attempts.
+- The standalone sampler takes oriented normals and a view direction, and
+  returns an accepted direction and throughput or an exact zero record.
+  Compare against the CPU f64 sampler within `2e-6 + 2e-4 * abs(reference)`
+  per component on deterministic fixtures away from horizon boundaries.
+  Include minimum roughness, a broad lobe, transmission, no specular lobe,
+  back-facing views, shading/geometric rejection and multiple history seeds.
+  Translate the probe to SPIR-V, MSL and HLSL before GPU testing.
+- A later dispatch will recover the R24.7 receiver, offset valid rays along
+  its geometric normal, and use inline R23 closest hits. Preserve the
+  environment on misses and emission plus the existing one sample per
+  prepared light on hits: no secondary MIS, and retain ray clipping, shadow
+  tint, lobe flags and the original `(pixel * 8 + sample)` light stream.
+  Keep the CPU spatial filter, per-jitter history and batched fallback until
+  live acceptance. Remeasure unchanged S10 and strict R26 only when enabling
+  the live signal; this standalone allowance does not change R26.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),

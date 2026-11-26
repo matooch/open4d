@@ -36,6 +36,15 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- [Reflection sampler checkpoint](../../specs/RENDER.md#r248-gpu-reflection-signal-brief-214):
+  the standalone GPU sampler preserves the eight opaque GGX attempts, both
+  hemisphere checks, and their RNG stream. Metal directions and RGB weights
+  matched the CPU reference at minimum roughness and for a broad transmitting
+  lobe; rejected attempts were zero and the final PCG word matched exactly.
+  The probe translated to SPIR-V, MSL and HLSL. Five required-Metal runs
+  passed; full gate: 2748 tests passed, `GATE: all passed`. Tier 2 still
+  uses the batched reflection estimator; no new S10 measurement or R26 change.
+
 - **GPU direct-shadow runtime:** Tier 2 now uses inline R23 visibility with
   cached R25 receiver attributes and the current raster bitmap views. It
   retains eight samples, the CPU spatial filter and per-jitter history, and
