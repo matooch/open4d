@@ -7,6 +7,7 @@ use forge_render_api::{RenderError, Snapshot};
 use glam::DVec3;
 
 pub use compute::{COMPUTE_TRAVERSAL_WGSL, COMPUTE_WGSL, ComputeBackend};
+pub(crate) use hardware::HardwareBackend;
 pub use hardware::{HARDWARE_TRAVERSAL_WGSL, HARDWARE_WGSL};
 
 /// Common hit result and miss sentinel used by both inline traversal kernels.

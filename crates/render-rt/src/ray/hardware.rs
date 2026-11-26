@@ -96,7 +96,7 @@ impl MeshBlas {
     }
 }
 
-pub(super) struct HardwareBackend {
+pub(crate) struct HardwareBackend {
     dispatch: QueryDispatch,
     meshes: Vec<MeshData>,
     blases: Vec<Option<MeshBlas>>,
@@ -113,6 +113,10 @@ impl HardwareBackend {
             top: None,
             stats: SceneStats::default(),
         })
+    }
+
+    pub(crate) fn tlas(&self) -> Option<&wgpu::Tlas> {
+        self.top.as_ref()
     }
 }
 

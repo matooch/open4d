@@ -7,6 +7,7 @@ mod engine;
 pub mod framegraph;
 mod hybrid;
 pub mod path_preview;
+mod path_trace;
 pub mod post;
 pub mod ray;
 pub mod shader;
@@ -14,6 +15,7 @@ pub mod shadow;
 
 pub use engine::RtEngine;
 pub use framegraph::{FrameGraph, GraphError, Pass};
+pub use path_trace::{PathTraceEngine, path_scene_wgsl};
 
 /// Requests the default adapter and device; `Err` carries the reason there is none.
 pub fn request_default_device() -> Result<(wgpu::Device, wgpu::Queue), String> {

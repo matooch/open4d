@@ -1084,6 +1084,12 @@ inputs, and [R7 tier budgets](../agents/tasks/203-rt-consistency.md). This is ou
   required by that scene implementation. R20 uses a flattened primitive key; R25 uses
   local primitive and snapshot instance keys. The scene module owns its storage
   declarations, and any WGSL extensions it uses are enabled before the material code.
+- Store shading attributes once per mesh-local triangle. Index the transform and ID
+  rows by snapshot instance ID, not by TLAS order. Apply the inverse transpose to the
+  local face normal (with R6 winding correction) and to the interpolated local shading
+  normal; align the two world normals as in R6. Transform corner positions to world
+  space for bump mapping and leave UVW in its authored space. In particular, mirrored
+  instances do not reverse the local outward normal.
 - One progressive sample index denotes one complete camera-path sample per active pixel.
   Continue the deterministic R20.2 per-pixel stream and pixel-filter index across batches.
   Changing batch boundaries does not change the sample sequence; resetting a view

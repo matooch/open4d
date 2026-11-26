@@ -250,6 +250,16 @@ impl ComputeBackend {
             stats: SceneStats::default(),
         })
     }
+
+    pub(crate) fn scene_buffers(&self) -> Option<[&wgpu::Buffer; 4]> {
+        let (geometry, top) = (self.geometry.as_ref()?, self.top.as_ref()?);
+        Some([
+            &top.nodes,
+            &top.instances,
+            &geometry.nodes,
+            &geometry.triangles,
+        ])
+    }
 }
 
 pub(super) struct QueryDispatch {
@@ -322,7 +332,7 @@ impl RtBackend for ComputeBackend {
     }
 
     fn trace(&self, rays: &[Ray]) -> Result<Vec<Option<RayHit>>, RenderError> {
-        let (Some(geometry), Some(top)) = (&self.geometry, &self.top) else {
+        let Some(buffers) = self.scene_buffers() else {
             return Err(RenderError::Settings(
                 "ray query scene has not been built".into(),
             ));
@@ -330,16 +340,8 @@ impl RtBackend for ComputeBackend {
         if rays.is_empty() {
             return Ok(vec![None; rays.len()]);
         }
-        self.dispatch.trace(
-            rays,
-            [
-                &top.nodes,
-                &top.instances,
-                &geometry.nodes,
-                &geometry.triangles,
-            ]
-            .map(wgpu::Buffer::as_entire_binding),
-        )
+        self.dispatch
+            .trace(rays, buffers.map(wgpu::Buffer::as_entire_binding))
     }
 }
 

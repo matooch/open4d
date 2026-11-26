@@ -13,6 +13,14 @@ use wgpu::util::DeviceExt;
 use crate::frame;
 use crate::pack::{Packed, frame_base};
 
+/// A replacement for the flattened R20 scene, with its resources in group 2.
+pub struct BoundScene<'a> {
+    pub directives: &'a str,
+    pub source: &'a str,
+    pub layout: &'a wgpu::BindGroupLayout,
+    pub bind: &'a wgpu::BindGroup,
+}
+
 /// A wgpu compute path tracer. Create it with [`GpuEngine::new`], or share a device with
 /// [`GpuEngine::with_device`].
 #[derive(Clone)]
@@ -188,39 +196,29 @@ impl GpuEngine {
             .collect()
     }
 
-    fn shader_buffers(
-        &self,
-        packed: &Packed,
-    ) -> (wgpu::Buffer, wgpu::Buffer, wgpu::Buffer, wgpu::Buffer) {
-        let make = |label: &str, bytes: &[u8]| {
-            self.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some(label),
-                    contents: bytes,
-                    usage: wgpu::BufferUsages::STORAGE,
-                })
-        };
-        (
-            make("tris", bytemuck::cast_slice(&packed.tris)),
-            make("nodes", bytemuck::cast_slice(&packed.nodes)),
-            make("prims", bytemuck::cast_slice(&packed.prims)),
-            make("lights", bytemuck::cast_slice(&packed.lights)),
-        )
-    }
-}
-
-impl RenderEngine for GpuEngine {
-    fn id(&self) -> &str {
-        "forge.render.gpu"
+    fn storage_buffer(&self, label: &str, bytes: &[u8]) -> wgpu::Buffer {
+        self.device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(label),
+                contents: bytes,
+                usage: wgpu::BufferUsages::STORAGE,
+            })
     }
 
-    fn render(
+    /// Runs the shared transport with either a supplied instanced scene or the R20 flat scene.
+    /// `packed` supplies lights and frame inputs; its geometry is used only for the flat scene.
+    pub fn render_transport(
         &self,
         snapshot: &Snapshot,
         settings: &RenderSettings,
         control: &Control,
+        packed: &Packed,
+        scene: Option<BoundScene<'_>>,
     ) -> Result<RenderOutput, RenderError> {
         settings.validate()?;
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
+        }
         if matches!(
             snapshot.environment.lighting,
             forge_render_api::Lighting::Image { .. }
@@ -229,7 +227,6 @@ impl RenderEngine for GpuEngine {
                 "image environments on the GPU (RENDER.md R16, R20.4)".into(),
             ));
         }
-        let packed = Packed::build(snapshot, settings.default_light)?;
         let mut wanted: Vec<Aov> = settings.aovs.clone();
         wanted.sort();
         wanted.dedup();
@@ -243,36 +240,14 @@ impl RenderEngine for GpuEngine {
             .iter()
             .map(|m| (&m.graph, &*m.sampler as &dyn forge_material::TextureSampler))
             .collect();
-        let assembled = crate::shader::assemble(&materials)?;
+        let assembled = if let Some(scene) = &scene {
+            crate::shader::assemble_with_scene(&materials, scene.directives, scene.source)?
+        } else {
+            crate::shader::assemble(&materials)?
+        };
         let source = assembled.source;
 
         let device = &self.device;
-        let errors = device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("path tracer"),
-            source: wgpu::ShaderSource::Wgsl(source.into()),
-        });
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("path tracer"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                storage_entry(1, true),
-                storage_entry(2, true),
-                storage_entry(3, true),
-                storage_entry(4, true),
-                storage_entry(5, false),
-                storage_entry(6, false),
-            ],
-        });
         if assembled.resources.len()
             > device.limits().max_sampled_textures_per_shader_stage as usize
         {
@@ -281,6 +256,33 @@ impl RenderEngine for GpuEngine {
                 assembled.resources.len()
             )));
         }
+        let errors = device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("path tracer"),
+            source: wgpu::ShaderSource::Wgsl(source.into()),
+        });
+        let mut frame_entries = vec![
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            storage_entry(4, true),
+            storage_entry(5, false),
+            storage_entry(6, false),
+        ];
+        if scene.is_none() {
+            frame_entries.extend((1..=3).map(|b| storage_entry(b, true)));
+        }
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("path tracer"),
+            entries: &frame_entries,
+        });
         let layout1 = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("bitmaps"),
             entries: &(0..assembled.resources.len() as u32)
@@ -296,12 +298,16 @@ impl RenderEngine for GpuEngine {
                 })
                 .collect::<Vec<_>>(),
         });
+        let mut layouts = vec![Some(&layout), Some(&layout1)];
+        if let Some(scene) = &scene {
+            layouts.push(Some(scene.layout));
+        }
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("path tracer"),
             layout: Some(
                 &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: None,
-                    bind_group_layouts: &[Some(&layout), Some(&layout1)],
+                    bind_group_layouts: &layouts,
                     immediate_size: 0,
                 }),
             ),
@@ -314,14 +320,21 @@ impl RenderEngine for GpuEngine {
             return Err(RenderError::Settings(format!("GPU shader: {e}")));
         }
 
-        let (tris, nodes, prims, lights) = self.shader_buffers(&packed);
+        let lights = self.storage_buffer("lights", bytemuck::cast_slice(&packed.lights));
+        let flat = scene.is_none().then(|| {
+            [
+                self.storage_buffer("tris", bytemuck::cast_slice(&packed.tris)),
+                self.storage_buffer("nodes", bytemuck::cast_slice(&packed.nodes)),
+                self.storage_buffer("prims", bytemuck::cast_slice(&packed.prims)),
+            ]
+        });
         let frame_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("frame"),
             size: (frame::SLOTS * 16) as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let base = frame_base(snapshot, settings, &packed, &wanted, stride);
+        let base = frame_base(snapshot, settings, packed, &wanted, stride);
 
         let tiles = tiles_of(settings);
         let batch_size = self.sample_batch_size.min(settings.samples);
@@ -371,39 +384,36 @@ impl RenderEngine for GpuEngine {
             usage: wgpu::BufferUsages::STORAGE,
             mapped_at_creation: false,
         });
+        let mut frame_bindings = vec![
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: frame_buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: lights.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: out.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: pixel_states.as_entire_binding(),
+            },
+        ];
+        if let Some(flat) = &flat {
+            frame_bindings.extend((1..=3).zip(flat).map(|(binding, buffer)| {
+                wgpu::BindGroupEntry {
+                    binding,
+                    resource: buffer.as_entire_binding(),
+                }
+            }));
+        }
         let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: frame_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: tris.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: nodes.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: prims.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: lights.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: out.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: pixel_states.as_entire_binding(),
-                },
-            ],
+            entries: &frame_bindings,
         });
 
         let views = self.bitmap_views(&assembled.resources)?;
@@ -466,6 +476,9 @@ impl RenderEngine for GpuEngine {
                         pass.set_pipeline(&pipeline);
                         pass.set_bind_group(0, &bind, &[]);
                         pass.set_bind_group(1, &bind1, &[]);
+                        if let Some(scene) = &scene {
+                            pass.set_bind_group(2, scene.bind, &[]);
+                        }
                         pass.dispatch_workgroups(tw.div_ceil(8), rows.div_ceil(8), 1);
                     }
                     if end == settings.samples {
@@ -568,6 +581,22 @@ impl RenderEngine for GpuEngine {
                 ignored_channels: forge_render_cpu::ignored_channels(snapshot),
             },
         })
+    }
+}
+
+impl RenderEngine for GpuEngine {
+    fn id(&self) -> &str {
+        "forge.render.gpu"
+    }
+
+    fn render(
+        &self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        control: &Control,
+    ) -> Result<RenderOutput, RenderError> {
+        let packed = Packed::build(snapshot, settings.default_light)?;
+        self.render_transport(snapshot, settings, control, &packed, None)
     }
 }
 

@@ -4,7 +4,7 @@ mod engine;
 pub mod pack;
 pub mod shader;
 
-pub use engine::{GpuEngine, MapSlot, SUBMISSION_BUDGET, await_mapped, map_read};
+pub use engine::{BoundScene, GpuEngine, MapSlot, SUBMISSION_BUDGET, await_mapped, map_read};
 
 /// The deterministic RNG and sampling helpers (R20.2), for tests of the WGSL directly.
 pub const RNG_WGSL: &str = include_str!("rng.wgsl");
