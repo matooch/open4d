@@ -2,9 +2,10 @@
 
 use bytemuck::{Pod, Zeroable};
 use forge_render_api::{Lighting, RenderError, RenderSettings, Snapshot};
+use forge_render_cpu::lights;
 
 use super::PrimaryInput;
-use super::direct_shadow::{RawSignalBindings, RawSignalProgram};
+use super::direct_shadow::{RawSignalBindings, RawSignalProgram, upload_lights};
 use crate::ray::{BackendKind, InlineScene};
 
 #[repr(C)]
@@ -21,6 +22,8 @@ struct ReflectionFrame {
     lighting: [f32; 4],
     zenith_rotation: [f32; 4],
     ground: [f32; 4],
+    light_count: u32,
+    _padding: [u32; 3],
 }
 
 pub(super) struct ReflectionProbe(RawSignalProgram);
@@ -74,6 +77,8 @@ impl ReflectionProbe {
             .pixel_frame(settings.width, settings.height)
             .unwrap_or_default();
         let [u, v, w, _] = snapshot.camera.matrix().as_mat4().to_cols_array_2d();
+        let prepared = lights::prepare(snapshot, settings.default_light)?;
+        let lights = upload_lights(device, &prepared)?;
         let mut frame = ReflectionFrame {
             camera: [u, v, w],
             film_scale: [f as f32, x as f32, y as f32, scale as f32],
@@ -82,6 +87,7 @@ impl ReflectionProbe {
             history,
             instance_count: snapshot.instances.len() as u32,
             epsilon: input.epsilon as f32,
+            light_count: prepared.len() as u32,
             ..ReflectionFrame::zeroed()
         };
         let pack = |[r, g, b]: [f64; 3], w: f64| [r as f32, g as f32, b as f32, w as f32];
@@ -155,7 +161,8 @@ impl ReflectionProbe {
                 primary: bindings.primary,
                 attributes: bindings.attributes,
                 bitmaps: bindings.bitmaps,
-                extra: wgpu::BindingResource::TextureView(&environment),
+                lights: &lights,
+                environment: Some(&environment),
             },
             settings,
             &frame,

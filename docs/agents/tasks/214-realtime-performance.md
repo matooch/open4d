@@ -36,6 +36,12 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Raw reflection secondary lighting:** inline Compute and Metal matched
+  the batched CPU-shaded reference at two history seeds for finite, area and
+  infinite lights, per-light lobe flags and tinted occlusion. The near
+  emitter matched its no-shadow control; the far emitter behind the same
+  blocker received the expected RGB tint. SPIR-V, MSL and HLSL translation
+  passed. This is still a standalone probe; no live reflection or S10 change.
 - **Raw reflection dispatch probe:** inline Compute and Metal matched the
   batched CPU-shaded reference for emission, dark hits, and misses under
   None, Constant, Sky, and rotated linear lat-long image lighting. The probe

@@ -75,7 +75,8 @@ pub(super) struct RawSignalBindings<'a> {
     pub primary: [&'a wgpu::TextureView; 2],
     pub attributes: &'a wgpu::Buffer,
     pub bitmaps: &'a [wgpu::TextureView],
-    pub extra: wgpu::BindingResource<'a>,
+    pub lights: &'a wgpu::Buffer,
+    pub environment: Option<&'a wgpu::TextureView>,
 }
 
 impl DirectShadowProgram {
@@ -102,29 +103,7 @@ impl DirectShadowProgram {
         settings: &RenderSettings,
         frame: DirectShadowFrame,
     ) -> Result<Vec<[f32; 8]>, RenderError> {
-        let limits = device.limits();
-        let storage_limit = limits
-            .max_buffer_size
-            .min(limits.max_storage_buffer_binding_size);
-        if bindings.lights.len().max(1) as u64
-            > storage_limit / std::mem::size_of::<GpuLight>() as u64
-        {
-            return Err(RenderError::Unsupported(
-                "raw direct-shadow lights exceed device limits".into(),
-            ));
-        }
-        let lights: Vec<_> = bindings.lights.iter().map(pack_light).collect();
-        let dummy = GpuLight::zeroed();
-        let contents = if lights.is_empty() {
-            bytemuck::bytes_of(&dummy)
-        } else {
-            bytemuck::cast_slice(&lights)
-        };
-        let lights = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("raw direct-shadow lights"),
-            contents,
-            usage: wgpu::BufferUsages::STORAGE,
-        });
+        let lights = upload_lights(device, bindings.lights)?;
         self.raw.read(
             (device, queue),
             RawSignalBindings {
@@ -132,12 +111,42 @@ impl DirectShadowProgram {
                 primary: bindings.primary,
                 attributes: bindings.attributes,
                 bitmaps: bindings.bitmaps,
-                extra: lights.as_entire_binding(),
+                lights: &lights,
+                environment: None,
             },
             settings,
             &frame,
         )
     }
+}
+
+pub(super) fn upload_lights(
+    device: &wgpu::Device,
+    lights: &[PLight],
+) -> Result<wgpu::Buffer, RenderError> {
+    let limits = device.limits();
+    let storage_limit = limits
+        .max_buffer_size
+        .min(limits.max_storage_buffer_binding_size);
+    if lights.len().max(1) as u64 > storage_limit / std::mem::size_of::<GpuLight>() as u64 {
+        return Err(RenderError::Unsupported(
+            "raw signal lights exceed device limits".into(),
+        ));
+    }
+    let lights: Vec<_> = lights.iter().map(pack_light).collect();
+    let dummy = GpuLight::zeroed();
+    let contents = if lights.is_empty() {
+        bytemuck::bytes_of(&dummy)
+    } else {
+        bytemuck::cast_slice(&lights)
+    };
+    Ok(
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("raw signal lights"),
+            contents,
+            usage: wgpu::BufferUsages::STORAGE,
+        }),
+    )
 }
 
 impl RawSignalProgram {
@@ -147,7 +156,7 @@ impl RawSignalProgram {
         source: String,
         bitmap_count: usize,
         label: &'static str,
-        extra_is_texture: bool,
+        has_environment: bool,
     ) -> Self {
         use wgpu::{BindingType as Binding, BufferBindingType as Buffer};
         let entry = |binding, ty| wgpu::BindGroupLayoutEntry {
@@ -184,14 +193,18 @@ impl RawSignalProgram {
             )]
         };
         scene.push(entry(4, storage));
+        let mut frame = vec![
+            entry(0, buffer(Buffer::Uniform)),
+            entry(1, texture),
+            entry(2, texture),
+            entry(3, if has_environment { texture } else { storage }),
+            entry(4, buffer(Buffer::Storage { read_only: false })),
+        ];
+        if has_environment {
+            frame.push(entry(5, storage));
+        }
         let layouts = [
-            layout(&[
-                entry(0, buffer(Buffer::Uniform)),
-                entry(1, texture),
-                entry(2, texture),
-                entry(3, if extra_is_texture { texture } else { storage }),
-                entry(4, buffer(Buffer::Storage { read_only: false })),
-            ]),
+            layout(&frame),
             layout(
                 &(0..bitmap_count as u32)
                     .map(|i| entry(i, texture))
@@ -285,16 +298,19 @@ impl RawSignalProgram {
                     .collect::<Vec<_>>(),
             )
         };
-        let frame_bind = sequential(
-            vec![
-                uniform.as_entire_binding(),
-                texture(bindings.primary[0]),
-                texture(bindings.primary[1]),
-                bindings.extra,
-                signal.as_entire_binding(),
-            ],
-            0,
-        );
+        let mut frame = vec![
+            uniform.as_entire_binding(),
+            texture(bindings.primary[0]),
+            texture(bindings.primary[1]),
+            bindings
+                .environment
+                .map_or_else(|| bindings.lights.as_entire_binding(), texture),
+            signal.as_entire_binding(),
+        ];
+        if bindings.environment.is_some() {
+            frame.push(bindings.lights.as_entire_binding());
+        }
+        let frame_bind = sequential(frame, 0);
         let bitmap_bind = sequential(bindings.bitmaps.iter().map(texture).collect(), 1);
         let mut scene: Vec<_> = match bindings.scene {
             InlineScene::Compute(buffers) => buffers

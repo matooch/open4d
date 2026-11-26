@@ -1256,8 +1256,7 @@ R24 reflections and the R7 opaque GGX specular lobe. This is our own design.
   for a linear image (`u = fract((atan2(x,z)-rotation)/(2*pi))`,
   `v = acos(clamp(y,-1,1))/pi`). Clamp the integer texel to the image
   extent; do not filter or substitute a constant for an image.
-  The standalone kernel omits secondary direct light and is not a live
-  replacement. Compile the complete kernel with both R23 traversals on
+  This probe is not a live replacement. Compile it with both R23 traversals on
   SPIR-V, MSL and HLSL before binding it in a numeric GPU probe.
 - Validate host dispatch on Compute and the available hardware backend
   against the batched CPU-shaded estimator with no prepared lights. Use
@@ -1267,11 +1266,20 @@ R24 reflections and the R7 opaque GGX specular lobe. This is our own design.
   coverage and for invalid receiver keys. Exercise an emissive hit, a dark
   hit, and misses under all four lighting modes at two history indices;
   keep the crop origin independent of absolute pixel RNG streams.
-- A later dispatch will recover the R24.7 receiver, offset valid rays along
-  its geometric normal, and use inline R23 closest hits. Preserve the
-  environment on misses and emission plus the existing one sample per
-  prepared light on hits: no secondary MIS, and retain ray clipping, shadow
-  tint, lobe flags and the original `(pixel * 8 + sample)` light stream.
+- Extend the raw transport with one sample per prepared light on hits and
+  no secondary MIS. Use `seed XOR history_frame XOR 0xed20e2d079fa645b
+  XOR light_index`, with stream `absolute_pixel * 8 + attempt`, including
+  gaps for rejected attempts. Reuse the R24.7 light sampler and R7 surface
+  evaluation. Orient Ng and Ns toward the returning ray, reject either
+  light horizon, and apply diffuse/specular flags before weighting by the
+  cosine, light sample weight and reflection throughput. For shadow-casting
+  lights, offset by Ng and clip to `max(0, distance*(1-1e-6)-epsilon)`;
+  blocked rays multiply RGB by `(1-density) + density*shadow_color`.
+  Sum hit emission and miss lighting in attempt order, then secondary
+  contributions in prepared-light order and attempt order, as on CPU.
+  Extend the same raw numerical acceptance to finite, area and infinite
+  lights, mixed lobe flags and tinted partial occlusion. Include a blocker
+  beyond a finite emitter, which must not shadow that sample.
   Keep the CPU spatial filter, per-jitter history and batched fallback until
   live acceptance. Remeasure unchanged S10 and strict R26 only when enabling
   the live signal; this standalone allowance does not change R26.
