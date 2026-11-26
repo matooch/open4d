@@ -1180,6 +1180,26 @@ and render settings and use the same comparison, with Metal as the reference.
 A compute run is not evidence of hardware RT parity; record the actual backend
 and mark unavailable hardware runs pending.
 
+The test pins only the observed below-budget CPU comparisons on Compute and
+Metal. It still renders and scores those cases, and fails on a new miss or
+when a pinned case passes (remove its pin after checking the result). No
+hardware-to-hardware miss is pinned.
+
+| Pinned cases | Tiers | Diagnostic evidence |
+|---|---|---|
+| `cube-plane`, `omni`, `omni-shadow` | 1, 2 | Single-effect runs show most of the Tier 2 improvement in diffuse GI; replacing direct shadows alone leaves the beauty scores nearly unchanged. The first hybrid frame still misses at 27.17 / 26.44 / 26.44 dB. Four TAA jitters do not bring Tier 2 above budget. |
+| `mat-bump-noise` | 1 | The raster normal AOV scores 14.52 dB vs CPU; the beauty miss (23.40 dB) persists with four TAA jitters. Replacing direct lighting for the casting light raises beauty to 34.49 dB without changing the reported raster normal AOV. |
+| `mat-glossy` | 1, 2 | Diffuse is about 49.7 dB in both tiers but the narrow direct specular highlight differs. Hybrid shadows alone reproduce the full hybrid miss (5.16 dB); the other three effects alone leave the raster score unchanged (12.64 dB). |
+
+Backend evidence is per frame: Tier 1 has no ray backend; Tier 2 reports the
+backend that supplied its applied hybrid signals (not merely an initialized
+device); Tier 3 reports the traversal it used.
+For the owner-run pair, `FORGE_R26_METAL_IMAGES` names a directory of
+row-major linear RGB `f32` little-endian files. The Metal test writes one
+file per case and tier. The Vulkan test reads those files and compares them
+at the same budgets, without exceptions. `FORGE_R26_HARDWARE` requires the
+named backend in both ray-traced tiers so a fallback cannot pass this check.
+
 ## R13 Not done / follow-ups
 
 The material hosted in the document (brief 194), object-shaped area lights, falloff `Steps`, Sobol sampling,

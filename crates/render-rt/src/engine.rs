@@ -18,6 +18,7 @@ use wgpu::util::DeviceExt;
 use crate::frame;
 use crate::framegraph::FrameGraph;
 use crate::hybrid::{Bounce, HybridView, PrimaryInput};
+use crate::ray::BackendKind;
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
 
 /// One shadow map descriptor, 416 bytes (R21.4).
@@ -589,6 +590,21 @@ impl RenderEngine for RtEngine {
         settings: &RenderSettings,
         control: &Control,
     ) -> Result<RenderOutput, RenderError> {
+        self.render_with_backend(snapshot, settings, control)
+            .map(|(output, _)| output)
+    }
+}
+
+impl RtEngine {
+    /// Render and report the ray backend that supplied the applied hybrid signals.
+    /// Raster-only frames (including fallbacks) report `None`. With TAA, every
+    /// subframe must use the same ray backend for it to be reported.
+    pub fn render_with_backend(
+        &self,
+        snapshot: &Snapshot,
+        settings: &RenderSettings,
+        control: &Control,
+    ) -> Result<(RenderOutput, Option<BackendKind>), RenderError> {
         settings.validate()?;
         if !settings.hybrid.enabled
             || !(settings.hybrid.ao
@@ -611,12 +627,18 @@ impl RenderEngine for RtEngine {
             let n = settings.post.taa_samples as usize;
             let mut acc: Option<Vec<[f32; 4]>> = None;
             let mut last: Option<RenderOutput> = None;
+            let mut backend = None;
             for j in 0..n {
                 if control.is_cancelled() {
                     return Err(RenderError::Cancelled);
                 }
                 let jitter = crate::post::halton_jitter(j as u32 + 1);
-                let out = self.render_with(snapshot, &sub, control, jitter)?;
+                let (out, used) = self.render_with(snapshot, &sub, control, jitter)?;
+                if j == 0 {
+                    backend = used;
+                } else if backend != used {
+                    backend = None;
+                }
                 let pixels: Vec<[f32; 4]> = out.beauty.data.as_chunks::<4>().0.to_vec();
                 crate::post::accumulate(&mut acc, &pixels, n);
                 last = Some(out);
@@ -631,20 +653,17 @@ impl RenderEngine for RtEngine {
                 }
                 out.beauty.data = mean.iter().flat_map(|p| p.iter().copied()).collect();
             }
-            return Ok(out);
+            return Ok((out, backend));
         }
         self.render_with(snapshot, settings, control, [0.0, 0.0])
     }
-}
-
-impl RtEngine {
     fn render_with(
         &self,
         snapshot: &Snapshot,
         settings: &RenderSettings,
         control: &Control,
         jitter: [f32; 2],
-    ) -> Result<RenderOutput, RenderError> {
+    ) -> Result<(RenderOutput, Option<BackendKind>), RenderError> {
         settings.validate()?;
         snapshot.validate()?;
         if settings.depth_of_field {
@@ -1184,6 +1203,7 @@ impl RtEngine {
             return Err(RenderError::Cancelled);
         }
         let mut primary = None;
+        let mut used_backend = None;
         let hybrid_view = if rt_ao || rt_shadows || rt_reflections || rt_gi {
             let mut view = self.hybrid.lock().unwrap_or_else(|e| e.into_inner());
             let signals = view
@@ -1226,6 +1246,7 @@ impl RtEngine {
                         || !reflections.is_empty()
                         || !gi.is_empty() =>
                 {
+                    used_backend = view.backend_kind();
                     values[frame::RT_AO_ON] = u32::from(!ao.is_empty()) as f32;
                     values[frame::RT_SHADOWS_ON] = u32::from(!shadows.is_empty()) as f32;
                     values[frame::RT_REFLECTIONS_ON] = u32::from(!reflections.is_empty()) as f32;
@@ -1460,18 +1481,21 @@ impl RtEngine {
         });
         control.emit(RenderEvent::Progress { done: 1, total: 1 });
         control.emit(RenderEvent::Finished);
-        Ok(RenderOutput {
-            width: w,
-            height: h,
-            beauty,
-            aovs: aov_imgs,
-            stats: RenderStats {
-                triangles: packed.triangles,
-                instances: packed.instances,
-                tiles: 1,
-                samples: (rx1 - rx0) as u64 * (ry1 - ry0) as u64,
-                ignored_channels: forge_render_cpu::ignored_channels(snapshot),
+        Ok((
+            RenderOutput {
+                width: w,
+                height: h,
+                beauty,
+                aovs: aov_imgs,
+                stats: RenderStats {
+                    triangles: packed.triangles,
+                    instances: packed.instances,
+                    tiles: 1,
+                    samples: (rx1 - rx0) as u64 * (ry1 - ry0) as u64,
+                    ignored_channels: forge_render_cpu::ignored_channels(snapshot),
+                },
             },
-        })
+            used_backend,
+        ))
     }
 }

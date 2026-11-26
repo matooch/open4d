@@ -1,4 +1,4 @@
-//! R25.3: real dispatches through the Tier 3 scene bindings and shared integrator.
+//! R25.3 Tier 3 dispatches and R26 consistency across all render tiers.
 
 #[path = "../../render-cpu/tests/common/mod.rs"]
 mod common;
@@ -11,7 +11,7 @@ use forge_parity_harness::{CompareOptions, ImageBuf, compare_image};
 use forge_render_api::*;
 use forge_render_cpu::CpuEngine;
 use forge_render_rt::{
-    PathTraceEngine, ray::BackendKind, request_default_device, request_rt_device,
+    PathTraceEngine, RtEngine, ray::BackendKind, request_default_device, request_rt_device,
 };
 use glam::{DMat4, DQuat, DVec3};
 use std::sync::Mutex;
@@ -240,54 +240,222 @@ fn area_light_paths_and_shadow_aov_match_cpu() {
 }
 
 #[test]
-fn o30_and_o43_beauty_match_cpu_at_sixteen_samples() {
+fn o30_and_o43_cross_tier_consistency() {
     let settings = image_parity::settings((320, 240), Vec::new());
+    let hybrid = RenderSettings {
+        hybrid: HybridSettings {
+            enabled: true,
+            shadows: true,
+            reflections: true,
+            ao: true,
+            gi: true,
+            ..HybridSettings::default()
+        },
+        ..settings.clone()
+    };
     assert_eq!(settings.samples, 16);
+    assert!(settings.post.is_off() && hybrid.post.is_off());
+    const BUDGETS: [f64; 3] = [24.0, 28.0, 35.0];
+    // Only these CPU comparisons are pinned (RENDER.md R26). New backends
+    // and GPU-to-GPU comparisons have no exemptions.
+    const KNOWN_MISMATCH: [(&str, usize); 9] = [
+        ("cube-plane", 1),
+        ("cube-plane", 2),
+        ("mat-bump-noise", 1),
+        ("mat-glossy", 1),
+        ("mat-glossy", 2),
+        ("omni", 1),
+        ("omni", 2),
+        ("omni-shadow", 1),
+        ("omni-shadow", 2),
+    ];
+    let required = std::env::var("FORGE_R26_HARDWARE")
+        .ok()
+        .map(|name| match name.as_str() {
+            "Metal" => BackendKind::Metal,
+            "Vulkan" => BackendKind::Vulkan,
+            _ => panic!("FORGE_R26_HARDWARE must be Metal or Vulkan"),
+        });
+    let captures = std::env::var_os("FORGE_R26_METAL_IMAGES").map(std::path::PathBuf::from);
+    if let Some(dir) = &captures {
+        match required {
+            Some(BackendKind::Metal) => std::fs::create_dir_all(dir).unwrap(),
+            Some(BackendKind::Vulkan) => assert!(dir.is_dir(), "missing Metal captures: {dir:?}"),
+            _ => panic!("FORGE_R26_METAL_IMAGES requires FORGE_R26_HARDWARE"),
+        }
+    }
+    let mut exercised = Vec::new();
     let mut failures = Vec::new();
     let cases = case_names();
     assert!(!cases.is_empty(), "no O30/O43 render fixtures");
+    for (name, _) in KNOWN_MISMATCH {
+        assert!(
+            cases.iter().any(|case| case == name),
+            "missing pinned case {name}"
+        );
+    }
     for name in cases {
         let case = load(&name);
-        let results = compare_beauty(&case.snapshot, &settings, &name);
-        failures.extend(results.into_iter().flatten());
+        let reference = std::cell::OnceCell::new();
+        let mut compute = None;
+        with_devices(|(device, queue)| {
+            let cpu = reference.get_or_init(|| {
+                let output = CpuEngine::new()
+                    .render(&case.snapshot, &settings, &Control::new())
+                    .unwrap_or_else(|e| panic!("{name}: CPU render failed: {e}"));
+                beauty(&output)
+            });
+            let engine = RtEngine::with_device(device.clone(), queue.clone());
+            let (raster, raster_backend) = engine
+                .render_with_backend(&case.snapshot, &settings, &Control::new())
+                .unwrap_or_else(|e| panic!("{name}: Tier 1 render failed: {e}"));
+            let (hybrid, hybrid_backend) = engine
+                .render_with_backend(&case.snapshot, &hybrid, &Control::new())
+                .unwrap_or_else(|e| panic!("{name}: Tier 2 render failed: {e}"));
+            let path = PathTraceEngine::with_device(device.clone(), queue.clone());
+            let (path, backend) = path
+                .render_with_backend(&case.snapshot, &settings, &Control::new())
+                .unwrap_or_else(|e| panic!("{name}: Tier 3 render failed: {e}"));
+            assert_eq!(raster_backend, None, "{name}: raster used RT");
+            assert_eq!(hybrid_backend, Some(backend), "{name}: hybrid backend");
+            assert_eq!(
+                backend != BackendKind::Compute,
+                device
+                    .features()
+                    .contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY),
+                "{name}: unexpected fallback or ray-query device"
+            );
+            if !exercised.contains(&backend) {
+                exercised.push(backend);
+            }
+            let images = [beauty(&raster), beauty(&hybrid), beauty(&path)];
+            for (i, (image, budget)) in images.iter().zip(BUDGETS).enumerate() {
+                let tier = i + 1;
+                let label = format!("{name} Tier {tier} {backend:?}");
+                record_score(
+                    &mut failures,
+                    &format!("{label} vs CPU"),
+                    cpu,
+                    image,
+                    budget,
+                    matches!(backend, BackendKind::Compute | BackendKind::Metal)
+                        && KNOWN_MISMATCH.contains(&(name.as_str(), tier)),
+                );
+                if let Some(baseline) = &compute {
+                    let baseline: &[ImageBuf; 3] = baseline;
+                    record_score(
+                        &mut failures,
+                        &format!("{label} vs Compute"),
+                        &baseline[i],
+                        image,
+                        budget,
+                        false,
+                    );
+                }
+                if let Some(dir) = &captures {
+                    let file = dir.join(format!("{name}-tier{tier}.rgb-f32le"));
+                    match backend {
+                        BackendKind::Metal if required == Some(backend) => {
+                            std::fs::write(&file, encode_rgb(image))
+                                .unwrap_or_else(|e| panic!("{file:?}: {e}"));
+                        }
+                        BackendKind::Vulkan if required == Some(backend) => {
+                            let bytes =
+                                std::fs::read(&file).unwrap_or_else(|e| panic!("{file:?}: {e}"));
+                            let metal = decode_rgb(image.width, image.height, &bytes);
+                            record_score(
+                                &mut failures,
+                                &format!("{label} vs Metal"),
+                                &metal,
+                                image,
+                                budget,
+                                false,
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            if backend == BackendKind::Compute {
+                assert!(
+                    compute.replace(images).is_none(),
+                    "expected one compute device"
+                );
+            }
+        });
+    }
+    if let Some(required) = required {
+        assert!(
+            exercised.contains(&required),
+            "missing {required:?} hardware run"
+        );
     }
     assert!(
         failures.is_empty(),
-        "Tier 3 parity:\n{}",
+        "R26 cross-tier consistency:\n{}",
         failures.join("\n")
     );
 }
 
-fn compare_beauty(
-    snapshot: &Snapshot,
-    settings: &RenderSettings,
+fn encode_rgb(image: &ImageBuf) -> Vec<u8> {
+    image.rgb.iter().flat_map(|x| x.to_le_bytes()).collect()
+}
+
+fn decode_rgb(width: u32, height: u32, bytes: &[u8]) -> ImageBuf {
+    assert_eq!(bytes.len(), width as usize * height as usize * 3 * 4);
+    let rgb: Vec<_> = bytes
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .copied()
+        .map(f32::from_le_bytes)
+        .collect();
+    assert!(rgb.iter().all(|value| value.is_finite()));
+    ImageBuf {
+        width,
+        height,
+        rgb,
+        alpha: None,
+    }
+}
+
+#[test]
+fn r26_capture_preserves_linear_hdr_values() {
+    let image = ImageBuf::from_fn(2, 1, |x, _| [x as f32, 1.25, -0.125]);
+    assert_eq!(&encode_rgb(&image)[4..8], &[0, 0, 160, 63]);
+    assert_eq!(decode_rgb(2, 1, &encode_rgb(&image)), image);
+}
+
+fn beauty(output: &RenderOutput) -> ImageBuf {
+    assert!(output.beauty.data.iter().all(|value| value.is_finite()));
+    ImageBuf::from_rgba(output.width, output.height, &output.beauty.data)
+}
+
+fn record_score(
+    failures: &mut Vec<String>,
     label: &str,
-) -> Vec<Option<String>> {
-    let reference = std::cell::OnceCell::new();
-    let options = CompareOptions::default();
-    with_devices(|(device, queue)| {
-        let cpu = reference.get_or_init(|| {
-            let output = CpuEngine::new()
-                .render(snapshot, settings, &Control::new())
-                .unwrap_or_else(|e| panic!("{label}: CPU render failed: {e}"));
-            ImageBuf::from_rgba(output.width, output.height, &output.beauty.data)
-        });
-        let engine = PathTraceEngine::with_device(device.clone(), queue.clone());
-        let (output, backend) =
-            match engine.render_with_backend(snapshot, settings, &Control::new()) {
-                Ok(render) => render,
-                Err(e) => return Some(format!("{label}: Tier 3 render failed: {e}")),
-            };
-        let gpu = ImageBuf::from_rgba(output.width, output.height, &output.beauty.data);
-        let report = compare_image(cpu, &gpu, &options).unwrap();
-        let result = format!("{backend:?} {label}: {:.2} dB", report.psnr);
-        eprintln!("{result}");
-        if report.psnr >= 35.0 {
-            None
-        } else {
-            Some(result)
-        }
-    })
+    expected: &ImageBuf,
+    actual: &ImageBuf,
+    budget: f64,
+    known_mismatch: bool,
+) {
+    let report = compare_image(expected, actual, &CompareOptions::default()).unwrap();
+    let result = format!(
+        "{label}: {:.2} dB (budget {budget:.0} dB, gain {:.6})",
+        report.psnr, report.exposure_gain
+    );
+    let disposition = if known_mismatch {
+        " [KNOWN_MISMATCH]"
+    } else {
+        ""
+    };
+    eprintln!("{result}{disposition}");
+    let missed = report.psnr < budget;
+    if known_mismatch && !missed {
+        failures.push(format!("stale mismatch pin: {result}"));
+    } else if (!known_mismatch && missed) || report.psnr.is_nan() {
+        failures.push(result);
+    }
 }
 
 #[test]

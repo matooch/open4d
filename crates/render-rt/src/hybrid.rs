@@ -10,7 +10,7 @@ use forge_render_cpu::scene::{Hit, HitGeom, Scene};
 use forge_render_cpu::surface::Surface;
 use glam::DVec3;
 
-use crate::ray::{self, Ray, RtBackend};
+use crate::ray::{self, BackendKind, Ray, RtBackend};
 
 const AO_RAYS: usize = 8;
 const SHADOW_RAYS: usize = 8;
@@ -21,7 +21,7 @@ const PIXELS_PER_BATCH: usize = 2048;
 
 #[derive(Default)]
 pub(crate) struct HybridView {
-    backend: Option<Box<dyn RtBackend>>,
+    backend: Option<(BackendKind, Box<dyn RtBackend>)>,
     scene: Option<Snapshot>,
     geometry: Option<PrimaryGeometry>,
     settings: Option<RenderSettings>,
@@ -74,6 +74,10 @@ pub(crate) struct PrimaryInput<'a> {
 }
 
 impl HybridView {
+    pub fn backend_kind(&self) -> Option<BackendKind> {
+        self.backend.as_ref().map(|(kind, _)| *kind)
+    }
+
     pub fn reset(&mut self) {
         self.ao.clear();
         self.shadows.clear();
@@ -89,7 +93,7 @@ impl HybridView {
         queue: &wgpu::Queue,
     ) -> Result<(), RenderError> {
         if self.backend.is_none() {
-            self.backend = Some(ray::on_device(device.clone(), queue.clone())?.1);
+            self.backend = Some(ray::on_device(device.clone(), queue.clone())?);
         }
         let same_geometry = self.scene.as_ref().is_some_and(|old| {
             old.meshes == snapshot.meshes && old.instances == snapshot.instances
@@ -98,6 +102,7 @@ impl HybridView {
             self.backend
                 .as_mut()
                 .expect("initialized ray backend")
+                .1
                 .update_scene(snapshot)?;
             self.geometry = None;
         }
@@ -134,7 +139,7 @@ impl HybridView {
         if radius == 0.0 || settings.post.ssao_strength == 0.0 {
             return Ok(visibility);
         }
-        let backend = self.backend.as_ref().expect("prepared ray backend");
+        let (_, backend) = self.backend.as_ref().expect("prepared ray backend");
         let history = self.ao.entry(input.jitter.map(f32::to_bits)).or_default();
         let mut rays = Vec::with_capacity(PIXELS_PER_BATCH * AO_RAYS);
         let mut active = Vec::with_capacity(PIXELS_PER_BATCH);
@@ -199,7 +204,7 @@ impl HybridView {
             self.geometry = Some(PrimaryGeometry::new(snapshot)?);
         }
         let geometry = self.geometry.as_ref().expect("prepared shading geometry");
-        let backend = self.backend.as_ref().expect("prepared ray backend");
+        let (_, backend) = self.backend.as_ref().expect("prepared ray backend");
         let history = self
             .shadows
             .entry(input.jitter.map(f32::to_bits))
@@ -287,7 +292,7 @@ impl HybridView {
             self.geometry = Some(PrimaryGeometry::new(snapshot)?);
         }
         let geometry = self.geometry.as_ref().expect("prepared shading geometry");
-        let backend = self.backend.as_ref().expect("prepared ray backend");
+        let (_, backend) = self.backend.as_ref().expect("prepared ray backend");
         let lights = lights::prepare(snapshot, settings.default_light)?;
         let history = match bounce {
             Bounce::Reflection => &mut self.reflections,
