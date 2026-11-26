@@ -223,3 +223,13 @@ layout, the default theme. Measure in screen pixels from your own screenshots, t
 
 ## Answers
 (The owner fills this in, per session, with the date.)
+
+### G10 / G1 partial (owner screenshot, transcribed by the planner, 2026-11-26)
+The owner supplied one screenshot of the Standard layout with an empty document. The planner read it
+and recorded the structure in words in [../specs/UI.md](../specs/UI.md) §29 (window rows; tool
+strip; command bar groups; viewport menu bar and HUD; timeline row; object palette strip with
+colour-coded creation groups, including the Cloner at the top level; managers column; attribute
+manager tabs as wrapping toggle buttons, two-column groups, step arrows). This answers G1 items 1,
+5 and part of 3, and G10 items 1 (proportions only), 3 and 7. The screenshot is not in the
+repository. Exact pixel sizes: O66.
+

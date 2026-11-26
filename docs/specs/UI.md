@@ -1736,3 +1736,102 @@ Known gap found while writing the test: the Create > Generator list is longer th
 window and the menu does not scroll, so Symmetry and Subdivision (alphabetically late) cannot
 be reached with the pointer. The test creates them with `object.create`, the command the menu
 item runs. Making the menu scrollable (or grouping the list) is a follow-up to briefs 049/147.
+
+## 29. Reference layout and density (D22; owner screenshot 2026-11-26)
+
+Source: a screenshot of the reference app's Standard layout on an empty document, supplied by the
+owner (D22). The planner read it and wrote it down in words and proportions here. The image is not
+in the repository, and no icon was traced. Proportions are of the window (the capture was about
+2000 × 790, a wide window). Exact pixel sizes come from observation O66 (ui-look.md). Until then the
+numbers here are **parity-pending O66**. This section is the target for briefs 223–229 and 231. Where an
+earlier section disagrees, this one wins for layout and density, and the earlier sections for behaviour.
+
+### 29.1 Window structure, top to bottom
+
+1. **Title bar:** the document name and the layout name, centred ("Untitled 1 - Main").
+2. **Document and layout row:** on the left, undo/redo, then **document tabs** (one per open
+   document, with a close cross, then "+"). On the right, the **layout switcher**: a row of text tabs
+   (Standard, Model, Sculpt, UV Edit, Paint, Groom, Track, Script, Nodes, then "+"), the active one
+   underlined, then a "New Layouts" toggle. Our names are ours (§21 workspaces), and we keep this
+   placement and form.
+3. **Main area, left to right:**
+   - **Tool strip** (about 1.2 % of the width, one icon column, full height): search at the top, then
+     selection tools, then **Move, Rotate, Scale** (the active tool has an accent fill), then the other
+     transform tools, then sculpt/paint-style brushes. Groups are separated by a small gap, not lines.
+     Hovering shows the tool name next to the strip (for example "Move" with its icon).
+   - **Viewport column** (about 86 % of the width):
+     - *Command bar* (one row, icons only): on the left, a make-editable style button, the **X / Y / Z axis
+       locks** and the coordinate-system toggle. In the centre, the **component modes** group (model,
+       mesh, points, edges, polygons, and the related UV and texture modes; the active one is
+       filled), then the **snapping** group (two buttons), then the **workplane / grid** group (two),
+       then two more toggle pairs. On the right, the **render** group (render view, render to
+       picture viewer, render settings). Groups are separated by gaps.
+     - *Viewport menu bar* (one row, text): a hamburger, then View, Cameras, Display, Options,
+       Filter, Panel. On the right, four small navigation icons (pan, zoom, orbit, switch/maximise
+       view). These work as drag handles: dragging one navigates.
+     - *Viewport:* the view name top-left ("Perspective"), the camera name centred at the top
+       ("Default Camera" with a small icon), a small axis triad top-right, "Grid Spacing : 50 cm"
+       bottom-right. Outside the render frame the view is darker (the film-gate shading of
+       VIEWPORT.md). There's a flat grid, and the world axes are drawn as long thin red, green and blue lines.
+     - *Timeline* (about 7 % of the height), under the viewport: a row of controls, a ruler, and a
+       range row. Controls: a key button on the left; in the centre, go to start, previous key,
+       previous frame, play, next frame, next key, go to end; the loop and sound toggles; the
+       current frame field ("0 F"); record and autokey (the autokey button turns red), the keying
+       options; the key-type toggles (position, rotation, scale, parameter, point level). The ruler
+       is labelled every 2 frames at this width, and the playhead is an accent marker. The range row
+       has min, preview start, preview end and max fields ("0 F" … "90 F").
+   - **Object palette strip** (about 1.1 % of the width, one icon column, between the viewport and the
+     managers): **creation categories**, each a drop-down group, colour-coded by category: object
+     selection/null, **primitives (blue)**, splines/text, **generators (green)**, **the clone
+     toolset (green: the Cloner sits here, top level, one click; owner note N4)**, **deformers
+     (purple)**, **fields (purple)**, environment, camera, light. Then a separate tool at the bottom.
+   - **Managers column** (about 11.7 % of the width):
+     - *Object manager* (top, about 45 % of the column height): tabs "Objects | Takes", then a menu
+       row (hamburger, File, Edit, View, Object, Tags, Bookmarks) with search, filter and other icons on the
+       right.
+     - *Attribute manager* (bottom, about 55 %): tabs "Attributes | Layers", then a menu row
+       (hamburger, Mode, Edit, User Data) with back/forward, up, search, lock and new-window icons on
+       the right. Then a header row with the object's icon and name, and a preset drop-down
+       ("Default") on the right. Then **tab buttons** (§29.3).
+4. **Status bar:** one thin row at the bottom (a hamburger, then the status text).
+
+### 29.2 Density and look
+
+- **Dense:** small text, single-row bars, icon-only command bar and strips, and small gaps between
+  groups instead of separator lines. The viewport gets almost all the space.
+- **Flat dark theme:** charcoal panels, slightly darker splitters, no bevels or drop shadows.
+  Text and icons are light grey. **Accent fill** (one accent colour) marks the active tool,
+  mode, attribute tab and timeline toggles. The active layout tab is underlined.
+- **Icons:** monochrome light grey, except the object palette's category colours (primitives,
+  generators/clone toolset, deformers/fields each have their own hue). Our hues and icon art are our own
+  (D22). The rule is one hue per category, used for that category's icons everywhere (object
+  manager rows, menus).
+
+### 29.3 Attribute manager layout (with §12 and brief 231)
+
+- **Tabs are small toggle buttons that wrap onto several rows** when they don't fit (the Project
+  example shows two rows: Project, Cineware-style, Info, Dynamics, XRefs / To Do, Animation, Nodes).
+  The active tab is accent-filled. Some tabs have a small leading icon.
+- Under the tabs: the tab's title in bold ("Project"), then rows. **Collapsible groups** have a
+  ▾ header ("Time", "Execution", "Display").
+- **Rows:** a right-aligned label column, then the value. Number fields have small step arrows on
+  both sides (‹ value ›) and show their unit ("0 F", "100 %"). Drop-downs show a ▾. Checkboxes are
+  small accent squares. A slider can follow a percent field. A colour swatch has a picker
+  button.
+- **Two-column groups:** short related fields sit side by side, each with its own label
+  (FPS | Project Time; Min Time | Max Time; the Execution checkboxes in two columns). Use this
+  when a group's fields are short. It is per group, data-driven (a `columns: 2` UI hint).
+- A `›` before a row means it expands to show sub-parameters (View Clipping, Input Color Profile).
+
+### 29.4 What this changes (brief mapping)
+
+| Rule | Brief |
+|---|---|
+| Tool strip left, Move/Rotate/Scale with accent fill, hover name | 227 (icons, layout table), 223 (E/R/T) |
+| Command bar groups: axis locks, component modes (the one mode UI), snapping, workplane, render | 225 (one mode UI), 227 |
+| Viewport menu bar and the four navigation handle icons | 227 (handles drag = navigate, with 1/2/3, 223) |
+| Object palette strip with colour-coded creation groups, Cloner one click | 228 |
+| Managers column: Objects/Takes over Attributes/Layers, menu rows | 226 (docking default layout), 229 |
+| Timeline row composition | 227 |
+| Attribute tabs as wrapping toggle buttons, two-column groups, step arrows | 231 (and §12) |
+| Document tabs and the layout switcher row | 227, 226 (layouts = §21 workspaces) |
