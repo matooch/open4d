@@ -1,6 +1,6 @@
 # 046 · Null display, Instance render modes, Connect weld options
 
-Status: waiting: O20b (Null display via the observer's viewport_screenshot; Instance modes and Connect weld are already built and observed) · Area: C · Depends on: – · Observations: O20 · Touches: generators, viewport
+Status: done (parity-pending: Null circle/sphere segment count, 3D shape depth and pyramid apex, star inner radius, in-plane up axis for the X/Y orientations, Aspect on solids, X-Ray drawing) · Area: C · Depends on: – · Observations: O20 · Touches: generators, viewport
 
 ## Goal
 The smaller R25 object options (Null display shapes, Instance modes, Connect weld tolerance) exist and match where observed.
@@ -16,8 +16,8 @@ The smaller R25 object options (Null display shapes, Instance modes, Connect wel
 - Connect: weld on/off, tolerance, Phong mode.
 
 ## Done when
-- [ ] GENERATORS2.md updated; tests.
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] SCENE-OBJECTS.md S9 (Null) and GENERATORS2.md updated; tests.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -27,10 +27,11 @@ The smaller R25 object options (Null display shapes, Instance modes, Connect wel
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
-- Result: blocked, nothing implemented. docs/parity/generators-3.md (O20, 59 cases) lists only metaball, atom-array, spline-mask, boole, subdivision, symmetry, sweep, loft, lathe, platonic, oil-tank, polygon-prim, figure, landscape cases; its Notes never mention Null display shapes, Instance modes or Connect weld/tolerance/Phong. tests/golden has no null folder; connect has only the R20 cases defaults/weld-off/apart/order (weld on/off already covered); instance has only defaults (Instance mode). No R25 observation exists for Null display, Render/Multi-Instance, Connect tolerance or Phong mode, so a spec could not cite a source (CLAUDE.md rule 4).
-- Follow-up: new observation form with cases null/shape-*, null/radius-aspect, instance/render-instance, instance/multi-instance, connect/tolerance-*, connect/phong-*.
-- Rules derived, with the case that proves each; parity-pending rules.
-- Deviations from the design decisions, and why.
-- Files changed.
-- Open questions or data that would settle them (the reviewer turns these into follow-up forms).
-- The last lines of the gate output.
+- Result: done (parity-pending, see below). Null display built from the O20b tables; Instance modes and Connect weld verified, not redone.
+- Verified (already built, O20): Connect weld on/off, tolerance and move-to-later-point (`connect/tolerance-in`, `connect/weld-off`, `connect/defaults`) and Instance / Render Instance (`instance/render-instance`) are read by `crates/generators/tests/generators_parity.rs` (passes); Multi-Instance and Phong Average were withheld by the observer (GENERATORS2.md section 4).
+- Rules derived, with the case that proves each (R = 100; full table in docs/specs/SCENE-OBJECTS.md S9.3): Rectangle corners on the circle (142.7 = 100 sqrt 2 + line width); Diamond vertices at +-R (198.7); Triangle circumradius R, vertex up (width 173.2 = R sqrt 3, y -50.3..98.7); Pentagon vertex up (width 191.1, y -80.9..98.7); Hexagon vertices left/right (198.7 x 173.2); Octagon flat sides on the axes (186.0 = 2 R cos 22.5 + line); Star 8 points, 16 segments (198.7); Axis +X and +Y arms from the origin (x 0..100.6, y -0.6..98.7); Cube square of side 2R in front view; Pyramid square plus diagonals, 8 segments; Sphere circle plus two diameters. Aspect multiplies the vertical axis of flat shapes (Rectangle R50 AR2: 71.3 x 142.7) and does nothing on the solids (Pyramid R50 AR2 identical to AR1). Orientation X/Y/Z lie in YZ/XZ/XY, Camera faces the view.
+- Parity-pending (own design, S9): circle and sphere circles use 64 segments; solids are 3D with depth 2R, pyramid apex on the normal toward the viewer; star inner radius R/2; the in-plane up axis is world Y for X and Z, world Z for Y; solids with Camera orientation use the world axes; fixed orientations are drawn in the Null's local frame and Camera orientation at its world position without its rotation or scale.
+- Deviations from the design decisions: none. X-Ray and the object tree icon tint (`icon_color`) are stored parameters but not drawn (the overlay line pipeline is depth tested with no per-line flag).
+- Files changed: crates/core/src/registry.rs, lib.rs (`null_type`, `NULL_SHAPES`); crates/generators/src/null_display.rs, lib.rs; crates/ui/src/scene_overlay.rs; tests crates/generators/tests/null_display.rs, crates/io/tests/null_display.rs, crates/ui/tests/null_overlay.rs; docs/specs/SCENE-OBJECTS.md, GENERATORS2.md; BACKLOG, STATUS, PROGRESS.
+- Open questions: circle/sphere segment count and solids' depth cannot be read from the front view; a Top and a rotated-view capture of Cube/Pyramid/Sphere at Camera orientation, and Aspect 2 with orientation X for a 3D shape, would settle them.
+- The last lines of the gate output: see the commit message of the final commit.
