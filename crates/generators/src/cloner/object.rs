@@ -61,6 +61,9 @@ pub(super) fn placements(
     if reaches(scene, *source, id) {
         return Err(BuildError::Unsupported("cyclic cloner object source"));
     }
+    if let Some(mut points) = forge_particles::EmitterPoints::new(scene, *source) {
+        return particle_items(&mut points, cloner, ctx, align, up);
+    }
     // A spline has no mesh of its own: its sampled polyline is the clone source (its points
     // are the Vertex distribution, its chords the Edge and Polygon Center ones).
     let spline = crate::splines::polyline_mesh(scene, *source);
@@ -172,6 +175,37 @@ pub(super) fn placements(
         return Err(BuildError::Unsupported("more than 1000000 clones"));
     }
     Ok(items)
+}
+
+/// One clone per live particle at the context's frame (DYNAMICS.md section 11): the
+/// particle's position in the cloner's space, +Z along its velocity when aligned (the frame of
+/// `frame(p, z, up)`), uniform scale the particle's scale.
+fn particle_items(
+    points: &mut dyn forge_particles::PointSource,
+    cloner: DMat4,
+    ctx: &EvalCtx,
+    align: bool,
+    up: Option<DVec3>,
+) -> Result<Vec<CloneItem>, BuildError> {
+    let at = (ctx.time * ctx.fps).round() as i64;
+    let inverse = cloner.inverse();
+    let live = points.points_at(at);
+    if live.len() > MAX_CLONES {
+        return Err(BuildError::Unsupported("more than 1000000 clones"));
+    }
+    Ok(live
+        .iter()
+        .map(|pt| {
+            let p = inverse.transform_point3(pt.position);
+            let z = inverse.transform_vector3(pt.velocity);
+            let m = if align && z.length_squared() > 0.0 {
+                frame(p, z, up.unwrap_or(DVec3::Y))
+            } else {
+                DMat4::from_translation(p)
+            };
+            CloneItem::at(m * DMat4::from_scale(DVec3::splat(pt.scale)), DVec3::ZERO)
+        })
+        .collect())
 }
 
 /// Evaluate linked sources only if their hierarchy and object links do not reach us.

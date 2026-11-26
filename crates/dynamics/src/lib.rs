@@ -11,6 +11,9 @@ pub mod settings;
 pub mod sim;
 pub mod soft;
 
+/// The particle emitter, forces and point source (docs/specs/DYNAMICS.md sections 9-11).
+pub use forge_particles as particles;
+
 pub use cache::DynamicsCache;
 pub use nodes::{
     CONNECTOR, DynamicsToolset, RIGID_BODY, SETTINGS, SPRING, connector_type, rigid_body_type,

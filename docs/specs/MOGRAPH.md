@@ -168,6 +168,12 @@ Polygon Center use the chord midpoints (a two-point chord reports the same midpo
 way). Surface draws nothing (a chord has no area) and Volume is `Unsupported` (the polyline is
 not a closed hull). No observation records a spline source, so this rule is **parity-pending**.
 
+**Particle source (brief 121; own design D20, DYNAMICS.md §11).** A particle emitter linked as the
+cloner's `object` makes one clone per live particle at the evaluation frame, whatever the
+distribution (Axis still gives the object's own axis): position the particle's position in the
+cloner's space, orientation (Align Clone, default on) +Z along the velocity, uniform scale the
+particle's scale. **Parity-pending** (no observation).
+
 Limit: a cloner makes at most `MAX_CLONES = 1 000 000` clones; more is `Unsupported`.
 
 ## C3. Evaluation and geometry expansion
@@ -1041,7 +1047,9 @@ Rules:
   object in its point order (8 chains for the cube, in the cube's point order), otherwise its origin; a Matrix or cloner link
   contributes one node per visible clone (its position). Chains of several links follow in link order. All chains are
   loops of one spline, in world space (the points are expressed in the Tracer's local frame so that they land at their world
-  position).
+  position). A particle emitter link (brief 121, own design D20, DYNAMICS.md §11) makes one chain per particle id instead,
+  after the chains of the other links, with the particle's positions over the sampled frames in which it is alive;
+  Connect All Objects adds the live particles of the current frame, by id.
 - **Sample Step** `s` (`tracer/interval`, s = 5 gives frames 1, 5, 10, ... 30): the frames `f` with `f = 1` or `f mod s = 0`
   (parity-pending: one case; whether frame 1 is always sampled or the first step is relative is not separable).
 - The linked object is evaluated at each sampled frame from the scene with its tracks read at exactly that frame

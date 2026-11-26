@@ -14,7 +14,7 @@ use glam::{DMat4, DVec3, IVec3};
 use crate::csg::{CsgOp, combine};
 use crate::filters::{self, Band, FilterKind, SmoothOp};
 use crate::grid::SparseGrid;
-use crate::sdf::{SdfParams, mesh_to_sdf, spline_to_sdf};
+use crate::sdf::{PointUnion, SdfParams, mesh_to_sdf, points_to_sdf, spline_to_sdf};
 
 pub const BUILDER: &str = "forge.volume_builder";
 pub const MESHER: &str = "forge.volume_mesher";
@@ -253,7 +253,12 @@ impl Blend {
 /// One source of the list, in builder space.
 enum Source {
     Mesh(PolyMesh),
-    Spline { points: Vec<DVec3>, closed: bool },
+    Spline {
+        points: Vec<DVec3>,
+        closed: bool,
+    },
+    /// The live particles of an emitter (VOLUME.md section 6.2, DYNAMICS.md section 11).
+    Particles(Vec<DVec3>),
     Volume(Box<Volume>),
     Filter(FilterSpec),
     Field(Box<dyn forge_fields::Field>),
@@ -268,6 +273,7 @@ struct FilterSpec {
 struct Settings {
     sdf: SdfParams,
     spline_range: f64,
+    particle_range: f64,
     fog: bool,
 }
 
@@ -297,6 +303,12 @@ pub const SPLINE_RADIUS_PER_RANGE: f64 = 0.735;
 /// The radius of the tube a spline becomes (VOLUME.md section 6.3).
 fn spline_radius(s: &Settings) -> f64 {
     SPLINE_RADIUS_PER_RANGE * s.spline_range * s.sdf.voxel_size
+}
+
+/// The sphere radius of a particle: the spline factor on the particle range (DYNAMICS.md
+/// section 11; own design, parity-pending).
+fn particle_radius(s: &Settings) -> f64 {
+    SPLINE_RADIUS_PER_RANGE * s.particle_range * s.sdf.voxel_size
 }
 
 fn gather(
@@ -339,6 +351,17 @@ fn gather(
         }
         let vol = build_volume_inner(scene, node, ctx, depth + 1, opts)?;
         out.push((node, Source::Volume(Box::new(vol))));
+        return Ok(());
+    }
+    if let Some(mut source) = forge_particles::EmitterPoints::new(scene, node) {
+        use forge_particles::PointSource;
+        let frame = (ctx.time * ctx.fps).round() as i64;
+        let points = source
+            .points_at(frame)
+            .iter()
+            .map(|p| to_builder.transform_point3(p.position))
+            .collect();
+        out.push((node, Source::Particles(points)));
         return Ok(());
     }
     if let Some(line) = forge_generators::splines::polyline_mesh(scene, node) {
@@ -462,6 +485,7 @@ fn settings(p: &P) -> Result<Settings, VolumeBuildError> {
             interior_range: p.int("interior_voxel_range") as f64,
         },
         spline_range: p.int("spline_voxel_range") as f64,
+        particle_range: p.int("particle_voxel_range") as f64,
         fog,
     })
 }
@@ -567,6 +591,11 @@ fn build_volume_inner(
             Source::Spline { points, closed } => {
                 spline_to_sdf(&points, closed, spline_radius(&s), &s.sdf)
             }
+            Source::Particles(points) => {
+                let r = particle_radius(&s);
+                let spheres: Vec<(DVec3, f64)> = points.iter().map(|p| (*p, r)).collect();
+                points_to_sdf(&spheres, PointUnion::Min, &s.sdf)
+            }
             Source::Volume(v) => {
                 let same =
                     v.grid.same_lattice(&s.sdf.empty_grid()) && v.to_parent == DMat4::IDENTITY;
@@ -624,7 +653,7 @@ fn entries_extent(entries: &[(NodeId, Source)]) -> f64 {
     for (_, s) in entries {
         let points: &[DVec3] = match s {
             Source::Mesh(m) => &m.points,
-            Source::Spline { points, .. } => points,
+            Source::Spline { points, .. } | Source::Particles(points) => points,
             _ => continue,
         };
         for p in points {

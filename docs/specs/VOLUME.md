@@ -148,6 +148,9 @@ geometry evaluation is `None` and the mesher (§7) or another consumer reads the
     ranges;
   - **splines** (anything `splines::polyline_mesh` accepts) go through `spline_to_sdf` (§3) with the
     spline radius of §6.3 and `spline_voxel_range`;
+  - **particle emitters** (`forge.particle_emitter`): each live particle at the evaluation frame
+    is a sphere of radius `0.735 * particle_voxel_range * voxel_size` (own design, parity-pending;
+    DYNAMICS.md §11), unioned with `points_to_sdf`;
   - **volume builders** as children: their volume, resampled trilinearly onto this lattice when the
     lattice differs (**own design**);
   - filter layers (`forge.volume_filter`, §8) and field layers (§9).

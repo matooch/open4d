@@ -118,7 +118,7 @@ implementers can avoid collisions.
 | 118 | [Soft bodies (PBD)](../agents/tasks/118-soft-bodies.md) | I | 115 | done (resting height pinned: the reference sinks through the plane; constants parity-pending) | dynamics |
 | 119 | [Particle emitter and particle data](../agents/tasks/119-particle-emitter.md) | I | 050 | done (parity-pending: O40, own design D20) | dynamics |
 | 120 | [Forces: gravity, wind, attractor, deflector, friction, turbulence, rotation](../agents/tasks/120-forces.md) | I | 119, 115, 063 | done (parity-pending: O40, own design D20) | dynamics |
-| 121 | [Particles in the clone toolset and volumes](../agents/tasks/121-particles-in-clones-volumes.md) | I | 119, 076, 081 | ready | dynamics, clone-engine, volume |
+| 121 | [Particles in the clone toolset and volumes](../agents/tasks/121-particles-in-clones-volumes.md) | I | 119, 076, 081 | done (parity-pending: own design D20) | dynamics, clone-engine, volume |
 | 122 | [Bake to keys and cache tags; dynamics UI](../agents/tasks/122-dynamics-bake-ui.md) | I | 115, 093 | done | dynamics, ui |
 | 123 | [Material model: Standard material + material tag + IR compile](../agents/tasks/123-material-model.md) | J | – | done (8 tests; scene hosting of materials needs a core slot) | material (new), plugin |
 | 124 | [Node material graph + node editor UI](../agents/tasks/124-node-material.md) | J | 123, 109 | done (parity-pending: G7) | material, ui |
