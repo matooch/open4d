@@ -13,6 +13,9 @@ pub(crate) const INSTANCE_GEOMETRY_WGSL: &str = include_str!("instance_geometry.
 /// R24.8 opaque reflection sampler; requires the shared RNG and surface WGSL.
 pub const REFLECTION_SAMPLING_WGSL: &str = include_str!("reflection_sampling.wgsl");
 
+/// Standalone R24.11 spatial reconstruction of the full-resolution diffuse signal.
+pub const DIFFUSE_SPATIAL_WGSL: &str = include_str!("diffuse_spatial.wgsl");
+
 /// Raw R24.8 reflection signal before spatial/temporal filtering.
 pub fn reflection_wgsl(
     backend: crate::ray::BackendKind,

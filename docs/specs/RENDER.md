@@ -1381,6 +1381,42 @@ quality assertions to pass. The candidate passed R26 on Compute and Metal
 with unchanged pins, but failed the R24 emissive-bounce PSNR improvement
 assertion; the default remains the eight-attempt inline estimator.
 
+### R24.11 GPU diffuse spatial reconstruction (brief 214)
+
+Sources: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report)
+and the R24.3 spatial filter. This is our own design.
+
+- In a second compute pass, read the full-resolution eight-attempt diffuse
+  signal directly from GPU storage. Write a separate buffer; never filter
+  in place or change the eight samples. Use absolute film coordinates,
+  including when the raster output is cropped.
+- Match the CPU filter: return the raw center unchanged if its coverage
+  is below 0.5. Otherwise start with twice the center and visit each
+  in-film neighbour in row-major order. Include it once if its coverage
+  tag equals the center's, the raster normal dot product is at least 0.95,
+  world separation is at most the filter limit, and absolute separation
+  along the center normal is at most one tenth of that limit. The limit
+  is three times the orthographic width (scene scale for other projections)
+  divided by the film width. The coverage tag carries material identity;
+  the triangle key in the normal's fourth component does not gate reuse.
+  Multiply by the reciprocal of the total weight.
+- Use two unfilterable primary texture views and two separate `vec4<f32>`
+  signal buffers. Pass `limit²` and `0.1 * limit` as f32 in a 16-byte
+  uniform. The GPU guide tests use f32, so a threshold tie can differ
+  from the CPU's f64 guide arithmetic. Do not change guide thresholds to
+  compensate.
+- Validate the standalone pass against the CPU filter on a cropped odd
+  film spanning multiple workgroups. Check all rejection rules, accepted
+  same-material neighbours with different triangle keys, and workgroup
+  and film boundaries. Raw passthrough must be exact; compare blended
+  components within `2e-6 * max(1, abs(expected))` to allow shader f32
+  arithmetic. Guide fixtures must discriminate rejection, not sit within
+  numeric roundoff of a decision threshold.
+- Translate the standalone shader to SPIR-V, MSL and HLSL before live use.
+  Live adoption requires the strict R26 matrix and existing R24 hybrid
+  quality assertions, with unchanged CPU fallback and per-jitter history.
+  This pass does not change the estimator, history or final composition.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),

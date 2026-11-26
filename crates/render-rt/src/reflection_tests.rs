@@ -10,6 +10,201 @@ use forge_render_api::{
 use glam::DMat4;
 
 #[test]
+fn gpu_diffuse_spatial_matches_cpu_across_crop_and_workgroups() {
+    use forge_render_gpu::{await_mapped, map_read};
+    use wgpu::util::DeviceExt;
+
+    let (device, queue) = match crate::request_default_device() {
+        Ok(gpu) => gpu,
+        Err(err) if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") => {
+            panic!("FORGE_REQUIRE_GPU=1 but no GPU: {err}");
+        }
+        Err(err) => {
+            eprintln!("skipping GPU test: {err}");
+            return;
+        }
+    };
+    let (w, h) = (19, 17);
+    let settings = RenderSettings {
+        width: w,
+        height: h,
+        region: Some([1, 1, w, h]),
+        ..Default::default()
+    };
+    let pixel = |x, y| (y * w + x) as usize;
+    let mut positions = vec![[0.; 4]; (w * h) as usize];
+    let mut normals = positions.clone();
+    let mut raw = positions.clone();
+    let pairs = [
+        ((1, 1), (2, 1), [0.3, 0., 0., 1.], [0., 0., 1., 2.], true),
+        ((7, 2), (8, 2), [0.3, 0., 0., 1.], [0., 0., 1., 2.], true),
+        ((7, 7), (8, 8), [0.3, 0., 0., 1.], [0., 0., 1., 2.], true),
+        (
+            (17, 16),
+            (18, 16),
+            [0.3, 0., 0., 1.],
+            [0., 0., 1., 2.],
+            true,
+        ),
+        ((1, 5), (2, 5), [0.3, 0., 0., 2.], [0., 0., 1., 1.], false),
+        ((1, 9), (2, 9), [0.3, 0., 0., 1.], [0.6, 0., 0.8, 1.], false),
+        ((1, 13), (2, 13), [1.2, 0., 0., 1.], [0., 0., 1., 1.], false),
+        (
+            (14, 7),
+            (14, 8),
+            [0.3, 0., 0.2, 1.],
+            [0., 0., 1., 1.],
+            false,
+        ),
+    ];
+    for ((x, y), (nx, ny), p, n, _) in pairs {
+        let (a, b) = (pixel(x, y), pixel(nx, ny));
+        positions[a] = [0., 0., 0., 1.];
+        normals[a] = [0., 0., 1., 1.];
+        positions[b] = p;
+        normals[b] = n;
+        raw[a] = [1., 2., 3., 0.];
+        raw[b] = [4., 8., 12., 0.];
+    }
+    for y in 11..=13 {
+        for x in 9..=11 {
+            let i = pixel(x, y);
+            positions[i] = [(x - 9) as f32 * 0.2, (y - 11) as f32 * 0.2, 0., 1.];
+            normals[i] = [0., 0., 1., 1.];
+            let lane = ((y - 11) * 3 + (x - 9)) as f32;
+            raw[i] = [lane, lane * lane, 1., 0.];
+        }
+    }
+    // Nonzero uncovered data proves passthrough, not a zero-fill.
+    raw[pixel(0, 1)] = [13., 17., 19., 23.];
+    let input = PrimaryInput {
+        positions: &positions,
+        normals: &normals,
+        jitter: [0.; 2],
+        epsilon: 0.,
+    };
+    let expected = spatial_filter(w as usize, &input, &raw, 1.);
+    for ((x, y), _, _, _, blends) in pairs {
+        let i = pixel(x, y);
+        assert_eq!(expected[i] != raw[i], blends, "fixture pixel {x},{y}");
+    }
+    assert_eq!(expected[pixel(10, 12)], [4., 22., 1., 0.]);
+
+    let views =
+        [input.positions, input.normals].map(|data| texture_view(&device, &queue, &settings, data));
+    let init = |usage, contents| {
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents,
+            usage,
+        })
+    };
+    let thresholds = init(
+        wgpu::BufferUsages::UNIFORM,
+        bytemuck::bytes_of(&[1_f32, 0.1, 0., 0.]),
+    );
+    let signal = init(wgpu::BufferUsages::STORAGE, bytemuck::cast_slice(&raw));
+    let alloc = |usage| {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: signal.size(),
+            usage,
+            mapped_at_creation: false,
+        })
+    };
+    let filtered = alloc(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
+    let staging = alloc(wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ);
+    use wgpu::{BindingType, BufferBindingType};
+    let buffer = |ty| BindingType::Buffer {
+        ty,
+        has_dynamic_offset: false,
+        min_binding_size: None,
+    };
+    let texture = BindingType::Texture {
+        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+        view_dimension: wgpu::TextureViewDimension::D2,
+        multisampled: false,
+    };
+    let types = [
+        buffer(BufferBindingType::Uniform),
+        texture,
+        texture,
+        buffer(BufferBindingType::Storage { read_only: true }),
+        buffer(BufferBindingType::Storage { read_only: false }),
+    ];
+    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: None,
+        entries: &std::array::from_fn::<_, 5, _>(|i| wgpu::BindGroupLayoutEntry {
+            binding: i as u32,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: types[i],
+            count: None,
+        }),
+    });
+    let resources = [
+        thresholds.as_entire_binding(),
+        wgpu::BindingResource::TextureView(&views[0]),
+        wgpu::BindingResource::TextureView(&views[1]),
+        signal.as_entire_binding(),
+        filtered.as_entire_binding(),
+    ];
+    let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &layout,
+        entries: &resources
+            .into_iter()
+            .enumerate()
+            .map(|(binding, resource)| wgpu::BindGroupEntry {
+                binding: binding as u32,
+                resource,
+            })
+            .collect::<Vec<_>>(),
+    });
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[Some(&layout)],
+        immediate_size: 0,
+    });
+    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(crate::shader::DIFFUSE_SPATIAL_WGSL.into()),
+    });
+    let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: None,
+        layout: Some(&pipeline_layout),
+        module: &module,
+        entry_point: Some("diffuse_spatial"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+    let mut encoder = device.create_command_encoder(&Default::default());
+    {
+        let mut pass = encoder.begin_compute_pass(&Default::default());
+        pass.set_pipeline(&pipeline);
+        pass.set_bind_group(0, &bind, &[]);
+        pass.dispatch_workgroups(w.div_ceil(8), h.div_ceil(8), 1);
+    }
+    encoder.copy_buffer_to_buffer(&filtered, 0, &staging, 0, signal.size());
+    queue.submit([encoder.finish()]);
+    let slice = staging.slice(..);
+    await_mapped(&device, &map_read(&slice)).unwrap();
+    let mapped = slice.get_mapped_range().unwrap();
+    let actual: &[[f32; 4]] = bytemuck::cast_slice(&mapped);
+    for (i, (&got, &want)) in actual.iter().zip(&expected).enumerate() {
+        if positions[i][3] < 0.5 {
+            assert_eq!(got, want, "uncovered pixel {i}");
+        } else {
+            for (got, want) in got.into_iter().zip(want) {
+                assert!(
+                    (got - want).abs() <= 2e-6 * want.abs().max(1.),
+                    "pixel {i}: {got} vs {want}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn gpu_reduced_diffuse_reuses_only_compatible_absolute_quad_lanes() {
     let triangle =
         |r: f64, z| MeshData::new(vec![[-r, -r, z], [r, -r, z], [0., r, z]], vec![[0, 1, 2]]);

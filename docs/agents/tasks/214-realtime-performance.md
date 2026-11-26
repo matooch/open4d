@@ -36,6 +36,14 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Standalone GPU spatial reconstruction:** The R24.11 filter reads
+  the raw diffuse signal from GPU storage without changing its sample
+  budget. Metal matched the CPU spatial filter on a cropped 19×17
+  fixture covering material, normal, distance and depth rejection,
+  same-material triangle boundaries and cross-workgroup neighbours.
+  The shader translated to SPIR-V, MSL and HLSL. `GATE: all passed`
+  (2757 tests). The live path remains unchanged; no new S10 measurement
+  or Tier 2 throughput claim.
 - **Live reduced-rate GI experiment:** Tested the rotating one-attempt
   quad entry with the existing spatial filter and per-jitter history. The CPU
   batched fallback still uses eight attempts. Strict R26 held at 18/19/23 of

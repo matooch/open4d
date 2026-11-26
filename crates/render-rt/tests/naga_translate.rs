@@ -45,6 +45,14 @@ fn translate(name: &str, source: &str) {
 }
 
 #[test]
+fn diffuse_spatial_reconstruction_translates_to_all_backends() {
+    translate(
+        "diffuse spatial reconstruction",
+        forge_render_rt::shader::DIFFUSE_SPATIAL_WGSL,
+    );
+}
+
+#[test]
 fn hardware_ray_queries_translate_to_all_backends() {
     translate("hardware ray queries", forge_render_rt::ray::HARDWARE_WGSL);
 }
