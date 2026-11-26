@@ -77,7 +77,7 @@ Then only 210 (DX12 shadows, your Windows PC) and 185 (v1.0 release) remain.
 | GUI sessions G1–G9 | Feel, layout, shortcuts, viewport look can only be checked by a person at the reference app | An hour or two per session: [parity/GUI-SESSIONS.md](parity/GUI-SESSIONS.md) |
 | Hands-on use of the editor | Nobody has used the editor for real work yet; that's where the remaining usability bugs are | Build a small scene in it and report what gets in the way |
 | S10 + R8 numbers | Need real GPUs | Run the benchmarks on the M5 Pro and RTX 3090 |
-| Reference app licence | Confirm scripted use is allowed (OBSERVER.md §1 step 6) | A one-line note in `docs/parity/r25-drift.md` |
+| **Reference app licence (now blocking observation)** | Its EULA (§11.3.7 per a summary) forbids access "through automated means, bots, or scripts" except through interfaces the vendor provides for that purpose. GUI automation is out; scripted access through the official scripting API needs your confirmation. New observer runs (O64 and on) are paused | Read the full EULA; add a one-line note in `docs/parity/r25-drift.md` saying whether scripted API use is allowed. GUI sessions G1/G2/G10: you drive the app, an AI only transcribes your screenshots |
 
 ## Observation data (golden cases from the reference app)
 
