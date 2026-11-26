@@ -31,7 +31,7 @@ Never quit, restart or kill the reference app yourself. If it stops answering, w
 
 Keep your context small. Command output fills it fast, so:
 - Always run git quietly and cap output, exactly like this:
-  ssh bigman@192.168.0.224 'cd /Users/bigman/Github/open4d && git fetch -q origin && git checkout -q observations && git merge -q --no-stat --no-edit origin/main && git log --oneline -1 && git status --short | head -20'
+  ssh bigman@192.168.0.224 'cd /Users/bigman/Github/open4d && git fetch -q origin && git checkout -q observations && git merge -q --no-stat --no-edit origin/main origin/claude/practical-hamilton-qmant4 && git log --oneline -1 && git status --short | head -20'
   (if the observations branch does not exist: git checkout -q -b observations origin/main)
 - Never print a whole diff, a full `git status` of many files, a mesh.obj, or a samples.json. Use `| head -20`, `wc -l`, or `golden info`.
 - Read only the parts of files you need (sed -n 'A,Bp' file).
