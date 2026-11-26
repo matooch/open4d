@@ -52,6 +52,8 @@ pub struct HybridSettings {
     pub ao: bool,
     /// Maximum AO ray distance in world units. Zero leaves ambient unchanged.
     pub ao_radius: f64,
+    /// Add one ray-traced diffuse bounce to raster lighting.
+    pub gi: bool,
 }
 
 impl Default for HybridSettings {
@@ -62,6 +64,7 @@ impl Default for HybridSettings {
             reflections: false,
             ao: false,
             ao_radius: 40.0,
+            gi: false,
         }
     }
 }

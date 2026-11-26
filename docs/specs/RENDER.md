@@ -1028,8 +1028,10 @@ and shading conventions in R7–R9. The hybrid renderer is our own design.
   emission. A zero radius leaves ambient unchanged.
 - GI samples the cosine-weighted hemisphere. A visible secondary surface supplies
   its emissive and directly lit radiance, weighted by the primary diffuse
-  reflectance. No additional indirect bounces. A miss adds no GI when the raster
-  environment already supplies the diffuse sky term.
+  BSDF times cosine over PDF (`albedo × (1 − transmission)` for R7 Lambert).
+  Add the result to `Diffuse` without replacing primary direct or ambient
+  lighting. There are no additional indirect bounces; a miss adds zero because
+  the raster environment already supplies the diffuse sky term.
 
 ### R24.3 Denoising and acceptance
 

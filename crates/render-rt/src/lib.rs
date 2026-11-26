@@ -96,6 +96,8 @@ pub mod frame {
     pub const RT_SHADOWS_ON: usize = 109;
     /// Lighting reads ray-traced specular radiance instead of raster environment specular.
     pub const RT_REFLECTIONS_ON: usize = 110;
+    /// Lighting reads a one-bounce diffuse contribution in addition to raster lighting.
+    pub const RT_GI_ON: usize = 111;
 
     pub const SLOTS: usize = 128;
 
@@ -151,5 +153,6 @@ pub mod frame {
         ("RT_AO_ON", RT_AO_ON),
         ("RT_SHADOWS_ON", RT_SHADOWS_ON),
         ("RT_REFLECTIONS_ON", RT_REFLECTIONS_ON),
+        ("RT_GI_ON", RT_GI_ON),
     ];
 }

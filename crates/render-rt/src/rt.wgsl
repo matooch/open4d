@@ -697,9 +697,13 @@ fn shade_pixel(px: vec2<i32>, frag: vec2<f32>) -> Shaded {
             specular += sv.spec * env_radiance(normalize(r)) * ao;
         }
     }
+    var layer = select(0, 2, fr(F_RT_SHADOWS_ON) > 0.5) + select(0, 1, fr(F_RT_AO_ON) > 0.5);
     if (fr(F_RT_REFLECTIONS_ON) > 0.5) {
-        let layer = select(0, 2, fr(F_RT_SHADOWS_ON) > 0.5) + select(0, 1, fr(F_RT_AO_ON) > 0.5);
         specular += textureLoad(forge_lighting_src, px, layer, 0).xyz;
+        layer += 1;
+    }
+    if (fr(F_RT_GI_ON) > 0.5) {
+        diffuse += textureLoad(forge_lighting_src, px, layer, 0).xyz;
     }
     if (contribution_sum > 0.0) {
         out.shadow = clamp(visible_sum / contribution_sum, 0.0, 1.0);

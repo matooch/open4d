@@ -198,7 +198,7 @@ implementers can avoid collisions.
 | 198 | [Real-time raster PBR engine (render-rt)](../agents/tasks/198-realtime-raster.md) | R | 197, 133, 137 | done | render-rt (new), viewport, render-api |
 | 199 | [Post effects and viewport Render mode](../agents/tasks/199-realtime-post.md) | R | 198 | done | render-rt, viewport, ui |
 | 200 | [GPU scene: RtBackend trait, instanced scene, compute backend](../agents/tasks/200-gpu-scene-rt.md) | R | 142, 198 | done | render-rt, render-gpu |
-| 201 | [Hybrid ray-traced shadows, reflections, AO and GI](../agents/tasks/201-hybrid-rt.md) | R | 200 | in-progress (hermes) | render-rt |
+| 201 | [Hybrid ray-traced shadows, reflections, AO and GI](../agents/tasks/201-hybrid-rt.md) | R | 200 | done | render-rt |
 | 202 | [Real-time path tracing with denoising](../agents/tasks/202-realtime-pathtrace.md) | R | 200, 201 | waiting: 200, 201 | render-rt |
 | 203 | [Consistency tests across render tiers](../agents/tasks/203-rt-consistency.md) | R | 198, 202 | waiting: 198, 202 | tests, render-rt |
 | 204 | [Real-time performance targets](../agents/tasks/204-rt-performance.md) | R | 199, 201 | waiting: 199, 201 | render-rt, bench |

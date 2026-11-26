@@ -14,7 +14,7 @@ use crate::ray::{self, Ray, RtBackend};
 
 const AO_RAYS: usize = 8;
 const SHADOW_RAYS: usize = 8;
-const REFLECTION_RAYS: usize = 8;
+const BOUNCE_RAYS: usize = 8;
 // At most 512 KiB each for ray input and hit output, well within supported
 // storage binding and compute dispatch limits.
 const PIXELS_PER_BATCH: usize = 2048;
@@ -29,6 +29,34 @@ pub(crate) struct HybridView {
     ao: BTreeMap<[u32; 2], History<f32>>,
     shadows: BTreeMap<[u32; 2], History<[f32; 8]>>,
     reflections: BTreeMap<[u32; 2], History<[f32; 4]>>,
+    gi: BTreeMap<[u32; 2], History<[f32; 4]>>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum Bounce {
+    Reflection,
+    Diffuse,
+}
+
+impl Bounce {
+    fn sample(self, p: &PrimarySurface, rng: &mut Rng) -> Option<(DVec3, DVec3)> {
+        match self {
+            Self::Reflection => p.surface.sample_specular(p.normal, p.view, rng),
+            Self::Diffuse if p.normal.dot(p.view) > 0.0 => {
+                let weight = p.surface.albedo * (DVec3::ONE - p.surface.trans);
+                (weight != DVec3::ZERO)
+                    .then(|| (to_world(p.normal, cosine_hemisphere(rng.f2())), weight))
+            }
+            Self::Diffuse => None,
+        }
+    }
+
+    fn miss(self, snapshot: &Snapshot, direction: DVec3) -> DVec3 {
+        match self {
+            Self::Reflection => lights::env_radiance(&snapshot.environment.lighting, direction),
+            Self::Diffuse => DVec3::ZERO,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -50,6 +78,7 @@ impl HybridView {
         self.ao.clear();
         self.shadows.clear();
         self.reflections.clear();
+        self.gi.clear();
     }
 
     pub fn prepare(
@@ -246,8 +275,9 @@ impl HybridView {
         Ok(history.mean.clone())
     }
 
-    pub fn reflections(
+    pub fn indirect(
         &mut self,
+        bounce: Bounce,
         snapshot: &Snapshot,
         settings: &RenderSettings,
         input: PrimaryInput<'_>,
@@ -259,12 +289,14 @@ impl HybridView {
         let geometry = self.geometry.as_ref().expect("prepared shading geometry");
         let backend = self.backend.as_ref().expect("prepared ray backend");
         let lights = lights::prepare(snapshot, settings.default_light)?;
-        let history = self
-            .reflections
-            .entry(input.jitter.map(f32::to_bits))
-            .or_default();
+        let history = match bounce {
+            Bounce::Reflection => &mut self.reflections,
+            Bounce::Diffuse => &mut self.gi,
+        }
+        .entry(input.jitter.map(f32::to_bits))
+        .or_default();
         let mut pixels = vec![[0.0; 4]; input.positions.len()];
-        let mut rays = Vec::with_capacity(PIXELS_PER_BATCH * REFLECTION_RAYS);
+        let mut rays = Vec::with_capacity(PIXELS_PER_BATCH * BOUNCE_RAYS);
         let mut samples = Vec::with_capacity(rays.capacity());
         let mut secondary = Vec::with_capacity(rays.capacity());
         let seed = settings.seed ^ u64::from(history.frames);
@@ -279,9 +311,8 @@ impl HybridView {
             for i in (first..end).filter(|&i| input.positions[i][3] >= 0.5) {
                 let p = geometry.surface(snapshot, settings, &input, i);
                 let mut rng = Rng::new(seed, i as u64);
-                for sample in 0..REFLECTION_RAYS {
-                    let Some((wi, weight)) = p.surface.sample_specular(p.normal, p.view, &mut rng)
-                    else {
+                for sample in 0..BOUNCE_RAYS {
+                    let Some((wi, weight)) = bounce.sample(&p, &mut rng) else {
                         continue;
                     };
                     if p.geometric_normal.dot(wi) <= 0.0 {
@@ -292,7 +323,7 @@ impl HybridView {
                         direction: wi,
                         t_max: f64::INFINITY,
                     });
-                    samples.push((i, sample, weight / REFLECTION_RAYS as f64));
+                    samples.push((i, sample, weight / BOUNCE_RAYS as f64));
                 }
             }
             for ((ray, &(i, sample, weight)), hit) in
@@ -316,14 +347,14 @@ impl HybridView {
                     if !lights.is_empty() {
                         secondary.push(Secondary {
                             pixel: i,
-                            stream: (i * REFLECTION_RAYS + sample) as u64,
+                            stream: (i * BOUNCE_RAYS + sample) as u64,
                             weight,
                             point: p,
                         });
                     }
                     emission
                 } else {
-                    lights::env_radiance(&snapshot.environment.lighting, ray.direction)
+                    bounce.miss(snapshot, ray.direction)
                 };
                 add_rgb(&mut pixels[i], radiance * weight);
             }

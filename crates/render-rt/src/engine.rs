@@ -17,7 +17,7 @@ use wgpu::util::DeviceExt;
 
 use crate::frame;
 use crate::framegraph::FrameGraph;
-use crate::hybrid::{HybridView, PrimaryInput};
+use crate::hybrid::{Bounce, HybridView, PrimaryInput};
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
 
 /// One shadow map descriptor, 416 bytes (R21.4).
@@ -106,11 +106,13 @@ impl RtEngine {
         shadows: &[[f32; 8]],
         ao: &[f32],
         reflections: &[[f32; 4]],
+        gi: &[[f32; 4]],
     ) -> wgpu::TextureView {
         let layer_count = 2 * u32::from(!shadows.is_empty())
             + u32::from(!ao.is_empty())
-            + u32::from(!reflections.is_empty());
-        let ao_only = shadows.is_empty() && reflections.is_empty();
+            + u32::from(!reflections.is_empty())
+            + u32::from(!gi.is_empty());
+        let ao_only = layer_count == 1 && !ao.is_empty();
         let size = wgpu::Extent3d {
             width: w,
             height: h,
@@ -171,6 +173,15 @@ impl RtEngine {
             write_layer(
                 shadow_layers as u32 + u32::from(!ao.is_empty()),
                 bytemuck::cast_slice(reflections),
+                16,
+            );
+        }
+        if !gi.is_empty() {
+            write_layer(
+                shadow_layers as u32
+                    + u32::from(!ao.is_empty())
+                    + u32::from(!reflections.is_empty()),
+                bytemuck::cast_slice(gi),
                 16,
             );
         }
@@ -580,7 +591,10 @@ impl RenderEngine for RtEngine {
     ) -> Result<RenderOutput, RenderError> {
         settings.validate()?;
         if !settings.hybrid.enabled
-            || !(settings.hybrid.ao || settings.hybrid.shadows || settings.hybrid.reflections)
+            || !(settings.hybrid.ao
+                || settings.hybrid.shadows
+                || settings.hybrid.reflections
+                || settings.hybrid.gi)
         {
             self.hybrid
                 .lock()
@@ -665,6 +679,7 @@ impl RtEngine {
         let rt_ao = settings.hybrid.enabled && settings.hybrid.ao;
         let rt_shadows = settings.hybrid.enabled && settings.hybrid.shadows;
         let rt_reflections = settings.hybrid.enabled && settings.hybrid.reflections;
+        let rt_gi = settings.hybrid.enabled && settings.hybrid.gi;
         let graph = frame_pass_graph(
             plans.len(),
             split,
@@ -1169,7 +1184,7 @@ impl RtEngine {
             return Err(RenderError::Cancelled);
         }
         let mut primary = None;
-        let hybrid_view = if rt_ao || rt_shadows || rt_reflections {
+        let hybrid_view = if rt_ao || rt_shadows || rt_reflections || rt_gi {
             let mut view = self.hybrid.lock().unwrap_or_else(|e| e.into_inner());
             let signals = view
                 .prepare(snapshot, settings, device, queue)
@@ -1192,22 +1207,31 @@ impl RtEngine {
                         Vec::new()
                     };
                     let reflections = if rt_reflections {
-                        view.reflections(snapshot, settings, input, control)?
+                        view.indirect(Bounce::Reflection, snapshot, settings, input, control)?
+                    } else {
+                        Vec::new()
+                    };
+                    let gi = if rt_gi {
+                        view.indirect(Bounce::Diffuse, snapshot, settings, input, control)?
                     } else {
                         Vec::new()
                     };
                     primary = Some(g);
-                    Ok((shadows, ao, reflections))
+                    Ok((shadows, ao, reflections, gi))
                 });
             match signals {
-                Ok((shadows, ao, reflections))
-                    if !shadows.is_empty() || !ao.is_empty() || !reflections.is_empty() =>
+                Ok((shadows, ao, reflections, gi))
+                    if !shadows.is_empty()
+                        || !ao.is_empty()
+                        || !reflections.is_empty()
+                        || !gi.is_empty() =>
                 {
                     values[frame::RT_AO_ON] = u32::from(!ao.is_empty()) as f32;
                     values[frame::RT_SHADOWS_ON] = u32::from(!shadows.is_empty()) as f32;
                     values[frame::RT_REFLECTIONS_ON] = u32::from(!reflections.is_empty()) as f32;
+                    values[frame::RT_GI_ON] = u32::from(!gi.is_empty()) as f32;
                     queue.write_buffer(&frame_buf, 0, &frame_bytes(&values));
-                    Some(self.upload_hybrid(w, h, &shadows, &ao, &reflections))
+                    Some(self.upload_hybrid(w, h, &shadows, &ao, &reflections, &gi))
                 }
                 Ok(_) => None,
                 Err(RenderError::Unsupported(_)) => {

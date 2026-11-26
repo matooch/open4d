@@ -382,6 +382,114 @@ fn ray_traced_reflections_replace_effective_ssr() {
     });
 }
 
+#[test]
+fn ray_traced_gi_improves_psnr_and_does_not_double_the_diffuse_environment() {
+    with_gpu(|device, queue| {
+        let engine = RtEngine::with_device(device.clone(), queue.clone());
+        let mut scene = fixture(Effect::Gi);
+        let target = reference(&scene);
+        let mut settings = Effect::Gi.raster_settings();
+        settings.aovs = vec![Aov::Diffuse, Aov::Specular];
+        let render = |scene: &Snapshot, settings: &RenderSettings| {
+            engine.render(scene, settings, &Control::new()).unwrap()
+        };
+        let raster = render(&scene, &settings);
+        settings.hybrid.gi = true;
+        assert_eq!(render(&scene, &settings).beauty.data, raster.beauty.data);
+        settings.hybrid.enabled = true;
+        let traced = render(&scene, &settings);
+        let baseline = psnr(&raster, &target);
+        let improved = psnr(&traced, &target);
+        assert!(improved > baseline, "GI: {improved:.3} vs {baseline:.3} dB");
+        eprintln!("GI: {baseline:.3} → {improved:.3} dB");
+        assert_eq!(
+            traced.aovs[&Aov::Specular].data,
+            raster.aovs[&Aov::Specular].data
+        );
+        for (beauty, diffuse) in traced
+            .beauty
+            .data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(traced.aovs[&Aov::Diffuse].data.as_chunks::<4>().0)
+        {
+            assert_eq!(beauty[..3], diffuse[..3]);
+        }
+
+        scene.instances.pop();
+        scene.environment.lighting = Lighting::Constant {
+            color: [0.3; 3],
+            intensity: 1.0,
+        };
+        let gi_sky = render(&scene, &settings);
+        settings.hybrid.enabled = false;
+        let raster_sky = render(&scene, &settings);
+        assert!(centre_mean(&raster_sky, 4)[0] > 0.0);
+        assert_eq!(gi_sky.beauty.data, raster_sky.beauty.data);
+    });
+}
+
+#[test]
+fn all_hybrid_signals_compose_in_the_same_frame() {
+    with_gpu(|device, queue| {
+        let mut scene = fixture(Effect::Reflections);
+        let mut light = Light::new(
+            LightKind::Area {
+                shape: AreaShape::Rectangle {
+                    width: 56.0,
+                    height: 56.0,
+                },
+                two_sided: false,
+            },
+            down_from(72.0),
+        );
+        light.shadow = ShadowMode::Soft;
+        scene.lights.push(light);
+        let mut settings = Effect::Reflections.raster_settings();
+        settings.post.ssr = false;
+        settings.aovs = vec![Aov::Diffuse, Aov::Specular, Aov::Shadow];
+        settings.hybrid.enabled = true;
+        let base = settings.hybrid;
+        let render = |settings: &RenderSettings| {
+            RtEngine::with_device(device.clone(), queue.clone())
+                .render(&scene, settings, &Control::new())
+                .unwrap()
+        };
+
+        // No environment: AO still occupies a layer, but cannot darken direct
+        // lighting. Starting fresh gives the same samples for each effect.
+        settings.hybrid.shadows = true;
+        let shadows = render(&settings);
+        settings.hybrid.reflections = true;
+        let reflections = render(&settings);
+        settings.hybrid = HybridSettings {
+            gi: true,
+            shadows: true,
+            ..base
+        };
+        let gi = render(&settings);
+        settings.hybrid.ao = true;
+        settings.hybrid.reflections = true;
+        let all = render(&settings);
+
+        assert_ne!(
+            shadows.aovs[&Aov::Specular].data,
+            reflections.aovs[&Aov::Specular].data
+        );
+        assert_ne!(
+            shadows.aovs[&Aov::Diffuse].data,
+            gi.aovs[&Aov::Diffuse].data
+        );
+        assert_eq!(all.aovs[&Aov::Shadow].data, shadows.aovs[&Aov::Shadow].data);
+        assert_eq!(
+            all.aovs[&Aov::Specular].data,
+            reflections.aovs[&Aov::Specular].data
+        );
+        assert_eq!(all.aovs[&Aov::Diffuse].data, gi.aovs[&Aov::Diffuse].data);
+    });
+}
+
 fn frame_delta(a: &RenderOutput, b: &RenderOutput) -> f64 {
     a.beauty
         .data
@@ -406,6 +514,11 @@ fn ray_traced_reflections_converge_and_discard_history_after_camera_change() {
     converges_and_discards_history_after_camera_change(Effect::Reflections);
 }
 
+#[test]
+fn ray_traced_gi_converges_and_discards_history_after_camera_change() {
+    converges_and_discards_history_after_camera_change(Effect::Gi);
+}
+
 fn converges_and_discards_history_after_camera_change(effect: Effect) {
     with_gpu(|device, queue| {
         let engine = RtEngine::with_device(device.clone(), queue.clone());
@@ -415,6 +528,7 @@ fn converges_and_discards_history_after_camera_change(effect: Effect) {
         settings.hybrid.ao = matches!(effect, Effect::Ao);
         settings.hybrid.shadows = matches!(effect, Effect::Shadows);
         settings.hybrid.reflections = matches!(effect, Effect::Reflections);
+        settings.hybrid.gi = matches!(effect, Effect::Gi);
         settings.hybrid.ao_radius = AO_RADIUS;
 
         let mut previous = engine.render(&scene, &settings, &Control::new()).unwrap();
