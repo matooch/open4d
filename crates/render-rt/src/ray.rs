@@ -62,7 +62,8 @@ pub fn request_backend(
     allow_hardware: bool,
 ) -> Result<(BackendKind, Box<dyn RtBackend>), RenderError> {
     let (device, queue) = request_device(adapter, allow_hardware)?;
-    on_device(device, queue)
+    let (kind, backend) = on_device(device, queue)?;
+    Ok((kind, backend))
 }
 
 pub(crate) fn request_device(
@@ -98,7 +99,7 @@ pub(crate) fn enabled_backend(device: &wgpu::Device) -> BackendKind {
 pub(crate) fn on_device(
     device: wgpu::Device,
     queue: wgpu::Queue,
-) -> Result<(BackendKind, Box<dyn RtBackend>), RenderError> {
+) -> Result<(BackendKind, Box<dyn DeviceQueries>), RenderError> {
     let kind = enabled_backend(&device);
     if kind != BackendKind::Compute
         && let Ok(native) = hardware::HardwareBackend::new(device.clone(), queue.clone())
@@ -109,6 +110,29 @@ pub(crate) fn on_device(
         BackendKind::Compute,
         Box::new(ComputeBackend::new(device, queue)?),
     ))
+}
+
+pub(crate) enum InlineScene<'a> {
+    Compute([&'a wgpu::Buffer; 4]),
+    Hardware(&'a wgpu::Tlas),
+}
+
+pub(crate) trait DeviceQueries: RtBackend {
+    fn inline_scene(&self) -> Option<InlineScene<'_>> {
+        None
+    }
+}
+
+impl DeviceQueries for ComputeBackend {
+    fn inline_scene(&self) -> Option<InlineScene<'_>> {
+        self.scene_buffers().map(InlineScene::Compute)
+    }
+}
+
+impl DeviceQueries for HardwareBackend {
+    fn inline_scene(&self) -> Option<InlineScene<'_>> {
+        self.tlas().map(InlineScene::Hardware)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -18,7 +18,7 @@ use wgpu::util::DeviceExt;
 
 use crate::frame;
 use crate::framegraph::FrameGraph;
-use crate::hybrid::{Bounce, HybridView, PrimaryInput};
+use crate::hybrid::{AmbientGpu, Bounce, HybridView, PrimaryInput};
 use crate::ray::BackendKind;
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
 
@@ -1543,7 +1543,16 @@ impl RtEngine {
                         epsilon: packed.scale.max(1e-6) * 1e-6,
                     };
                     let ao = if rt_ao {
-                        let result = view.ambient_visibility(settings, input, control)?;
+                        let result = view.ambient_visibility(
+                            settings,
+                            input,
+                            control,
+                            Some(AmbientGpu {
+                                device,
+                                queue,
+                                textures: [&targets.g_views[0], &targets.g_views[1]],
+                            }),
+                        )?;
                         finish_phase(profile, device, "rt-ao")?;
                         result
                     } else {

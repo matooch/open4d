@@ -10,7 +10,8 @@ use forge_render_cpu::scene::{Hit, HitGeom, Scene};
 use forge_render_cpu::surface::Surface;
 use glam::DVec3;
 
-use crate::ray::{self, BackendKind, Ray, RtBackend};
+use crate::ambient::{AmbientFrame, AmbientProgram};
+use crate::ray::{self, BackendKind, DeviceQueries, Ray, RtBackend};
 
 const SHADOW_RAYS: usize = 8;
 const BOUNCE_RAYS: usize = 8;
@@ -20,7 +21,8 @@ const PIXELS_PER_BATCH: usize = 2048;
 
 #[derive(Default)]
 pub(crate) struct HybridView {
-    backend: Option<(BackendKind, Box<dyn RtBackend>)>,
+    backend: Option<(BackendKind, Box<dyn DeviceQueries>)>,
+    ambient_program: Option<AmbientProgram>,
     scene: Option<Snapshot>,
     geometry: Option<PrimaryGeometry>,
     settings: Option<RenderSettings>,
@@ -70,6 +72,12 @@ pub(crate) struct PrimaryInput<'a> {
     pub normals: &'a [[f32; 4]],
     pub jitter: [f32; 2],
     pub epsilon: f64,
+}
+
+pub(crate) struct AmbientGpu<'a> {
+    pub device: &'a wgpu::Device,
+    pub queue: &'a wgpu::Queue,
+    pub textures: [&'a wgpu::TextureView; 2],
 }
 
 impl HybridView {
@@ -132,79 +140,44 @@ impl HybridView {
         settings: &RenderSettings,
         input: PrimaryInput<'_>,
         control: &Control,
+        gpu: Option<AmbientGpu<'_>>,
     ) -> Result<Vec<f32>, RenderError> {
         let radius = settings.hybrid.ao_radius;
-        let mut visibility = vec![1.0; input.positions.len()];
         if radius == 0.0 || settings.post.ssao_strength == 0.0 {
-            return Ok(visibility);
+            return Ok(vec![1.0; input.positions.len()]);
         }
-        let (_, backend) = self.backend.as_ref().expect("prepared ray backend");
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
+        }
+        let (kind, backend) = self.backend.as_ref().expect("prepared ray backend");
         let history = self.ao.entry(input.jitter.map(f32::to_bits)).or_default();
-        let width = settings.width as usize;
-        let height = settings.height as usize;
-        let quad_width = width.div_ceil(2);
-        let quads = quad_width * height.div_ceil(2);
-        let quads_per_batch = PIXELS_PER_BATCH / 4;
-        let phase = history.frames as usize % 4;
-        let limit = radius * 0.15;
-        let epsilon = input.epsilon.min(radius * 0.01);
-        let mut rays = Vec::with_capacity(PIXELS_PER_BATCH);
-        let mut receivers = Vec::with_capacity(PIXELS_PER_BATCH);
-        for first in (0..quads).step_by(quads_per_batch) {
-            if control.is_cancelled() {
-                return Err(RenderError::Cancelled);
-            }
-            rays.clear();
-            receivers.clear();
-            for quad in first..(first + quads_per_batch).min(quads) {
-                let x = 2 * (quad % quad_width);
-                let y = 2 * (quad / quad_width);
-                let mut representatives = [None; 4];
-                for (order, lane) in (phase..phase + 4).map(|lane| lane % 4).enumerate() {
-                    let px = x + lane % 2;
-                    let py = y + lane / 2;
-                    if px >= width || py >= height {
-                        continue;
-                    }
-                    let i = py * width + px;
-                    let material = input.positions[i][3];
-                    let n = xyz(input.normals[i]).normalize_or_zero();
-                    if material < 0.5 || n == DVec3::ZERO {
-                        continue;
-                    }
-                    let p = xyz(input.positions[i]);
-                    let existing = representatives.iter().flatten().find_map(
-                        |&(other_p, other_n, other_material, ray)| {
-                            let delta: DVec3 = p - other_p;
-                            (material == other_material
-                                && n.dot(other_n) >= 0.95
-                                && delta.length_squared() <= limit * limit
-                                && delta.dot(n).abs() <= limit * 0.1
-                                && delta.dot(other_n).abs() <= limit * 0.1)
-                                .then_some(ray)
-                        },
+        let raw = match (gpu, backend.inline_scene()) {
+            (Some(gpu), Some(scene)) => {
+                let result = self
+                    .ambient_program
+                    .get_or_insert_with(|| AmbientProgram::new(gpu.device, *kind))
+                    .read(
+                        (gpu.device, gpu.queue),
+                        scene,
+                        gpu.textures,
+                        settings,
+                        AmbientFrame::new(settings, history.frames, input.epsilon),
                     );
-                    let ray = existing.unwrap_or_else(|| {
-                        let ray = rays.len();
-                        representatives[order] = Some((p, n, material, ray));
-                        let mut rng = Rng::new(settings.seed ^ u64::from(history.frames), i as u64);
-                        rays.push(Ray {
-                            origin: p + n * epsilon,
-                            direction: to_world(n, cosine_hemisphere(rng.f2())),
-                            t_max: radius,
-                        });
-                        ray
-                    });
-                    receivers.push((i, ray));
+                match result {
+                    Err(RenderError::Unsupported(_)) => None,
+                    result => Some(result?),
                 }
             }
-            let blocked = backend.occluded(&rays)?;
-            for &(i, ray) in &receivers {
-                visibility[i] = if blocked[ray] { 0.0 } else { 1.0 };
-            }
+            _ => None,
+        };
+        let visibility = match raw {
+            Some(raw) => raw,
+            None => raw_ambient_visibility(&**backend, settings, input, history.frames, control)?,
+        };
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
         }
-
-        let filtered = spatial_filter(width, &input, &visibility, limit);
+        let filtered = spatial_filter(settings.width as usize, &input, &visibility, radius * 0.15);
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
@@ -216,7 +189,85 @@ impl HybridView {
             .map(|open| 1.0 - (1.0 - open) * strength)
             .collect())
     }
+}
 
+fn raw_ambient_visibility(
+    backend: &dyn RtBackend,
+    settings: &RenderSettings,
+    input: PrimaryInput<'_>,
+    history_frame: u32,
+    control: &Control,
+) -> Result<Vec<f32>, RenderError> {
+    let radius = settings.hybrid.ao_radius;
+    let mut visibility = vec![1.0; input.positions.len()];
+    let width = settings.width as usize;
+    let height = settings.height as usize;
+    let quad_width = width.div_ceil(2);
+    let quads = quad_width * height.div_ceil(2);
+    let quads_per_batch = PIXELS_PER_BATCH / 4;
+    let phase = history_frame as usize % 4;
+    let limit = radius * 0.15;
+    let epsilon = input.epsilon.min(radius * 0.01);
+    let mut rays = Vec::with_capacity(PIXELS_PER_BATCH);
+    let mut receivers = Vec::with_capacity(PIXELS_PER_BATCH);
+    for first in (0..quads).step_by(quads_per_batch) {
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
+        }
+        rays.clear();
+        receivers.clear();
+        for quad in first..(first + quads_per_batch).min(quads) {
+            let x = 2 * (quad % quad_width);
+            let y = 2 * (quad / quad_width);
+            let mut representatives = [None; 4];
+            for (order, lane) in (phase..phase + 4).map(|lane| lane % 4).enumerate() {
+                let px = x + lane % 2;
+                let py = y + lane / 2;
+                if px >= width || py >= height {
+                    continue;
+                }
+                let i = py * width + px;
+                let material = input.positions[i][3];
+                let n = xyz(input.normals[i]).normalize_or_zero();
+                if material < 0.5 || n == DVec3::ZERO {
+                    continue;
+                }
+                let p = xyz(input.positions[i]);
+                let existing = representatives.iter().flatten().find_map(
+                    |&(other_p, other_n, other_material, ray)| {
+                        let delta: DVec3 = p - other_p;
+                        (material == other_material
+                            && n.dot(other_n) >= 0.95
+                            && delta.length_squared() <= limit * limit
+                            && delta.dot(n).abs() <= limit * 0.1
+                            && delta.dot(other_n).abs() <= limit * 0.1)
+                            .then_some(ray)
+                    },
+                );
+                let ray = existing.unwrap_or_else(|| {
+                    let ray = rays.len();
+                    representatives[order] = Some((p, n, material, ray));
+                    let mut rng = Rng::new(settings.seed ^ u64::from(history_frame), i as u64);
+                    rays.push(Ray {
+                        origin: p + n * epsilon,
+                        direction: to_world(n, cosine_hemisphere(rng.f2())),
+                        t_max: radius,
+                    });
+                    ray
+                });
+                receivers.push((i, ray));
+            }
+        }
+        let blocked = backend.occluded(&rays)?;
+        for &(i, ray) in &receivers {
+            visibility[i] = if blocked[ray] { 0.0 } else { 1.0 };
+        }
+    }
+
+    Ok(visibility)
+}
+
+impl HybridView {
     pub fn direct_shadows(
         &mut self,
         snapshot: &Snapshot,
@@ -654,7 +705,120 @@ mod tests {
     use crate::ray::{RayHit, SceneStats};
     use std::sync::Mutex;
 
+    #[test]
+    fn gpu_raw_ao_matches_cpu_across_all_quad_phases() {
+        use forge_render_api::{Instance, MaterialData, MeshData};
+        use glam::DMat4;
+
+        for request in [crate::request_default_device, crate::request_rt_device] {
+            let (device, queue) = match request() {
+                Ok(gpu) => gpu,
+                Err(err) if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") => {
+                    panic!("FORGE_REQUIRE_GPU=1 but no GPU: {err}");
+                }
+                Err(err) => {
+                    eprintln!("skipping GPU test: {err}");
+                    return;
+                }
+            };
+            let snapshot = Snapshot {
+                meshes: vec![MeshData::new(
+                    vec![[-10., -10., 0.], [10., -10., 0.], [0., 10., 0.]],
+                    vec![[0, 1, 2]],
+                )],
+                instances: vec![Instance::new(0, DMat4::IDENTITY, 0, 1)],
+                materials: vec![MaterialData::new(
+                    "occluder",
+                    forge_material::ir::ShadingGraph {
+                        nodes: vec![],
+                        outputs: Default::default(),
+                    },
+                )],
+                ..Snapshot::default()
+            };
+            let (kind, mut backend) = ray::on_device(device.clone(), queue.clone()).unwrap();
+            assert_eq!(kind, ray::enabled_backend(&device));
+            backend.update_scene(&snapshot).unwrap();
+            let mut settings = RenderSettings {
+                width: 3,
+                height: 3,
+                seed: 0x1234_abcd_f00d_5678,
+                ..RenderSettings::default()
+            };
+            settings.hybrid.ao_radius = 1.0;
+            let positions = [
+                [0.00, 0., -0.005, 1.],
+                [0.01, 0., 0.005, 1.], // Reuse despite different own-ray visibility.
+                [0.; 4],               // Clear outside the crop.
+                [0.02, 0., -0.08, 1.], // Same material, incompatible depth.
+                [0.03, 0., 0.005, 2.], // Incompatible material.
+                [0.04, 0., -0.005, 1.],
+                [0.05, 0., 0.005, 1.],
+                [0.06, 0., 0.005, 1.], // Incompatible normal within the bottom quad.
+                [0.07, 0., 0.005, 1.],
+            ];
+            let mut normals = [[0., 0., 1., 0.]; 9];
+            normals[7] = [0., 0., -1., 0.];
+            normals[8] = [0.; 4];
+            let input = PrimaryInput {
+                positions: &positions,
+                normals: &normals,
+                jitter: [0.; 2],
+                epsilon: 1e-6,
+            };
+            let texture_view = |data: &[[f32; 4]; 9]| {
+                let size = wgpu::Extent3d {
+                    width: 3,
+                    height: 3,
+                    depth_or_array_layers: 1,
+                };
+                let texture = device.create_texture(&wgpu::TextureDescriptor {
+                    label: None,
+                    size,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba32Float,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                    view_formats: &[],
+                });
+                queue.write_texture(
+                    texture.as_image_copy(),
+                    bytemuck::cast_slice(data),
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(48),
+                        rows_per_image: Some(3),
+                    },
+                    size,
+                );
+                texture.create_view(&Default::default())
+            };
+            let textures = [texture_view(&positions), texture_view(&normals)];
+            let program = AmbientProgram::new(&device, kind);
+            let control = Control::new();
+            for phase in 0..4 {
+                let reference =
+                    raw_ambient_visibility(&*backend, &settings, input, phase, &control).unwrap();
+                let raw = program
+                    .read(
+                        (&device, &queue),
+                        backend.inline_scene().unwrap(),
+                        [&textures[0], &textures[1]],
+                        &settings,
+                        AmbientFrame::new(&settings, phase, input.epsilon),
+                    )
+                    .unwrap();
+                assert_eq!(raw, reference, "{kind:?} phase {phase}");
+                let shared = if phase == 1 { 1.0 } else { 0.0 };
+                assert_eq!(raw, [shared, shared, 1., 0., 1., 0., 1., 0., 1.]);
+            }
+        }
+    }
+
     struct RecordingBackend(Arc<Mutex<Vec<Ray>>>);
+
+    impl DeviceQueries for RecordingBackend {}
 
     impl RtBackend for RecordingBackend {
         fn update_scene(&mut self, _: &Snapshot) -> Result<(), RenderError> {
@@ -732,7 +896,7 @@ mod tests {
         };
 
         let visibility = view
-            .ambient_visibility(&settings, input, &Control::new())
+            .ambient_visibility(&settings, input, &Control::new(), None)
             .unwrap();
         check_rays(&[0, 3, 4, 5, 6, 7]);
         // The full-resolution spatial filter still blends pixels 1 and 5
@@ -742,14 +906,14 @@ mod tests {
             [0.0, 0.25, 1.0, 1.0, 1.0, 2.0 / 3.0, 1.0, 1.0, 1.0]
         );
 
-        view.ambient_visibility(&settings, input, &Control::new())
+        view.ambient_visibility(&settings, input, &Control::new(), None)
             .unwrap();
         check_rays(&[1, 3, 4, 5, 7, 6]);
 
         let cancelled = Control::new();
         cancelled.cancel();
         assert!(matches!(
-            view.ambient_visibility(&settings, input, &cancelled),
+            view.ambient_visibility(&settings, input, &cancelled, None),
             Err(RenderError::Cancelled)
         ));
         check_rays(&[]);

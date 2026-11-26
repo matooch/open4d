@@ -117,6 +117,21 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 - [GPU AO kernel checkpoint](../../specs/RENDER.md#r246-gpu-ambient-visibility-dispatch-brief-214):
   the raw visibility shader reads primary textures and runs inline traversal and
   quad reconstruction without a ray list. Five translation runs passed for
-  Compute and hardware variants (SPIR-V, MSL and HLSL). The raster engine does not
-  dispatch this kernel yet; no new S10 or R26 result is claimed. Checkpoint gate:
-  2740 tests passed, zero failed; `GATE: all passed`.
+   Compute and hardware variants (SPIR-V, MSL and HLSL). At this checkpoint there
+   was no host dispatch or new S10 or R26 result. Checkpoint gate:
+   2740 tests passed, zero failed; `GATE: all passed`.
+- **GPU AO runtime:** the engine binds its existing R23 scene and G-buffer directly
+  and reads back one raw float per pixel for the unchanged CPU spatial filter
+  and per-jitter history. It uses the batched R24.4 path if there is no inline
+  scene binding or the output exceeds dispatch limits. Five required-GPU runs
+  passed, including exact raw visibility on Compute and Metal across all four
+  phases on an odd-sized fixture with cleared and incompatible neighbours.
+- Full-size S10 Tier 2 on M5 Pro, actual Metal, all effects: AO **16.738 ms**
+  (previously 394.190 ms); the uninstrumented median was **3829.127 ms /
+  0.261 fps** (previously 4238.415 ms / 0.236 fps). CPU filtering and signal upload
+  remain, along with CPU orchestration for the other effects. Tier 2 still misses
+  30 fps.
+- Strict R26 retained **18/23**, **19/23**, and **23/23** against CPU on both
+  Compute and Metal with the same nine pins. Metal-vs-Compute minima were exact,
+  165.12 dB, and 75.66 dB, respectively. No Vulkan hardware run.
+- GPU AO runtime checkpoint gate: 2741 tests passed, zero failed; `GATE: all passed`.

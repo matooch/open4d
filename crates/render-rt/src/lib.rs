@@ -3,6 +3,7 @@
 //! A wgpu engine with a small frame graph, a deferred G-buffer, shadow maps per light and
 //! environment lighting, shading through the same IR as the CPU and compute tracers.
 
+mod ambient;
 mod engine;
 pub mod framegraph;
 mod hybrid;
