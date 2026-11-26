@@ -4,22 +4,22 @@ One page to check where the project stands. The planner updates it after every m
 Details live in the files linked at the bottom; when this page and those files disagree, the
 linked files win.
 
-**Last updated:** 2026-11-26, after Hermes run 9 (ray tracing: 200, 211, 201–204, 212), particles (119–121) and Pose Morph/S6.
+**Last updated:** 2026-11-26, after 046 (Null display), the run 10 checkpoint of 214 (Tier 1 at 100 fps) and the new area P (behaviours, live input, play mode; briefs 215–222).
 
 ## At a glance
 
 | | Now |
 |---|---|
-| Implementation briefs | **200 of 204 done** (98 %) · 4 ready |
+| Implementation briefs | **200 of 212 done** (94 %) · 214 in progress · 11 ready (incl. area P: 215–222) |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
-| Acceptance scenarios | S1–S9 pass (S6 with own-design Pose Morph, parity-pending) · S10 needs a measurement |
+| Acceptance scenarios | S1–S9 pass (S6 with own-design Pose Morph, parity-pending) · S10: Tier 1 meets 60 fps, Tier 2 open (214) · S11 new (area P) |
 | Release | No release cut yet (v1.0 checklist is brief 185, last) |
-| Next | Implementer run 6 continues from 197 (see below) |
+| Next | Implementer run 10 continues 214, then 213, then area P (215–222) |
 
 ## Acceptance scenarios (the "is it usable" test)
 
-Each scenario is a real end-to-end task, run as an automated test. v1.0 = all ten pass on
+Each scenario is a real end-to-end task, run as an automated test. v1.0 = all eleven pass on
 all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 
 | | Scenario | Status | What's left |
@@ -34,6 +34,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | S8 | Look-dev: area light, DOF camera, node material, CPU render + AOVs | ✅ passes (146) | Cross-OS reference check confirmed by CI |
 | S9 | Import FBX / glTF / Alembic from the reference app, matches | ✅ passes (171): 6 cases × FBX, GLB, Alembic, STL through the CLI | glTF skinned-arm poses at f15/f30 pinned KNOWN_MISMATCH (≤ 5e-4) |
 | S10 | 1 M polygons + 10 k clones, ≥ 20 fps, 30-min fuzz without crash | 🔴 measured (204): M5 Pro Tier 1 0.86 fps, Tier 2 0.21 fps | Brief 214 (persistent GPU scene, RT effect budgets); RTX 3090 run |
+| S11 | Behaviours: Luau-built cloner with a stateful behaviour, gamepad + MIDI (injected), live play, recorded, rendered byte-identically, scrubbed | ⚪ not started | Briefs 215–222 (area P, D21) |
 
 ## Areas
 
@@ -53,14 +54,16 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | L · UI and UX | 16 / 16 | Hands-on checks in GUI sessions G1, G2, G4 |
 | M · File exchange | 12 / 12 | Done: S9 passes (171). Open: glTF skin-pose KNOWN_MISMATCH, PLY/USD/morph not observed |
 | N · Platform, packaging, docs | 13 / 14 | 185 v1.0 release checklist (last) |
-| R · Real-time GPU renderer | 13 / 16 | All three tiers built: raster + post (198, 199), hybrid RT (201), real-time path tracing (202), RT on Metal (211) and Vulkan (212, matches compute on lavapipe; RTX 3090 run pending), cross-tier tests (203), S10 benchmark (204). **Open: 214 performance** (S10 on M5 Pro: Tier 1 0.86 fps of 60, Tier 2 0.21 of 30; CPU scene packing dominates), 213 Tier 1/2 quality gaps (mat-glossy), 210 DX12 shadows |
+| P · Behaviours, live input, play mode (Luau, Rust; D21) | 0 / 8 | Briefs 215–222 queued after 213: Luau runtime and builder scripts, behaviour tag with start/update and a per-frame cache, inputs (keyboard, gamepad, MIDI, OSC) through named actions, input tracks, play mode, bulk clone API, Rust behaviours, `forge play` and S11 |
+| R · Real-time GPU renderer | 13 / 16 | All three tiers built: raster + post (198, 199), hybrid RT (201), real-time path tracing (202), RT on Metal (211) and Vulkan (212, matches compute on lavapipe; RTX 3090 run pending), cross-tier tests (203), S10 benchmark (204). **214 performance in progress** (S10 on M5 Pro: Tier 1 now 100 fps, target 60, met; Tier 2 0.77 fps of 30, diffuse GI 1,141 ms is next), 213 Tier 1/2 quality gaps (mat-glossy), 210 DX12 shadows |
 
 ## Next implementer run (run 10)
 
 Run 9 finished: ray tracing (200, 211, 201, 202, 203, 204, 212).
 
-1. 214 · Real-time performance: persistent GPU scene, RT effect budgets (S10 targets)
+1. 214 · Real-time performance (continuing: Tier 1 done; Tier 2 diffuse GI on the GPU next)
 2. 213 · Tier 1/2 quality gaps (mat-glossy specular under hybrid shadows)
+3. Area P, behaviours: 215, 216, 217, 218, 220, 221, 219, 222 (S11)
 
 Then only 210 (DX12 shadows, your Windows PC) and 185 (v1.0 release) remain.
 
