@@ -344,7 +344,7 @@ pub fn frame_base(
     frame[f::RY0] = y0 as f32;
     frame[f::RX1] = x1 as f32;
     frame[f::RY1] = y1 as f32;
-    frame[f::SAMPLES] = settings.samples as f32;
+    frame[f::SAMPLE_TOTAL] = f32::from_bits(settings.samples);
     frame[f::MAX_DEPTH] = settings.max_depth as f32;
     frame[f::SEED_LO] = f32::from_bits(settings.seed as u32);
     frame[f::SEED_HI] = f32::from_bits((settings.seed >> 32) as u32);

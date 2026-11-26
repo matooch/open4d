@@ -32,7 +32,8 @@ pub mod frame {
     pub const RY1: usize = 5;
     pub const TX: usize = 6;
     pub const TY: usize = 7;
-    pub const SAMPLES: usize = 8;
+    /// Total samples to resolve, bitcast into the slot.
+    pub const SAMPLE_TOTAL: usize = 8;
     pub const MAX_DEPTH: usize = 9;
     pub const SEED_LO: usize = 10;
     pub const SEED_HI: usize = 11;
@@ -76,6 +77,9 @@ pub mod frame {
     pub const SCALE: usize = 63;
     /// Ten AOV tags, `Aov` as a `u32` bitcast into the float slot.
     pub const AOV_TAG: usize = 64;
+    /// Inclusive/exclusive sample indices for this dispatch, bitcast into the slots.
+    pub const SAMPLE_START: usize = 74;
+    pub const SAMPLE_END: usize = 75;
 
     pub const SLOTS: usize = 96;
 
@@ -89,7 +93,7 @@ pub mod frame {
         ("RY1", RY1),
         ("TX", TX),
         ("TY", TY),
-        ("SAMPLES", SAMPLES),
+        ("SAMPLE_TOTAL", SAMPLE_TOTAL),
         ("MAX_DEPTH", MAX_DEPTH),
         ("SEED_LO", SEED_LO),
         ("SEED_HI", SEED_HI),
@@ -131,6 +135,8 @@ pub mod frame {
         ("STRIDE", STRIDE),
         ("SCALE", SCALE),
         ("AOV_TAG", AOV_TAG),
+        ("SAMPLE_START", SAMPLE_START),
+        ("SAMPLE_END", SAMPLE_END),
     ];
 }
 

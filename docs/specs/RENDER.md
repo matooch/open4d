@@ -551,9 +551,9 @@ required (`FORGE_REQUIRE_GPU=1`) in the gate.
   lens draw and `trace_path` (area-light hits, emission, NEE + MIS, dielectric branch,
   Russian roulette at depth 3, `clamp`) keep the CPU's order of RNG calls.
 - Arithmetic is `f32`; the acceptance rule is the image comparison of R20.3, not bit identity.
-- Tiles: one dispatch per render tile, `(tile.width, tile.height, 1)` invocations of 1 pixel
-  each; `Started`, `Tile`, `Progress`, `Finished` and `Control::cancel` behave as R4 (cancel is
-  checked between tiles, a cancelled render returns `RenderError::Cancelled`).
+- Tiles are reported once each; each dispatch has one invocation per pixel of a row band
+  (R20.4). `Started`, `Tile`, `Progress`, `Finished` and `Control::cancel` behave as R4 (cancel
+  is checked between dispatches, a cancelled render returns `RenderError::Cancelled`).
 
 ### R20.3 Parity rule
 
@@ -583,7 +583,7 @@ sub-field passed as an argument, so `acc_add` takes a pointer to the whole `Trac
 - `threads`, `tile` and the region are CPU-side scheduling only; a `region` renders its own
   rectangle into the full-size image exactly as R2.
 
-**Submission budget (R20.4, from Windows CI).** A graphics driver's watchdog (about 2 s per submission on Windows) resets the device when one submission runs too long; on the software DX12 adapter the heaviest O30 material (`mat-bump-noise`: noise evaluated several times per hit for bump) at 320 x 240 / 16 spp did exactly that. The compute engine therefore never submits a whole tile at once: a tile is dispatched in **bands of rows**, one submission (and one bounded wait) per band, where a band holds `max(1, SUBMISSION_BUDGET / (spp * tile_width))` rows, i.e. at most `SUBMISSION_BUDGET` = 4096 pixels x samples (one full row of the tile is the floor). `GpuEngine::with_submission_budget(n)` overrides it. The frame uniform carries the band's first row (`TY`) and height (`TILE_H`); the shader keys the per-pixel RNG on the pixel's absolute `(x, y)` (R20.2), never on the dispatch, so **the image does not depend on the budget**: a band is the same pixels computed in the same order of RNG calls. The `cpu_vs_gpu` PSNR per case is unchanged (e.g. `mat-bump-noise` 83.26 dB, `mat-glossy` 65.49 dB on lavapipe), and the test `the_submission_budget_does_not_change_the_image` renders with a budget of 1 (one row per submission), the default and an unbounded budget (one submission per tile) and requires identical bytes in beauty and AOVs. Samples of one pixel are not split further (the RNG is one sequential stream per pixel, R20.2); a single row of `tile` pixels at very high spp stays one submission.
+**Submission budget (R20.4, from Windows CI).** A graphics driver's watchdog (about 2 s per submission on Windows) resets the device when one submission runs too long; on the software DX12 adapter the heaviest O30 material (`mat-bump-noise`: noise evaluated several times per hit for bump) at 320 x 240 / 16 spp did exactly that. The compute engine dispatches each tile in **bands of rows**. The budget is 4096 pixels × samples per submission, with one full row as the floor. `GpuEngine::with_submission_budget(n)` overrides it. By default there is one submission per band; `with_sample_batch_size(n)` also splits the per-pixel sample loop across submissions (R25.1). The frame uniform carries the band's first row (`TY`) and height (`TILE_H`); the shader keys the per-pixel RNG on the pixel's absolute `(x, y)` (R20.2), never on the dispatch. The raw beauty and AOVs are independent of the band budget and sample batch size (`the_submission_budget_does_not_change_the_image` and `split_sample_dispatches_preserve_beauty_and_aovs`).
 
 **Readback never panics (R20, R21).** The map callback of a readback stores its `Result` in a shared slot instead of unwrapping it; after the bounded wait the engine reads the slot and returns `RenderError::Output("GPU readback failed (device lost or out of memory): ...")`. A poll made while other threads poll the same device can return before this thread's callback ran, so the wait repeats until the slot is filled or `GPU_WAIT_TIMEOUT` passes (seen: `BufferAsyncError` panic on Windows CI after the device was reset).
 
@@ -1079,6 +1079,10 @@ inputs, and [R7 tier budgets](../agents/tasks/203-rt-consistency.md). This is ou
   Continue the deterministic R20.2 per-pixel stream and pixel-filter index across batches.
   Changing batch boundaries does not change the sample sequence; resetting a view
   reproduces its first sample batch.
+- Keep the unnormalised colour and AOV sums, coverage and hit counts, first valid hit's IDs,
+  pixel-filter offset seed and PCG state across dispatches. Normalise by the total sample
+  count only when resolving output. For the same device and transport inputs, a split
+  dispatch must produce bit-identical raw beauty and AOVs to a single dispatch.
 
 ### R25.2 Preview and final output
 

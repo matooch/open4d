@@ -21,11 +21,15 @@ pub struct GpuEngine {
     queue: wgpu::Queue,
     /// Most pixel-samples (pixels x samples per pixel) one submission may hold (R20.4).
     submission_budget: u64,
+    sample_batch_size: u32,
 }
 
 /// Default for [`GpuEngine::submission_budget`]: small enough that a slow software device
 /// finishes one submission well inside a driver watchdog (about 2 s on Windows).
 pub const SUBMISSION_BUDGET: u64 = 4096;
+
+// WGSL PixelState array stride.
+const PIXEL_STATE_BYTES: u64 = 160;
 
 /// The result of one `map_async`, stored by its callback (which never panics).
 pub type MapSlot = Arc<Mutex<Option<Result<(), wgpu::BufferAsyncError>>>>;
@@ -114,11 +118,7 @@ impl GpuEngine {
     pub fn new() -> Result<GpuEngine, RenderError> {
         let (device, queue) = crate::request_default_device()
             .map_err(|e| RenderError::Unsupported(format!("no GPU adapter: {e}")))?;
-        Ok(GpuEngine {
-            device,
-            queue,
-            submission_budget: SUBMISSION_BUDGET,
-        })
+        Ok(Self::with_device(device, queue))
     }
 
     pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> GpuEngine {
@@ -126,6 +126,7 @@ impl GpuEngine {
             device,
             queue,
             submission_budget: SUBMISSION_BUDGET,
+            sample_batch_size: u32::MAX,
         }
     }
 
@@ -133,6 +134,13 @@ impl GpuEngine {
     /// always dispatched). The image does not depend on it (R20.4).
     pub fn with_submission_budget(mut self, pixel_samples: u64) -> GpuEngine {
         self.submission_budget = pixel_samples.max(1);
+        self
+    }
+
+    /// Limits samples per pixel in one dispatch; ordered pixel sums carry over between
+    /// batches, so the final raw image is unchanged (R25.1).
+    pub fn with_sample_batch_size(mut self, samples: u32) -> GpuEngine {
+        self.sample_batch_size = samples.max(1);
         self
     }
 
@@ -262,6 +270,7 @@ impl RenderEngine for GpuEngine {
                 storage_entry(3, true),
                 storage_entry(4, true),
                 storage_entry(5, false),
+                storage_entry(6, false),
             ],
         });
         if assembled.resources.len()
@@ -315,6 +324,28 @@ impl RenderEngine for GpuEngine {
         let base = frame_base(snapshot, settings, &packed, &wanted, stride);
 
         let tiles = tiles_of(settings);
+        let batch_size = self.sample_batch_size.min(settings.samples);
+        let splitting = batch_size < settings.samples;
+        let max_row_width = tiles.iter().map(|tile| tile.2 as u64).max().unwrap_or(1);
+        let limits = device.limits();
+        let state_capacity = if splitting {
+            let limit = limits
+                .max_storage_buffer_binding_size
+                .min(limits.max_buffer_size)
+                / PIXEL_STATE_BYTES;
+            if max_row_width > limit {
+                return Err(RenderError::Unsupported(
+                    "one row of pixel state exceeds the GPU storage binding limit".into(),
+                ));
+            }
+            (self.submission_budget / batch_size as u64)
+                .max(max_row_width)
+                .min(limit)
+                .min(settings.tile as u64 * settings.tile as u64)
+        } else {
+            // Single-batch dispatches don't access the state buffer.
+            1
+        };
         control.emit(RenderEvent::Started {
             width: settings.width,
             height: settings.height,
@@ -332,6 +363,12 @@ impl RenderEngine for GpuEngine {
             label: Some("staging"),
             size: max_bytes,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let pixel_states = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("sample batch state"),
+            size: state_capacity * PIXEL_STATE_BYTES,
+            usage: wgpu::BufferUsages::STORAGE,
             mapped_at_creation: false,
         });
         let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -362,6 +399,10 @@ impl RenderEngine for GpuEngine {
                     binding: 5,
                     resource: out.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: pixel_states.as_entire_binding(),
+                },
             ],
         });
 
@@ -390,39 +431,52 @@ impl RenderEngine for GpuEngine {
             frame[frame::TILE_W] = tw as f32;
             frame[frame::TILE_H] = th as f32;
             let bytes = tw as u64 * th as u64 * stride as u64 * 16;
-            // One submission per band of rows: pixels x samples of a band stay under the
-            // budget, so a slow device's watchdog never sees a long dispatch (R20.4).
-            let rows_per_band = (self.submission_budget
-                / (settings.samples.max(1) as u64 * tw as u64))
-                .max(1) as u32;
+            // Each dispatch covers one sample batch of a row band (R20.4, R25.1).
+            let rows_per_band = (self.submission_budget / (batch_size as u64 * tw as u64)).max(1);
+            let rows_per_band = if splitting {
+                rows_per_band.min(state_capacity / tw as u64)
+            } else {
+                rows_per_band
+            }
+            .min(th as u64) as u32;
             let mut row = 0u32;
             while row < th {
-                if control.is_cancelled() {
-                    return Err(RenderError::Cancelled);
-                }
                 let rows = rows_per_band.min(th - row);
                 let mut frame = frame;
                 frame[frame::TY] = (ty + row) as f32;
                 frame[frame::TILE_H] = rows as f32;
-                self.queue.write_buffer(&frame_buf, 0, &frame_bytes(&frame));
-                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("tile"),
-                });
-                {
-                    let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                        label: Some("tile"),
-                        timestamp_writes: None,
-                    });
-                    pass.set_pipeline(&pipeline);
-                    pass.set_bind_group(0, &bind, &[]);
-                    pass.set_bind_group(1, &bind1, &[]);
-                    pass.dispatch_workgroups(tw.div_ceil(8), rows.div_ceil(8), 1);
+                let mut sample = 0;
+                while sample < settings.samples {
+                    if control.is_cancelled() {
+                        return Err(RenderError::Cancelled);
+                    }
+                    let end = sample + batch_size.min(settings.samples - sample);
+                    frame[frame::SAMPLE_START] = f32::from_bits(sample);
+                    frame[frame::SAMPLE_END] = f32::from_bits(end);
+                    self.queue.write_buffer(&frame_buf, 0, &frame_bytes(&frame));
+                    let mut encoder =
+                        device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("tile"),
+                        });
+                    {
+                        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                            label: Some("tile"),
+                            timestamp_writes: None,
+                        });
+                        pass.set_pipeline(&pipeline);
+                        pass.set_bind_group(0, &bind, &[]);
+                        pass.set_bind_group(1, &bind1, &[]);
+                        pass.dispatch_workgroups(tw.div_ceil(8), rows.div_ceil(8), 1);
+                    }
+                    if end == settings.samples {
+                        let band_bytes = tw as u64 * rows as u64 * stride as u64 * 16;
+                        let band_at = tw as u64 * row as u64 * stride as u64 * 16;
+                        encoder.copy_buffer_to_buffer(&out, 0, &staging, band_at, band_bytes);
+                    }
+                    self.queue.submit([encoder.finish()]);
+                    wait_for_gpu(device)?;
+                    sample = end;
                 }
-                let band_bytes = tw as u64 * rows as u64 * stride as u64 * 16;
-                let band_at = tw as u64 * row as u64 * stride as u64 * 16;
-                encoder.copy_buffer_to_buffer(&out, 0, &staging, band_at, band_bytes);
-                self.queue.submit([encoder.finish()]);
-                wait_for_gpu(device)?;
                 row += rows;
             }
             let slice = staging.slice(..bytes);

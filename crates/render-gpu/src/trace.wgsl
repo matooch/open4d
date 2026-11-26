@@ -1116,44 +1116,42 @@ fn aov_tag(k: u32) -> u32 {
     return bitcast<u32>(fr(F_AOV_TAG + k));
 }
 
-@compute @workgroup_size(8, 8, 1)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let tw = u32(fr(F_TILE_W) + 0.5);
-    let th = u32(fr(F_TILE_H) + 0.5);
-    if (gid.x >= tw || gid.y >= th) {
-        return;
-    }
-    let x = u32(fr(F_TX) + 0.5) + gid.x;
-    let y = u32(fr(F_TY) + 0.5) + gid.y;
-    let stride = u32(fr(F_STRIDE) + 0.5);
-    let aovs = u32(fr(F_AOV_COUNT) + 0.5);
-    let base = (gid.y * tw + gid.x) * stride;
-    let n = u32(fr(F_SAMPLES) + 0.5);
+// Storage stride: 160 bytes. No bools (not host-shareable) or averaged outputs.
+struct PixelState {
+    acc: Acc,
+    normal_sum: vec3<f32>,
+    depth_sum: f32,
+    albedo_sum: vec3<f32>,
+    vis: f32,
+    pos_sum: vec3<f32>,
+    tot: f32,
+    rng: Rng,
+    sxy: vec2<f32>,
+    first_ids: vec2<f32>,
+    hits: u32,
+    cover: u32,
+};
+
+@group(0) @binding(6) var<storage, read_write> pixel_states: array<PixelState>;
+
+fn new_pixel(x: u32, y: u32) -> PixelState {
+    var p: PixelState;
     let seed_w = vec2<u32>(bitcast<u32>(fr(F_SEED_LO)), bitcast<u32>(fr(F_SEED_HI)));
     let pix = splitmix(u64_xor(seed_w, splitmix(vec2<u32>(y, x))));
     var rng = rng_new(pix, u64_shr(pix, 17u));
-    let sxy = rng_f2(&rng);
+    p.sxy = rng_f2(&rng);
+    p.rng = rng;
+    return p;
+}
 
-    var acc: Acc;
-    acc.rgb = vec3<f32>(0.0);
-    acc.diffuse = vec3<f32>(0.0);
-    acc.specular = vec3<f32>(0.0);
-    acc.emission = vec3<f32>(0.0);
-    var hits = 0u;
-    var vis = 0.0;
-    var tot = 0.0;
-    var cover = 0u;
-    var depth_sum = 0.0;
-    var normal_sum = vec3<f32>(0.0);
-    var albedo_sum = vec3<f32>(0.0);
-    var pos_sum = vec3<f32>(0.0);
-    var first_ok = false;
-    var first = Sample();
+fn advance_pixel(previous: PixelState, x: u32, y: u32, start: u32, end: u32) -> PixelState {
+    var p = previous;
+    var rng = p.rng;
     let dof = fr(F_APERTURE_PRESENT) > 0.5;
-    for (var i = 0u; i < n; i = i + 1u) {
+    for (var i = start; i < end; i = i + 1u) {
         let u = vec2<f32>(
-            fract(sxy.x + 0.5 + f32(i) * 0.7548776662466927),
-            fract(sxy.y + 0.5 + f32(i) * 0.5698402909980532),
+            fract(p.sxy.x + 0.5 + f32(i) * 0.7548776662466927),
+            fract(p.sxy.y + 0.5 + f32(i) * 0.5698402909980532),
         );
         let off = filter_offset(u32(fr(F_FILTER) + 0.5), fr(F_FILTER_WIDTH), u, &rng);
         let px = f32(x) + 0.5 + off.x;
@@ -1169,58 +1167,89 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (!(all(t.acc.rgb == t.acc.rgb))) {
             continue;
         }
-        acc.rgb = acc.rgb + t.acc.rgb;
-        acc.diffuse = acc.diffuse + t.acc.diffuse;
-        acc.specular = acc.specular + t.acc.specular;
-        acc.emission = acc.emission + t.acc.emission;
-        tot = tot + s.shadow_total;
-        vis = vis + s.shadow_visible;
+        p.acc.rgb = p.acc.rgb + t.acc.rgb;
+        p.acc.diffuse = p.acc.diffuse + t.acc.diffuse;
+        p.acc.specular = p.acc.specular + t.acc.specular;
+        p.acc.emission = p.acc.emission + t.acc.emission;
+        p.tot = p.tot + s.shadow_total;
+        p.vis = p.vis + s.shadow_visible;
         if (s.covered) {
-            cover = cover + 1u;
+            p.cover = p.cover + 1u;
         }
         if (s.covered && s.depth > 0.0) {
-            hits = hits + 1u;
-            depth_sum = depth_sum + s.depth;
-            normal_sum = normal_sum + s.normal;
-            albedo_sum = albedo_sum + s.albedo;
-            pos_sum = pos_sum + s.position;
-            if (!first_ok) {
-                first_ok = true;
-                first = s;
+            if (p.hits == 0u) {
+                p.first_ids = vec2<f32>(s.object_id, s.material_id);
             }
+            p.hits = p.hits + 1u;
+            p.depth_sum = p.depth_sum + s.depth;
+            p.normal_sum = p.normal_sum + s.normal;
+            p.albedo_sum = p.albedo_sum + s.albedo;
+            p.pos_sum = p.pos_sum + s.position;
         }
     }
-    let inv = 1.0 / f32(n);
-    let alpha = f32(cover) * inv;
-    forge_out[base] = vec4<f32>(acc.rgb * inv, alpha);
-    let hinv = select(0.0, 1.0 / f32(hits), hits > 0u);
+    p.rng = rng;
+    return p;
+}
+
+fn resolve_pixel(p: PixelState, base: u32, samples: u32) {
+    let inv = 1.0 / f32(samples);
+    let alpha = f32(p.cover) * inv;
+    forge_out[base] = vec4<f32>(p.acc.rgb * inv, alpha);
+    let hinv = select(0.0, 1.0 / f32(p.hits), p.hits > 0u);
+    let aovs = u32(fr(F_AOV_COUNT) + 0.5);
     for (var k = 0u; k < aovs; k = k + 1u) {
         let tag = aov_tag(k);
         var v = vec3<f32>(0.0);
         if (tag == 0u) {
-            v = vec3<f32>(depth_sum * hinv);
+            v = vec3<f32>(p.depth_sum * hinv);
         } else if (tag == 1u) {
-            v = normal_sum * hinv;
+            v = p.normal_sum * hinv;
             if (dot(v, v) > 0.0) {
                 v = normalize(v);
             }
         } else if (tag == 2u) {
-            v = albedo_sum * hinv;
+            v = p.albedo_sum * hinv;
         } else if (tag == 3u) {
-            v = pos_sum * hinv;
+            v = p.pos_sum * hinv;
         } else if (tag == 4u) {
-            v = vec3<f32>(select(0.0, first.object_id, first_ok));
+            v = vec3<f32>(p.first_ids.x);
         } else if (tag == 5u) {
-            v = vec3<f32>(select(0.0, first.material_id, first_ok));
+            v = vec3<f32>(p.first_ids.y);
         } else if (tag == 6u) {
-            v = vec3<f32>(select(1.0, vis / tot, tot > 0.0));
+            v = vec3<f32>(select(1.0, p.vis / p.tot, p.tot > 0.0));
         } else if (tag == 7u) {
-            v = acc.diffuse * inv;
+            v = p.acc.diffuse * inv;
         } else if (tag == 8u) {
-            v = acc.specular * inv;
+            v = p.acc.specular * inv;
         } else {
-            v = acc.emission * inv;
+            v = p.acc.emission * inv;
         }
         forge_out[base + 1u + k] = vec4<f32>(v, alpha);
+    }
+}
+
+@compute @workgroup_size(8, 8, 1)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let tw = u32(fr(F_TILE_W) + 0.5);
+    let th = u32(fr(F_TILE_H) + 0.5);
+    if (gid.x >= tw || gid.y >= th) {
+        return;
+    }
+    let x = u32(fr(F_TX) + 0.5) + gid.x;
+    let y = u32(fr(F_TY) + 0.5) + gid.y;
+    let pixel = gid.y * tw + gid.x;
+    let start = bitcast<u32>(fr(F_SAMPLE_START));
+    let end = bitcast<u32>(fr(F_SAMPLE_END));
+    var p: PixelState;
+    if (start == 0u) {
+        p = new_pixel(x, y);
+    } else {
+        p = pixel_states[pixel];
+    }
+    p = advance_pixel(p, x, y, start, end);
+    if (end < bitcast<u32>(fr(F_SAMPLE_TOTAL))) {
+        pixel_states[pixel] = p;
+    } else {
+        resolve_pixel(p, pixel * u32(fr(F_STRIDE) + 0.5), end);
     }
 }
