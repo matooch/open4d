@@ -3,7 +3,10 @@
 #[path = "../../render-cpu/tests/common/mod.rs"]
 mod common;
 
-use common::{golden::load, image_parity};
+use common::{
+    golden::{case_names, load},
+    image_parity,
+};
 use forge_parity_harness::{CompareOptions, ImageBuf, compare_image};
 use forge_render_api::*;
 use forge_render_cpu::CpuEngine;
@@ -234,6 +237,57 @@ fn area_light_paths_and_shadow_aov_match_cpu() {
     let aovs = [Aov::Diffuse, Aov::Shadow];
     let settings = image_parity::settings((48, 36), aovs.to_vec());
     compare(&case.snapshot, &settings, &aovs);
+}
+
+#[test]
+fn o30_and_o43_beauty_match_cpu_at_sixteen_samples() {
+    let settings = image_parity::settings((320, 240), Vec::new());
+    assert_eq!(settings.samples, 16);
+    let mut failures = Vec::new();
+    let cases = case_names();
+    assert!(!cases.is_empty(), "no O30/O43 render fixtures");
+    for name in cases {
+        let case = load(&name);
+        let results = compare_beauty(&case.snapshot, &settings, &name);
+        failures.extend(results.into_iter().flatten());
+    }
+    assert!(
+        failures.is_empty(),
+        "Tier 3 parity:\n{}",
+        failures.join("\n")
+    );
+}
+
+fn compare_beauty(
+    snapshot: &Snapshot,
+    settings: &RenderSettings,
+    label: &str,
+) -> Vec<Option<String>> {
+    let reference = std::cell::OnceCell::new();
+    let options = CompareOptions::default();
+    with_devices(|(device, queue)| {
+        let cpu = reference.get_or_init(|| {
+            let output = CpuEngine::new()
+                .render(snapshot, settings, &Control::new())
+                .unwrap_or_else(|e| panic!("{label}: CPU render failed: {e}"));
+            ImageBuf::from_rgba(output.width, output.height, &output.beauty.data)
+        });
+        let engine = PathTraceEngine::with_device(device.clone(), queue.clone());
+        let (output, backend) =
+            match engine.render_with_backend(snapshot, settings, &Control::new()) {
+                Ok(render) => render,
+                Err(e) => return Some(format!("{label}: Tier 3 render failed: {e}")),
+            };
+        let gpu = ImageBuf::from_rgba(output.width, output.height, &output.beauty.data);
+        let report = compare_image(cpu, &gpu, &options).unwrap();
+        let result = format!("{backend:?} {label}: {:.2} dB", report.psnr);
+        eprintln!("{result}");
+        if report.psnr >= 35.0 {
+            None
+        } else {
+            Some(result)
+        }
+    })
 }
 
 #[test]
