@@ -36,6 +36,17 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Live GPU direct-shadow spatial reconstruction:** The inline pass now
+  filters both shadow RGBA lanes using one guide and weight sum before
+  readback. Compute and actual Metal matched one CPU filter pass on the
+  cropped probe, including both independent luminance channels. The eight
+  samples, no-light bypass, batched fallback and per-jitter history are
+  unchanged. Five required-GPU lib, hybrid and translation runs passed.
+  Strict R26 held at 18/19/23 of 23 against CPU on both backends, with nine
+  unchanged pins and Metal-vs-Compute minima of exact/161.24/75.66 dB.
+  On unchanged full-size Metal S10, shadows fell from 37.288 to 26.307 ms
+  and Tier 2 frame time from 161.447 to 150.339 ms (6.194 to 6.652 fps).
+  The 30 fps target remains unmet. `GATE: all passed` (2757 tests).
 - **Live GPU reflection spatial reconstruction:** Inline reflections now share
   the R24.11 spatial pipeline with diffuse GI. Cropped HDR reflection output
   matched one CPU filter pass before per-jitter history on Compute and

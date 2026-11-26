@@ -130,12 +130,35 @@ impl DirectShadowProgram {
         self.raw.pipeline()
     }
 
+    #[cfg(test)]
     pub fn read(
         &self,
         (device, queue): (&wgpu::Device, &wgpu::Queue),
         bindings: DirectShadowBindings<'_>,
         settings: &RenderSettings,
         frame: DirectShadowFrame,
+    ) -> Result<Vec<[f32; 8]>, RenderError> {
+        self.read_impl((device, queue), bindings, settings, frame, None)
+    }
+
+    pub fn read_spatial(
+        &self,
+        gpu: (&wgpu::Device, &wgpu::Queue),
+        bindings: DirectShadowBindings<'_>,
+        settings: &RenderSettings,
+        frame: DirectShadowFrame,
+        spatial: BounceSpatialPass<'_>,
+    ) -> Result<Vec<[f32; 8]>, RenderError> {
+        self.read_impl(gpu, bindings, settings, frame, Some(spatial))
+    }
+
+    fn read_impl(
+        &self,
+        (device, queue): (&wgpu::Device, &wgpu::Queue),
+        bindings: DirectShadowBindings<'_>,
+        settings: &RenderSettings,
+        frame: DirectShadowFrame,
+        spatial: Option<BounceSpatialPass<'_>>,
     ) -> Result<Vec<[f32; 8]>, RenderError> {
         let lights = upload_lights(device, bindings.lights)?;
         self.raw.read(
@@ -147,7 +170,7 @@ impl DirectShadowProgram {
                 bitmaps: bindings.bitmaps,
                 lights: &lights,
                 environment: None,
-                spatial: None,
+                spatial,
             },
             settings,
             &frame,
@@ -396,10 +419,6 @@ impl RawSignalProgram {
             pass.dispatch_workgroups(groups[0], groups[1], 1);
         }
         let filtered = bindings.spatial.map(|spatial| {
-            debug_assert!(matches!(
-                self.frame_layout,
-                SignalFrameLayout::Diffuse | SignalFrameLayout::Reflection
-            ));
             spatial.encode(
                 device,
                 &mut encoder,

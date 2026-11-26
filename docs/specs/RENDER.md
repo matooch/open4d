@@ -1381,7 +1381,7 @@ quality assertions to pass. The candidate passed R26 on Compute and Metal
 with unchanged pins, but failed the R24 emissive-bounce PSNR improvement
 assertion; the default remains the eight-attempt inline estimator.
 
-### R24.11 GPU bounce spatial reconstruction (brief 214)
+### R24.11 GPU signal spatial reconstruction (brief 214)
 
 Sources: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report)
 and the R24.3 spatial filter. This is our own design.
@@ -1416,16 +1416,29 @@ and the R24.3 spatial filter. This is our own design.
   Live adoption requires the strict R26 matrix and existing R24 hybrid
   quality assertions, with unchanged CPU fallback and per-jitter history.
   This pass does not change the estimator, history or final composition.
-- Share one spatial pipeline per hybrid view between inline reflection and
-  diffuse GI. Encode transport and spatial reconstruction in separate
+- Share one spatial pipeline per hybrid view across inline effects. Encode
+  transport and spatial reconstruction in separate
   passes of one command encoder and copy only the filtered signal to staging.
   Feed that result directly into per-jitter history; do not run the CPU
   spatial filter a second time. Raw probes and the unadopted reduced-rate
   candidate still read raw data; batched fallback retains CPU filtering.
-- Compare the chained GPU result with one CPU spatial pass over the same
-  raw inline output. Exercise cropped absolute coordinates, both camera
-  projections and different jitter/history inputs, with a signal that
-  changes under filtering and would change again under a second pass.
+- For reflection and diffuse GI, compare the chained GPU result with one
+  CPU spatial pass over the same raw inline output. Exercise cropped
+  absolute coordinates, both camera projections and different jitter/history
+  inputs, with a signal that changes under each successive filter pass.
+- Inline direct shadows share this pass with the bounce signals. Each
+  shadow pixel stores two interleaved RGBA lanes: diffuse RGB with
+  unoccluded luminance and specular RGB with occluded luminance. Compute
+  guide acceptance and total weight once, but accumulate and normalize
+  each lane independently, including alpha. The 16-byte uniform carries
+  the lane count as a `u32`; bounce signals keep one lane. The host checks
+  the selected lane count against the raw buffer's pixel stride.
+- Compare chained shadow output against one CPU spatial pass over the
+  same raw lanes on cropped guides. Include guide-compatible black
+  neighbours, nonzero luminance in both lanes and an uncovered pixel;
+  require a fixture that distinguishes one pass from zero or two.
+  Preserve the eight shadow samples, no-light bypass, CPU fallback, and
+  per-jitter history after spatial filtering.
 
 ## R25 Progressive GPU path tracing (brief 202)
 

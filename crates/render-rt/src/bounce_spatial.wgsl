@@ -1,8 +1,9 @@
-// R24.11: filter an already evaluated bounce signal without mapping it.
+// R24.11: filter already evaluated bounce and shadow signals without mapping them.
 struct SpatialLimits {
     distance_squared: f32,
     depth: f32,
-    _padding: vec2<f32>,
+    lanes: u32,
+    _padding: u32,
 }
 
 @group(0) @binding(0) var<uniform> spatial_limits: SpatialLimits;
@@ -16,11 +17,16 @@ fn bounce_spatial(@builtin(global_invocation_id) id: vec3<u32>) {
     let film = textureDimensions(spatial_positions);
     if any(id.xy >= film) { return; }
     let center = vec2<i32>(id.xy);
-    let i = id.y * film.x + id.x;
+    let lanes = spatial_limits.lanes;
+    let dual = lanes == 2u;
+    let i = (id.y * film.x + id.x) * lanes;
     let value = spatial_raw[i];
+    var second = vec4<f32>(0.0);
+    if dual { second = spatial_raw[i + 1u]; }
     let p = textureLoad(spatial_positions, center, 0);
     if p.w < 0.5 {
         spatial_filtered[i] = value;
+        if dual { spatial_filtered[i + 1u] = second; }
         return;
     }
 
@@ -28,6 +34,7 @@ fn bounce_spatial(@builtin(global_invocation_id) id: vec3<u32>) {
     let lo = max(center - vec2<i32>(1), vec2<i32>(0));
     let hi = min(center + vec2<i32>(1), vec2<i32>(film) - vec2<i32>(1));
     var sum = value * 2.0;
+    var second_sum = second * 2.0;
     var weight = 2.0;
     for (var y = lo.y; y <= hi.y; y += 1) {
         for (var x = lo.x; x <= hi.x; x += 1) {
@@ -41,9 +48,13 @@ fn bounce_spatial(@builtin(global_invocation_id) id: vec3<u32>) {
                 abs(dot(delta, n)) > spatial_limits.depth {
                 continue;
             }
-            sum += spatial_raw[u32(y) * film.x + u32(x)];
+            let j = (u32(y) * film.x + u32(x)) * lanes;
+            sum += spatial_raw[j];
+            if dual { second_sum += spatial_raw[j + 1u]; }
             weight += 1.0;
         }
     }
-    spatial_filtered[i] = sum * (1.0 / weight);
+    let inv_weight = 1.0 / weight;
+    spatial_filtered[i] = sum * inv_weight;
+    if dual { spatial_filtered[i + 1u] = second_sum * inv_weight; }
 }

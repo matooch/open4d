@@ -72,11 +72,20 @@ fn gpu_raw_direct_shadows_match_batched_reference() {
         positions[i] = position;
         normals[i] = [0., 0., 1., 1.];
     }
+    normals[31] = [0., 0., 1., 0.];
     let input = PrimaryInput {
         positions: &positions,
         normals: &normals,
         epsilon: 1e-5,
         jitter: [-0.375, 0.25],
+    };
+    // Covered, compatible guide with an invalid receiver key: raw black.
+    // The batched raw reference expects valid keys for all covered pixels.
+    let mut spatial_positions = positions;
+    spatial_positions[31] = [0.11, 0.25, 0., 1.];
+    let guide = PrimaryInput {
+        positions: &spatial_positions,
+        ..input
     };
     for request in [crate::request_default_device, crate::request_rt_device] {
         let (device, queue) = match request() {
@@ -94,8 +103,8 @@ fn gpu_raw_direct_shadows_match_batched_reference() {
         backend.update_scene(&snapshot).unwrap();
         let geometry = PrimaryGeometry::new(&snapshot).unwrap();
         let attrs = crate::path_trace::attributes(&device, &snapshot, &geometry.scene).unwrap();
-        let views =
-            [positions, normals].map(|data| texture_view(&device, &queue, &settings, &data));
+        let views = [spatial_positions, normals]
+            .map(|data| texture_view(&device, &queue, &settings, &data));
         let materials: Vec<_> = snapshot
             .materials
             .iter()
@@ -104,6 +113,7 @@ fn gpu_raw_direct_shadows_match_batched_reference() {
         let assembled = crate::shader::direct_shadow_wgsl(kind, &materials).unwrap();
         assert!(assembled.resources.is_empty());
         let program = DirectShadowProgram::new(&device, kind, assembled.source, 0);
+        let spatial = BounceSpatialProgram::new(&device);
         let scene = backend.inline_scene().unwrap();
         let control = Control::new();
         for (name, input_lights) in [
@@ -175,6 +185,48 @@ fn gpu_raw_direct_shadows_match_batched_reference() {
                         }
                         "infinite" => assert_eq!(&actual[..3], &[0.; 3]),
                         _ => {}
+                    }
+                }
+                if name == "mixed" {
+                    let width = settings.width as usize;
+                    let limit = geometry.filter_limit(&snapshot, width);
+                    let once = spatial_filter(width, &guide, &actual, limit);
+                    let twice = spatial_filter(width, &guide, &once, limit);
+                    let filtered = program
+                        .read_spatial(
+                            (&device, &queue),
+                            DirectShadowBindings {
+                                scene,
+                                primary: [&views[0], &views[1]],
+                                attributes: &attrs,
+                                bitmaps: &[],
+                                lights: &lights,
+                            },
+                            &settings,
+                            DirectShadowFrame::new(
+                                &snapshot,
+                                &settings,
+                                input,
+                                geometry.scene.scale,
+                                history,
+                                lights.len(),
+                            ),
+                            spatial.shadow_pass(limit),
+                        )
+                        .unwrap();
+                    for alpha in [3, 7] {
+                        assert!(once[31][alpha] > 1e-4);
+                        assert!((once[31][alpha] - twice[31][alpha]).abs() > 2e-6);
+                    }
+                    assert_ne!(once[31][3], once[31][7]);
+                    assert_eq!(filtered[32], [0.; 8]);
+                    for (i, (out, expected)) in filtered.iter().zip(once).enumerate() {
+                        for (j, (&a, b)) in out.iter().zip(expected).enumerate() {
+                            assert!(
+                                (a - b).abs() <= 2e-6 * b.abs().max(1.),
+                                "{kind:?} history {history} pixel {i} channel {j}: {a} vs {b}"
+                            );
+                        }
                     }
                 }
                 if let Some(previous) = previous

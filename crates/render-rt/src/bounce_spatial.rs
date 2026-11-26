@@ -1,8 +1,8 @@
-//! GPU spatial reconstruction of eight-attempt Tier 2 bounce signals (R24.11).
+//! GPU spatial reconstruction of Tier 2 bounce and direct-shadow signals (R24.11).
 
 use wgpu::util::DeviceExt;
 
-const LABEL: &str = "Tier 2 bounce spatial";
+const LABEL: &str = "Tier 2 signal spatial";
 
 pub(super) struct BounceSpatialProgram {
     pipeline: wgpu::ComputePipeline,
@@ -11,7 +11,16 @@ pub(super) struct BounceSpatialProgram {
 
 pub(super) struct BounceSpatialPass<'a> {
     program: &'a BounceSpatialProgram,
-    thresholds: [f32; 4],
+    limits: SpatialLimits,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct SpatialLimits {
+    distance_squared: f32,
+    depth: f32,
+    lanes: u32,
+    _padding: u32,
 }
 
 impl BounceSpatialProgram {
@@ -64,9 +73,22 @@ impl BounceSpatialProgram {
     }
 
     pub fn pass(&self, limit: f64) -> BounceSpatialPass<'_> {
+        self.pass_with_lanes(limit, 1)
+    }
+
+    pub fn shadow_pass(&self, limit: f64) -> BounceSpatialPass<'_> {
+        self.pass_with_lanes(limit, 2)
+    }
+
+    fn pass_with_lanes(&self, limit: f64, lanes: u32) -> BounceSpatialPass<'_> {
         BounceSpatialPass {
             program: self,
-            thresholds: [(limit * limit) as f32, (limit * 0.1) as f32, 0., 0.],
+            limits: SpatialLimits {
+                distance_squared: (limit * limit) as f32,
+                depth: (limit * 0.1) as f32,
+                lanes,
+                _padding: 0,
+            },
         }
     }
 }
@@ -80,9 +102,14 @@ impl BounceSpatialPass<'_> {
         raw: &wgpu::Buffer,
         film: [u32; 2],
     ) -> wgpu::Buffer {
+        assert_eq!(
+            raw.size(),
+            u64::from(film[0]) * u64::from(film[1]) * u64::from(self.limits.lanes) * 16,
+            "spatial signal stride mismatch"
+        );
         let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(LABEL),
-            contents: bytemuck::bytes_of(&self.thresholds),
+            contents: bytemuck::bytes_of(&self.limits),
             usage: wgpu::BufferUsages::UNIFORM,
         });
         let filtered = device.create_buffer(&wgpu::BufferDescriptor {

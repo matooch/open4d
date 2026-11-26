@@ -359,6 +359,8 @@ impl HybridView {
             .shadows
             .entry(input.jitter.map(f32::to_bits))
             .or_default();
+        let width = settings.width as usize;
+        let limit = geometry.filter_limit(snapshot, width);
         let inline = match (gpu, backend.inline_scene()) {
             (Some(gpu), Some(scene)) => (|| {
                 let MaterialGpu {
@@ -379,11 +381,14 @@ impl HybridView {
                 }
                 let attributes =
                     resident_attributes(&mut self.attributes, device, snapshot, &geometry.scene)?;
+                let spatial = self
+                    .bounce_spatial
+                    .get_or_insert_with(|| BounceSpatialProgram::new(device));
                 MaterialProgram::get(&mut self.shadow_program, *kind, gpu, |materials| {
                     let source = crate::shader::direct_shadow_source(*kind, materials);
                     DirectShadowProgram::new(device, *kind, source, bitmaps.len())
                 })
-                .read(
+                .read_spatial(
                     (device, queue),
                     DirectShadowBindings {
                         scene,
@@ -401,30 +406,31 @@ impl HybridView {
                         history.frames,
                         lights.len(),
                     ),
+                    spatial.shadow_pass(limit),
                 )
             })(),
             _ => Err(RenderError::Unsupported(
                 "no inline direct-shadow scene".into(),
             )),
         };
-        let pixels = match inline {
-            Err(RenderError::Unsupported(_)) => raw_direct_shadows(
-                (geometry, &**backend),
-                snapshot,
-                settings,
-                input,
-                &lights,
-                history.frames,
-                control,
-            )?,
+        let filtered = match inline {
+            Err(RenderError::Unsupported(_)) => {
+                let pixels = raw_direct_shadows(
+                    (geometry, &**backend),
+                    snapshot,
+                    settings,
+                    input,
+                    &lights,
+                    history.frames,
+                    control,
+                )?;
+                if control.is_cancelled() {
+                    return Err(RenderError::Cancelled);
+                }
+                spatial_filter(width, &input, &pixels, limit)
+            }
             result => result?,
         };
-        if control.is_cancelled() {
-            return Err(RenderError::Cancelled);
-        }
-        let width = settings.width as usize;
-        let limit = geometry.filter_limit(snapshot, width);
-        let filtered = spatial_filter(width, &input, &pixels, limit);
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
