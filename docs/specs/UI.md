@@ -1810,7 +1810,7 @@ earlier section disagrees, this one wins for layout and density, and the earlier
 ### 29.3 Attribute manager layout (with §12 and brief 231)
 
 - **Tabs are small toggle buttons that wrap onto several rows** when they don't fit (the Project
-  example shows two rows: Project, Cineware-style, Info, Dynamics, XRefs / To Do, Animation, Nodes).
+  example shows two rows: Project, an exchange-plug-in tab, Info, Dynamics, XRefs / To Do, Animation, Nodes).
   The active tab is accent-filled. Some tabs have a small leading icon.
 - Under the tabs: the tab's title in bold ("Project"), then rows. **Collapsible groups** have a
   ▾ header ("Time", "Execution", "Display").
