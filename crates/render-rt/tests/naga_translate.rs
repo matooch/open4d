@@ -168,7 +168,31 @@ fn raw_direct_shadow_transport_translates_with_each_traversal() {
 
 #[test]
 fn raw_reflection_transport_translates_with_each_traversal() {
-    use forge_render_rt::{ray::BackendKind, shader::reflection_wgsl};
+    check_raw_bounce_translation(
+        forge_render_rt::shader::reflection_wgsl,
+        "reflection_signal",
+        true,
+    );
+}
+
+#[test]
+fn raw_diffuse_transport_translates_without_environment_binding() {
+    check_raw_bounce_translation(
+        forge_render_rt::shader::diffuse_wgsl,
+        "diffuse_signal",
+        false,
+    );
+}
+
+fn check_raw_bounce_translation(
+    assemble: impl Fn(
+        forge_render_rt::ray::BackendKind,
+        &[(&ShadingGraph, &dyn TextureSampler)],
+    ) -> Result<forge_render_gpu::shader::Assembled, forge_render_api::RenderError>,
+    entry: &str,
+    uses_environment: bool,
+) {
+    use forge_render_rt::ray::BackendKind;
     let case = load("mat-bump-noise");
     let materials: Vec<(&ShadingGraph, &dyn TextureSampler)> = case
         .snapshot
@@ -181,13 +205,19 @@ fn raw_reflection_transport_translates_with_each_traversal() {
         BackendKind::Metal,
         BackendKind::Vulkan,
     ] {
-        let module = reflection_wgsl(backend, &materials).unwrap();
+        let module = assemble(backend, &materials).unwrap();
         let compiled = naga::front::wgsl::parse_str(&module.source)
             .unwrap_or_else(|e| panic!("{backend:?}: {}", e.emit_to_string(&module.source)));
         assert_eq!(compiled.entry_points.len(), 1);
-        assert_eq!(compiled.entry_points[0].name, "reflection_signal");
+        assert_eq!(compiled.entry_points[0].name, entry);
         assert_eq!(compiled.entry_points[0].workgroup_size, [8, 8, 1]);
-        translate(&format!("{backend:?} raw reflection"), &module.source);
+        assert_eq!(
+            compiled.global_variables.iter().any(|(_, global)| global
+                .binding
+                .is_some_and(|binding| binding.group == 0 && binding.binding == 3)),
+            uses_environment
+        );
+        translate(&format!("{backend:?} {entry}"), &module.source);
     }
 }
 

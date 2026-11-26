@@ -36,6 +36,14 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- [Raw diffuse GI kernel checkpoint](../../specs/RENDER.md#r249-gpu-diffuse-gi-signal-brief-214):
+  diffuse and reflection share inline receiver, hit and secondary-light code.
+  Diffuse makes eight cosine attempts and has no environment texture binding.
+  Compute, Metal and Vulkan selections translated to SPIR-V, MSL and HLSL.
+  Required-GPU lib, hybrid and translation suites passed five times; full gate:
+  2751 tests passed, `GATE: all passed`. This does not yet dispatch diffuse GI
+  on the GPU; no new S10 result.
+
 - **GPU reflection runtime:** Tier 2 uses inline R23 for the eight reflection
   attempts and secondary direct lighting, sharing the resident R25 attributes
   with direct shadows. Cropped warm and cold results matched after scene

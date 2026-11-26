@@ -1295,6 +1295,32 @@ R24 reflections and the R7 opaque GGX specular lobe. This is our own design.
   visible change in the reflection AOV when the bitmap pixels change. Keep
   the eight attempts and the strict R26 budgets unchanged.
 
+### R24.9 GPU diffuse GI signal (brief 214)
+
+Sources: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report),
+R24.2 diffuse bounce and R24.8 inline secondary lighting. This is our own design.
+
+- Use the R24.8 receiver, inline R23 traversal, R25 hit attributes and
+  secondary-light accumulation, but sample the diffuse lobe. From
+  `Rng(seed XOR history_frame, absolute_pixel)`, make eight attempts. A
+  back-facing shading view or all-zero `albedo * (1-trans)` consumes no
+  draws. Otherwise consume two draws for each cosine-hemisphere direction
+  in the shading frame, reject the geometric horizon, and weight an
+  accepted ray by `albedo * (1-trans) / 8` without renormalizing.
+- A diffuse miss is black regardless of environment lighting; the raw
+  diffuse shader has no environment texture binding. Accumulate hit
+  emission and secondary direct lighting in the same order as reflection,
+  with the same absolute attempt IDs, finite light clipping, tint and
+  lobe flags. Uncovered pixels and invalid receiver keys write exact zero.
+- First translate the standalone diffuse entry to SPIR-V, MSL and HLSL
+  with all R23 backend selections. Before enabling live GI, compare raw
+  Compute and hardware dispatch to the batched CPU-shaded diffuse estimator
+  on isolated receivers within the R24.8 raw allowance. Include black
+  misses under non-black environment lighting, emissive and lit secondary
+  hits, partial and full transmission, and two history indices. Leave
+  the live batched GI path, filtering and strict R26 budgets unchanged
+  until standalone numeric acceptance.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),

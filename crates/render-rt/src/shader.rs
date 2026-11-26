@@ -24,14 +24,43 @@ pub fn reflection_wgsl(
 }
 
 pub(crate) fn reflection_source(backend: crate::ray::BackendKind, materials: &str) -> String {
+    bounce_source(
+        backend,
+        materials,
+        REFLECTION_SAMPLING_WGSL,
+        include_str!("reflection_signal.wgsl"),
+    )
+}
+
+/// Raw R24.9 diffuse GI signal before spatial/temporal filtering.
+pub fn diffuse_wgsl(
+    backend: crate::ray::BackendKind,
+    materials: &[(&ShadingGraph, &dyn TextureSampler)],
+) -> Result<Assembled, RenderError> {
+    let mut assembled = forge_render_gpu::shader::materials(materials, 1)?;
+    assembled.source = bounce_source(
+        backend,
+        &assembled.source,
+        "",
+        include_str!("diffuse_signal.wgsl"),
+    );
+    Ok(assembled)
+}
+
+fn bounce_source(
+    backend: crate::ray::BackendKind,
+    materials: &str,
+    sampler: &str,
+    lobe: &str,
+) -> String {
     use forge_render_gpu::{GEOMETRY_WGSL, LIGHT_SAMPLING_WGSL, RNG_WGSL, SURFACE_WGSL};
     let (directives, scene) = crate::ray::inline_ray_scene(backend);
     let receiver = include_str!("receiver_geometry.wgsl");
-    let reflection = include_str!("reflection_signal.wgsl");
+    let transport = include_str!("bounce_signal.wgsl");
     format!(
         "{directives}\n{materials}\n{RNG_WGSL}\n{GEOMETRY_WGSL}\n{SURFACE_WGSL}\n\
          {LIGHT_SAMPLING_WGSL}\n{scene}\n{INSTANCE_GEOMETRY_WGSL}\n{receiver}\n\
-         {REFLECTION_SAMPLING_WGSL}\n{reflection}"
+         {sampler}\n{transport}\n{lobe}"
     )
 }
 
