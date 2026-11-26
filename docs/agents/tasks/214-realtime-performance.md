@@ -114,3 +114,9 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
   this run does not show a frame-rate gain. The change saves readback bytes
   but does not reduce traversal work or eliminate CPU/GPU synchronization.
 - Visibility checkpoint gate: 2739 tests passed, zero failed; `GATE: all passed`.
+- [GPU AO kernel checkpoint](../../specs/RENDER.md#r246-gpu-ambient-visibility-dispatch-brief-214):
+  the raw visibility shader reads primary textures and runs inline traversal and
+  quad reconstruction without a ray list. Five translation runs passed for
+  Compute and hardware variants (SPIR-V, MSL and HLSL). The raster engine does not
+  dispatch this kernel yet; no new S10 or R26 result is claimed. Checkpoint gate:
+  2740 tests passed, zero failed; `GATE: all passed`.

@@ -13,6 +13,28 @@ pub use hardware::{HARDWARE_TRAVERSAL_WGSL, HARDWARE_WGSL};
 /// Common hit result and miss sentinel used by both inline traversal kernels.
 pub const RAY_HIT_WGSL: &str = include_str!("ray/hit.wgsl");
 
+/// Inline R23 declarations shared by the path transport and hybrid effects.
+pub(crate) fn inline_ray_scene(backend: BackendKind) -> (&'static str, String) {
+    let (directives, traversal, bindings) = match backend {
+        BackendKind::Compute => (
+            "",
+            COMPUTE_TRAVERSAL_WGSL,
+            "
+@group(2) @binding(0) var<storage, read> tlas: array<Node>;
+@group(2) @binding(1) var<storage, read> instances: array<Instance>;
+@group(2) @binding(2) var<storage, read> blas: array<Node>;
+@group(2) @binding(3) var<storage, read> triangles: array<Triangle>;
+",
+        ),
+        BackendKind::Metal | BackendKind::Vulkan => (
+            "enable wgpu_ray_query;",
+            HARDWARE_TRAVERSAL_WGSL,
+            "\n@group(2) @binding(0) var scene: acceleration_structure;\n",
+        ),
+    };
+    (directives, format!("{RAY_HIT_WGSL}\n{traversal}{bindings}"))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendKind {
     Compute,

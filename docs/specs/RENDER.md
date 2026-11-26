@@ -1119,6 +1119,30 @@ Source: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-s
   backend, including finite rays, empty batches and partial workgroups.
   Translate both GPU query entries and rerun R24, R26 and full-size S10.
 
+### R24.6 GPU ambient-visibility dispatch (brief 214)
+
+Source: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report).
+R24.4 remains the estimator contract.
+
+- Dispatch one invocation per absolute 2×2 quad. Load positions/materials
+  and normals from the two primary G-buffer textures. In rotated order,
+  retain past traced representatives in invocation-local state and write
+  raw visibility once per in-bounds pixel. Uncovered pixels and pixels
+  with invalid normals write one. No inter-invocation dependency or
+  intermediate ray list is needed.
+- Use the shared GPU PCG and cosine-hemisphere helpers with the same seed,
+  history frame and absolute pixel index as R24.4. Test inline R23 opaque
+  visibility at the configured finite radius, with the normal offset capped
+  at one percent of the radius. The GPU uses `f32` for geometric tests;
+  boundary rounding is not required to be bitwise identical to the CPU.
+- Validate this raw signal independently before using it for raster
+  composition. Check odd/cropped quads, all four rotation phases and
+  incompatible material, normal and depth neighbours. Translate the
+  complete Compute and hardware variants through SPIR-V, MSL and HLSL.
+- Frame integration preserves the existing spatial filter, per-jitter
+  history, cancellation and fallback. Measure full-size S10 and the
+  unchanged R26 acceptance before claiming any performance or quality result.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),

@@ -9,6 +9,14 @@ use forge_render_gpu::shader::Assembled;
 /// The passes of R21.2–R21.5.
 pub const RT_WGSL: &str = include_str!("rt.wgsl");
 
+/// Raw R24.6 visibility and reconstruction; spatial and temporal filtering are separate.
+pub fn ambient_visibility_wgsl(backend: crate::ray::BackendKind) -> String {
+    let (directives, scene) = crate::ray::inline_ray_scene(backend);
+    let rng = forge_render_gpu::RNG_WGSL;
+    let ao = include_str!("ambient_visibility.wgsl");
+    format!("{directives}\n{scene}\n{rng}\n{ao}")
+}
+
 /// The `F_*` constants of the frame uniform, generated from [`crate::frame`].
 pub fn frame_constants() -> String {
     let mut s = String::new();

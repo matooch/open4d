@@ -11,10 +11,7 @@ use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
 use crate::path_preview::{PrimaryGuide, denoise};
-use crate::ray::{
-    BackendKind, COMPUTE_TRAVERSAL_WGSL, ComputeBackend, HARDWARE_TRAVERSAL_WGSL, HardwareBackend,
-    RAY_HIT_WGSL, RtBackend,
-};
+use crate::ray::{BackendKind, ComputeBackend, HardwareBackend, RtBackend};
 
 const INSTANCE_ROWS: usize = 7;
 const TRIANGLE_ROWS: usize = 10;
@@ -23,30 +20,9 @@ const ATTRIBUTES_BINDING: u32 = 4;
 /// The WGSL extension directive and scene module used by the Tier 3 integrator.
 /// Hardware backends share the same acceleration-structure interface.
 pub fn path_scene_wgsl(backend: BackendKind) -> (&'static str, String) {
-    let (directives, traversal, bindings) = match backend {
-        BackendKind::Compute => (
-            "",
-            COMPUTE_TRAVERSAL_WGSL,
-            "
-@group(2) @binding(0) var<storage, read> tlas: array<Node>;
-@group(2) @binding(1) var<storage, read> instances: array<Instance>;
-@group(2) @binding(2) var<storage, read> blas: array<Node>;
-@group(2) @binding(3) var<storage, read> triangles: array<Triangle>;
-",
-        ),
-        BackendKind::Metal | BackendKind::Vulkan => (
-            "enable wgpu_ray_query;",
-            HARDWARE_TRAVERSAL_WGSL,
-            "\n@group(2) @binding(0) var scene: acceleration_structure;\n",
-        ),
-    };
-    (
-        directives,
-        format!(
-            "{RAY_HIT_WGSL}\n{traversal}{bindings}{}",
-            include_str!("path_scene.wgsl")
-        ),
-    )
+    let (directives, mut source) = crate::ray::inline_ray_scene(backend);
+    source.push_str(include_str!("path_scene.wgsl"));
+    (directives, source)
 }
 
 fn attributes(

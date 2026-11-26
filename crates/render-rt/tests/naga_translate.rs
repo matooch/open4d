@@ -85,6 +85,21 @@ fn path(@builtin(global_invocation_id) id: vec3<u32>) {
 }
 
 #[test]
+fn ambient_visibility_transport_translates_with_each_traversal() {
+    use forge_render_rt::{ray::BackendKind, shader::ambient_visibility_wgsl};
+    for backend in [
+        BackendKind::Compute,
+        BackendKind::Metal,
+        BackendKind::Vulkan,
+    ] {
+        translate(
+            &format!("{backend:?} ambient visibility"),
+            &ambient_visibility_wgsl(backend),
+        );
+    }
+}
+
+#[test]
 fn shared_path_transport_translates_with_every_backend() {
     use forge_render_gpu::shader::assemble_with_scene;
     use forge_render_rt::{path_scene_wgsl, ray::BackendKind};
