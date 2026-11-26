@@ -43,7 +43,32 @@ pub fn diffuse_wgsl(
 }
 
 pub(crate) fn diffuse_source(backend: crate::ray::BackendKind, materials: &str) -> String {
-    bounce_source(backend, materials, "", include_str!("diffuse_signal.wgsl"))
+    let entry = "const BOUNCE_SAMPLES: u32 = 8u;
+        @compute @workgroup_size(8, 8)
+        fn diffuse_signal(@builtin(global_invocation_id) id: vec3<u32>) {
+            bounce_signal(id.xy);
+        }";
+    bounce_source(
+        backend,
+        materials,
+        include_str!("diffuse_signal.wgsl"),
+        entry,
+    )
+}
+
+/// Experimental raw R24.10 diffuse GI probe, one invocation per absolute 2×2 quad.
+pub fn reduced_diffuse_wgsl(
+    backend: crate::ray::BackendKind,
+    materials: &[(&ShadingGraph, &dyn TextureSampler)],
+) -> Result<Assembled, RenderError> {
+    let mut assembled = forge_render_gpu::shader::materials(materials, 1)?;
+    assembled.source = bounce_source(
+        backend,
+        &assembled.source,
+        include_str!("diffuse_signal.wgsl"),
+        include_str!("reduced_diffuse_signal.wgsl"),
+    );
+    Ok(assembled)
 }
 
 fn bounce_source(

@@ -184,6 +184,15 @@ fn raw_diffuse_transport_translates_without_environment_binding() {
     );
 }
 
+#[test]
+fn reduced_diffuse_transport_translates_without_environment_binding() {
+    check_raw_bounce_translation(
+        forge_render_rt::shader::reduced_diffuse_wgsl,
+        "reduced_diffuse_signal",
+        false,
+    );
+}
+
 fn check_raw_bounce_translation(
     assemble: impl Fn(
         forge_render_rt::ray::BackendKind,

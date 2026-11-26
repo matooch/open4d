@@ -67,6 +67,51 @@ fn bounce_direct(h: BounceHit, l: GpuLight, seed: vec2<u32>, stream: vec2<u32>) 
     return value;
 }
 
+fn bounce_estimate(pixel: vec2<u32>, index: u32, p: vec3<f32>, ids: vec2<u32>) -> vec3<f32> {
+    let g = receiver_geometry(p, ids);
+    let wo = receiver_view(vec2<f32>(pixel), bounce_frame.jitter,
+        bounce_frame.film, bounce_frame.camera);
+    let material = u32(path_attributes[7u * ids.x].y);
+    let m = surface_at(material, g, wo, bounce_frame.scale);
+    let face = select(-1.0, 1.0, dot(g.ng, wo) > 0.0);
+    let ng = g.ng * face;
+    let ns = m.n * face;
+    let n = select(ns, ng, dot(ns, ng) < 0.0);
+    let origin = g.p + ng * bounce_frame.epsilon;
+    let seed = bounce_frame.seed ^ vec2<u32>(bounce_frame.history_frame, 0u);
+    var rng = rng_new(seed, vec2<u32>(index, 0u));
+    var secondary: array<BounceHit, BOUNCE_SAMPLES>;
+    var rgb = vec3<f32>(0.0);
+    for (var attempt = 0u; attempt < BOUNCE_SAMPLES; attempt += 1u) {
+        let s = bounce_sample(m, n, ng, wo, &rng);
+        if s.accepted {
+            let hit = rt_closest(origin, s.direction, 1e30);
+            if hit.ids.x == RT_MISS {
+                rgb += s.weight * bounce_miss(s.direction);
+            } else {
+                let h = bounce_hit(hit, origin, s.direction, s.weight);
+                rgb += s.weight * h.m.emission;
+                secondary[attempt] = h;
+            }
+        }
+    }
+    // Keep the absolute attempt IDs independent of the per-receiver budget.
+    let stream_base = u64_mul(vec2<u32>(index, 0u), vec2<u32>(8u, 0u));
+    let direct_seed = seed ^ vec2<u32>(0x79fa645bu, 0xed20e2d0u);
+    for (var light = 0u; light < bounce_frame.light_count; light += 1u) {
+        let l = bounce_lights[light];
+        let light_seed = direct_seed ^ vec2<u32>(light, 0u);
+        for (var attempt = 0u; attempt < BOUNCE_SAMPLES; attempt += 1u) {
+            let h = secondary[attempt];
+            if h.valid {
+                let stream = u64_add(stream_base, vec2<u32>(attempt, 0u));
+                rgb += bounce_direct(h, l, light_seed, stream);
+            }
+        }
+    }
+    return rgb;
+}
+
 fn bounce_signal(pixel: vec2<u32>) {
     let size = textureDimensions(bounce_positions);
     if any(pixel >= size) {
@@ -79,45 +124,7 @@ fn bounce_signal(pixel: vec2<u32>) {
         let key = u32(textureLoad(bounce_normals, pixel, 0).w);
         let ids = receiver_triangle(key, bounce_frame.instance_count);
         if ids.x < bounce_frame.instance_count {
-            let g = receiver_geometry(p.xyz, ids);
-            let wo = receiver_view(vec2<f32>(pixel), bounce_frame.jitter,
-                bounce_frame.film, bounce_frame.camera);
-            let material = u32(path_attributes[7u * ids.x].y);
-            let m = surface_at(material, g, wo, bounce_frame.scale);
-            let face = select(-1.0, 1.0, dot(g.ng, wo) > 0.0);
-            let ng = g.ng * face;
-            let ns = m.n * face;
-            let n = select(ns, ng, dot(ns, ng) < 0.0);
-            let origin = g.p + ng * bounce_frame.epsilon;
-            let seed = bounce_frame.seed ^ vec2<u32>(bounce_frame.history_frame, 0u);
-            var rng = rng_new(seed, vec2<u32>(index, 0u));
-            var secondary: array<BounceHit, BOUNCE_SAMPLES>;
-            for (var attempt = 0u; attempt < BOUNCE_SAMPLES; attempt += 1u) {
-                let s = bounce_sample(m, n, ng, wo, &rng);
-                if s.accepted {
-                    let hit = rt_closest(origin, s.direction, 1e30);
-                    if hit.ids.x == RT_MISS {
-                        rgb += s.weight * bounce_miss(s.direction);
-                    } else {
-                        let h = bounce_hit(hit, origin, s.direction, s.weight);
-                        rgb += s.weight * h.m.emission;
-                        secondary[attempt] = h;
-                    }
-                }
-            }
-            let stream_base = u64_mul(vec2<u32>(index, 0u), vec2<u32>(BOUNCE_SAMPLES, 0u));
-            let direct_seed = seed ^ vec2<u32>(0x79fa645bu, 0xed20e2d0u);
-            for (var light = 0u; light < bounce_frame.light_count; light += 1u) {
-                let l = bounce_lights[light];
-                let light_seed = direct_seed ^ vec2<u32>(light, 0u);
-                for (var attempt = 0u; attempt < BOUNCE_SAMPLES; attempt += 1u) {
-                    let h = secondary[attempt];
-                    if h.valid {
-                        let stream = u64_add(stream_base, vec2<u32>(attempt, 0u));
-                        rgb += bounce_direct(h, l, light_seed, stream);
-                    }
-                }
-            }
+            rgb = bounce_estimate(pixel, index, p.xyz, ids);
         }
     }
     bounce_output[index] = vec4<f32>(rgb, 0.0);

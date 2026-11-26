@@ -1336,6 +1336,32 @@ R24.2 diffuse bounce and R24.8 inline secondary lighting. This is our own design
   indirectly lit receiver. Keep all eight attempts, rerun strict R26 and
   measure unchanged full-size S10 on Metal.
 
+### R24.10 Reduced-rate diffuse GI probe (brief 214)
+
+Sources: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report),
+R24.4 representative rotation and R24.9 diffuse transport. This is our own design.
+
+- Start with a separate raw compute entry covering absolute 2×2 quads.
+  Visit lanes in row-major order starting at `history_frame % 4`, wrapping
+  after lane 3. Out-of-film pixels and uncovered or invalid receivers
+  cannot represent any lane. Covered invalid receivers write exact zero.
+- Reuse the first compatible representative: same valid triangle key and
+  G-buffer material, shading-normal cosine at least `0.95`, world separation
+  at most `0.015 * scene_scale`, and absolute depth along either normal at
+  most one tenth of that distance. A zero normal cannot share a sample.
+  A lane that cannot reuse traces its own sample. Write full-resolution RGB;
+  no cross-quad reuse or blending. Surface variation within a triangle and
+  the lower sampling rate can introduce bias or variance.
+- Trace one R24.9 cosine attempt per representative using its absolute pixel
+  and the existing seed XOR history. Use the full opaque diffuse weight, not
+  one eighth; keep the existing `absolute_pixel * 8` secondary light stream for
+  attempt zero. Preserve black misses and secondary visibility and lighting.
+- Translate this entry to SPIR-V, MSL and HLSL with each R23 selection. Before
+  using it in Tier 2, check rotation, disjoint geometry and materials, depth
+  and normal discontinuities, partial absolute quads and black miss/invalid
+  output on GPU. Leave the eight-attempt live and CPU fallback paths unchanged
+  pending those checks, strict R26 and unchanged Metal S10 measurements.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),

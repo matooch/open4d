@@ -36,6 +36,12 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Reduced-rate GI checkpoint:** R24.10 specifies a standalone one-attempt
+  diffuse estimator with rotating 2×2 representatives and conservative
+  reconstruction guards. The raw shader translates to SPIR-V, MSL and HLSL
+  for each declared traversal selection. Full gate passed (2753 tests).
+  No host dispatch or live budget change yet; numeric Compute/Metal
+  acceptance and measured R26/S10 runs are still required before adopting it.
 - **Live GPU diffuse GI:** Tier 2 now dispatches the eight diffuse attempts
   inline, sharing resident geometry with reflections and shadows while
   retaining the CPU spatial filter, per-jitter history and batched fallback.
