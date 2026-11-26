@@ -291,77 +291,100 @@ impl HybridView {
             .shadows
             .entry(input.jitter.map(f32::to_bits))
             .or_default();
-        let mut pixels = vec![[0.0; 8]; input.positions.len()];
-        let mut rays = Vec::with_capacity(PIXELS_PER_BATCH * SHADOW_RAYS);
-        let mut samples = Vec::with_capacity(rays.capacity());
+        let pixels = raw_direct_shadows(
+            (geometry, &**backend),
+            snapshot,
+            settings,
+            input,
+            &lights,
+            history.frames,
+            control,
+        )?;
         let width = settings.width as usize;
-        for first in (0..pixels.len()).step_by(PIXELS_PER_BATCH) {
-            let end = (first + PIXELS_PER_BATCH).min(pixels.len());
-            let primary: Vec<_> = (first..end)
-                .filter(|&i| input.positions[i][3] >= 0.5)
-                .map(|i| (i, geometry.surface(snapshot, settings, &input, i)))
-                .collect();
-            for (l, light) in lights.iter().enumerate() {
-                if control.is_cancelled() {
-                    return Err(RenderError::Cancelled);
-                }
-                rays.clear();
-                samples.clear();
-                let density = light.light.shadow_density;
-                let occluded =
-                    DVec3::splat(1.0 - density) + DVec3::from(light.light.shadow_color) * density;
-                for (i, p) in &primary {
-                    let stream = (*i as u64).wrapping_mul(lights.len() as u64) + l as u64;
-                    let mut rng = Rng::new(settings.seed ^ u64::from(history.frames), stream);
-                    for _ in 0..SHADOW_RAYS {
-                        let Some(s) = light.sample(p.position, &mut rng) else {
-                            continue;
-                        };
-                        let cos = p.normal.dot(s.wi);
-                        if cos <= 0.0 || p.geometric_normal.dot(s.wi) <= 0.0 {
-                            continue;
-                        }
-                        let (mut fd, mut fs) = p.surface.eval(p.normal, p.view, s.wi);
-                        if !light.light.diffuse {
-                            fd = DVec3::ZERO;
-                        }
-                        if !light.light.specular {
-                            fs = DVec3::ZERO;
-                        }
-                        if fd == DVec3::ZERO && fs == DVec3::ZERO {
-                            continue;
-                        }
-                        let mis = if s.pdf > 0.0 {
-                            power_heuristic(s.pdf, p.surface.pdf(p.normal, p.view, s.wi))
-                        } else {
-                            1.0
-                        };
-                        let weight = s.weight * (cos * mis / SHADOW_RAYS as f64);
-                        samples.push((*i, fd * weight, fs * weight));
-                        rays.push(Ray {
-                            origin: p.position + p.geometric_normal * input.epsilon,
-                            direction: s.wi,
-                            t_max: (s.dist * (1.0 - 1e-6) - input.epsilon).max(0.0),
-                        });
-                    }
-                }
-                for ((i, d, s), blocked) in samples.iter().zip(backend.occluded(&rays)?) {
-                    let factor = if blocked { occluded } else { DVec3::ONE };
-                    let [dr, dg, db] = (*d * factor).to_array();
-                    let [sr, sg, sb] = (*s * factor).to_array();
-                    let total = *d + *s;
-                    pixels[*i].add_scaled(
-                        [dr, dg, db, lum(total), sr, sg, sb, lum(total * factor)].map(|v| v as f32),
-                        1.0,
-                    );
-                }
-            }
-        }
         let limit = geometry.filter_limit(snapshot, width);
         history.accumulate(spatial_filter(width, &input, &pixels, limit));
         Ok(history.mean.clone())
     }
+}
 
+fn raw_direct_shadows(
+    (geometry, backend): (&PrimaryGeometry, &dyn RtBackend),
+    snapshot: &Snapshot,
+    settings: &RenderSettings,
+    input: PrimaryInput<'_>,
+    lights: &[lights::PLight],
+    history_frame: u32,
+    control: &Control,
+) -> Result<Vec<[f32; 8]>, RenderError> {
+    let mut pixels = vec![[0.0; 8]; input.positions.len()];
+    let mut rays = Vec::with_capacity(PIXELS_PER_BATCH * SHADOW_RAYS);
+    let mut samples = Vec::with_capacity(rays.capacity());
+    for first in (0..pixels.len()).step_by(PIXELS_PER_BATCH) {
+        let end = (first + PIXELS_PER_BATCH).min(pixels.len());
+        let primary: Vec<_> = (first..end)
+            .filter(|&i| input.positions[i][3] >= 0.5)
+            .map(|i| (i, geometry.surface(snapshot, settings, &input, i)))
+            .collect();
+        for (l, light) in lights.iter().enumerate() {
+            if control.is_cancelled() {
+                return Err(RenderError::Cancelled);
+            }
+            rays.clear();
+            samples.clear();
+            let density = light.light.shadow_density;
+            let occluded =
+                DVec3::splat(1.0 - density) + DVec3::from(light.light.shadow_color) * density;
+            for (i, p) in &primary {
+                let stream = (*i as u64).wrapping_mul(lights.len() as u64) + l as u64;
+                let mut rng = Rng::new(settings.seed ^ u64::from(history_frame), stream);
+                for _ in 0..SHADOW_RAYS {
+                    let Some(s) = light.sample(p.position, &mut rng) else {
+                        continue;
+                    };
+                    let cos = p.normal.dot(s.wi);
+                    if cos <= 0.0 || p.geometric_normal.dot(s.wi) <= 0.0 {
+                        continue;
+                    }
+                    let (mut fd, mut fs) = p.surface.eval(p.normal, p.view, s.wi);
+                    if !light.light.diffuse {
+                        fd = DVec3::ZERO;
+                    }
+                    if !light.light.specular {
+                        fs = DVec3::ZERO;
+                    }
+                    if fd == DVec3::ZERO && fs == DVec3::ZERO {
+                        continue;
+                    }
+                    let mis = if s.pdf > 0.0 {
+                        power_heuristic(s.pdf, p.surface.pdf(p.normal, p.view, s.wi))
+                    } else {
+                        1.0
+                    };
+                    let weight = s.weight * (cos * mis / SHADOW_RAYS as f64);
+                    samples.push((*i, fd * weight, fs * weight));
+                    rays.push(Ray {
+                        origin: p.position + p.geometric_normal * input.epsilon,
+                        direction: s.wi,
+                        t_max: (s.dist * (1.0 - 1e-6) - input.epsilon).max(0.0),
+                    });
+                }
+            }
+            for ((i, d, s), blocked) in samples.iter().zip(backend.occluded(&rays)?) {
+                let factor = if blocked { occluded } else { DVec3::ONE };
+                let [dr, dg, db] = (*d * factor).to_array();
+                let [sr, sg, sb] = (*s * factor).to_array();
+                let total = *d + *s;
+                pixels[*i].add_scaled(
+                    [dr, dg, db, lum(total), sr, sg, sb, lum(total * factor)].map(|v| v as f32),
+                    1.0,
+                );
+            }
+        }
+    }
+    Ok(pixels)
+}
+
+impl HybridView {
     pub fn indirect(
         &mut self,
         bounce: Bounce,
@@ -539,8 +562,16 @@ struct PrimaryGeometry {
 }
 
 #[cfg(test)]
+#[path = "direct_shadow.rs"]
+mod direct_shadow;
+
+#[cfg(test)]
 #[path = "receiver_tests.rs"]
 mod receiver_tests;
+
+#[cfg(test)]
+#[path = "direct_shadow_tests.rs"]
+mod direct_shadow_tests;
 
 struct PrimarySurface {
     position: DVec3,

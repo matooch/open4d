@@ -1191,9 +1191,16 @@ R24 direct shadows, and the R20/R25 GPU transport. This is our own design.
   luminance)`. Clear/invalid receivers and frames without lights write zero;
   no filter, temporal accumulation or raster composition runs in this kernel.
 - Before enabling the dispatch, compare its raw signal against the existing
-  estimator for finite, area and infinite lights, including a cropped frame,
-  distinct geometric/shading normals and both R23 backends available locally.
-  Remeasure unchanged S10 and strict R26 on the host once there is a runtime
+   estimator for finite, area and infinite lights, including a cropped frame,
+   distinct geometric/shading normals and both R23 backends available locally.
+   The host probe binds the existing R23 scene and R25 attributes, prepared
+   light records and unfilterable float G-buffer views. Compare all eight
+   components against the unfiltered batched estimator within
+   `2e-6 + 2e-4 * abs(reference)` per component (f32 vs f64); require exact
+   zero for clear pixels. Include an opaque blocker beyond one finite light,
+   a tinted shadow from a light beyond the blocker, and multiple history
+   indices for non-delta sampling. This limit is for the new raw probe only.
+   Remeasure unchanged S10 and strict R26 on the host once there is a runtime
   change; shader extraction alone makes no performance or parity claim.
 
 ## R25 Progressive GPU path tracing (brief 202)

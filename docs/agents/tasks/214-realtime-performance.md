@@ -36,6 +36,15 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- [Raw direct-shadow dispatch probe](../../specs/RENDER.md#r247-gpu-direct-shadow-visibility-brief-214):
+  bound the existing R23 traversal scene, R25 receiver attributes and shared
+  packed lights. Compute and Metal matched the unfiltered batched reference
+  across all eight components for cropped finite, area, infinite and mixed
+  lights at two history indices. The probe also checked exact clears,
+  finite-emitter clipping, tinted occlusion and light lobe flags. The
+  required-GPU lib, hybrid and shader translation suites passed five times;
+  full gate: 2746 tests passed, `GATE: all passed`. Tier 2 still uses the
+  batched estimator, so there is no new S10 measurement.
 - [Raw direct-shadow kernel checkpoint](../../specs/RENDER.md#r247-gpu-direct-shadow-visibility-brief-214):
   assemble a standalone inline R23 shader that reconstructs and shades each
   covered receiver, retains eight samples per prepared shadow light, and

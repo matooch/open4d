@@ -112,6 +112,7 @@ pub(crate) fn on_device(
     ))
 }
 
+#[derive(Clone, Copy)]
 pub(crate) enum InlineScene<'a> {
     Compute([&'a wgpu::Buffer; 4]),
     Hardware(&'a wgpu::Tlas),
