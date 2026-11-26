@@ -191,6 +191,17 @@ These are internal performance rules; they do not change the renderer's referenc
   or resource identity, not a wall-clock assertion. An exact match to previously validated
   mesh inputs can skip scanning mesh indices and positions a second time; recheck instance
   references and camera against the current frame. Validate changed geometry before upload.
+- Native ray queries retain one BLAS and its input buffers per nonempty mesh slot. At
+  each scene update, compare positions and triangle indices exactly in that slot;
+  vertex attributes, revisions and instance edits do not replace matching BLASes.
+  Build and upload only changed or newly added nonempty slots. Empty and removed
+  slots keep no BLAS; reordering may rebuild moved meshes. Build the new TLAS with
+  both reused and newly built handles, preserving snapshot instance and primitive
+  IDs. Install replacements and retire old resources only after validation succeeds.
+  `blas_builds` counts successful mesh-layout/geometry update batches (including
+  initial setup and removals), not individual BLASes. Test actual handle/buffer
+  reuse and query results across edits and a rejected update. This checkpoint does
+  not make the Compute or raster geometry packing selective.
 - Report unchanged-scene S10 per §6, with the same fixture and all four Tier 2 effects.
   Separately report camera-only setup (target <5 ms); do not use this phase timing as a
   substitute for frame throughput. Any Tier 2 estimator changes require their own R24

@@ -36,6 +36,19 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Selective native BLAS residency:** Editing one mesh slot now replaces
+  only that slot's BLAS and input buffers; the replacement TLAS uses both
+  new and resident handles. Actual Metal retained one of two populated
+  slots on a single-mesh edit, returned the expected hits after position
+  and index changes and slot additions/removals, and preserved the previous
+  handles, TLAS, statistics and hits after a rejected update. Compute and
+  raster mesh packing are still whole-geometry. Five required-GPU lib
+  and ray-scene runs passed; strict R26 reproduced all 207 reported scores
+  with nine unchanged pins per backend. Unchanged full-size M5 Pro S10
+  measured **109.598 fps** Tier 1 and **6.664 fps** Tier 2 (actual Metal,
+  150.069 ms vs the previous 150.339 ms). The warm fixture does not measure
+  edit acceleration, and Tier 2 still misses 30 fps. Vulkan RT run pending
+  on the owner's RTX 3090. `GATE: all passed`.
 - **Live GPU direct-shadow spatial reconstruction:** The inline pass now
   filters both shadow RGBA lanes using one guide and weight sum before
   readback. Compute and actual Metal matched one CPU filter pass on the

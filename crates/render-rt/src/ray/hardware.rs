@@ -97,10 +97,14 @@ impl MeshBlas {
     }
 }
 
+struct MeshSlot {
+    geometry: MeshData,
+    blas: Option<MeshBlas>,
+}
+
 pub(crate) struct HardwareBackend {
     dispatch: QueryDispatch,
-    meshes: Vec<MeshData>,
-    blases: Vec<Option<MeshBlas>>,
+    meshes: Vec<MeshSlot>,
     top: Option<wgpu::Tlas>,
     stats: SceneStats,
 }
@@ -110,7 +114,6 @@ impl HardwareBackend {
         Ok(Self {
             dispatch: QueryDispatch::new(device, queue, HARDWARE_WGSL)?,
             meshes: Vec::new(),
-            blases: Vec::new(),
             top: None,
             stats: SceneStats::default(),
         })
@@ -125,27 +128,24 @@ impl RtBackend for HardwareBackend {
     fn update_scene(&mut self, snapshot: &Snapshot) -> Result<(), RenderError> {
         snapshot.validate()?;
         let device = &self.dispatch.device;
-        let new_geometry = self.stats.blas_builds == 0
-            || self.meshes.len() != snapshot.meshes.len()
-            || self
-                .meshes
-                .iter()
-                .zip(&snapshot.meshes)
-                .any(|(a, b)| a.positions != b.positions || a.triangles != b.triangles);
         let errors = device.push_error_scope(wgpu::ErrorFilter::Validation);
         let result = (|| {
-            let replacement = if new_geometry {
-                Some(
-                    snapshot
-                        .meshes
-                        .iter()
-                        .map(|mesh| MeshBlas::new(device, mesh))
-                        .collect::<Result<Vec<_>, _>>()?,
-                )
-            } else {
-                None
-            };
-            let blases = replacement.as_deref().unwrap_or(&self.blases);
+            // Outer None reuses a slot; Some(None) replaces it with an empty mesh.
+            let replacements = snapshot
+                .meshes
+                .iter()
+                .enumerate()
+                .map(|(slot, mesh)| {
+                    if self.meshes.get(slot).is_some_and(|old| {
+                        old.geometry.positions == mesh.positions
+                            && old.geometry.triangles == mesh.triangles
+                    }) {
+                        Ok(None)
+                    } else {
+                        MeshBlas::new(device, mesh).map(Some)
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()?;
             let mut instances = Vec::new();
             for (index, instance) in snapshot.instances.iter().enumerate() {
                 let matrix = DMat4::from_cols_array(&instance.transform);
@@ -155,7 +155,11 @@ impl RtBackend for HardwareBackend {
                         "an instance transform is singular".into(),
                     ));
                 }
-                if let Some(blas) = &blases[instance.mesh] {
+                let blas = match &replacements[instance.mesh] {
+                    Some(blas) => blas,
+                    None => &self.meshes[instance.mesh].blas,
+                };
+                if let Some(blas) = blas {
                     if index >= 1 << 24
                         || instances.len() >= device.limits().max_tlas_instance_count as usize
                     {
@@ -186,7 +190,7 @@ impl RtBackend for HardwareBackend {
                 }
                 top
             });
-            let entries: Vec<_> = replacement
+            let entries: Vec<_> = replacements
                 .iter()
                 .flatten()
                 .flatten()
@@ -197,22 +201,42 @@ impl RtBackend for HardwareBackend {
                 encoder.build_acceleration_structures(&entries, top.iter());
                 self.dispatch.queue.submit([encoder.finish()]);
             }
-            Ok((replacement, top, count))
+            Ok((replacements, top, count))
         })();
         let error = pollster::block_on(errors.pop());
-        let (replacement, top, count) = result?;
+        let (replacements, top, count) = result?;
         if let Some(err) = error {
             return Err(RenderError::Settings(format!("ray query scene: {err}")));
         }
-        if let Some(blases) = replacement {
-            self.meshes = snapshot
+        let mut geometry_update =
+            self.stats.blas_builds == 0 || self.meshes.len() != replacements.len();
+        self.meshes.truncate(replacements.len());
+        for (slot, replacement) in replacements.into_iter().enumerate() {
+            if let Some(blas) = replacement {
+                let mesh = &snapshot.meshes[slot];
+                let resident = MeshSlot {
+                    geometry: MeshData::new(mesh.positions.clone(), mesh.triangles.clone()),
+                    blas,
+                };
+                if let Some(old) = self.meshes.get_mut(slot) {
+                    *old = resident;
+                } else {
+                    self.meshes.push(resident);
+                }
+                geometry_update = true;
+            }
+        }
+        if geometry_update {
+            self.stats.blases = self
                 .meshes
                 .iter()
-                .map(|mesh| MeshData::new(mesh.positions.clone(), mesh.triangles.clone()))
-                .collect();
-            self.stats.blases = blases.iter().flatten().count();
-            self.stats.triangles = self.meshes.iter().map(|mesh| mesh.triangles.len()).sum();
-            self.blases = blases;
+                .filter(|mesh| mesh.blas.is_some())
+                .count();
+            self.stats.triangles = self
+                .meshes
+                .iter()
+                .map(|mesh| mesh.geometry.triangles.len())
+                .sum();
             self.stats.blas_builds += 1;
         }
         self.top = top;
@@ -247,5 +271,129 @@ impl RtBackend for HardwareBackend {
 
     fn stats(&self) -> SceneStats {
         self.stats
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use forge_render_api::{Instance, MaterialData};
+    use glam::DVec3;
+
+    fn resources(
+        backend: &HardwareBackend,
+        slot: usize,
+    ) -> (wgpu::Blas, wgpu::Buffer, wgpu::Buffer) {
+        let mesh = backend.meshes[slot].blas.as_ref().unwrap();
+        (
+            mesh.handle.clone(),
+            mesh.vertices.clone(),
+            mesh.indices.clone(),
+        )
+    }
+
+    #[test]
+    fn native_scene_replaces_only_edited_mesh_slots() {
+        let (device, queue) = match crate::request_rt_device() {
+            Ok(pair) => pair,
+            Err(err) if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") => {
+                panic!("FORGE_REQUIRE_GPU=1 but no GPU: {err}");
+            }
+            Err(err) => {
+                eprintln!("skipping native BLAS test: {err}");
+                return;
+            }
+        };
+        let kind = super::super::enabled_backend(&device);
+        if kind == super::super::BackendKind::Compute {
+            eprintln!("skipping native BLAS test: no native ray queries");
+            return;
+        }
+        eprintln!("testing native BLAS residency on {kind:?}");
+        let mut backend = HardwareBackend::new(device, queue).unwrap();
+        let mesh = MeshData::new(
+            vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [1., 1., 0.]],
+            vec![[0, 1, 2]],
+        );
+        let mut frame = Snapshot {
+            meshes: vec![mesh.clone(), mesh.clone()],
+            materials: vec![MaterialData::new("test", Default::default())],
+            instances: vec![
+                Instance::new(0, DMat4::IDENTITY, 0, 42),
+                Instance::new(1, DMat4::from_translation(2. * DVec3::X), 0, 42),
+            ],
+            ..Default::default()
+        };
+        let rays = [0.25, 2.25, 2.75].map(|x| Ray {
+            origin: DVec3::new(x, if x == 2.75 { 0.75 } else { 0.25 }, 5.),
+            direction: -DVec3::Z,
+            t_max: 10.,
+        });
+        let hits = |backend: &HardwareBackend| {
+            backend
+                .trace(&rays)
+                .unwrap()
+                .into_iter()
+                .map(|hit| hit.map(|hit| (hit.instance, hit.triangle, hit.t)))
+                .collect::<Vec<_>>()
+        };
+
+        backend.update_scene(&frame).unwrap();
+        let stable = resources(&backend, 0);
+        let old = resources(&backend, 1);
+        assert_eq!(hits(&backend), [Some((0, 0, 5.)), Some((1, 0, 5.)), None]);
+
+        frame.meshes[0].uvs = vec![[0.1, 0.2, 0.]; 3];
+        for p in &mut frame.meshes[1].positions {
+            p[2] = 1.;
+        }
+        backend.update_scene(&frame).unwrap();
+        assert_eq!(resources(&backend, 0), stable);
+        let changed = resources(&backend, 1);
+        assert_ne!(changed.0, old.0);
+        assert_ne!(changed.1, old.1);
+        assert_ne!(changed.2, old.2);
+        assert_eq!(hits(&backend), [Some((0, 0, 5.)), Some((1, 0, 4.)), None]);
+        assert_eq!(backend.stats().blas_builds, 2);
+
+        frame.meshes[1].triangles[0] = [3, 2, 1];
+        let good_transform = frame.instances[1].transform;
+        frame.instances[1].transform = DMat4::ZERO.to_cols_array();
+        let stats = backend.stats();
+        let top = backend.top.clone();
+        assert!(backend.update_scene(&frame).is_err());
+        assert_eq!(backend.stats(), stats);
+        assert_eq!(backend.top, top);
+        assert_eq!(resources(&backend, 0), stable);
+        assert_eq!(resources(&backend, 1), changed);
+        assert_eq!(hits(&backend), [Some((0, 0, 5.)), Some((1, 0, 4.)), None]);
+
+        frame.instances[1].transform = good_transform;
+        backend.update_scene(&frame).unwrap();
+        assert_eq!(resources(&backend, 0), stable);
+        assert_ne!(resources(&backend, 1).0, changed.0);
+        assert_eq!(hits(&backend), [Some((0, 0, 5.)), None, Some((1, 0, 4.))]);
+
+        frame.meshes[1].triangles.clear();
+        frame.meshes.push(mesh);
+        frame.instances.push(Instance::new(
+            2,
+            DMat4::from_cols_array(&good_transform),
+            0,
+            42,
+        ));
+        backend.update_scene(&frame).unwrap();
+        assert_eq!(resources(&backend, 0), stable);
+        assert!(backend.meshes[1].blas.is_none());
+        assert_eq!(hits(&backend), [Some((0, 0, 5.)), Some((2, 0, 5.)), None]);
+        assert_eq!(backend.stats().blases, 2);
+
+        frame.instances.truncate(1);
+        frame.meshes.truncate(1);
+        backend.update_scene(&frame).unwrap();
+        assert_eq!(resources(&backend, 0), stable);
+        assert_eq!(backend.meshes.len(), 1);
+        assert_eq!(hits(&backend), [Some((0, 0, 5.)), None, None]);
+        assert_eq!(backend.stats().blas_builds, 5);
     }
 }
