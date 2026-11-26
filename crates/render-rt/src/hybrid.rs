@@ -13,7 +13,7 @@ use glam::DVec3;
 use crate::ambient::{AmbientFrame, AmbientProgram};
 use crate::ray::{self, BackendKind, DeviceQueries, Ray, RtBackend};
 use direct_shadow::{DirectShadowBindings, DirectShadowFrame, DirectShadowProgram};
-use reflection::{ReflectionBindings, ReflectionInput, ReflectionProgram};
+use reflection::{BounceEntry, ReflectionBindings, ReflectionInput, ReflectionProgram};
 
 const SHADOW_RAYS: usize = 8;
 const BOUNCE_RAYS: usize = 8;
@@ -581,12 +581,15 @@ impl HybridView {
                     Bounce::Reflection => &mut self.reflection_program,
                     Bounce::Diffuse => &mut self.diffuse_program,
                 };
+                let entry = BounceEntry::live(bounce);
                 MaterialProgram::get(cache, *kind, gpu, |materials| {
-                    let source = match bounce {
-                        Bounce::Reflection => crate::shader::reflection_source(*kind, materials),
-                        Bounce::Diffuse => crate::shader::diffuse_source(*kind, materials),
-                    };
-                    ReflectionProgram::for_bounce(device, *kind, source, gpu.bitmaps.len(), bounce)
+                    ReflectionProgram::for_entry(
+                        device,
+                        *kind,
+                        entry.source(*kind, materials),
+                        gpu.bitmaps.len(),
+                        entry,
+                    )
                 })
                 .read(
                     (device, queue),

@@ -1,5 +1,5 @@
 use super::direct_shadow_tests::texture_view;
-use super::reflection::{ReflectionBindings, ReflectionInput, ReflectionProgram};
+use super::reflection::{BounceEntry, ReflectionBindings, ReflectionInput, ReflectionProgram};
 use super::*;
 use forge_core::Value;
 use forge_image::{AlphaMode, Image};
@@ -683,5 +683,27 @@ fn gpu_raw_reflections_match_batched_reference() {
                 }
             }
         }
+    }
+}
+#[test]
+fn live_bounce_entry_pairs_source_with_dispatch_layout() {
+    for (entry, name, groups) in [
+        (BounceEntry::Reflection, "reflection_signal", [5, 3]),
+        (BounceEntry::live(Bounce::Diffuse), "diffuse_signal", [5, 3]),
+        (
+            BounceEntry::Diffuse { reduced: true },
+            "reduced_diffuse_signal",
+            [3, 2],
+        ),
+    ] {
+        let (symbol, layout) = entry.dispatch();
+        assert_eq!(symbol, name);
+        assert_eq!(layout.groups(33, 19), groups);
+        let source = entry.source(BackendKind::Compute, "");
+        assert!(source.contains(&format!("fn {symbol}(")));
+        assert_eq!(
+            source.contains("fn reduced_diffuse_signal("),
+            matches!(entry, BounceEntry::Diffuse { reduced: true })
+        );
     }
 }

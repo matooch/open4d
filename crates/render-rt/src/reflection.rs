@@ -26,7 +26,42 @@ struct ReflectionFrame {
     _padding: [u32; 3],
 }
 
-pub(super) struct ReflectionProgram(RawSignalProgram, Bounce);
+pub(super) struct ReflectionProgram(RawSignalProgram, BounceEntry);
+
+#[derive(Clone, Copy)]
+pub(super) enum BounceEntry {
+    Reflection,
+    Diffuse { reduced: bool },
+}
+
+impl BounceEntry {
+    pub fn live(bounce: Bounce) -> Self {
+        match bounce {
+            Bounce::Reflection => Self::Reflection,
+            Bounce::Diffuse => Self::Diffuse { reduced: false },
+        }
+    }
+
+    pub fn source(self, backend: BackendKind, materials: &str) -> String {
+        match self {
+            Self::Reflection => crate::shader::reflection_source(backend, materials),
+            Self::Diffuse { reduced: false } => crate::shader::diffuse_source(backend, materials),
+            Self::Diffuse { reduced: true } => {
+                crate::shader::reduced_diffuse_source(backend, materials)
+            }
+        }
+    }
+
+    pub(super) fn dispatch(self) -> (&'static str, SignalFrameLayout) {
+        match self {
+            Self::Reflection => ("reflection_signal", SignalFrameLayout::Reflection),
+            Self::Diffuse { reduced: false } => ("diffuse_signal", SignalFrameLayout::Diffuse),
+            Self::Diffuse { reduced: true } => {
+                ("reduced_diffuse_signal", SignalFrameLayout::ReducedDiffuse)
+            }
+        }
+    }
+}
 
 pub(super) struct ReflectionBindings<'a> {
     pub scene: InlineScene<'a>,
@@ -53,7 +88,7 @@ impl ReflectionProgram {
         source: String,
         bitmap_count: usize,
     ) -> Self {
-        Self::for_bounce(device, kind, source, bitmap_count, Bounce::Reflection)
+        Self::for_entry(device, kind, source, bitmap_count, BounceEntry::Reflection)
     }
 
     #[cfg(test)]
@@ -63,7 +98,13 @@ impl ReflectionProgram {
         source: String,
         bitmap_count: usize,
     ) -> Self {
-        Self::for_bounce(device, kind, source, bitmap_count, Bounce::Diffuse)
+        Self::for_entry(
+            device,
+            kind,
+            source,
+            bitmap_count,
+            BounceEntry::Diffuse { reduced: false },
+        )
     }
 
     #[cfg(test)]
@@ -73,33 +114,26 @@ impl ReflectionProgram {
         source: String,
         bitmap_count: usize,
     ) -> Self {
-        Self(
-            RawSignalProgram::new(
-                device,
-                kind,
-                source,
-                bitmap_count,
-                "reduced_diffuse_signal",
-                SignalFrameLayout::ReducedDiffuse,
-            ),
-            Bounce::Diffuse,
+        Self::for_entry(
+            device,
+            kind,
+            source,
+            bitmap_count,
+            BounceEntry::Diffuse { reduced: true },
         )
     }
 
-    pub fn for_bounce(
+    pub fn for_entry(
         device: &wgpu::Device,
         kind: BackendKind,
         source: String,
         bitmap_count: usize,
-        bounce: Bounce,
+        entry: BounceEntry,
     ) -> Self {
-        let (entry, layout) = match bounce {
-            Bounce::Reflection => ("reflection_signal", SignalFrameLayout::Reflection),
-            Bounce::Diffuse => ("diffuse_signal", SignalFrameLayout::Diffuse),
-        };
+        let (symbol, layout) = entry.dispatch();
         Self(
-            RawSignalProgram::new(device, kind, source, bitmap_count, entry, layout),
-            bounce,
+            RawSignalProgram::new(device, kind, source, bitmap_count, symbol, layout),
+            entry,
         )
     }
 
@@ -138,13 +172,13 @@ impl ReflectionProgram {
             ..ReflectionFrame::zeroed()
         };
         let environment = match self.1 {
-            Bounce::Reflection => Some(reflection_environment(
+            BounceEntry::Reflection => Some(reflection_environment(
                 device,
                 queue,
                 &snapshot.environment.lighting,
                 &mut frame,
             )?),
-            Bounce::Diffuse => None,
+            BounceEntry::Diffuse { .. } => None,
         };
         self.0.read(
             (device, queue),

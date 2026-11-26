@@ -76,7 +76,6 @@ pub(super) enum SignalFrameLayout {
     DirectShadow,
     Reflection,
     Diffuse,
-    #[cfg(test)]
     ReducedDiffuse,
 }
 
@@ -88,9 +87,8 @@ impl SignalFrameLayout {
         }
     }
 
-    fn groups(self, width: u32, height: u32) -> [u32; 2] {
+    pub(super) fn groups(self, width: u32, height: u32) -> [u32; 2] {
         let pixels_per_group = match self {
-            #[cfg(test)]
             Self::ReducedDiffuse => 16, // 8×8 invocations over absolute 2×2 quads
             _ => 8,
         };

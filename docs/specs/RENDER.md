@@ -1336,7 +1336,7 @@ R24.2 diffuse bounce and R24.8 inline secondary lighting. This is our own design
   indirectly lit receiver. Keep all eight attempts, rerun strict R26 and
   measure unchanged full-size S10 on Metal.
 
-### R24.10 Reduced-rate diffuse GI probe (brief 214)
+### R24.10 Reduced-rate diffuse GI candidate (brief 214)
 
 Sources: [S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report),
 R24.4 representative rotation and R24.9 diffuse transport. This is our own design.
@@ -1365,11 +1365,21 @@ R24.4 representative rotation and R24.9 diffuse transport. This is our own desig
   isolated receivers at their original pixel coordinates. The test selects
   the expected representatives independently from the shader and verifies
   that varying per-lane radiance makes rotation and rejected reuse observable.
-- Translate this entry to SPIR-V, MSL and HLSL with each R23 selection. Before
-  using it in Tier 2, check rotation, disjoint geometry and materials, depth
-  and normal discontinuities, partial absolute quads and black miss/invalid
-  output on GPU. Leave the eight-attempt live and CPU fallback paths unchanged
-  pending those checks, strict R26 and unchanged Metal S10 measurements.
+- Translate this entry to SPIR-V, MSL and HLSL with each R23 selection. GPU
+  acceptance checks rotation, disjoint geometry and materials, depth and
+  normal discontinuities, partial absolute quads and black miss/invalid
+  output.
+
+The reduced entry can replace only inline diffuse GI. It uses the same resident
+R25 attributes, current material bitmap views, light inputs and per-jitter
+history as R24.9. Only the shader entry, dispatch extent and raw sample budget
+change. The full-resolution result still uses the existing spatial filter,
+history, cancellation checks and composition. Missing inline resources use
+the unchanged eight-attempt CPU batched estimator. Before selecting the
+reduced entry by default, require both strict R26 and the existing R24 hybrid
+quality assertions to pass. The candidate passed R26 on Compute and Metal
+with unchanged pins, but failed the R24 emissive-bounce PSNR improvement
+assertion; the default remains the eight-attempt inline estimator.
 
 ## R25 Progressive GPU path tracing (brief 202)
 

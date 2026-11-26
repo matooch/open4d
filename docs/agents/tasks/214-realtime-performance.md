@@ -36,6 +36,18 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Live reduced-rate GI experiment:** Tested the rotating one-attempt
+  quad entry with the existing spatial filter and per-jitter history. The CPU
+  batched fallback still uses eight attempts. Strict R26 held at 18/19/23 of
+  23 against CPU on Compute and actual Metal with all nine pins unchanged;
+  Metal-vs-Compute minima were exact/155.58/75.66 dB. On the unchanged
+  full-size Metal S10 fixture, median GI fell from 48.420 to 21.958 ms and
+  full Tier 2 frame time fell from 186.042 to 157.717 ms (5.375 to 6.340 fps).
+  The existing R24 emissive-bounce test rejected the candidate: GI dropped
+  to 22.162 dB versus 22.981 dB for the raster baseline, where it must
+  improve PSNR. Kept the eight-attempt default and did not change the test.
+  The 6.340 fps result is experimental, not shipped performance.
+  With the default restored, `GATE: all passed` (2755 tests).
 - **Reduced-rate GI raw dispatch:** Compute and actual Metal matched the
   independently selected isolated one-ray representatives exactly across
   all four phases on a cropped 21×19 film. The fixture distinguished
@@ -43,8 +55,7 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
   quads across workgroups; and verified full emission weight and exact
   black for misses and invalid receivers. Five required-GPU lib, hybrid and
   translation runs passed, and the full gate passed (2754 tests).
-  Live GI still uses eight attempts; strict R26 and unchanged S10 are
-  pending for live adoption.
+  The live experiment and rejection are recorded above.
 - **Reduced-rate GI checkpoint:** R24.10 specifies a standalone one-attempt
   diffuse estimator with rotating 2×2 representatives and conservative
   reconstruction guards. The raw shader translates to SPIR-V, MSL and HLSL
