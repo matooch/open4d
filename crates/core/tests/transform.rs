@@ -18,8 +18,9 @@ fn hierarchy_types_get_transform_params_first() {
     let r = common::registry();
     let null = r.get("forge.null").unwrap();
     let ids: Vec<&str> = null.params.iter().map(|p| p.id.as_str()).collect();
+    // the type's own params (the Null's display, SCENE-OBJECTS.md S9) follow the common ones
     assert_eq!(
-        ids,
+        ids[..7],
         [
             "transform.pos",
             "transform.rot",
@@ -30,6 +31,7 @@ fn hierarchy_types_get_transform_params_first() {
             "object.layer"
         ]
     );
+    assert!(ids[7..].iter().all(|id| !id.contains('.')));
     let bx = r.get("test.box").unwrap();
     assert_eq!(bx.params[0].id, "transform.pos");
     assert_eq!(bx.params[7].id, "size");
