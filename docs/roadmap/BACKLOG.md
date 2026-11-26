@@ -201,7 +201,7 @@ implementers can avoid collisions.
 | 201 | [Hybrid ray-traced shadows, reflections, AO and GI](../agents/tasks/201-hybrid-rt.md) | R | 200 | done | render-rt |
 | 202 | [Real-time path tracing with denoising](../agents/tasks/202-realtime-pathtrace.md) | R | 200, 201 | done | render-rt |
 | 203 | [Consistency tests across render tiers](../agents/tasks/203-rt-consistency.md) | R | 198, 202 | done | tests, render-rt |
-| 204 | [Real-time performance targets](../agents/tasks/204-rt-performance.md) | R | 199, 201 | waiting: 199, 201 | render-rt, bench |
+| 204 | [Real-time performance targets](../agents/tasks/204-rt-performance.md) | R | 199, 201 | in-progress (hermes) | render-rt, bench |
 | 205 | [S4 acceptance test and motion-graphics docs](../agents/tasks/205-s4-mograph-acceptance.md) | E | 066, 072, 074, 075, 136 | done | tests, docs |
 | 206 | [S5 acceptance test and volume docs](../agents/tasks/206-s5-volume-acceptance.md) | F | 081, 082, 083, 003 | done | tests, docs |
 | 208 | [Volume mesher: manifold output on thin features](../agents/tasks/208-volume-mesher-manifold.md) | F | 083, 206 | done | volume |

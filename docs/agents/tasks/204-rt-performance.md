@@ -1,6 +1,6 @@
 # 204 · Real-time performance targets
 
-Status: waiting: 199, 201 · Area: R · Depends on: 199, 201 · Observations: – (own design; material values from O29/O42/O43 through the shading IR) · Touches: render-rt, bench
+Status: in-progress (hermes) · Area: R · Depends on: 199, 201 · Observations: – (own design; material values from O29/O42/O43 through the shading IR) · Touches: render-rt, bench
 
 ## Goal
 Benchmarks for the S10 scene (1 M polygons, 10 000 clones): Tier 1 at ≥ 60 fps and Tier 2 at ≥ 30 fps at 1080p on both reference machines: an NVIDIA RTX 3090 (Vulkan, Windows/Linux) and an Apple M5 Pro (Metal); frame-time breakdown per pass.

@@ -107,3 +107,41 @@ Informational (not budgeted), from VIEWPORT.md §10.10: instanced frame at 320 x
 2. `cargo run --release -p forge-bench-check -- --no-run --markdown` prints the table above.
 3. Adding a benchmark: add the bench, add its id to `bench/budgets.toml` (the runner fails on a
    budgeted id that did not run), re-run step 1.
+
+## 6. S10 real-time render frame (R8, brief 204)
+
+Sources: [S10](../roadmap/README.md), [R8 and the reference machines](../roadmap/areas/R-realtime.md),
+[D19](../roadmap/DECISIONS.md), and the existing S10 workload in
+`crates/app/benches/s10.rs`. No reference-app data or renderer is involved.
+
+- Use one deterministic snapshot for both tiers: a 1000×1000 quad surface
+  (2,000,000 input triangles) and a 100×100 grid of clones of one shared cube
+  mesh (120,000 more rendered triangles). Frame the grid and surface; use one
+  shadow-casting light plus an environment. Do not downscale the scene, trim
+  coverage, replace clones with unrelated meshes, or report a partial frame as S10.
+- Time a complete 1920×1080 render, with no region, extra AOVs, or temporal
+  antialiasing. Tier 1 uses the raster path; Tier 2 enables all four R24 effects.
+  Verify the backend that supplied Tier 2 (Metal on M5 Pro; Vulkan on RTX 3090).
+  A compute run is useful diagnostics but not a reference-machine measurement.
+- Build the fixture and open the adapter before timing. Reuse the same engine
+  across warmups and samples; report the median of each pass and of complete
+  frames independently. The targets apply to complete warm frames: Tier 1
+  ≤ 1000/60 ms, Tier 2 ≤ 1000/30 ms. Report measured shortfalls as such.
+- Report setup/packing separately from the shadow atlas, G-buffer, each
+  requested hybrid effect, lighting and output/readback. Pass timings are
+  synchronized host wall times, not GPU-only timestamps; the uninstrumented
+  render supplies the complete frame metric so extra profiling waits do not
+  reduce its reported fps. End each measured GPU phase only after its submitted
+  work completes. Profiling must produce the same image as the normal path.
+- Compare like runs only: include the adapter, API, actual hybrid backend,
+  workload version, resolution and sampling protocol in the baseline identity.
+  Compare each corresponding median, including the complete frame. A current
+  median above `baseline × 1.10` is a regression; exactly 10% is allowed.
+  Missing baseline passes and incompatible run identities are errors, not
+  skipped comparisons. Keep this same-machine check separate from the existing
+  CI CPU budgets and from the absolute fps targets.
+- Device limits are part of the result: request sufficient limits where the
+  adapter advertises them, and report unsupported workloads explicitly rather
+  than attempting an invalid GPU allocation. The current flattened raster
+  triangle table alone needs 373,120,000 bytes at this scale (176 × 2,120,000);
+  default storage binding limits cannot be assumed sufficient.
