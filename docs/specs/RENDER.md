@@ -1259,6 +1259,14 @@ R24 reflections and the R7 opaque GGX specular lobe. This is our own design.
   The standalone kernel omits secondary direct light and is not a live
   replacement. Compile the complete kernel with both R23 traversals on
   SPIR-V, MSL and HLSL before binding it in a numeric GPU probe.
+- Validate host dispatch on Compute and the available hardware backend
+  against the batched CPU-shaded estimator with no prepared lights. Use
+  isolated covered pixels so the CPU spatial filter has no neighbours,
+  and use fresh history for each reference seed. Compare raw RGB within
+  `2e-6 + 2e-4 * abs(reference)` per component, with exact zero outside
+  coverage and for invalid receiver keys. Exercise an emissive hit, a dark
+  hit, and misses under all four lighting modes at two history indices;
+  keep the crop origin independent of absolute pixel RNG streams.
 - A later dispatch will recover the R24.7 receiver, offset valid rays along
   its geometric normal, and use inline R23 closest hits. Preserve the
   environment on misses and emission plus the existing one sample per

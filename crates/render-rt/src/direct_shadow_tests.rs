@@ -188,7 +188,7 @@ fn gpu_raw_direct_shadows_match_batched_reference() {
     }
 }
 
-fn texture_view(
+pub(super) fn texture_view(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     settings: &RenderSettings,
@@ -200,7 +200,7 @@ fn texture_view(
         depth_or_array_layers: 1,
     };
     let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("raw shadow probe primary"),
+        label: Some("raw signal probe primary"),
         size,
         mip_level_count: 1,
         sample_count: 1,

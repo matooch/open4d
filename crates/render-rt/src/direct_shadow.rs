@@ -61,8 +61,21 @@ pub(super) struct DirectShadowBindings<'a> {
 }
 
 pub(super) struct DirectShadowProgram {
+    raw: RawSignalProgram,
+}
+
+pub(super) struct RawSignalProgram {
     pipeline: wgpu::ComputePipeline,
     layouts: [wgpu::BindGroupLayout; 3],
+    label: &'static str,
+}
+
+pub(super) struct RawSignalBindings<'a> {
+    pub scene: InlineScene<'a>,
+    pub primary: [&'a wgpu::TextureView; 2],
+    pub attributes: &'a wgpu::Buffer,
+    pub bitmaps: &'a [wgpu::TextureView],
+    pub extra: wgpu::BindingResource<'a>,
 }
 
 impl DirectShadowProgram {
@@ -71,6 +84,70 @@ impl DirectShadowProgram {
         kind: BackendKind,
         source: String,
         bitmap_count: usize,
+    ) -> Self {
+        Self {
+            raw: RawSignalProgram::new(device, kind, source, bitmap_count, "direct_shadow", false),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn pipeline(&self) -> wgpu::ComputePipeline {
+        self.raw.pipeline.clone()
+    }
+
+    pub fn read(
+        &self,
+        (device, queue): (&wgpu::Device, &wgpu::Queue),
+        bindings: DirectShadowBindings<'_>,
+        settings: &RenderSettings,
+        frame: DirectShadowFrame,
+    ) -> Result<Vec<[f32; 8]>, RenderError> {
+        let limits = device.limits();
+        let storage_limit = limits
+            .max_buffer_size
+            .min(limits.max_storage_buffer_binding_size);
+        if bindings.lights.len().max(1) as u64
+            > storage_limit / std::mem::size_of::<GpuLight>() as u64
+        {
+            return Err(RenderError::Unsupported(
+                "raw direct-shadow lights exceed device limits".into(),
+            ));
+        }
+        let lights: Vec<_> = bindings.lights.iter().map(pack_light).collect();
+        let dummy = GpuLight::zeroed();
+        let contents = if lights.is_empty() {
+            bytemuck::bytes_of(&dummy)
+        } else {
+            bytemuck::cast_slice(&lights)
+        };
+        let lights = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("raw direct-shadow lights"),
+            contents,
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+        self.raw.read(
+            (device, queue),
+            RawSignalBindings {
+                scene: bindings.scene,
+                primary: bindings.primary,
+                attributes: bindings.attributes,
+                bitmaps: bindings.bitmaps,
+                extra: lights.as_entire_binding(),
+            },
+            settings,
+            &frame,
+        )
+    }
+}
+
+impl RawSignalProgram {
+    pub fn new(
+        device: &wgpu::Device,
+        kind: BackendKind,
+        source: String,
+        bitmap_count: usize,
+        label: &'static str,
+        extra_is_texture: bool,
     ) -> Self {
         use wgpu::{BindingType as Binding, BufferBindingType as Buffer};
         let entry = |binding, ty| wgpu::BindGroupLayoutEntry {
@@ -81,7 +158,7 @@ impl DirectShadowProgram {
         };
         let layout = |entries: &[wgpu::BindGroupLayoutEntry]| {
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("raw direct shadows"),
+                label: Some(label),
                 entries,
             })
         };
@@ -112,7 +189,7 @@ impl DirectShadowProgram {
                 entry(0, buffer(Buffer::Uniform)),
                 entry(1, texture),
                 entry(2, texture),
-                entry(3, storage),
+                entry(3, if extra_is_texture { texture } else { storage }),
                 entry(4, buffer(Buffer::Storage { read_only: false })),
             ]),
             layout(
@@ -123,81 +200,63 @@ impl DirectShadowProgram {
             layout(&scene),
         ];
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("raw direct shadows"),
+            label: Some(label),
             bind_group_layouts: &layouts.each_ref().map(Some),
             immediate_size: 0,
         });
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("raw direct shadows"),
+            label: Some(label),
             source: wgpu::ShaderSource::Wgsl(source.into()),
         });
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("raw direct shadows"),
+            label: Some(label),
             layout: Some(&pipeline_layout),
             module: &module,
-            entry_point: Some("direct_shadow"),
+            entry_point: Some(label),
             compilation_options: Default::default(),
             cache: None,
         });
-        Self { pipeline, layouts }
+        Self {
+            pipeline,
+            layouts,
+            label,
+        }
     }
 
-    #[cfg(test)]
-    pub fn pipeline(&self) -> wgpu::ComputePipeline {
-        self.pipeline.clone()
-    }
-
-    pub fn read(
+    pub fn read<T: Pod>(
         &self,
         (device, queue): (&wgpu::Device, &wgpu::Queue),
-        bindings: DirectShadowBindings<'_>,
+        bindings: RawSignalBindings<'_>,
         settings: &RenderSettings,
-        frame: DirectShadowFrame,
-    ) -> Result<Vec<[f32; 8]>, RenderError> {
+        frame: &impl Pod,
+    ) -> Result<Vec<T>, RenderError> {
         let size = u64::from(settings.width) * u64::from(settings.height);
         let groups = [settings.width.div_ceil(8), settings.height.div_ceil(8)];
         let limits = device.limits();
         let storage_limit = limits
             .max_buffer_size
             .min(limits.max_storage_buffer_binding_size);
-        if bindings.lights.len().max(1) as u64
-            > storage_limit / std::mem::size_of::<GpuLight>() as u64
-        {
-            return Err(RenderError::Unsupported(
-                "raw direct-shadow lights exceed device limits".into(),
-            ));
-        }
         let size = size
-            .checked_mul(32)
+            .checked_mul(std::mem::size_of::<T>() as u64)
             .filter(|&bytes| bytes > 0 && bytes <= storage_limit);
         let Some(size) = size.filter(|_| {
             groups
                 .iter()
                 .all(|&n| n <= limits.max_compute_workgroups_per_dimension)
         }) else {
-            return Err(RenderError::Unsupported(
-                "raw direct-shadow dispatch exceeds device limits".into(),
-            ));
+            return Err(RenderError::Unsupported(format!(
+                "{} dispatch exceeds device limits",
+                self.label
+            )));
         };
-        let upload = |contents, usage| {
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("raw direct shadows"),
-                contents,
-                usage,
-            })
-        };
-        let uniform = upload(bytemuck::bytes_of(&frame), wgpu::BufferUsages::UNIFORM);
-        let lights: Vec<_> = bindings.lights.iter().map(pack_light).collect();
-        let dummy = GpuLight::zeroed();
-        let light_bytes = if lights.is_empty() {
-            bytemuck::bytes_of(&dummy)
-        } else {
-            bytemuck::cast_slice(&lights)
-        };
-        let lights = upload(light_bytes, wgpu::BufferUsages::STORAGE);
+        let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(self.label),
+            contents: bytemuck::bytes_of(frame),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
         let alloc = |usage| {
             device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("raw direct shadows"),
+                label: Some(self.label),
                 size,
                 usage,
                 mapped_at_creation: false,
@@ -207,7 +266,7 @@ impl DirectShadowProgram {
         let staging = alloc(wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ);
         let bind = |group: usize, entries: &[wgpu::BindGroupEntry<'_>]| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("raw direct shadows"),
+                label: Some(self.label),
                 layout: &self.layouts[group],
                 entries,
             })
@@ -231,7 +290,7 @@ impl DirectShadowProgram {
                 uniform.as_entire_binding(),
                 texture(bindings.primary[0]),
                 texture(bindings.primary[1]),
-                lights.as_entire_binding(),
+                bindings.extra,
                 signal.as_entire_binding(),
             ],
             0,

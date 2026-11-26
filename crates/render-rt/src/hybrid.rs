@@ -685,6 +685,14 @@ mod receiver_tests;
 #[path = "direct_shadow_tests.rs"]
 mod direct_shadow_tests;
 
+#[cfg(test)]
+#[path = "reflection_probe.rs"]
+mod reflection_probe;
+
+#[cfg(test)]
+#[path = "reflection_tests.rs"]
+mod reflection_tests;
+
 struct PrimarySurface {
     position: DVec3,
     normal: DVec3,

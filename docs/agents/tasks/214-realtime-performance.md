@@ -36,6 +36,14 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Raw reflection dispatch probe:** inline Compute and Metal matched the
+  batched CPU-shaded reference for emission, dark hits, and misses under
+  None, Constant, Sky, and rotated linear lat-long image lighting. The probe
+  also checked two history seeds and exact clears for uncovered pixels and
+  invalid receiver keys. Five required-GPU lib, hybrid and translation runs
+  passed; full gate: 2750 tests passed, `GATE: all passed`. Secondary direct
+  light and live integration are pending; no new S10 or R26 result.
+
 - [Raw reflection kernel checkpoint](../../specs/RENDER.md#r248-gpu-reflection-signal-brief-214):
   the standalone shader reconstructs the receiver and sums inline R23 hit
   emission or scene lighting on misses, including unfiltered lat-long
