@@ -1618,6 +1618,9 @@ impl Editor {
             [0.0, 0.0]
         };
         let over = response.hovered();
+        // the digits are hold keys only over the viewport, or while a drag started there runs
+        // (UI.md §6.1, owner note N1)
+        let hold_ok = !typing && (over || response.dragged());
         let input = ui.ctx().input(|i| NavInput {
             primary: i.pointer.primary_down(),
             middle: i.pointer.middle_down(),
@@ -1626,7 +1629,7 @@ impl Editor {
             held: NavMode::KEYS
                 .iter()
                 .find(|(k, _)| {
-                    !typing && i.key_down(*k) && !i.modifiers.command && !i.modifiers.alt
+                    hold_ok && i.key_down(*k) && !i.modifiers.command && !i.modifiers.alt
                 })
                 .map(|(_, m)| *m),
             drag,

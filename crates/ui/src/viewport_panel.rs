@@ -42,11 +42,11 @@ pub enum NavMode {
 }
 
 impl NavMode {
-    /// The hold keys: X pan, C dolly, V orbit (own design, parity-pending G2).
+    /// The hold keys (owner note N1): 1 pan, 2 zoom (dolly), 3 orbit.
     pub const KEYS: [(egui::Key, NavMode); 3] = [
-        (egui::Key::X, NavMode::Pan),
-        (egui::Key::C, NavMode::Dolly),
-        (egui::Key::V, NavMode::Orbit),
+        (egui::Key::Num1, NavMode::Pan),
+        (egui::Key::Num2, NavMode::Dolly),
+        (egui::Key::Num3, NavMode::Orbit),
     ];
 }
 
@@ -84,7 +84,7 @@ pub enum NavAction {
     ZoomAt(f64, [f64; 2]),
 }
 
-/// Our default bindings (parity-pending G2; UI.md §6.1).
+/// The gesture table (owner note N1 for the hold keys; the rest parity-pending G2; UI.md §6.1).
 pub fn nav_action(i: &NavInput) -> NavAction {
     let (dx, dy) = (i.drag[0] as f64, i.drag[1] as f64);
     let held = |m: NavMode| i.primary && i.held == Some(m);

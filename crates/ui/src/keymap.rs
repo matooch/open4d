@@ -455,6 +455,10 @@ impl KeyMap {
                     }
                 },
             };
+            if is_reserved(chord) {
+                warnings.push(format!("keymap '{text}': {RESERVED_WARNING}"));
+                continue;
+            }
             self.bindings.retain(|b| b.chord != chord);
             self.bindings.extend(binding);
         }
@@ -487,6 +491,22 @@ impl KeyMap {
     }
 }
 
+/// Why a settings-file entry on a reserved chord is dropped (UI.md §14.3).
+pub const RESERVED_WARNING: &str =
+    "1, 2 and 3 are navigation keys; the binding was dropped (shading is on Mod+Shift+1 ..)";
+
+/// True for the bare `1`, `2` and `3` chords: the navigation hold keys (UI.md §6.1, owner
+/// note N1). They are read from keyboard state, so a binding on them could never be told
+/// from a navigation gesture.
+pub fn is_reserved(chord: Chord) -> bool {
+    !chord.command
+        && !chord.alt
+        && !chord.shift
+        && crate::viewport_panel::NavMode::KEYS
+            .iter()
+            .any(|(k, _)| *k == chord.key)
+}
+
 /// The key map in use, its defaults and where overrides are stored.
 #[derive(Debug, Clone)]
 pub struct KeyMapState {
@@ -517,8 +537,23 @@ impl KeyMapState {
         self.map = self.defaults.clone();
         self.warnings.clear();
         if let Some(p) = &path {
-            let file = read_settings(p);
+            let mut file = read_settings(p);
             self.warnings = self.map.apply_overrides(&file["keymap"]);
+            // entries on the reserved digits are removed from the file, so the warning
+            // shows once; everything else in the file stays as it is
+            if let Some(obj) = file["keymap"].as_object_mut() {
+                let before = obj.len();
+                obj.retain(|text, _| !Chord::parse(text).is_ok_and(is_reserved));
+                if obj.len() != before {
+                    if obj.is_empty() {
+                        file.as_object_mut().map(|o| o.remove("keymap"));
+                    }
+                    if let Err(e) = std::fs::write(p, file.to_string()) {
+                        self.warnings
+                            .push(format!("Could not update the settings file: {e}"));
+                    }
+                }
+            }
         }
         self.path = path;
     }

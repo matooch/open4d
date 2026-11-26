@@ -136,28 +136,39 @@ nodes use the selection colour. GPU meshes are rebuilt only when `Scene::revisio
 the selection changes; nodes whose build is unsupported are skipped. Without a wgpu render state (tests) it shows a
 "Viewport unavailable" label.
 
-### 6.1 Navigation (brief 153)
+### 6.1 Navigation (brief 153; revised by brief 223, owner note N1, decision D22)
 
 Camera maths is pure and lives in `forge_viewport::nav` (VIEWPORT.md §7). The panel only
-turns pointer input into calls. GUI session G2 §2 is unanswered: **all directions, speeds and
-keys below are parity-pending, ours.** `nav_action(input) -> NavAction` with
+turns pointer input into calls. The hold keys come from **owner note N1** (GUI-SESSIONS.md,
+answers G2); the wheel and Alt gestures stay our own design, parity-pending G2.
+`nav_action(input) -> NavAction` with
 `NavInput { primary, middle, secondary, alt, held: Option<NavMode>, drag, scroll, cursor }`:
 
 | Input | Action |
 |---|---|
 | wheel `s` (points) at pointer `c` | `ZoomAt(0.999^s, c)`: zoom toward the cursor, `s > 0` zooms in |
-| Alt + primary drag, or hold `V` + primary drag | `Orbit(dx, dy)` |
-| middle drag (with or without Alt), or Alt + middle, or hold `X` + primary drag | `Pan(dx, dy)` |
-| Alt + secondary drag, or hold `C` + primary drag | `Dolly(dx)`, about the view centre |
+| hold `3` + primary drag, or Alt + primary drag | `Orbit(dx, dy)` |
+| hold `1` + primary drag, or middle drag (with or without Alt), or Alt + middle | `Pan(dx, dy)` |
+| hold `2` + primary drag, or Alt + secondary drag | `Dolly(dx)` (zoom), about the view centre |
 | anything else | `None` |
 
 Wheel takes precedence over drags in the same frame. `NavMode` = `Pan | Dolly | Orbit` for the
-held keys. The brief's "1/2/3 key + drag" is replaced by the hold keys X / C / V: 1 to 5 are the
-shading keys of the key map (§14.2) and a press of `1` would change the shading, so the digit
-keys cannot also be navigation modifiers. The hold keys are plain modifiers read from the
-keyboard state (a key held with no Mod/Alt/Shift while the pointer is over the viewport), not
-chords; they are not in the key map and are listed here only. While Alt or a hold key is down the viewport does no selection, rubber band or gizmo
-interaction.
+held keys; the key table is data (`NavMode::KEYS`: `Num1` Pan, `Num2` Dolly, `Num3` Orbit).
+Rules (owner note N1):
+
+- The digits are **plain hold modifiers**, read from keyboard state, not chords: a digit
+  counts as held only when no Mod/Alt is down, no text field has the keyboard, and the pointer
+  is over the viewport pane (or a drag that began there is still running). A digit held while
+  the pointer is over another panel does nothing.
+- **A tap with no drag does nothing**: the digits are not in the key map, so pressing and
+  releasing one changes nothing (no shading, no camera, no selection). Only primary-button
+  motion while the digit is down moves the camera.
+- While Alt or a hold key is down the viewport does no selection, rubber band or gizmo
+  interaction (`NavInput::navigating`).
+- The chords bare `1`, `2`, `3` are **reserved** (`keymap::is_reserved`): the key map editor
+  refuses to bind them and a settings file entry on them is dropped with a warning (§14.3).
+  `4` .. `9` are not navigation keys and stay bindable.
+- The earlier own-design hold keys X / C / V are gone; X, C and V are free.
 
 Navigation works even without a wgpu render state (it is evaluated before the "Viewport
 unavailable" early return), so it is testable with egui_kittest.
@@ -171,13 +182,15 @@ top, back, left, bottom. (`F1`..`F5` of the area design collide with `F2` rename
 free.) View > menu entries: Frame all, Frame selected, and a "View" submenu with the seven
 views, each showing its chord.
 
-Tests (crates/ui/tests/navigation.rs): the input mapping of every gesture and hold key, `apply_nav`;
+Tests (crates/ui/tests/navigation.rs): the input mapping of every gesture and hold key, `apply_nav`, the key table;
 `view.frame_all` / `view.frame_selected` fit the bounds (aspect-aware), nothing selected frames
 all, a selected null recentres, an empty scene resets; `view.set_view`, `view.set_camera`
 (partial update, validation, pitch clamp) and `view.get_camera`; camera commands add no undo
 step and Ctrl+Z leaves the camera alone; egui_kittest (no GPU): Alt + left/middle/right drags
-orbit / pan / dolly, a held `V` turns a plain drag into an orbit (and not without it), the
-wheel zooms toward the cursor, `H`, `S`, `Mod+4`, `Mod+1` run their commands.
+orbit / pan / dolly, held `3` / `1` / `2` turn a plain drag into orbit / pan / dolly (and not
+without the key), a digit held with the pointer outside the viewport does nothing, a digit tap
+changes nothing, no selection while a digit is held, the wheel zooms toward the cursor, `H`,
+`S`, `Mod+4`, `Mod+1` run their commands.
 
 Undo: camera moves, frames and view switches are **not** undo steps (the camera is view state,
 not document state; COMMANDS.md §6). Gestures and `view.*` commands never touch the history.
@@ -493,7 +506,8 @@ actions, a drag onto an attribute link field.
 ## 14. Key map (`keymap`, `keymap_editor`; brief 152)
 
 Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G2 (docs/parity/GUI-SESSIONS.md)
-is unanswered, so **every default binding is parity-pending**: they follow common DCC
+is only partly answered (owner notes N1 and N2: hold keys 1 / 2 / 3, tool keys E / R / T), so
+**every default binding except those is parity-pending**: they follow common DCC
 conventions where those do not collide with our other keys, and they are ours to change once
 G2 is answered. Nothing is taken from the reference app's key files or presets.
 
@@ -543,13 +557,13 @@ Default bindings (all parity-pending, ours):
 | Alt+1 / Alt+2 / Alt+3 / Alt+4 | `select.mode` model / points / edges / polys |
 | Mod+Shift+E | `mesh.make_editable` |
 | Mod+Shift+P | `ui.command_palette` (brief 159, §18) |
-| 1 .. 5 | `view.shading` smooth, flat, wire, smooth_wire, flat_wire |
-| 6 .. 9 | `view.shading` quick, constant, hidden_line, bounding_box (brief 143) |
+| Mod+Shift+1 .. 5 | `view.shading` smooth, flat, wire, smooth_wire, flat_wire (moved off the digits by brief 223; parity-pending G2) |
+| Mod+Shift+6 .. 9 | `view.shading` quick, constant, hidden_line, bounding_box (brief 143; parity-pending G2) |
 | F4 | `view.layout` (toggle single / four; brief 143) |
 | Mod+M | `view.maximize` (toggle the active pane; brief 143) |
-| W / E / R | `view.gizmo_mode` move / rotate / scale |
+| E / R / T | `view.gizmo_mode` move / rotate / scale (owner note N2; W is free) |
 | Q | `view.gizmo_space` (toggle) |
-| Shift+S | `snap.toggle` (brief 032; X is the Pan hold key) |
+| Shift+S | `snap.toggle` (brief 032) |
 | L | `edit.axis_mode` (toggle; brief 032) |
 | H / S | `view.frame_all` / `view.frame_selected` (brief 153) |
 | Mod+1 .. Mod+7 | `view.set_view` perspective, front, right, top, back, left, bottom (brief 153) |
@@ -561,7 +575,12 @@ Default bindings (all parity-pending, ours):
 | Shift+Comma / Shift+Period | `key.jump` forward false / true |
 
 These are the old hard-coded keys of §5 and ANIM.md §2.7 unchanged, plus the rows for
-`select.invert`, `select.mode` and `mesh.make_editable`.
+`select.invert`, `select.mode` and `mesh.make_editable`, except the two changes of owner notes
+N1 and N2 (brief 223): the bare digits are the navigation hold keys (§6.1) and so cannot
+carry the shading commands, which moved to `Mod+Shift+1 .. 9` (**our choice,
+parity-pending G2**: the new G2 item asks what the reference uses; `Mod+digit` is the
+view-switch family and `Alt+digit` the mode family, so `Mod+Shift+digit` is the free one);
+the gizmo keys moved from W / E / R to E / R / T. The default map has no bare digit binding.
 
 ### 14.3 User overrides (settings file)
 
@@ -584,6 +603,17 @@ unknown to the registry is kept (plugins may be missing) and listed in the edito
 unknown; running it reports the registry's error in the status bar. `KeyMap::overrides()`
 is the inverse: the minimal JSON that, applied to the defaults, gives the current map.
 When it is empty the `keymap` key is removed. A missing or unreadable file means defaults.
+
+**Migration (brief 223, owner notes N1 and N2).** Files written before the change hold only
+the user's differences from the old defaults, so they stay valid: other bindings are kept
+untouched. Two things need care. (1) An entry on a bare `1`, `2` or `3` chord (any command, or
+`null`) cannot be honoured, the chords being navigation keys now (§6.1): it is dropped with
+the warning "keymap '1': 1, 2 and 3 are navigation keys; the binding was dropped (shading is on
+Mod+Shift+1 ..)" and `KeyMapState::use_settings_file` removes exactly those entries from the
+file, so the warning appears **once**; every other entry, including unparsable ones, stays in
+the file. (2) An entry on `4` .. `9`, `W`, `E`, `R` or `T` is the user's own choice and replaces the
+new default on that chord like any override. Defaults the user never touched simply follow the
+new table.
 
 ### 14.4 Conflicts
 

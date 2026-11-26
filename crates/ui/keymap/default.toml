@@ -1,5 +1,7 @@
-# Default key map (docs/specs/UI.md §14). Our own design, parity-pending G2
-# (docs/parity/GUI-SESSIONS.md): common DCC conventions where they do not collide.
+# Default key map (docs/specs/UI.md §14). Parity-pending G2 (docs/parity/GUI-SESSIONS.md)
+# except the owner notes N1 (bare 1 / 2 / 3 are the navigation hold keys, so no bare digit
+# is bound here) and N2 (E / R / T = move / rotate / scale); the rest follows common DCC
+# conventions where they do not collide.
 # `Mod` is Cmd on macOS and Ctrl elsewhere. Users override chords in the settings file.
 version = 1
 
@@ -80,50 +82,50 @@ command = "mesh.make_editable"
 chord = "Mod+Shift+P"
 command = "ui.command_palette"
 
-# View: shading
+# View: shading (moved off the bare digits by owner note N1; parity-pending G2)
 [[bind]]
-chord = "1"
+chord = "Mod+Shift+1"
 command = "view.shading"
 args = { mode = "smooth" }
 
 [[bind]]
-chord = "2"
+chord = "Mod+Shift+2"
 command = "view.shading"
 args = { mode = "flat" }
 
 [[bind]]
-chord = "3"
+chord = "Mod+Shift+3"
 command = "view.shading"
 args = { mode = "wire" }
 
 [[bind]]
-chord = "4"
+chord = "Mod+Shift+4"
 command = "view.shading"
 args = { mode = "smooth_wire" }
 
 [[bind]]
-chord = "5"
+chord = "Mod+Shift+5"
 command = "view.shading"
 args = { mode = "flat_wire" }
 
 # View: more display modes, the four-view layout (brief 143)
 [[bind]]
-chord = "6"
+chord = "Mod+Shift+6"
 command = "view.shading"
 args = { mode = "quick" }
 
 [[bind]]
-chord = "7"
+chord = "Mod+Shift+7"
 command = "view.shading"
 args = { mode = "constant" }
 
 [[bind]]
-chord = "8"
+chord = "Mod+Shift+8"
 command = "view.shading"
 args = { mode = "hidden_line" }
 
 [[bind]]
-chord = "9"
+chord = "Mod+Shift+9"
 command = "view.shading"
 args = { mode = "bounding_box" }
 
@@ -179,19 +181,19 @@ chord = "Mod+7"
 command = "view.set_view"
 args = { view = "bottom" }
 
-# Gizmo
+# Gizmo (owner note N2)
 [[bind]]
-chord = "W"
+chord = "E"
 command = "view.gizmo_mode"
 args = { mode = "move" }
 
 [[bind]]
-chord = "E"
+chord = "R"
 command = "view.gizmo_mode"
 args = { mode = "rotate" }
 
 [[bind]]
-chord = "R"
+chord = "T"
 command = "view.gizmo_mode"
 args = { mode = "scale" }
 

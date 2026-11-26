@@ -1,6 +1,6 @@
 # 223 · Viewport navigation 1 / 2 / 3 and tool keys E / R / T
 
-Status: ready · Area: L · Depends on: 153, 152 · Observations: owner notes (GUI-SESSIONS.md), G1/G2/G5 · Touches: ui, viewport
+Status: done (parity-pending: G2 shading keys) · Area: L · Depends on: 153, 152 · Observations: owner notes (GUI-SESSIONS.md), G1/G2/G5 · Touches: ui, viewport
 
 ## Goal
 Hold **1** + left-drag = pan, **2** + left-drag = zoom, **3** + left-drag = orbit (owner note N1), and **E / R / T** = move / rotate / scale (N2), replacing the X / C / V hold keys and W / E / R.
@@ -26,3 +26,11 @@ Sources: owner notes N1–N8 and GUI sessions G1/G2/G5 in [../../parity/GUI-SESS
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+
+- Spec: UI.md §6.1 rewritten (owner note N1, hold digits, reserved chords, tap rule), §14 (2, 14.2, 14.3 migration) updated for N1 and N2; the manual's key table follows.
+- Keys: hold `1` / `2` / `3` + left drag = pan / zoom (dolly) / orbit (`NavMode::KEYS`, a table). Digits count as held only while the pointer is over the viewport pane (or a drag that began there still runs), with no Mod/Alt and no text field focused. A tap does nothing (the digits are not in the key map). E / R / T = move / rotate / scale; W is now unbound. X, C, V are free again. Alt + mouse and the wheel are unchanged.
+- Shading keys (`parity-pending G2`, our choice): `Mod+Shift+1 .. 9` (smooth, flat, wire, smooth_wire, flat_wire, quick, constant, hidden_line, bounding_box). Chosen because `Mod+digit` is the view family and `Alt+digit` the mode family.
+- Migration: bare `1`/`2`/`3` are reserved (`keymap::is_reserved`). An override entry on them (any command, or null) is dropped with a warning and removed from the settings file, so it warns once; every other entry (including unparsable ones and entries on 4..9, W, E, R, T) is kept. The key map editor refuses to capture the reserved chords.
+- Tests updated to the new spec: `keymap.rs::default_bindings_table` (shading chords, E/R/T), `keymap.rs::default_shortcuts_run_their_commands_and_undo_undoes` (digits do nothing, Mod+Shift+digit shades, R/T/E gizmo keys, W free), `navigation.rs::a_held_hold_key_turns_a_plain_drag_into_navigation` (now `a_held_digit_turns_a_plain_drag_into_navigation`, V replaced by 1/2/3). New: key table, digit outside the viewport, tap changes nothing, no selection while a digit is held (with a control click that does select), no bare digit default, migration of old files, editor refusal.
+- Results: `cargo test -p forge-ui --test keymap --test navigation` 25 + 15 passed, 5 runs in a row; clippy `-p forge-ui --all-targets -D warnings` clean.
+- Owner confirmation of the feel on their Mac: pending (not possible here).
