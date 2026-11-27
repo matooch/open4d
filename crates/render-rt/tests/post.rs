@@ -454,3 +454,44 @@ fn the_default_post_block_changes_nothing_and_stays_deterministic() {
     assert_eq!(c.beauty.data, d.beauty.data, "post on is deterministic too");
     assert_eq!(c.aovs.len(), 0, "no AOV was asked for, so none is produced");
 }
+
+#[test]
+fn antialiasing_tracks_a_thin_edge_during_a_camera_pan() {
+    let Some((_serial, engine)) = engine() else {
+        return;
+    };
+    let mut scene = common::snapshot_with(
+        cube(1.0),
+        glossy_floor(),
+        DMat4::from_rotation_z(0.2) * DMat4::from_scale(DVec3::new(1.5, 32.0, 1.0)),
+        common::looking_at_origin(150.0),
+    );
+    constant_env(&mut scene, [1.0; 3]);
+    let capture = |scene: &Snapshot, samples| {
+        render(
+            &engine,
+            scene,
+            &settings(PostSettings {
+                taa: samples > 1,
+                taa_samples: samples,
+                ..PostSettings::default()
+            }),
+        )
+    };
+    let mut error = [0.0; 2];
+    for x in [0.0, 0.4, 0.8, 1.2] {
+        scene.camera = look_at(DVec3::new(x, 0.0, -150.0), DVec3::new(x, 0.0, 0.0));
+        let reference = capture(&scene, 32);
+        for (index, samples) in [1, 4].into_iter().enumerate() {
+            let image = capture(&scene, samples);
+            error[index] += image
+                .beauty
+                .data
+                .iter()
+                .zip(&reference.beauty.data)
+                .map(|(a, b)| f64::from((a - b).powi(2)))
+                .sum::<f64>();
+        }
+    }
+    assert!(error[1] < error[0] * 0.5, "pan errors {error:?}");
+}

@@ -1258,7 +1258,10 @@ impl Editor {
         let Some(active) = self.state.dock.active(Area::Bottom) else {
             return;
         };
-        let expanded = matches!(active, Panel::DopeSheet | Panel::ValueGraph);
+        let expanded = matches!(
+            active,
+            Panel::DopeSheet | Panel::ValueGraph | Panel::Materials
+        );
         let compact = active == Panel::Timeline;
         let compact_height = if ui.available_width() < 650.0 {
             148.0
@@ -1453,6 +1456,13 @@ impl Editor {
                     match a {
                         BrowserAction::Run(c) => {
                             self.run(c);
+                        }
+                        BrowserAction::OpenSample(id) => {
+                            if self.confirm_discard()
+                                && self.run(("browser.open_sample", json!({"id": id})))
+                            {
+                                self.run(("view.look_through_camera", json!({})));
+                            }
                         }
                         BrowserAction::OpenRecent(i) => self.open_recent(i),
                     }
@@ -2086,7 +2096,10 @@ impl Editor {
             return;
         };
         if self.state.display == DisplayMode::Render {
-            self.paint_render_mode(ui, rs, pane, rect, ppp);
+            let gizmo = self.current_gizmo();
+            self.paint_render_mode(ui, rs, pane, rect, ppp, gizmo.as_ref());
+            self.paint_transform_handles(ui, pane, rect, ppp, size, gizmo);
+            self.paint_size_handles(ui, &response, pane, rect, ppp);
             return;
         }
         let gizmo = self.current_gizmo();
@@ -2160,63 +2173,7 @@ impl Editor {
             );
         }
         self.paint_size_handles(ui, &response, pane, rect, ppp);
-        if let Some(g) = gizmo {
-            use forge_viewport::gizmo::{Axis, Handle, Plane};
-            let camera = self.state.pane_camera(pane);
-            let (w, h) = (f64::from(size[0]), f64::from(size[1]));
-            let hovered = ui
-                .ctx()
-                .pointer_hover_pos()
-                .filter(|p| rect.contains(*p))
-                .and_then(|p| {
-                    let q = (p - rect.min) * ppp;
-                    g.hit_test(&camera, q.x.into(), q.y.into(), w, h)
-                });
-            let l = g.world_length(&camera, h);
-            let painter = ui.painter_at(rect);
-            let draw = |a, b, handle, color| {
-                if let (Some(a), Some(b)) = (camera.project(a, w, h), camera.project(b, w, h)) {
-                    let active = hovered == Some(handle);
-                    painter.line_segment(
-                        [a, b].map(|p| rect.min + egui::vec2(p.x as f32, p.y as f32) / ppp),
-                        egui::Stroke::new(
-                            if active { 3.5 } else { 2.0 },
-                            if active { egui::Color32::GOLD } else { color },
-                        ),
-                    );
-                }
-            };
-            for (axis, color) in Axis::ALL.into_iter().zip([
-                egui::Color32::LIGHT_RED,
-                egui::Color32::LIGHT_GREEN,
-                egui::Color32::LIGHT_BLUE,
-            ]) {
-                let handle = Handle::Axis(axis);
-                if g.mode == GizmoMode::Rotate {
-                    let ring = g.ring_points(axis, l);
-                    for i in 0..ring.len() {
-                        draw(ring[i], ring[(i + 1) % ring.len()], handle, color);
-                    }
-                } else {
-                    draw(g.origin, g.origin + g.axis(axis) * l * 0.85, handle, color);
-                }
-            }
-            if g.mode != GizmoMode::Rotate {
-                for plane in Plane::ALL {
-                    if hovered == Some(Handle::Plane(plane)) {
-                        let corners = g.plane_corners(plane, l);
-                        for i in 0..4 {
-                            draw(
-                                corners[i],
-                                corners[(i + 1) % 4],
-                                Handle::Plane(plane),
-                                egui::Color32::GOLD,
-                            );
-                        }
-                    }
-                }
-            }
-        }
+        self.paint_transform_handles(ui, pane, rect, ppp, size, gizmo);
         self.paint_clone_overlay(ui, &shown, pane, rect);
         self.paint_field_overlay(ui, &shown, pane, rect);
         if pane == self.state.views.active {
@@ -2279,12 +2236,79 @@ impl Editor {
         }
     }
 
+    fn paint_transform_handles(
+        &self,
+        ui: &Ui,
+        pane: Pane,
+        rect: egui::Rect,
+        ppp: f32,
+        size: [u32; 2],
+        gizmo: Option<Gizmo>,
+    ) {
+        if let Some(g) = gizmo {
+            use forge_viewport::gizmo::{Axis, Handle, Plane};
+            let camera = self.state.pane_camera(pane);
+            let (w, h) = (f64::from(size[0]), f64::from(size[1]));
+            let hovered = ui
+                .ctx()
+                .pointer_hover_pos()
+                .filter(|p| rect.contains(*p))
+                .and_then(|p| {
+                    let q = (p - rect.min) * ppp;
+                    g.hit_test(&camera, q.x.into(), q.y.into(), w, h)
+                });
+            let l = g.world_length(&camera, h);
+            let painter = ui.painter_at(rect);
+            let draw = |a, b, handle, color| {
+                if let (Some(a), Some(b)) = (camera.project(a, w, h), camera.project(b, w, h)) {
+                    let active = hovered == Some(handle);
+                    painter.line_segment(
+                        [a, b].map(|p| rect.min + egui::vec2(p.x as f32, p.y as f32) / ppp),
+                        egui::Stroke::new(
+                            if active { 3.5 } else { 2.0 },
+                            if active { egui::Color32::GOLD } else { color },
+                        ),
+                    );
+                }
+            };
+            for (axis, color) in Axis::ALL.into_iter().zip([
+                egui::Color32::LIGHT_RED,
+                egui::Color32::LIGHT_GREEN,
+                egui::Color32::LIGHT_BLUE,
+            ]) {
+                let handle = Handle::Axis(axis);
+                if g.mode == GizmoMode::Rotate {
+                    let ring = g.ring_points(axis, l);
+                    for i in 0..ring.len() {
+                        draw(ring[i], ring[(i + 1) % ring.len()], handle, color);
+                    }
+                } else {
+                    draw(g.origin, g.origin + g.axis(axis) * l * 0.85, handle, color);
+                }
+            }
+            if g.mode != GizmoMode::Rotate {
+                for plane in Plane::ALL {
+                    if hovered == Some(Handle::Plane(plane)) {
+                        let corners = g.plane_corners(plane, l);
+                        for i in 0..4 {
+                            draw(
+                                corners[i],
+                                corners[(i + 1) % 4],
+                                Handle::Plane(plane),
+                                egui::Color32::GOLD,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn viewport_size_handles(&self) -> Vec<crate::size_handles::Handle> {
         let Some(node) = self.state.selection.active else {
             return Vec::new();
         };
         if self.state.mode != EditMode::Model
-            || self.state.display == DisplayMode::Render
             || self.state.app.transform_settings.axis_mode
             || self.state.tool.is_some()
             || forge_core::layers::locked(self.state.doc.scene(), node)
@@ -2346,9 +2370,7 @@ impl Editor {
         }
     }
 
-    /// The Render display mode: the real-time tier's frame of this pane's camera, without the
-    /// overlays (UI.md §6.3, RENDER.md R22.7). A missing device keeps a note instead of the
-    /// shaded image, since the shaded image needs the same device.
+    /// Render the pane camera at native resolution, then composite the selection guides.
     fn paint_render_mode(
         &mut self,
         ui: &mut Ui,
@@ -2356,11 +2378,10 @@ impl Editor {
         pane: Pane,
         rect: egui::Rect,
         ppp: f32,
+        gizmo: Option<&Gizmo>,
     ) {
-        let size = [
-            ((rect.width() * ppp).round() as u32).clamp(1, 640),
-            ((rect.height() * ppp).round() as u32).clamp(1, 400),
-        ];
+        let full = rect.size() * ppp;
+        let size = [full.x, full.y].map(|v| v.round().max(1.0) as u32);
         let current = self.state.timeline.current;
         let scheduled = self.state.app.scheduled_draw(current);
         let shown = scheduled.scene.clone();
@@ -2377,10 +2398,6 @@ impl Editor {
                 // the selection outline over the render engine's image: the viewport draws it
                 // alone on a transparent target, hidden by the scene's meshes (VIEWPORT.md §16.2)
                 if !self.state.selection.nodes.is_empty() {
-                    let full = [
-                        (rect.width() * ppp).round() as u32,
-                        (rect.height() * ppp).round() as u32,
-                    ];
                     let lights = crate::panes::scene_lights(&shown);
                     let base = Settings {
                         shadows: false,
@@ -2389,13 +2406,13 @@ impl Editor {
                     let overlay = self.viewport.render(
                         rs,
                         pane,
-                        full,
+                        size,
                         &camera,
                         base,
                         SceneView {
                             scene: &shown,
                             selected: &self.state.selection.nodes,
-                            gizmo: None,
+                            gizmo,
                             component: None,
                             ctx: forge_core::EvalCtx::at_frame(
                                 current,
@@ -2412,6 +2429,26 @@ impl Editor {
                         },
                     );
                     ui.painter().image(overlay, rect, uv, egui::Color32::WHITE);
+                    let painter = ui.painter_at(rect);
+                    for line in crate::scene_overlay::object_lines(
+                        &shown,
+                        &self.state.selection.nodes,
+                        true,
+                    ) {
+                        let project = |v| {
+                            camera
+                                .project(v, size[0] as f64, size[1] as f64)
+                                .map(|p| rect.min + egui::vec2(p.x as f32, p.y as f32) / ppp)
+                        };
+                        if let (Some(a), Some(b)) = (project(line.a), project(line.b)) {
+                            let color =
+                                egui::Rgba::from_rgb(line.color[0], line.color[1], line.color[2]);
+                            painter.line_segment(
+                                [a, b],
+                                egui::Stroke::new(1.5, egui::Color32::from(color)),
+                            );
+                        }
+                    }
                 }
                 ui.painter().text(
                     rect.left_top() + egui::vec2(8.0, 6.0),

@@ -1,0 +1,124 @@
+(
+format: "forge3d-scene", version: 13,
+render: Some((width: 640, height: 360, samples: 16, max_depth: 4, seed: 1, default_light: false, filter: Cubic, filter_width: 2.0)),
+materials: [
+(id: 1, type_id: "forge.material.standard", name: "Polished chrome",
+    params: {
+        "color.color": Color((0.9, 0.92, 0.95)),
+        "icon_color": Color((0.9, 0.92, 0.95)),
+        "reflectance.spec.width": Float(0.09),
+        "reflectance.spec.strength": Float(1.0),
+        "reflectance.spec.attenuation": Enum("metal"),
+        "reflectance.spec.color": Color((0.9, 0.92, 0.95))
+    }, tags: [], children: []),
+(id: 2, type_id: "forge.material.standard", name: "Warm copper",
+    params: {
+        "color.color": Color((0.95, 0.53, 0.32)),
+        "icon_color": Color((0.95, 0.53, 0.32)),
+        "reflectance.spec.width": Float(0.23),
+        "reflectance.spec.strength": Float(0.98),
+        "reflectance.spec.attenuation": Enum("metal"),
+        "reflectance.spec.color": Color((0.95, 0.53, 0.32))
+    }, tags: [], children: []),
+(id: 3, type_id: "forge.material.standard", name: "Porcelain",
+    params: {
+        "color.color": Color((0.82, 0.86, 0.9)),
+        "icon_color": Color((0.82, 0.86, 0.9)),
+        "reflectance.spec.width": Float(0.18),
+        "reflectance.spec.strength": Float(0.12),
+        "reflectance.spec.attenuation": Enum("additive"),
+        "reflectance.spec.color": Color((1.0, 1.0, 1.0))
+    }, tags: [], children: []),
+(id: 4, type_id: "forge.material.standard", name: "Obsidian glaze",
+    params: {
+        "color.color": Color((0.018, 0.022, 0.03)),
+        "icon_color": Color((0.018, 0.022, 0.03)),
+        "reflectance.spec.width": Float(0.12),
+        "reflectance.spec.strength": Float(0.22),
+        "reflectance.spec.attenuation": Enum("additive"),
+        "reflectance.spec.color": Color((1.0, 1.0, 1.0))
+    }, tags: [], children: [])
+],
+roots: [
+(id: 6, type_id: "forge.sphere", name: "Mirror",
+    params: {
+        "transform.pos": Vec3((-105.0, 45.0, 0.0)),
+        "radius": Float(45.0),
+        "segments": Int(48)
+    }, tags: [
+(id: 5, type_id: "forge.tag.texture", name: "Mirror material",
+    params: {
+        "material": Link(Some(1))
+    }, tags: [], children: [])
+], children: []),
+(id: 8, type_id: "forge.sphere", name: "Copper",
+    params: {
+        "transform.pos": Vec3((0.0, 55.0, 0.0)),
+        "radius": Float(55.0),
+        "segments": Int(48)
+    }, tags: [
+(id: 7, type_id: "forge.tag.texture", name: "Copper material",
+    params: {
+        "material": Link(Some(2))
+    }, tags: [], children: [])
+], children: []),
+(id: 10, type_id: "forge.sphere", name: "Ceramic",
+    params: {
+        "transform.pos": Vec3((105.0, 40.0, 0.0)),
+        "radius": Float(40.0),
+        "segments": Int(48)
+    }, tags: [
+(id: 9, type_id: "forge.tag.texture", name: "Ceramic material",
+    params: {
+        "material": Link(Some(3))
+    }, tags: [], children: [])
+], children: []),
+(id: 12, type_id: "forge.plane", name: "Studio ground",
+    params: {
+        "transform.pos": Vec3((0.0, -0.1, 0.0)),
+        "width": Float(1700.0),
+        "height": Float(1700.0)
+    }, tags: [
+(id: 11, type_id: "forge.tag.texture", name: "Studio ground material",
+    params: {
+        "material": Link(Some(4))
+    }, tags: [], children: [])
+], children: []),
+(id: 13, type_id: "forge.camera", name: "Shot camera",
+    params: {
+        "transform.pos": Vec3((65.0, 145.0, -420.0)),
+        "transform.rot": Vec3((0.15354378253955608, -0.23554498072086333, 0.0))
+    }, tags: [], children: []),
+(id: 17, type_id: "forge.null", name: "Lighting rig",
+    params: {
+
+    }, tags: [], children: [
+(id: 14, type_id: "forge.light", name: "Tall softbox",
+    params: {
+        "transform.pos": Vec3((-160.0, 170.0, -130.0)),
+        "transform.rot": Vec3((-0.8884797719201485, -0.5521305617351757, 0.0)),
+        "type": Enum("area"),
+        "shadow": Enum("area"),
+        "size_x": Float(150.0),
+        "size_y": Float(260.0),
+        "color": Color((1.0, 0.88, 0.72)),
+        "intensity": Float(4.0)
+    }, tags: [], children: []),
+(id: 15, type_id: "forge.light", name: "Cool strip",
+    params: {
+        "transform.pos": Vec3((160.0, 120.0, 45.0)),
+        "transform.rot": Vec3((1.8449637779145553, -0.433839044473635, 0.0)),
+        "type": Enum("area"),
+        "shadow": Enum("area"),
+        "size_x": Float(60.0),
+        "size_y": Float(250.0),
+        "color": Color((0.7, 0.82, 1.0)),
+        "intensity": Float(5.0)
+    }, tags: [], children: []),
+(id: 16, type_id: "forge.sky", name: "Studio fill",
+    params: {
+        "brightness": Float(0.32)
+    }, tags: [], children: [])
+])
+],
+)

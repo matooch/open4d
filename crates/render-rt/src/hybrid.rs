@@ -45,13 +45,19 @@ pub(crate) enum Bounce {
 }
 
 impl Bounce {
-    fn sample(self, p: &PrimarySurface, rng: &mut Rng) -> Option<(DVec3, DVec3)> {
+    fn sample(self, p: &PrimarySurface, sample: usize, rng: &mut Rng) -> Option<(DVec3, DVec3)> {
         match self {
             Self::Reflection => p.surface.sample_specular(p.normal, p.view, rng),
             Self::Diffuse if p.normal.dot(p.view) > 0.0 => {
                 let weight = p.surface.albedo * (DVec3::ONE - p.surface.trans);
-                (weight != DVec3::ZERO)
-                    .then(|| (to_world(p.normal, cosine_hemisphere(rng.f2())), weight))
+                (weight != DVec3::ZERO).then(|| {
+                    let (r, phi) = rng.f2();
+                    let uv = (
+                        ((sample / 4) as f64 + r) / 2.0,
+                        ((sample % 4) as f64 + phi) / 4.0,
+                    );
+                    (to_world(p.normal, cosine_hemisphere(uv)), weight)
+                })
             }
             Self::Diffuse => None,
         }
@@ -656,7 +662,7 @@ fn raw_indirect(
             let p = geometry.surface(snapshot, settings, &input, i);
             let mut rng = Rng::new(seed, i as u64);
             for sample in 0..BOUNCE_RAYS {
-                let Some((wi, weight)) = bounce.sample(&p, &mut rng) else {
+                let Some((wi, weight)) = bounce.sample(&p, sample, &mut rng) else {
                     continue;
                 };
                 if p.geometric_normal.dot(wi) <= 0.0 {

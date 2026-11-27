@@ -50,6 +50,39 @@ const BUILTIN: [(&str, &str); 3] = [
     ("table", include_str!("../presets/objects/table.forge")),
 ];
 
+/// Editable, standalone scenes bundled with the application.
+pub struct SampleScene {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub exercise: &'static str,
+    pub preview: &'static [u8],
+    pub file: &'static str,
+}
+
+pub const SAMPLE_SCENES: &[SampleScene] = &[
+    SampleScene {
+        id: "softbox-studio",
+        name: "Softbox Studio",
+        exercise: "Widen the tall softbox and compare the highlights on chrome, copper, and porcelain.",
+        preview: include_bytes!("../presets/scenes/softbox-studio.png"),
+        file: include_str!("../presets/scenes/softbox-studio.forge"),
+    },
+    SampleScene {
+        id: "radial-assembly",
+        name: "Radial Assembly",
+        exercise: "Change the radial cloner count or radius to reshape the gold fins around the enamel collar.",
+        preview: include_bytes!("../presets/scenes/radial-assembly.png"),
+        file: include_str!("../presets/scenes/radial-assembly.forge"),
+    },
+    SampleScene {
+        id: "color-grid",
+        name: "Color Grid",
+        exercise: "Change the grid spacing or move the warm rim light across the ruby beads and satin plinth.",
+        preview: include_bytes!("../presets/scenes/color-grid.png"),
+        file: include_str!("../presets/scenes/color-grid.forge"),
+    },
+];
+
 /// Library and recent files of one application.
 #[derive(Debug, Clone, Default)]
 pub struct Browser {
@@ -401,7 +434,15 @@ impl Grafter<'_> {
         parent: Option<NodeId>,
     ) -> Result<NodeId, EditError> {
         let node = self.src.node(from).ok_or(EditError::UnknownNode(from))?;
-        let new = tx.create(&node.type_id, parent, None)?;
+        let new = match self.src.node_type(from).map(|ty| ty.category) {
+            Some(forge_core::Category::Material) => tx.create_material(&node.type_id, None)?,
+            Some(forge_core::Category::Shader) => tx.create_shader(
+                &node.type_id,
+                parent.ok_or(EditError::UnknownNode(from))?,
+                None,
+            )?,
+            _ => tx.create(&node.type_id, parent, None)?,
+        };
         self.fill(tx, from, new)?;
         for tag in &node.tags {
             let t = self.src.node(*tag).ok_or(EditError::UnknownNode(*tag))?;

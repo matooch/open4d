@@ -66,6 +66,12 @@ fn default_layout_places_the_panels() {
     // the timeline strip spans under the palette and the viewport, not under the managers
     assert!(timeline.min.x < viewport.min.x + 400.0);
     h.get_by_label("Coordinates");
+    assert!(
+        Layout::standard()
+            .dock
+            .tabs(Area::Bottom)
+            .contains(&Panel::Materials)
+    );
 }
 
 #[test]

@@ -25,13 +25,6 @@ const MIN_PSNR: f64 = 30.0;
 const MIN_IOU: f64 = 0.98;
 const MEAN_RATIO: (f64, f64) = (0.6, 1.7);
 
-/// R2 is opaque (R21.3): the CPU's transmissive material loses light the raster keeps, so only
-/// the silhouette is compared.
-const OPAQUE_ONLY: &[(&str, &str)] = &[(
-    "mat-transparent",
-    "transmission is not refracted in the raster tier (RENDER.md R21.3)",
-)];
-
 static GPU: Mutex<Option<Option<(wgpu::Device, wgpu::Queue)>>> = Mutex::new(None);
 
 /// Held for a whole test: GPU tests in this file run one at a time, so a slow device (CI's
@@ -242,10 +235,6 @@ fn the_o30_cases_keep_the_cpu_silhouette_and_light_level() {
         let ratio = rm / cm;
         eprintln!("{name}: IoU {i:.4}, mean ratio {ratio:.3}");
         assert!(i >= MIN_IOU, "{name}: silhouette IoU {i:.4}");
-        if OPAQUE_ONLY.iter().any(|(n, _)| *n == name) {
-            checked += 1;
-            continue;
-        }
         assert!(
             (MEAN_RATIO.0..=MEAN_RATIO.1).contains(&ratio),
             "{name}: mean luminance ratio {ratio:.3} (CPU {cm:.4}, RT {rm:.4})"
@@ -569,6 +558,8 @@ fn an_image_environment_matches_a_constant_one() {
     let (cx, cy) = (settings.width / 2, settings.height / 2);
     let top = split.beauty.pixel(cx, cy - 15)[0];
     let bottom = split.beauty.pixel(cx, cy + 15)[0];
+    // Both sides receive some light from the opposite hemisphere.
+    assert!(top > 0.05 && bottom < 0.79, "split environment: {top}, {bottom}");
     assert!(top < bottom, "top {top} is not darker than bottom {bottom}");
 }
 

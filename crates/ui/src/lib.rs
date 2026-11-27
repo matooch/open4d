@@ -52,6 +52,7 @@ mod size_handles;
 pub mod snapping;
 pub mod spline_edit;
 pub mod state;
+mod texture_library;
 pub mod theme;
 pub mod timeline;
 pub mod tools;

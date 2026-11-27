@@ -435,6 +435,25 @@ fn trace_path(o_in: vec3<f32>, d_in: vec3<f32>, rng: ptr<function, Rng>) -> Trac
             if (!ls.ok) {
                 continue;
             }
+            // Direct backlighting approximation for closed solids. Measure the
+            // chord to the light, then check visibility beyond the exit surface.
+            let back_cos = max(-dot(n, ls.wi), 0.0);
+            if (surf.scattering_distance > 0.0 && front && g.closed && dot(ngv, ls.wi) < 0.0 && back_cos > 0.0 && l.flags.z > 0.5) {
+                let inside = g.p + eps * ls.wi;
+                let exit_hit = scene_intersect(inside, ls.wi, ls.dist);
+                if (exit_hit.found && scene_ids(exit_hit).y == object_id) {
+                    let distance = exit_hit.t + eps;
+                    let outside = inside + (exit_hit.t + eps) * ls.wi;
+                    var visibility = vec3<f32>(1.0);
+                    if (l.params.z > 0.5 && scene_occluded(outside, ls.wi, max(ls.dist - distance - eps, 0.0))) {
+                        visibility = mix(vec3<f32>(1.0), l.shadow_color.xyz, l.params.w);
+                    }
+                    let scatter = exp(-distance / surf.scattering_distance) * back_cos / PI_F;
+                    let radiance = throughput * surf.albedo * opaque_part(surf) * scatter * ls.weight * visibility;
+                    let scatter_lobe = select(target_of(cat), TARGET_DIFFUSE, cat == LOBE_NONE);
+                    acc_add(&out, radiance, depth, scatter_lobe, clamp_value);
+                }
+            }
             nee(&out, surf, n, ngv, wo, origin, ls, l.flags.z > 0.5, l.flags.w > 0.5, l.params.z > 0.5, l.params.w, l.shadow_color.xyz, throughput, depth, cat, clamp_value);
         }
         if (has_env()) {

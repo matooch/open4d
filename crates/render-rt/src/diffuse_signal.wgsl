@@ -8,13 +8,16 @@ struct DiffuseSample {
 }
 
 fn bounce_sample(m: Mat, n: vec3<f32>, ng: vec3<f32>, wo: vec3<f32>,
-    rng: ptr<function, Rng>) -> DiffuseSample {
+    sample_index: u32, rng: ptr<function, Rng>) -> DiffuseSample {
     var s: DiffuseSample;
     let weight = m.albedo * opaque_part(m);
     if dot(n, wo) <= 0.0 || all(weight == vec3<f32>(0.0)) {
         return s;
     }
-    let wi = to_world(n, cosine_hemisphere(rng_f2(rng)));
+    // Stratify the projected hemisphere into two rings and four sectors.
+    let cell = vec2<f32>(f32(sample_index / 4u), f32(sample_index % 4u));
+    let uv = (cell + rng_f2(rng)) / vec2<f32>(2.0, 4.0);
+    let wi = to_world(n, cosine_hemisphere(uv));
     if dot(ng, wi) <= 0.0 {
         return s;
     }

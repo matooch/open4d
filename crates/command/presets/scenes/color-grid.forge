@@ -1,0 +1,120 @@
+(
+format: "forge3d-scene", version: 13,
+render: Some((width: 640, height: 360, samples: 16, max_depth: 4, seed: 1, default_light: false, filter: Cubic, filter_width: 2.0)),
+materials: [
+(id: 1, type_id: "forge.material.standard", name: "Ruby lacquer",
+    params: {
+        "color.color": Color((0.4, 0.012, 0.025)),
+        "icon_color": Color((0.4, 0.012, 0.025)),
+        "reflectance.spec.width": Float(0.1),
+        "reflectance.spec.strength": Float(0.21),
+        "reflectance.spec.attenuation": Enum("additive"),
+        "reflectance.spec.color": Color((1.0, 1.0, 1.0))
+    }, tags: [], children: []),
+(id: 2, type_id: "forge.material.standard", name: "Satin aluminum",
+    params: {
+        "color.color": Color((0.83, 0.86, 0.9)),
+        "icon_color": Color((0.83, 0.86, 0.9)),
+        "reflectance.spec.width": Float(0.42),
+        "reflectance.spec.strength": Float(0.96),
+        "reflectance.spec.attenuation": Enum("metal"),
+        "reflectance.spec.color": Color((0.83, 0.86, 0.9))
+    }, tags: [], children: []),
+(id: 3, type_id: "forge.material.standard", name: "Porcelain",
+    params: {
+        "color.color": Color((0.82, 0.86, 0.9)),
+        "icon_color": Color((0.82, 0.86, 0.9)),
+        "reflectance.spec.width": Float(0.18),
+        "reflectance.spec.strength": Float(0.12),
+        "reflectance.spec.attenuation": Enum("additive"),
+        "reflectance.spec.color": Color((1.0, 1.0, 1.0))
+    }, tags: [], children: [])
+],
+roots: [
+(id: 7, type_id: "forge.cloner", name: "Bead grid - edit Count or Size",
+    params: {
+        "transform.pos": Vec3((0.0, 20.0, 0.0)),
+        "mode": Enum("grid"),
+        "grid_count": Vec3((5.0, 1.0, 3.0)),
+        "grid_size": Vec3((45.0, 45.0, 45.0))
+    }, tags: [
+(id: 6, type_id: "forge.tag.texture", name: "Bead grid - edit Count or Size material",
+    params: {
+        "material": Link(Some(1))
+    }, tags: [], children: [])
+], children: [
+(id: 5, type_id: "forge.sphere", name: "Source bead",
+    params: {
+        "transform.pos": Vec3((0.0, 0.0, 0.0)),
+        "radius": Float(19.0),
+        "segments": Int(32)
+    }, tags: [
+(id: 4, type_id: "forge.tag.texture", name: "Source bead material",
+    params: {
+        "material": Link(Some(1))
+    }, tags: [], children: [])
+], children: [])
+]),
+(id: 9, type_id: "forge.cube", name: "Satin plinth",
+    params: {
+        "transform.pos": Vec3((0.0, -5.0, 0.0)),
+        "size_x": Float(238.0),
+        "size_y": Float(10.0),
+        "size_z": Float(152.0),
+        "fillet": Bool(true),
+        "fillet_radius": Float(4.0)
+    }, tags: [
+(id: 8, type_id: "forge.tag.texture", name: "Satin plinth material",
+    params: {
+        "material": Link(Some(2))
+    }, tags: [], children: [])
+], children: []),
+(id: 11, type_id: "forge.plane", name: "Studio ground",
+    params: {
+        "transform.pos": Vec3((0.0, -10.1, 0.0)),
+        "width": Float(1700.0),
+        "height": Float(1700.0)
+    }, tags: [
+(id: 10, type_id: "forge.tag.texture", name: "Studio ground material",
+    params: {
+        "material": Link(Some(3))
+    }, tags: [], children: [])
+], children: []),
+(id: 12, type_id: "forge.camera", name: "Shot camera",
+    params: {
+        "transform.pos": Vec3((174.0, 195.6, -336.0)),
+        "transform.rot": Vec3((0.47783105499211487, -0.4517583158586386, 0.0))
+    }, tags: [], children: []),
+(id: 16, type_id: "forge.null", name: "Lighting rig",
+    params: {
+
+    }, tags: [], children: [
+(id: 13, type_id: "forge.light", name: "Cool key",
+    params: {
+        "transform.pos": Vec3((-120.0, 130.0, -110.0)),
+        "transform.rot": Vec3((-0.8288490587889792, -0.6272218208630895, 0.0)),
+        "type": Enum("area"),
+        "shadow": Enum("area"),
+        "size_x": Float(90.0),
+        "size_y": Float(130.0),
+        "color": Color((0.24, 0.52, 1.0)),
+        "intensity": Float(5.0)
+    }, tags: [], children: []),
+(id: 14, type_id: "forge.light", name: "Warm rim",
+    params: {
+        "transform.pos": Vec3((100.0, 80.0, 80.0)),
+        "transform.rot": Vec3((2.2455372690184494, -0.48813177351332093, 0.0)),
+        "type": Enum("area"),
+        "shadow": Enum("area"),
+        "size_x": Float(70.0),
+        "size_y": Float(170.0),
+        "color": Color((1.0, 0.36, 0.12)),
+        "intensity": Float(6.0)
+    }, tags: [], children: []),
+(id: 15, type_id: "forge.sky", name: "Studio fill",
+    params: {
+        "brightness": Float(0.32)
+    }, tags: [], children: [])
+])
+],
+)

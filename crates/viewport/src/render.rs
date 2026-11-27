@@ -1735,11 +1735,10 @@ impl Renderer {
             .map(|g| Vertices::new(device, "grid", &grid_vertices(g, pal)));
         let gizmo = frame
             .gizmo
-            .filter(|_| !overlay)
             .map(|g| Vertices::new(device, "gizmo", &gizmo_vertices(g, cam, height as f64, pal)));
         let gizmo_tips = frame
             .gizmo
-            .filter(|g| !overlay && g.mode != GizmoMode::Rotate)
+            .filter(|g| g.mode != GizmoMode::Rotate)
             .and_then(|g| {
                 let vertices = gizmo_tip_vertices(g, cam, width as f64, height as f64, pal);
                 (!vertices.is_empty()).then(|| Vertices::new(device, "gizmo tips", &vertices))
@@ -1991,6 +1990,9 @@ impl Renderer {
                     set.0.draw(&mut pass);
                 }
             }
+        }
+        if gizmo.is_some() {
+            pass.set_bind_group(0, &plain, &[]);
             if let Some(gizmo) = &gizmo {
                 pass.set_pipeline(&self.gizmo);
                 gizmo.draw(&mut pass);

@@ -20,6 +20,7 @@ struct CreateArgs {
     #[serde(rename = "type")]
     ty: Option<String>,
     name: Option<String>,
+    params: Option<Map<String, Json>>,
     /// Position in the material list (default: the end).
     index: Option<usize>,
 }
@@ -144,10 +145,28 @@ fn require_material(ctx: &dyn CommandContext, id: u64) -> Result<NodeId, Command
 
 fn create(ctx: &mut dyn CommandContext, a: CreateArgs) -> Result<Json, CommandError> {
     let ty = a.ty.unwrap_or_else(|| MATERIAL.to_string());
+    let mut values = Vec::new();
+    if let Some(params) = a.params {
+        let desc = ctx
+            .doc()
+            .scene()
+            .registry()
+            .get(&ty)
+            .ok_or_else(|| CommandError::failed(format!("unknown material type {ty}")))?;
+        for (key, input) in params {
+            let param = desc
+                .find_param(&key)
+                .ok_or_else(|| CommandError::failed(format!("unknown material parameter {key}")))?;
+            values.push((key, param_value_from_json(param, &input)?));
+        }
+    }
     let id = ctx.doc_mut().transact("Create Material", |tx| {
         let id = tx.create_material(&ty, a.index)?;
         if let Some(name) = &a.name {
             tx.rename(id, name)?;
+        }
+        for (key, value) in values {
+            tx.set_param(id, &key, value)?;
         }
         Ok(id)
     })?;

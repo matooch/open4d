@@ -118,6 +118,34 @@ impl Surface {
                 n = geom.ns;
             }
         }
+        if let Some(map) = &o.normal
+            && map.method == "tangent"
+        {
+            let [a, b, c] = geom.corners;
+            let [u, v, w] = geom.corner_uvw;
+            let (uv1, uv2) = (v - u, w - u);
+            let det = uv1.x * uv2.y - uv1.y * uv2.x;
+            if det.abs() > 1e-12 {
+                let du = ((b - a) * uv2.y - (c - a) * uv1.y) / det;
+                let dv = ((c - a) * uv1.x - (b - a) * uv2.x) / det;
+                if let Some(t) = (du - n * n.dot(du)).try_normalize() {
+                    let b = n.cross(t) * n.cross(t).dot(dv).signum();
+                    let mut local = v3(g.eval(map.texture, sampler, &ctx)) * 2.0 - DVec3::ONE;
+                    for (i, flip) in map.flip.iter().enumerate() {
+                        if *flip {
+                            local[i] = -local[i];
+                        }
+                    }
+                    if map.swap_yz {
+                        local = DVec3::new(local.x, local.z, local.y);
+                    }
+                    n = n
+                        .lerp(t * local.x + b * local.y + n * local.z, map.strength)
+                        .try_normalize()
+                        .unwrap_or(n);
+                }
+            }
+        }
         Surface {
             albedo,
             spec,

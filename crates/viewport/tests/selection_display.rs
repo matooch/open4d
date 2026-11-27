@@ -831,3 +831,41 @@ fn an_open_surface_is_outlined_too_and_its_interior_is_untouched() {
         }
     }
 }
+
+#[test]
+fn render_overlay_draws_transform_handles_without_mesh_geometry() {
+    use forge_viewport::gizmo::{Gizmo, GizmoMode};
+    let Some((_lock, gpu)) = gpu() else { return };
+    for mode in [GizmoMode::Translate, GizmoMode::Rotate, GizmoMode::Scale] {
+        let gizmo = Gizmo {
+            mode,
+            size_px: 32.0,
+            ..Default::default()
+        };
+        let frame = Frame {
+            meshes: &[],
+            instanced: &[],
+            grid: None,
+            lines: &[],
+            gizmo: Some(&gizmo),
+            settings: settings(Shading::Smooth),
+        };
+        let image = render(
+            gpu,
+            &cam(),
+            &frame,
+            &SelectionDisplay {
+                overlay_only: true,
+                ..Default::default()
+            },
+        );
+        let visible = (0..H)
+            .flat_map(|y| (0..W).map(move |x| (x, y)))
+            .filter(|&(x, y)| image.px(x, y)[3] > 0)
+            .count();
+        assert!(
+            visible > 10 && visible < (W * H / 2) as usize,
+            "{mode:?}, {visible}"
+        );
+    }
+}

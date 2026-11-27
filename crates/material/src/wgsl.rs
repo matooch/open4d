@@ -11,7 +11,7 @@ use std::sync::Arc;
 use crate::ir::{DiffuseModel, IrNode, MixMode, ShadingGraph};
 
 /// Bumped whenever the emitted source changes; part of the cache key.
-pub const CODEGEN_VERSION: u32 = 3;
+pub const CODEGEN_VERSION: u32 = 4;
 
 /// The colour a shader-node (`Texture`) channel compiles to in part 1.
 pub const FALLBACK_COLOR: [f64; 3] = [0.8, 0.8, 0.8];
@@ -169,6 +169,26 @@ struct Surface {
     diffusion: vec4<f32>,
     diffusion_present: vec4<f32>,
 };
+// Tangent-space normal map with an orthonormal basis from the authored UVs.
+fn forge_tangent_normal(s: Surface, n: vec3<f32>, e1: vec3<f32>, e2: vec3<f32>,
+    uv1: vec2<f32>, uv2: vec2<f32>) -> vec3<f32> {
+    if (s.normal_params.x < 0.5 || s.normal_params.y > 0.5) { return n; }
+    let det = uv1.x * uv2.y - uv1.y * uv2.x;
+    if (abs(det) < 1e-12) { return n; }
+    let du = (e1 * uv2.y - e2 * uv1.y) / det;
+    let dv = (e2 * uv1.x - e1 * uv2.x) / det;
+    let ortho = du - n * dot(n, du);
+    if (dot(ortho, ortho) < 1e-16) { return n; }
+    let t = normalize(ortho);
+    let b = cross(n, t) * sign(dot(cross(n, t), dv));
+    let flags = u32(s.normal_params.z);
+    var local = (2.0 * s.normal.xyz - 1.0) * select(vec3<f32>(1.0), vec3<f32>(-1.0),
+        (vec3<u32>(flags) & vec3<u32>(1u,2u,4u)) != vec3<u32>(0u));
+    if (s.normal_params.w > 0.5) { local = local.xzy; }
+    let mapped = mix(n, t * local.x + b * local.y + n * local.z, s.normal.w);
+    if (dot(mapped,mapped) < 1e-16) { return n; }
+    return normalize(mapped);
+}
 fn forge_mix(base: vec3<f32>, top: vec3<f32>, mode: u32, strength: f32) -> vec3<f32> {
     if (mode == 0u) {
         return mix(base, top, strength);
@@ -536,6 +556,14 @@ pub fn compile_into(
             u32::from(d.affect_reflection)
         );
         out.push_str("    s.diffusion_present = vec4<f32>(1.0, 0.0, 0.0, 0.0);\n");
+    }
+    // Use the spare diffusion metadata component to preserve the surface buffer layout.
+    if o.subsurface_distance > 0.0 {
+        let _ = writeln!(
+            out,
+            "    s.diffusion_present.y = {};",
+            f(o.subsurface_distance)
+        );
     }
     out.push_str("    return s;\n}\n");
     (out, fallbacks)

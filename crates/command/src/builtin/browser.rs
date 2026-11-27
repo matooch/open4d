@@ -14,6 +14,12 @@ use crate::context::CommandContext;
 use crate::error::CommandError;
 use crate::registry::CommandRegistry;
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct SampleArgs {
+    id: String,
+}
+
 /// What a preset holds.
 #[derive(Deserialize, JsonSchema, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
@@ -71,6 +77,38 @@ fn browser(ctx: &dyn CommandContext) -> Result<&Browser, CommandError> {
 }
 
 pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
+    r.register_fn(spec("browser.import_material", "Import Material Preset", true, || json!({"path": "material.forge"})), |ctx, args: PathArgs| {
+        let path = std::path::Path::new(&args.path);
+        let bytes = std::fs::read(path).map_err(|e| CommandError::failed(e.to_string()))?;
+        let options = file::LoadOptions { base_dir: path.parent().map(ToOwned::to_owned), check_external: true };
+        let (src, report) = file::load_with(ctx.doc().scene().registry().clone(), &bytes, &options)
+            .map_err(|e| CommandError::failed(e.to_string()))?;
+        if src.materials().is_empty() { return Err(CommandError::failed("This preset contains no materials")); }
+        let ids = ctx.doc_mut().transact("Import Material Preset", |tx| graft(&src, src.materials(), tx, None))?;
+        ctx.set_status(report.warnings.join("; "));
+        Ok(json!({"materials": ids.iter().map(|id| id.0).collect::<Vec<_>>(), "warnings":report.warnings}))
+    })?;
+    r.register_fn(
+        spec(
+            "browser.open_sample",
+            "Open Sample Scene",
+            false,
+            || json!({"id":"softbox-studio"}),
+        ),
+        |ctx, args: SampleArgs| {
+            let sample = crate::browser::SAMPLE_SCENES
+                .iter()
+                .find(|s| s.id == args.id)
+                .ok_or_else(|| {
+                    CommandError::InvalidArgs(format!("Unknown sample scene {}", args.id))
+                })?;
+            let (scene, report) = file::load(ctx.doc().scene().registry().clone(), sample.file)
+                .map_err(|e| CommandError::failed(e.to_string()))?;
+            ctx.reset_document(Document::from_scene(scene), None, true);
+            ctx.set_status(report.warnings.join("; "));
+            Ok(json!({"sample":sample.id, "warnings":report.warnings}))
+        },
+    )?;
     r.register_fn(
         spec(
             "browser.list",

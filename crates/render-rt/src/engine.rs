@@ -898,7 +898,15 @@ impl RtEngine {
                 if control.is_cancelled() {
                     return Err(RenderError::Cancelled);
                 }
-                let jitter = crate::post::halton_jitter(j as u32 + 1);
+                // Pair each offset with its reflection so the pixel filter stays centered.
+                let offset = crate::post::halton_jitter((j / 2 + 2) as u32);
+                let jitter = if n % 2 == 1 && j == n - 1 {
+                    [0.0; 2]
+                } else if j % 2 == 0 {
+                    offset
+                } else {
+                    [-offset[0], -offset[1]]
+                };
                 let (out, used) = self.render_with(snapshot, &sub, control, jitter, profile)?;
                 if j == 0 {
                     backend = used;
