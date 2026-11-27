@@ -226,6 +226,7 @@ fn theme_meets_contrast_targets() {
     assert!(contrast(t.text, t.panel) >= 7.0);
     assert!(contrast(t.text, t.window) >= 7.0);
     assert!(contrast(t.weak_text, t.panel) >= 4.5);
-    assert!(contrast(t.accent_text, t.accent) >= 4.5);
+    assert!(contrast(t.state_text, t.state) >= 4.5);
+    assert!(contrast(t.selection_text, t.selection) >= 4.5);
     assert!((contrast(egui::Color32::WHITE, egui::Color32::BLACK) - 21.0).abs() < 1e-6);
 }

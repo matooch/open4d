@@ -224,7 +224,7 @@ Smooth as Smooth + wire, Flat as Flat + wire), and:
 
 Other objects draw as usual (their points are not drawn). The component selection colour is
 new: `Theme.component_selection`, `#38C6E8`, passed to the renderer as `Palette.selection`
-(object selection stays the orange tint). It differs from the object selection colour so a
+(object selection is the amber outline, VIEWPORT.md §16). It differs from the object selection colour so a
 selected object and selected components can be told apart.
 The mode buttons are the four "Mode" buttons of the left tool palette (UI.md §11; owner note N6:
 one place only, brief 225; the viewport header no longer repeats them, parity-pending G1).

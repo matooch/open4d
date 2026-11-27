@@ -10,9 +10,10 @@ use serde_json::{Value as Json, json};
 use crate::state::EditorState;
 use crate::theme::Theme;
 use crate::tree::{
-    Connector, DropMark, DropTarget, METRICS, RowColours, TreeRow, click_selection,
-    connector_segments, connectors, context_menu, drop_mark, drop_target, drop_zone, filter_rows,
-    layer_menu, menu_target, moved_set, row_colours, row_layout, tree_rows,
+    Connector, DropMark, DropTarget, EvalCell, METRICS, RowColours, TreeRow, click_selection,
+    connector_segments, connectors, context_menu, disclosure_box, disclosure_glyph, drop_mark,
+    drop_target, drop_zone, filter_rows, layer_menu, menu_target, moved_set, name_colour,
+    row_colours, row_layout, tree_rows,
 };
 
 /// A command to run: registry id and JSON arguments.
@@ -44,19 +45,50 @@ fn vis_colour(v: Vis) -> Color32 {
     }
 }
 
-/// A round clickable dot with an accessibility label.
-fn dot(ui: &mut Ui, colour: Color32, label: String) -> egui::Response {
+/// The two stacked visibility dots (observed, G1 item 2): the upper one is the editor
+/// visibility, the lower one the render visibility. Each is its own click target with an
+/// accessibility label; the result says which one was clicked.
+fn dot_pair(ui: &mut Ui, row: NodeId, editor: Vis, render: Vis, name: &str) -> (bool, bool) {
+    let (rect, _) = ui.allocate_exact_size(vec2(DOT, METRICS.row_height), Sense::hover());
+    let half = METRICS.row_height / 2.0;
+    let mut clicked = [false; 2];
+    for (k, (vis, what)) in [(editor, "Editor"), (render, "Render")]
+        .into_iter()
+        .enumerate()
+    {
+        let cell = Rect::from_min_size(
+            Pos2::new(rect.left(), rect.top() + half * k as f32),
+            vec2(DOT, half),
+        );
+        let r = ui.interact(
+            cell,
+            ui.make_persistent_id(("object_dot", row.0, what)),
+            Sense::click(),
+        );
+        let label = format!("{what} visibility: {name}");
+        r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label.clone()));
+        ui.painter()
+            .circle_filled(cell.center(), DOT * 0.22, vis_colour(vis));
+        if r.hovered() {
+            ui.painter().circle_stroke(
+                cell.center(),
+                DOT * 0.32,
+                Stroke::new(1.0, ui.visuals().strong_text_color()),
+            );
+        }
+        clicked[k] = r.clicked();
+    }
+    (clicked[0], clicked[1])
+}
+
+/// The active-camera target: a ring with a dot.
+fn target(ui: &mut Ui, label: String) -> egui::Response {
     let r = ui.allocate_response(vec2(DOT, DOT), Sense::click());
     r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label.clone()));
+    let ink = ui.visuals().text_color();
     ui.painter()
-        .circle_filled(r.rect.center(), DOT * 0.32, colour);
-    if r.hovered() {
-        ui.painter().circle_stroke(
-            r.rect.center(),
-            DOT * 0.42,
-            Stroke::new(1.0, ui.visuals().strong_text_color()),
-        );
-    }
+        .circle_stroke(r.rect.center(), DOT * 0.3, Stroke::new(1.2, ink));
+    ui.painter().circle_filled(r.rect.center(), DOT * 0.12, ink);
     r
 }
 
@@ -116,6 +148,7 @@ impl ObjectManager {
                 for (index, row) in rows.iter().enumerate() {
                     let look = RowLook {
                         index,
+                        selected: st.selection.nodes.contains(&row.id),
                         colours,
                         connector: &lines[index],
                     };
@@ -167,7 +200,7 @@ impl ObjectManager {
                 r.widget_info(|| {
                     egui::WidgetInfo::labeled(egui::Role::Button, true, format!("{verb}: {name}"))
                 });
-                fold_arrow(ui, rect, row.expanded, r.hovered());
+                disclosure(ui, rect, row.depth, row.expanded, r.hovered());
                 if r.clicked() {
                     cmds.push(("view.toggle_expanded", json!({"node": row.id.0})));
                 }
@@ -193,33 +226,19 @@ impl ObjectManager {
                 }
                 return;
             }
-            // the layer colour (UI.md §22.2)
-            if let Some((_, layer_name, c)) = &row.layer {
-                let (rect, r) = ui.allocate_exact_size(vec2(5.0, DOT), Sense::hover());
-                let col = Color32::from_rgb(
-                    (c[0] * 255.0).round() as u8,
-                    (c[1] * 255.0).round() as u8,
-                    (c[2] * 255.0).round() as u8,
-                );
-                ui.painter().rect_filled(rect, 1.0, col);
-                r.widget_info(|| {
-                    egui::WidgetInfo::labeled(
-                        egui::Role::Label,
-                        true,
-                        format!("Layer: {layer_name}"),
-                    )
-                });
-            }
             let selected = st.selection.nodes.contains(&row.id);
+            let theme = Theme::current(ui.ctx());
             let mut text = RichText::new(&row.name);
             if row.missing_type {
                 text = text.italics();
             }
-            if row.dim || !row.enabled {
+            if let Some(colour) = name_colour(&theme, selected) {
+                text = text.color(colour).strong();
+            } else if row.dim || !row.enabled {
                 text = text.weak();
             }
             let r = ui
-                .selectable_label(selected, text)
+                .add(egui::Button::new(text).frame(false))
                 .interact(Sense::click_and_drag());
             r.dnd_set_drag_payload(row.id);
             // egui takes the payload before checking its type. Leave object reordering alone.
@@ -260,23 +279,13 @@ impl ObjectManager {
                     }
                 });
             });
+            // the type label stands in for the per-type icon of brief 227
             ui.weak(&row.type_label);
-            for (tag_id, tag) in &row.tags {
-                let text = RichText::new(format!("[{tag}]")).weak();
-                let r = ui.add(egui::Label::new(text).sense(Sense::click()));
-                if r.double_clicked()
-                    && st
-                        .doc
-                        .scene()
-                        .node(*tag_id)
-                        .is_some_and(|n| n.type_id == forge_nodes::TAG)
-                {
-                    self.open_tag = Some(*tag_id);
-                }
-            }
-            // Dots and tick, right aligned (UI.md §13.1).
+            // Layer glyph, the stacked visibility dots, the evaluation cell, then the tags,
+            // right aligned (UI.md §13.1; observed order, G1 item 2). The layout is right to
+            // left, so the last cell is added first.
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let target = |st: &EditorState| {
+                let target_nodes = |st: &EditorState| {
                     if st.selection.nodes.contains(&row.id) {
                         st.selection.nodes.iter().map(|n| n.0).collect::<Vec<_>>()
                     } else {
@@ -284,35 +293,65 @@ impl ObjectManager {
                     }
                 };
                 let name = &row.name;
-                if tick(ui, row.enabled, format!("Enabled: {name}")).clicked() {
-                    cmds.push((
-                        "object.enable",
-                        json!({"nodes": target(st), "enabled": !row.enabled}),
-                    ));
+                for (tag_id, tag) in row.tags.iter().rev() {
+                    let text = RichText::new(format!("[{tag}]")).weak();
+                    let r = ui.add(egui::Label::new(text).sense(Sense::click()));
+                    if r.double_clicked()
+                        && st
+                            .doc
+                            .scene()
+                            .node(*tag_id)
+                            .is_some_and(|n| n.type_id == forge_nodes::TAG)
+                    {
+                        self.open_tag = Some(*tag_id);
+                    }
                 }
-                if dot(
-                    ui,
-                    vis_colour(row.render_vis),
-                    format!("Render visibility: {name}"),
-                )
-                .clicked()
-                {
+                match row.eval {
+                    EvalCell::Check => {
+                        if tick(ui, row.enabled, format!("Enabled: {name}")).clicked() {
+                            cmds.push((
+                                "object.enable",
+                                json!({"nodes": target_nodes(st), "enabled": !row.enabled}),
+                            ));
+                        }
+                    }
+                    EvalCell::ActiveCamera => {
+                        if target(ui, format!("Active camera: {name}")).clicked() {
+                            cmds.push(("view.look_through_camera", json!({"node": row.id.0})));
+                        }
+                    }
+                    EvalCell::None => {}
+                }
+                let (editor_clicked, render_clicked) =
+                    dot_pair(ui, row.id, row.editor_vis, row.render_vis, name);
+                if editor_clicked {
                     cmds.push((
                         "object.visibility",
-                        json!({"nodes": target(st), "render": row.render_vis.next().id()}),
+                        json!({"nodes": target_nodes(st), "editor": row.editor_vis.next().id()}),
                     ));
                 }
-                if dot(
-                    ui,
-                    vis_colour(row.editor_vis),
-                    format!("Editor visibility: {name}"),
-                )
-                .clicked()
-                {
+                if render_clicked {
                     cmds.push((
                         "object.visibility",
-                        json!({"nodes": target(st), "editor": row.editor_vis.next().id()}),
+                        json!({"nodes": target_nodes(st), "render": row.render_vis.next().id()}),
                     ));
+                }
+                // the layer glyph (UI.md §22.2)
+                if let Some((_, layer_name, c)) = &row.layer {
+                    let (rect, r) = ui.allocate_exact_size(vec2(5.0, DOT), Sense::hover());
+                    let col = Color32::from_rgb(
+                        (c[0] * 255.0).round() as u8,
+                        (c[1] * 255.0).round() as u8,
+                        (c[2] * 255.0).round() as u8,
+                    );
+                    ui.painter().rect_filled(rect, 1.0, col);
+                    r.widget_info(|| {
+                        egui::WidgetInfo::labeled(
+                            egui::Role::Label,
+                            true,
+                            format!("Layer: {layer_name}"),
+                        )
+                    });
                 }
             });
         });
@@ -394,33 +433,31 @@ impl ObjectManager {
 struct RowLook<'a> {
     /// Position in the visible list (odd rows get the alternating shade).
     index: usize,
+    selected: bool,
     colours: RowColours,
     connector: &'a Connector,
 }
 
-/// The fold arrow: a filled triangle, right when collapsed, down when expanded.
-fn fold_arrow(ui: &Ui, cell: Rect, expanded: bool, hovered: bool) {
-    let c = cell.center();
-    let points = if expanded {
-        vec![
-            c + vec2(-4.0, -2.5),
-            c + vec2(4.0, -2.5),
-            c + vec2(0.0, 3.5),
-        ]
-    } else {
-        vec![
-            c + vec2(-2.5, -4.0),
-            c + vec2(-2.5, 4.0),
-            c + vec2(3.5, 0.0),
-        ]
-    };
+/// The disclosure: a boxed minus (expanded) or boxed plus (collapsed) in the gutter cell
+/// (observed, G1 item 7).
+fn disclosure(ui: &Ui, cell: Rect, depth: usize, expanded: bool, hovered: bool) {
+    let origin = cell.left_top() - vec2(row_layout(depth).start, 0.0);
+    let (l, t, r, b) = disclosure_box(depth);
+    let rect = Rect::from_min_max(origin + vec2(l, t), origin + vec2(r, b));
     let colour = if hovered {
         ui.visuals().strong_text_color()
     } else {
         ui.visuals().text_color()
     };
+    let stroke = Stroke::new(1.0, colour);
     ui.painter()
-        .add(egui::Shape::convex_polygon(points, colour, Stroke::NONE));
+        .rect_stroke(rect, 1.0, stroke, egui::StrokeKind::Inside);
+    for (a, b) in disclosure_glyph(depth, expanded) {
+        ui.painter().line_segment(
+            [origin + vec2(a[0], a[1]), origin + vec2(b[0], b[1])],
+            stroke,
+        );
+    }
 }
 
 /// Fills the reserved paint slot of a row: alternating shade, connector lines, separator.
@@ -435,8 +472,21 @@ fn paint_row_backdrop(
     if look.index % 2 == 1 {
         shapes.push(egui::Shape::rect_filled(rect, 0.0, look.colours.alt));
     }
+    if look.selected {
+        shapes.push(egui::Shape::rect_filled(rect, 0.0, look.colours.selected));
+        shapes.push(egui::Shape::rect_filled(
+            Rect::from_min_size(rect.left_top(), vec2(2.0, rect.height())),
+            0.0,
+            look.colours.bar,
+        ));
+    }
     let guide = Stroke::new(1.0, look.colours.guide);
-    for (a, b) in connector_segments(row.depth, row.has_children, &look.connector.trunks) {
+    for (a, b) in connector_segments(
+        row.depth,
+        row.has_children,
+        row.expanded,
+        &look.connector.trunks,
+    ) {
         // half a pixel in, so the 1 px lines are crisp
         let at = |p: [f32; 2]| Pos2::new(rect.left() + p[0] + 0.5, rect.top() + p[1]);
         shapes.push(egui::Shape::line_segment([at(a), at(b)], guide));

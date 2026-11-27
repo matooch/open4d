@@ -411,13 +411,13 @@ fn press(h: &mut Harness<'_, Editor>, mods: Modifiers, key: Key) {
 }
 
 #[test]
-fn f4_toggles_the_four_view_layout() {
+fn f5_toggles_the_four_view_layout() {
     let mut h = harness(Editor::new(common::state()));
     assert_eq!(panes_shown(&h), 1);
-    press(&mut h, Modifiers::NONE, Key::F4);
+    press(&mut h, Modifiers::NONE, Key::F5);
     assert_eq!(h.state().state.views.layout, Layout::Four);
     assert_eq!(panes_shown(&h), 4);
-    press(&mut h, Modifiers::NONE, Key::F4);
+    press(&mut h, Modifiers::NONE, Key::F5);
     assert_eq!(h.state().state.views.layout, Layout::Single);
     assert_eq!(panes_shown(&h), 1);
 }
@@ -431,7 +431,7 @@ fn mod_m_maximises_the_active_pane_and_restores_it() {
         None,
         "nothing to maximise in one view"
     );
-    press(&mut h, Modifiers::NONE, Key::F4);
+    press(&mut h, Modifiers::NONE, Key::F5);
     assert_eq!(panes_shown(&h), 4);
     press(&mut h, Modifiers::COMMAND, Key::M);
     assert_eq!(h.state().state.views.maximized, Some(Pane::Perspective));
@@ -444,7 +444,7 @@ fn mod_m_maximises_the_active_pane_and_restores_it() {
 #[test]
 fn the_pane_under_the_pointer_becomes_active_and_navigates_alone() {
     let mut h = harness(Editor::new(common::state()));
-    press(&mut h, Modifiers::NONE, Key::F4);
+    press(&mut h, Modifiers::NONE, Key::F5);
     // pane centres, top-left, top-right, bottom-left, bottom-right
     let mut centres: Vec<egui::Pos2> = h
         .query_all_by_label("Viewport unavailable")

@@ -121,10 +121,10 @@ Groups follow the reference order: Object, Spline, Generator, Deformer, Field,
 Volume, Camera, Light, Tag. The Clone toolset remains a separate submenu (see below).
 Types with `in_create_menu == false` (the polygon object) are left out.
 
-Key bindings (**parity-pending**, ours; now data in the key map, §14, these are its defaults): Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo,
-Ctrl+A select all, Ctrl+Shift+A deselect all (Cmd on macOS),
-Delete delete selected, F2 rename active, 1–5 shading (Smooth, Flat, Wire,
-SmoothWire, FlatWire).
+Key bindings are data in the key map (§14.2, observed in G2 item 1 where listed there): Ctrl+Z undo,
+Ctrl+Y redo, Ctrl+A select all, Ctrl+Shift+A deselect all (Cmd on macOS),
+Backspace or Delete delete selected. Rename has no key (§13.4); shading is on Ctrl+Shift+1 ..
+(ours).
 
 ## 6. Viewport panel (`viewport_panel`)
 
@@ -136,7 +136,7 @@ nodes use the selection colour. GPU meshes are rebuilt only when `Scene::revisio
 the selection changes; nodes whose build is unsupported are skipped. Without a wgpu render state (tests) it shows a
 "Viewport unavailable" label.
 
-### 6.1 Navigation (brief 153; revised by brief 223, owner note N1, decision D22)
+### 6.1 Navigation (brief 153; revised by brief 223 and brief 233, owner note N1, decision D22)
 
 Camera maths is pure and lives in `forge_viewport::nav` (VIEWPORT.md §7). The panel only
 turns pointer input into calls. The hold keys come from **owner note N1** (GUI-SESSIONS.md,
@@ -146,7 +146,7 @@ answers G2); the wheel and Alt gestures stay our own design, parity-pending G2.
 
 | Input | Action |
 |---|---|
-| wheel `s` (points) at pointer `c` | `ZoomAt(0.999^s, c)`: zoom toward the cursor, `s > 0` zooms in |
+| wheel `s` (points) at pointer `c` | `ZoomAt(0.999^s, c)`: zoom toward the cursor, `s > 0` zooms in (scroll up zooms in, scroll down reverses it: observed, G2 item 2) |
 | hold `3` + primary drag, or Alt + primary drag | `Orbit(dx, dy)` |
 | hold `1` + primary drag, or middle drag (with or without Alt), or Alt + middle | `Pan(dx, dy)` |
 | hold `2` + primary drag, or Alt + secondary drag | `Dolly(dx)` (zoom), about the view centre |
@@ -176,11 +176,16 @@ unavailable" early return), so it is testable with egui_kittest.
 The viewport stores its aspect ratio (`EditorState.view_aspect`, width / height, default 16/9)
 each frame; the frame commands use it.
 
-Key-map bindings (UI.md §14.2) for the commands of COMMANDS.md §6: `H` = `view.frame_all`,
-`S` = `view.frame_selected`, `Mod+1` .. `Mod+7` = `view.set_view` perspective, front, right,
-top, back, left, bottom. (`F1`..`F5` of the area design collide with `F2` rename; Mod+digit is
-free.) View > menu entries: Frame all, Frame selected, and a "View" submenu with the seven
-views, each showing its chord.
+Key-map bindings (UI.md §14.2) for the commands of COMMANDS.md §6 (observed, G2 item 1): `H` =
+`view.frame_all` (Frame Geometry), `S` and `O` = `view.frame_selected` (the reference has `S`
+for the selected elements and `O` for the selected objects; ours has no component framing, so
+both frame the selected objects), `F1` Perspective, `F2` Top, `F3` Right, `F4` Front =
+`view.set_view` on the active pane (the reference shows that view; in the four-view layout ours
+sets the active pane's view, **parity-pending G2**), `F5` = `view.layout` (all views, toggling
+back to one: the toggle back is ours). `Mod+1` .. `Mod+7` = `view.set_view` perspective, front,
+right, top, back, left, bottom stay as our extras. View > menu entries: Frame all, Frame
+selected, and a "View" submenu with the seven views, each showing its chord. The wheel
+direction above is checked by the kittest wheel test (`the wheel zooms toward the cursor`).
 
 Tests (crates/ui/tests/navigation.rs): the input mapping of every gesture and hold key, `apply_nav`, the key table;
 `view.frame_all` / `view.frame_selected` fit the bounds (aspect-aware), nothing selected frames
@@ -225,7 +230,7 @@ command that reads `state.camera` automatically acts on the active pane. `pane_c
   `pane_camera`, shading `SmoothWire` for Perspective and `Wire` for the three orthographic panes
   (they start as line drawings, our choice). File > New resets all of it (the dock layout stays).
 - `Single` shows the active pane only (the earlier behaviour). `Four` shows the 2×2 grid of
-  VIEWPORT.md §9 in the viewport area, with a 2 px gap; the active pane has an accent outline.
+  VIEWPORT.md §9 in the viewport area, with a 2 px gap; the active pane has a state (mint) outline.
   `maximized = Some(p)` in `Four` shows `p` alone, full size; toggling it off restores the quad.
 - Hovering a pane, or pressing/dragging in it, makes it active before the input is read, so
   navigation, picking, gizmos, tools and `view.frame_*` act on the pane under the pointer. A drag
@@ -283,7 +288,7 @@ Behaviour, data and rules: docs/specs/ANIM.md §2. Panel summary (own design,
   10 pt are the marker lane: each marker is a flag in its colour with its name (label "Marker
   <name>"): click goes to its frame, drag moves it (`marker.move`), the context menu has the
   name, "Color <name>" entries and "Delete Marker". The preview range shades the outside of the
-  strip, draws an accent band along the bottom and two handles (labels "Preview start handle" and
+  strip, draws a time-coloured band along the bottom and two handles (labels "Preview start handle" and
   "Preview end handle"; dragging runs `timeline.set_preview`, the handles cannot cross). Keys M
   and Alt+Comma / Alt+Period (ANIM.md §2.7).
 - `Timeline { current: 0, playing: false }` is editor state; start, end and fps live in
@@ -296,11 +301,14 @@ Behaviour, data and rules: docs/specs/ANIM.md §2. Panel summary (own design,
 Three themes (own palettes, §24.1): dark (default), light, high contrast. The text below is
 the dark one.
 
-Our own dark palette (sRGB): window `#1E2024`, panel `#25282D`, faint
-`#2E3238`, text `#D6D9DE`, weak text `#9AA0A8`, accent `#E08A2E` (selection), accent
-text `#1A1A1A`, error `#E5534B`, component selection `#38C6E8` (selected points, edges
-and polygons of the component target, EDITABLE.md §2.6). `apply(&egui::Context)`. Requirement: text on panel
-and on window has WCAG contrast ≥ 7, weak text ≥ 4.5, accent text on accent ≥ 4.5.
+Our own dark palette (sRGB; role tokens, §24.1, owner note N11): window `#171B21`, panel `#20262E`,
+viewport `#252C35`, input `#181D24`, divider `#343D49`, text `#E8EDF2`, weak text `#A7B2C0`;
+**state** (mint) `#73D6BC` marks the active tool, mode, toggle, layout tab and the playhead;
+**selection** (amber) `#F3B36B` marks what is selected everywhere; **record** (red) `#F17A80` marks
+recording and errors; component selection `#38C6E8` (selected points, edges and polygons of the
+component target, EDITABLE.md §2.6). There is no single `accent` any more. `apply(&egui::Context)`.
+Requirement: text on panel and on window has WCAG contrast ≥ 7, weak text ≥ 4.5, text on a state
+or selection fill ≥ 4.5.
 
 ## 9. App (`app`, `apps/studio`)
 
@@ -346,8 +354,13 @@ being plain data over that model.
 `from_json` rejects a version other than `LAYOUT_VERSION`, a panel listed twice and an
 active tab out of range). `Layout::standard()` is the default; `Editor::layout()` /
 `set_layout()` read and apply one, and Window > Reset layout applies the standard layout.
-`Sizes { left_width 150, right_width 340, right_top_fraction 0.45, bottom_height 120 }` are
-initial sizes of the resizable areas (egui remembers later drags).
+`Sizes { left_width 150, right_width 402, right_top_fraction 0.47, bottom_height 92 }` are
+initial sizes of the resizable areas (egui remembers later drags). Right width, split and
+timeline height are the reference's measured numbers (observed, G10 item 1; §29.1, `layout::WINDOW`).
+`left_width` stays 150 because our tool palette still holds labelled buttons; the reference's strip
+is 43 px (`WINDOW.tool_strip`) and brief 227 sets it when the buttons become icons. The panels
+grow to the widest content, so a tab or a number field that is wider than the managers column
+pushes it out: the number field of §12 is sized to keep three of them in 402 px.
 
 Standard arrangement, top to bottom: menu bar; Top area: command bar; Left: tool palette
 column; Centre: viewport; right column: Object manager above Attribute manager; Bottom
@@ -376,17 +389,30 @@ Pointer-driven tools (cuts, bridge, pen) stay in the Mesh menu, as do the arrang
 (Array, Duplicate, Arrange, Randomize, Transfer; MODELING.md §9.7), which have a settings panel and no
 viewport interaction.
 
-## 12. Attribute manager (`attributes`, `widgets`; brief 150)
+## 12. Attribute manager (`attributes`, `widgets`; brief 150, revised by brief 233)
 
-Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G4 (docs/parity/GUI-SESSIONS.md)
-is unanswered, so **tabs look, scrub modifiers, arrow behaviour and widget look are
-parity-pending**. Every row is derived from a `ParamDesc`; nothing is hand-laid per type.
+Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G4 items 1 and 2 and G1 item 3
+(docs/parity/GUI-SESSIONS.md, "Owner's Cowork session, 2026-11-27") observed the number field, the
+key diamond and the stacking of two tabs. What stays **parity-pending G4**: the scrub modifiers
+(the session did not test continuous scrubbing or fine / coarse modifiers), the widget look
+beyond what is written below. Every row is derived from a `ParamDesc`; nothing is hand-laid per
+type.
 
 Tabs and groups: `UiHint.group` is `"Tab/Group"` (split at the first `/`) or just `"Group"`
 (tab `Basic`; empty group is `Parameters`). `AttributeView.tabs()` lists tabs in
 first-appearance order, `groups_of(tab)` the groups of one; a tab bar is drawn only with two
 or more tabs, groups are collapsible. The shown tab is editor state (`attr_tab`); a tab
 that no longer exists falls back to the first.
+
+**Stacked tabs** (observed, G1 item 3: Shift-clicking the Light's Details with General active
+showed both tab bodies in one vertical scroll area, General first, Details below). The shown
+tabs are `attributes::TabSelection { active, stacked }` (editor state, not saved). A plain click
+on a tab shows only that tab. A Shift-click on another tab adds its body below the shown ones;
+the one that was active first stays on top and the others follow in click order, all in one
+scroll area with a separator line between the bodies. The tab buttons of every shown tab are drawn
+selected. A second Shift-click on a shown tab removes it (ours, **parity-pending G1**; removing the
+top one promotes the next, and the last shown tab cannot be removed). Tabs that the new selection
+does not have drop out; with none left the first tab shows.
 
 Widgets, one module per kind in `widgets/`: `float` (scrub, display units), `int` (scrub,
 range), `boolean` (checkbox with the row label), `enumeration` (drop-down), `vector` (X, Y, Z
@@ -402,8 +428,23 @@ colour drag or typing run shares a gesture number and merges into one.
 Scrubbing (`widgets::scrub`, pure): the base step is `UiHint.step` (display units per pixel)
 else 1 for ints, 0.1 for angle and percent, 0.01 otherwise. Shift = 10 times finer, Ctrl = 10
 times coarser, any other combination (including Alt, which navigates the viewport) = base.
-Clicking a field types a value; Up/Down arrows in a focused field add one step. Values are
-shown and edited in display units (degrees, percent, UI.md §4).
+Values are shown and edited in display units (degrees, percent, UI.md §4).
+
+**Number field** (`widgets::number`, shared by the float, int and vector widgets; observed, G4
+item 1: "a dark numeric box with left/right chevrons"; the right chevron took Size X from 200 cm to
+201 cm and the left chevron back; double-clicking the value allowed direct text entry and Return
+committed it): a dark value box with a left and a right chevron (12 px cells, a 56 px box; the
+three of a vector must fit the managers column, §29). A click on a chevron steps the value by one
+unit (`scrub::chevron_step`): 1 for whole numbers and for distances, angles and percentages in
+their display unit, 0.1 for other floats (**parity-pending G4**: "one unit" of a unit-less float is
+unobserved). The step stays inside the parameter's range and is one undo step per click. A
+**double-click** on the value opens a text edit with the value selected for typing; **Return
+commits** (a value that does not parse, or is unchanged, changes nothing), Escape cancels, losing
+the focus commits (ours). A drag on the value scrubs by the base step per pixel with the
+modifiers above (the single-click-types rule of the earlier DragValue is gone). An accessibility
+tree exposes a spin button with its value and the chevrons as buttons `Increase <row>` /
+`Decrease <row>` (vectors: `Increase X <row>`); assistive technology can also set, increase and
+decrease the value.
 
 Multi-edit: the rows are those of the active object whose id and kind exist in every other
 selected object's type. A row is `mixed` when values differ (vec3: per component, `mixed_axes`).
@@ -412,10 +453,27 @@ string is empty with a hint, a colour has a "mixed" note, a list shows the activ
 Other widgets show the active object's value. A set applies to all selected objects in one
 undo step; a vec3 component edit keeps each object's other components.
 
-Key indicators (097, toggle by brief 224, owner note N3): every row whose descriptor supports key
-tracks has a 12 px button left of the label. A faint outline means no tracks, an accent outline
-means animated elsewhere, a filled accent means a key here, and a warning fill means an
-uncommitted edit. What a click does depends on the state (`RowKeys::click`):
+Key indicators (097, toggle by brief 224, owner note N3; look observed by brief 233, G4 item 2):
+every row whose descriptor supports key tracks has a 12 px diamond button left of the label. It
+has **four states** (`key_indicator::KeyState`), told apart by fill and colour:
+
+| State | Look (observed) | Ours (theme tokens) |
+|---|---|---|
+| unkeyed: no track | hollow grey diamond | outline `weak_text`, no fill |
+| keyed: a key at this frame | solid red | solid `key` (the time colour, mint) |
+| changed: an unkeyed draft (§12.1) | solid amber / orange | solid `modified` (violet) |
+| animated: a track, no key at this frame | hollow red | outline `key`, no fill |
+
+The reference showed the amber diamond on a keyed frame after an unrecorded edit and after
+reselecting the object, so a draft wins over a key at this frame; scrubbing to another frame
+discards it and shows the hollow `key` one. Colours are our own (D22; brief 234, owner note N11):
+`Theme.key` is the time colour (mint) and `Theme.modified` a violet in every theme, **not amber**:
+amber is selection, and a draft must not read as selected. Their hues differ by at least 30
+degrees, `modified` also differs from `selection` by at least 30 degrees, and both keep 3:1 against
+the panel (tested), so the two solid states are never mistaken; fill (solid or hollow) carries the
+rest in greyscale. The accessible label is
+`<row> unkeyed | keyed | changed | animated`. What a click does depends on the state
+(`RowKeys::click`):
 
 | State | Click |
 |---|---|
@@ -497,69 +555,98 @@ same layer; a mixed selection; Record keys drafts; render, export and save ignor
 
 Not in this brief: lock/unlock, history back/forward, the field-list widget.
 
-## 13. Object manager (`tree`, `object_manager`; brief 149)
+## 13. Object manager (`tree`, `object_manager`; brief 149, revised by briefs 229 and 233)
 
-Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G1 (docs/parity/GUI-SESSIONS.md)
-is unanswered, so **the column order, what the dots and tick show, the dot click cycle, the
-drop zones and the context menu items are parity-pending**. Look and labels are ours.
+Sources: own design from docs/roadmap/areas/L-ui.md, replaced where GUI session G1 items 2 and 7
+(docs/parity/GUI-SESSIONS.md, "Owner's Cowork session, 2026-11-27") observed the reference: the
+row order, the dot click cycle, what the evaluation cell shows, the row pitch, the indent and
+the boxed disclosure. What stays **parity-pending G1**: the drop zones and the in-progress drop
+markers (the session's drag completed before a capture), the context menu items, the lower dot's
+rendered result, and the context list. Look and labels are ours (D22).
 All edits are registry commands (COMMANDS.md §6); the panel only computes arguments, so an
 agent gets the same behaviour. Each user gesture is one undo step.
 
-### 13.1 Columns (left to right, parity-pending)
+### 13.1 Columns (left to right; the order is observed, G1 item 2)
 
-1. Expand arrow (a painted triangle, only for rows with children), indented 18 px per depth (§13.1a).
-2. Name (type label as a weak suffix), renamed in place.
-3. Editor dot, Render dot, Enable tick.
-4. Tags: one weak `[label]` per tag on the host.
+1. Gutter: a boxed minus (expanded) or boxed plus (collapsed), only for rows with children, with
+   thin connector lines to the children, indented 12 px per depth (§13.1a). A click folds.
+2. Type icon: brief 227's icon goes here. Until it lands, the weak type label stands in for
+   it, drawn after the name.
+3. Name, renamed in place (§13.4). **Selected rows draw the name in the selection colour**
+   (observed: amber; ours is the theme's `selection`, the same amber as the viewport outline, D22,
+   owner note N11) over a faint selection fill, with a 2 px selection bar at the row's left edge so
+   the row reads in greyscale.
+4. Layer glyph (a small bar in the layer's colour; §22.2), only for objects on a layer.
+5. Two **stacked visibility dots** in one column: the upper one is the editor visibility, the
+   lower one the render visibility. Each is its own 14 x 10 px click target.
+6. The type-dependent evaluation cell (`tree::eval_cell`): a **check** (`EvalCell::Check`) on
+   most types, an **active-camera target** on cameras (`EvalCell::ActiveCamera`), **nothing**
+   on nulls (`EvalCell::None`), as observed for the Light (check), the camera and the null. Which
+   other types lack the check is **parity-pending G1**: ours is every type but the null.
+7. Tags: one weak `[label]` per tag on the host (observed: small tag glyphs further right).
+
+Columns 4 to 7 sit right aligned in that order, the name column takes the rest.
 
 Dot state (`object.editor_vis`, `object.render_vis`, `Vis`): `Default` (grey: follows the
-parent, root = on), `Off` (red), `On` (green, forced on even under an Off parent). A click
-cycles Default -> Off -> On -> Default and runs `object.visibility` for the clicked row (or
-for the whole selection when the row is selected). The tick is `object.enabled`; a click runs
-`object.enable` with the inverted value. A node is shown in the viewport iff it and every
-ancestor are enabled and its resolved editor visibility (`forge_core::visibility`) is on.
-Render visibility is stored and resolved the same way (`render_visible`) but honouring it in
-the render bridge is a follow-up (the renderer does not read it yet).
+parent, root = on), `On` (green, forced on even under an Off parent), `Off` (red). **A click
+cycles Default -> On -> Off -> Default** (observed, G1 item 2: two clicks on the Cube's upper
+dot first kept it visible, then hid it, and a third restored the default), and runs
+`object.visibility` for the clicked row (or for the whole selection when the row is selected).
+The evaluation check is `object.enabled`; a click runs `object.enable` with the inverted value
+(observed for the Light: the check became a red X and the object stopped evaluating; ours draws
+an empty box when off). The camera's target runs `view.look_through_camera` for the row, our
+stand-in for the reference's active camera (**parity-pending G1**; the target does not show which
+camera is active). A node is shown in the viewport iff it and every ancestor are enabled and its
+resolved editor visibility (`forge_core::visibility`) is on. Render visibility is stored and
+resolved the same way (`render_visible`) but honouring it in the render bridge is a follow-up
+(the renderer does not read it yet).
 Accessibility labels (used by the tests): `Editor visibility: <name>`, `Render visibility:
-<name>`, `Enabled: <name>`.
+<name>`, `Enabled: <name>`, `Active camera: <name>`.
 
-### 13.1a Row geometry and hierarchy cues (brief 229, owner note N7, **parity-pending G1 item 7**)
+### 13.1a Row geometry and hierarchy cues (brief 229; numbers observed by brief 233, G1 item 7)
 
 Owner note N7 asks that a child is clearly shown as a child and that rows are separated more.
-G1 item 7 (pixel numbers, lines or brackets, shading) is unanswered, so the numbers below are
-ours; they live in one place, `tree::METRICS` and the pure functions `tree::row_layout`,
-`tree::connectors`, `tree::connector_segments`, `tree::drop_mark` and `tree::row_colours`,
-which replace the earlier 14 px indent and `+` / `-` text buttons (§13.1 item 1).
+G1 item 7 measured the reference: **row pitch 20 px** (row centres at y 112, 132, 152, 172),
+**child indent about 12 px** (between the left edges of a parent's and a child's icon), and a
+**small boxed minus** in the gutter of an expanded parent with a **thin right-angle connector**
+to its child; a collapsed branch shows a boxed plus. The numbers below follow; they live in one
+place, `tree::METRICS` and the pure functions `tree::row_layout`, `tree::disclosure_box`,
+`tree::disclosure_glyph`, `tree::connectors`, `tree::connector_segments`, `tree::drop_mark` and
+`tree::row_colours`. They replace brief 229's 22 px rows, 18 px indent and painted triangles.
+The separator, the alternating shade, the colours and the drop marks of brief 229 are ours and
+stay (**parity-pending G1**).
 
 | Quantity | Value |
 |---|---|
-| Row height | 22 px (was about 18 px plus 3 px item spacing) |
+| Row height | 20 px (observed) |
 | Gap between rows | 0 px: rows touch, so every y in the list belongs to a row (drop zones, §13.3) |
-| Indent per depth level | 18 px; the row of depth `d` starts at `x = 18 d` |
-| Fold arrow cell | 16 px wide, at the start of the row's own column, `x = 18 d .. 18 d + 16`, full row height as the click target |
-| Fold arrow glyph | a filled triangle about 8 px: pointing right when collapsed, down when expanded; only on rows with children |
+| Indent per depth level | 12 px (observed, "about"); the row of depth `d` starts at `x = 12 d` |
+| Gutter cell | 12 px wide, at the start of the row's own column, `x = 12 d .. 12 d + 12`, full row height as the click target |
+| Disclosure box | a 10 x 10 px square outline centred in the gutter cell and in the row; a 6 px horizontal bar inside it when expanded (minus), plus a 6 px vertical bar when collapsed (plus); only on rows with children |
 | Connector lines | 1 px, colour `guide` |
 | Separator | 1 px line along the bottom edge of every row, colour `separator` |
-| Alternating shade | rows with an odd index in the visible list are filled with `alt`; the selected row keeps the selection fill |
+| Alternating shade | rows with an odd index in the visible list are filled with `alt`; a selected row is filled with `selected` (the selection colour at 16 % into the panel colour) |
 
 Connectors (`connectors(rows)` gives, per row, `trunks: Vec<bool>` of length `depth`, from the
 visible depth sequence alone): an ancestor at depth `k` has a **trunk**, a vertical line at
-`x = 18 k + 8` (the centre of that ancestor's arrow cell), which runs down through the rows of
-its subtree. Row `i` of depth `d > 0`: for `k < d - 1`, `trunks[k]` is true when a later row of
-depth `k + 1` follows before the list returns to a depth `<= k`, and a full-height vertical is
-drawn at the trunk of `k`; the **elbow** is at `k = d - 1`: a vertical from the row's top to its
-vertical centre, continuing to the bottom when `trunks[d - 1]` is true (a later sibling exists),
-then a horizontal at the vertical centre from the trunk to `x = 18 d` (the arrow cell) for a row
-with children or to `x = 18 d + 14` for a leaf. Root rows (depth 0) have no connector. Rows of
-the search result (§13.5) use the same rules over their own depth sequence; a layer with the
-manager off (§22) does not appear, its children move up one level, the rules read depths only.
+`x = 12 k + 6` (the centre of that ancestor's gutter cell and box), which runs down through
+the rows of its subtree. Row `i` of depth `d > 0`: for `k < d - 1`, `trunks[k]` is true when a
+later row of depth `k + 1` follows before the list returns to a depth `<= k`, and a full-height
+vertical is drawn at the trunk of `k`; the **elbow** is at `k = d - 1`: a vertical from the row's
+top to its vertical centre, continuing to the bottom when `trunks[d - 1]` is true (a later
+sibling exists), then a horizontal at the vertical centre from the trunk to the left edge of the
+row's disclosure box (`x = 12 d + 1`) for a row with children, or to `x = 12 d + 8` for a leaf.
+A row with children that is expanded also draws a **stub** on its own trunk from the bottom of
+its box to the row's bottom edge, so the line continues into its children. Root rows have no
+elbow. Rows of the search result (§13.5) use the same rules over their own depth sequence; a
+layer with the manager off (§22) does not appear, its children move up one level, the rules read
+depths only.
 
 Colours come from the theme tokens (`row_colours(theme)`), so all three themes follow
 (§24.1): `guide` is `weak_text` mixed 75 % into `panel`, `separator` is `weak_text` mixed 18 % into
-`panel`, `alt` is `faint` mixed 55 % into `panel`. The guide keeps at least 3:1 contrast against
-both `panel` and `alt` in dark, light and high-contrast (tested). The per-type icon of brief
-227 goes between the arrow cell and the name when that brief lands; it adds a 16 px cell and does
-not change the numbers above.
+`panel`, `alt` is `faint` mixed 55 % into `panel`, `selected` is `selection` mixed 16 % into `panel`.
+The guide keeps at least 3:1 contrast against both `panel` and `alt` in dark, light and
+high-contrast (tested), and the selection-coloured name keeps 3:1 on `selected`.
 
 ### 13.2 Selection (pure, `tree::click_selection`)
 
@@ -582,8 +669,9 @@ dropping on a moved node, or into/next to a descendant of a moved node (a cycle)
 `After` = right after it, except an expanded row with children: `After` then means first
 child (the position the line is drawn at). The empty area below the rows = root list, last.
 The drop runs `object.move` (`nodes` in visible order, `parent`, `index`). A drag hover
-shows what the drop does (`tree::drop_mark`): **Into** fills the whole hovered row with the accent
-colour at 25 % alpha and outlines it 1.5 px (the row becomes the parent); **Before / After**
+shows what the drop does (`tree::drop_mark`; ours, **parity-pending G1**: the session's drag
+completed before a capture could be taken): **Into** fills the whole hovered row with the state
+colour (mint) at 25 % alpha and outlines it 1.5 px (the row becomes the parent); **Before / After**
 draw a 2 px line across the row's bottom or top edge with a filled 3 px dot at its left end,
 placed at the indent of the depth the nodes would land at (`Before`: the row's depth; `After`:
 the row's depth, or one deeper for an expanded row with children, whose first child it becomes).
@@ -593,7 +681,8 @@ search filter is active. Moving keeps local transforms, like `object.reparent`.
 
 ### 13.4 Rename
 
-Double-click (or F2, or the menu item) opens a text field on the row; Enter or focus loss
+Double-click (or the context menu item "Rename"; there is no key, `F2` is the Top view, §14.2,
+**parity-pending G1**) opens a text field on the row; Enter or focus loss
 commits via `object.rename` (an unchanged or empty name is not committed), Escape cancels.
 
 ### 13.5 Search / filter (pure, `tree::filter_rows`)
@@ -617,24 +706,31 @@ editor and render both Off, or Default when all are already Off), Disable / Enab
 ### 13.7 Tests
 
 Pure unit tests (crates/ui/tests/object_manager.rs): drop targets for every zone,
-cycles, ranges, filter, context items, visibility resolution (core). egui_kittest: reparent
+cycles, ranges, filter, context items, visibility resolution (core), the row numbers (20 / 12),
+the boxed disclosure, the connector snapshot, the evaluation cell per type, the dot cycle,
+the selection-coloured name. egui_kittest: reparent
 by drag, reorder by drag, dots and tick (each with undo), rename, search, context menu
-actions, a drag onto an attribute link field.
+actions, a drag onto an attribute link field, the stacked dots (one column, editor above
+render, the check to their right), no check on nulls and a target on cameras.
 
 
-## 14. Key map (`keymap`, `keymap_editor`; brief 152)
+## 14. Key map (`keymap`, `keymap_editor`; brief 152, revised by brief 233)
 
-Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G2 (docs/parity/GUI-SESSIONS.md)
-is only partly answered (owner notes N1 and N2: hold keys 1 / 2 / 3, tool keys E / R / T), so
-**every default binding except those is parity-pending**: they follow common DCC
-conventions where those do not collide with our other keys, and they are ours to change once
-G2 is answered. Nothing is taken from the reference app's key files or presets.
+Sources: GUI session G2 item 1 (docs/parity/GUI-SESSIONS.md, "Owner's Cowork session,
+2026-11-27"): the owner read the reference app's Command Manager and menus, so every default
+below marked **observed** is the reference's. What the session did not cover (shading, the
+`Alt+digit` mode keys, `Mod+1 .. 7` views, `Mod+M`, `Q`, `L`, `Shift+S`, `Shift+M`, the marker
+jumps, `Mod+Shift+P`, `Space`'s viewport scope) stays **ours, parity-pending G2**. Owner notes N1
+(bare 1 / 2 / 3 are navigation hold keys) and N2 (E / R / T) still hold; N2 is observed too.
+Nothing is taken from the reference app's key files or presets.
 
 ### 14.1 Model
 
 A `Chord { command, alt, shift, key }` is one key press with modifiers. `command` means
-egui's `Modifiers::COMMAND`: Cmd on macOS, Ctrl elsewhere. A `Binding { chord, command,
-args, scope }` runs the registry command `command` with the JSON object `args`. `scope` is
+egui's `Modifiers::COMMAND`: Cmd on macOS, Ctrl elsewhere. A `Binding { chord, then, command,
+args, scope }` runs the registry command `command` with the JSON object `args`; `then` is
+`None` for a single key and the second key of a **two-key sequence** (§14.7), in which `chord`
+is the prefix key. `scope` is
 `global` (default) or `viewport` (only while the pointer was over the viewport; the Space
 rule of ANIM.md §2.7). `KeyMap { bindings }` is the resource, held by `EditorState.keymap`.
 Every shortcut runs a registry command through `commands::execute`; there is no key handling
@@ -663,52 +759,79 @@ scope = "global"         # optional, global | viewport
 
 Several `[[bind]]` entries may name the same command (redo has two chords). Loading rejects
 a version other than 1, an unparsable chord, an unknown scope and `args` that is not a table.
-Default bindings (all parity-pending, ours):
+A `chord` with a space is a two-key sequence (`"M T"`, §14.7). Default bindings. Rows marked
+**observed** are G2 item 1; the others are ours (parity-pending G2):
 
-| Chord | Command (args) |
-|---|---|
-| Mod+O / Mod+S / Mod+Shift+S | `file.open_dialog` / `file.save_dialog` / `file.save_as_dialog` |
-| Mod+Z | `edit.undo` |
-| Mod+Shift+Z, Mod+Y | `edit.redo` |
-| Delete | `object.delete` |
-| F2 | `object.begin_rename` |
-| Mod+A / Mod+Shift+A / Mod+I | `select.all` / `select.none` / `select.invert` |
-| Alt+1 / Alt+2 / Alt+3 / Alt+4 | `select.mode` model / points / edges / polys |
-| Mod+Shift+E | `mesh.make_editable` |
-| Mod+Shift+P | `ui.command_palette` (brief 159, §18) |
-| Mod+Shift+1 .. 5 | `view.shading` smooth, flat, wire, smooth_wire, flat_wire (moved off the digits by brief 223; parity-pending G2) |
-| Mod+Shift+6 .. 9 | `view.shading` quick, constant, hidden_line, bounding_box (brief 143; parity-pending G2) |
-| F4 | `view.layout` (toggle single / four; brief 143) |
-| Mod+M | `view.maximize` (toggle the active pane; brief 143) |
-| E / R / T | `view.gizmo_mode` move / rotate / scale (owner note N2; W is free) |
-| Q | `view.gizmo_space` (toggle) |
-| Shift+S | `snap.toggle` (brief 032) |
-| L | `edit.axis_mode` (toggle; brief 032) |
-| H / S | `view.frame_all` / `view.frame_selected` (brief 153) |
-| Mod+1 .. Mod+7 | `view.set_view` perspective, front, right, top, back, left, bottom (brief 153) |
-| K / Shift+K | `key.record` / `key.autokey` |
-| Space (viewport scope) | `timeline.toggle_play` |
-| Comma / Period | `timeline.step` delta -1 / +1 |
-| M | `marker.add` (brief 094) |
-| Alt+Comma / Alt+Period | `marker.jump` backward / forward (brief 094) |
-| Shift+Comma / Shift+Period | `key.jump` forward false / true |
+| Keys | Command (args) | Source |
+|---|---|---|
+| Mod+O / Mod+S / Mod+Shift+S | `file.open_dialog` / `file.save_dialog` / `file.save_as_dialog` | ours |
+| Mod+Z / Mod+Y | `edit.undo` / `edit.redo` | observed |
+| Backspace, Delete | `object.delete` | observed |
+| Mod+A / Mod+Shift+A | `select.all` / `select.none` | observed |
+| U I / U Y / U K | `select.invert` / `select.grow` / `select.shrink` | observed |
+| U W / U L / U B | `select.connected` / `select.loop` / `select.ring` | observed (Select menu) |
+| Alt+1 / Alt+2 / Alt+3 / Alt+4 | `select.mode` model / points / edges / polys | ours, an extra: the reference has no default mode keys (G2 item 1) |
+| C | `mesh.make_editable` | observed |
+| Alt+G | `object.group` | observed |
+| Mod+Shift+P | `ui.command_palette` (brief 159, §18) | ours |
+| Mod+Shift+1 .. 5 | `view.shading` smooth, flat, wire, smooth_wire, flat_wire | ours (G2 did not observe shading; owner note N1 moved it off the digits) |
+| Mod+Shift+6 .. 9 | `view.shading` quick, constant, hidden_line, bounding_box (brief 143) | ours |
+| F1 / F2 / F3 / F4 | `view.set_view` perspective / top / right / front (§6.1) | observed |
+| F5 | `view.layout` (toggle single / four; §6.2) | observed (opens four panes); the toggle back is ours |
+| Mod+M | `view.maximize` (toggle the active pane; brief 143) | ours |
+| H / S / O | `view.frame_all` / `view.frame_selected` / `view.frame_selected` | observed; S and O both frame objects |
+| Mod+1 .. Mod+7 | `view.set_view` perspective, front, right, top, back, left, bottom | ours, extras |
+| E / R / T | `view.gizmo_mode` move / rotate / scale (owner note N2; W is free) | observed |
+| Q | `view.gizmo_space` (toggle) | ours |
+| Shift+S / L | `snap.toggle` / `edit.axis_mode` (brief 032) | ours |
+| F8 / F7 | `timeline.play` / `timeline.stop` | observed |
+| F9 / Mod+F9 | `key.record` / `key.autokey` | observed |
+| G / F | `timeline.step` +1 / -1 (next / previous frame) | observed |
+| Mod+G / Mod+F | `key.jump` forward true / false (next / previous key) | observed |
+| Space (viewport scope) | `timeline.toggle_play` | the reference also plays with Space in the timeline (observed); the viewport scope is ours |
+| Shift+M | `marker.add` (brief 094; bare M is the mesh prefix, so it moved) | ours |
+| Alt+Comma / Alt+Period | `marker.jump` backward / forward (brief 094) | ours |
+| M T / M W / M S / M B | `mesh.extrude` / `mesh.extrude_inner` (Inset) / `mesh.bevel` / `mesh.bridge` | observed |
+| M Q / M P / M N / M H | `mesh.weld` / `mesh.stitch` / `mesh.dissolve` / `mesh.mirror` | observed (Mesh menu tables, G10) |
+| M M / M O | `mesh.connect_points` / `mesh.slide` | observed (G10) |
+| U S / U O | `mesh.subdivide` / `mesh.optimize` | observed |
+| U Z / U P / U D / U U / U R | `mesh.melt` / `mesh.split` / `mesh.disconnect` / `mesh.untriangulate` / `mesh.reverse_normals` | observed (G10) |
 
-These are the old hard-coded keys of §5 and ANIM.md §2.7 unchanged, plus the rows for
-`select.invert`, `select.mode` and `mesh.make_editable`, except the two changes of owner notes
-N1 and N2 (brief 223): the bare digits are the navigation hold keys (§6.1) and so cannot
-carry the shading commands, which moved to `Mod+Shift+1 .. 9` (**our choice,
-parity-pending G2**: the new G2 item asks what the reference uses; `Mod+digit` is the
-view-switch family and `Alt+digit` the mode family, so `Mod+Shift+digit` is the free one);
-the gizmo keys moved from W / E / R to E / R / T. The default map has no bare digit binding.
+**Replaced by brief 233** (the earlier own-design choices): `Mod+Shift+Z` redo (now Undo View, no
+command yet), `F2` rename (rename is the object manager's double-click or menu entry, §13.4;
+`object.begin_rename` has no default key, **parity-pending G1**), `Mod+I` invert (now `U I`),
+`Mod+Shift+E` make editable (now `C`), `F4` layout toggle (now `F5`; `F4` is the Front view),
+`K` record and `Shift+K` autokey (now `F9` and `Mod+F9`; `K` is free for the Line Cut family),
+`,` / `.` and `Shift+,` / `Shift+.` (now `F` / `G` and `Mod+F` / `Mod+G`), `M` marker (now
+`Shift+M`).
+
+**No command yet** (observed in G2 item 1, nothing bound until a command exists; the
+default-map test pins each as unbound): Live Selection `9`, Rectangle Selection `0` (tool
+selection has no command), Undo View / Redo View `Mod+Shift+Z` / `Mod+Shift+Y`, Render View
+`Mod+R`, Render to Picture Viewer `Shift+R`, Play backwards `F6` (`timeline.play` has no
+direction), Record Animated `Alt+F9`, Ungroup `Shift+G`, and the pointer tools Line Cut `K K`,
+Loop/Path Cut `K L`, Plane Cut `K J`, Polygon Pen `M E`, Close Polygon Hole `M D` (their commands
+need geometry arguments). Also unbound for lack of a command: `M A` Create Point, `M X`, `M Y`,
+`M R`, `M F`, `M G`, `M C`, `M I`, `M U`, `M V`, `M Z`, `U C`, `U H`, `U T`, `U G`, `U E`, `U A`,
+`U J`, `U Q`, `U F`, `U M`, `U N`, `U V`. The Spline menu repeats several sequences (`M A`, `U S`,
+`U O`, `M Q`, `M H`, `U D`, `U P`, `M I`, `M U`, `K K`) for spline objects; the key map has no
+selection-dependent dispatch, so the Mesh commands are bound (**parity-pending G2**). "Toggle
+Active View" (middle mouse or Page Up) is the viewport's own gesture, not a binding. The reference
+also shows the frame commands with an `Alt+` second chord (`Alt+H`, `Alt+S`, `Alt+O`); ours has
+one chord each.
+
+The default map has no bare digit binding, and no single key on a prefix key (§14.7).
 
 ### 14.3 User overrides (settings file)
 
 The shared settings file of RPC.md §2 (`forge_platform::settings_path()`: `$FORGE_SETTINGS`, else the per-OS config
 directory, PLATFORM.md §1-2) holds
-an optional object `keymap`, keyed by canonical or parseable chord text:
+an optional object `keymap`, keyed by canonical or parseable chord text, or by a two-key
+sequence (the two chords separated by a space, §14.7):
 
 ```json
 {"keymap": {"Mod+Shift+K": {"command": "key.autokey", "args": {}, "scope": "global"},
+            "M X": {"command": "mesh.extrude"},
             "Mod+Z": null}}
 ```
 
@@ -736,9 +859,11 @@ new table.
 
 ### 14.4 Conflicts
 
-Two bindings conflict when they have the same chord and their scopes overlap (`global`
-overlaps everything; `viewport` overlaps `viewport` and `global`). `KeyMap::conflicts()`
-lists them; the default map has none (tested). Dispatch with a conflict is deterministic:
+Two bindings conflict when they have the same keys and their scopes overlap (`global`
+overlaps everything; `viewport` overlaps `viewport` and `global`), or when one is a single key
+and the other a sequence that starts with it (§14.7). `KeyMap::conflicts()`
+lists them (`Conflict { chord, then, bindings }`: `then` is `None` for the single key and the
+sequences it starts); the default map has none (tested). Dispatch with a conflict is deterministic:
 the first matching binding in map order runs, and exactly one command runs per key press.
 Dispatch is matched exactly on `Mod`, `Alt`, `Shift` (so Mod+A and Mod+Shift+A need no
 ordering) and the matching key event is consumed. Nothing runs while a text field has the
@@ -750,13 +875,14 @@ never does that silently: it shows the conflicting command and asks to Replace o
 ### 14.5 Key map editor (Window > Key map...)
 
 A floating window (state in `Editor`, not in the layout). Top: a search field (matches
-command id, label, or the chord text, case-insensitive), a "Reset all" button, a count of
+command id, label, or the keys' text, case-insensitive; `m t` finds the sequence M T), a "Reset all" button, a count of
 conflicts and unknown commands, and the warnings of the last load. Below, a scrolling list,
 one row per binding plus one row for each registry command that has no binding: command
 label, id (weak), args summary, the chord as a button. Clicking the chord button starts
 capture ("Press keys..."): the next key press with its modifiers becomes the chord; Escape
 cancels. If the chord is taken by another binding the window shows "<chord> is bound to
-<label>" with Replace and Cancel; Replace rebinds and removes the other. Each row has
+<label>" with Replace and Cancel; Replace rebinds and removes the other (for a single key
+on a prefix key, every sequence it starts; §14.7). Each row has
 Clear (unbind) and, when it differs from the default, Reset. Every change is stored to the
 settings file at once (when the editor has one) and takes effect on the next key press.
 
@@ -769,6 +895,68 @@ runs against the registry's argument schema; conflict rules for scopes; override
 file keeps unrelated keys. egui_kittest (no GPU): pressing each kind of default shortcut
 runs its command and Mod+Z undoes it; a rebind in the editor takes effect; a conflicting
 rebind asks first; Reset and Clear; a changed map is written to the settings file.
+
+Brief 233 adds: the default table above (every observed binding, the "no command yet" keys
+pinned unbound), each replaced default checked, F2 is no longer rename, and the sequence rules
+of §14.7 (arm, run, time-out, Escape, no conflict with single keys, overrides, the editor's
+capture).
+
+### 14.7 Two-key sequences (brief 233; observed, G2 item 1: "M then a letter means two keypresses in sequence")
+
+The reference binds many commands to a prefix key followed by a second key (`M T` Extrude, `U S`
+Subdivide, `K L` Loop/Path Cut). The rest of this section (timing, cancel, conflicts, editor,
+file syntax) is ours: the session did not measure them (**parity-pending G2**).
+
+- **Model.** `Binding.then: Option<Chord>`; the keys of a binding are `chord` or `chord then`.
+  The text form is the chords joined by white space, `M T`, `Mod+K Mod+S`; spaces next to a `+`
+  belong to the chord (`Mod + A`). More than two keys, an empty text or an unknown key is an
+  error (`parse_keys`, `keys_text` print the canonical form). Used in `default.toml`
+  (`chord = "M T"`), in the settings file's `keymap` keys and in the editor. Bare `1`, `2`, `3`
+  (§6.1) are refused as the first or the second key.
+- **Prefix key.** A key press that is the first key of at least one sequence binding active in
+  the current scope **arms** the prefix: the press is consumed and nothing runs. State
+  (`KeyMapState.armed: Option<Armed { chord, at }>`) is editor state, not document state, never
+  saved. While armed, the status bar shows the prefix in the platform spelling and an ellipsis
+  (`M ...`).
+- **Second key.** The next key press, with its modifiers matched exactly like a single key,
+  runs the binding `chord then` (scope as for singles; one command per press) and disarms.
+  Any other key disarms the prefix and is then handled as an ordinary fresh press: it may run
+  a single-key binding or arm another prefix (`M` then `U` arms `U`). Modifier keys alone are not
+  key presses and change nothing.
+- **Time-out.** The prefix lapses 1.5 s (`SEQUENCE_TIMEOUT`) after it was pressed, measured on
+  the input clock; a key after that is a fresh press (`M`, wait, `T` is Scale). The window
+  repaints once so the status text clears.
+- **Escape** while armed disarms and is consumed (nothing runs; a later Escape is ordinary). A
+  text field taking the keyboard, an open palette or an active key capture also drop the prefix.
+- **Single keys on a prefix.** A key that starts a sequence cannot also run a single binding: a
+  single binding and a sequence starting with its chord conflict (§14.4). If such a map is
+  loaded anyway the prefix wins (the single key never runs), which keeps dispatch
+  deterministic. The default map has none: bare `M` marker became `Shift+M`, bare `K` record
+  became `F9`. `M T` and `M W` do not conflict; `M T` and `U T` do not conflict; two bindings
+  on the same two keys do.
+- **Binding over a collision** (`KeyMap::bind`, the editor's Replace, a settings file entry):
+  the new binding removes every binding it collides with. A single key on `M` therefore removes
+  all `M` sequences, a sequence on `M T` removes a single `M`, and the same two keys replace
+  the old sequence. A `null` entry unbinds exactly its own keys (`"M": null` leaves `M T`).
+  `KeyMap::overrides` writes canonical sequence text (`"M T"`) and stays the minimal inverse of
+  the merge.
+- **Key map editor (§14.5).** A row shows a sequence as its chords in the platform spelling,
+  separated by a space; the search matches its canonical or shown text. Capture takes the
+  first key press and then waits up to 1.5 s: a second press makes a two-key sequence at once;
+  with none the single key is bound when the time is up (the window repaints for it; the
+  button shows `M ...` meanwhile); Escape cancels at either step; a second press after the time
+  limit is dropped and the first key stands alone. Taken keys ask Replace / Cancel naming the
+  bindings that would go (§14.4). A bare navigation digit ends the capture with the message of §6.1.
+- **Menus and the palette** show the keys of the first binding of a command as the same text
+  (`Binding::display`; the palette's `Entry.keys` is the canonical text).
+
+Tests (crates/ui/tests/keymap.rs): text parse and print (spaces, aliases, three keys refused);
+arm then run; a prefix alone runs nothing; modifiers must match; time-out at 1.5 s; Escape
+cancels and is consumed; a foreign key disarms and acts fresh; prefix and single key conflict
+and the dispatch rule; bind-over replaces; settings-file syntax and the round trip through
+`overrides()`; navigation digits refused; kittest: the sequence runs in the window, the
+prefix alone does nothing, the status bar shows it, Escape drops it; the editor's capture
+(sequence, time-out single key, late second key, Escape, Replace over a prefix, refused digit).
 
 ## 15. Autosave and recovery (`autosave`, `app`; brief 179)
 
@@ -1492,34 +1680,78 @@ Sources: own design from docs/roadmap/areas/L-ui.md ("HiDPI, IME, keyboard-only 
 high-contrast theme"); egui's public input model (`Event::Ime`, `Memory::focused`). No reference
 observation; the palettes are our own.
 
-### 24.1 Theme tokens (one module, `theme`)
+### 24.1 Theme tokens (one module, `theme`; revised by brief 234, owner note N11)
 `ThemeKind { Dark, Light, HighContrast }`, names `dark`, `light`, `high-contrast`
 (`name()`, `from_name()`, `ThemeKind::ALL`). `Theme::of(kind)` returns the token set; the UI
-takes its colours from it. Tokens: `window`, `panel`, `faint`, `text`, `weak_text`, `accent`,
-`accent_text`, `error`, `component_selection` and `focus` (keyboard focus ring and IME
-composition underline). `Theme::default()` is `of(Dark)`, unchanged (§8).
+takes its colours from it. Colour **roles** replace the single accent (the reference layout stays,
+D22; the proposal's palette is ours, source: design reference `WORKSPACE-DESIGN.md`, "Dark token"
+table, and owner note N11):
+
+| role | tokens | marks |
+|---|---|---|
+| surfaces | `window`, `panel`, `viewport`, `input`, `faint`, `divider` | shell, managers, canvas backdrop, recessed controls (text fields, drag values), hover/stripe fill, panel edges |
+| text | `text`, `weak_text` | controls and values; units and secondary labels |
+| **state** (mint) | `state`, `state_text` | the active tool, mode, checked toggle, active attribute tab, active layout tab (underline), links, "current" markers; `state_text` is the text on a `state` fill |
+| **time** (mint) | `time` (equal to `state` in every theme, tested) | the playhead and current-frame marker (timeline, dope sheet, F-curve), the timeline's key ticks, preview-range band and handles, key diamonds at or around the playhead (`key` is `time`) |
+| **selection** (amber) | `selection`, `selection_text` | selected objects (viewport outline, VIEWPORT.md §16), selected rows and names in the object manager and other lists, selected keys in the dope sheet and F-curve (drawn larger as well), selected nodes and UV points, box-select rectangles; `selection_text` is the text on a `selection` fill |
+| **record** (red) | `record`, `error` (equal, tested) | auto-key recording and errors; always paired with a label or shape |
+| **focus** | `focus` | keyboard focus ring, IME composition underline |
+| **component** | `component_selection` | selected points, edges and polygons of the component target (distinct from the amber object selection) |
+| **key** | `key` (= `time`), `modified` | the key diamond: key at this frame and animated-elsewhere use `key`; a draft uses `modified` |
+
+The *modified* hue is a **violet**, so it never reads as "selected" (amber), as the playhead and keys
+(mint) or as an error (red); its hue differs from `key` and from `selection` by at least 30 degrees
+(tested; §12).
 
 | token | dark | light | high contrast |
 |---|---|---|---|
-| window | `#1E2024` | `#F4F5F7` | `#000000` |
-| panel | `#25282D` | `#ECEEF1` | `#000000` |
-| faint | `#2E3238` | `#DDE0E5` | `#1A1A1A` |
-| text | `#D6D9DE` | `#1B1E22` | `#FFFFFF` |
-| weak text | `#9AA0A8` | `#4A515A` | `#D8D8D8` |
-| accent | `#E08A2E` | `#A64B00` | `#FFD400` |
-| accent text | `#1A1A1A` | `#FFFFFF` | `#000000` |
-| error | `#E5534B` | `#B3261E` | `#FF7B72` |
+| window | `#171B21` | `#EEF1F5` | `#000000` |
+| panel | `#20262E` | `#E6EAF0` | `#000000` |
+| viewport | `#252C35` | `#D9DFE7` | `#0A0A0A` |
+| input | `#181D24` | `#FFFFFF` | `#000000` |
+| faint | `#2A323C` | `#D8DEE6` | `#1A1A1A` |
+| divider | `#343D49` | `#B4BEC9` | `#BFBFBF` |
+| text | `#E8EDF2` | `#161B22` | `#FFFFFF` |
+| weak text | `#A7B2C0` | `#465162` | `#D8D8D8` |
+| state / time / key | `#73D6BC` | `#0B6B57` | `#5CFFD8` |
+| state text | `#0E221C` | `#FFFFFF` | `#000000` |
+| selection | `#F3B36B` | `#8F4C00` | `#FFC266` |
+| selection text | `#2A1805` | `#FFFFFF` | `#000000` |
+| record / error | `#F17A80` | `#B3202E` | `#FF8A90` |
+| modified | `#B79CF2` | `#6B3FC4` | `#D2B0FF` |
 | component selection | `#38C6E8` | `#006C99` | `#00E5FF` |
 | focus | `#5AA9FF` | `#0B57D0` | `#5CE1FF` |
 
-Contrast (WCAG ratio, tested for every theme): text on panel and window >= 7 (high contrast
->= 15), weak text on panel >= 4.5, accent text on accent >= 4.5, focus on panel >= 3, error on
-panel >= 3 (dark) or >= 4.5 (light, high contrast).
-`Theme::visuals()` builds from egui's dark visuals (light visuals for Light) and sets the focus
-style: the active/focused widget outline is a 2 point stroke in `focus`, and the IME
-composition underlines use `focus`. `Theme::apply(ctx)` installs visuals and fonts and stores
-the theme in the context; `Theme::current(&Context)` reads it back (dark before the first
-apply). `Theme::apply_visuals` does the same without reinstalling fonts (used when switching).
+The light and high-contrast values are derived from the dark ones: every role colour keeps its hue
+and is darkened (light) or brightened (high contrast) until it reaches the contrast below.
+Contrast (WCAG ratio, tested for every theme): text on panel, window, viewport and input >= 7 (high
+contrast >= 15); weak text on panel and viewport >= 4.5; `state_text` on `state` and
+`selection_text` on `selection` >= 4.5; `state`, `selection`, `record` and `modified` on panel,
+viewport and input >= 4.5 (text drawn in a role colour is then readable); `focus` on panel >= 3.
+**Greyscale:** colour is never the only cue. Dark mint and amber have almost the same luminance,
+so each role carries a shape, outline or text as well (checked by the role audit below): state is
+a filled or checked control or an underline, selection is an outline, a row bar or a larger key,
+time is a line, record has a label.
+`Theme::visuals()` builds from egui's dark visuals (light visuals for Light): `selection.bg_fill`
+is `state` and `selection.stroke` is `state_text` (egui's checked buttons, selectable labels and
+sliders are mode and tab states); `hyperlink_color` is `state`; `extreme_bg_color` is `input`;
+`widgets.noninteractive.bg_stroke` is `divider`; the active/focused widget outline is a 2 point
+stroke in `focus` and the IME composition underlines use `focus`. Lists whose rows are selected
+things (nodes, joints, UV points) draw them with `Theme::selection_scope`, which sets
+`selection.bg_fill` to `selection` and `selection.stroke` to `selection_text` for the closure.
+`Theme::apply(ctx)` installs visuals and fonts and stores the theme in the context;
+`Theme::current(&Context)` reads it back (dark before the first apply). `Theme::apply_visuals` does
+the same without reinstalling fonts (used when switching).
+
+**Role audit (`theme::role_audit() -> &[RoleUse]`, tested).** Every use of a role colour in
+`crates/ui` and `crates/viewport` maps to exactly one `Role` (`State`, `Time`, `Selection`, `Record`,
+`Focus`, `Component`). `RoleUse { role, widget, cue }` lists the widgets per role and the
+non-colour `Cue` that keeps the state legible in greyscale (`Fill`, `Outline`, `Underline`, `Line`,
+`Size`, `Text`). The test checks that every role has widgets, no entry is colour only, and that no
+source file under `crates/ui/src` or `crates/viewport/src` reads a token named `accent` (the token no
+longer exists). Fixed own colours that are not theme roles are named in the audit as such: the
+console WARN level (amber text, always with the word WARN), port-type colours of the node editor,
+the object palette's category hues (§29.2) and the clone axis marks.
 
 ### 24.2 Preferences (`prefs::UiPrefs`)
 `UiPrefs { theme: ThemeKind, scale: f32 }`, default dark and 1.0. `scale` is the UI scale
@@ -1586,7 +1818,8 @@ drawn with the focus ring (§24.1). Test: with the editor shown, Tab moves focus
 widget and then to a different one, Shift+Tab goes back.
 
 ### 24.7 Tests
-`crates/ui/tests/accessibility.rs`: token tables and contrast for the three themes, names round
+`crates/ui/tests/accessibility.rs`: token tables, role equalities (time = state = key, record =
+error), contrast of every role per theme, the modified hue, the role audit, names round
 trip, `Theme::of(Dark) == Theme::default()`, visuals (focus stroke, light base), `UiPrefs`
 clamp, settings round trip and leniency, commands (refused headless, argument validation),
 window (switching theme changes `Theme::current` and the saved file, scale sets the zoom
@@ -1768,7 +2001,7 @@ Steps and what is asserted after each:
 4. Bevel: Alt+3 (edge mode), select the outer top edge of the seat, Mesh > Bevel, offset 8,
    Apply: the point and polygon counts grow.
 5. Loop cut: Mesh > Loop/Path Cut, hover an edge, click: counts grow, one undo step.
-6. Ctrl+Z removes the cut, Ctrl+Shift+Z brings it back.
+6. Ctrl+Z removes the cut, Ctrl+Y brings it back.
 7. Symmetry (mirror plane ZY, default) is created and the polygon object moved under it;
    Subdivision is created and Symmetry moved under it (object manager hierarchy: Subdivision >
    Symmetry > polygon object). The evaluated Symmetry mesh is symmetric about x = 0 (bounds sum
@@ -1789,14 +2022,47 @@ window and the menu does not scroll, so Symmetry and Subdivision (alphabetically
 be reached with the pointer. The test creates them with `object.create`, the command the menu
 item runs. Making the menu scrollable (or grouping the list) is a follow-up to briefs 049/147.
 
-## 29. Reference layout and density (D22; owner screenshot 2026-11-26)
+## 29. Reference layout and density (D22; owner screenshot 2026-11-26; metrics observed, G10, brief 233)
 
-Source: a screenshot of the reference app's Standard layout on an empty document, supplied by the
-owner (D22). The planner read it and wrote it down in words and proportions here. The image is not
-in the repository, and no icon was traced. Proportions are of the window (the capture was about
-2000 × 790, a wide window). Exact pixel sizes come from observation O66 (ui-look.md). Until then the
-numbers here are **parity-pending O66**. This section is the target for briefs 223–229 and 231. Where an
-earlier section disagrees, this one wins for layout and density, and the earlier sections for behaviour.
+Sources: a screenshot of the reference app's Standard layout on an empty document, supplied by the
+owner (D22), which the planner read and wrote down in words; and the owner's Cowork session of
+2026-11-27 (GUI-SESSIONS.md, G10 item 1 and A2 to A8), which measured the window at 1920 x 1080
+(scale 1) in pixels. The image is not in the repository, and no icon was traced. **The numbers of
+§29.1a replace the earlier proportions** (which were taken from a 2000 x 790 capture). This
+section is the target for briefs 223-229 and 231. Where an earlier section disagrees, this one
+wins for layout and density, and the earlier sections for behaviour.
+
+### 29.1a Measured sizes (observed, G10 item 1; `layout::WINDOW`, `layout::regions`, `theme::BUTTONS`)
+
+At 1920 x 1080, scale 1 (a 1520-point horizontal resize reduced the captured width by exactly 1520
+px, so the capture is 1x), origin at the window's top-left:
+
+| Region | Observed |
+|---|---|
+| Title bar (native), document / layout row | y 0-28, y 28-52 (24) |
+| Command bar, viewport menu row | y 52-94 (42), y 94-114 (20) |
+| Left tool strip | x 0-43 (43 wide), from the command bar down to the bottom of the viewport |
+| Viewport canvas | x 43-1472, y 114-962: about 1429 x 848 |
+| Object palette | x 1473-1516 (43 wide) |
+| Managers column (Objects / Takes above Attributes / Layers) | x 1517-1919 (402 wide); the split sits near y 500, about 47 % of the height |
+| Timeline | x 43-1473, y 963-1055 (92) |
+| Status bar | y 1055-1079 (24) |
+| Buttons | command bar about 27 x 26, vertical palettes 34 x 34 |
+
+`layout::WINDOW` holds the numbers (rows 28 / 24 / 42 / 20 / 92 / 24, columns 43 / 43 / 402, the
+split 0.47, a 1 px separator between regions: three across, two down); `layout::regions(w, h)`
+lays the regions out and reproduces the table above at 1920 x 1080 (tested). The default layout's
+`Sizes` read them (§11): right width 402, split 0.47, timeline 92; the document row, the command
+bar and the status bar use them as their panel heights (24 minimum, 42 minimum, 24 exact).
+`theme::BUTTONS` holds the button sizes, used as the minimum size of the command bar's and the
+palette's buttons (27 x 26 and 34 x 34; our text-labelled buttons are wider). **Parity-pending
+G10:** our tool column is still 150 wide with labelled buttons (43 once the icons of brief 227
+land), the object palette strip (43) comes with brief 228, the title bar is the window system's,
+and the viewport menu row (20) comes with brief 227. The timeline ruler labels every 5 frames at
+this width (`timeline::ruler_step(90, 1413) = 5`, label spacing at least 40 px: observed, G10 A7;
+this replaces the "every 2 frames" read from the earlier screenshot). The status bar shows the
+active tool's help text (G10 A8), here `tools::help_text` for the transform tool and the selection
+mode, with errors replacing it.
 
 ### 29.1 Window structure, top to bottom
 
@@ -1807,11 +2073,11 @@ earlier section disagrees, this one wins for layout and density, and the earlier
    underlined, then a "New Layouts" toggle. Our names are ours (§21 workspaces), and we keep this
    placement and form.
 3. **Main area, left to right:**
-   - **Tool strip** (about 1.2 % of the width, one icon column, full height): search at the top, then
-     selection tools, then **Move, Rotate, Scale** (the active tool has an accent fill), then the other
+   - **Tool strip** (43 px wide, one icon column, from the command bar down): search at the top, then
+     selection tools, then **Move, Rotate, Scale** (the active tool has a state fill, mint), then the other
      transform tools, then sculpt/paint-style brushes. Groups are separated by a small gap, not lines.
      Hovering shows the tool name next to the strip (for example "Move" with its icon).
-   - **Viewport column** (about 86 % of the width):
+   - **Viewport column** (about 1429 px wide at 1920, the rest of the width):
      - *Command bar* (one row, icons only): on the left, a make-editable style button, the **X / Y / Z axis
        locks** and the coordinate-system toggle. In the centre, the **component modes** group (model,
        mesh, points, edges, polygons, and the related UV and texture modes; the active one is
@@ -1825,35 +2091,38 @@ earlier section disagrees, this one wins for layout and density, and the earlier
        ("Default Camera" with a small icon), a small axis triad top-right, "Grid Spacing : 50 cm"
        bottom-right. Outside the render frame the view is darker (the film-gate shading of
        VIEWPORT.md). There's a flat grid, and the world axes are drawn as long thin red, green and blue lines.
-     - *Timeline* (about 7 % of the height), under the viewport: a row of controls, a ruler, and a
+     - *Timeline* (92 px high), under the viewport: a row of controls, a ruler, and a
        range row. Controls: a key button on the left; in the centre, go to start, previous key,
        previous frame, play, next frame, next key, go to end; the loop and sound toggles; the
        current frame field ("0 F"); record and autokey (the autokey button turns red), the keying
        options; the key-type toggles (position, rotation, scale, parameter, point level). The ruler
-       is labelled every 2 frames at this width, and the playhead is an accent marker. The range row
+       is labelled every 5 frames at 1920 px (§29.1a), and the playhead is a time (mint) marker. The range row
        has min, preview start, preview end and max fields ("0 F" … "90 F").
-   - **Object palette strip** (about 1.1 % of the width, one icon column, between the viewport and the
+   - **Object palette strip** (43 px wide, one icon column, between the viewport and the
      managers): **creation categories**, each a drop-down group, colour-coded by category: object
      selection/null, **primitives (blue)**, splines/text, **generators (green)**, **the clone
      toolset (green: the Cloner sits here, top level, one click; owner note N4)**, **deformers
      (purple)**, **fields (purple)**, environment, camera, light. Then a separate tool at the bottom.
-   - **Managers column** (about 11.7 % of the width):
-     - *Object manager* (top, about 45 % of the column height): tabs "Objects | Takes", then a menu
+   - **Managers column** (402 px wide):
+     - *Object manager* (top, about 47 % of the column height): tabs "Objects | Takes", then a menu
        row (hamburger, File, Edit, View, Object, Tags, Bookmarks) with search, filter and other icons on the
        right.
-     - *Attribute manager* (bottom, about 55 %): tabs "Attributes | Layers", then a menu row
+     - *Attribute manager* (bottom, about 53 %): tabs "Attributes | Layers", then a menu row
        (hamburger, Mode, Edit, User Data) with back/forward, up, search, lock and new-window icons on
        the right. Then a header row with the object's icon and name, and a preset drop-down
        ("Default") on the right. Then **tab buttons** (§29.3).
-4. **Status bar:** one thin row at the bottom (a hamburger, then the status text).
+4. **Status bar:** one thin row at the bottom (a hamburger, then the active tool's help text; §29.1a).
 
 ### 29.2 Density and look
 
 - **Dense:** small text, single-row bars, icon-only command bar and strips, and small gaps between
   groups instead of separator lines. The viewport gets almost all the space.
 - **Flat dark theme:** charcoal panels, slightly darker splitters, no bevels or drop shadows.
-  Text and icons are light grey. **Accent fill** (one accent colour) marks the active tool,
-  mode, attribute tab and timeline toggles. The active layout tab is underlined.
+  Text and icons are light grey. **Role colours** (brief 234, owner note N11; §24.1): the **state** fill (mint) marks the active
+  tool, mode, attribute tab and timeline toggles, and the active layout tab is underlined in it; the
+  **time** colour (mint) is the playhead; the **selection** colour (amber) marks selected things
+  everywhere (objects in the viewport and rows in the managers, keys, nodes); **record** (red) marks
+  recording and errors. Amber never marks a mode and mint never marks a selection.
 - **Icons:** monochrome light grey, except the object palette's category colours (primitives,
   generators/clone toolset, deformers/fields each have their own hue). Our hues and icon art are our own
   (D22). The rule is one hue per category, used for that category's icons everywhere (object
@@ -1863,12 +2132,12 @@ earlier section disagrees, this one wins for layout and density, and the earlier
 
 - **Tabs are small toggle buttons that wrap onto several rows** when they don't fit (the Project
   example shows two rows: Project, an exchange-plug-in tab, Info, Dynamics, XRefs / To Do, Animation, Nodes).
-  The active tab is accent-filled. Some tabs have a small leading icon.
+  The active tab is state-filled (mint). Some tabs have a small leading icon.
 - Under the tabs: the tab's title in bold ("Project"), then rows. **Collapsible groups** have a
   ▾ header ("Time", "Execution", "Display").
 - **Rows:** a right-aligned label column, then the value. Number fields have small step arrows on
   both sides (‹ value ›) and show their unit ("0 F", "100 %"). Drop-downs show a ▾. Checkboxes are
-  small accent squares. A slider can follow a percent field. A colour swatch has a picker
+  small state-filled (mint) squares. A slider can follow a percent field. A colour swatch has a picker
   button.
 - **Two-column groups:** short related fields sit side by side, each with its own label
   (FPS | Project Time; Min Time | Max Time; the Execution checkboxes in two columns). Use this
@@ -1879,7 +2148,7 @@ earlier section disagrees, this one wins for layout and density, and the earlier
 
 | Rule | Brief |
 |---|---|
-| Tool strip left, Move/Rotate/Scale with accent fill, hover name | 227 (icons, layout table), 223 (E/R/T) |
+| Tool strip left, Move/Rotate/Scale with state fill, hover name | 227 (icons, layout table), 223 (E/R/T) |
 | Command bar groups: axis locks, component modes (the one mode UI), snapping, workplane, render | 225 (one mode UI), 227 |
 | Viewport menu bar and the four navigation handle icons | 227 (handles drag = navigate, with 1/2/3, 223) |
 | Object palette strip with colour-coded creation groups, Cloner one click | 228 |

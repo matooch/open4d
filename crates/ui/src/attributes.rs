@@ -61,6 +61,61 @@ pub struct AttrRow {
     pub animatable: bool,
 }
 
+/// Which attribute tabs are shown (UI.md §12; observed, G1 item 3): a plain click shows one
+/// tab; Shift-clicking a second tab shows both bodies stacked in one scroll area, the one that
+/// was active first on top. `active` is that first one, `stacked` the Shift-clicked ones in
+/// click order.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TabSelection {
+    pub active: String,
+    pub stacked: Vec<String>,
+}
+
+impl TabSelection {
+    /// The tabs to draw, top to bottom: the active one, then the stacked ones. Names that
+    /// are not among `tabs` (the selected object changed) are dropped; when nothing is left
+    /// the first tab shows.
+    pub fn shown(&self, tabs: &[String]) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for t in std::iter::once(&self.active).chain(&self.stacked) {
+            if tabs.contains(t) && !out.contains(t) {
+                out.push(t.clone());
+            }
+        }
+        if out.is_empty() {
+            out.extend(tabs.first().cloned());
+        }
+        out
+    }
+
+    /// Makes the selection valid for `tabs` (what `shown` would draw).
+    pub fn normalise(&mut self, tabs: &[String]) {
+        let shown = self.shown(tabs);
+        self.active = shown.first().cloned().unwrap_or_default();
+        self.stacked = shown.into_iter().skip(1).collect();
+    }
+
+    /// A click on `tab`: plain shows only that tab; with Shift the tab is added below the
+    /// shown ones, or removed again when it is already shown (the last tab stays; removing
+    /// the active one promotes the next). Removal by a second Shift-click is ours,
+    /// **parity-pending G1**.
+    pub fn click(&mut self, tab: &str, shift: bool, tabs: &[String]) {
+        self.normalise(tabs);
+        if !shift {
+            self.active = tab.to_string();
+            self.stacked.clear();
+        } else if self.active == tab {
+            if !self.stacked.is_empty() {
+                self.active = self.stacked.remove(0);
+            }
+        } else if let Some(i) = self.stacked.iter().position(|t| t == tab) {
+            self.stacked.remove(i);
+        } else if tabs.iter().any(|t| t == tab) {
+            self.stacked.push(tab.to_string());
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AttributeView {
     pub name: String,

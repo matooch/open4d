@@ -15,7 +15,8 @@ use forge_viewport::cull::Frustum;
 use forge_viewport::instancing::{INSTANCE_CHUNK, InstanceInput, build_layout, visible_ranges};
 use forge_viewport::picking::pick_instances;
 use forge_viewport::render::{
-    DrawInstanced, DrawMesh, Frame, Gpu, InstanceSet, MeshBuffers, Settings, render_to_rgba,
+    DrawInstanced, DrawMesh, Frame, Gpu, Highlight, InstanceSet, MeshBuffers, SelectionDisplay,
+    Settings, render_to_rgba, render_to_rgba_with,
 };
 use glam::{DMat4, DQuat, DVec3};
 
@@ -288,6 +289,96 @@ fn gpu_benches(c: &mut Criterion) {
             ))
         })
     });
+    g.finish();
+
+    // the selection outline (docs/specs/VIEWPORT.md §16.3): the same frame with nothing
+    // selected and with everything selected, at 640 x 360
+    let mut g = c.benchmark_group("outline_640x360");
+    g.sample_size(10);
+    let selected = |n: usize| SelectionDisplay {
+        meshes: vec![Highlight::Selected; n],
+        instanced: vec![Highlight::Selected; n],
+        ..SelectionDisplay::default()
+    };
+    let clones = Clones::new(10_000);
+    let set = InstanceSet::new(
+        &gpu.device,
+        &protos,
+        Some(std::f64::consts::PI),
+        &clones.input(),
+        &DMat4::IDENTITY,
+    );
+    let cam = camera_over(&clones);
+    // 400 separate cube objects on a 20 x 20 grid
+    let cubes: Vec<MeshBuffers> = (0..400)
+        .map(|k| {
+            let mut m = cube();
+            let (i, j) = ((k % 20) as f64, (k / 20) as f64);
+            for p in &mut m.points {
+                *p += DVec3::new(i * 3.0 - 30.0, 0.0, j * 3.0 - 30.0);
+            }
+            MeshBuffers::with_device_no_points(
+                &gpu.device,
+                &m,
+                &Selection::default(),
+                Some(std::f64::consts::PI),
+            )
+        })
+        .collect();
+    let draws: Vec<DrawMesh> = cubes
+        .iter()
+        .map(|mesh| DrawMesh {
+            mesh,
+            color: [0.7; 3],
+        })
+        .collect();
+    let cube_cam = Camera {
+        distance: 90.0,
+        pitch: 0.8,
+        ..Camera::default()
+    };
+    let one = [DrawInstanced {
+        set: &set,
+        color: [0.7; 3],
+    }];
+    let one_selected = SelectionDisplay {
+        meshes: std::iter::once(Highlight::Active)
+            .chain(std::iter::repeat_n(Highlight::None, 399))
+            .collect(),
+        ..SelectionDisplay::default()
+    };
+    for (name, sel) in [
+        ("none", SelectionDisplay::default()),
+        ("one", one_selected),
+        ("all", selected(400)),
+    ] {
+        g.bench_function(format!("objects_400_{name}"), |b| {
+            b.iter(|| {
+                let frame = Frame {
+                    meshes: &draws,
+                    instanced: &[],
+                    grid: None,
+                    lines: &[],
+                    gizmo: None,
+                    settings: Settings::default(),
+                };
+                black_box(render_to_rgba_with(&gpu, 640, 360, &cube_cam, &frame, &sel))
+            })
+        });
+        g.bench_function(format!("clones_10000_{name}"), |b| {
+            b.iter(|| {
+                let frame = Frame {
+                    meshes: &[],
+                    instanced: &one,
+                    grid: None,
+                    lines: &[],
+                    gizmo: None,
+                    settings: Settings::default(),
+                };
+                black_box(render_to_rgba_with(&gpu, 640, 360, &cam, &frame, &sel))
+            })
+        });
+    }
     g.finish();
 }
 

@@ -382,6 +382,9 @@ Linear / Step, Copy / Paste (at the current frame), Scale 1/2 and Scale 2 about 
 Ripple, Snap, "Selected objects only". Pan with the scroll wheel, zoom with pinch / ctrl-scroll about
 the cursor (`TimeView`). Shared pure logic (`TimeView`, `ValueView`, `KeySelection`, `hit_test`,
 `box_select`, `scale_about`, `rows`) is covered without egui.
+Colours (brief 234, owner note N11; UI.md §24.1): selected keys are drawn in the **selection** colour
+(amber) and one pixel larger, unselected keys in `text`, the box-select rectangle in `selection`, and the
+current-frame line in the **time** colour (mint); the same in the value graph.
 
 ### Value graph (`crates/ui/src/fcurve.rs`)
 One curve per numeric track of the selected objects, drawn by sampling `value_at_exact` (the
@@ -538,18 +541,18 @@ drop_frames }`, built by `Playback::of(settings, time)`:
   anchors (the frame does not change), as in §2.6.
 - `timeline.play` in `Once` mode with the current frame on `hi` first jumps to `lo`.
 
-### 2.7 Shortcuts (own design, parity-pending; none clashes with the existing ones)
-Existing: Ctrl/Cmd+O, S, Shift+S, A, Shift+A, Z, Shift+Z, Y, Delete, 1-5 (shading),
-W/E/R/Q (gizmo), F2 (rename). New, all inactive while a text field has the keyboard:
+### 2.7 Shortcuts (observed, GUI session G2 item 1, brief 233; the table in UI.md §14.2 is the source of truth)
+All inactive while a text field has the keyboard:
 
 | Key | Command |
 |---|---|
-| K | Record |
-| Shift+K | Autokey toggle |
-| Space | Play / Stop, when the pointer is over the viewport |
-| `,` / `.` | previous / next frame |
-| Shift+`,` / Shift+`.` | previous / next key |
-| M | add a marker at the current frame (`marker.add`) |
+| F9 | Record (observed) |
+| Mod+F9 | Autokey toggle (observed) |
+| F8 / F7 | Play / Stop (observed; Play backwards F6 has no command yet) |
+| Space | Play / Stop, when the pointer is over the viewport (the reference plays with Space in the timeline; the viewport scope is ours) |
+| G / F | next / previous frame (observed) |
+| Mod+G / Mod+F | next / previous key (observed) |
+| Shift+M | add a marker at the current frame (`marker.add`; ours, bare M is a prefix key) |
 | Alt+`,` / Alt+`.` | previous / next marker (`marker.jump`) |
 
 ### 2.8 Make Editable and Current State to Object

@@ -355,9 +355,10 @@ fn visibility_resolves_down_the_hierarchy() {
         "disabled ancestor"
     );
     assert_eq!(visibility::own(s.doc.scene(), c).0, Vis::Default);
-    assert_eq!(Vis::Default.next(), Vis::Off);
-    assert_eq!(Vis::Off.next(), Vis::On);
-    assert_eq!(Vis::On.next(), Vis::Default);
+    // observed, G1 item 2: a click cycles default -> on -> off -> default
+    assert_eq!(Vis::Default.next(), Vis::On);
+    assert_eq!(Vis::On.next(), Vis::Off);
+    assert_eq!(Vis::Off.next(), Vis::Default);
 }
 
 #[test]
@@ -500,8 +501,8 @@ fn visibility_and_enable_commands_validate_and_undo() {
 // ---- hierarchy cues and row geometry (brief 229, owner note N7, UI.md 13.1a) ----------
 
 use forge_ui::tree::{
-    Connector, DropMark, METRICS, connector_segments, connectors, drop_mark, row_colours,
-    row_layout, trunk_x,
+    Connector, DropMark, EvalCell, METRICS, connector_segments, connectors, disclosure_box,
+    disclosure_glyph, drop_mark, eval_cell, name_colour, row_colours, row_layout, trunk_x,
 };
 
 /// Roots `R` (children `P` (children `Q1`, `Q2`) and `S`) and `T`, all expanded.
@@ -529,16 +530,18 @@ fn three_levels(s: &mut EditorState) -> Vec<NodeId> {
 
 #[test]
 fn row_geometry_numbers_are_fixed() {
-    assert_eq!(METRICS.row_height, 22.0);
-    assert_eq!(METRICS.indent, 18.0);
-    assert_eq!(METRICS.arrow_width, 16.0);
+    // observed, G1 item 7: row pitch 20 px, child indent about 12 px
+    assert_eq!(METRICS.row_height, 20.0);
+    assert_eq!(METRICS.indent, 12.0);
+    assert_eq!(METRICS.arrow_width, 12.0);
+    assert_eq!(METRICS.box_size, 10.0);
     let l0 = row_layout(0);
-    assert_eq!((l0.start, l0.arrow), (0.0, (0.0, 16.0)));
+    assert_eq!((l0.start, l0.arrow), (0.0, (0.0, 12.0)));
     let l2 = row_layout(2);
-    assert_eq!((l2.start, l2.arrow), (36.0, (36.0, 52.0)));
-    // the trunk of a level is the centre of that level's arrow cell
-    assert_eq!(trunk_x(0), 8.0);
-    assert_eq!(trunk_x(2), 44.0);
+    assert_eq!((l2.start, l2.arrow), (24.0, (24.0, 36.0)));
+    // the trunk of a level is the centre of that level's gutter cell
+    assert_eq!(trunk_x(0), 6.0);
+    assert_eq!(trunk_x(2), 30.0);
     assert_eq!(l2.parent_trunk, Some(trunk_x(1)));
     assert_eq!(l0.parent_trunk, None);
     // a child starts further right than its parent, by exactly one indent
@@ -547,6 +550,33 @@ fn row_geometry_numbers_are_fixed() {
             row_layout(d + 1).start - row_layout(d).start,
             METRICS.indent
         );
+    }
+}
+
+#[test]
+fn the_disclosure_is_a_boxed_minus_or_a_boxed_plus() {
+    // the box is centred in the gutter cell, on the trunk, at the row's vertical middle
+    for depth in [0, 1, 3] {
+        let (l, t, r, b) = disclosure_box(depth);
+        assert_eq!((r - l, b - t), (METRICS.box_size, METRICS.box_size));
+        assert_eq!((l + r) / 2.0, trunk_x(depth));
+        assert_eq!((t + b) / 2.0, METRICS.row_height / 2.0);
+        // expanded: one horizontal bar (a minus); collapsed: also a vertical one (a plus)
+        let minus = disclosure_glyph(depth, true);
+        let plus = disclosure_glyph(depth, false);
+        assert_eq!(minus.len(), 1);
+        assert_eq!(plus.len(), 2);
+        assert_eq!(plus[0], minus[0]);
+        let ([x0, y0], [x1, y1]) = minus[0];
+        assert_eq!(
+            (y0, y1),
+            (METRICS.row_height / 2.0, METRICS.row_height / 2.0)
+        );
+        assert!(x0 > l && x1 < r, "the bar stays inside the box");
+        let ([vx0, vy0], [vx1, vy1]) = plus[1];
+        assert_eq!(vx0, vx1);
+        assert_eq!(vx0, trunk_x(depth));
+        assert!(vy0 > t && vy1 < b);
     }
 }
 
@@ -578,8 +608,8 @@ fn connectors_follow_the_visible_depth_sequence() {
 }
 
 /// The segments of a row as text, `x0,y0-x1,y1`, for exact comparison.
-fn seg_text(depth: usize, has_children: bool, trunks: &[bool]) -> Vec<String> {
-    connector_segments(depth, has_children, trunks)
+fn seg_text(depth: usize, has_children: bool, expanded: bool, trunks: &[bool]) -> Vec<String> {
+    connector_segments(depth, has_children, expanded, trunks)
         .iter()
         .map(|([x0, y0], [x1, y1])| format!("{x0},{y0}-{x1},{y1}"))
         .collect()
@@ -587,7 +617,8 @@ fn seg_text(depth: usize, has_children: bool, trunks: &[bool]) -> Vec<String> {
 
 #[test]
 fn the_three_level_tree_draws_these_connector_lines() {
-    // snapshot of the line geometry of the sample tree R, P, Q1, Q2, S, T (22 px rows)
+    // snapshot of the line geometry of the sample tree R, P, Q1, Q2, S, T (20 px rows, 12 px
+    // indent, 10 px boxes)
     let mut s = state();
     three_levels(&mut s);
     let rs = rows(&s);
@@ -595,16 +626,23 @@ fn the_three_level_tree_draws_these_connector_lines() {
     let snap: Vec<(String, Vec<String>)> = rs
         .iter()
         .zip(&cs)
-        .map(|(r, c)| (r.name.clone(), seg_text(r.depth, r.has_children, &c.trunks)))
+        .map(|(r, c)| {
+            (
+                r.name.clone(),
+                seg_text(r.depth, r.has_children, r.expanded, &c.trunks),
+            )
+        })
         .collect();
-    // P has children: its horizontal stops at its arrow cell (18); Q1 / Q2 / S are leaves:
-    // their horizontals stop 14 px into their own cell (50 = 36 + 14, 32 = 18 + 14)
+    // R and P are expanded parents: a stub runs from the bottom of their box (15) to the
+    // row's bottom (20) on their own trunk (6, 18). P's horizontal stops at its box's left
+    // edge (13 = 12 + 1); Q1 / Q2 / S are leaves: their horizontals stop 8 px into their own
+    // cell (32 = 24 + 8, 20 = 12 + 8).
     let want: Vec<(String, Vec<String>)> = [
-        ("R", vec![]),
-        ("P", vec!["8,0-8,22", "8,11-18,11"]),
-        ("Q1", vec!["8,0-8,22", "26,0-26,22", "26,11-50,11"]),
-        ("Q2", vec!["8,0-8,22", "26,0-26,11", "26,11-50,11"]),
-        ("S", vec!["8,0-8,11", "8,11-32,11"]),
+        ("R", vec!["6,15-6,20"]),
+        ("P", vec!["6,0-6,20", "6,10-13,10", "18,15-18,20"]),
+        ("Q1", vec!["6,0-6,20", "18,0-18,20", "18,10-32,10"]),
+        ("Q2", vec!["6,0-6,20", "18,0-18,10", "18,10-32,10"]),
+        ("S", vec!["6,0-6,10", "6,10-20,10"]),
         ("T", vec![]),
     ]
     .into_iter()
@@ -678,6 +716,8 @@ fn row_colours_stay_readable_in_every_theme() {
         assert_ne!(c.separator, c.alt, "{kind:?}");
         // the text stays readable on the shaded row
         assert!(contrast(theme.text, c.alt) >= 4.5, "{kind:?}");
+        // the selected row's fill differs from the plain one and keeps the text readable
+        assert_ne!(c.selected, theme.panel, "{kind:?}");
     }
 }
 
@@ -794,37 +834,131 @@ fn click_shift_and_command_in_the_panel() {
 #[test]
 fn dots_and_tick_run_commands_and_undo() {
     let mut h = harness();
-    let a = node_named(&h, "A");
+    // B1 is a generator-like type: it has the evaluation check (nulls have none)
+    let a = node_named(&h, "B1");
     let param = |h: &Harness<'_, Editor>, p: &str| st(h).doc.scene().param(a, p).cloned();
-    h.get_by_label("Editor visibility: A").click();
-    h.run();
-    assert_eq!(
-        param(&h, "object.editor_vis"),
-        Some(Value::Enum("off".into()))
-    );
-    h.get_by_label("Editor visibility: A").click();
+    // observed, G1 item 2: default -> on -> off -> default
+    h.get_by_label("Editor visibility: B1").click();
     h.run();
     assert_eq!(
         param(&h, "object.editor_vis"),
         Some(Value::Enum("on".into()))
     );
-    h.get_by_label("Render visibility: A").click();
+    h.get_by_label("Editor visibility: B1").click();
+    h.run();
+    assert_eq!(
+        param(&h, "object.editor_vis"),
+        Some(Value::Enum("off".into()))
+    );
+    h.get_by_label("Editor visibility: B1").click();
+    h.run();
+    assert_eq!(
+        param(&h, "object.editor_vis"),
+        Some(Value::Enum("default".into()))
+    );
+    h.get_by_label("Editor visibility: B1").click();
+    h.run();
+    h.get_by_label("Editor visibility: B1").click();
+    h.run();
+    assert_eq!(
+        param(&h, "object.editor_vis"),
+        Some(Value::Enum("off".into()))
+    );
+    h.get_by_label("Render visibility: B1").click();
     h.run();
     assert_eq!(
         param(&h, "object.render_vis"),
-        Some(Value::Enum("off".into()))
+        Some(Value::Enum("on".into()))
     );
-    h.get_by_label("Enabled: A").click();
+    h.get_by_label("Enabled: B1").click();
     h.run();
     assert_eq!(param(&h, "object.enabled"), Some(Value::Bool(false)));
     for (p, want) in [
         ("object.enabled", Value::Bool(true)),
         ("object.render_vis", Value::Enum("default".into())),
-        ("object.editor_vis", Value::Enum("off".into())),
+        ("object.editor_vis", Value::Enum("on".into())),
     ] {
         execute(&mut h.state_mut().state, "edit.undo", json!({})).unwrap();
         h.run();
         assert_eq!(param(&h, p), Some(want), "undo of {p}");
+    }
+}
+
+#[test]
+fn the_two_visibility_dots_are_stacked_editor_above_render() {
+    let h = harness();
+    let editor = h.get_by_label("Editor visibility: B1").rect();
+    let render = h.get_by_label("Render visibility: B1").rect();
+    // one column: the upper dot is the editor's, the lower one the render's
+    assert_eq!(editor.center().x, render.center().x);
+    assert!(editor.center().y < render.center().y);
+    assert_eq!(
+        render.center().y - editor.center().y,
+        METRICS.row_height / 2.0
+    );
+    // the evaluation check sits to the right of the dots, and the row stays 20 px high
+    let tick = h.get_by_label("Enabled: B1").rect();
+    assert!(tick.min.x >= editor.max.x);
+    assert!(editor.height() + render.height() <= METRICS.row_height + 0.5);
+}
+
+#[test]
+fn the_evaluation_cell_depends_on_the_type() {
+    // observed, G1 item 2: a check where applicable, an active-camera target on cameras,
+    // nothing on nulls
+    assert_eq!(eval_cell("forge.null"), EvalCell::None);
+    assert_eq!(eval_cell("forge.camera"), EvalCell::ActiveCamera);
+    assert_eq!(eval_cell("forge.light"), EvalCell::Check);
+    assert_eq!(eval_cell("forge.cube"), EvalCell::Check);
+    assert_eq!(eval_cell("test.box"), EvalCell::Check);
+    let mut s = state();
+    let null = create(&mut s, "forge.null");
+    let cam = create(&mut s, "forge.camera");
+    let cube = create(&mut s, "forge.cube");
+    let by_id = |id| rows(&s).into_iter().find(|r| r.id == id).unwrap().eval;
+    assert_eq!(by_id(null), EvalCell::None);
+    assert_eq!(by_id(cam), EvalCell::ActiveCamera);
+    assert_eq!(by_id(cube), EvalCell::Check);
+    // in the panel: no tick on the null, a target on the camera, a tick on the cube
+    s.selection.clear();
+    let mut h = Harness::builder()
+        .with_size([1280.0, 800.0])
+        .build_ui_state(|ui, e: &mut Editor| e.show(ui, None), Editor::new(s));
+    h.run();
+    let names = |h: &Harness<'_, Editor>| {
+        let sc = h.state().state.doc.scene();
+        [null, cam, cube].map(|id| sc.node(id).unwrap().name.clone())
+    };
+    let [n_null, n_cam, n_cube] = names(&h);
+    assert!(h.query_by_label(&format!("Enabled: {n_null}")).is_none());
+    assert!(
+        h.query_by_label(&format!("Active camera: {n_cam}"))
+            .is_some()
+    );
+    assert!(h.query_by_label(&format!("Enabled: {n_cam}")).is_none());
+    assert!(h.query_by_label(&format!("Enabled: {n_cube}")).is_some());
+    // the camera's target runs view.look_through_camera
+    h.get_by_label(&format!("Active camera: {n_cam}")).click();
+    h.run();
+    assert!(
+        h.state().state.status.is_empty(),
+        "{}",
+        h.state().state.status
+    );
+}
+
+#[test]
+fn selected_names_are_drawn_in_the_selection_colour() {
+    use forge_ui::theme::{Theme, ThemeKind, contrast};
+    for kind in ThemeKind::ALL {
+        let theme = Theme::of(kind);
+        assert_eq!(name_colour(&theme, true), Some(theme.selection), "{kind:?}");
+        assert_eq!(name_colour(&theme, false), None);
+        // the amber name stays readable on the faint fill of a selected row, and the row's left
+        // bar is the selection colour itself (the greyscale cue)
+        let fill = row_colours(&theme).selected;
+        assert!(contrast(theme.selection, fill) >= 3.0, "{kind:?}");
+        assert_eq!(row_colours(&theme).bar, theme.selection, "{kind:?}");
     }
 }
 
@@ -836,17 +970,21 @@ fn a_dot_on_a_selected_row_changes_the_whole_selection() {
     h.get_by_label("C")
         .click_modifiers(egui::Modifiers::COMMAND);
     h.run();
-    h.get_by_label("Enabled: C").click();
+    h.get_by_label("Editor visibility: C").click();
     h.run();
+    let editor_vis = |h: &Harness<'_, Editor>, n: &str| {
+        st(h)
+            .doc
+            .scene()
+            .param(node_named(h, n), "object.editor_vis")
+            .cloned()
+    };
     for n in ["A", "C"] {
-        assert!(
-            !visibility::enabled(st(&h).doc.scene(), node_named(&h, n)),
-            "{n}"
-        );
+        assert_eq!(editor_vis(&h, n), Some(Value::Enum("on".into())), "{n}");
     }
-    assert!(visibility::enabled(st(&h).doc.scene(), node_named(&h, "B")));
+    assert_eq!(editor_vis(&h, "B"), Some(Value::Enum("default".into())));
     execute(&mut h.state_mut().state, "edit.undo", json!({})).unwrap();
-    assert!(visibility::enabled(st(&h).doc.scene(), node_named(&h, "A")));
+    assert_eq!(editor_vis(&h, "A"), Some(Value::Enum("default".into())));
 }
 
 #[test]

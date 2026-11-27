@@ -155,6 +155,17 @@ fn color32(c: [u8; 3]) -> Color32 {
     Color32::from_rgb(c[0], c[1], c[2])
 }
 
+/// The ruler's label interval in frames: the smallest of 1, 2, 5, 10, ... that keeps labels
+/// at least 40 points apart over `width` points showing `span` frames. At the reference's
+/// 1920 x 1080 window the strip is about 1413 points wide for a 0 - 90 project, which labels
+/// every 5 frames (observed, G10 A7).
+pub fn ruler_step(span: f32, width: f32) -> i64 {
+    [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 5000]
+        .into_iter()
+        .find(|s| (*s as f32 / span) * width >= 40.0)
+        .unwrap_or(10000)
+}
+
 /// The frame strip: scrubbing, ruler, key ticks, the preview range with its two handles and
 /// the markers. `keys` are key frames of the selected objects.
 pub fn strip(ui: &mut Ui, scene: &Scene, current: i64, keys: &[f64], out: &mut Vec<Cmd>) {
@@ -183,7 +194,7 @@ pub fn strip(ui: &mut Ui, scene: &Scene, current: i64, keys: &[f64], out: &mut V
     }
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 2.0, theme.faint);
-    // preview range: the outside is dimmed, the inside gets an accent band
+    // preview range: the outside is dimmed, the inside gets a time-coloured band
     if let Some((a, b)) = time.preview {
         let (xa, xb) = (scale.to_x(a as f64), scale.to_x(b as f64));
         let dim = Color32::from_black_alpha(110);
@@ -203,15 +214,12 @@ pub fn strip(ui: &mut Ui, scene: &Scene, current: i64, keys: &[f64], out: &mut V
                 Pos2::new(xb, body.bottom()),
             ),
             0.0,
-            theme.accent,
+            theme.time,
         );
     }
     // ruler
     let span = scale.span();
-    let step = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 5000]
-        .into_iter()
-        .find(|s| (*s as f32 / span) * (scale.x1 - scale.x0) >= 40.0)
-        .unwrap_or(10000);
+    let step = ruler_step(span, scale.x1 - scale.x0);
     let first = settings.start.div_euclid(step) * step;
     for f in (first..=settings.end).step_by(step as usize) {
         if f < settings.start {
@@ -240,13 +248,13 @@ pub fn strip(ui: &mut Ui, scene: &Scene, current: i64, keys: &[f64], out: &mut V
         let x = scale.to_x(*f);
         painter.line_segment(
             [Pos2::new(x, body.top()), Pos2::new(x, body.top() + 8.0)],
-            Stroke::new(2.0, theme.accent),
+            Stroke::new(2.0, theme.time),
         );
     }
     let x = scale.to_x(current as f64);
     painter.line_segment(
         [Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())],
-        Stroke::new(1.5, theme.component_selection),
+        Stroke::new(1.5, theme.time),
     );
     // widgets on top of the scrub area: preview handles, then markers
     if let Some((a, b)) = time.preview {
@@ -264,7 +272,7 @@ pub fn strip(ui: &mut Ui, scene: &Scene, current: i64, keys: &[f64], out: &mut V
             ui.painter_at(rect).rect_filled(
                 Rect::from_center_size(Pos2::new(x, body.bottom() - 6.0), vec2(4.0, 12.0)),
                 1.0,
-                theme.accent,
+                theme.time,
             );
             if r.dragged()
                 && let Some(pos) = r.interact_pointer_pos()

@@ -39,12 +39,13 @@ impl Vis {
         }
     }
 
-    /// The dot click cycle: Default -> Off -> On -> Default.
+    /// The dot click cycle: Default -> On -> Off -> Default (observed, G1 item 2: the first
+    /// click keeps the object visible, the second hides it, the third restores the default).
     pub fn next(self) -> Vis {
         match self {
-            Vis::Default => Vis::Off,
-            Vis::Off => Vis::On,
-            Vis::On => Vis::Default,
+            Vis::Default => Vis::On,
+            Vis::On => Vis::Off,
+            Vis::Off => Vis::Default,
         }
     }
 }

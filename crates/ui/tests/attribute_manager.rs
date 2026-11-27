@@ -715,3 +715,266 @@ fn user_data_rows_appear_in_the_attribute_panel() {
     assert_eq!(row.label, "Amount");
     assert_eq!(row.value, Value::Float(2.5));
 }
+
+// ---- brief 233: chevrons, key indicator states, tab stacking -------------------------
+
+use egui::{Key, Modifiers};
+use forge_ui::attributes::TabSelection;
+use forge_ui::key_indicator::KeyState;
+use forge_ui::theme::{Theme, ThemeKind, contrast};
+use forge_ui::widgets::number::{format_value, parse_value, step_value};
+
+#[test]
+fn a_chevron_steps_one_unit_and_stays_in_range() {
+    // observed, G4 item 1: the right chevron took 200 cm to 201 cm, the left one back
+    assert_eq!(scrub::chevron_step(Unit::Distance, false), 1.0);
+    assert_eq!(scrub::chevron_step(Unit::Angle, false), 1.0);
+    assert_eq!(scrub::chevron_step(Unit::Percent, false), 1.0);
+    assert_eq!(scrub::chevron_step(Unit::None, true), 1.0);
+    assert_eq!(scrub::chevron_step(Unit::None, false), 0.1);
+    assert_eq!(step_value(200.0, 1, 1.0, None), 201.0);
+    assert_eq!(step_value(201.0, -1, 1.0, None), 200.0);
+    // repeated small steps carry no binary noise
+    let mut v = 0.0;
+    for _ in 0..3 {
+        v = step_value(v, 1, 0.1, None);
+    }
+    assert_eq!(v, 0.3);
+    // a step never leaves the range
+    assert_eq!(step_value(50.0, 1, 1.0, Some((1.0, 50.0))), 50.0);
+    assert_eq!(step_value(1.0, -1, 1.0, Some((1.0, 50.0))), 1.0);
+    // typed text
+    assert_eq!(format_value(201.0, false), "201");
+    assert_eq!(format_value(0.5, false), "0.5");
+    assert_eq!(format_value(-0.00001, false), "0");
+    assert_eq!(format_value(7.4, true), "7");
+}
+
+/// A double click: a frame of the test harness lasts 0.75 s of frame clock, longer than the
+/// default double-click delay, so the delay is raised to 1 s; earlier clicks of the test are
+/// first left behind (a third click soon after two others would be a triple click).
+fn double_click(h: &mut Harness<'_, Editor>, label: &str) {
+    h.ctx
+        .options_mut(|o| o.input_options.max_double_click_delay = 1.0);
+    for _ in 0..8 {
+        h.step();
+    }
+    h.get_by_label(label).click();
+    h.step();
+    h.get_by_label(label).click();
+    h.step();
+    h.run();
+}
+
+#[test]
+fn chevrons_and_typing_edit_a_number_field() {
+    let mut s = state();
+    let a = make(&mut s, "am.thing");
+    let mut h = harness(s);
+    h.run();
+    let before = undo_steps(&h);
+    // the right chevron adds one, the left one takes it back; each is its own undo step
+    h.get_by_label("Increase Count").click();
+    h.run();
+    assert_eq!(param(&h, a, "count"), Value::Int(4));
+    assert_eq!(undo_steps(&h), before + 1);
+    h.get_by_label("Decrease Count").click();
+    h.run();
+    assert_eq!(param(&h, a, "count"), Value::Int(3));
+    // a float in display units: one degree
+    h.get_by_label("Decrease Angle").click();
+    h.run();
+    let Value::Float(v) = param(&h, a, "angle") else {
+        panic!()
+    };
+    assert!((v - (0.5 - 1f64.to_radians())).abs() < 1e-9, "{v}");
+    // the range holds: Count is 1 .. 50
+    h.get_by_label("Decrease Count").click();
+    h.run();
+    h.get_by_label("Decrease Count").click();
+    h.run();
+    h.get_by_label("Decrease Count").click();
+    h.run();
+    assert_eq!(param(&h, a, "count"), Value::Int(1));
+    // a vector field has chevrons per component
+    h.get_by_label("Increase Y Pos").click();
+    h.run();
+    // unit-less floats step by 0.1
+    assert_eq!(param(&h, a, "pos"), Value::Vec3([1.0, 2.1, 3.0]));
+
+    // double-click edits the text, Return commits
+    double_click(&mut h, "Count");
+    h.get_by_label("Edit Count");
+    h.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    h.get_by_label("Edit Count").type_text("8");
+    h.run();
+    assert_eq!(
+        param(&h, a, "count"),
+        Value::Int(1),
+        "typing alone does not commit"
+    );
+    h.key_press(Key::Enter);
+    h.run();
+    assert_eq!(param(&h, a, "count"), Value::Int(8));
+    assert!(
+        h.query_by_label("Edit Count").is_none(),
+        "the editor closed"
+    );
+    // Escape cancels an edit
+    double_click(&mut h, "Count");
+    h.get_by_label("Edit Count").type_text("9");
+    h.key_press(Key::Escape);
+    h.run();
+    assert_eq!(param(&h, a, "count"), Value::Int(8));
+    assert!(h.query_by_label("Edit Count").is_none());
+}
+
+#[test]
+fn typed_text_is_read_without_its_unit() {
+    use forge_ui::widgets::number::NumberField;
+    let f = NumberField {
+        base: 0.1,
+        prefix: "X ".into(),
+        suffix: "°",
+        mixed: false,
+        label: egui::Id::NULL,
+        name: "Rot".into(),
+        step: 1.0,
+        range: None,
+        is_int: false,
+    };
+    assert_eq!(parse_value("12.5", &f), Some(12.5));
+    assert_eq!(parse_value(" X 12.5° ", &f), Some(12.5));
+    assert_eq!(parse_value("12,5", &f), Some(12.5));
+    assert_eq!(parse_value("abc", &f), None);
+    assert_eq!(parse_value("", &f), None);
+    assert_eq!(parse_value("inf", &f), None);
+}
+
+/// The hue in degrees of an sRGB colour (HSV on the bytes).
+fn hue(c: egui::Color32) -> f32 {
+    let [r, g, b] = [c.r(), c.g(), c.b()].map(|v| f32::from(v) / 255.0);
+    let (max, min) = (r.max(g).max(b), r.min(g).min(b));
+    let d = max - min;
+    if d == 0.0 {
+        return 0.0;
+    }
+    let h = if max == r {
+        ((g - b) / d).rem_euclid(6.0)
+    } else if max == g {
+        (b - r) / d + 2.0
+    } else {
+        (r - g) / d + 4.0
+    };
+    h * 60.0
+}
+
+#[test]
+fn the_key_diamond_has_four_distinct_states() {
+    // observed, G4 item 2: hollow grey / solid key colour / solid modified colour / hollow
+    // key colour
+    assert_eq!(KeyState::of(false, false, false), KeyState::Unkeyed);
+    assert_eq!(KeyState::of(false, true, true), KeyState::Keyed);
+    assert_eq!(KeyState::of(false, false, true), KeyState::Animated);
+    // an unkeyed draft shows as modified on a keyed frame and on a frame between keys
+    assert_eq!(KeyState::of(true, true, true), KeyState::Modified);
+    assert_eq!(KeyState::of(true, false, true), KeyState::Modified);
+    let words: Vec<&str> = [
+        KeyState::Unkeyed,
+        KeyState::Keyed,
+        KeyState::Modified,
+        KeyState::Animated,
+    ]
+    .iter()
+    .map(|s| s.word())
+    .collect();
+    assert_eq!(words, ["unkeyed", "keyed", "changed", "animated"]);
+    for kind in ThemeKind::ALL {
+        let t = Theme::of(kind);
+        let clear = egui::Color32::TRANSPARENT;
+        let (un, un_fill) = KeyState::Unkeyed.look(&t);
+        let (kd, kd_fill) = KeyState::Keyed.look(&t);
+        let (md, md_fill) = KeyState::Modified.look(&t);
+        let (an, an_fill) = KeyState::Animated.look(&t);
+        // hollow: no fill; solid: filled with the outline colour
+        assert_eq!((un_fill, an_fill), (clear, clear), "{kind:?}");
+        assert_eq!((kd_fill, md_fill), (kd, md), "{kind:?}");
+        // grey has no hue worth naming; the others are the key colour and the modified colour
+        assert_eq!(un, t.weak_text, "{kind:?}");
+        assert_eq!((kd, an), (t.key, t.key), "{kind:?}");
+        assert_eq!(md, t.modified, "{kind:?}");
+        // the key colour and the modified colour are distinct hues, and both readable
+        let mut d = (hue(t.key) - hue(t.modified)).abs();
+        d = d.min(360.0 - d);
+        assert!(
+            d >= 30.0,
+            "{kind:?}: hues {} / {}",
+            hue(t.key),
+            hue(t.modified)
+        );
+        for c in [t.key, t.modified] {
+            assert!(contrast(c, t.panel) >= 3.0, "{kind:?}: {c:?}");
+        }
+        // the four are told apart: solid key vs solid modified differ, hollow key vs hollow grey
+        assert_ne!(kd, md);
+        assert_ne!(un, an);
+    }
+}
+
+#[test]
+fn shift_click_stacks_two_tab_bodies() {
+    let tabs: Vec<String> = ["Basic", "Extra", "Third"].map(String::from).to_vec();
+    let mut t = TabSelection::default();
+    assert_eq!(t.shown(&tabs), ["Basic"], "the first tab shows by default");
+    t.click("Extra", false, &tabs);
+    assert_eq!(t.shown(&tabs), ["Extra"]);
+    // Shift-click adds a body below, the first-active one stays on top
+    t.click("Basic", true, &tabs);
+    assert_eq!(t.shown(&tabs), ["Extra", "Basic"]);
+    t.click("Third", true, &tabs);
+    assert_eq!(t.shown(&tabs), ["Extra", "Basic", "Third"]);
+    // a second Shift-click removes it; removing the top one promotes the next
+    t.click("Basic", true, &tabs);
+    assert_eq!(t.shown(&tabs), ["Extra", "Third"]);
+    t.click("Extra", true, &tabs);
+    assert_eq!(t.shown(&tabs), ["Third"]);
+    t.click("Third", true, &tabs);
+    assert_eq!(t.shown(&tabs), ["Third"], "the last tab stays");
+    // a plain click shows just that tab
+    t.click("Basic", true, &tabs);
+    t.click("Extra", false, &tabs);
+    assert_eq!(t.shown(&tabs), ["Extra"]);
+    // tabs that no longer exist drop out
+    t.click("Basic", true, &tabs);
+    let fewer: Vec<String> = vec!["Basic".into()];
+    assert_eq!(t.shown(&fewer), ["Basic"]);
+    assert_eq!(t.shown(&[]), Vec::<String>::new());
+}
+
+#[test]
+fn shift_clicking_a_second_tab_shows_both_bodies_in_one_scroll_area() {
+    let mut s = state();
+    make(&mut s, "am.thing");
+    let mut h = harness(s);
+    h.run();
+    assert!(h.query_by_label("Note").is_none());
+    // Shift-click the Extra tab with Basic active: both bodies, Basic on top
+    h.get_by_label("Extra").click_modifiers(Modifiers::SHIFT);
+    h.run();
+    let angle = h.get_by_label("Angle").rect();
+    let note = h.get_by_label("Note").rect();
+    assert!(angle.center().y < note.center().y, "Basic above Extra");
+    // a plain click on a tab shows only that tab again
+    tab(&mut h, "Extra");
+    assert!(h.query_by_label("Note").is_some());
+    assert!(h.query_by_label("Angle").is_none());
+    // Shift-click Basic while Extra is active: Extra stays on top
+    h.get_by_label("Basic").click_modifiers(Modifiers::SHIFT);
+    h.run();
+    let angle = h.get_by_label("Angle").rect();
+    let note = h.get_by_label("Note").rect();
+    assert!(
+        note.center().y < angle.center().y,
+        "the first-active tab is on top"
+    );
+}

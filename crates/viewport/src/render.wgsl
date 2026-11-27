@@ -300,3 +300,16 @@ fn vs_color(v: ColorIn) -> ColorOut {
 fn fs_color(i: ColorOut) -> @location(0) vec4<f32> {
     return vec4<f32>(i.color, 1.0);
 }
+
+// Selection outline mask (docs/specs/VIEWPORT.md §16.2): u.base.rg is the value written to the
+// two-channel mask (R: highlighted, G: active); outline.wgsl dilates it.
+@fragment
+fn fs_mask() -> @location(0) vec4<f32> {
+    return vec4<f32>(u.base.r, u.base.g, 0.0, 0.0);
+}
+
+// Colour writes are masked off for the depth-only pipelines; the stage only has to exist.
+@fragment
+fn fs_none() -> @location(0) vec4<f32> {
+    return vec4<f32>(0.0);
+}

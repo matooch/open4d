@@ -527,7 +527,8 @@ const BG: Color32 = Color32::from_rgb(30, 32, 36);
 const GRID: Color32 = Color32::from_rgb(40, 43, 48);
 const NODE_FILL: Color32 = Color32::from_rgb(46, 49, 56);
 const NODE_STROKE: Color32 = Color32::from_rgb(78, 82, 92);
-const ACCENT: Color32 = Color32::from_rgb(240, 170, 60);
+/// The selection amber (UI.md §24.1, dark theme value): the canvas has its own dark palette.
+const SELECTION: Color32 = Color32::from_rgb(0xF3, 0xB3, 0x6B);
 const OK: Color32 = Color32::from_rgb(90, 200, 110);
 const BAD: Color32 = Color32::from_rgb(230, 80, 70);
 const TEXT: Color32 = Color32::from_gray(225);
@@ -927,7 +928,7 @@ impl CanvasState {
                 sr,
                 r,
                 if selected {
-                    Stroke::new(2.0, ACCENT)
+                    Stroke::new(2.0, SELECTION)
                 } else {
                     Stroke::new(1.0, NODE_STROKE)
                 },
@@ -1032,8 +1033,8 @@ impl CanvasState {
         // The box selection rectangle.
         if let (Drag::Box { start, .. }, Some(p)) = (&self.drag, self.pointer) {
             let r = Rect::from_two_pos(view.to_screen(origin, *start), p);
-            painter.rect_filled(r, 0.0, ACCENT.gamma_multiply(0.12));
-            painter.rect_stroke(r, 0.0, Stroke::new(1.0, ACCENT), StrokeKind::Inside);
+            painter.rect_filled(r, 0.0, SELECTION.gamma_multiply(0.12));
+            painter.rect_stroke(r, 0.0, Stroke::new(1.0, SELECTION), StrokeKind::Inside);
         }
     }
 

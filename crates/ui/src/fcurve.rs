@@ -345,7 +345,7 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
     let cx = g.tview.to_x(current, canvas.left());
     painter.line_segment(
         [Pos2::new(cx, canvas.top()), Pos2::new(cx, canvas.bottom())],
-        Stroke::new(1.0, theme.accent),
+        Stroke::new(1.0, theme.time),
     );
 
     // curves
@@ -398,8 +398,8 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
             let selected = g.selection.contains(&id);
             painter.circle(
                 p,
-                KEY_R,
-                if selected { theme.accent } else { color },
+                if selected { KEY_R + 1.0 } else { KEY_R },
+                if selected { theme.selection } else { color },
                 Stroke::new(1.0, theme.window),
             );
             if selected && speed {
@@ -473,7 +473,7 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
             painter.rect_stroke(
                 Rect::from_two_pos(origin, now),
                 0.0,
-                Stroke::new(1.0, theme.accent),
+                Stroke::new(1.0, theme.selection),
                 egui::StrokeKind::Inside,
             );
         }

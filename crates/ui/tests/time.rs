@@ -439,7 +439,8 @@ fn marker_keys_add_and_jump() {
     h.run();
     h.state_mut().state.timeline.current = 7;
     h.run();
-    h.key_press(egui::Key::M);
+    // bare M is the mesh prefix key now; Shift+M adds the marker
+    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::M);
     h.run();
     let frames: Vec<i64> = editor(&h)
         .doc

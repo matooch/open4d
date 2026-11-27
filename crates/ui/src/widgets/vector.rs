@@ -13,15 +13,24 @@ pub fn show(ui: &mut egui::Ui, cx: &Cx, row: &AttrRow, unit: Unit) -> Option<Edi
     let Value::Vec3(v) = row.value else {
         return None;
     };
+    let (min, max) = match row.widget {
+        crate::attributes::Widget::Vec3Drag { min, max, .. } => (min, max),
+        _ => (f64::NEG_INFINITY, f64::INFINITY),
+    };
     let mut edit = None;
     ui.horizontal(|ui| {
         for (k, axis) in ["X", "Y", "Z"].iter().enumerate() {
             let mut d = to_display(unit, v[k]);
             let mut base = scrub::base_step(unit, false, row.step);
             let suffix = unit_suffix(unit);
+            let mut range = (to_display(unit, min), to_display(unit, max));
             if unit == Unit::Distance {
                 d = cx.distance.to_display(d);
                 base = cx.distance.to_display(base);
+                range = (
+                    cx.distance.to_display(range.0),
+                    cx.distance.to_display(range.1),
+                );
             }
             let (r, changed) = number::show(
                 ui,
@@ -32,6 +41,10 @@ pub fn show(ui: &mut egui::Ui, cx: &Cx, row: &AttrRow, unit: Unit) -> Option<Edi
                     suffix,
                     mixed: row.mixed_axes[k],
                     label: cx.label,
+                    name: row.label.clone(),
+                    step: scrub::chevron_step(unit, false),
+                    range: Some(range).filter(|(lo, hi)| lo.is_finite() || hi.is_finite()),
+                    is_int: false,
                 },
             );
             if changed {

@@ -10,7 +10,7 @@ use forge_core::{NodeId, Value};
 use forge_generators::axis::AxisEdit;
 use forge_viewport::gizmo::{Drag, Gizmo, GizmoMode, Space as GizmoSpace};
 use forge_viewport::panes::{Layout as PaneLayout, Pane, arrange};
-use forge_viewport::render::Shading;
+use forge_viewport::render::{Settings, Shading};
 use glam::DVec3;
 use serde_json::{Value as Json, json};
 
@@ -127,7 +127,7 @@ pub struct Editor {
     /// Name field buffer in the attribute panel.
     name_edit: Option<(NodeId, String)>,
     /// The attribute manager tab shown (UI.md §12).
-    attr_tab: String,
+    attr_tabs: crate::attributes::TabSelection,
     /// Counter for drag/typing gestures (each is one undo step).
     gesture_seq: u64,
     gesture: Option<u64>,
@@ -232,7 +232,7 @@ impl Editor {
             keymap_editor: KeyMapEditor::default(),
             palette: Palette::default(),
             name_edit: None,
-            attr_tab: String::new(),
+            attr_tabs: crate::attributes::TabSelection::default(),
             gesture_seq: 0,
             gesture: None,
             viewport_hot: false,
@@ -563,13 +563,19 @@ impl Editor {
                 .send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.sent_title = title;
         }
-        egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));
-        egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
+        // the document / layout row and the status bar have the observed heights (UI.md §29.1)
+        egui::Panel::top("menu")
+            .min_size(crate::layout::WINDOW.document_row)
+            .show(ui, |ui| self.menu_bar(ui));
+        egui::Panel::bottom("status")
+            .exact_size(crate::layout::WINDOW.status_bar)
+            .show(ui, |ui| self.status_bar(ui));
         let sizes = self.sizes;
         let salt = self.layout_gen;
         if !self.state.dock.tabs(Area::Top).is_empty() {
             egui::Panel::top("area_top")
                 .resizable(false)
+                .min_size(crate::layout::WINDOW.command_bar)
                 .show(ui, |ui| self.area(ui, Area::Top, rs));
         }
         if !self.state.dock.tabs(Area::Bottom).is_empty() {
@@ -640,15 +646,19 @@ impl Editor {
     fn shortcuts(&mut self, ctx: &egui::Context) {
         if self.keymap_editor.is_capturing() {
             if let Some(chord) = ctx.input_mut(crate::keymap_editor::take_captured) {
-                self.keymap_editor.captured(chord, &mut self.state.keys);
+                let now = ctx.input(|i| i.time);
+                self.keymap_editor
+                    .captured(chord, &mut self.state.keys, now);
             }
+            self.state.keys.armed = None;
             return;
         }
         if ctx.egui_wants_keyboard_input() || self.palette.open {
+            self.state.keys.armed = None;
             return;
         }
         let hot = self.viewport_hot;
-        let presses = ctx.input_mut(|i| self.state.keys.map.take_presses(i, hot));
+        let presses = ctx.input_mut(|i| self.state.keys.take_presses(i, hot));
         for (id, args) in presses {
             // Delete over the node editor deletes nodes, not objects (UI.md §17.4).
             if id == "object.delete" && self.state.node_editor.active_canvas().hot {
@@ -665,8 +675,8 @@ impl Editor {
         self.state
             .keys
             .map
-            .chord_of(id, args)
-            .map(|c| c.display(ctx))
+            .binding_of(id, args)
+            .map(|b| b.display(ctx))
     }
 
     fn file_action(&mut self, action: FileAction) {
@@ -1139,8 +1149,21 @@ impl Editor {
 
     fn status_bar(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
+            let now = ui.input(|i| i.time);
+            if let Some(prefix) = self.state.keys.pending_prefix(now) {
+                // a prefix key waits for its second key (UI.md §14.7)
+                ui.strong(format!("{} \u{2026}", prefix.display(ui.ctx())));
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_secs_f64(
+                        crate::keymap::SEQUENCE_TIMEOUT + 0.05,
+                    ));
+            }
             if self.state.status.is_empty() {
-                ui.weak("Ready");
+                // the active tool's help text (observed, G10 A8)
+                ui.weak(crate::tools::help_text(
+                    self.state.gizmo_mode,
+                    forge_command::CommandContext::edit_mode(&self.state),
+                ));
             } else {
                 ui.colored_label(Theme::current(ui.ctx()).error, &self.state.status);
             }
@@ -1250,7 +1273,7 @@ impl Editor {
                 if i > 0 {
                     ui.separator();
                 }
-                if let Some(c) = self.button_group(ui, group) {
+                if let Some(c) = self.button_group(ui, group, crate::theme::BUTTONS.command) {
                     clicked = Some(c);
                 }
             }
@@ -1267,7 +1290,7 @@ impl Editor {
             for group in tool_palette() {
                 ui.weak(group.name);
                 ui.horizontal_wrapped(|ui| {
-                    if let Some(c) = self.button_group(ui, &group) {
+                    if let Some(c) = self.button_group(ui, &group, crate::theme::BUTTONS.palette) {
                         clicked = Some(c);
                     }
                 });
@@ -1280,7 +1303,7 @@ impl Editor {
     }
 
     /// Draws a group's buttons; the command of the one clicked, if any.
-    fn button_group(&self, ui: &mut Ui, group: &ButtonGroup) -> Option<Cmd> {
+    fn button_group(&self, ui: &mut Ui, group: &ButtonGroup, min: [f32; 2]) -> Option<Cmd> {
         let mut clicked = None;
         for b in &group.buttons {
             let selected = b.command == "select.mode"
@@ -1289,7 +1312,11 @@ impl Editor {
                     && b.args["mode"]
                         == json!(crate::commands::shading_mode_of(self.state.shading)));
             let response = ui
-                .add(egui::Button::new(b.text()).selected(selected))
+                .add(
+                    egui::Button::new(b.text())
+                        .selected(selected)
+                        .min_size(egui::vec2(min[0], min[1])),
+                )
                 .on_hover_text(b.tip);
             if response.clicked() {
                 // the registry owns the ids; `Cmd` borrows them as 'static
@@ -1575,7 +1602,7 @@ impl Editor {
                 ui.painter().rect_stroke(
                     rect,
                     0.0,
-                    egui::Stroke::new(1.5, Theme::current(ui.ctx()).component_selection),
+                    egui::Stroke::new(1.5, Theme::current(ui.ctx()).state),
                     egui::StrokeKind::Inside,
                 );
             }
@@ -1678,7 +1705,7 @@ impl Editor {
             return;
         };
         if self.state.display == DisplayMode::Render {
-            self.paint_render_mode(ui, pane, rect, ppp);
+            self.paint_render_mode(ui, rs, pane, rect, ppp);
             return;
         }
         let gizmo = self.current_gizmo();
@@ -1729,6 +1756,10 @@ impl Editor {
                 splines: &crate::spline_edit::editor_draws(&shown, &self.state),
                 motion: &motion,
                 overlay: &overlay,
+                active: self.state.selection.active,
+                theme: Theme::current(ui.ctx()),
+                scale: ppp,
+                overlay_only: false,
             },
         );
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
@@ -1812,13 +1843,21 @@ impl Editor {
     /// The Render display mode: the real-time tier's frame of this pane's camera, without the
     /// overlays (UI.md §6.3, RENDER.md R22.7). A missing device keeps a note instead of the
     /// shaded image, since the shaded image needs the same device.
-    fn paint_render_mode(&mut self, ui: &mut Ui, pane: Pane, rect: egui::Rect, ppp: f32) {
+    fn paint_render_mode(
+        &mut self,
+        ui: &mut Ui,
+        rs: &egui_wgpu::RenderState,
+        pane: Pane,
+        rect: egui::Rect,
+        ppp: f32,
+    ) {
         let size = [
             ((rect.width() * ppp).round() as u32).clamp(1, 640),
             ((rect.height() * ppp).round() as u32).clamp(1, 400),
         ];
         let current = self.state.timeline.current;
-        let shown = self.state.app.scheduled_draw(current).scene.clone();
+        let scheduled = self.state.app.scheduled_draw(current);
+        let shown = scheduled.scene.clone();
         let camera = self.state.pane_camera(pane);
         let post = self.state.post;
         match self
@@ -1829,6 +1868,45 @@ impl Editor {
                 let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
                 ui.painter()
                     .image(texture.id(), rect, uv, egui::Color32::WHITE);
+                // the selection outline over the render engine's image: the viewport draws it
+                // alone on a transparent target, hidden by the scene's meshes (VIEWPORT.md §16.2)
+                if !self.state.selection.nodes.is_empty() {
+                    let full = [
+                        (rect.width() * ppp).round() as u32,
+                        (rect.height() * ppp).round() as u32,
+                    ];
+                    let lights = crate::panes::scene_lights(&shown);
+                    let base = Settings {
+                        shadows: false,
+                        ..display_settings(&self.state.views, Shading::Smooth, &lights)
+                    };
+                    let overlay = self.viewport.render(
+                        rs,
+                        pane,
+                        full,
+                        &camera,
+                        base,
+                        SceneView {
+                            scene: &shown,
+                            selected: &self.state.selection.nodes,
+                            gizmo: None,
+                            component: None,
+                            ctx: forge_core::EvalCtx::at_frame(
+                                current,
+                                f64::from(shown.settings().fps),
+                            ),
+                            frame: Some(&*scheduled),
+                            splines: &[],
+                            motion: &Default::default(),
+                            overlay: &Default::default(),
+                            active: self.state.selection.active,
+                            theme: Theme::current(ui.ctx()),
+                            scale: ppp,
+                            overlay_only: true,
+                        },
+                    );
+                    ui.painter().image(overlay, rect, uv, egui::Color32::WHITE);
+                }
                 ui.painter().text(
                     rect.left_top() + egui::vec2(8.0, 6.0),
                     egui::Align2::LEFT_TOP,
@@ -1866,7 +1944,7 @@ impl Editor {
         let tone = |t: Tone| match t {
             Tone::Normal => theme.text,
             Tone::Weak => theme.weak_text,
-            Tone::Guide => theme.accent,
+            Tone::Guide => theme.state,
         };
         let at = |p: [f32; 2]| rect.min + egui::vec2(p[0], p[1]);
         for prim in &list {
@@ -2808,38 +2886,47 @@ impl Editor {
             self.run(("object.rename", json!({"node": id.0, "name": name})));
         }
         let tabs = view.tabs();
-        if !tabs.contains(&self.attr_tab) {
-            self.attr_tab = tabs.first().cloned().unwrap_or_default();
-        }
+        self.attr_tabs.normalise(&tabs);
         if tabs.len() > 1 {
             ui.horizontal(|ui| {
+                let shown = self.attr_tabs.shown(&tabs);
                 for t in &tabs {
-                    if ui.selectable_label(*t == self.attr_tab, t).clicked() {
-                        self.attr_tab = t.clone();
+                    let r = ui.selectable_label(shown.contains(t), t);
+                    if r.clicked() {
+                        // Shift-click stacks a second tab body under the first (G1 item 3)
+                        let shift = ui.input(|i| i.modifiers.shift);
+                        self.attr_tabs.click(t, shift, &tabs);
                     }
                 }
             });
         }
         ui.separator();
-        let tab = self.attr_tab.clone();
+        let shown_tabs = self.attr_tabs.shown(&tabs);
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
                 ui.add_enabled_ui(view.editable, |ui| {
-                    for (group, rows) in view.groups_of(&tab) {
-                        egui::CollapsingHeader::new(group)
-                            .default_open(true)
-                            .show(ui, |ui| {
-                                egui::Grid::new(("attrs", &tab, group))
-                                    .num_columns(2)
-                                    .spacing([12.0, 4.0])
-                                    .show(ui, |ui| {
-                                        for row in rows {
-                                            self.attribute_row(ui, &shown, id, row, can_draft);
-                                            ui.end_row();
-                                        }
-                                    });
-                            });
+                    for (n, tab) in shown_tabs.iter().enumerate() {
+                        if n > 0 {
+                            // stacked bodies are told apart by a line
+                            ui.separator();
+                        }
+                        for (group, rows) in view.groups_of(tab) {
+                            egui::CollapsingHeader::new(group)
+                                .id_salt(("attr_group", tab, group))
+                                .default_open(true)
+                                .show(ui, |ui| {
+                                    egui::Grid::new(("attrs", tab, group))
+                                        .num_columns(2)
+                                        .spacing([12.0, 4.0])
+                                        .show(ui, |ui| {
+                                            for row in rows {
+                                                self.attribute_row(ui, &shown, id, row, can_draft);
+                                                ui.end_row();
+                                            }
+                                        });
+                                });
+                        }
                     }
                 });
             });
@@ -3031,7 +3118,13 @@ impl Editor {
                 }
             }
             let mut auto = self.state.autokey;
-            if ui.checkbox(&mut auto, "Auto-Key").clicked() {
+            // recording is the record role (red), with the word and the checked box as cues
+            let auto_label = if auto {
+                RichText::new("Auto-Key").color(Theme::current(ui.ctx()).record)
+            } else {
+                RichText::new("Auto-Key")
+            };
+            if ui.checkbox(&mut auto, auto_label).clicked() {
                 cmds.push(cmd("key.autokey"));
             }
             ui.separator();
