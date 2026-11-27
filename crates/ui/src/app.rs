@@ -29,8 +29,9 @@ use crate::components::{
 use crate::content_browser::{BrowserAction, menu_entries};
 use crate::coordinates::{CoordDraft, Mixed, Space, Third, coord_view_multi};
 use crate::dock::{Area, Panel};
+use crate::icons::{IconAtlas, icon_name};
 use crate::keymap_editor::KeyMapEditor;
-use crate::layout::{ButtonGroup, Layout, Sizes, command_bar, tool_palette};
+use crate::layout::{CLONE_TOOLSET, CommandButton, Layout, Sizes, command_bar, tool_palette};
 use crate::manipulate::{apply_axis_drag, apply_drag_edit, apply_transform_edits, edit_drafts};
 use crate::object_manager::ObjectManager;
 use crate::palette::Palette;
@@ -110,6 +111,7 @@ pub struct Editor {
     pub state: EditorState,
     /// Initial sizes of the resizable areas (docs/specs/UI.md §11).
     sizes: Sizes,
+    icons: Option<(IconAtlas, egui::TextureHandle)>,
     viewport: ViewportPanel,
     /// The Render display mode's frames and their cache (UI.md §6.3, R22.7).
     render_view: crate::render_mode::RenderView,
@@ -221,6 +223,7 @@ impl Editor {
         Editor {
             state,
             sizes: Sizes::default(),
+            icons: None,
             viewport: ViewportPanel::default(),
             render_view: crate::render_mode::RenderView::default(),
             objects: ObjectManager::default(),
@@ -549,6 +552,16 @@ impl Editor {
         // requests left by commands run outside `run_id` (a script, a test) (UI.md §21.4)
         self.serve_ui_requests();
         self.apply_prefs(ui.ctx());
+        let icon_scale = ui.ctx().pixels_per_point().clamp(0.5, 4.0);
+        if self
+            .icons
+            .as_ref()
+            .is_none_or(|(atlas, _)| atlas.pixels_per_point != icon_scale)
+        {
+            let atlas = IconAtlas::build(icon_scale);
+            let texture = atlas.texture(ui.ctx());
+            self.icons = Some((atlas, texture));
+        }
         // Closing the window with unsaved changes asks first (UI.md §15).
         if ui.ctx().input(|i| i.viewport().close_requested()) && !self.confirm_discard() {
             ui.ctx()
@@ -886,15 +899,7 @@ impl Editor {
                 }
             });
             ui.menu_button("Create", |ui| {
-                ui.menu_button("Clone toolset", |ui| {
-                    let entries = clone_toolset_menu(self.state.doc.scene().registry());
-                    for entry in entries {
-                        if ui.button(&entry.label).clicked() {
-                            self.run((entry.command, entry.args));
-                            ui.close();
-                        }
-                    }
-                });
+                ui.menu_button(CLONE_TOOLSET, |ui| self.clone_toolset_ui(ui));
                 ui.menu_button("Scene", |ui| {
                     for entry in scene_menu(self.state.doc.scene().registry()) {
                         if ui.button(&entry.label).clicked() {
@@ -1267,63 +1272,139 @@ impl Editor {
 
     /// The command bar: grouped buttons, each running one registry command.
     fn command_bar_ui(&mut self, ui: &mut Ui) {
-        let mut clicked: Option<Cmd> = None;
         ui.horizontal_wrapped(|ui| {
-            for (i, group) in command_bar().iter().enumerate() {
+            for (i, group) in command_bar().into_iter().enumerate() {
                 if i > 0 {
                     ui.separator();
                 }
-                if let Some(c) = self.button_group(ui, group, crate::theme::BUTTONS.command) {
-                    clicked = Some(c);
+                for button in group.buttons {
+                    self.chrome_button(ui, button, false);
+                }
+                if group.name == CLONE_TOOLSET {
+                    ui.menu_button("Clone tools", |ui| self.clone_toolset_ui(ui))
+                        .response
+                        .on_hover_text("Create clone tools, effectors or fields");
                 }
             }
         });
-        if let Some(c) = clicked {
-            self.run(c);
-        }
     }
 
-    /// The tool palette: the groups stacked in a column.
-    fn tool_palette_ui(&mut self, ui: &mut Ui) {
-        let mut clicked: Option<Cmd> = None;
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for group in tool_palette() {
-                ui.weak(group.name);
-                ui.horizontal_wrapped(|ui| {
-                    if let Some(c) = self.button_group(ui, &group, crate::theme::BUTTONS.palette) {
-                        clicked = Some(c);
+    fn clone_toolset_ui(&mut self, ui: &mut Ui) {
+        let entries = clone_toolset_menu(self.state.doc.scene().registry());
+        let max_height = (ui.ctx().content_rect().height() - 110.0).max(80.0);
+        egui::ScrollArea::vertical()
+            .max_height(max_height)
+            .show(ui, |ui| {
+                for entry in entries {
+                    let id = entry.args["type"].as_str().unwrap_or(entry.command);
+                    let image = icon_name(id)
+                        .and_then(|name| self.chrome_icon(name, 16.0, ui.visuals().text_color()));
+                    if ui
+                        .add(egui::Button::opt_image_and_text(
+                            image,
+                            Some(entry.label.into()),
+                        ))
+                        .clicked()
+                    {
+                        self.run((entry.command, entry.args));
+                        ui.close();
                     }
-                });
-                ui.separator();
+                }
+            });
+    }
+
+    /// A single column of tools with a gap between groups.
+    fn tool_palette_ui(&mut self, ui: &mut Ui) {
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for (index, group) in tool_palette().into_iter().enumerate() {
+                if index > 0 {
+                    ui.add_space(5.0);
+                }
+                for button in group.buttons {
+                    self.chrome_button(ui, button, true);
+                }
             }
         });
-        if let Some(c) = clicked {
-            self.run(c);
-        }
     }
 
-    /// Draws a group's buttons; the command of the one clicked, if any.
-    fn button_group(&self, ui: &mut Ui, group: &ButtonGroup, min: [f32; 2]) -> Option<Cmd> {
-        let mut clicked = None;
-        for b in &group.buttons {
-            let selected = b.command == "select.mode"
-                && b.args["mode"] == json!(forge_command::ModeArg::from(self.state.mode))
-                || (b.command == "view.shading"
-                    && b.args["mode"]
-                        == json!(crate::commands::shading_mode_of(self.state.shading)));
-            let response = ui
-                .add(
-                    egui::Button::new(b.text())
-                        .selected(selected)
-                        .min_size(egui::vec2(min[0], min[1])),
-                )
-                .on_hover_text(b.tip);
-            if response.clicked() {
-                // the registry owns the ids; `Cmd` borrows them as 'static
-                clicked = Some((b.command, b.args.clone()));
+    fn chrome_icon(
+        &self,
+        name: &str,
+        size: f32,
+        tint: egui::Color32,
+    ) -> Option<egui::Image<'static>> {
+        let (atlas, texture) = self.icons.as_ref()?;
+        let uv = atlas.uv(name)?;
+        Some(
+            egui::Image::new((texture.id(), egui::Vec2::splat(size)))
+                .uv(uv)
+                .tint(tint),
+        )
+    }
+
+    fn chrome_button(&mut self, ui: &mut Ui, button: CommandButton, rail: bool) {
+        let command = (button.command, button.args);
+        let state = match command.0 {
+            "select.mode" => {
+                Some(command.1["mode"] == json!(forge_command::ModeArg::from(self.state.mode)))
             }
+            "view.shading" => Some(
+                command.1["mode"] == json!(crate::commands::shading_mode_of(self.state.shading)),
+            ),
+            "view.gizmo_mode" => {
+                let active = match self.state.gizmo_mode {
+                    GizmoMode::Translate => "move",
+                    GizmoMode::Rotate => "rotate",
+                    GizmoMode::Scale => "scale",
+                };
+                Some(command.1["mode"] == active)
+            }
+            _ => None,
+        };
+        let selected = state.unwrap_or(false);
+        let visuals = ui.visuals();
+        let tint = if selected {
+            visuals.selection.stroke.color
+        } else {
+            visuals.text_color()
+        };
+        let metrics = crate::theme::BUTTONS;
+        let (size, min, location) = if rail {
+            (20.0, metrics.palette, "tool rail")
+        } else {
+            (17.0, metrics.command, "toolbar")
+        };
+        let widget = match self.chrome_icon(button.icon, size, tint) {
+            Some(image) => egui::Button::image(image),
+            None => egui::Button::new(button.label),
+        };
+        let widget = widget
+            .selected(selected)
+            .min_size(egui::vec2(min[0], min[1]));
+        let response = ui.add(widget);
+        response.widget_info(|| {
+            let label = format!("{} ({location})", button.label);
+            match state {
+                Some(selected) => egui::WidgetInfo::selected(
+                    egui::Role::Button,
+                    response.enabled(),
+                    selected,
+                    label,
+                ),
+                None => egui::WidgetInfo::labeled(egui::Role::Button, response.enabled(), label),
+            }
+        });
+        let response = response.on_hover_ui(|ui| {
+            let shortcut = self.chord_text(ui.ctx(), &command);
+            ui.strong(match shortcut {
+                Some(shortcut) => format!("{}  {shortcut}", button.label),
+                None => button.label.to_owned(),
+            });
+            ui.label(button.tip);
+        });
+        if response.clicked() {
+            self.run(command);
         }
-        clicked
     }
 
     /// Soft selection and symmetry controls of component modes (EDITABLE.md §5.6).

@@ -1,7 +1,5 @@
 //! docs/specs/UI.md §11: the default layout, command bar and tool palette (brief 147).
 
-mod common;
-
 use std::collections::BTreeSet;
 
 use egui_kittest::Harness;
@@ -17,7 +15,9 @@ use forge_ui::tools::help_text;
 use forge_viewport::gizmo::GizmoMode;
 
 fn harness() -> Harness<'static, Editor> {
-    let editor = Editor::new(common::state());
+    let editor = Editor::new(forge_ui::state::EditorState::new(std::sync::Arc::new(
+        forge_app::default_registry().unwrap(),
+    )));
     Harness::builder()
         .with_size([1280.0, 800.0])
         .build_ui_state(|ui, editor: &mut Editor| editor.show(ui, None), editor)
@@ -32,8 +32,8 @@ fn default_layout_places_the_panels() {
     let h = harness();
     // one widget of each panel: command bar, palette, viewport, the managers' tab
     // headers, the timeline strip
-    let bar = rect(&h, "<- Undo");
-    let palette = rect(&h, "^^ Extrude");
+    let bar = rect(&h, "Undo (toolbar)");
+    let palette = rect(&h, "Extrude (tool rail)");
     let viewport = rect(&h, "Viewport unavailable");
     let objects = rect(&h, "Objects");
     let attributes = rect(&h, "Attributes");
@@ -114,19 +114,22 @@ fn bad_layouts_are_rejected() {
 
 #[test]
 fn every_button_maps_to_a_registry_command() {
-    let st = common::state();
+    let st = harness();
+    let st = &st.state().state;
     let commands = st.app.commands.clone();
     let buttons = all_buttons();
     assert!(buttons.len() >= 25, "{} buttons", buttons.len());
-    let mut texts = BTreeSet::new();
+    let mut labels = BTreeSet::new();
+    let atlas = forge_ui::icons::IconAtlas::build(1.0);
     for b in &buttons {
         let handler = commands
             .get(b.command)
             .unwrap_or_else(|| panic!("`{}` ({}) is not a registry command", b.command, b.label));
-        assert!(!b.label.is_empty() && !b.tip.is_empty() && !b.glyph.is_empty());
+        assert!(!b.label.is_empty() && !b.tip.is_empty());
+        assert!(atlas.rect(b.icon).is_some(), "missing icon for {}", b.label);
         assert!(b.args.is_object(), "{}: arguments are an object", b.label);
         let _ = handler;
-        assert!(texts.insert(b.text()), "duplicate button text {}", b.text());
+        assert!(labels.insert(b.label), "duplicate button label {}", b.label);
     }
     assert!(!command_bar().is_empty() && !tool_palette().is_empty());
     // create buttons name registered node types
@@ -142,30 +145,55 @@ fn every_button_maps_to_a_registry_command() {
 #[test]
 fn buttons_run_their_commands() {
     let mut h = harness();
-    h.get_by_label("# Cube").click();
+    h.get_by_label("Cube (toolbar)").click();
     h.run();
     let id = h.state().state.selection.active.expect("cube created");
     assert_eq!(
         h.state().state.doc.scene().node(id).unwrap().type_id,
         "forge.cube"
     );
-    h.get_by_label("<- Undo").click();
+    h.get_by_label("Undo (toolbar)").click();
     h.run();
     assert!(h.state().state.selection.nodes.is_empty());
-    h.get_by_label("-> Redo").click();
+    h.get_by_label("Redo (toolbar)").click();
     h.run();
     let len = h.state().state.doc.scene().len();
     assert!(len >= 1);
 
     // the mode buttons run select.mode
-    h.get_by_label("\\ Pol").click();
+    h.get_by_label("Polygon Mode (tool rail)").click();
     h.run();
     assert_eq!(h.state().state.mode, forge_ui::components::EditMode::Polys);
     // a failing command reports in the status bar and changes nothing
-    h.get_by_label("^^ Extrude").click();
+    h.get_by_label("Extrude (tool rail)").click();
     h.run();
     assert!(!h.state().state.status.is_empty());
     assert_eq!(h.state().state.doc.scene().len(), len);
+}
+
+#[test]
+fn the_transform_rail_and_cloner_buttons_use_the_editor_commands() {
+    let mut h = harness();
+    let move_rect = rect(&h, "Move (tool rail)");
+    let rotate_rect = rect(&h, "Rotate (tool rail)");
+    assert_eq!(move_rect.center().x, rotate_rect.center().x);
+    assert!(move_rect.max.y < rotate_rect.min.y);
+    h.get_by_label("Rotate (tool rail)").click();
+    h.run();
+    assert_eq!(h.state().state.gizmo_mode, GizmoMode::Rotate);
+
+    h.get_by_label("Cloner (toolbar)").click();
+    h.run();
+    let cloner = h.state().state.selection.active.unwrap();
+    let doc = &h.state().state.doc;
+    assert_eq!(
+        doc.scene().node(cloner).unwrap().type_id,
+        forge_clone_engine::CLONER
+    );
+    assert_eq!(doc.history().undo_labels().len(), 1);
+    h.get_by_label("Clone tools").click();
+    h.run();
+    h.get_by_label("Cloner from Selection");
 }
 
 #[test]
@@ -231,9 +259,7 @@ fn the_default_layout_sizes_and_button_metrics_are_the_observed_ones() {
     assert_eq!(s.right_width, 402.0);
     assert_eq!(s.right_top_fraction, 0.47);
     assert_eq!(s.bottom_height, 92.0);
-    // the tool strip is 43 in the reference; ours keeps its labelled buttons wide until
-    // the icons of brief 227 (UI.md §29.1)
-    assert!(s.left_width >= WINDOW.tool_strip);
+    assert_eq!(s.left_width, WINDOW.tool_strip);
     assert_eq!(Layout::standard().sizes, s);
     // command bar buttons about 27 x 26, palette buttons 34 x 34
     assert_eq!(BUTTONS.command, [27.0, 26.0]);
@@ -244,9 +270,9 @@ fn the_default_layout_sizes_and_button_metrics_are_the_observed_ones() {
 fn bars_and_buttons_have_the_observed_heights_in_the_window() {
     let h = harness();
     // every command bar and palette button is at least as large as the metrics say
-    let undo = rect(&h, "<- Undo");
+    let undo = rect(&h, "Undo (toolbar)");
     assert!(undo.width() >= BUTTONS.command[0] && undo.height() >= BUTTONS.command[1]);
-    let extrude = rect(&h, "^^ Extrude");
+    let extrude = rect(&h, "Extrude (tool rail)");
     assert!(extrude.width() >= BUTTONS.palette[0] && extrude.height() >= BUTTONS.palette[1]);
     // the status bar is 24 high: its text sits within the last 24 points of the window
     let text = help_text(GizmoMode::Translate, ModeArg::Model);

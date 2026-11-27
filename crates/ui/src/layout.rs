@@ -128,12 +128,8 @@ pub struct Sizes {
 
 impl Default for Sizes {
     fn default() -> Sizes {
-        // observed, G10 item 1: managers column 402, split near 47 %, timeline 92. The
-        // reference's tool strip is 43 wide (`WINDOW.tool_strip`) because it holds icons;
-        // ours still holds labelled buttons, which a 43 px column would clip, so the width
-        // stays at the old 150 until brief 227 brings the icons and sets it to 43.
         Sizes {
-            left_width: 150.0,
+            left_width: WINDOW.tool_strip,
             right_width: WINDOW.managers,
             right_top_fraction: WINDOW.manager_split,
             bottom_height: WINDOW.timeline,
@@ -228,23 +224,14 @@ impl Layout {
     }
 }
 
-/// One button: the command it runs and how it looks. `glyph` is a simple placeholder
-/// symbol (icons are brief 148); `label` is the button text, `tip` the hover text.
+/// One button: a registry command, an atlas glyph, an accessible label and help text.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CommandButton {
     pub command: &'static str,
     pub args: Value,
-    pub glyph: &'static str,
+    pub icon: &'static str,
     pub label: &'static str,
     pub tip: &'static str,
-}
-
-impl CommandButton {
-    /// The text on the button, e.g. `"<- Undo"`. Different from the menu item texts, so a
-    /// label identifies one widget.
-    pub fn text(&self) -> String {
-        format!("{} {}", self.glyph, self.label)
-    }
 }
 
 /// A named run of buttons separated from the next group.
@@ -257,14 +244,14 @@ pub struct ButtonGroup {
 fn button(
     command: &'static str,
     args: Value,
-    glyph: &'static str,
+    icon: &'static str,
     label: &'static str,
     tip: &'static str,
 ) -> CommandButton {
     CommandButton {
         command,
         args,
-        glyph,
+        icon,
         label,
         tip,
     }
@@ -272,27 +259,28 @@ fn button(
 
 fn create(
     ty: &'static str,
-    glyph: &'static str,
+    icon: &'static str,
     label: &'static str,
     tip: &'static str,
 ) -> CommandButton {
-    button("object.create", json!({"type": ty}), glyph, label, tip)
+    button("object.create", json!({"type": ty}), icon, label, tip)
 }
 
-/// The command bar along the top (**parity-pending** order): history, object creation,
-/// view, animation.
+pub(crate) const CLONE_TOOLSET: &str = "Clone toolset";
+
+/// The icon groups along the top (**parity-pending** order).
 pub fn command_bar() -> Vec<ButtonGroup> {
     let none = || json!({});
     vec![
         ButtonGroup {
             name: "History",
             buttons: vec![
-                button("edit.undo", none(), "<-", "Undo", "Undo the last step"),
-                button("edit.redo", none(), "->", "Redo", "Redo the undone step"),
+                button("edit.undo", none(), "undo", "Undo", "Undo the last step"),
+                button("edit.redo", none(), "redo", "Redo", "Redo the undone step"),
                 button(
                     "object.delete",
                     none(),
-                    "x",
+                    "delete",
                     "Remove",
                     "Delete the selected objects",
                 ),
@@ -301,20 +289,34 @@ pub fn command_bar() -> Vec<ButtonGroup> {
         ButtonGroup {
             name: "Objects",
             buttons: vec![
-                create("forge.cube", "#", "Cube", "Create a cube"),
-                create("forge.sphere", "o", "Sphere", "Create a sphere"),
-                create("forge.cylinder", "|", "Cylinder", "Create a cylinder"),
-                create("forge.cone", "^", "Cone", "Create a cone"),
-                create("forge.plane", "-", "Plane", "Create a plane"),
-                create("forge.torus", "O", "Torus", "Create a torus"),
+                create("forge.cube", "cube", "Cube", "Create a cube"),
+                create("forge.sphere", "sphere", "Sphere", "Create a sphere"),
+                create(
+                    "forge.cylinder",
+                    "cylinder",
+                    "Cylinder",
+                    "Create a cylinder",
+                ),
+                create("forge.cone", "cone", "Cone", "Create a cone"),
+                create("forge.plane", "plane", "Plane", "Create a plane"),
+                create("forge.torus", "torus", "Torus", "Create a torus"),
                 button(
                     "mesh.make_editable",
                     none(),
-                    "*",
+                    "make_editable",
                     "Make editable",
                     "Convert the selection to polygon objects",
                 ),
             ],
+        },
+        ButtonGroup {
+            name: CLONE_TOOLSET,
+            buttons: vec![create(
+                forge_clone_engine::CLONER,
+                "cloner",
+                "Cloner",
+                "Create a Cloner",
+            )],
         },
         ButtonGroup {
             name: "View",
@@ -322,21 +324,21 @@ pub fn command_bar() -> Vec<ButtonGroup> {
                 button(
                     "view.shading",
                     json!({"mode": "smooth"}),
-                    "(",
+                    "shading",
                     "Shaded",
                     "Smooth shading",
                 ),
                 button(
                     "view.shading",
                     json!({"mode": "wire"}),
-                    "%",
-                    "Wire",
+                    "wireframe",
+                    "Wireframe",
                     "Wireframe",
                 ),
                 button(
                     "view.frame_all",
                     none(),
-                    "+",
+                    "frame",
                     "Frame all",
                     "Fit the whole scene in the view",
                 ),
@@ -345,13 +347,19 @@ pub fn command_bar() -> Vec<ButtonGroup> {
         ButtonGroup {
             name: "Animation",
             buttons: vec![
-                button("timeline.play", none(), ">", "Run", "Play the animation"),
-                button("timeline.stop", none(), "#", "Halt", "Stop playback"),
+                button(
+                    "timeline.play",
+                    none(),
+                    "play",
+                    "Play",
+                    "Play the animation",
+                ),
+                button("timeline.stop", none(), "stop", "Stop", "Stop playback"),
                 button(
                     "key.record",
                     none(),
-                    "o",
-                    "Key",
+                    "record",
+                    "Record Key",
                     "Record keys for the active objects",
                 ),
             ],
@@ -364,31 +372,75 @@ pub fn command_bar() -> Vec<ButtonGroup> {
 /// Interactive tools (cuts, bridge, pen) stay in the Mesh menu.
 pub fn tool_palette() -> Vec<ButtonGroup> {
     let none = || json!({});
-    let mode = |m: &'static str, glyph, label, tip| {
-        button("select.mode", json!({"mode": m}), glyph, label, tip)
+    let mode = |m: &'static str, icon, label, tip| {
+        button("select.mode", json!({"mode": m}), icon, label, tip)
     };
+    let transform =
+        |mode, icon, label, tip| button("view.gizmo_mode", json!({"mode": mode}), icon, label, tip);
     vec![
+        ButtonGroup {
+            name: "Transform",
+            buttons: vec![
+                transform("move", "move", "Move", "Translate the selection"),
+                transform("rotate", "rotate", "Rotate", "Rotate the selection"),
+                transform("scale", "scale", "Scale", "Scale the selection"),
+            ],
+        },
         ButtonGroup {
             name: "Mode",
             buttons: vec![
-                mode("model", "[]", "Objects", "Click selects whole objects"),
-                mode("points", ".", "Pts", "Click selects points"),
-                mode("edges", "/", "Edg", "Click selects edges"),
-                mode("polys", "\\", "Pol", "Click selects polygons"),
+                mode(
+                    "model",
+                    "mode_object",
+                    "Object Mode",
+                    "Click selects whole objects",
+                ),
+                mode("points", "mode_point", "Point Mode", "Click selects points"),
+                mode("edges", "mode_edge", "Edge Mode", "Click selects edges"),
+                mode(
+                    "polys",
+                    "mode_polygon",
+                    "Polygon Mode",
+                    "Click selects polygons",
+                ),
             ],
         },
         ButtonGroup {
             name: "Selection",
             buttons: vec![
-                button("select.all", none(), "**", "All", "Select all"),
-                button("select.none", none(), "0", "None", "Deselect all"),
-                button("select.invert", none(), "~", "Invert", "Invert selection"),
-                button("select.grow", none(), "+", "Grow", "Grow the selection"),
+                button(
+                    "select.all",
+                    none(),
+                    "select_all",
+                    "Select All",
+                    "Select all",
+                ),
+                button(
+                    "select.none",
+                    none(),
+                    "select_none",
+                    "Deselect All",
+                    "Deselect all",
+                ),
+                button(
+                    "select.invert",
+                    none(),
+                    "select_invert",
+                    "Invert Selection",
+                    "Invert selection",
+                ),
+                button(
+                    "select.grow",
+                    none(),
+                    "select_grow",
+                    "Grow Selection",
+                    "Grow the selection",
+                ),
                 button(
                     "select.shrink",
                     none(),
-                    "-",
-                    "Shrink",
+                    "select_shrink",
+                    "Shrink Selection",
                     "Shrink the selection",
                 ),
             ],
@@ -396,35 +448,53 @@ pub fn tool_palette() -> Vec<ButtonGroup> {
         ButtonGroup {
             name: "Modeling",
             buttons: vec![
-                button("mesh.extrude", none(), "^^", "Extrude", "Extrude polygons"),
+                button(
+                    "mesh.extrude",
+                    none(),
+                    "extrude",
+                    "Extrude",
+                    "Extrude polygons",
+                ),
                 button(
                     "mesh.extrude_inner",
                     none(),
-                    "[+]",
-                    "Inner",
+                    "inset",
+                    "Extrude Inner",
                     "Extrude polygons inwards",
                 ),
-                button("mesh.bevel", none(), "/|", "Bevel", "Bevel the selection"),
+                button(
+                    "mesh.bevel",
+                    none(),
+                    "bevel",
+                    "Bevel",
+                    "Bevel the selection",
+                ),
                 button(
                     "mesh.subdivide",
                     none(),
-                    "##",
-                    "Subdiv",
+                    "subdivide",
+                    "Subdivide",
                     "Subdivide polygons",
                 ),
                 button(
                     "mesh.triangulate",
                     none(),
-                    "/\\",
-                    "Tris",
+                    "triangulate",
+                    "Triangulate",
                     "Triangulate polygons",
                 ),
-                button("mesh.optimize", none(), "@", "Tidy", "Remove unused points"),
+                button(
+                    "mesh.optimize",
+                    none(),
+                    "optimize",
+                    "Optimize",
+                    "Remove unused points",
+                ),
                 button(
                     "mesh.reverse_normals",
                     none(),
-                    "<>",
-                    "Flip",
+                    "normals",
+                    "Reverse Normals",
                     "Reverse normals",
                 ),
             ],

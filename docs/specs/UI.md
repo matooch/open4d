@@ -201,8 +201,8 @@ Undo: camera moves, frames and view switches are **not** undo steps (the camera 
 not document state; COMMANDS.md §6). Gestures and `view.*` commands never touch the history.
 
 Component modes (EDITABLE.md §2): `EditorState.mode` is switched in **one place** (owner note N6,
-decision D22): the four "Mode" buttons at the top of the left tool palette (§11: Objects, Pts,
-Edg, Pol; the selected one is drawn selected) and the Alt+1 .. Alt+4 keys of the key map (§14.2).
+decision D22): the four mode buttons in the left tool rail (§11: Object, Point,
+Edge and Polygon, with the active mode highlighted) and the Alt+1 .. Alt+4 keys of the key map (§14.2).
 The viewport header used to repeat the four buttons as "Model", "Points", "Edges", "Polygons";
 that duplicate is removed (brief 225). Which one stays follows G1 item 8, still unanswered:
 **parity-pending G1**, our choice is the palette, which the owner's note names as the place of
@@ -354,35 +354,37 @@ being plain data over that model.
 `from_json` rejects a version other than `LAYOUT_VERSION`, a panel listed twice and an
 active tab out of range). `Layout::standard()` is the default; `Editor::layout()` /
 `set_layout()` read and apply one, and Window > Reset layout applies the standard layout.
-`Sizes { left_width 150, right_width 402, right_top_fraction 0.47, bottom_height 92 }` are
+`Sizes { left_width 43, right_width 402, right_top_fraction 0.47, bottom_height 92 }` are
 initial sizes of the resizable areas (egui remembers later drags). Right width, split and
 timeline height are the reference's measured numbers (observed, G10 item 1; §29.1, `layout::WINDOW`).
-`left_width` stays 150 because our tool palette still holds labelled buttons; the reference's strip
-is 43 px (`WINDOW.tool_strip`) and brief 227 sets it when the buttons become icons. The panels
-grow to the widest content, so a tab or a number field that is wider than the managers column
-pushes it out: the number field of §12 is sized to keep three of them in 402 px.
+The tool rail starts at the observed 43 pt width (G10 item 1). Its 34 pt buttons fit in
+one column, with vertical scrolling and gaps between groups. Saved layouts retain their
+configured widths until reset. The panels grow to the widest content, so the number field
+of §12 is sized to keep three fields in 402 pt.
 
-Standard arrangement, top to bottom: menu bar; Top area: command bar; Left: tool palette
-column; Centre: viewport; right column: Object manager above Attribute manager; Bottom
-strip: Timeline, with Coordinates as a second tab; status bar. Menus are unchanged
-(File, Edit, Select, Mesh, Create, Animate, View, Window).
+Standard arrangement, top to bottom: menu bar; Top area: command bar; Left: tool rail;
+Centre: viewport; right column: Objects above Attributes; Bottom: Timeline and Coordinates;
+status bar.
 
-Every button is a `CommandButton { command, args, glyph, label, tip }` that runs the
-registry command `command` with `args` through `Editor::run`; nothing else happens on a
-click. Button text is `"<glyph> <label>"` (a short ASCII placeholder symbol, since the bundled fonts lack most Unicode symbols; icons are
-brief 148), which also keeps labels distinct from the menu items. `command_bar()` groups:
-History (`edit.undo`, `edit.redo`, `object.delete`); Objects (`object.create` for
-`forge.cube`, `forge.sphere`, `forge.cylinder`, `forge.cone`, `forge.plane`, `forge.torus`;
-`mesh.make_editable`); View (`view.shading` smooth and wire, `view.frame_all`); Animation
-(`timeline.play`, `timeline.stop`, `key.record`). `tool_palette()` groups: Mode
-(`select.mode` model, points, edges, polys); Selection (`select.all`, `select.none`,
-`select.invert`, `select.grow`, `select.shrink`); Modeling (`mesh.extrude`,
-`mesh.extrude_inner`, `mesh.bevel`, `mesh.subdivide`, `mesh.triangulate`, `mesh.optimize`,
-`mesh.reverse_normals`, run with the stored selection and default settings). The
-`select.mode` and `view.shading` buttons show as selected for the current value. The Mode group
-is the only mode switch in the default layout (§6.1, owner note N6): no other panel, bar or menu
-repeats it; a test counts the widgets per mode. A failed
-command goes to the status bar like any other.
+The command bar and rail use the original Forge glyph atlas (§25). Their controls are
+`CommandButton { command, args, icon, label, tip }`. Accessible names include the action
+and its toolbar location. Hover text gives the label, a short description and the current
+shortcut when one exists. The atlas follows the current UI scale. Active icons use the
+theme's selected-button foreground color. Sources: owner notes N2, N6 and N8 and the
+measured button sizes in G10 item 1 (docs/parity/GUI-SESSIONS.md). Exact group order remains
+**parity-pending G1**.
+
+The command bar groups History (Undo, Redo, Remove), Objects (the six existing primitives,
+Make editable), Clone toolset (one-click Cloner and a labeled menu), View (Shaded, Wireframe,
+Frame all), and Animation (Play, Stop, Record Key). The rail groups Move/Rotate/Scale,
+Object/Point/Edge/Polygon mode, selection operations, and immediate mesh commands.
+The active transform, component mode and shading buttons use the theme's active state.
+The rail is the only default component mode switch (owner note N6). All actions run
+their existing registry commands and report failures in the status bar.
+
+The command bar's Clone toolset menu and Create > Clone toolset share the same registered
+entries and commands (§16.2, owner note N4). The direct Cloner button uses the same create
+command as its menu entry. This is the first pass on briefs 227 and 228.
 
 Snapping and axis mode exist as commands (`snap.*`, `edit.axis_mode`, MANIPULATE.md §6–7) and as Edit menu entries; they are not palette buttons yet.
 Pointer-driven tools (cuts, bridge, pen) stay in the Mesh menu, as do the arrangement tools
@@ -1493,12 +1495,12 @@ brief 129 adds it), and panels not listed are closed (reopen from the Window men
 
 | Workspace | Top | Left | Centre | Right top | Right bottom | Bottom | Sizes (left, right, fraction, bottom) |
 |---|---|---|---|---|---|---|---|
-| Standard | Command bar | Tools | Viewport | Objects | Attributes | Timeline, Coordinates | 150, 340, 0.45, 120 |
-| Modeling | Command bar | Tools | Viewport | Objects | Attributes, Coordinates | History, Console | 150, 360, 0.35, 150 |
-| Animate | Command bar | Tools | Viewport | Objects | Attributes, Coordinates | Timeline, History | 150, 340, 0.40, 240 |
-| UV | Command bar | Tools | Viewport | - | Attributes, Coordinates, Objects | History | 150, 400, 0.45, 120 |
-| Rigging | Command bar | Tools | Viewport | Objects | Attributes | Timeline, Coordinates, Script | 150, 380, 0.60, 160 |
-| Node | Command bar | - | Node Editor, Viewport | Objects | Attributes | Console, History, Script | 150, 340, 0.45, 200 |
+| Standard | Command bar | Tools | Viewport | Objects | Attributes | Timeline, Coordinates | 43, 402, 0.47, 92 |
+| Modeling | Command bar | Tools | Viewport | Objects | Attributes, Coordinates | History, Console | 43, 360, 0.35, 150 |
+| Animate | Command bar | Tools | Viewport | Objects | Attributes, Coordinates | Timeline, History | 43, 340, 0.40, 240 |
+| UV | Command bar | Tools | Viewport | - | Attributes, Coordinates, Objects | History | 43, 400, 0.45, 120 |
+| Rigging | Command bar | Tools | Viewport | Objects | Attributes | Timeline, Coordinates, Script | 43, 380, 0.60, 160 |
+| Node | Command bar | - | Node Editor, Viewport | Objects | Attributes | Console, History, Script | 43, 340, 0.45, 200 |
 
 `Standard` equals `Layout::standard()`. Each tab list starts with the shown tab. Switching
 applies the dock and the sizes (egui forgets its remembered panel sizes: a new size generation
@@ -2052,13 +2054,11 @@ px, so the capture is 1x), origin at the window's top-left:
 `layout::WINDOW` holds the numbers (rows 28 / 24 / 42 / 20 / 92 / 24, columns 43 / 43 / 402, the
 split 0.47, a 1 px separator between regions: three across, two down); `layout::regions(w, h)`
 lays the regions out and reproduces the table above at 1920 x 1080 (tested). The default layout's
-`Sizes` read them (§11): right width 402, split 0.47, timeline 92; the document row, the command
+`Sizes` read them (§11): tool rail 43, right width 402, split 0.47, timeline 92; the document row, the command
 bar and the status bar use them as their panel heights (24 minimum, 42 minimum, 24 exact).
 `theme::BUTTONS` holds the button sizes, used as the minimum size of the command bar's and the
-palette's buttons (27 x 26 and 34 x 34; our text-labelled buttons are wider). **Parity-pending
-G10:** our tool column is still 150 wide with labelled buttons (43 once the icons of brief 227
-land), the object palette strip (43) comes with brief 228, the title bar is the window system's,
-and the viewport menu row (20) comes with brief 227. The timeline ruler labels every 5 frames at
+rail's icon buttons (27 x 26 and 34 x 34). The title bar is the window system's.
+**Parity-pending G10:** the dedicated object palette strip (43) and viewport menu row (20). The timeline ruler labels every 5 frames at
 this width (`timeline::ruler_step(90, 1413) = 5`, label spacing at least 40 px: observed, G10 A7;
 this replaces the "every 2 frames" read from the earlier screenshot). The status bar shows the
 active tool's help text (G10 A8), here `tools::help_text` for the transform tool and the selection

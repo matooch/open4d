@@ -53,8 +53,8 @@ impl Workspace {
             Attributes, CommandBar, Console, Coordinates, History, NodeEditor, ObjectTree, Script,
             Timeline, ToolPalette, UvEditor, Viewport,
         };
-        let sizes = |left_width, right_width, right_top_fraction, bottom_height| Sizes {
-            left_width,
+        let sizes = |right_width, right_top_fraction, bottom_height| Sizes {
+            left_width: crate::layout::WINDOW.tool_strip,
             right_width,
             right_top_fraction,
             bottom_height,
@@ -70,7 +70,7 @@ impl Workspace {
                     (RightBottom, &[Attributes, Coordinates]),
                     (Bottom, &[History, Console]),
                 ],
-                sizes(150.0, 360.0, 0.35, 150.0),
+                sizes(360.0, 0.35, 150.0),
             ),
             Workspace::Animate => (
                 vec![
@@ -81,7 +81,7 @@ impl Workspace {
                     (RightBottom, &[Attributes, Coordinates]),
                     (Bottom, &[Timeline, History]),
                 ],
-                sizes(150.0, 340.0, 0.40, 240.0),
+                sizes(340.0, 0.40, 240.0),
             ),
             Workspace::Uv => (
                 vec![
@@ -91,7 +91,7 @@ impl Workspace {
                     (RightBottom, &[Attributes, Coordinates, ObjectTree]),
                     (Bottom, &[History]),
                 ],
-                sizes(150.0, 400.0, 0.45, 120.0),
+                sizes(400.0, 0.45, 120.0),
             ),
             Workspace::Rigging => (
                 vec![
@@ -102,7 +102,7 @@ impl Workspace {
                     (RightBottom, &[Attributes]),
                     (Bottom, &[Timeline, Coordinates, Script]),
                 ],
-                sizes(150.0, 380.0, 0.60, 160.0),
+                sizes(380.0, 0.60, 160.0),
             ),
             Workspace::Node => (
                 vec![
@@ -112,7 +112,7 @@ impl Workspace {
                     (RightBottom, &[Attributes]),
                     (Bottom, &[Console, History, Script]),
                 ],
-                sizes(150.0, 340.0, 0.45, 200.0),
+                sizes(340.0, 0.45, 200.0),
             ),
         };
         Layout {

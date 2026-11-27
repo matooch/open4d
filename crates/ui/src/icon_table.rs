@@ -175,6 +175,10 @@ pub(crate) const GLYPHS: &[(&str, &str)] = &[
     ("melt", include_str!("../icons/melt.svg")),
     ("mesh_deform", include_str!("../icons/mesh_deform.svg")),
     ("mirror", include_str!("../icons/mirror.svg")),
+    ("mode_edge", include_str!("../icons/mode_edge.svg")),
+    ("mode_object", include_str!("../icons/mode_object.svg")),
+    ("mode_point", include_str!("../icons/mode_point.svg")),
+    ("mode_polygon", include_str!("../icons/mode_polygon.svg")),
     ("motion_path", include_str!("../icons/motion_path.svg")),
     ("move", include_str!("../icons/move.svg")),
     ("normals", include_str!("../icons/normals.svg")),
@@ -202,6 +206,7 @@ pub(crate) const GLYPHS: &[(&str, &str)] = &[
     ("rename", include_str!("../icons/rename.svg")),
     ("reparent", include_str!("../icons/reparent.svg")),
     ("rigid_body", include_str!("../icons/rigid_body.svg")),
+    ("rotate", include_str!("../icons/rotate.svg")),
     ("scale", include_str!("../icons/scale.svg")),
     ("search", include_str!("../icons/search.svg")),
     ("select_all", include_str!("../icons/select_all.svg")),
@@ -303,6 +308,7 @@ pub(crate) const GLYPHS: &[(&str, &str)] = &[
     ("weld", include_str!("../icons/weld.svg")),
     ("wind", include_str!("../icons/wind.svg")),
     ("workspace", include_str!("../icons/workspace.svg")),
+    ("wireframe", include_str!("../icons/wireframe.svg")),
     ("wrap", include_str!("../icons/wrap.svg")),
 ];
 
