@@ -1,0 +1,658 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forge3D workspace prototype</title>
+<style>
+  html {background:#11151b}
+  body {margin:0;padding:clamp(6px,2vw,24px)}
+  main {max-width:1440px;margin:auto}
+</style>
+</head>
+<body>
+<main>
+<div id="forge-studio-preview" aria-label="Forge3D workspace concept">
+<style>
+#forge-studio-preview {
+  --window:#171b21; --panel:#20262e; --view:#252c35; --input:#181d24; --line:#343d49;
+  --text:#e8edf2; --muted:#a7b2c0; --mint:#73d6bc; --select:#f3b36b; --record:#f17a80;
+  color-scheme:dark; background:var(--window); color:var(--text);
+  font:13px/1.42 system-ui,sans-serif; border:1px solid var(--line); border-radius:9px;
+  overflow:hidden; isolation:isolate; container-type:inline-size;
+}
+#forge-studio-preview *, #forge-studio-preview *::before {box-sizing:border-box}
+#forge-studio-preview [hidden] {display:none!important}
+#forge-studio-preview button, #forge-studio-preview input, #forge-studio-preview select {
+  color:inherit; font:inherit; border:1px solid transparent; border-radius:4px; background:none; min-width:0;
+}
+#forge-studio-preview button {padding:4px 8px; white-space:nowrap}
+#forge-studio-preview button:not(:disabled):hover {background:#ffffff0e}
+#forge-studio-preview button:focus-visible, #forge-studio-preview input:focus-visible,
+#forge-studio-preview select:focus-visible {outline:2px solid var(--mint); outline-offset:-2px}
+#forge-studio-preview button[aria-pressed=true] {background:color-mix(in srgb,var(--mint) 13%,transparent); color:var(--mint)}
+#forge-studio-preview button:disabled {opacity:.4}
+#forge-studio-preview i {font-style:normal}
+#forge-studio-preview svg {height:15px;width:15px;flex:none;vertical-align:middle;stroke-width:1.65}
+#forge-studio-preview .bar {display:flex;align-items:center;gap:4px;padding:4px 9px;min-height:35px;flex-wrap:wrap}
+#forge-studio-preview .space {flex:1}
+#forge-studio-preview .identity {border-bottom:1px solid var(--line); padding-left:12px; color:var(--muted); font-size:12px}
+#forge-studio-preview .brand {color:var(--text);font-weight:730;letter-spacing:.025em;display:flex;align-items:center;gap:7px}
+#forge-studio-preview .brand svg {color:var(--mint)}
+#forge-studio-preview .name {margin-inline:auto; padding-inline:12px}
+#forge-studio-preview .workspace {border-bottom:1px solid var(--line);background:#1c2229}
+#forge-studio-preview .workspace .worktab {color:var(--muted);border-radius:0;border-bottom:2px solid transparent}
+#forge-studio-preview .workspace .worktab[aria-pressed=true] {background:none;color:var(--text);border-bottom-color:var(--mint)}
+#forge-studio-preview .workspace .create {border-color:var(--line);background:var(--panel)}
+#forge-studio-preview .create svg {margin-right:3px;color:#9cbaff}
+#forge-studio-preview [data-action=cloner] svg {color:var(--mint)}
+#forge-studio-preview .body {display:grid;grid-template-columns:minmax(0,1fr) clamp(224px,27%,292px)}
+#forge-studio-preview .main {min-width:0;background:var(--panel)}
+#forge-studio-preview .viewbar {border-bottom:1px solid var(--line);font-size:12px}
+#forge-studio-preview .mode {display:inline-flex;gap:1px;padding:2px;background:var(--input);border-radius:5px}
+#forge-studio-preview .mode button {padding:2px 6px}
+#forge-studio-preview .workarea {display:grid;grid-template-columns:42px minmax(0,1fr)}
+#forge-studio-preview .rail {background:var(--panel);border-right:1px solid var(--line);padding:7px 5px;display:flex;flex-direction:column;gap:5px}
+#forge-studio-preview .rail button {height:31px;padding:0}
+#forge-studio-preview .rule {height:1px;background:var(--line);margin:2px}
+#forge-studio-preview .viewport {position:relative;height:clamp(300px,46cqw,455px);overflow:hidden;background:var(--view)}
+#forge-studio-preview .animating .viewport {height:clamp(235px,34cqw,340px)}
+#forge-studio-preview .viewport canvas {width:100%;height:100%;display:block;touch-action:pan-y}
+#forge-studio-preview .hud {position:absolute;pointer-events:none;color:var(--muted);font-size:11px;left:12px;top:10px}
+#forge-studio-preview .grid-label {position:absolute;left:12px;bottom:9px;pointer-events:none;color:var(--muted);font-size:11px}
+#forge-studio-preview aside {border-left:1px solid var(--line);background:var(--panel);min-width:0;display:grid;grid-template-rows:minmax(195px,42%) 1fr}
+#forge-studio-preview .manager {min-width:0}
+#forge-studio-preview .manager + .manager {border-top:1px solid var(--line)}
+#forge-studio-preview .panel-title {margin:0;color:var(--text);font-size:13px;font-weight:660}
+#forge-studio-preview .panel-head {background:#262d36;border-bottom:1px solid var(--line);min-height:34px}
+#forge-studio-preview .filter {margin:9px;width:calc(100% - 18px);padding:5px 7px;background:var(--input);border-color:var(--line);font-size:12px}
+#forge-studio-preview .tree {padding:0 6px 8px;min-height:116px}
+#forge-studio-preview .tree-row {display:flex;min-height:28px;align-items:center;gap:1px;border-left:2px solid transparent;border-radius:3px;background:#ffffff03}
+#forge-studio-preview .tree-row:nth-child(2n) {background:transparent}
+#forge-studio-preview .tree-row.child {margin-left:14px;position:relative}
+#forge-studio-preview .tree-row.child::before {content:"";border-left:1px solid var(--line);border-bottom:1px solid var(--line);position:absolute;left:-10px;top:0;width:10px;height:50%}
+#forge-studio-preview .tree-row.selected {background:color-mix(in srgb,var(--select) 10%,transparent);border-left-color:var(--select)}
+#forge-studio-preview .tree-row .item {text-align:left;flex:1;overflow:hidden;text-overflow:ellipsis;padding-inline:3px}
+#forge-studio-preview .tree-row .item svg {margin-right:4px}
+#forge-studio-preview .tree-row.selected .item {color:var(--select)}
+#forge-studio-preview .tree-row .toggle {min-width:23px;color:var(--muted);padding:3px}
+#forge-studio-preview .tree-row .toggle svg {height:13px;width:13px}
+#forge-studio-preview .mesh {color:#a8bfff}
+#forge-studio-preview .group {color:#79cebb}
+#forge-studio-preview .tag {color:var(--muted);font-size:11px}
+#forge-studio-preview .object-head {padding:10px 10px 5px;display:flex;align-items:center;gap:6px;font-weight:620}
+#forge-studio-preview .object-head small {margin-left:auto;color:var(--muted);font-weight:400;font-size:11px}
+#forge-studio-preview .tabs {display:flex;gap:3px;flex-wrap:wrap;padding:4px 8px 7px;border-bottom:1px solid var(--line);font-size:12px}
+#forge-studio-preview .attrs {padding:10px 9px;min-height:145px}
+#forge-studio-preview .field {display:grid;grid-template-columns:66px minmax(0,1fr) 22px;align-items:center;min-height:31px;gap:4px;font-size:12px}
+#forge-studio-preview .field label, #forge-studio-preview .field > span:first-child {color:var(--muted)}
+#forge-studio-preview .field .xyz {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px}
+#forge-studio-preview .field .xyz label {display:flex;gap:2px;align-items:center;min-width:0}
+#forge-studio-preview .field input, #forge-studio-preview .field select, #forge-studio-preview .frame {
+  border-color:var(--line);background:var(--input);padding:3px 4px;font-variant-numeric:tabular-nums;width:100%;
+}
+#forge-studio-preview .field .key {color:var(--muted);padding:0;min-height:23px;font-size:15px}
+#forge-studio-preview .field .key[data-keyed=true] {color:var(--select)}
+#forge-studio-preview .transport {border-top:1px solid var(--line);background:var(--panel)}
+#forge-studio-preview .transport .bar {column-gap:2px}
+#forge-studio-preview .transport .bar button {min-width:28px;padding-inline:5px}
+#forge-studio-preview .transport .frame {max-width:49px}
+#forge-studio-preview .transport [data-action=auto][aria-pressed=true] {color:var(--record);background:#f17a8025}
+#forge-studio-preview .track-area {display:grid;grid-template-columns:minmax(0,1fr);border-top:1px solid var(--line)}
+#forge-studio-preview .track-names {border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:stretch;padding-top:55px;background:#1c2229}
+#forge-studio-preview .track-names button {text-align:left;font-size:11px}
+#forge-studio-preview .scale {padding:0 10px 0;overflow:hidden}
+#forge-studio-preview .ticks {display:flex;justify-content:space-between;position:relative;padding:5px 0 0;color:var(--muted);font:11px/1.4 ui-monospace,monospace}
+#forge-studio-preview .ruler {width:100%;margin:0;height:16px;accent-color:var(--mint);cursor:ew-resize;display:block}
+#forge-studio-preview .range {border-top:1px solid var(--line);color:var(--muted);font-size:11px;min-height:25px}
+#forge-studio-preview .graph {width:100%;height:145px;display:block;cursor:crosshair;touch-action:pan-y}
+#forge-studio-preview .footer {border-top:1px solid var(--line);font-size:11px;color:var(--muted);min-height:27px}
+#forge-studio-preview .empty {padding:10px;color:var(--muted);font-size:12px}
+#forge-studio-preview .empty button {border-color:var(--line)}
+@container (max-width:640px) {
+  #forge-studio-preview .body {grid-template-columns:minmax(0,1fr)}
+  #forge-studio-preview aside {border-left:0;border-top:1px solid var(--line);grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto}
+  #forge-studio-preview .manager + .manager {border-top:0;border-left:1px solid var(--line)}
+  #forge-studio-preview .viewport {height:285px}
+  #forge-studio-preview .field {grid-template-columns:minmax(0,1fr) 23px}
+  #forge-studio-preview .field > :first-child {grid-column:1/-1}
+  #forge-studio-preview .field .xyz label span {display:none}
+}
+@container (max-width:390px) {
+  #forge-studio-preview .body {display:block}
+  #forge-studio-preview aside {display:block}
+  #forge-studio-preview .manager + .manager {border-top:1px solid var(--line);border-left:0}
+  #forge-studio-preview .track-area {grid-template-columns:85px minmax(0,1fr)}
+}
+</style>
+<header>
+  <div class="bar identity"><span class="brand"><i data-icon="boxes" aria-hidden="true"></i> Forge3D</span><span class="name">Orbit Study.forge</span><span>Scene preview</span></div>
+  <div class="bar workspace" aria-label="Workspace and creation">
+    <button class="worktab" data-work="standard" aria-pressed="true">Standard</button>
+    <button class="worktab" data-work="model">Modeling</button>
+    <button class="worktab" data-work="animate">Animate</button>
+    <span class="space"></span>
+    <span class="create-control"><select class="create" data-create aria-label="Add primitive"><option value="">+ Primitive</option><option>Sphere</option><option>Cube</option><option>Torus</option></select></span>
+    <button class="create" data-action="cloner"><i data-icon="layers-3" aria-hidden="true"></i> Cloner</button>
+  </div>
+</header>
+<div class="body">
+  <div class="main">
+    <div class="bar viewbar">
+      <span><i data-icon="camera" aria-hidden="true"></i> Perspective</span><span class="space"></span>
+      <div class="mode" role="group" aria-label="Component mode">
+        <button data-mode="Object" aria-pressed="true">Object</button><button data-mode="Point">Point</button><button data-mode="Edge">Edge</button><button data-mode="Polygon">Polygon</button>
+      </div>
+      <button data-action="wire" aria-label="Toggle wireframe" title="Wireframe"><i data-icon="box" aria-hidden="true"></i></button>
+      <button data-action="grid" aria-label="Toggle grid" title="Grid" aria-pressed="true"><i data-icon="grid-3x3" aria-hidden="true"></i></button>
+      <button data-action="fit" aria-label="Frame scene" title="Frame scene"><i data-icon="maximize" aria-hidden="true"></i></button>
+    </div>
+    <div class="workarea">
+      <div class="rail" role="group" aria-label="Viewport tools">
+        <button data-tool="Select" aria-label="Select" title="Select"><i data-icon="mouse-pointer-2" aria-hidden="true"></i></button>
+        <button data-tool="Move" aria-pressed="true" aria-label="Move" title="Move · E"><i data-icon="move" aria-hidden="true"></i></button>
+        <button data-tool="Rotate" aria-label="Rotate" title="Rotate · R"><i data-icon="rotate-cw" aria-hidden="true"></i></button>
+        <button data-tool="Scale" aria-label="Scale" title="Scale · T"><i data-icon="scaling" aria-hidden="true"></i></button>
+        <div class="rule"></div>
+        <button data-action="clear" aria-label="Clear selection" title="Clear selection"><i data-icon="square-dashed" aria-hidden="true"></i></button>
+      </div>
+      <div class="viewport" aria-label="Scene viewport">
+        <canvas class="scene" role="img" aria-label="Perspective view of the Orbit Study scene"></canvas>
+        <span class="hud">Default Camera · <span data-shading>Solid</span></span>
+        <span class="grid-label">Grid · 50 cm</span>
+      </div>
+    </div>
+    <section class="transport" aria-label="Timeline and animation editors">
+      <div class="bar">
+        <div class="mode" data-editor-tabs role="group" aria-label="Animation editor" hidden><button data-editor="sheet" aria-pressed="true">Dope Sheet</button><button data-editor="curve">F-Curve</button></div>
+        <span class="space"></span>
+        <button data-action="start" title="Go to start" aria-label="Go to start"><i data-icon="skip-back" aria-hidden="true"></i></button>
+        <button data-action="prev" aria-label="Previous frame" title="Previous frame"><i data-icon="chevron-left" aria-hidden="true"></i></button>
+        <button data-action="play" aria-label="Play" title="Play"><i data-icon="play" aria-hidden="true"></i></button>
+        <button data-action="next" aria-label="Next frame" title="Next frame"><i data-icon="chevron-right" aria-hidden="true"></i></button>
+        <button data-action="end" title="Go to end" aria-label="Go to end"><i data-icon="skip-forward" aria-hidden="true"></i></button>
+        <input class="frame" type="number" min="0" max="90" value="30" aria-label="Current frame">
+        <button data-action="key" aria-label="Toggle Position X key at current frame" title="Toggle Position X key">◇</button>
+        <button data-action="auto" aria-pressed="false" title="Auto-key Position X">Auto-key</button>
+      </div>
+      <div class="track-area">
+        <div class="track-names" data-tracks hidden><button data-track="1" aria-pressed="true">◈ Position X</button></div>
+        <div class="scale">
+          <div class="ticks" aria-hidden="true"><span>0</span><span>15</span><span>30</span><span>45</span><span>60</span><span>75</span><span>90</span></div>
+          <input class="ruler" type="range" min="0" max="90" value="30" aria-label="Scrub scene frame">
+          <canvas class="graph" role="img" aria-label="Animation keys or value curve for Position X" hidden></canvas>
+        </div>
+      </div>
+      <div class="bar range"><span>Preview 0–90 f</span><span class="space"></span><span>30 fps</span></div>
+    </section>
+  </div>
+  <aside aria-label="Scene managers">
+    <section class="manager">
+      <div class="bar panel-head"><h2 class="panel-title">Objects</h2><span class="space"></span><button data-action="scene" title="Toggle empty scene preview">Empty scene</button></div>
+      <input class="filter" type="search" placeholder="Find objects" aria-label="Find objects">
+      <div class="tree" aria-label="Scene hierarchy"></div>
+    </section>
+    <section class="manager">
+      <div class="bar panel-head"><h2 class="panel-title">Attributes</h2></div>
+      <div class="object-head"></div>
+      <div class="tabs" aria-label="Attribute tabs"></div>
+      <div class="attrs"></div>
+    </section>
+  </aside>
+</div>
+<div class="bar footer"><span data-status role="status">Orb selected</span><span class="space"></span><span data-count>4 objects</span></div>
+<style>
+#forge-studio-preview .animating .track-area {grid-template-columns:124px minmax(0,1fr)}
+#forge-studio-preview .workspace select {padding:4px 6px;font-size:12px}
+#forge-studio-preview .play-mark {display:inline-flex;width:15px;justify-content:center;font-size:13px}
+#forge-studio-preview .field .xyz input::-webkit-inner-spin-button {appearance:none}
+@container (max-width:390px) {
+  #forge-studio-preview .animating .track-area {grid-template-columns:85px minmax(0,1fr)}
+}
+</style>
+<script>
+(() => {
+  const root = document.getElementById('forge-studio-preview');
+  const icons = {
+    "boxes": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" /><line x1=\"3\" y1=\"9\" x2=\"21\" y2=\"9\" /><line x1=\"10\" y1=\"9\" x2=\"10\" y2=\"20\" /></svg>",
+    "layers-3": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" stroke-dasharray=\"2 2\"/><rect x=\"7\" y=\"7\" width=\"4\" height=\"4\" /><rect x=\"13\" y=\"13\" width=\"4\" height=\"4\" /></svg>",
+    "camera": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"7\" width=\"14\" height=\"11\" rx=\"1.5\"/><path d=\"M17 11 L21 8 V17 L17 14\" /></svg>",
+    "box": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 3 L20 7.5 V16.5 L12 21 L4 16.5 V7.5 Z\" /><path d=\"M4 7.5 L12 12 L20 7.5 M12 12 V21\" /></svg>",
+    "grid-3x3": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 15 L12 10 L21 15 L12 20 Z\"/><path d=\"M7.5 12.5 L16.5 17.5\"/><path d=\"M16.5 12.5 L7.5 17.5\"/></svg>",
+    "maximize": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 9 V4 H9 M15 4 H20 V9 M20 15 V20 H15 M9 20 H4 V15\" /></svg>",
+    "mouse-pointer-2": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 3 L6 19 L10.5 15 L14 21 L16.5 19.8 L13 14 L19 13.5 Z\" /></svg>",
+    "move": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"12\" y1=\"3\" x2=\"12\" y2=\"21\" /><line x1=\"3\" y1=\"12\" x2=\"21\" y2=\"12\" /><path d=\"M9 6 L12 3 L15 6 M9 18 L12 21 L15 18 M6 9 L3 12 L6 15 M18 9 L21 12 L18 15\" /></svg>",
+    "rotate-cw": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 4 H18 M6 20 H18 M6 4 C6 10 18 14 18 20 M18 4 C18 10 6 14 6 20\" /></svg>",
+    "scaling": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" stroke-dasharray=\"2 2\"/><rect x=\"3\" y=\"12\" width=\"9\" height=\"9\" /><path d=\"M12 12 L20 4 M15 4 H20 V9\" /></svg>",
+    "square-dashed": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" stroke-dasharray=\"2 2\"/></svg>",
+    "play": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7 4 L19 12 L7 20 Z\" /></svg>",
+    "circle": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"8.5\" /><ellipse cx=\"12\" cy=\"12\" rx=\"8.5\" ry=\"3\" /><path d=\"M12 3.5 C8 8 8 16 12 20.5 M12 3.5 C16 8 16 16 12 20.5\" /></svg>",
+    "disc-3": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><ellipse cx=\"12\" cy=\"12\" rx=\"9\" ry=\"6\" /><ellipse cx=\"12\" cy=\"12.5\" rx=\"4\" ry=\"2.2\" /></svg>",
+    "cylinder": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><ellipse cx=\"12\" cy=\"6\" rx=\"7\" ry=\"3\" /><path d=\"M5 6 V18 M19 6 V18 M5 18 A7 3 0 0 0 19 18\" /></svg>",
+    "copy-plus": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"4\" width=\"5\" height=\"5\" /><rect x=\"4\" y=\"15\" width=\"5\" height=\"5\" /><rect x=\"15\" y=\"4\" width=\"5\" height=\"5\" /><rect x=\"15\" y=\"15\" width=\"5\" height=\"5\" /><rect x=\"9.5\" y=\"9.5\" width=\"5\" height=\"5\" fill=\"#fff\" stroke=\"none\"/></svg>",
+    "eye": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M2 12 C6 5 18 5 22 12 C18 19 6 19 2 12 Z\" /><circle cx=\"12\" cy=\"12\" r=\"3\" /></svg>",
+    "eye-off": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M2 12 C6 5 18 5 22 12 C18 19 6 19 2 12 Z\" /><circle cx=\"12\" cy=\"12\" r=\"3\" /><path d=\"M3 3 L21 21\"/></svg>",
+    "chevron-left": "<span class=\"play-mark\">‹</span>",
+    "chevron-right": "<span class=\"play-mark\">›</span>",
+    "skip-back": "<span class=\"play-mark\">|‹</span>",
+    "skip-forward": "<span class=\"play-mark\">›|</span>"
+  };
+  function paintIcons() {
+    for (const icon of root.querySelectorAll('[data-icon]')) {
+      icon.innerHTML = icons[icon.dataset.icon] || '';
+    }
+  }
+  const by = selector => root.querySelector(selector);
+  const all = selector => [...root.querySelectorAll(selector)];
+  const sceneCanvas = by('.scene');
+  const graphCanvas = by('.graph');
+  const sample = () => [
+    {id:1, name:'Orbit assembly', type:'Group', shape:'group', x:0, y:0, z:0},
+    {id:2, name:'Orb', type:'Sphere', shape:'sphere', parent:1, x:0, y:1.65, z:0, size:1.07, segments:32, keys:new Map([[0,-48],[30,0],[60,48],[90,-48]])},
+    {id:3, name:'Orbit ring', type:'Torus', shape:'torus', parent:1, x:0, y:.9, z:0, size:1.57, segments:40},
+    {id:4, name:'Pedestal', type:'Cylinder', shape:'base', x:0, y:.2, z:0, size:1.65, segments:48}
+  ];
+  let objects = sample(), selected = 2, nextId = 5, frame = 30, workspace = 'standard';
+  let mode = 'Object', tool = 'Move', attribute = 'Transform', editor = 'sheet';
+  let grid = true, wire = false, auto = false, expanded = true, track = true, timer;
+  const previewScenes={};
+  let orbit = -.35, elevation = .41, zoom = 1, panX = 0, panY = 0, hitAreas = [];
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const active = () => objects.find(object => object.id === selected);
+  const keys = object => [...(object?.keys || [])].sort((a,b) => a[0]-b[0]);
+  function position(object, time = frame) {
+    const samples = keys(object);
+    if (!samples.length) return object.x;
+    if (time <= samples[0][0]) return samples[0][1];
+    for (let n=1;n<samples.length;n++) {
+      const [right, end] = samples[n];
+      if (time > right) continue;
+      const [left, start] = samples[n-1];
+      const ratio = (time-left)/(right-left);
+      return start + (end-start)*ratio*ratio*(3-2*ratio);
+    }
+    return samples.at(-1)[1];
+  }
+  function pressed(selector, value, data) {
+    for (const control of all(selector)) control.setAttribute('aria-pressed', String(control.dataset[data] === value));
+  }
+  function choose(id) {
+    selected = id;
+    attribute = 'Transform';
+    renderPanels();
+    syncFrame();
+  }
+  function glyph(object) {
+    const icons = {group:'layers-3',sphere:'circle',torus:'disc-3',base:'cylinder',cube:'box',cloner:'copy-plus'};
+    return '<span class="' + (object.shape === 'group' || object.shape === 'cloner' ? 'group' : 'mesh') + '"><i data-icon="' + icons[object.shape] + '" aria-hidden="true"></i></span>';
+  }
+  function renderTree() {
+    const search = by('.filter').value.trim().toLowerCase();
+    const matches = object => (object.name+' '+object.type).toLowerCase().includes(search);
+    const visible = objects.filter(object => {
+      if (search) return matches(object) || objects.some(child => child.parent === object.id && matches(child));
+      return !object.parent || expanded;
+    });
+    by('.tree').innerHTML = visible.length ? visible.map(object =>
+      '<div class="tree-row '+(object.parent ? 'child ' : '')+(selected===object.id?'selected':'')+'">'+
+      (object.shape==='group' ? '<button class="toggle" data-action="expand" aria-label="Expand or collapse Orbit assembly" aria-expanded="'+expanded+'">'+(expanded?'▾':'▸')+'</button>' : '<span style="width:14px"></span>')+
+      '<button class="item" data-object="'+object.id+'" aria-pressed="'+(selected===object.id)+'">'+glyph(object)+' '+object.name+'</button>'+
+      '<button class="toggle" data-visible="'+object.id+'" aria-label="'+(object.hidden?'Show ':'Hide ')+object.name+' in viewport" title="Viewport visibility">'+
+      '<i data-icon="'+(object.hidden?'eye-off':'eye')+'" aria-hidden="true"></i></button></div>'
+    ).join('') : '<div class="empty">'+(search?'No matching objects.':'No objects in this scene.')+'</div>';
+  }
+  function field(label, id, value, unit, step = 1) {
+    return '<div class="field"><label for="forge-preview-'+id+'">'+label+'</label><input id="forge-preview-'+id+'" data-param="'+id+'" type="number" step="'+step+'" value="'+value+'"><span>'+unit+'</span></div>';
+  }
+  function vector(label, prefix, values) {
+    return '<div class="field"><span>'+label+'</span><span class="xyz">'+['X','Y','Z'].map((axis,i) =>
+      '<label><span>'+axis+'</span><input type="number" step="1" value="'+values[i]+'" data-param="'+prefix+axis+'" aria-label="'+label+' '+axis+'"></label>'
+    ).join('')+'</span>'+(prefix==='p'?'<button class="key" data-action="key" aria-label="Toggle Position X key at current frame" title="Toggle Position X key">◇</button>':'<span></span>')+'</div>';
+  }
+  function renderPanels() {
+    renderTree();
+    const object = active();
+    by('.object-head').innerHTML = object ? glyph(object)+' '+object.name+'<small>'+object.type+'</small>' : 'Project';
+    by('.tabs').innerHTML = (object ? ['Transform', 'Object'] : ['Time']).map(tab =>
+      '<button data-attr="'+tab+'" aria-pressed="'+(attribute===tab || !object)+'">'+tab+'</button>'
+    ).join('');
+    by('.attrs').innerHTML = !object
+      ? '<div class="field"><span>Frame rate</span><span>30 fps</span></div><div class="field"><span>Range</span><span>0–90 f</span></div>'
+      : attribute==='Transform'
+        ? vector('Position','p',[Math.round(position(object)),Math.round(object.y*100),Math.round(object.z*100)])+
+          vector('Rotation','r',object.rotation || [0,0,0])+vector('Scale','s',object.scale || [100,100,100])
+        : object.shape==='group' ? '<div class="empty">'+objects.filter(child => child.parent===object.id).length+' children</div>'
+        : object.shape==='cloner' ? field('Count','count',object.count||3,'')+field('Spacing','spacing',object.spacing||85,'cm')
+        : field(object.shape==='cube'?'Size':'Radius','size',Math.round(object.size*100),'cm')+
+          (object.shape==='cube'?'':field('Segments','segments',object.segments,''));
+    paintIcons();
+  }
+  function pointCanvas(canvas) {
+    const width = canvas.clientWidth, height = canvas.clientHeight;
+    if (!width || !height) return null;
+    const ratio = Math.min(window.devicePixelRatio || 1,2);
+    if (canvas.width !== Math.round(width*ratio) || canvas.height !== Math.round(height*ratio)) {
+      canvas.width = Math.round(width*ratio); canvas.height = Math.round(height*ratio);
+    }
+    const context = canvas.getContext('2d');
+    context.setTransform(ratio,0,0,ratio,0,0);
+    context.clearRect(0,0,width,height);
+    return [context,width,height];
+  }
+  function path(ctx, points, fill, stroke, weight=1, closed=false) {
+    ctx.beginPath();
+    ctx.moveTo(points[0][0],points[0][1]);
+    for (const point of points.slice(1)) ctx.lineTo(point[0],point[1]);
+    if (closed) ctx.closePath();
+    if (fill) {ctx.fillStyle=fill;ctx.fill();}
+    if (stroke) {ctx.strokeStyle=stroke;ctx.lineWidth=weight;ctx.stroke();}
+  }
+  function drawScene() {
+    const setup = pointCanvas(sceneCanvas);
+    if (!setup) return;
+    const [ctx,w,h] = setup, scale=Math.min(w/6.1,h/4.65)*zoom;
+    const selectionColor=getComputedStyle(root).getPropertyValue('--select').trim();
+    const cos=Math.cos(orbit), sin=Math.sin(orbit), tilt=Math.sin(elevation), rise=Math.cos(elevation);
+    const projection = ([x,y,z]) => {
+      const depth=z*cos-x*sin, perspective=12/(12-depth*rise-y*tilt);
+      return [w*.5+panX+(x*cos+z*sin)*scale*perspective,
+        h*.70+panY+(depth*tilt-y*rise)*scale*perspective, depth*rise+y*tilt];
+    };
+    const background = ctx.createRadialGradient(w*.43,h*.33,12,w*.5,h*.53,Math.max(w,h)*.72);
+    background.addColorStop(0,'#303b47'); background.addColorStop(1,'#20262f');
+    ctx.fillStyle=background; ctx.fillRect(0,0,w,h);
+    const line = (from,to,color,width=1) => path(ctx,[projection(from),projection(to)],null,color,width);
+    if (grid) {
+      for (let n=-15;n<=15;n++) {
+        const tone = n%4===0?'#889ab236':'#889ab21e', k=n*.5;
+        line([k,0,-10],[k,0,6],tone,.7);
+        line([-9,0,k],[9,0,k],tone,.7);
+      }
+      line([-8,0,0],[8,0,0],'#b96d7160'); line([0,0,-8],[0,0,6],'#7599d570');
+    }
+    hitAreas = [];
+    const jobs = [];
+    const face = (points, fill, stroke, weight, rank=0) => {
+      const surface=points.map(projection);
+      jobs.push({depth:surface.reduce((sum,p)=>sum+p[2],0)/surface.length+rank,
+        draw:()=>path(ctx,surface,wire?null:fill,wire?'#a8bfff93':stroke,weight,true)});
+    };
+    for (const object of objects.filter(item => !item.hidden && !objects.find(parent=>parent.id===item.parent)?.hidden)) {
+      const x=position(object)/100, y=object.y, z=object.z, size=(object.size||.65)*(object.scale?.[0]||100)/100;
+      const center=projection([x,y,z]), selectedObject=selected===object.id;
+      const highlight=selectedObject?selectionColor:null;
+      if (object.shape==='group') continue;
+      hitAreas.push({id:object.id, point:center, radius:Math.max(12,scale*size*(object.shape==='torus'?.78:.90))});
+      if (object.shape==='sphere' || object.shape==='cloner') {
+        const copies = object.shape==='cloner'?clamp(object.count||3,1,8):1;
+        for(let n=0;n<copies;n++) {
+          const p=projection([x+(n-(copies-1)/2)*(object.spacing||85)/100,y,z]);
+          const radius=size*scale*(copies>1?.57:1)*12/(12-p[2]);
+          jobs.push({depth:p[2]+.16,draw:()=>{
+            ctx.beginPath();ctx.arc(p[0],p[1],radius,0,2*Math.PI);
+            if(!wire) {
+              const shade=ctx.createRadialGradient(p[0]-radius*.39,p[1]-radius*.52,radius*.08,p[0]+radius*.09,p[1]+radius*.18,radius*1.08);
+              shade.addColorStop(0,'#e2e8ed'); shade.addColorStop(.40,'#a5b0ba'); shade.addColorStop(.80,'#616d79'); shade.addColorStop(1,'#434d59');
+              ctx.fillStyle=shade;ctx.fill();
+            }
+            if(highlight||wire){ctx.strokeStyle=highlight||'#a8bfff93';ctx.lineWidth=1.55;ctx.stroke();}
+            if(wire || (selectedObject && mode!=='Object')) {
+              ctx.strokeStyle=selectedObject?selectionColor:'#a8bfff93';ctx.lineWidth=.75;
+              for (const ratio of [.23,.49,.76]) {
+                ctx.beginPath();ctx.ellipse(p[0],p[1],radius*ratio,radius,0,0,2*Math.PI);ctx.stroke();
+              }
+              for(const part of [-.68,-.35,0,.35,.68]) {
+                ctx.beginPath();ctx.ellipse(p[0],p[1]+radius*part,radius*Math.sqrt(1-part*part),radius*.16,0,0,2*Math.PI);ctx.stroke();
+                if(mode==='Point'){ctx.fillStyle=selectionColor; for(const side of [-1,0,1]) {ctx.beginPath();ctx.arc(p[0]+radius*side*.65,p[1]+radius*part,2,0,2*Math.PI);ctx.fill();}}
+              }
+            }
+          }});
+        }
+      } else if (object.shape==='cube') {
+        const half=size*.62, angle=(object.rotation?.[1]||0)*Math.PI/180;
+        const corners=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([a,b])=>[x+(a*Math.cos(angle)-b*Math.sin(angle))*half,z+(a*Math.sin(angle)+b*Math.cos(angle))*half]);
+        const ring=level=>corners.map(([a,b])=>[a,level,b]);
+        const top=ring(y+half), bottom=ring(y-half);
+        for(let j=0;j<4;j++) {const next=(j+1)%4;face([top[j],top[next],bottom[next],bottom[j]],['#7f8b94','#606b77','#909da7','#56616d'][j],highlight,1);}
+        face(top,'#b2bcc5',highlight,1);
+      } else if (object.shape==='base') {
+        const count=clamp(object.segments,8,64);
+        const ring=(level,radius)=>Array.from({length:count},(_,i)=>{
+          const angle=i*2*Math.PI/count;
+          return [x+radius*Math.cos(angle),level,z+radius*Math.sin(angle)];
+        });
+        const top=ring(y,size), bottom=ring(y-.24,size*.99);
+        for(let j=0;j<count;j++) {
+          const next=(j+1)%count, c=Math.round(62+23*(Math.cos(j*2*Math.PI/count+.5)+1));
+          face([top[j],top[next],bottom[next],bottom[j]],'rgb('+c+','+(c+10)+','+(c+20)+')',null,1);
+        }
+        const rim=top.map(projection);
+        jobs.push({depth:center[2],draw:()=>{
+          path(ctx,rim,wire?null:'#82909c',highlight||(wire?'#a8bfff93':'#a0acb5'),1,true);
+          if(wire)return;
+          const shadow=ctx.createRadialGradient(center[0],center[1],1,center[0],center[1],scale*size);
+          shadow.addColorStop(0,'#141b2550');shadow.addColorStop(1,'#19212b00');
+          path(ctx,rim,shadow,null,1,true);
+        }});
+      } else {
+        const count=clamp(object.segments,12,64);
+        const ring=(angle,radius)=>[x+radius*Math.cos(angle),y+radius*Math.cos(angle)*.14,z+radius*Math.sin(angle)];
+        for(let j=0;j<count;j++) {
+          const a=j*2*Math.PI/count, b=(j+1)*2*Math.PI/count;
+          const c=Math.round(118+32*(Math.cos(a-1)+1));
+          face([ring(a,size-.036),ring(b,size-.036),ring(b,size+.036),ring(a,size+.036)],'rgb('+c+','+(c+11)+','+(c+20)+')',highlight,1);
+        }
+      }
+    }
+    jobs.sort((a,b)=>a.depth-b.depth).forEach(job=>job.draw());
+    const object=active();
+    const axisColors=['#f18a85','#83d5a7','#86acfa'];
+    const axes=[[1,0,0],[0,1,0],[0,0,1]];
+    const triad=projection([0,0,0]);
+    axes.forEach((axis,index)=>{
+      const end=projection(axis);
+      const dx=end[0]-triad[0],dy=end[1]-triad[1],len=Math.hypot(dx,dy);
+      const dot=[w-30+20*dx/len,37+20*dy/len];
+      path(ctx,[[w-30,37],dot],null,axisColors[index],1.25);
+      ctx.fillStyle=axisColors[index];ctx.font='10px system-ui';ctx.textAlign='center';ctx.fillText('XYZ'[index],dot[0],dot[1]+3);
+    });
+    if(object && !object.hidden && tool!=='Select') {
+      const origin=[position(object)/100,object.y,object.z], from=projection(origin);
+      if(tool==='Rotate') {
+        axisColors.forEach((color,index)=>{
+          ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=1.4;
+          ctx.ellipse(from[0],from[1],27,12,index*Math.PI/3,0,2*Math.PI);ctx.stroke();
+        });
+      } else axes.forEach((axis,index)=>{
+        const to=projection(axis.map((value,k)=>origin[k]+value*.66)), color=axisColors[index];
+        path(ctx,[from,to],null,color,1.8);
+        if(tool==='Scale'){ctx.fillStyle=color;ctx.fillRect(to[0]-3,to[1]-3,6,6);return;}
+        const a=Math.atan2(to[1]-from[1],to[0]-from[0]);
+        path(ctx,[to,[to[0]-8*Math.cos(a-.45),to[1]-8*Math.sin(a-.45)],[to[0]-8*Math.cos(a+.45),to[1]-8*Math.sin(a+.45)]],color,null,1,true);
+      });
+    }
+  }
+  function drawGraph() {
+    const setup=pointCanvas(graphCanvas);
+    if(!setup)return;
+    const [ctx,w,h]=setup, object=active(), samples=track?keys(object):[];
+    const selectionColor=getComputedStyle(root).getPropertyValue('--select').trim();
+    const x=time=>5+(w-10)*time/90, y=value=>h*.5-value*(h-28)/(2*Math.max(60,...samples.map(key=>Math.abs(key[1]))));
+    ctx.font='10px system-ui';ctx.textAlign='left';
+    for(let t=0;t<=90;t+=5) path(ctx,[[x(t),0],[x(t),h]],null,t%15?'#ffffff0e':'#ffffff1c');
+    if(editor==='curve') {
+      for(const v of [-40,0,40]){
+        path(ctx,[[0,y(v)],[w,y(v)]],null,v===0?'#788594':'#ffffff13');
+        ctx.fillStyle='#a7b2c0';ctx.fillText(v+' cm',7,y(v)-4);
+      }
+      if(samples.length)path(ctx,Array.from({length:91},(_,t)=>[x(t),y(position(object,t))]),null,'#f18a85',1.7);
+    } else if(samples.length) {
+      ctx.fillStyle='#ffffff08';ctx.fillRect(0,21,w,31);
+      path(ctx,[[0,52],[w,52]],null,'#ffffff20');
+    }
+    path(ctx,[[x(frame),0],[x(frame),h]],null,getComputedStyle(root).getPropertyValue('--mint').trim(),1);
+    for(const [t,v] of samples) {
+      const a=x(t), b=editor==='curve'?y(v):37;
+      if(editor==='curve' && t===frame) {
+        path(ctx,[[Math.max(3,a-16),b],[Math.min(w-3,a+16),b]],null,selectionColor,1);
+        ctx.fillStyle=selectionColor; ctx.fillRect(Math.max(2,a-17),b-1,3,3); ctx.fillRect(Math.min(w-4,a+15),b-1,3,3);
+      }
+      path(ctx,[[a,b-4],[a+4,b],[a,b+4],[a-4,b]],t===frame?selectionColor:'#bdcad4',null,1,true);
+    }
+    if(!samples.length){
+      ctx.fillStyle='#a7b2c0';ctx.textAlign='center';
+      ctx.fillText(!track?'Track hidden':object?'No keys for Position X':'Select an object to see its keys',w/2,h*.72);
+    }
+  }
+  function syncFrame() {
+    const object=active(), keyed=object?.keys?.has(frame);
+    by('.frame').value=frame;by('.ruler').value=frame;
+    const input=by('[data-param=pX]');
+    if(object && input && document.activeElement!==input) input.value=Math.round(position(object));
+    for(const button of all('[data-action=key]')) {
+      button.disabled=!object;
+      button.textContent=keyed?'◆':object?.keys?.size?'◈':'◇';
+      button.dataset.keyed=Boolean(keyed);
+      if(button.closest('.transport')) button.style.color=keyed?'var(--select)':'';
+    }
+    by('[data-track]').textContent=object?'◈ '+object.name+' · X':'Position X';
+    by('[data-count]').textContent=objects.length+(objects.length===1?' object':' objects');
+    drawScene();drawGraph();
+  }
+  function setFrame(value) {
+    frame=clamp(Math.round(Number(value)||0),0,90);
+    syncFrame();
+  }
+  function add(type) {
+    const shape=type.toLowerCase(), id=nextId++;
+    objects.push({id,name:type+' '+id,type,shape,x:170*Math.cos(id*1.2),y:shape==='cloner'?1:.86,z:.9*Math.sin(id),size:shape==='torus'?.83:.54,segments:32});
+    by('.filter').value='';
+    choose(id);
+    by('[data-status]').textContent=type+' created';
+  }
+  function keyed() {
+    const object=active();
+    if(!object)return;
+    const value=position(object);
+    object.keys ||= new Map();
+    if(object.keys.has(frame)) {
+      object.keys.delete(frame);
+      if(!object.keys.size)object.x=value;
+    } else object.keys.set(frame,value);
+    by('[data-status]').textContent=(object.keys.has(frame)?'Key set at ':'Key removed at ')+frame+' f';
+    syncFrame();
+  }
+  function showWorkspace(value) {
+    const previous=workspace;
+    workspace=value;
+    if(value==='model' && previous!=='model'){mode='Polygon';pressed('[data-mode]',mode,'mode');}
+    pressed('[data-work]',workspace,'work');
+    by('.main').classList.toggle('animating',workspace==='animate');
+    for(const selector of ['[data-editor-tabs]','[data-tracks]','.graph']) by(selector).hidden=workspace!=='animate';
+    by('[data-status]').textContent=({standard:'Standard',model:'Modeling',animate:'Animate'})[value]+' workspace';
+    syncFrame();
+  }
+  const actions={
+    scene:()=>{
+      const showSample=by('[data-action=scene]').dataset.blank==='true';
+      const previous=showSample?'blank':'sample', destination=showSample?'sample':'blank';
+      previewScenes[previous]={objects, selected, frame, expanded};
+      ({objects, selected, frame, expanded}=previewScenes[destination] ||
+        {objects:[], selected:null, frame:0, expanded:true});
+      by('[data-action=scene]').dataset.blank=String(!showSample);
+      by('[data-action=scene]').textContent=showSample?'Empty scene':'Sample scene';
+      by('.filter').value='';
+      choose(selected);
+      setFrame(frame);
+      by('[data-status]').textContent=showSample?'Sample scene loaded':'Empty scene';
+    },
+    cloner:()=>add('Cloner'), expand:()=>{expanded=!expanded;renderPanels();syncFrame();by('[data-action=expand]')?.focus();},
+    clear:()=>{choose(null);by('[data-status]').textContent='Selection cleared';},
+    key:keyed,
+    grid:()=>{grid=!grid;by('[data-action=grid]').setAttribute('aria-pressed',grid);by('.grid-label').hidden=!grid;drawScene();},
+    wire:()=>{wire=!wire;by('[data-action=wire]').setAttribute('aria-pressed',wire);by('[data-shading]').textContent=wire?'Wireframe':'Solid';drawScene();},
+    fit:()=>{orbit=-.35;elevation=.41;zoom=1;panX=0;panY=0;drawScene();},
+    start:()=>setFrame(0),end:()=>setFrame(90),prev:()=>setFrame(frame-1),next:()=>setFrame(frame+1),
+    auto:()=>{auto=!auto;by('[data-action=auto]').setAttribute('aria-pressed',auto);},
+    play:()=>{
+      const button=by('[data-action=play]');
+      if(timer){clearInterval(timer);timer=undefined;button.innerHTML='<span class="play-mark">▶</span>';}
+      else {timer=setInterval(()=>setFrame(frame>=90?0:frame+1),1000/30);button.innerHTML='<span class="play-mark">Ⅱ</span>';}
+      button.setAttribute('aria-label',timer?'Pause':'Play');
+      button.title=timer?'Pause':'Play';
+    }
+  };
+  root.addEventListener('click', event=>{
+    const button=event.target.closest('button');if(!button)return;
+    const data=button.dataset;
+    if(data.action){actions[data.action]();return;}
+    if(data.work){showWorkspace(data.work);return;}
+    if(data.editor){editor=data.editor;pressed('[data-editor]',editor,'editor');drawGraph();return;}
+    if(data.track){track=!track;button.setAttribute('aria-pressed',track);drawGraph();return;}
+    if(data.mode){mode=data.mode;pressed('[data-mode]',mode,'mode');drawScene();return;}
+    if(data.tool){tool=data.tool;pressed('[data-tool]',tool,'tool');drawScene();return;}
+    if(data.attr){attribute=data.attr;renderPanels();syncFrame();by('[data-attr="'+attribute+'"]').focus();return;}
+    if(data.object){choose(Number(data.object));by('[data-object="'+data.object+'"]')?.focus();by('[data-status]').textContent=active().name+' selected';return;}
+    if(data.visible){const object=objects.find(item=>item.id===Number(data.visible));object.hidden=!object.hidden;renderPanels();syncFrame();by('[data-visible="'+data.visible+'"]')?.focus();}
+  });
+  by('.filter').addEventListener('input',()=>{renderTree();paintIcons();});
+  by('.ruler').addEventListener('input',event=>setFrame(event.target.value));
+  by('.frame').addEventListener('change',event=>setFrame(event.target.value));
+  by('[data-create]').addEventListener('change',event=>{if(event.target.value)add(event.target.value);event.target.value='';});
+  by('.attrs').addEventListener('change',event=>{
+    const param=event.target.dataset.param,value=Number(event.target.value),object=active();
+    if(!param || !object || !Number.isFinite(value))return;
+    if(param==='pX'){
+      object.x=value;
+      if(auto||object.keys?.size){object.keys ||= new Map();object.keys.set(frame,value);}
+    } else if(param==='pY'||param==='pZ'){object[param[1].toLowerCase()]=value/100;}
+    else if(param[0]==='r'||param[0]==='s'&&param.length===2) {
+      const key=param[0]==='r'?'rotation':'scale';
+      object[key] ||= key==='rotation'?[0,0,0]:[100,100,100];
+      object[key]['XYZ'.indexOf(param[1])]=value;
+    } else object[param]=param==='size'?clamp(value,5,300)/100:clamp(value,1,300);
+    syncFrame();
+  });
+  graphCanvas.addEventListener('click',event=>setFrame((event.offsetX-5)/(graphCanvas.clientWidth-10)*90));
+  let dragging, navKey;
+  root.addEventListener('keydown',event=>{
+    if(event.target.matches('input,select'))return;
+    if('123'.includes(event.key)&&event.key.length===1)navKey=event.key;
+    const shortcut={e:'Move',r:'Rotate',t:'Scale'}[event.key.toLowerCase()];
+    if(shortcut)by('[data-tool="'+shortcut+'"]').click();
+  });
+  window.addEventListener('keyup',event=>{if(event.key===navKey)navKey=undefined;});
+  window.addEventListener('blur',()=>{navKey=undefined;});
+  by('.viewport').tabIndex=0;
+  sceneCanvas.addEventListener('pointerdown',event=>{
+    by('.viewport').focus({preventScroll:true});
+    dragging={x:event.offsetX,y:event.offsetY,lastX:event.offsetX,lastY:event.offsetY,moved:false};
+    sceneCanvas.setPointerCapture(event.pointerId);
+  });
+  sceneCanvas.addEventListener('pointermove',event=>{
+    if(!dragging)return;
+    if(Math.hypot(event.offsetX-dragging.x,event.offsetY-dragging.y)>4)dragging.moved=true;
+    if(!dragging.moved)return;
+    const dx=event.offsetX-dragging.lastX,dy=event.offsetY-dragging.lastY;
+    if(navKey==='1'){panX+=dx;panY+=dy;}
+    else if(navKey==='2'){zoom=clamp(zoom+dx*.006,.4,2.6);}
+    else {orbit+=dx*.009;elevation=clamp(elevation+dy*.008,.12,1.1);}
+    dragging.lastX=event.offsetX;dragging.lastY=event.offsetY;drawScene();
+  });
+  sceneCanvas.addEventListener('pointerup',event=>{
+    if(dragging&&!dragging.moved) {
+      const hit=hitAreas.map(area=>({...area, distance:Math.hypot(event.offsetX-area.point[0],event.offsetY-area.point[1])}))
+        .filter(area=>area.distance<area.radius).sort((a,b)=>a.distance-b.distance)[0];
+      choose(hit?.id??null);by('[data-status]').textContent=active()?active().name+' selected':'Selection cleared';
+    }
+    dragging=null;
+  });
+  sceneCanvas.addEventListener('pointercancel',()=>{dragging=null;});
+  new ResizeObserver(()=>{drawScene();drawGraph();}).observe(root);
+  renderPanels();syncFrame();
+})();
+</script>
+</div>
+</main>
+</body>
+</html>
