@@ -11,6 +11,54 @@ use crate::object_manager::Cmd;
 use crate::theme::Theme;
 use crate::widgets::Edit;
 
+/// The four states of the key diamond (observed, G4 item 2): hollow grey = no track; solid
+/// key colour = a key at this frame; solid modified colour = an unkeyed draft (brief 232);
+/// hollow key colour = animated, no key here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyState {
+    Unkeyed,
+    Keyed,
+    Modified,
+    Animated,
+}
+
+impl KeyState {
+    /// The state from what the row knows. A draft wins over a key at this frame (the
+    /// reference showed the amber diamond on the keyed frame after an unrecorded edit).
+    pub fn of(changed: bool, key_here: bool, animated: bool) -> KeyState {
+        if changed {
+            KeyState::Modified
+        } else if key_here {
+            KeyState::Keyed
+        } else if animated {
+            KeyState::Animated
+        } else {
+            KeyState::Unkeyed
+        }
+    }
+
+    /// The word in the accessible label (`<row> <word>`).
+    pub fn word(self) -> &'static str {
+        match self {
+            KeyState::Unkeyed => "unkeyed",
+            KeyState::Keyed => "keyed",
+            KeyState::Modified => "changed",
+            KeyState::Animated => "animated",
+        }
+    }
+
+    /// `(outline, fill)` of the diamond; a transparent fill is hollow.
+    pub fn look(self, theme: &Theme) -> (Color32, Color32) {
+        let clear = Color32::TRANSPARENT;
+        match self {
+            KeyState::Unkeyed => (theme.weak_text, clear),
+            KeyState::Keyed => (theme.key, theme.key),
+            KeyState::Modified => (theme.modified, theme.modified),
+            KeyState::Animated => (theme.key, clear),
+        }
+    }
+}
+
 pub(crate) fn draft_value(desc: &ParamDesc, current: &Value, edit: &Edit) -> Option<Value> {
     let value = if let Some(axis) = edit.component {
         let Value::Vec3(mut vector) = *current else {
@@ -118,17 +166,9 @@ impl RowKeys {
 
     pub fn show(&self, ui: &mut Ui, label: &str, value: &Value, changed: bool) -> Option<Cmd> {
         let theme = Theme::current(ui.ctx());
-        let clear = Color32::TRANSPARENT;
-        let (state, stroke, fill) = if changed {
-            let warn = ui.visuals().warn_fg_color;
-            ("changed", warn, warn)
-        } else if !self.here.is_empty() {
-            ("keyed", theme.accent, theme.accent)
-        } else if self.animated {
-            ("animated", theme.accent, clear)
-        } else {
-            ("unkeyed", theme.weak_text, clear)
-        };
+        let key_state = KeyState::of(changed, !self.here.is_empty(), self.animated);
+        let state = key_state.word();
+        let (stroke, fill) = key_state.look(&theme);
         let (rect, response) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), Sense::click());
         response.widget_info(|| {
             egui::WidgetInfo::labeled(

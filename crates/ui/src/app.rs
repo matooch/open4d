@@ -127,7 +127,7 @@ pub struct Editor {
     /// Name field buffer in the attribute panel.
     name_edit: Option<(NodeId, String)>,
     /// The attribute manager tab shown (UI.md §12).
-    attr_tab: String,
+    attr_tabs: crate::attributes::TabSelection,
     /// Counter for drag/typing gestures (each is one undo step).
     gesture_seq: u64,
     gesture: Option<u64>,
@@ -232,7 +232,7 @@ impl Editor {
             keymap_editor: KeyMapEditor::default(),
             palette: Palette::default(),
             name_edit: None,
-            attr_tab: String::new(),
+            attr_tabs: crate::attributes::TabSelection::default(),
             gesture_seq: 0,
             gesture: None,
             viewport_hot: false,
@@ -563,13 +563,19 @@ impl Editor {
                 .send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.sent_title = title;
         }
-        egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));
-        egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
+        // the document / layout row and the status bar have the observed heights (UI.md §29.1)
+        egui::Panel::top("menu")
+            .min_size(crate::layout::WINDOW.document_row)
+            .show(ui, |ui| self.menu_bar(ui));
+        egui::Panel::bottom("status")
+            .exact_size(crate::layout::WINDOW.status_bar)
+            .show(ui, |ui| self.status_bar(ui));
         let sizes = self.sizes;
         let salt = self.layout_gen;
         if !self.state.dock.tabs(Area::Top).is_empty() {
             egui::Panel::top("area_top")
                 .resizable(false)
+                .min_size(crate::layout::WINDOW.command_bar)
                 .show(ui, |ui| self.area(ui, Area::Top, rs));
         }
         if !self.state.dock.tabs(Area::Bottom).is_empty() {
@@ -1153,7 +1159,11 @@ impl Editor {
                     ));
             }
             if self.state.status.is_empty() {
-                ui.weak("Ready");
+                // the active tool's help text (observed, G10 A8)
+                ui.weak(crate::tools::help_text(
+                    self.state.gizmo_mode,
+                    forge_command::CommandContext::edit_mode(&self.state),
+                ));
             } else {
                 ui.colored_label(Theme::current(ui.ctx()).error, &self.state.status);
             }
@@ -1263,7 +1273,7 @@ impl Editor {
                 if i > 0 {
                     ui.separator();
                 }
-                if let Some(c) = self.button_group(ui, group) {
+                if let Some(c) = self.button_group(ui, group, crate::theme::BUTTONS.command) {
                     clicked = Some(c);
                 }
             }
@@ -1280,7 +1290,7 @@ impl Editor {
             for group in tool_palette() {
                 ui.weak(group.name);
                 ui.horizontal_wrapped(|ui| {
-                    if let Some(c) = self.button_group(ui, &group) {
+                    if let Some(c) = self.button_group(ui, &group, crate::theme::BUTTONS.palette) {
                         clicked = Some(c);
                     }
                 });
@@ -1293,7 +1303,7 @@ impl Editor {
     }
 
     /// Draws a group's buttons; the command of the one clicked, if any.
-    fn button_group(&self, ui: &mut Ui, group: &ButtonGroup) -> Option<Cmd> {
+    fn button_group(&self, ui: &mut Ui, group: &ButtonGroup, min: [f32; 2]) -> Option<Cmd> {
         let mut clicked = None;
         for b in &group.buttons {
             let selected = b.command == "select.mode"
@@ -1302,7 +1312,11 @@ impl Editor {
                     && b.args["mode"]
                         == json!(crate::commands::shading_mode_of(self.state.shading)));
             let response = ui
-                .add(egui::Button::new(b.text()).selected(selected))
+                .add(
+                    egui::Button::new(b.text())
+                        .selected(selected)
+                        .min_size(egui::vec2(min[0], min[1])),
+                )
                 .on_hover_text(b.tip);
             if response.clicked() {
                 // the registry owns the ids; `Cmd` borrows them as 'static
@@ -2821,38 +2835,47 @@ impl Editor {
             self.run(("object.rename", json!({"node": id.0, "name": name})));
         }
         let tabs = view.tabs();
-        if !tabs.contains(&self.attr_tab) {
-            self.attr_tab = tabs.first().cloned().unwrap_or_default();
-        }
+        self.attr_tabs.normalise(&tabs);
         if tabs.len() > 1 {
             ui.horizontal(|ui| {
+                let shown = self.attr_tabs.shown(&tabs);
                 for t in &tabs {
-                    if ui.selectable_label(*t == self.attr_tab, t).clicked() {
-                        self.attr_tab = t.clone();
+                    let r = ui.selectable_label(shown.contains(t), t);
+                    if r.clicked() {
+                        // Shift-click stacks a second tab body under the first (G1 item 3)
+                        let shift = ui.input(|i| i.modifiers.shift);
+                        self.attr_tabs.click(t, shift, &tabs);
                     }
                 }
             });
         }
         ui.separator();
-        let tab = self.attr_tab.clone();
+        let shown_tabs = self.attr_tabs.shown(&tabs);
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
                 ui.add_enabled_ui(view.editable, |ui| {
-                    for (group, rows) in view.groups_of(&tab) {
-                        egui::CollapsingHeader::new(group)
-                            .default_open(true)
-                            .show(ui, |ui| {
-                                egui::Grid::new(("attrs", &tab, group))
-                                    .num_columns(2)
-                                    .spacing([12.0, 4.0])
-                                    .show(ui, |ui| {
-                                        for row in rows {
-                                            self.attribute_row(ui, &shown, id, row, can_draft);
-                                            ui.end_row();
-                                        }
-                                    });
-                            });
+                    for (n, tab) in shown_tabs.iter().enumerate() {
+                        if n > 0 {
+                            // stacked bodies are told apart by a line
+                            ui.separator();
+                        }
+                        for (group, rows) in view.groups_of(tab) {
+                            egui::CollapsingHeader::new(group)
+                                .id_salt(("attr_group", tab, group))
+                                .default_open(true)
+                                .show(ui, |ui| {
+                                    egui::Grid::new(("attrs", tab, group))
+                                        .num_columns(2)
+                                        .spacing([12.0, 4.0])
+                                        .show(ui, |ui| {
+                                            for row in rows {
+                                                self.attribute_row(ui, &shown, id, row, can_draft);
+                                                ui.end_row();
+                                            }
+                                        });
+                                });
+                        }
                     }
                 });
             });

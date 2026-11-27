@@ -6,9 +6,15 @@ use std::collections::BTreeSet;
 
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
+use forge_command::ModeArg;
 use forge_ui::app::Editor;
 use forge_ui::dock::{Area, Dock, Panel};
-use forge_ui::layout::{LAYOUT_VERSION, Layout, all_buttons, command_bar, tool_palette};
+use forge_ui::layout::{
+    LAYOUT_VERSION, Layout, Sizes, WINDOW, all_buttons, command_bar, regions, tool_palette,
+};
+use forge_ui::theme::BUTTONS;
+use forge_ui::tools::help_text;
+use forge_viewport::gizmo::GizmoMode;
 
 fn harness() -> Harness<'static, Editor> {
     let editor = Editor::new(common::state());
@@ -33,7 +39,7 @@ fn default_layout_places_the_panels() {
     let attributes = rect(&h, "Attributes");
     let timeline = rect(&h, "Timeline");
     let menu = rect(&h, "File");
-    let status = rect(&h, "Ready");
+    let status = rect(&h, &help_text(GizmoMode::Translate, ModeArg::Model));
 
     assert!(
         menu.center().y < bar.center().y,
@@ -172,4 +178,121 @@ fn reset_layout_restores_the_standard_layout() {
     h.get_by_label("Reset layout").click();
     h.run();
     assert_eq!(h.state().layout(), Layout::standard());
+}
+
+// ---- observed window metrics (brief 233, G10 item 1; UI.md §29.1) -----------------------
+
+#[test]
+fn the_reference_window_regions_at_1920_by_1080() {
+    // rows: title bar 28, document / layout row 24, command bar 42, viewport menu row 20,
+    // timeline 92, status bar 24
+    assert_eq!(
+        (
+            WINDOW.title_bar,
+            WINDOW.document_row,
+            WINDOW.command_bar,
+            WINDOW.viewport_menu,
+            WINDOW.timeline,
+            WINDOW.status_bar
+        ),
+        (28.0, 24.0, 42.0, 20.0, 92.0, 24.0)
+    );
+    // columns: tool strip 43, object palette 43, managers 402
+    assert_eq!(
+        (WINDOW.tool_strip, WINDOW.object_palette, WINDOW.managers),
+        (43.0, 43.0, 402.0)
+    );
+    let r = regions(1920.0, 1080.0);
+    // y 0-28 and 28-52, then 52-94 and 94-114
+    assert_eq!((r.title_bar.1, r.title_bar.3), (0.0, 28.0));
+    assert_eq!((r.document_row.1, r.document_row.3), (28.0, 52.0));
+    assert_eq!((r.command_bar.1, r.command_bar.3), (52.0, 94.0));
+    assert_eq!((r.viewport_menu.1, r.viewport_menu.3), (94.0, 114.0));
+    // the tool strip: x 0-43; the viewport canvas x 43-1472, y 114-962 (1429 x 848)
+    assert_eq!((r.tool_strip.0, r.tool_strip.2), (0.0, 43.0));
+    assert_eq!(r.viewport, (43.0, 114.0, 1472.0, 962.0));
+    assert_eq!(r.viewport.2 - r.viewport.0, 1429.0);
+    assert_eq!(r.viewport.3 - r.viewport.1, 848.0);
+    // the object palette x 1473-1516 (43 wide), the managers x 1517-1919 (402 wide)
+    assert_eq!((r.object_palette.0, r.object_palette.2), (1473.0, 1516.0));
+    assert_eq!((r.managers.0, r.managers.2), (1517.0, 1919.0));
+    // the timeline y 963-1055 under the viewport, the status bar y 1055-1079
+    assert_eq!((r.timeline.1, r.timeline.3), (963.0, 1055.0));
+    assert_eq!((r.timeline.0, r.timeline.2), (43.0, 1473.0));
+    assert_eq!((r.status_bar.1, r.status_bar.3), (1055.0, 1079.0));
+    // the split between Objects and Attributes sits near y 500 (47 % of the column's height
+    // measured from the window top to the status bar: 0.47 * 1055 = 496)
+    assert!((WINDOW.manager_split * r.status_bar.1 - 500.0).abs() < 10.0);
+}
+
+#[test]
+fn the_default_layout_sizes_and_button_metrics_are_the_observed_ones() {
+    let s = Sizes::default();
+    assert_eq!(s.right_width, 402.0);
+    assert_eq!(s.right_top_fraction, 0.47);
+    assert_eq!(s.bottom_height, 92.0);
+    // the tool strip is 43 in the reference; ours keeps its labelled buttons wide until
+    // the icons of brief 227 (UI.md §29.1)
+    assert!(s.left_width >= WINDOW.tool_strip);
+    assert_eq!(Layout::standard().sizes, s);
+    // command bar buttons about 27 x 26, palette buttons 34 x 34
+    assert_eq!(BUTTONS.command, [27.0, 26.0]);
+    assert_eq!(BUTTONS.palette, [34.0, 34.0]);
+}
+
+#[test]
+fn bars_and_buttons_have_the_observed_heights_in_the_window() {
+    let h = harness();
+    // every command bar and palette button is at least as large as the metrics say
+    let undo = rect(&h, "<- Undo");
+    assert!(undo.width() >= BUTTONS.command[0] && undo.height() >= BUTTONS.command[1]);
+    let extrude = rect(&h, "^^ Extrude");
+    assert!(extrude.width() >= BUTTONS.palette[0] && extrude.height() >= BUTTONS.palette[1]);
+    // the status bar is 24 high: its text sits within the last 24 points of the window
+    let text = help_text(GizmoMode::Translate, ModeArg::Model);
+    let status = rect(&h, &text);
+    assert!(status.center().y > 800.0 - WINDOW.status_bar);
+    // the managers column is 402 wide (the tab header sits one frame margin inside it)
+    let objects = rect(&h, "Objects");
+    assert!(
+        (objects.min.x - (1280.0 - WINDOW.managers)).abs() <= 12.0,
+        "{objects:?}"
+    );
+}
+
+#[test]
+fn the_status_bar_shows_the_active_tools_help() {
+    let move_help = help_text(GizmoMode::Translate, ModeArg::Model);
+    assert!(move_help.starts_with("Move:"), "{move_help}");
+    assert!(help_text(GizmoMode::Rotate, ModeArg::Points).starts_with("Rotate:"));
+    assert!(help_text(GizmoMode::Scale, ModeArg::Edges).starts_with("Scale:"));
+    assert!(help_text(GizmoMode::Translate, ModeArg::Polys).contains("polygons"));
+    let mut h = harness();
+    h.get_by_label(&move_help);
+    // choosing the rotate tool changes the line; an error replaces it until the next success
+    forge_ui::commands::execute(
+        &mut h.state_mut().state,
+        "view.gizmo_mode",
+        serde_json::json!({"mode": "rotate"}),
+    )
+    .unwrap();
+    h.run();
+    h.get_by_label(&help_text(GizmoMode::Rotate, ModeArg::Model));
+}
+
+#[test]
+fn the_timeline_ruler_labels_every_five_frames_at_the_reference_width() {
+    use forge_ui::timeline::ruler_step;
+    // the strip under the viewport is about 1413 points wide (1429 minus its 8 point margins)
+    // for the empty document's 0 - 90 project: labels every 5 frames (observed, G10 A7)
+    assert_eq!(ruler_step(90.0, 1429.0 - 16.0), 5);
+    // narrower strips label less often, wider ones more often
+    assert_eq!(ruler_step(90.0, 600.0), 10);
+    assert_eq!(ruler_step(90.0, 2000.0), 2);
+    assert_eq!(ruler_step(10.0, 1000.0), 1);
+    // labels are never closer than 40 points
+    for width in [200.0_f32, 700.0, 1413.0, 2500.0] {
+        let step = ruler_step(90.0, width);
+        assert!(step as f32 / 90.0 * width >= 40.0);
+    }
 }

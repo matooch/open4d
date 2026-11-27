@@ -1165,11 +1165,13 @@ fn a_prefix_times_out_and_escape_cancels() {
         "after the timeout T is the scale key"
     );
     // a pending prefix expires for the status bar too
-    let mut state = KeyMapState::default();
-    state.armed = Some(forge_ui::keymap::Armed {
-        chord: chord("M"),
-        at: 5.0,
-    });
+    let state = KeyMapState {
+        armed: Some(forge_ui::keymap::Armed {
+            chord: chord("M"),
+            at: 5.0,
+        }),
+        ..KeyMapState::default()
+    };
     assert_eq!(state.pending_prefix(5.5), Some(chord("M")));
     assert_eq!(state.pending_prefix(5.0 + SEQUENCE_TIMEOUT + 0.1), None);
     // Escape cancels and is consumed; the next key is ordinary again

@@ -27,6 +27,20 @@ impl ThemeKind {
     }
 }
 
+/// Button sizes of the bars and strips, in points (observed, G10 item 1, at scale 1): the
+/// command bar's buttons are about 27 x 26, the vertical palettes' 34 x 34. Shared by every
+/// theme.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ButtonMetrics {
+    pub command: [f32; 2],
+    pub palette: [f32; 2],
+}
+
+pub const BUTTONS: ButtonMetrics = ButtonMetrics {
+    command: [27.0, 26.0],
+    palette: [34.0, 34.0],
+};
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Theme {
     pub kind: ThemeKind,
@@ -42,6 +56,12 @@ pub struct Theme {
     pub component_selection: Color32,
     /// Keyboard focus ring and IME composition underline (UI.md §24.1).
     pub focus: Color32,
+    /// A parameter key indicator with a key at this frame and its hollow form (UI.md §12;
+    /// observed red in the reference, G4 item 2, ours is our own red).
+    pub key: Color32,
+    /// A parameter key indicator with an unkeyed draft (UI.md §12; observed amber). Its hue
+    /// differs from `key` by at least 30 degrees in every theme (tested).
+    pub modified: Color32,
 }
 
 impl Default for Theme {
@@ -70,6 +90,8 @@ impl Theme {
                 error: rgb(0xE5534B),
                 component_selection: rgb(0x38C6E8),
                 focus: rgb(0x5AA9FF),
+                key: rgb(0xE8505B),
+                modified: rgb(0xF2B134),
             },
             ThemeKind::Light => Theme {
                 kind,
@@ -83,6 +105,8 @@ impl Theme {
                 error: rgb(0xB3261E),
                 component_selection: rgb(0x006C99),
                 focus: rgb(0x0B57D0),
+                key: rgb(0xC4262E),
+                modified: rgb(0x8A6A00),
             },
             ThemeKind::HighContrast => Theme {
                 kind,
@@ -96,6 +120,8 @@ impl Theme {
                 error: rgb(0xFF7B72),
                 component_selection: rgb(0x00E5FF),
                 focus: rgb(0x5CE1FF),
+                key: rgb(0xFF5C5C),
+                modified: rgb(0xFFB000),
             },
         }
     }

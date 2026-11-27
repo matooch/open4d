@@ -8,10 +8,12 @@ use forge_core::Value;
 use forge_ui::app::Editor;
 use forge_ui::dock::{Area, Panel};
 
+/// The window is 1000 high: with the observed bar heights (command bar 42, status bar 24,
+/// UI.md §29.1) the attribute panel's last rows need more than 800.
 fn harness() -> Harness<'static, Editor> {
     let editor = Editor::new(common::state());
     Harness::builder()
-        .with_size([1280.0, 800.0])
+        .with_size([1280.0, 1000.0])
         .build_ui_state(|ui, editor: &mut Editor| editor.show(ui, None), editor)
 }
 

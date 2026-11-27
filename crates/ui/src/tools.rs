@@ -19,6 +19,26 @@ use serde_json::{Value as Json, json};
 use crate::commands::execute;
 use crate::state::EditorState;
 
+/// The status bar's help line for the active transform tool (observed, G10 A8: with Move
+/// active the reference explains dragging, Shift quantizing and adding in point mode; the text
+/// is ours and only says what ours does).
+pub fn help_text(gizmo: forge_viewport::gizmo::GizmoMode, mode: forge_command::ModeArg) -> String {
+    use forge_command::ModeArg;
+    use forge_viewport::gizmo::GizmoMode;
+    let what = match gizmo {
+        GizmoMode::Translate => "Move: drag an arrow or plane handle to move the selection",
+        GizmoMode::Rotate => "Rotate: drag a ring to rotate the selection",
+        GizmoMode::Scale => "Scale: drag a handle to scale the selection",
+    };
+    let pick = match mode {
+        ModeArg::Model => "click an object to select it",
+        ModeArg::Points => "click points to select them",
+        ModeArg::Edges => "click edges to select them",
+        ModeArg::Polys => "click polygons to select them",
+    };
+    format!("{what}; {pick}.")
+}
+
 /// A modeling tool the editor can activate.
 pub trait Tool: Send + Sync {
     fn id(&self) -> &'static str;

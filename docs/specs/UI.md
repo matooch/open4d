@@ -351,8 +351,13 @@ being plain data over that model.
 `from_json` rejects a version other than `LAYOUT_VERSION`, a panel listed twice and an
 active tab out of range). `Layout::standard()` is the default; `Editor::layout()` /
 `set_layout()` read and apply one, and Window > Reset layout applies the standard layout.
-`Sizes { left_width 150, right_width 340, right_top_fraction 0.45, bottom_height 120 }` are
-initial sizes of the resizable areas (egui remembers later drags).
+`Sizes { left_width 150, right_width 402, right_top_fraction 0.47, bottom_height 92 }` are
+initial sizes of the resizable areas (egui remembers later drags). Right width, split and
+timeline height are the reference's measured numbers (observed, G10 item 1; §29.1, `layout::WINDOW`).
+`left_width` stays 150 because our tool palette still holds labelled buttons; the reference's strip
+is 43 px (`WINDOW.tool_strip`) and brief 227 sets it when the buttons become icons. The panels
+grow to the widest content, so a tab or a number field that is wider than the managers column
+pushes it out: the number field of §12 is sized to keep three of them in 402 px.
 
 Standard arrangement, top to bottom: menu bar; Top area: command bar; Left: tool palette
 column; Centre: viewport; right column: Object manager above Attribute manager; Bottom
@@ -381,17 +386,30 @@ Pointer-driven tools (cuts, bridge, pen) stay in the Mesh menu, as do the arrang
 (Array, Duplicate, Arrange, Randomize, Transfer; MODELING.md §9.7), which have a settings panel and no
 viewport interaction.
 
-## 12. Attribute manager (`attributes`, `widgets`; brief 150)
+## 12. Attribute manager (`attributes`, `widgets`; brief 150, revised by brief 233)
 
-Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G4 (docs/parity/GUI-SESSIONS.md)
-is unanswered, so **tabs look, scrub modifiers, arrow behaviour and widget look are
-parity-pending**. Every row is derived from a `ParamDesc`; nothing is hand-laid per type.
+Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G4 items 1 and 2 and G1 item 3
+(docs/parity/GUI-SESSIONS.md, "Owner's Cowork session, 2026-11-27") observed the number field, the
+key diamond and the stacking of two tabs. What stays **parity-pending G4**: the scrub modifiers
+(the session did not test continuous scrubbing or fine / coarse modifiers), the widget look
+beyond what is written below. Every row is derived from a `ParamDesc`; nothing is hand-laid per
+type.
 
 Tabs and groups: `UiHint.group` is `"Tab/Group"` (split at the first `/`) or just `"Group"`
 (tab `Basic`; empty group is `Parameters`). `AttributeView.tabs()` lists tabs in
 first-appearance order, `groups_of(tab)` the groups of one; a tab bar is drawn only with two
 or more tabs, groups are collapsible. The shown tab is editor state (`attr_tab`); a tab
 that no longer exists falls back to the first.
+
+**Stacked tabs** (observed, G1 item 3: Shift-clicking the Light's Details with General active
+showed both tab bodies in one vertical scroll area, General first, Details below). The shown
+tabs are `attributes::TabSelection { active, stacked }` (editor state, not saved). A plain click
+on a tab shows only that tab. A Shift-click on another tab adds its body below the shown ones;
+the one that was active first stays on top and the others follow in click order, all in one
+scroll area with a separator line between the bodies. The tab buttons of every shown tab are drawn
+selected. A second Shift-click on a shown tab removes it (ours, **parity-pending G1**; removing the
+top one promotes the next, and the last shown tab cannot be removed). Tabs that the new selection
+does not have drop out; with none left the first tab shows.
 
 Widgets, one module per kind in `widgets/`: `float` (scrub, display units), `int` (scrub,
 range), `boolean` (checkbox with the row label), `enumeration` (drop-down), `vector` (X, Y, Z
@@ -407,8 +425,23 @@ colour drag or typing run shares a gesture number and merges into one.
 Scrubbing (`widgets::scrub`, pure): the base step is `UiHint.step` (display units per pixel)
 else 1 for ints, 0.1 for angle and percent, 0.01 otherwise. Shift = 10 times finer, Ctrl = 10
 times coarser, any other combination (including Alt, which navigates the viewport) = base.
-Clicking a field types a value; Up/Down arrows in a focused field add one step. Values are
-shown and edited in display units (degrees, percent, UI.md §4).
+Values are shown and edited in display units (degrees, percent, UI.md §4).
+
+**Number field** (`widgets::number`, shared by the float, int and vector widgets; observed, G4
+item 1: "a dark numeric box with left/right chevrons"; the right chevron took Size X from 200 cm to
+201 cm and the left chevron back; double-clicking the value allowed direct text entry and Return
+committed it): a dark value box with a left and a right chevron (12 px cells, a 56 px box; the
+three of a vector must fit the managers column, §29). A click on a chevron steps the value by one
+unit (`scrub::chevron_step`): 1 for whole numbers and for distances, angles and percentages in
+their display unit, 0.1 for other floats (**parity-pending G4**: "one unit" of a unit-less float is
+unobserved). The step stays inside the parameter's range and is one undo step per click. A
+**double-click** on the value opens a text edit with the value selected for typing; **Return
+commits** (a value that does not parse, or is unchanged, changes nothing), Escape cancels, losing
+the focus commits (ours). A drag on the value scrubs by the base step per pixel with the
+modifiers above (the single-click-types rule of the earlier DragValue is gone). An accessibility
+tree exposes a spin button with its value and the chevrons as buttons `Increase <row>` /
+`Decrease <row>` (vectors: `Increase X <row>`); assistive technology can also set, increase and
+decrease the value.
 
 Multi-edit: the rows are those of the active object whose id and kind exist in every other
 selected object's type. A row is `mixed` when values differ (vec3: per component, `mixed_axes`).
@@ -417,10 +450,24 @@ string is empty with a hint, a colour has a "mixed" note, a list shows the activ
 Other widgets show the active object's value. A set applies to all selected objects in one
 undo step; a vec3 component edit keeps each object's other components.
 
-Key indicators (097, toggle by brief 224, owner note N3): every row whose descriptor supports key
-tracks has a 12 px button left of the label. A faint outline means no tracks, an accent outline
-means animated elsewhere, a filled accent means a key here, and a warning fill means an
-uncommitted edit. What a click does depends on the state (`RowKeys::click`):
+Key indicators (097, toggle by brief 224, owner note N3; look observed by brief 233, G4 item 2):
+every row whose descriptor supports key tracks has a 12 px diamond button left of the label. It
+has **four states** (`key_indicator::KeyState`), told apart by fill and colour:
+
+| State | Look (observed) | Ours (theme tokens) |
+|---|---|---|
+| unkeyed: no track | hollow grey diamond | outline `weak_text`, no fill |
+| keyed: a key at this frame | solid red | solid `key` |
+| changed: an unkeyed draft (§12.1) | solid amber / orange | solid `modified` |
+| animated: a track, no key at this frame | hollow red | outline `key`, no fill |
+
+The reference showed the amber diamond on a keyed frame after an unrecorded edit and after
+reselecting the object, so a draft wins over a key at this frame; scrubbing to another frame
+discards it and shows the hollow red one. Colours are our own (D22): `Theme.key` is a red and
+`Theme.modified` an amber in every theme; their hues differ by at least 30 degrees and both keep 3:1
+against the panel (tested), so the two solid states are never mistaken. The accessible label is
+`<row> unkeyed | keyed | changed | animated`. What a click does depends on the state
+(`RowKeys::click`):
 
 | State | Click |
 |---|---|
@@ -1922,14 +1969,47 @@ window and the menu does not scroll, so Symmetry and Subdivision (alphabetically
 be reached with the pointer. The test creates them with `object.create`, the command the menu
 item runs. Making the menu scrollable (or grouping the list) is a follow-up to briefs 049/147.
 
-## 29. Reference layout and density (D22; owner screenshot 2026-11-26)
+## 29. Reference layout and density (D22; owner screenshot 2026-11-26; metrics observed, G10, brief 233)
 
-Source: a screenshot of the reference app's Standard layout on an empty document, supplied by the
-owner (D22). The planner read it and wrote it down in words and proportions here. The image is not
-in the repository, and no icon was traced. Proportions are of the window (the capture was about
-2000 × 790, a wide window). Exact pixel sizes come from observation O66 (ui-look.md). Until then the
-numbers here are **parity-pending O66**. This section is the target for briefs 223–229 and 231. Where an
-earlier section disagrees, this one wins for layout and density, and the earlier sections for behaviour.
+Sources: a screenshot of the reference app's Standard layout on an empty document, supplied by the
+owner (D22), which the planner read and wrote down in words; and the owner's Cowork session of
+2026-11-27 (GUI-SESSIONS.md, G10 item 1 and A2 to A8), which measured the window at 1920 x 1080
+(scale 1) in pixels. The image is not in the repository, and no icon was traced. **The numbers of
+§29.1a replace the earlier proportions** (which were taken from a 2000 x 790 capture). This
+section is the target for briefs 223-229 and 231. Where an earlier section disagrees, this one
+wins for layout and density, and the earlier sections for behaviour.
+
+### 29.1a Measured sizes (observed, G10 item 1; `layout::WINDOW`, `layout::regions`, `theme::BUTTONS`)
+
+At 1920 x 1080, scale 1 (a 1520-point horizontal resize reduced the captured width by exactly 1520
+px, so the capture is 1x), origin at the window's top-left:
+
+| Region | Observed |
+|---|---|
+| Title bar (native), document / layout row | y 0-28, y 28-52 (24) |
+| Command bar, viewport menu row | y 52-94 (42), y 94-114 (20) |
+| Left tool strip | x 0-43 (43 wide), from the command bar down to the bottom of the viewport |
+| Viewport canvas | x 43-1472, y 114-962: about 1429 x 848 |
+| Object palette | x 1473-1516 (43 wide) |
+| Managers column (Objects / Takes above Attributes / Layers) | x 1517-1919 (402 wide); the split sits near y 500, about 47 % of the height |
+| Timeline | x 43-1473, y 963-1055 (92) |
+| Status bar | y 1055-1079 (24) |
+| Buttons | command bar about 27 x 26, vertical palettes 34 x 34 |
+
+`layout::WINDOW` holds the numbers (rows 28 / 24 / 42 / 20 / 92 / 24, columns 43 / 43 / 402, the
+split 0.47, a 1 px separator between regions: three across, two down); `layout::regions(w, h)`
+lays the regions out and reproduces the table above at 1920 x 1080 (tested). The default layout's
+`Sizes` read them (§11): right width 402, split 0.47, timeline 92; the document row, the command
+bar and the status bar use them as their panel heights (24 minimum, 42 minimum, 24 exact).
+`theme::BUTTONS` holds the button sizes, used as the minimum size of the command bar's and the
+palette's buttons (27 x 26 and 34 x 34; our text-labelled buttons are wider). **Parity-pending
+G10:** our tool column is still 150 wide with labelled buttons (43 once the icons of brief 227
+land), the object palette strip (43) comes with brief 228, the title bar is the window system's,
+and the viewport menu row (20) comes with brief 227. The timeline ruler labels every 5 frames at
+this width (`timeline::ruler_step(90, 1413) = 5`, label spacing at least 40 px: observed, G10 A7;
+this replaces the "every 2 frames" read from the earlier screenshot). The status bar shows the
+active tool's help text (G10 A8), here `tools::help_text` for the transform tool and the selection
+mode, with errors replacing it.
 
 ### 29.1 Window structure, top to bottom
 
@@ -1940,11 +2020,11 @@ earlier section disagrees, this one wins for layout and density, and the earlier
    underlined, then a "New Layouts" toggle. Our names are ours (§21 workspaces), and we keep this
    placement and form.
 3. **Main area, left to right:**
-   - **Tool strip** (about 1.2 % of the width, one icon column, full height): search at the top, then
+   - **Tool strip** (43 px wide, one icon column, from the command bar down): search at the top, then
      selection tools, then **Move, Rotate, Scale** (the active tool has an accent fill), then the other
      transform tools, then sculpt/paint-style brushes. Groups are separated by a small gap, not lines.
      Hovering shows the tool name next to the strip (for example "Move" with its icon).
-   - **Viewport column** (about 86 % of the width):
+   - **Viewport column** (about 1429 px wide at 1920, the rest of the width):
      - *Command bar* (one row, icons only): on the left, a make-editable style button, the **X / Y / Z axis
        locks** and the coordinate-system toggle. In the centre, the **component modes** group (model,
        mesh, points, edges, polygons, and the related UV and texture modes; the active one is
@@ -1958,27 +2038,27 @@ earlier section disagrees, this one wins for layout and density, and the earlier
        ("Default Camera" with a small icon), a small axis triad top-right, "Grid Spacing : 50 cm"
        bottom-right. Outside the render frame the view is darker (the film-gate shading of
        VIEWPORT.md). There's a flat grid, and the world axes are drawn as long thin red, green and blue lines.
-     - *Timeline* (about 7 % of the height), under the viewport: a row of controls, a ruler, and a
+     - *Timeline* (92 px high), under the viewport: a row of controls, a ruler, and a
        range row. Controls: a key button on the left; in the centre, go to start, previous key,
        previous frame, play, next frame, next key, go to end; the loop and sound toggles; the
        current frame field ("0 F"); record and autokey (the autokey button turns red), the keying
        options; the key-type toggles (position, rotation, scale, parameter, point level). The ruler
-       is labelled every 2 frames at this width, and the playhead is an accent marker. The range row
+       is labelled every 5 frames at 1920 px (§29.1a), and the playhead is an accent marker. The range row
        has min, preview start, preview end and max fields ("0 F" … "90 F").
-   - **Object palette strip** (about 1.1 % of the width, one icon column, between the viewport and the
+   - **Object palette strip** (43 px wide, one icon column, between the viewport and the
      managers): **creation categories**, each a drop-down group, colour-coded by category: object
      selection/null, **primitives (blue)**, splines/text, **generators (green)**, **the clone
      toolset (green: the Cloner sits here, top level, one click; owner note N4)**, **deformers
      (purple)**, **fields (purple)**, environment, camera, light. Then a separate tool at the bottom.
-   - **Managers column** (about 11.7 % of the width):
-     - *Object manager* (top, about 45 % of the column height): tabs "Objects | Takes", then a menu
+   - **Managers column** (402 px wide):
+     - *Object manager* (top, about 47 % of the column height): tabs "Objects | Takes", then a menu
        row (hamburger, File, Edit, View, Object, Tags, Bookmarks) with search, filter and other icons on the
        right.
-     - *Attribute manager* (bottom, about 55 %): tabs "Attributes | Layers", then a menu row
+     - *Attribute manager* (bottom, about 53 %): tabs "Attributes | Layers", then a menu row
        (hamburger, Mode, Edit, User Data) with back/forward, up, search, lock and new-window icons on
        the right. Then a header row with the object's icon and name, and a preset drop-down
        ("Default") on the right. Then **tab buttons** (§29.3).
-4. **Status bar:** one thin row at the bottom (a hamburger, then the status text).
+4. **Status bar:** one thin row at the bottom (a hamburger, then the active tool's help text; §29.1a).
 
 ### 29.2 Density and look
 

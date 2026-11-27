@@ -1,4 +1,4 @@
-//! Number scrubbing (own design, **parity-pending G4**).
+//! Number scrubbing (own design, **parity-pending G4**; the chevron step is observed, G4 item 1).
 //!
 //! Dragging a number field changes it by `step` display units per pixel. Shift makes the
 //! step 10 times finer, Ctrl 10 times coarser; any other combination leaves it unchanged.
@@ -46,6 +46,18 @@ pub fn base_step(unit: Unit, is_int: bool, hint: Option<f64>) -> f64 {
     match unit {
         Unit::Angle | Unit::Percent => 0.1,
         _ => 0.01,
+    }
+}
+
+/// What one click on a number field's chevron adds (observed, G4 item 1: the right chevron
+/// took a size of 200 cm to 201 cm): one unit of the displayed value. Whole numbers and
+/// distances, angles and percentages step by 1; other floats (unit-less factors, times) by
+/// 0.1, since a whole step there would usually leave the useful range (**parity-pending G4**).
+pub fn chevron_step(unit: Unit, is_int: bool) -> f64 {
+    match unit {
+        _ if is_int => 1.0,
+        Unit::Distance | Unit::Angle | Unit::Percent => 1.0,
+        _ => 0.1,
     }
 }
 

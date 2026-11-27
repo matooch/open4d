@@ -12,6 +12,107 @@ use crate::dock::Dock;
 /// Bumped when the serialised form changes.
 pub const LAYOUT_VERSION: u32 = 1;
 
+/// The reference window's measured sizes at 1920 x 1080, scale 1 (observed, GUI session G10
+/// item 1; UI.md §29.1). One place for every layout number; the default layout's
+/// [`Sizes`] and the theme's button metrics read it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WindowMetrics {
+    /// The native title bar (not drawn by us: the window decoration).
+    pub title_bar: f32,
+    /// Document tabs and the layout switcher.
+    pub document_row: f32,
+    /// The command bar.
+    pub command_bar: f32,
+    /// The viewport's menu row.
+    pub viewport_menu: f32,
+    /// The timeline strip, transport row and ruler included.
+    pub timeline: f32,
+    /// The status bar.
+    pub status_bar: f32,
+    /// The tool strip left of the viewport.
+    pub tool_strip: f32,
+    /// The object palette between the viewport and the managers.
+    pub object_palette: f32,
+    /// The managers column.
+    pub managers: f32,
+    /// Share of the managers column taken by the Objects manager ("near 47 %").
+    pub manager_split: f32,
+    /// The 1 px separators between the regions (three across, two down).
+    pub gap: f32,
+}
+
+/// The observed numbers.
+pub const WINDOW: WindowMetrics = WindowMetrics {
+    title_bar: 28.0,
+    document_row: 24.0,
+    command_bar: 42.0,
+    viewport_menu: 20.0,
+    timeline: 92.0,
+    status_bar: 24.0,
+    tool_strip: 43.0,
+    object_palette: 43.0,
+    managers: 402.0,
+    manager_split: 0.47,
+    gap: 1.0,
+};
+
+/// A region of the window, `(x0, y0, x1, y1)` in points from the top-left corner.
+pub type Region = (f32, f32, f32, f32);
+
+/// The regions of the standard layout in a window of `width` x `height`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Regions {
+    pub title_bar: Region,
+    pub document_row: Region,
+    pub command_bar: Region,
+    pub viewport_menu: Region,
+    pub tool_strip: Region,
+    pub viewport: Region,
+    pub object_palette: Region,
+    pub managers: Region,
+    pub timeline: Region,
+    pub status_bar: Region,
+}
+
+/// Lays the regions out from [`WINDOW`]. At 1920 x 1080 this gives the observed table:
+/// rows 0-28, 28-52, 52-94, 94-114; the viewport 43-1472 x 114-962; the object palette
+/// 1473-1516; the managers 1517-1919; the timeline 963-1055 under the viewport; the status
+/// bar 1055-1079.
+pub fn regions(width: f32, height: f32) -> Regions {
+    let w = WINDOW;
+    let y1 = w.title_bar;
+    let y2 = y1 + w.document_row;
+    let y3 = y2 + w.command_bar;
+    let y4 = y3 + w.viewport_menu;
+    let status_top = height - w.status_bar - w.gap;
+    let timeline_top = status_top - w.timeline;
+    let managers_left = width - w.managers - w.gap;
+    let palette_left = managers_left - w.gap - w.object_palette;
+    let viewport_right = palette_left - w.gap;
+    Regions {
+        title_bar: (0.0, 0.0, width, y1),
+        document_row: (0.0, y1, width, y2),
+        command_bar: (0.0, y2, width, y3),
+        viewport_menu: (w.tool_strip, y3, viewport_right, y4),
+        tool_strip: (0.0, y3, w.tool_strip, timeline_top - w.gap),
+        viewport: (w.tool_strip, y4, viewport_right, timeline_top - w.gap),
+        object_palette: (
+            palette_left,
+            y3,
+            palette_left + w.object_palette,
+            timeline_top - w.gap,
+        ),
+        managers: (managers_left, y2, width - w.gap, status_top),
+        timeline: (
+            w.tool_strip,
+            timeline_top,
+            viewport_right + w.gap,
+            status_top,
+        ),
+        status_bar: (0.0, status_top, width, status_top + w.status_bar),
+    }
+}
+
 /// Initial sizes of the resizable areas, in points.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Sizes {
@@ -27,11 +128,15 @@ pub struct Sizes {
 
 impl Default for Sizes {
     fn default() -> Sizes {
+        // observed, G10 item 1: managers column 402, split near 47 %, timeline 92. The
+        // reference's tool strip is 43 wide (`WINDOW.tool_strip`) because it holds icons;
+        // ours still holds labelled buttons, which a 43 px column would clip, so the width
+        // stays at the old 150 until brief 227 brings the icons and sets it to 43.
         Sizes {
             left_width: 150.0,
-            right_width: 340.0,
-            right_top_fraction: 0.45,
-            bottom_height: 120.0,
+            right_width: WINDOW.managers,
+            right_top_fraction: WINDOW.manager_split,
+            bottom_height: WINDOW.timeline,
         }
     }
 }
