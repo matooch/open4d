@@ -11,7 +11,6 @@ struct SpatialProgram {
 
 pub(super) struct BounceSpatialProgram(SpatialProgram);
 
-#[cfg(test)]
 pub(super) struct AmbientSpatialProgram(SpatialProgram);
 
 pub(super) struct BounceSpatialPass<'a> {
@@ -114,7 +113,6 @@ impl SpatialLimits {
     }
 }
 
-#[cfg(test)]
 impl AmbientSpatialProgram {
     pub fn new(device: &wgpu::Device) -> Self {
         Self(SpatialProgram::new(

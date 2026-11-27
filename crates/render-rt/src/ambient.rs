@@ -97,6 +97,7 @@ impl AmbientProgram {
         Self { pipeline, layouts }
     }
 
+    #[cfg(test)]
     pub fn read(
         &self,
         (device, queue): (&wgpu::Device, &wgpu::Queue),

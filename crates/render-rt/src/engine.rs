@@ -19,7 +19,7 @@ use wgpu::util::DeviceExt;
 use crate::frame;
 use crate::framegraph::FrameGraph;
 use crate::hybrid::{
-    AmbientGpu, BounceSignal, HybridView, MaterialGpu, PrimaryInput, ShadowSignal,
+    AmbientGpu, AmbientSignal, BounceSignal, HybridView, MaterialGpu, PrimaryInput, ShadowSignal,
 };
 use crate::ray::BackendKind;
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
@@ -346,7 +346,7 @@ impl RtEngine {
         w: u32,
         h: u32,
         shadows: &ShadowSignal,
-        ao: &[f32],
+        ao: &AmbientSignal,
         reflections: &BounceSignal,
         gi: &BounceSignal,
     ) -> wgpu::TextureView {
@@ -391,10 +391,6 @@ impl RtEngine {
                 },
             );
         };
-        if ao_only {
-            write_layer(0, bytemuck::cast_slice(ao), 4);
-            return lighting_source_view(&texture);
-        }
         let mut encoder = None;
         let copy_encoder = || self.device.create_command_encoder(&Default::default());
         let shadow_layers = 2 * u32::from(!shadows.is_empty());
@@ -416,11 +412,22 @@ impl RtEngine {
             }
         }
         if !ao.is_empty() {
-            write_layer(
-                shadow_layers,
-                bytemuck::cast_slice(&ao.iter().map(|&a| [a, 0.0, 0.0, 0.0]).collect::<Vec<_>>()),
-                16,
-            );
+            match ao {
+                AmbientSignal::Cpu(pixels) if ao_only => {
+                    write_layer(0, bytemuck::cast_slice(pixels), 4);
+                }
+                AmbientSignal::Cpu(pixels) => {
+                    let pixels: Vec<_> = pixels.iter().map(|&a| [a, 0.0, 0.0, 0.0]).collect();
+                    write_layer(shadow_layers, bytemuck::cast_slice(&pixels), 16);
+                }
+                AmbientSignal::Gpu(output) => {
+                    output.copy_to_layer(
+                        encoder.get_or_insert_with(copy_encoder),
+                        &texture,
+                        shadow_layers,
+                    );
+                }
+            }
         }
         let first_bounce_layer = shadow_layers + u32::from(!ao.is_empty());
         for (offset, signal) in [reflections, gi]
@@ -1570,14 +1577,6 @@ impl RtEngine {
                         materials: &program.source[..material_source_len],
                         bitmaps: &bitmap_views,
                     };
-                    let ao = if rt_ao {
-                        let result =
-                            view.ambient_visibility(settings, input, control, Some(primary_gpu))?;
-                        finish_phase(profile, device, "rt-ao")?;
-                        result
-                    } else {
-                        Vec::new()
-                    };
                     let shadows = if rt_shadows {
                         let result = view.direct_shadows(
                             snapshot,
@@ -1612,6 +1611,25 @@ impl RtEngine {
                     } else {
                         BounceSignal::Cpu(Vec::new())
                     };
+                    let ao = if rt_ao {
+                        let format =
+                            if shadows.is_empty() && reflections.is_empty() && gi.is_empty() {
+                                wgpu::TextureFormat::R32Float
+                            } else {
+                                wgpu::TextureFormat::Rgba32Float
+                            };
+                        let result = view.ambient_visibility(
+                            settings,
+                            input,
+                            control,
+                            Some(primary_gpu),
+                            format,
+                        )?;
+                        finish_phase(profile, device, "rt-ao")?;
+                        result
+                    } else {
+                        AmbientSignal::Cpu(Vec::new())
+                    };
                     primary = Some(g);
                     Ok((shadows, ao, reflections, gi))
                 });
@@ -1631,6 +1649,7 @@ impl RtEngine {
                     let texture = self.upload_hybrid(w, h, &shadows, &ao, &reflections, &gi);
                     if profile.is_some()
                         && !matches!(shadows, ShadowSignal::Gpu(_))
+                        && !matches!(ao, AmbientSignal::Gpu(_))
                         && ![&reflections, &gi]
                             .into_iter()
                             .any(|signal| matches!(signal, BounceSignal::Gpu(_)))

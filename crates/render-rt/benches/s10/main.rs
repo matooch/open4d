@@ -165,10 +165,10 @@ impl Measurement<'_> {
         if self.hybrid {
             expected_passes.extend([
                 "hybrid-primary",
-                "rt-ao",
                 "rt-shadows",
                 "rt-reflections",
                 "rt-gi",
+                "rt-ao",
                 "hybrid-upload",
             ]);
         }

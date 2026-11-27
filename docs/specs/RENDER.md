@@ -1626,6 +1626,27 @@ This is our own design.
   Translate the standalone module to SPIR-V, MSL and HLSL. This probe does
   not change the live AO route.
 
+#### Live scalar ambient visibility
+
+- With supported inline bindings and film footprints, encode raw AO,
+  exactly one spatial pass and scalar history together without mapping
+  visibility. Rotate the quarter-rate representative phase from the
+  accepted count for the exact jitter. Keep only the compact unstrengthened
+  mean and count in history; the current lighting signal owns the padded
+  strengthened copy source. Cancellation before adoption leaves the
+  previous mean and count unchanged.
+- If inline AO becomes unavailable, restore the accepted compact mean and
+  count once, then continue on the CPU for that jitter until reset. Keep the
+  zero-radius and zero-strength paths open without advancing history.
+- Select R32Float when AO is the only available lighting signal and
+  RGBA32Float otherwise. In the mixed array, AO follows the two shadow
+  layers if present and precedes reflection and GI. Copy resident layers
+  in one lighting upload submission without overwriting adjacent layers.
+- Compare the live GPU route against batched AO on an odd cropped film
+  across interleaved jitters, both output formats, cancellation, fallback
+  and reset. Retain the R24 AO quality and mixed-layer checks and measure
+  the same full-size S10 workload under the R26 budgets.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),

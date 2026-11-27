@@ -12,7 +12,8 @@ use glam::DVec3;
 
 use crate::ray::{self, BackendKind, DeviceQueries, Ray, RtBackend};
 use ambient::{AmbientFrame, AmbientProgram};
-use bounce_spatial::BounceSpatialProgram;
+use ambient_history::{AmbientHistory, AmbientHistoryFrame, AmbientHistoryProgram, AmbientOutput};
+use bounce_spatial::{AmbientSpatialProgram, BounceSpatialProgram};
 use diffuse_history::{DiffuseHistory, DiffuseHistoryProgram};
 use direct_shadow::{DirectShadowBindings, DirectShadowFrame, DirectShadowProgram, read_encoded};
 use reflection::{BounceEntry, ReflectionBindings, ReflectionInput, ReflectionProgram};
@@ -27,6 +28,8 @@ const PIXELS_PER_BATCH: usize = 2048;
 pub(crate) struct HybridView {
     backend: Option<(BackendKind, Box<dyn DeviceQueries>)>,
     ambient_program: Option<AmbientProgram>,
+    ambient_spatial: Option<AmbientSpatialProgram>,
+    ambient_history: Option<AmbientHistoryProgram>,
     shadow_program: Option<MaterialProgram<DirectShadowProgram>>,
     reflection_program: Option<MaterialProgram<ReflectionProgram>>,
     diffuse_program: Option<MaterialProgram<ReflectionProgram>>,
@@ -37,7 +40,7 @@ pub(crate) struct HybridView {
     geometry: Option<PrimaryGeometry>,
     settings: Option<RenderSettings>,
     // Each raster TAA jitter has different primary visibility.
-    ao: BTreeMap<[u32; 2], History<f32>>,
+    ao: BTreeMap<[u32; 2], AmbientState>,
     shadows: BTreeMap<[u32; 2], SignalHistory<[f32; 8]>>,
     reflections: BTreeMap<[u32; 2], BounceHistory>,
     gi: BTreeMap<[u32; 2], BounceHistory>,
@@ -79,6 +82,31 @@ struct History<T> {
 type BounceHistory = SignalHistory<[f32; 4]>;
 pub(crate) type BounceSignal = HybridSignal<[f32; 4]>;
 pub(crate) type ShadowSignal = HybridSignal<[f32; 8]>;
+pub(crate) type AmbientSignal = HybridSignal<f32, AmbientOutput>;
+
+enum AmbientState {
+    Cpu(History<f32>),
+    Gpu {
+        mean: AmbientHistory,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+    },
+}
+
+impl Default for AmbientState {
+    fn default() -> Self {
+        Self::Cpu(History::default())
+    }
+}
+
+impl AmbientState {
+    fn frames(&self) -> u32 {
+        match self {
+            Self::Cpu(history) => history.frames,
+            Self::Gpu { mean, .. } => mean.frames,
+        }
+    }
+}
 
 enum SignalHistory<T> {
     Cpu(History<T>),
@@ -104,12 +132,12 @@ impl<T> SignalHistory<T> {
     }
 }
 
-pub(crate) enum HybridSignal<T> {
+pub(crate) enum HybridSignal<T, G = DiffuseHistory> {
     Cpu(Vec<T>),
-    Gpu(DiffuseHistory),
+    Gpu(G),
 }
 
-impl<T> HybridSignal<T> {
+impl<T, G> HybridSignal<T, G> {
     pub fn is_empty(&self) -> bool {
         matches!(self, Self::Cpu(pixels) if pixels.is_empty())
     }
@@ -246,53 +274,112 @@ impl HybridView {
         input: PrimaryInput<'_>,
         control: &Control,
         gpu: Option<AmbientGpu<'_>>,
-    ) -> Result<Vec<f32>, RenderError> {
+        format: wgpu::TextureFormat,
+    ) -> Result<AmbientSignal, RenderError> {
         let radius = settings.hybrid.ao_radius;
         if radius == 0.0 || settings.post.ssao_strength == 0.0 {
-            return Ok(vec![1.0; input.positions.len()]);
+            return Ok(AmbientSignal::Cpu(vec![1.0; input.positions.len()]));
         }
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
         let (kind, backend) = self.backend.as_ref().expect("prepared ray backend");
         let history = self.ao.entry(input.jitter.map(f32::to_bits)).or_default();
-        let raw = match (gpu, backend.inline_scene()) {
-            (Some(gpu), Some(scene)) => {
-                let result = self
+        let film = [settings.width, settings.height];
+        let strength = settings.post.ssao_strength as f32;
+        let limit = radius * 0.15;
+        if !matches!(history, AmbientState::Cpu(cpu) if cpu.frames != 0)
+            && let Some(gpu) = gpu
+            && let Some(scene) = backend.inline_scene()
+            && settings.width.max(settings.height).div_ceil(8)
+                <= gpu.device.limits().max_compute_workgroups_per_dimension
+        {
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            let pending = (|| {
+                let raw = self
                     .ambient_program
                     .get_or_insert_with(|| AmbientProgram::new(gpu.device, *kind))
-                    .read(
-                        (gpu.device, gpu.queue),
+                    .encode(
+                        gpu.device,
+                        &mut encoder,
                         scene,
                         gpu.textures,
                         settings,
-                        AmbientFrame::new(settings, history.frames, input.epsilon),
-                    );
-                match result {
-                    Err(RenderError::Unsupported(_)) => None,
-                    result => Some(result?),
+                        AmbientFrame::new(settings, history.frames(), input.epsilon),
+                    )?;
+                let filtered = self
+                    .ambient_spatial
+                    .get_or_insert_with(|| AmbientSpatialProgram::new(gpu.device))
+                    .encode(gpu.device, &mut encoder, gpu.textures, &raw, film, limit);
+                let previous = match history {
+                    AmbientState::Cpu(_) => None,
+                    AmbientState::Gpu { mean, .. } => Some(&*mean),
+                };
+                self.ambient_history
+                    .get_or_insert_with(|| AmbientHistoryProgram::new(gpu.device))
+                    .encode(
+                        gpu.device,
+                        &mut encoder,
+                        &filtered,
+                        previous,
+                        AmbientHistoryFrame {
+                            film,
+                            strength,
+                            format,
+                        },
+                    )
+            })();
+            match pending {
+                Ok((mean, output)) => {
+                    if control.is_cancelled() {
+                        return Err(RenderError::Cancelled);
+                    }
+                    gpu.queue.submit([encoder.finish()]);
+                    *history = AmbientState::Gpu {
+                        mean,
+                        device: gpu.device.clone(),
+                        queue: gpu.queue.clone(),
+                    };
+                    return Ok(AmbientSignal::Gpu(output));
                 }
+                Err(RenderError::Unsupported(_)) => {}
+                Err(err) => return Err(err),
             }
-            _ => None,
-        };
-        let visibility = match raw {
-            Some(raw) => raw,
-            None => raw_ambient_visibility(&**backend, settings, input, history.frames, control)?,
+        }
+        let visibility =
+            raw_ambient_visibility(&**backend, settings, input, history.frames(), control)?;
+        if control.is_cancelled() {
+            return Err(RenderError::Cancelled);
+        }
+        let filtered = spatial_filter(settings.width as usize, &input, &visibility, limit);
+        let restored = match history {
+            AmbientState::Gpu {
+                mean,
+                device,
+                queue,
+            } => Some(History {
+                frames: mean.frames,
+                mean: mean.read_mean(device, queue)?,
+            }),
+            AmbientState::Cpu(_) => None,
         };
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
-        let filtered = spatial_filter(settings.width as usize, &input, &visibility, radius * 0.15);
-        if control.is_cancelled() {
-            return Err(RenderError::Cancelled);
+        if let Some(restored) = restored {
+            *history = AmbientState::Cpu(restored);
         }
+        let AmbientState::Cpu(history) = history else {
+            unreachable!("ambient fallback restored the CPU history");
+        };
         history.accumulate(filtered);
-        let strength = settings.post.ssao_strength as f32;
-        Ok(history
-            .mean
-            .iter()
-            .map(|open| 1.0 - (1.0 - open) * strength)
-            .collect())
+        Ok(AmbientSignal::Cpu(
+            history
+                .mean
+                .iter()
+                .map(|open| 1.0 - (1.0 - open) * strength)
+                .collect(),
+        ))
     }
 }
 
@@ -1032,7 +1119,6 @@ struct PrimaryGeometry {
 #[path = "ambient.rs"]
 mod ambient;
 
-#[cfg(test)]
 #[path = "ambient_history.rs"]
 mod ambient_history;
 
@@ -1608,7 +1694,7 @@ mod tests {
                 cpu.frames = u32::MAX;
                 accepted.as_mut().unwrap().frames = u32::MAX;
             }
-            let next = program
+            let (next, output) = program
                 .encode(&device, &mut encoder, &filtered, accepted.as_ref(), frame)
                 .unwrap();
             if step == 1 {
@@ -1658,7 +1744,7 @@ mod tests {
                     },
                 );
             }
-            next.copy_to_layer(&mut encoder, &texture, layer);
+            output.copy_to_layer(&mut encoder, &texture, layer);
             let pitch = (W * channels * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
             let plane = u64::from(pitch * H);
             let staging = device.create_buffer(&wgpu::BufferDescriptor {
@@ -1680,7 +1766,7 @@ mod tests {
                 extent,
             );
             encoder.copy_buffer_to_buffer(
-                &next.output,
+                &output.output,
                 0,
                 &staging,
                 plane * u64::from(extent.depth_or_array_layers),
@@ -1738,7 +1824,7 @@ mod tests {
     }
 
     #[test]
-    fn gpu_raw_ao_matches_cpu_across_all_quad_phases() {
+    fn gpu_raw_and_live_ao_match_cpu_on_cropped_film() {
         let _serial = crate::gpu_test_serial();
         use forge_render_api::{Instance, MaterialData, MeshData};
         use glam::DMat4;
@@ -1873,6 +1959,114 @@ mod tests {
                 distinguishes_pass_count,
                 "fixture must distinguish a single pass"
             );
+
+            let mut live = HybridView {
+                backend: Some((kind, backend)),
+                ..Default::default()
+            };
+            settings.post.ssao_strength = 0.6;
+            let mut cpu = HybridView::default();
+            cpu.prepare(&snapshot, &settings, &device, &queue).unwrap();
+            let gpu = AmbientGpu {
+                device: &device,
+                queue: &queue,
+                textures: views,
+            };
+            let r32 = wgpu::TextureFormat::R32Float;
+            let rgba32 = wgpu::TextureFormat::Rgba32Float;
+            let shifted = PrimaryInput {
+                jitter: [0.125, -0.125],
+                ..input
+            };
+            let compare = |signal: AmbientSignal, expected: AmbientSignal, channels| {
+                let AmbientSignal::Cpu(expected) = expected else {
+                    panic!("batched visibility should remain on the CPU");
+                };
+                let actual = match signal {
+                    AmbientSignal::Cpu(pixels) => {
+                        assert_eq!(channels, 0, "expected resident visibility on {kind:?}");
+                        pixels
+                    }
+                    AmbientSignal::Gpu(output) => {
+                        assert!(channels > 0, "fallback must remain on the CPU");
+                        let pixels: Vec<f32> = read_encoded(
+                            (&device, &queue),
+                            device.create_command_encoder(&Default::default()),
+                            &output.output,
+                        )
+                        .unwrap();
+                        assert_eq!(pixels.len(), 3 * 64);
+                        let mut visibility = Vec::new();
+                        for row in pixels.as_chunks::<64>().0 {
+                            for pixel in row[..3 * channels].chunks_exact(channels) {
+                                visibility.push(pixel[0]);
+                                assert!(pixel[1..].iter().all(|v| *v == 0.));
+                            }
+                            assert!(row[3 * channels..].iter().all(|v| *v == 0.));
+                        }
+                        visibility
+                    }
+                };
+                assert_eq!(actual[2].to_bits(), 1.0_f32.to_bits());
+                assert_eq!(actual.len(), expected.len());
+                for (actual, expected) in actual.into_iter().zip(expected) {
+                    assert!((actual - expected).abs() <= 2e-6, "{actual} != {expected}");
+                }
+            };
+            let mut step = |input: PrimaryInput<'_>, gpu, format, channels| {
+                let actual = live
+                    .ambient_visibility(&settings, input, &control, gpu, format)
+                    .unwrap();
+                let expected = cpu
+                    .ambient_visibility(&settings, input, &control, None, format)
+                    .unwrap();
+                compare(actual, expected, channels);
+            };
+            step(input, Some(gpu), r32, 1);
+            step(shifted, Some(gpu), rgba32, 4);
+            step(input, Some(gpu), rgba32, 4);
+            let cancelled = Control::new();
+            cancelled.cancel();
+            assert!(matches!(
+                live.ambient_visibility(&settings, input, &cancelled, Some(gpu), r32),
+                Err(RenderError::Cancelled)
+            ));
+            let key = input.jitter.map(f32::to_bits);
+            assert_eq!(live.ao[&key].frames(), 2);
+            let mut off = settings.clone();
+            off.post.ssao_strength = 0.;
+            assert!(matches!(
+                live.ambient_visibility(&off, input, &control, Some(gpu), r32),
+                Ok(AmbientSignal::Cpu(open)) if open == vec![1.0; 9]
+            ));
+            off.post.ssao_strength = settings.post.ssao_strength;
+            off.hybrid.ao_radius = 0.;
+            assert!(matches!(
+                live.ambient_visibility(&off, input, &control, Some(gpu), rgba32),
+                Ok(AmbientSignal::Cpu(open)) if open == vec![1.0; 9]
+            ));
+            assert_eq!(live.ao[&key].frames(), 2);
+            for route in [None, Some(gpu)] {
+                compare(
+                    live.ambient_visibility(&settings, input, &control, route, r32)
+                        .unwrap(),
+                    cpu.ambient_visibility(&settings, input, &control, None, r32)
+                        .unwrap(),
+                    0,
+                );
+            }
+            assert_eq!(live.ao[&key].frames(), 4);
+            assert_eq!(live.ao[&shifted.jitter.map(f32::to_bits)].frames(), 1);
+            live.reset();
+            cpu.reset();
+            compare(
+                live.ambient_visibility(&settings, input, &control, Some(gpu), r32)
+                    .unwrap(),
+                cpu.ambient_visibility(&settings, input, &control, None, r32)
+                    .unwrap(),
+                1,
+            );
+            assert_eq!(live.ao[&key].frames(), 1);
         }
     }
 
@@ -1955,9 +2149,13 @@ mod tests {
             }
         };
 
-        let visibility = view
-            .ambient_visibility(&settings, input, &Control::new(), None)
-            .unwrap();
+        let format = wgpu::TextureFormat::R32Float;
+        let AmbientSignal::Cpu(visibility) = view
+            .ambient_visibility(&settings, input, &Control::new(), None, format)
+            .unwrap()
+        else {
+            panic!("recording backend has no inline bindings");
+        };
         check_rays(&[0, 3, 4, 5, 6, 7]);
         // The full-resolution spatial filter still blends pixels 1 and 5
         // across quads; neither material nor depth/normal boundaries blend.
@@ -1966,17 +2164,17 @@ mod tests {
             [0.0, 0.25, 1.0, 1.0, 1.0, 2.0 / 3.0, 1.0, 1.0, 1.0]
         );
 
-        view.ambient_visibility(&settings, input, &Control::new(), None)
+        view.ambient_visibility(&settings, input, &Control::new(), None, format)
             .unwrap();
         check_rays(&[1, 3, 4, 5, 7, 6]);
 
         let cancelled = Control::new();
         cancelled.cancel();
         assert!(matches!(
-            view.ambient_visibility(&settings, input, &cancelled, None),
+            view.ambient_visibility(&settings, input, &cancelled, None, format),
             Err(RenderError::Cancelled)
         ));
         check_rays(&[]);
-        assert_eq!(view.ao[&[0; 2]].frames, 2);
+        assert_eq!(view.ao[&[0; 2]].frames(), 2);
     }
 }

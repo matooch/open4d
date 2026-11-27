@@ -1,4 +1,4 @@
-//! Standalone encoder-side scalar history and lighting copy (R24.13).
+//! Encoder-side scalar history and lighting copy (R24.13).
 
 use forge_render_api::RenderError;
 use wgpu::util::DeviceExt;
@@ -17,11 +17,15 @@ pub(super) struct AmbientHistoryFrame {
 
 pub(super) struct AmbientHistory {
     mean: wgpu::Buffer,
+    film: [u32; 2],
+    pub(super) frames: u32,
+}
+
+pub(crate) struct AmbientOutput {
     pub(super) output: wgpu::Buffer,
     film: [u32; 2],
     format: wgpu::TextureFormat,
     pitch: u32,
-    pub(super) frames: u32,
 }
 
 impl AmbientHistoryProgram {
@@ -49,7 +53,7 @@ impl AmbientHistoryProgram {
         filtered: &wgpu::Buffer,
         previous: Option<&AmbientHistory>,
         frame: AmbientHistoryFrame,
-    ) -> Result<AmbientHistory, RenderError> {
+    ) -> Result<(AmbientHistory, AmbientOutput), RenderError> {
         let AmbientHistoryFrame {
             film: [width, height],
             strength,
@@ -136,14 +140,19 @@ impl AmbientHistoryProgram {
             pass.set_bind_group(0, &group, &[]);
             pass.dispatch_workgroups(groups[0], groups[1], 1);
         }
-        Ok(AmbientHistory {
-            mean,
-            output,
-            film: frame.film,
-            format,
-            pitch,
-            frames: next,
-        })
+        Ok((
+            AmbientHistory {
+                mean,
+                film: frame.film,
+                frames: next,
+            },
+            AmbientOutput {
+                output,
+                film: frame.film,
+                format,
+                pitch,
+            },
+        ))
     }
 }
 
@@ -159,7 +168,9 @@ impl AmbientHistory {
             &self.mean,
         )
     }
+}
 
+impl AmbientOutput {
     pub fn copy_to_layer(
         &self,
         encoder: &mut wgpu::CommandEncoder,

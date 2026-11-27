@@ -36,6 +36,17 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Live GPU ambient visibility:** Inline AO now keeps its unstrengthened
+  history on the GPU and copies the strengthened result to the AO-only
+  R32Float or mixed RGBA32Float lighting texture. The cropped test matched
+  batched AO on Compute and Metal across interleaved jitters, both formats,
+  cancellation, sticky CPU fallback and reset. Five required-GPU unit,
+  R24 hybrid and shader-translation runs passed. Strict R26 reproduced all
+  207 scores with unchanged pins. Unchanged Metal S10 Tier 2 went from
+  115.322 ms / 8.671 fps to 100.053 ms / **9.995 fps** (AO 15.419 →
+  3.839 ms, upload 8.184 → 4.764 ms), with no phase exceeding the
+  baseline regression limit. Tier 2 still misses 30 fps; primary readback
+  and transport budgets remain open. `GATE: all passed` (2788 tests).
 - **Standalone GPU AO history and layer copy:** On Metal, an odd 19×11
   film matched the CPU running mean through first, discarded, accepted and
   saturated samples. The probe copied strengthened visibility into

@@ -207,10 +207,11 @@ fn synchronized_profiling_preserves_render_and_names_executed_passes() {
             if hybrid {
                 expected.extend([
                     "hybrid-primary",
-                    "rt-ao",
                     "rt-shadows",
                     "rt-reflections",
                     "rt-gi",
+                    // AO picks its copy format from the available signals.
+                    "rt-ao",
                     "hybrid-upload",
                 ]);
             }
