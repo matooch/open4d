@@ -10,7 +10,7 @@ linked files win.
 
 | | Now |
 |---|---|
-| Implementation briefs | **200 of 212 done** (94 %) · 214 in progress · 11 ready (incl. area P: 215–222) |
+| Implementation briefs | **204 of 221 done** (92 %) · 214 in progress · 15 ready · 231 waits on O64 |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
 | Acceptance scenarios | S1–S9 pass (S6 with own-design Pose Morph, parity-pending) · S10: Tier 1 meets 60 fps, Tier 2 open (214) · S11 new (area P) |
@@ -51,7 +51,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | I · Dynamics and particles | 8 / 8 | Parity-pending: particles, forces and their point-source use (own design D20, O40; statistical tests) |
 | J · Materials, shaders, UVs | 13 / 13 | Hands-on checks in GUI session G7 |
 | K · Rendering and viewport | 11 / 12 | 142 GPU path tracer (queued) |
-| L · UI and UX | 16 / 16 | Hands-on checks in GUI sessions G1, G2, G4 |
+| L · UI and UX | 20 / 25 | Owner's first hands-on use (2026-11-26, D22): 223 nav 1/2/3 + E/R/T, 224 keyframe toggle, 225 one mode UI and 229 object manager cues are done (owner's feel check on the Mac pending; placements and numbers parity-pending G1/G2/G5); open: 226 docking, 227 icons and reference layout, 228 clone toolset at top level, 230 script lookup, 231 settings in tabs (waits on observation O64). GUI sessions G1/G2 give the exact layout |
 | M · File exchange | 12 / 12 | Done: S9 passes (171). Open: glTF skin-pose KNOWN_MISMATCH, PLY/USD/morph not observed |
 | N · Platform, packaging, docs | 13 / 14 | 185 v1.0 release checklist (last) |
 | P · Behaviours, live input, play mode (Luau, Rust; D21) | 0 / 8 | Briefs 215–222 queued after 213: Luau runtime and builder scripts, behaviour tag with start/update and a per-frame cache, inputs (keyboard, gamepad, MIDI, OSC) through named actions, input tracks, play mode, bulk clone API, Rust behaviours, `forge play` and S11 |
@@ -63,7 +63,8 @@ Run 9 finished: ray tracing (200, 211, 201, 202, 203, 204, 212).
 
 1. 214 · Real-time performance (continuing: Tier 1 done; Tier 2 diffuse GI on the GPU next)
 2. 213 · Tier 1/2 quality gaps (mat-glossy specular under hybrid shadows)
-3. Area P, behaviours: 215, 216, 217, 218, 220, 221, 219, 222 (S11)
+3. UI round (D22): 223, 224, 225, 229, 226, 227, 228
+4. Area P, behaviours: 215, 216, 217, 218, 220, 221, 219, 222 (S11), then 230
 
 Then only 210 (DX12 shadows, your Windows PC) and 185 (v1.0 release) remain.
 
@@ -76,7 +77,6 @@ Then only 210 (DX12 shadows, your Windows PC) and 185 (v1.0 release) remain.
 | GUI sessions G1–G9 | Feel, layout, shortcuts, viewport look can only be checked by a person at the reference app | An hour or two per session: [parity/GUI-SESSIONS.md](parity/GUI-SESSIONS.md) |
 | Hands-on use of the editor | Nobody has used the editor for real work yet; that's where the remaining usability bugs are | Build a small scene in it and report what gets in the way |
 | S10 + R8 numbers | Need real GPUs | Run the benchmarks on the M5 Pro and RTX 3090 |
-| Reference app licence | Confirm scripted use is allowed (OBSERVER.md §1 step 6) | A one-line note in `docs/parity/r25-drift.md` |
 
 ## Observation data (golden cases from the reference app)
 

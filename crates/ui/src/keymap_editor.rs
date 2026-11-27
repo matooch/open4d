@@ -186,6 +186,11 @@ impl KeyMapEditor {
         if row.chord == Some(chord) {
             return;
         }
+        if crate::keymap::is_reserved(chord) {
+            self.message = "1, 2 and 3 are navigation keys and cannot be bound".to_string();
+            return;
+        }
+        self.message.clear();
         let taken_by: Vec<String> = keys
             .map
             .conflicts_with(chord, row.scope)

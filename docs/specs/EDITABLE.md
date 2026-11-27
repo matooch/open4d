@@ -226,9 +226,8 @@ Other objects draw as usual (their points are not drawn). The component selectio
 new: `Theme.component_selection`, `#38C6E8`, passed to the renderer as `Palette.selection`
 (object selection stays the orange tint). It differs from the object selection colour so a
 selected object and selected components can be told apart.
-The mode buttons are four toggle buttons in the viewport header labelled "Model", "Points",
-"Edges", "Polygons" (text only; icons and the tool palette come with brief 10); the header
-label also names the mode.
+The mode buttons are the four "Mode" buttons of the left tool palette (UI.md §11; owner note N6:
+one place only, brief 225; the viewport header no longer repeats them, parity-pending G1).
 
 ### 2.7 Checks (`crates/ui/tests/components.rs`)
 - Picking: on a made-editable cube seen from a known camera, each element type is picked at
@@ -239,7 +238,7 @@ label also names the mode.
   version 2 file loads with empty sets).
 - With a non-polygon active object, clicks pick objects.
 - Picking uses the deformed mesh and stores base indices; select all / none / invert / grow /
-  shrink; header buttons, Ctrl/Cmd+A and the Edit and Select menus (egui_kittest, no GPU).
+  shrink; palette mode buttons, Ctrl/Cmd+A and the Edit and Select menus (egui_kittest, no GPU).
 - Display: `display_selection` per mode, `component_shading`; the renderer's sized points
   (`crates/viewport/tests/render.rs`, GPU) draw a square in the wire or selection colour and
   are hidden behind filled faces.

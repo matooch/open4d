@@ -119,6 +119,17 @@ impl RowKeys {
         ))
     }
 
+    /// What a click on the button does (UI.md §12, owner note N3): with a key at this frame
+    /// and no uncommitted edit it removes the row's keys here (`key.delete`); in every other
+    /// state it adds or updates the key.
+    pub fn click(&self, value: &Value, changed: bool) -> Option<Cmd> {
+        if !changed && !self.here.is_empty() {
+            Some(("key.delete", json!({"keys": self.here})))
+        } else {
+            self.set(value)
+        }
+    }
+
     pub fn show(&self, ui: &mut Ui, label: &str, value: &Value, changed: bool) -> Option<Cmd> {
         let theme = Theme::current(ui.ctx());
         let clear = Color32::TRANSPARENT;
@@ -161,7 +172,7 @@ impl RowKeys {
             );
         }
         let mut cmd = if response.clicked() {
-            self.set(value)
+            self.click(value, changed)
         } else {
             None
         };

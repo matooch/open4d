@@ -136,28 +136,39 @@ nodes use the selection colour. GPU meshes are rebuilt only when `Scene::revisio
 the selection changes; nodes whose build is unsupported are skipped. Without a wgpu render state (tests) it shows a
 "Viewport unavailable" label.
 
-### 6.1 Navigation (brief 153)
+### 6.1 Navigation (brief 153; revised by brief 223, owner note N1, decision D22)
 
 Camera maths is pure and lives in `forge_viewport::nav` (VIEWPORT.md §7). The panel only
-turns pointer input into calls. GUI session G2 §2 is unanswered: **all directions, speeds and
-keys below are parity-pending, ours.** `nav_action(input) -> NavAction` with
+turns pointer input into calls. The hold keys come from **owner note N1** (GUI-SESSIONS.md,
+answers G2); the wheel and Alt gestures stay our own design, parity-pending G2.
+`nav_action(input) -> NavAction` with
 `NavInput { primary, middle, secondary, alt, held: Option<NavMode>, drag, scroll, cursor }`:
 
 | Input | Action |
 |---|---|
 | wheel `s` (points) at pointer `c` | `ZoomAt(0.999^s, c)`: zoom toward the cursor, `s > 0` zooms in |
-| Alt + primary drag, or hold `V` + primary drag | `Orbit(dx, dy)` |
-| middle drag (with or without Alt), or Alt + middle, or hold `X` + primary drag | `Pan(dx, dy)` |
-| Alt + secondary drag, or hold `C` + primary drag | `Dolly(dx)`, about the view centre |
+| hold `3` + primary drag, or Alt + primary drag | `Orbit(dx, dy)` |
+| hold `1` + primary drag, or middle drag (with or without Alt), or Alt + middle | `Pan(dx, dy)` |
+| hold `2` + primary drag, or Alt + secondary drag | `Dolly(dx)` (zoom), about the view centre |
 | anything else | `None` |
 
 Wheel takes precedence over drags in the same frame. `NavMode` = `Pan | Dolly | Orbit` for the
-held keys. The brief's "1/2/3 key + drag" is replaced by the hold keys X / C / V: 1 to 5 are the
-shading keys of the key map (§14.2) and a press of `1` would change the shading, so the digit
-keys cannot also be navigation modifiers. The hold keys are plain modifiers read from the
-keyboard state (a key held with no Mod/Alt/Shift while the pointer is over the viewport), not
-chords; they are not in the key map and are listed here only. While Alt or a hold key is down the viewport does no selection, rubber band or gizmo
-interaction.
+held keys; the key table is data (`NavMode::KEYS`: `Num1` Pan, `Num2` Dolly, `Num3` Orbit).
+Rules (owner note N1):
+
+- The digits are **plain hold modifiers**, read from keyboard state, not chords: a digit
+  counts as held only when no Mod/Alt is down, no text field has the keyboard, and the pointer
+  is over the viewport pane (or a drag that began there is still running). A digit held while
+  the pointer is over another panel does nothing.
+- **A tap with no drag does nothing**: the digits are not in the key map, so pressing and
+  releasing one changes nothing (no shading, no camera, no selection). Only primary-button
+  motion while the digit is down moves the camera.
+- While Alt or a hold key is down the viewport does no selection, rubber band or gizmo
+  interaction (`NavInput::navigating`).
+- The chords bare `1`, `2`, `3` are **reserved** (`keymap::is_reserved`): the key map editor
+  refuses to bind them and a settings file entry on them is dropped with a warning (§14.3).
+  `4` .. `9` are not navigation keys and stay bindable.
+- The earlier own-design hold keys X / C / V are gone; X, C and V are free.
 
 Navigation works even without a wgpu render state (it is evaluated before the "Viewport
 unavailable" early return), so it is testable with egui_kittest.
@@ -171,19 +182,26 @@ top, back, left, bottom. (`F1`..`F5` of the area design collide with `F2` rename
 free.) View > menu entries: Frame all, Frame selected, and a "View" submenu with the seven
 views, each showing its chord.
 
-Tests (crates/ui/tests/navigation.rs): the input mapping of every gesture and hold key, `apply_nav`;
+Tests (crates/ui/tests/navigation.rs): the input mapping of every gesture and hold key, `apply_nav`, the key table;
 `view.frame_all` / `view.frame_selected` fit the bounds (aspect-aware), nothing selected frames
 all, a selected null recentres, an empty scene resets; `view.set_view`, `view.set_camera`
 (partial update, validation, pitch clamp) and `view.get_camera`; camera commands add no undo
 step and Ctrl+Z leaves the camera alone; egui_kittest (no GPU): Alt + left/middle/right drags
-orbit / pan / dolly, a held `V` turns a plain drag into an orbit (and not without it), the
-wheel zooms toward the cursor, `H`, `S`, `Mod+4`, `Mod+1` run their commands.
+orbit / pan / dolly, held `3` / `1` / `2` turn a plain drag into orbit / pan / dolly (and not
+without the key), a digit held with the pointer outside the viewport does nothing, a digit tap
+changes nothing, no selection while a digit is held, the wheel zooms toward the cursor, `H`,
+`S`, `Mod+4`, `Mod+1` run their commands.
 
 Undo: camera moves, frames and view switches are **not** undo steps (the camera is view state,
 not document state; COMMANDS.md §6). Gestures and `view.*` commands never touch the history.
 
-Component modes (EDITABLE.md §2): the header of the viewport holds four toggle buttons
-"Model", "Points", "Edges", "Polygons" (`EditorState.mode`). With a component target, left
+Component modes (EDITABLE.md §2): `EditorState.mode` is switched in **one place** (owner note N6,
+decision D22): the four "Mode" buttons at the top of the left tool palette (§11: Objects, Pts,
+Edg, Pol; the selected one is drawn selected) and the Alt+1 .. Alt+4 keys of the key map (§14.2).
+The viewport header used to repeat the four buttons as "Model", "Points", "Edges", "Polygons";
+that duplicate is removed (brief 225). Which one stays follows G1 item 8, still unanswered:
+**parity-pending G1**, our choice is the palette, which the owner's note names as the place of
+the tools. The header keeps the Soft / symmetry bar, shown while a component mode is on. With a component target, left
 click and left drag (not on a gizmo handle) select components instead of objects, and the
 target is drawn with its points / edges / polygon outlines and selected components in the
 component selection colour (§8); the panel rebuilds its GPU meshes when the revision, the
@@ -348,7 +366,9 @@ History (`edit.undo`, `edit.redo`, `object.delete`); Objects (`object.create` fo
 `select.invert`, `select.grow`, `select.shrink`); Modeling (`mesh.extrude`,
 `mesh.extrude_inner`, `mesh.bevel`, `mesh.subdivide`, `mesh.triangulate`, `mesh.optimize`,
 `mesh.reverse_normals`, run with the stored selection and default settings). The
-`select.mode` and `view.shading` buttons show as selected for the current value. A failed
+`select.mode` and `view.shading` buttons show as selected for the current value. The Mode group
+is the only mode switch in the default layout (§6.1, owner note N6): no other panel, bar or menu
+repeats it; a test counts the widgets per mode. A failed
 command goes to the status bar like any other.
 
 Snapping and axis mode exist as commands (`snap.*`, `edit.axis_mode`, MANIPULATE.md §6–7) and as Edit menu entries; they are not palette buttons yet.
@@ -392,11 +412,31 @@ string is empty with a hint, a colour has a "mixed" note, a list shows the activ
 Other widgets show the active object's value. A set applies to all selected objects in one
 undo step; a vec3 component edit keeps each object's other components.
 
-Key indicators (097): every row whose descriptor supports key tracks has a 12 px
-button left of the label. A faint outline means no tracks, an accent outline means
-animated elsewhere, a filled accent means a key here, and a warning fill means an
-uncommitted edit. Click to add/update a key for the active object's row; the context
-menu also deletes the row's keys here and jumps to its previous/next keyed frame.
+Key indicators (097, toggle by brief 224, owner note N3): every row whose descriptor supports key
+tracks has a 12 px button left of the label. A faint outline means no tracks, an accent outline
+means animated elsewhere, a filled accent means a key here, and a warning fill means an
+uncommitted edit. What a click does depends on the state (`RowKeys::click`):
+
+| State | Click |
+|---|---|
+| unkeyed (no track) | adds a key of the row's current value (`key.set_parameter`; a Vec3 keys all three components) |
+| animated (a track, no key at this frame, so also a frame between keys) | adds a key here |
+| changed (uncommitted edit; a key may or may not exist here) | adds or updates the key with the edited value |
+| keyed (a key at this frame on any of the row's tracks, no uncommitted edit) | **removes** the keys of the row here through `key.delete`, one undo step; a Vec3 loses every component key at this frame together |
+
+The state is computed from the scene every frame, so the button shows the new state in the frame
+after the click, with no further input. Removing
+the last key of a track removes the track (the `key.delete` rule, ANIM.md "key.delete {keys}"); the row then shows
+unkeyed again. **Parity-pending G5:** the reference may keep an empty track; ours never has one
+(`Track::validate` refuses an empty track). The context menu is unchanged: "Add / Update Key on
+Parameter", "Delete Key on Parameter" (enabled when a key is here), and the previous / next
+keyed frame entries.
+
+The timeline's "Record" button (the key-all button of the selection, ANIM.md §2.3) toggles the
+same way: when every recordable selected node already has a key on all 9 record tracks at the
+current frame, the button is drawn selected and a click removes exactly those keys (`key.delete`,
+one undo step, other parameters' keys are kept); otherwise it runs `key.record`. The `K` key and
+the Animate menu's "Record Active Objects" stay add / update. "Delete Keys" is unchanged.
 Vector and colour rows key their three component tracks together. This is an own
 design based on [G4](../parity/GUI-SESSIONS.md#g4--attribute-manager-widgets-and-field-lists)
 and is **parity-pending**.
@@ -419,7 +459,7 @@ agent gets the same behaviour. Each user gesture is one undo step.
 
 ### 13.1 Columns (left to right, parity-pending)
 
-1. Expand arrow (`+` / `-`, only for rows with children), indented 14 px per depth.
+1. Expand arrow (a painted triangle, only for rows with children), indented 18 px per depth (§13.1a).
 2. Name (type label as a weak suffix), renamed in place.
 3. Editor dot, Render dot, Enable tick.
 4. Tags: one weak `[label]` per tag on the host.
@@ -434,6 +474,44 @@ Render visibility is stored and resolved the same way (`render_visible`) but hon
 the render bridge is a follow-up (the renderer does not read it yet).
 Accessibility labels (used by the tests): `Editor visibility: <name>`, `Render visibility:
 <name>`, `Enabled: <name>`.
+
+### 13.1a Row geometry and hierarchy cues (brief 229, owner note N7, **parity-pending G1 item 7**)
+
+Owner note N7 asks that a child is clearly shown as a child and that rows are separated more.
+G1 item 7 (pixel numbers, lines or brackets, shading) is unanswered, so the numbers below are
+ours; they live in one place, `tree::METRICS` and the pure functions `tree::row_layout`,
+`tree::connectors`, `tree::connector_segments`, `tree::drop_mark` and `tree::row_colours`,
+which replace the earlier 14 px indent and `+` / `-` text buttons (§13.1 item 1).
+
+| Quantity | Value |
+|---|---|
+| Row height | 22 px (was about 18 px plus 3 px item spacing) |
+| Gap between rows | 0 px: rows touch, so every y in the list belongs to a row (drop zones, §13.3) |
+| Indent per depth level | 18 px; the row of depth `d` starts at `x = 18 d` |
+| Fold arrow cell | 16 px wide, at the start of the row's own column, `x = 18 d .. 18 d + 16`, full row height as the click target |
+| Fold arrow glyph | a filled triangle about 8 px: pointing right when collapsed, down when expanded; only on rows with children |
+| Connector lines | 1 px, colour `guide` |
+| Separator | 1 px line along the bottom edge of every row, colour `separator` |
+| Alternating shade | rows with an odd index in the visible list are filled with `alt`; the selected row keeps the selection fill |
+
+Connectors (`connectors(rows)` gives, per row, `trunks: Vec<bool>` of length `depth`, from the
+visible depth sequence alone): an ancestor at depth `k` has a **trunk**, a vertical line at
+`x = 18 k + 8` (the centre of that ancestor's arrow cell), which runs down through the rows of
+its subtree. Row `i` of depth `d > 0`: for `k < d - 1`, `trunks[k]` is true when a later row of
+depth `k + 1` follows before the list returns to a depth `<= k`, and a full-height vertical is
+drawn at the trunk of `k`; the **elbow** is at `k = d - 1`: a vertical from the row's top to its
+vertical centre, continuing to the bottom when `trunks[d - 1]` is true (a later sibling exists),
+then a horizontal at the vertical centre from the trunk to `x = 18 d` (the arrow cell) for a row
+with children or to `x = 18 d + 14` for a leaf. Root rows (depth 0) have no connector. Rows of
+the search result (§13.5) use the same rules over their own depth sequence; a layer with the
+manager off (§22) does not appear, its children move up one level, the rules read depths only.
+
+Colours come from the theme tokens (`row_colours(theme)`), so all three themes follow
+(§24.1): `guide` is `weak_text` mixed 75 % into `panel`, `separator` is `weak_text` mixed 18 % into
+`panel`, `alt` is `faint` mixed 55 % into `panel`. The guide keeps at least 3:1 contrast against
+both `panel` and `alt` in dark, light and high-contrast (tested). The per-type icon of brief
+227 goes between the arrow cell and the name when that brief lands; it adds a 16 px cell and does
+not change the numbers above.
 
 ### 13.2 Selection (pure, `tree::click_selection`)
 
@@ -456,7 +534,13 @@ dropping on a moved node, or into/next to a descendant of a moved node (a cycle)
 `After` = right after it, except an expanded row with children: `After` then means first
 child (the position the line is drawn at). The empty area below the rows = root list, last.
 The drop runs `object.move` (`nodes` in visible order, `parent`, `index`). A drag hover
-shows an insertion line (Before/After) or a row highlight (Into). Dragging is disabled while a
+shows what the drop does (`tree::drop_mark`): **Into** fills the whole hovered row with the accent
+colour at 25 % alpha and outlines it 1.5 px (the row becomes the parent); **Before / After**
+draw a 2 px line across the row's bottom or top edge with a filled 3 px dot at its left end,
+placed at the indent of the depth the nodes would land at (`Before`: the row's depth; `After`:
+the row's depth, or one deeper for an expanded row with children, whose first child it becomes).
+So a line with the dot at the row's own indent means "next to this row", a dot one level deeper
+means "first child", and a filled row means "inside". Dragging is disabled while a
 search filter is active. Moving keeps local transforms, like `object.reparent`.
 
 ### 13.4 Rename
@@ -493,7 +577,8 @@ actions, a drag onto an attribute link field.
 ## 14. Key map (`keymap`, `keymap_editor`; brief 152)
 
 Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G2 (docs/parity/GUI-SESSIONS.md)
-is unanswered, so **every default binding is parity-pending**: they follow common DCC
+is only partly answered (owner notes N1 and N2: hold keys 1 / 2 / 3, tool keys E / R / T), so
+**every default binding except those is parity-pending**: they follow common DCC
 conventions where those do not collide with our other keys, and they are ours to change once
 G2 is answered. Nothing is taken from the reference app's key files or presets.
 
@@ -543,13 +628,13 @@ Default bindings (all parity-pending, ours):
 | Alt+1 / Alt+2 / Alt+3 / Alt+4 | `select.mode` model / points / edges / polys |
 | Mod+Shift+E | `mesh.make_editable` |
 | Mod+Shift+P | `ui.command_palette` (brief 159, §18) |
-| 1 .. 5 | `view.shading` smooth, flat, wire, smooth_wire, flat_wire |
-| 6 .. 9 | `view.shading` quick, constant, hidden_line, bounding_box (brief 143) |
+| Mod+Shift+1 .. 5 | `view.shading` smooth, flat, wire, smooth_wire, flat_wire (moved off the digits by brief 223; parity-pending G2) |
+| Mod+Shift+6 .. 9 | `view.shading` quick, constant, hidden_line, bounding_box (brief 143; parity-pending G2) |
 | F4 | `view.layout` (toggle single / four; brief 143) |
 | Mod+M | `view.maximize` (toggle the active pane; brief 143) |
-| W / E / R | `view.gizmo_mode` move / rotate / scale |
+| E / R / T | `view.gizmo_mode` move / rotate / scale (owner note N2; W is free) |
 | Q | `view.gizmo_space` (toggle) |
-| Shift+S | `snap.toggle` (brief 032; X is the Pan hold key) |
+| Shift+S | `snap.toggle` (brief 032) |
 | L | `edit.axis_mode` (toggle; brief 032) |
 | H / S | `view.frame_all` / `view.frame_selected` (brief 153) |
 | Mod+1 .. Mod+7 | `view.set_view` perspective, front, right, top, back, left, bottom (brief 153) |
@@ -561,7 +646,12 @@ Default bindings (all parity-pending, ours):
 | Shift+Comma / Shift+Period | `key.jump` forward false / true |
 
 These are the old hard-coded keys of §5 and ANIM.md §2.7 unchanged, plus the rows for
-`select.invert`, `select.mode` and `mesh.make_editable`.
+`select.invert`, `select.mode` and `mesh.make_editable`, except the two changes of owner notes
+N1 and N2 (brief 223): the bare digits are the navigation hold keys (§6.1) and so cannot
+carry the shading commands, which moved to `Mod+Shift+1 .. 9` (**our choice,
+parity-pending G2**: the new G2 item asks what the reference uses; `Mod+digit` is the
+view-switch family and `Alt+digit` the mode family, so `Mod+Shift+digit` is the free one);
+the gizmo keys moved from W / E / R to E / R / T. The default map has no bare digit binding.
 
 ### 14.3 User overrides (settings file)
 
@@ -584,6 +674,17 @@ unknown to the registry is kept (plugins may be missing) and listed in the edito
 unknown; running it reports the registry's error in the status bar. `KeyMap::overrides()`
 is the inverse: the minimal JSON that, applied to the defaults, gives the current map.
 When it is empty the `keymap` key is removed. A missing or unreadable file means defaults.
+
+**Migration (brief 223, owner notes N1 and N2).** Files written before the change hold only
+the user's differences from the old defaults, so they stay valid: other bindings are kept
+untouched. Two things need care. (1) An entry on a bare `1`, `2` or `3` chord (any command, or
+`null`) cannot be honoured, the chords being navigation keys now (§6.1): it is dropped with
+the warning "keymap '1': 1, 2 and 3 are navigation keys; the binding was dropped (shading is on
+Mod+Shift+1 ..)" and `KeyMapState::use_settings_file` removes exactly those entries from the
+file, so the warning appears **once**; every other entry, including unparsable ones, stays in
+the file. (2) An entry on `4` .. `9`, `W`, `E`, `R` or `T` is the user's own choice and replaces the
+new default on that chord like any override. Defaults the user never touched simply follow the
+new table.
 
 ### 14.4 Conflicts
 
@@ -1635,3 +1736,102 @@ Known gap found while writing the test: the Create > Generator list is longer th
 window and the menu does not scroll, so Symmetry and Subdivision (alphabetically late) cannot
 be reached with the pointer. The test creates them with `object.create`, the command the menu
 item runs. Making the menu scrollable (or grouping the list) is a follow-up to briefs 049/147.
+
+## 29. Reference layout and density (D22; owner screenshot 2026-11-26)
+
+Source: a screenshot of the reference app's Standard layout on an empty document, supplied by the
+owner (D22). The planner read it and wrote it down in words and proportions here. The image is not
+in the repository, and no icon was traced. Proportions are of the window (the capture was about
+2000 × 790, a wide window). Exact pixel sizes come from observation O66 (ui-look.md). Until then the
+numbers here are **parity-pending O66**. This section is the target for briefs 223–229 and 231. Where an
+earlier section disagrees, this one wins for layout and density, and the earlier sections for behaviour.
+
+### 29.1 Window structure, top to bottom
+
+1. **Title bar:** the document name and the layout name, centred ("Untitled 1 - Main").
+2. **Document and layout row:** on the left, undo/redo, then **document tabs** (one per open
+   document, with a close cross, then "+"). On the right, the **layout switcher**: a row of text tabs
+   (Standard, Model, Sculpt, UV Edit, Paint, Groom, Track, Script, Nodes, then "+"), the active one
+   underlined, then a "New Layouts" toggle. Our names are ours (§21 workspaces), and we keep this
+   placement and form.
+3. **Main area, left to right:**
+   - **Tool strip** (about 1.2 % of the width, one icon column, full height): search at the top, then
+     selection tools, then **Move, Rotate, Scale** (the active tool has an accent fill), then the other
+     transform tools, then sculpt/paint-style brushes. Groups are separated by a small gap, not lines.
+     Hovering shows the tool name next to the strip (for example "Move" with its icon).
+   - **Viewport column** (about 86 % of the width):
+     - *Command bar* (one row, icons only): on the left, a make-editable style button, the **X / Y / Z axis
+       locks** and the coordinate-system toggle. In the centre, the **component modes** group (model,
+       mesh, points, edges, polygons, and the related UV and texture modes; the active one is
+       filled), then the **snapping** group (two buttons), then the **workplane / grid** group (two),
+       then two more toggle pairs. On the right, the **render** group (render view, render to
+       picture viewer, render settings). Groups are separated by gaps.
+     - *Viewport menu bar* (one row, text): a hamburger, then View, Cameras, Display, Options,
+       Filter, Panel. On the right, four small navigation icons (pan, zoom, orbit, switch/maximise
+       view). These work as drag handles: dragging one navigates.
+     - *Viewport:* the view name top-left ("Perspective"), the camera name centred at the top
+       ("Default Camera" with a small icon), a small axis triad top-right, "Grid Spacing : 50 cm"
+       bottom-right. Outside the render frame the view is darker (the film-gate shading of
+       VIEWPORT.md). There's a flat grid, and the world axes are drawn as long thin red, green and blue lines.
+     - *Timeline* (about 7 % of the height), under the viewport: a row of controls, a ruler, and a
+       range row. Controls: a key button on the left; in the centre, go to start, previous key,
+       previous frame, play, next frame, next key, go to end; the loop and sound toggles; the
+       current frame field ("0 F"); record and autokey (the autokey button turns red), the keying
+       options; the key-type toggles (position, rotation, scale, parameter, point level). The ruler
+       is labelled every 2 frames at this width, and the playhead is an accent marker. The range row
+       has min, preview start, preview end and max fields ("0 F" … "90 F").
+   - **Object palette strip** (about 1.1 % of the width, one icon column, between the viewport and the
+     managers): **creation categories**, each a drop-down group, colour-coded by category: object
+     selection/null, **primitives (blue)**, splines/text, **generators (green)**, **the clone
+     toolset (green: the Cloner sits here, top level, one click; owner note N4)**, **deformers
+     (purple)**, **fields (purple)**, environment, camera, light. Then a separate tool at the bottom.
+   - **Managers column** (about 11.7 % of the width):
+     - *Object manager* (top, about 45 % of the column height): tabs "Objects | Takes", then a menu
+       row (hamburger, File, Edit, View, Object, Tags, Bookmarks) with search, filter and other icons on the
+       right.
+     - *Attribute manager* (bottom, about 55 %): tabs "Attributes | Layers", then a menu row
+       (hamburger, Mode, Edit, User Data) with back/forward, up, search, lock and new-window icons on
+       the right. Then a header row with the object's icon and name, and a preset drop-down
+       ("Default") on the right. Then **tab buttons** (§29.3).
+4. **Status bar:** one thin row at the bottom (a hamburger, then the status text).
+
+### 29.2 Density and look
+
+- **Dense:** small text, single-row bars, icon-only command bar and strips, and small gaps between
+  groups instead of separator lines. The viewport gets almost all the space.
+- **Flat dark theme:** charcoal panels, slightly darker splitters, no bevels or drop shadows.
+  Text and icons are light grey. **Accent fill** (one accent colour) marks the active tool,
+  mode, attribute tab and timeline toggles. The active layout tab is underlined.
+- **Icons:** monochrome light grey, except the object palette's category colours (primitives,
+  generators/clone toolset, deformers/fields each have their own hue). Our hues and icon art are our own
+  (D22). The rule is one hue per category, used for that category's icons everywhere (object
+  manager rows, menus).
+
+### 29.3 Attribute manager layout (with §12 and brief 231)
+
+- **Tabs are small toggle buttons that wrap onto several rows** when they don't fit (the Project
+  example shows two rows: Project, an exchange-plug-in tab, Info, Dynamics, XRefs / To Do, Animation, Nodes).
+  The active tab is accent-filled. Some tabs have a small leading icon.
+- Under the tabs: the tab's title in bold ("Project"), then rows. **Collapsible groups** have a
+  ▾ header ("Time", "Execution", "Display").
+- **Rows:** a right-aligned label column, then the value. Number fields have small step arrows on
+  both sides (‹ value ›) and show their unit ("0 F", "100 %"). Drop-downs show a ▾. Checkboxes are
+  small accent squares. A slider can follow a percent field. A colour swatch has a picker
+  button.
+- **Two-column groups:** short related fields sit side by side, each with its own label
+  (FPS | Project Time; Min Time | Max Time; the Execution checkboxes in two columns). Use this
+  when a group's fields are short. It is per group, data-driven (a `columns: 2` UI hint).
+- A `›` before a row means it expands to show sub-parameters (View Clipping, Input Color Profile).
+
+### 29.4 What this changes (brief mapping)
+
+| Rule | Brief |
+|---|---|
+| Tool strip left, Move/Rotate/Scale with accent fill, hover name | 227 (icons, layout table), 223 (E/R/T) |
+| Command bar groups: axis locks, component modes (the one mode UI), snapping, workplane, render | 225 (one mode UI), 227 |
+| Viewport menu bar and the four navigation handle icons | 227 (handles drag = navigate, with 1/2/3, 223) |
+| Object palette strip with colour-coded creation groups, Cloner one click | 228 |
+| Managers column: Objects/Takes over Attributes/Layers, menu rows | 226 (docking default layout), 229 |
+| Timeline row composition | 227 |
+| Attribute tabs as wrapping toggle buttons, two-column groups, step arrows | 231 (and §12) |
+| Document tabs and the layout switcher row | 227, 226 (layouts = §21 workspaces) |

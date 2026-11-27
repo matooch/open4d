@@ -159,6 +159,127 @@ fn attribute_key_indicator_stages_a_change_then_keys_it_and_navigates_the_row() 
     );
 }
 
+/// Clicks a key button and lets the next frames show the result without further input.
+fn click_key_button(h: &mut Harness<'_, Editor>, name: &str) {
+    h.get_by_label(name).click();
+    h.step();
+    h.step();
+}
+
+fn track_len(h: &Harness<'_, Editor>, id: NodeId, track: &str) -> usize {
+    h.state()
+        .state
+        .doc
+        .scene()
+        .node(id)
+        .unwrap()
+        .tracks
+        .get(track)
+        .map_or(0, |t| t.keys.len())
+}
+
+#[test]
+fn the_key_button_toggles_a_key_at_the_current_frame() {
+    // owner note N3 (UI.md §12): add when no key is here, remove when one is
+    let mut st = state();
+    let id = make(&mut st, "am.thing");
+    let mut h = harness(st);
+    h.run();
+    let n = undo_steps(&h);
+
+    // no track: adds
+    click_key_button(&mut h, "Flag unkeyed");
+    h.get_by_label("Flag keyed");
+    assert_eq!(track_len(&h, id, "flag"), 1);
+    assert_eq!(undo_steps(&h), n + 1);
+
+    // a key here: removes, in one undo step; the last key takes the track with it
+    click_key_button(&mut h, "Flag keyed");
+    h.get_by_label("Flag unkeyed");
+    assert!(
+        !h.state()
+            .state
+            .doc
+            .scene()
+            .node(id)
+            .unwrap()
+            .tracks
+            .contains_key("flag"),
+        "the empty track is removed"
+    );
+    assert_eq!(undo_steps(&h), n + 2);
+
+    // undo restores the key, and the button shows it
+    undo(&mut h);
+    assert_eq!(track_len(&h, id, "flag"), 1);
+    h.get_by_label("Flag keyed");
+    assert_eq!(undo_steps(&h), n + 1);
+
+    // a frame between keys adds a key, a second click removes just that one
+    execute(
+        &mut h.state_mut().state,
+        "key.set_parameter",
+        json!({"node": id.0, "param": "flag", "frame": 20, "value": true}),
+    )
+    .unwrap();
+    h.state_mut().state.timeline.current = 10;
+    h.run();
+    h.get_by_label("Flag animated");
+    click_key_button(&mut h, "Flag animated");
+    h.get_by_label("Flag keyed");
+    assert_eq!(track_len(&h, id, "flag"), 3);
+    click_key_button(&mut h, "Flag keyed");
+    h.get_by_label("Flag animated");
+    assert_eq!(track_len(&h, id, "flag"), 2);
+    let frames: Vec<f64> = h.state().state.doc.scene().node(id).unwrap().tracks["flag"]
+        .keys
+        .iter()
+        .map(|k| k.time * 30.0)
+        .collect();
+    assert_eq!(frames, [0.0, 20.0]);
+}
+
+#[test]
+fn toggling_a_vector_row_off_removes_all_its_component_keys_in_one_step() {
+    let mut st = state();
+    let id = make(&mut st, "am.thing");
+    let mut h = harness(st);
+    h.run();
+    click_key_button(&mut h, "Pos unkeyed");
+    let n = undo_steps(&h);
+    for axis in ["x", "y", "z"] {
+        assert_eq!(track_len(&h, id, &format!("pos.{axis}")), 1);
+    }
+    click_key_button(&mut h, "Pos keyed");
+    h.get_by_label("Pos unkeyed");
+    assert_eq!(undo_steps(&h), n + 1);
+    for axis in ["x", "y", "z"] {
+        assert_eq!(track_len(&h, id, &format!("pos.{axis}")), 0);
+    }
+    undo(&mut h);
+    h.get_by_label("Pos keyed");
+    for axis in ["x", "y", "z"] {
+        assert_eq!(track_len(&h, id, &format!("pos.{axis}")), 1);
+    }
+}
+
+#[test]
+fn a_changed_row_updates_its_key_instead_of_removing_it() {
+    let mut st = state();
+    let id = make(&mut st, "am.thing");
+    let mut h = harness(st);
+    h.run();
+    click_key_button(&mut h, "Flag unkeyed");
+    h.get_by_label("Flag").click();
+    h.run();
+    h.get_by_label("Flag changed");
+    click_key_button(&mut h, "Flag changed");
+    h.get_by_label("Flag keyed");
+    assert_eq!(track_len(&h, id, "flag"), 1);
+    let key = h.state().state.doc.scene().node(id).unwrap().tracks["flag"].keys[0];
+    assert_eq!(key.value, 1.0);
+}
+
 #[test]
 fn keying_a_vector_row_keys_every_component_in_one_step() {
     let mut st = state();

@@ -821,7 +821,7 @@ mod tests {
         // ... but a preset per binding
         let wire = find(&es, "view.shading", json!({"mode": "wire"}));
         assert!(wire.preset && !wire.needs_form);
-        assert_eq!(wire.chord.unwrap().to_string(), "3");
+        assert_eq!(wire.chord.unwrap().to_string(), "Mod+Shift+3");
         assert_eq!(wire.args_text, "mode=wire");
         assert!(wire.label.ends_with("mode=wire"), "{}", wire.label);
         // needs_form follows the schema

@@ -17,7 +17,7 @@ each file is identical. Nothing in `tests/golden/<feature>/` is changed by this 
 | `execute_python_script` returns version and `1 + 1` | ok: `{'version': 25010, 'sum': 2}` |
 | probe: default cube → OBJ export | ok, but **not identical** to the R20 file with the §1 settings: no normals at all (see below) |
 | probe: key position X at 0 and 30, read the value at 15 | ok: keys 0 and 300 gave 150.00043 at frame 15 (default key interpolation is not exactly linear; set linear on both keys if O2 needs exact values) |
-| licence / EULA | edition not readable from the scripting API (no licence-type call in R25's Python); EULA wording **not checked** by the observer (OBSERVER.md §2 / parity/README.md §0 ask the owner to confirm scripted observation and export are allowed). Owner to fill in: edition ______, EULA allows scripted observation: yes / no |
+| licence / EULA | edition not readable from the scripting API (no licence-type call in R25's Python); EULA wording **not checked** by the observer (OBSERVER.md §2 / parity/README.md §0 ask the owner to confirm scripted observation and export are allowed). **Owner decision (2026-11-26):** scripted observation and export through the app's own scripting API (the MCP bridge) are allowed for this project, which is for the owner's own use. GUI automation (clicks, keystrokes, menu walks, window resizing by an agent) is **not** used: the UI is observed through the scripting API, plus screen captures taken with the OS `screencapture` command, which doesn't operate the app. Recorded by the planner from the owner's message. |
 
 Cube export vs `tests/golden/cube/defaults/mesh.obj` (200 cm cube, Scale 1 cm, Flip Z off, Material None, UVs Original, Normals Vertices):
 

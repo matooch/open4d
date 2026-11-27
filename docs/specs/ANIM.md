@@ -479,6 +479,16 @@ acceptance, not reference parity, and belongs to the existing three-OS CLI suite
   other new keys are Spline. An existing key keeps its exact time, tangent and
   interpolation. Menus delete and navigate only the active row's tracks.
 
+### 2.5a Key button toggle (brief 224, owner note N3, decision D22)
+Clicking a parameter's key button (UI.md §12) when a key exists at the current frame removes it
+(`key.delete` of the row's keys here, one undo step); with no key here it adds one
+(`key.set_parameter`), whether the row has no track or a track whose keys are on other frames.
+The three states are *unkeyed* (no track), *animated* (track, no key here) and *keyed* (key
+here). A track that loses its last key is removed (the `key.delete` rule above), so the row returns to *unkeyed*
+(**parity-pending G5**, our choice). The timeline's Record button toggles the nine record tracks
+of the selection the same way (UI.md §12); the commands `key.record` and `key.set_parameter`
+themselves stay add / update, so scripts and `K` are idempotent.
+
 ### 2.6 Playback (`timeline::Timeline`)
 `Timeline { current, playing }` plus an anchor `(clock time, frame)` set when playing
 starts or the frame is set by hand. `update(now, settings)`: the frame is

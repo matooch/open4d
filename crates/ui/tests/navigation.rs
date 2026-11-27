@@ -384,29 +384,157 @@ fn alt_drags_orbit_pan_and_dolly_the_camera() {
     assert!(h.state().state.doc.history().undo_labels().is_empty());
 }
 
+/// A drag of `button` starting at `start`, like `drag` but from any point.
+fn drag_from(h: &mut Harness<'_, Editor>, start: Pos2, by: egui::Vec2) {
+    h.hover_at(start);
+    h.run();
+    h.event(egui::Event::PointerButton {
+        pos: start,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    h.run();
+    for k in 1..=4 {
+        h.hover_at(start + by * (k as f32 / 4.0));
+        h.run();
+    }
+    h.event(egui::Event::PointerButton {
+        pos: start + by,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    h.run();
+}
+
 #[test]
-fn a_held_hold_key_turns_a_plain_drag_into_navigation() {
+fn the_digits_are_the_hold_keys_one_pan_two_zoom_three_orbit() {
+    // owner note N1; the table is data
+    assert_eq!(
+        NavMode::KEYS,
+        [
+            (Key::Num1, NavMode::Pan),
+            (Key::Num2, NavMode::Dolly),
+            (Key::Num3, NavMode::Orbit),
+        ]
+    );
+}
+
+#[test]
+fn a_held_digit_turns_a_plain_drag_into_navigation() {
+    let by = egui::vec2(40.0, 0.0);
+    // 3 orbits
     let mut h = harness(Editor::new(common::state()));
     let c0 = h.state().state.camera;
-    h.key_down(Key::V);
-    drag(
-        &mut h,
-        egui::PointerButton::Primary,
-        Modifiers::NONE,
-        egui::vec2(40.0, 0.0),
-    );
-    h.key_up(Key::V);
+    h.key_down(Key::Num3);
+    drag(&mut h, egui::PointerButton::Primary, Modifiers::NONE, by);
+    h.key_up(Key::Num3);
     h.run();
-    assert!(h.state().state.camera.yaw != c0.yaw);
-    // without the key the same drag leaves the camera alone
     let c1 = h.state().state.camera;
-    drag(
-        &mut h,
-        egui::PointerButton::Primary,
-        Modifiers::NONE,
-        egui::vec2(40.0, 0.0),
-    );
+    assert!(c1.yaw != c0.yaw);
+    assert_eq!((c1.target, c1.distance), (c0.target, c0.distance));
+    // without the key the same drag leaves the camera alone
+    drag(&mut h, egui::PointerButton::Primary, Modifiers::NONE, by);
     assert_eq!(h.state().state.camera, c1);
+
+    // 1 pans: the target moves in the view plane, yaw and distance stay
+    h.key_down(Key::Num1);
+    drag(&mut h, egui::PointerButton::Primary, Modifiers::NONE, by);
+    h.key_up(Key::Num1);
+    h.run();
+    let c2 = h.state().state.camera;
+    assert!(c2.target != c1.target);
+    assert!((c2.target - c1.target).dot(c1.forward()).abs() < 1e-6);
+    assert_eq!((c2.yaw, c2.distance), (c1.yaw, c1.distance));
+
+    // 2 zooms: dragging right moves closer, the target stays
+    h.key_down(Key::Num2);
+    drag(&mut h, egui::PointerButton::Primary, Modifiers::NONE, by);
+    h.key_up(Key::Num2);
+    h.run();
+    let c3 = h.state().state.camera;
+    assert!(c3.distance < c2.distance);
+    assert_eq!(c3.target, c2.target);
+    assert!(h.state().state.doc.history().undo_labels().is_empty());
+}
+
+#[test]
+fn a_digit_held_outside_the_viewport_does_nothing() {
+    let mut h = harness(Editor::new(common::state()));
+    let c0 = h.state().state.camera;
+    // the top-left corner is the menu bar, not the viewport
+    assert!(
+        !h.get_by_label("Viewport unavailable")
+            .rect()
+            .contains(Pos2::new(8.0, 8.0))
+    );
+    h.key_down(Key::Num3);
+    drag_from(&mut h, Pos2::new(8.0, 8.0), egui::vec2(40.0, 30.0));
+    h.key_up(Key::Num3);
+    h.run();
+    assert_eq!(h.state().state.camera, c0);
+}
+
+#[test]
+fn tapping_a_digit_changes_nothing() {
+    // no shading change, no camera move, no undo step, no selection
+    let mut st = common::state();
+    cube_at(&mut st, [0.0, 0.0, 0.0]);
+    st.selection.clear();
+    let steps = st.doc.history().undo_labels().len();
+    let shading = st.shading;
+    let mut h = harness(Editor::new(st));
+    let c0 = h.state().state.camera;
+    let at = viewport_point(&h);
+    h.hover_at(at);
+    h.run();
+    for k in [Key::Num1, Key::Num2, Key::Num3, Key::Num4] {
+        h.key_press(k);
+        h.run();
+    }
+    let st = &h.state().state;
+    assert_eq!(st.camera, c0);
+    assert_eq!(st.shading, shading);
+    assert_eq!(st.doc.history().undo_labels().len(), steps);
+    assert!(st.selection.nodes.is_empty());
+}
+
+#[test]
+fn no_selection_while_a_digit_is_held() {
+    let click = |h: &mut Harness<'_, Editor>, at: Pos2| {
+        h.hover_at(at);
+        h.run();
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton {
+                pos: at,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: Modifiers::NONE,
+            });
+            h.run();
+        }
+    };
+    let mut st = common::state();
+    cube_at(&mut st, [0.0, 0.0, 0.0]);
+    st.selection.clear();
+    let mut h = harness(Editor::new(st));
+    let centre = h.get_by_label("Viewport unavailable").rect().center();
+    h.key_down(Key::Num1);
+    click(&mut h, centre);
+    h.key_up(Key::Num1);
+    h.run();
+    assert!(
+        h.state().state.selection.nodes.is_empty(),
+        "selected while 1 was held"
+    );
+    // control: the same click without the digit picks the cube
+    click(&mut h, centre);
+    assert_eq!(
+        h.state().state.selection.nodes.len(),
+        1,
+        "the click misses the cube"
+    );
 }
 
 #[test]

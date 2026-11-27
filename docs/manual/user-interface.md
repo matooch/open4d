@@ -78,8 +78,8 @@ menu item. The defaults:
 | Alt+1 to Alt+4 | Model, Points, Edges, Polygons mode |
 | Ctrl/Cmd+Shift+E | Make Editable |
 | Ctrl/Cmd+Shift+P | Command palette |
-| 1 to 9 | Shading modes |
-| W, E, R, Q | Move, rotate, scale gizmo; local/world |
+| Ctrl/Cmd+Shift+1 to 9 | Shading modes |
+| E, R, T, Q | Move, rotate, scale gizmo; local/world |
 | H, S | Frame all, frame selected |
 | Ctrl/Cmd+1 to 7 | Perspective, front, right, top, back, left, bottom view |
 | K, Space, comma, period | Record key, play/stop, previous/next frame |
@@ -94,11 +94,12 @@ A removed or changed default can always be restored from the same window.
 | Gesture | Effect |
 |---|---|
 | Mouse wheel | Zoom towards the pointer |
-| Alt + left drag, or hold V and drag | Orbit |
-| Middle drag, or hold X and drag | Pan |
-| Alt + right drag, or hold C and drag | Dolly |
+| Alt + left drag, or hold 3 and left drag | Orbit |
+| Middle drag, or hold 1 and left drag | Pan |
+| Alt + right drag, or hold 2 and left drag | Dolly (zoom) |
 
-While Alt or one of these hold keys is down, the viewport does not select or move anything.
+The digits work while the pointer is over the viewport; tapping one without dragging does
+nothing. While Alt or one of the digits is down, the viewport does not select or move anything.
 *View > Frame all / Frame selected* and the view shortcuts above fit the camera to the scene.
 `view.layout` toggles between one and four panes, and `view.maximize` enlarges the active
 pane.

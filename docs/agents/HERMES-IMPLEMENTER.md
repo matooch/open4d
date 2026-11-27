@@ -44,6 +44,10 @@ merged run 9 there (check `git branch -r --contains a96496a`), otherwise from
 1. [214](tasks/214-realtime-performance.md) · Real-time performance: persistent GPU scene, then RT effect budgets; measure S10 on the M5 Pro after each step
 2. [213](tasks/213-raster-hybrid-quality.md) · Tier 1/2 quality gaps (mat-glossy first)
 
+Then the UI round from the owner's first hands-on use (D22, GUI-SESSIONS.md owner notes), one branch per brief:
+
+- [223](tasks/223-nav-tool-keys.md), [224](tasks/224-keyframe-toggle.md), [225](tasks/225-single-mode-ui.md), [229](tasks/229-object-manager-visuals.md), [226](tasks/226-docking.md), [227](tasks/227-icons-command-layout.md), [228](tasks/228-mograph-top-level.md), then [231](tasks/231-attribute-tabs.md) once its BACKLOG row says `ready` (it waits for observation O64) (230 comes after 215)
+
 Then area P (behaviours, BEHAVIOURS.md, D21), one branch per brief, each from the previous one:
 
 3. [215](tasks/215-luau-runtime.md) · Luau runtime and builder scripts
@@ -54,6 +58,7 @@ Then area P (behaviours, BEHAVIOURS.md, D21), one branch per brief, each from th
 8. [221](tasks/221-rust-behaviours.md) · Rust behaviours
 9. [219](tasks/219-play-mode.md) · Play mode in the editor
 10. [222](tasks/222-s11-runtime.md) · `forge play` and S11
+11. [230](tasks/230-script-lookup.md) · Script Manager lookup and context search
 
 The planner may take some of 215–222 with a subagent; skip any brief whose BACKLOG row is not `ready`.
 

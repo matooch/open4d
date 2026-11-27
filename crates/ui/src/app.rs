@@ -1518,25 +1518,13 @@ impl Editor {
     }
 
     fn viewport_ui(&mut self, ui: &mut Ui, rs: Option<&egui_wgpu::RenderState>) {
-        // header: what a click selects (EDITABLE.md §2.6)
+        // header: the soft-selection bar of the component modes and the render toggle. The
+        // modes themselves are switched in the tool palette only (UI.md §6.1, owner note N6).
         ui.horizontal(|ui| {
-            for mode in EditMode::ALL {
-                let on = self.state.mode == mode;
-                if ui
-                    .add(egui::Button::new(mode.label()).selected(on))
-                    .clicked()
-                {
-                    self.run((
-                        "select.mode",
-                        json!({"mode": forge_command::ModeArg::from(mode)}),
-                    ));
-                }
-            }
             if self.state.mode != EditMode::Model {
-                ui.separator();
                 self.component_bar(ui);
+                ui.separator();
             }
-            ui.separator();
             // what the panes draw: the shaded scene or the real-time tier (UI.md §6.3).
             // UI state only: no undo entry, no document change.
             let render = self.state.display == DisplayMode::Render;
@@ -1618,6 +1606,9 @@ impl Editor {
             [0.0, 0.0]
         };
         let over = response.hovered();
+        // the digits are hold keys only over the viewport, or while a drag started there runs
+        // (UI.md §6.1, owner note N1)
+        let hold_ok = !typing && (over || response.dragged());
         let input = ui.ctx().input(|i| NavInput {
             primary: i.pointer.primary_down(),
             middle: i.pointer.middle_down(),
@@ -1626,7 +1617,7 @@ impl Editor {
             held: NavMode::KEYS
                 .iter()
                 .find(|(k, _)| {
-                    !typing && i.key_down(*k) && !i.modifiers.command && !i.modifiers.alt
+                    hold_ok && i.key_down(*k) && !i.modifiers.command && !i.modifiers.alt
                 })
                 .map(|(_, m)| *m),
             drag,
@@ -2929,8 +2920,31 @@ impl Editor {
             if ui.button(if playing { "Stop" } else { "Play" }).clicked() {
                 cmds.push(cmd("timeline.toggle_play"));
             }
-            if ui.button("Record").clicked() {
-                cmds.push(cmd("key.record"));
+            // key-all toggles (UI.md §12, owner note N3): when every record key of the
+            // selection is here already, the button is selected and removes them
+            let recorded = forge_app::animate::recorded_keys_here(
+                self.state.doc.scene(),
+                &ids,
+                self.state.timeline.current,
+                settings.fps,
+            );
+            let remove = !recorded.is_empty();
+            if ui
+                .add(egui::Button::new("Record").selected(remove))
+                .clicked()
+            {
+                if remove {
+                    let fps = f64::from(settings.fps);
+                    let keys: Vec<serde_json::Value> = recorded
+                        .iter()
+                        .map(|(id, track, time)| {
+                            json!({"node": id.0, "track": track, "frame": time * fps})
+                        })
+                        .collect();
+                    cmds.push(("key.delete", json!({"keys": keys})));
+                } else {
+                    cmds.push(cmd("key.record"));
+                }
             }
             let mut auto = self.state.autokey;
             if ui.checkbox(&mut auto, "Auto-Key").clicked() {

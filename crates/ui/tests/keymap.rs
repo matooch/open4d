@@ -141,15 +141,15 @@ fn default_bindings_table() {
         ("Alt+4", "select.mode", r#"{"mode":"polys"}"#),
         ("Mod+Shift+E", "mesh.make_editable", "{}"),
         ("Mod+Shift+P", "ui.command_palette", "{}"),
-        ("1", "view.shading", r#"{"mode":"smooth"}"#),
-        ("2", "view.shading", r#"{"mode":"flat"}"#),
-        ("3", "view.shading", r#"{"mode":"wire"}"#),
-        ("4", "view.shading", r#"{"mode":"smooth_wire"}"#),
-        ("5", "view.shading", r#"{"mode":"flat_wire"}"#),
-        ("6", "view.shading", r#"{"mode":"quick"}"#),
-        ("7", "view.shading", r#"{"mode":"constant"}"#),
-        ("8", "view.shading", r#"{"mode":"hidden_line"}"#),
-        ("9", "view.shading", r#"{"mode":"bounding_box"}"#),
+        ("Mod+Shift+1", "view.shading", r#"{"mode":"smooth"}"#),
+        ("Mod+Shift+2", "view.shading", r#"{"mode":"flat"}"#),
+        ("Mod+Shift+3", "view.shading", r#"{"mode":"wire"}"#),
+        ("Mod+Shift+4", "view.shading", r#"{"mode":"smooth_wire"}"#),
+        ("Mod+Shift+5", "view.shading", r#"{"mode":"flat_wire"}"#),
+        ("Mod+Shift+6", "view.shading", r#"{"mode":"quick"}"#),
+        ("Mod+Shift+7", "view.shading", r#"{"mode":"constant"}"#),
+        ("Mod+Shift+8", "view.shading", r#"{"mode":"hidden_line"}"#),
+        ("Mod+Shift+9", "view.shading", r#"{"mode":"bounding_box"}"#),
         ("F4", "view.layout", "{}"),
         ("Mod+M", "view.maximize", "{}"),
         ("H", "view.frame_all", "{}"),
@@ -161,9 +161,9 @@ fn default_bindings_table() {
         ("Mod+5", "view.set_view", r#"{"view":"back"}"#),
         ("Mod+6", "view.set_view", r#"{"view":"left"}"#),
         ("Mod+7", "view.set_view", r#"{"view":"bottom"}"#),
-        ("W", "view.gizmo_mode", r#"{"mode":"move"}"#),
-        ("E", "view.gizmo_mode", r#"{"mode":"rotate"}"#),
-        ("R", "view.gizmo_mode", r#"{"mode":"scale"}"#),
+        ("E", "view.gizmo_mode", r#"{"mode":"move"}"#),
+        ("R", "view.gizmo_mode", r#"{"mode":"rotate"}"#),
+        ("T", "view.gizmo_mode", r#"{"mode":"scale"}"#),
         ("Q", "view.gizmo_space", "{}"),
         ("Shift+S", "snap.toggle", "{}"),
         ("L", "edit.axis_mode", "{}"),
@@ -532,27 +532,38 @@ fn default_shortcuts_run_their_commands_and_undo_undoes() {
     assert!(!h.state().state.selection.nodes.contains(&b));
 
     // view and gizmo state
+    // owner note N1: the bare digits do nothing (they are navigation hold keys)
+    let shading0 = h.state().state.shading;
     press(&mut h, Modifiers::NONE, Key::Num3);
+    assert_eq!(h.state().state.shading, shading0);
+    let shift_cmd = Modifiers::COMMAND | Modifiers::SHIFT;
+    press(&mut h, shift_cmd, Key::Num3);
     assert_eq!(
         h.state().state.shading,
         forge_viewport::render::Shading::Wire
     );
-    press(&mut h, Modifiers::NONE, Key::Num1);
+    press(&mut h, shift_cmd, Key::Num1);
     assert_eq!(
         h.state().state.shading,
         forge_viewport::render::Shading::Smooth
     );
-    press(&mut h, Modifiers::NONE, Key::E);
+    // owner note N2: E / R / T = move / rotate / scale; W is free
+    press(&mut h, Modifiers::NONE, Key::R);
     assert_eq!(
         h.state().state.gizmo_mode,
         forge_viewport::gizmo::GizmoMode::Rotate
     );
-    press(&mut h, Modifiers::NONE, Key::R);
+    press(&mut h, Modifiers::NONE, Key::T);
     assert_eq!(
         h.state().state.gizmo_mode,
         forge_viewport::gizmo::GizmoMode::Scale
     );
     press(&mut h, Modifiers::NONE, Key::W);
+    assert_eq!(
+        h.state().state.gizmo_mode,
+        forge_viewport::gizmo::GizmoMode::Scale
+    );
+    press(&mut h, Modifiers::NONE, Key::E);
     assert_eq!(
         h.state().state.gizmo_mode,
         forge_viewport::gizmo::GizmoMode::Translate
@@ -762,5 +773,132 @@ fn clear_reset_and_reset_all() {
     h.get_by_label("Reset all").click();
     h.run();
     assert!(same(&h.state().state.keys.map, &KeyMap::defaults()));
+    std::fs::remove_dir_all(path.parent().unwrap()).ok();
+}
+
+// ---- owner notes N1 / N2 (brief 223) ------------------------------------------------
+
+#[test]
+fn no_default_binding_sits_on_a_bare_navigation_digit() {
+    let map = KeyMap::defaults();
+    for b in map.bindings() {
+        assert!(
+            !forge_ui::keymap::is_reserved(b.chord),
+            "{} is bound to a navigation key",
+            b.chord
+        );
+    }
+    for d in ["1", "2", "3"] {
+        assert!(forge_ui::keymap::is_reserved(chord(d)), "{d}");
+    }
+    // 4 .. 9, modified digits and the old X / C / V hold keys are not reserved
+    for c in [
+        "4",
+        "9",
+        "Alt+1",
+        "Mod+1",
+        "Mod+Shift+1",
+        "Shift+1",
+        "X",
+        "C",
+        "V",
+    ] {
+        assert!(!forge_ui::keymap::is_reserved(chord(c)), "{c}");
+    }
+    // E / R / T move, rotate, scale; W is free
+    assert!(map.lookup(&Modifiers::NONE, Key::W, false).is_none());
+    for (k, mode) in [(Key::E, "move"), (Key::R, "rotate"), (Key::T, "scale")] {
+        let b = map.lookup(&Modifiers::NONE, k, false).unwrap();
+        assert_eq!(
+            (b.command.as_str(), &b.args),
+            ("view.gizmo_mode", &json!({"mode": mode}))
+        );
+    }
+}
+
+#[test]
+fn old_override_files_migrate_once() {
+    // an old file: digits rebound or unbound, other bindings and keys of the user
+    let path = temp_file("migrate");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &path,
+        r#"{"rpc": {"port": 9}, "keymap": {
+            "1": {"command": "view.shading", "args": {"mode": "wire"}},
+            "2": null,
+            "3": {"command": "select.all"},
+            "7": {"command": "select.none"},
+            "E": {"command": "edit.undo"},
+            "F9": {"command": "select.all"},
+            "Hyper+Q": {"command": "edit.undo"}}}"#,
+    )
+    .unwrap();
+    let mut keys = KeyMapState::default();
+    keys.use_settings_file(Some(path.clone()));
+    // three digit entries dropped with a warning each, the broken one still warns
+    let digit_warnings: Vec<_> = keys
+        .warnings
+        .iter()
+        .filter(|w| w.contains("navigation keys"))
+        .collect();
+    assert_eq!(digit_warnings.len(), 3, "{:?}", keys.warnings);
+    assert_eq!(keys.warnings.len(), 4, "{:?}", keys.warnings);
+    for k in [Key::Num1, Key::Num2, Key::Num3] {
+        assert!(keys.map.lookup(&Modifiers::NONE, k, true).is_none());
+    }
+    // the user's other bindings are kept
+    let cmd = |m: Modifiers, k: Key| keys.map.lookup(&m, k, false).map(|b| b.command.clone());
+    assert_eq!(
+        cmd(Modifiers::NONE, Key::Num7).as_deref(),
+        Some("select.none")
+    );
+    assert_eq!(cmd(Modifiers::NONE, Key::E).as_deref(), Some("edit.undo"));
+    assert_eq!(cmd(Modifiers::NONE, Key::F9).as_deref(), Some("select.all"));
+    // the new shading defaults and tool keys are there
+    assert_eq!(
+        cmd(Modifiers::COMMAND | Modifiers::SHIFT, Key::Num1).as_deref(),
+        Some("view.shading")
+    );
+    assert_eq!(
+        cmd(Modifiers::NONE, Key::T).as_deref(),
+        Some("view.gizmo_mode")
+    );
+    // the file lost exactly the digit entries and kept the rest, so a second load is silent
+    let file = read_settings(&path);
+    assert_eq!(file["rpc"]["port"], 9);
+    let km = file["keymap"].as_object().unwrap();
+    assert_eq!(km.len(), 4, "{km:?}");
+    assert!(["1", "2", "3"].iter().all(|d| !km.contains_key(*d)));
+    let mut again = KeyMapState::default();
+    again.use_settings_file(Some(path.clone()));
+    assert_eq!(again.warnings.len(), 1, "{:?}", again.warnings);
+    assert!(again.warnings[0].contains("Hyper+Q"));
+    // a file with only digit entries loses its keymap key altogether
+    std::fs::write(&path, r#"{"keymap": {"1": null}}"#).unwrap();
+    again.use_settings_file(Some(path.clone()));
+    assert_eq!(again.warnings.len(), 1);
+    assert!(read_settings(&path).get("keymap").is_none());
+    assert_eq!(again.map, KeyMap::defaults());
+    std::fs::remove_dir_all(path.parent().unwrap()).ok();
+}
+
+#[test]
+fn the_editor_refuses_to_bind_a_navigation_digit() {
+    let (mut e, path) = editor_with_file("reserved");
+    e.state.selection.clear();
+    let mut h = harness(e);
+    open_editor_window(&mut h, "edit.undo");
+    h.get_by_label("Ctrl+Z").click();
+    h.run();
+    assert!(h.state().keymap_editor().is_capturing());
+    press(&mut h, Modifiers::NONE, Key::Num2);
+    assert!(!h.state().keymap_editor().is_capturing());
+    assert!(!h.state().keymap_editor().message.is_empty());
+    let keys = &h.state().state.keys;
+    assert_eq!(
+        keys.map.chord_of("edit.undo", &json!({})),
+        Some(chord("Mod+Z"))
+    );
+    assert!(read_settings(&path).get("keymap").is_none());
     std::fs::remove_dir_all(path.parent().unwrap()).ok();
 }

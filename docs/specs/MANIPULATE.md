@@ -212,7 +212,7 @@ translate `move` (per axis; plane drags per plane axis, centre drags per world c
 
 - `snap.set` `{enabled?, mode?, radius?, visible_only?, grid_spacing?, targets?, workplane?, quantize?}`
   merges settings and returns the full settings; no arguments reads them. Not undoable.
-- `snap.toggle` `{enabled?}`: flips `enabled` (or sets it); returns `{enabled}`. Key `Shift+S` (`X` is the Pan hold key, UI.md §6).
+- `snap.toggle` `{enabled?}`: flips `enabled` (or sets it); returns `{enabled}`. Key `Shift+S`.
 - `snap.reset`: defaults. Not undoable.
 - `snap.query` `{point, radius?, nodes?}`: sources = the drawn meshes (world space) of `nodes`
   (default: the whole scene; each source's origin is the node's world position); `radius` in

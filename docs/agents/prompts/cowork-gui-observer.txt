@@ -1,0 +1,3 @@
+Retired (2026-11-26). The UI is observed by the scripted observer through the reference app's
+scripting API and OS screen captures (observer-hermes.txt, jobs O64-O66), without anyone or any
+agent operating the GUI. Do not use a computer-use session on the reference app.

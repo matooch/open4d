@@ -8,9 +8,11 @@ use forge_core::visibility::Vis;
 use serde_json::{Value as Json, json};
 
 use crate::state::EditorState;
+use crate::theme::Theme;
 use crate::tree::{
-    DropTarget, DropZone, TreeRow, click_selection, context_menu, drop_target, drop_zone,
-    filter_rows, layer_menu, menu_target, moved_set, tree_rows,
+    Connector, DropMark, DropTarget, METRICS, RowColours, TreeRow, click_selection,
+    connector_segments, connectors, context_menu, drop_mark, drop_target, drop_zone, filter_rows,
+    layer_menu, menu_target, moved_set, row_colours, row_layout, tree_rows,
 };
 
 /// A command to run: registry id and JSON arguments.
@@ -29,7 +31,6 @@ pub struct ObjectManager {
     last_pointer: Option<Pos2>,
 }
 
-const INDENT: f32 = 14.0;
 const DOT: f32 = 14.0;
 const RED: Color32 = Color32::from_rgb(214, 74, 66);
 const GREEN: Color32 = Color32::from_rgb(86, 178, 98);
@@ -104,12 +105,21 @@ impl ObjectManager {
         };
         let order: Vec<NodeId> = rows.iter().map(|r| r.id).collect();
         let mut rects: Vec<(NodeId, Rect)> = Vec::new();
+        let colours = row_colours(&Theme::current(&ctx));
+        let lines = connectors(&rows);
 
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
-                for row in &rows {
-                    let rect = self.row_ui(ui, st, row, filtering, &order, &mut cmds);
+                // rows touch: every y of the list belongs to a row (UI.md §13.1a)
+                ui.spacing_mut().item_spacing.y = 0.0;
+                for (index, row) in rows.iter().enumerate() {
+                    let look = RowLook {
+                        index,
+                        colours,
+                        connector: &lines[index],
+                    };
+                    let rect = self.row_ui(ui, st, row, filtering, &order, &look, &mut cmds);
                     rects.push((row.id, rect));
                 }
                 // The empty area below the rows: drop = end of the root list.
@@ -125,6 +135,7 @@ impl ObjectManager {
     }
 
     /// Draws one row and handles its clicks; returns the row's rectangle.
+    #[allow(clippy::too_many_arguments)]
     fn row_ui(
         &mut self,
         ui: &mut Ui,
@@ -132,18 +143,38 @@ impl ObjectManager {
         row: &TreeRow,
         filtering: bool,
         order: &[NodeId],
+        look: &RowLook,
         cmds: &mut Vec<Cmd>,
     ) -> Rect {
+        // the background, separator and connector lines go behind the widgets: reserve
+        // their place in the paint order now, fill it once the row's size is known
+        let backdrop = ui.painter().add(egui::Shape::Noop);
+        let full_width = ui.available_width();
         let resp = ui.horizontal(|ui| {
-            ui.add_space(row.depth as f32 * INDENT);
+            ui.set_min_height(METRICS.row_height);
+            // indent and fold arrow cell sit flush, at the numbers of `row_layout`
+            let layout = row_layout(row.depth);
+            let gap = ui.spacing().item_spacing.x;
+            ui.spacing_mut().item_spacing.x = 0.0;
+            ui.add_space(layout.start);
             if row.has_children && !filtering {
-                let arrow = if row.expanded { "-" } else { "+" };
-                if ui.small_button(arrow).clicked() {
+                let (rect, r) = ui.allocate_exact_size(
+                    vec2(layout.arrow.1 - layout.arrow.0, METRICS.row_height),
+                    Sense::click(),
+                );
+                let name = &row.name;
+                let verb = if row.expanded { "Collapse" } else { "Expand" };
+                r.widget_info(|| {
+                    egui::WidgetInfo::labeled(egui::Role::Button, true, format!("{verb}: {name}"))
+                });
+                fold_arrow(ui, rect, row.expanded, r.hovered());
+                if r.clicked() {
                     cmds.push(("view.toggle_expanded", json!({"node": row.id.0})));
                 }
             } else {
-                ui.add_space(18.0);
+                ui.add_space(layout.arrow.1 - layout.arrow.0);
             }
+            ui.spacing_mut().item_spacing.x = gap;
             if let Some((id, buf)) = &mut self.renaming
                 && *id == row.id
             {
@@ -285,7 +316,15 @@ impl ObjectManager {
                 }
             });
         });
-        resp.response.rect
+        let row_rect = Rect::from_min_size(
+            resp.response.rect.min,
+            vec2(
+                full_width.max(resp.response.rect.width()),
+                resp.response.rect.height().max(METRICS.row_height),
+            ),
+        );
+        paint_row_backdrop(ui, backdrop, row_rect, row, look);
+        row_rect
     }
 
     /// Drop indicator while dragging a row, and the move on release (UI.md §13.3).
@@ -313,7 +352,7 @@ impl ObjectManager {
         let moved = moved_set(scene, rows, &st.selection.nodes, *dragged);
         // The hovered row and zone; the empty area (id 0) = root end.
         let hit = rects.iter().find(|(_, r)| r.y_range().contains(pos.y));
-        let (target, line): (Option<DropTarget>, Option<(Rect, bool)>) = match hit {
+        let (target, mark): (Option<DropTarget>, Option<(Rect, DropMark)>) = match hit {
             Some((NodeId(0), _)) | None => (
                 Some(DropTarget {
                     parent: None,
@@ -324,30 +363,16 @@ impl ObjectManager {
             Some((id, r)) => {
                 let zone = drop_zone((pos.y - r.top()) / r.height().max(1.0));
                 let t = drop_target(scene, rows, *id, zone, &moved);
-                let line = t.map(|_| match zone {
-                    DropZone::Into => (*r, true),
-                    DropZone::Before => (*r, false),
-                    DropZone::After => (*r, false),
-                });
-                (t, line)
+                let mark = rows
+                    .iter()
+                    .find(|row| row.id == *id)
+                    .filter(|_| t.is_some())
+                    .map(|row| (*r, drop_mark(row, zone)));
+                (t, mark)
             }
         };
-        if let (Some(_), Some((r, into))) = (target, line) {
-            let colour = ui.visuals().selection.stroke.color;
-            let p = ui.painter();
-            if into {
-                p.rect_stroke(r, 2.0, Stroke::new(1.5, colour), egui::StrokeKind::Inside);
-            } else {
-                let y = if pos.y < r.center().y {
-                    r.top()
-                } else {
-                    r.bottom()
-                };
-                p.line_segment(
-                    [Pos2::new(r.left(), y), Pos2::new(r.right(), y)],
-                    Stroke::new(2.0, colour),
-                );
-            }
+        if let Some((r, mark)) = mark {
+            paint_drop_mark(ui, r, mark);
         }
         if ui.input(|i| i.pointer.any_released())
             && let Some(t) = target
@@ -361,6 +386,89 @@ impl ObjectManager {
                 args["index"] = json!(i);
             }
             cmds.push(("object.move", args));
+        }
+    }
+}
+
+/// What a row needs besides its data to be drawn.
+struct RowLook<'a> {
+    /// Position in the visible list (odd rows get the alternating shade).
+    index: usize,
+    colours: RowColours,
+    connector: &'a Connector,
+}
+
+/// The fold arrow: a filled triangle, right when collapsed, down when expanded.
+fn fold_arrow(ui: &Ui, cell: Rect, expanded: bool, hovered: bool) {
+    let c = cell.center();
+    let points = if expanded {
+        vec![
+            c + vec2(-4.0, -2.5),
+            c + vec2(4.0, -2.5),
+            c + vec2(0.0, 3.5),
+        ]
+    } else {
+        vec![
+            c + vec2(-2.5, -4.0),
+            c + vec2(-2.5, 4.0),
+            c + vec2(3.5, 0.0),
+        ]
+    };
+    let colour = if hovered {
+        ui.visuals().strong_text_color()
+    } else {
+        ui.visuals().text_color()
+    };
+    ui.painter()
+        .add(egui::Shape::convex_polygon(points, colour, Stroke::NONE));
+}
+
+/// Fills the reserved paint slot of a row: alternating shade, connector lines, separator.
+fn paint_row_backdrop(
+    ui: &Ui,
+    slot: egui::layers::ShapeIdx,
+    rect: Rect,
+    row: &TreeRow,
+    look: &RowLook,
+) {
+    let mut shapes: Vec<egui::Shape> = Vec::new();
+    if look.index % 2 == 1 {
+        shapes.push(egui::Shape::rect_filled(rect, 0.0, look.colours.alt));
+    }
+    let guide = Stroke::new(1.0, look.colours.guide);
+    for (a, b) in connector_segments(row.depth, row.has_children, &look.connector.trunks) {
+        // half a pixel in, so the 1 px lines are crisp
+        let at = |p: [f32; 2]| Pos2::new(rect.left() + p[0] + 0.5, rect.top() + p[1]);
+        shapes.push(egui::Shape::line_segment([at(a), at(b)], guide));
+    }
+    shapes.push(egui::Shape::line_segment(
+        [
+            Pos2::new(rect.left(), rect.bottom() - 0.5),
+            Pos2::new(rect.right(), rect.bottom() - 0.5),
+        ],
+        Stroke::new(1.0, look.colours.separator),
+    ));
+    ui.painter().set(slot, egui::Shape::Vec(shapes));
+}
+
+/// The drag hover: the whole row for "inside", a line with a dot at the landing indent for
+/// "between rows" (UI.md §13.3).
+fn paint_drop_mark(ui: &Ui, row: Rect, mark: DropMark) {
+    let colour = ui.visuals().selection.bg_fill;
+    let p = ui.painter();
+    match mark {
+        DropMark::Into => {
+            p.rect_filled(row, 2.0, colour.gamma_multiply(0.25));
+            p.rect_stroke(row, 2.0, Stroke::new(1.5, colour), egui::StrokeKind::Inside);
+        }
+        DropMark::Line { depth, below } => {
+            let y = if below { row.bottom() } else { row.top() };
+            let x = row.left() + row_layout(depth).start;
+            p.line_segment(
+                [Pos2::new(x, y), Pos2::new(row.right(), y)],
+                Stroke::new(2.0, colour),
+            );
+            p.circle_filled(Pos2::new(x, y), 3.0, colour);
         }
     }
 }
