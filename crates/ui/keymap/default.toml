@@ -1,7 +1,10 @@
-# Default key map (docs/specs/UI.md §14). Parity-pending G2 (docs/parity/GUI-SESSIONS.md)
-# except the owner notes N1 (bare 1 / 2 / 3 are the navigation hold keys, so no bare digit
-# is bound here) and N2 (E / R / T = move / rotate / scale); the rest follows common DCC
-# conventions where they do not collide.
+# Default key map (docs/specs/UI.md §14). Observed in the reference app, GUI session G2
+# item 1 (docs/parity/GUI-SESSIONS.md), for every action the session listed; the shading keys,
+# the Alt+digit mode keys, Mod+1 .. 7 views, Mod+M, Q, L, Shift+S, Shift+M, the marker jumps,
+# Space and the palette key are ours (parity-pending G2 / G1).
+# A chord with a space is a two-key sequence: `M T` presses M, then T (UI.md §14.7).
+# Bare 1 / 2 / 3 are the navigation hold keys (owner note N1), so no bare digit is bound
+# here; E / R / T are move / rotate / scale (owner note N2, observed).
 # `Mod` is Cmd on macOS and Ctrl elsewhere. Users override chords in the settings file.
 version = 1
 
@@ -18,26 +21,23 @@ command = "file.save_dialog"
 chord = "Mod+Shift+S"
 command = "file.save_as_dialog"
 
-# Edit
+# Edit: undo / redo (observed; Undo View and Redo View, Mod+Shift+Z / Mod+Shift+Y, have no command yet)
 [[bind]]
 chord = "Mod+Z"
 command = "edit.undo"
 
 [[bind]]
-chord = "Mod+Shift+Z"
-command = "edit.redo"
-
-[[bind]]
 chord = "Mod+Y"
 command = "edit.redo"
 
+# Delete: Backspace and Delete (observed). Rename has no key; it is the object manager's double-click and menu entry (parity-pending G1)
 [[bind]]
 chord = "Delete"
 command = "object.delete"
 
 [[bind]]
-chord = "F2"
-command = "object.begin_rename"
+chord = "Backspace"
+command = "object.delete"
 
 # Select
 [[bind]]
@@ -49,9 +49,30 @@ chord = "Mod+Shift+A"
 command = "select.none"
 
 [[bind]]
-chord = "Mod+I"
+chord = "U I"
 command = "select.invert"
 
+[[bind]]
+chord = "U Y"
+command = "select.grow"
+
+[[bind]]
+chord = "U K"
+command = "select.shrink"
+
+[[bind]]
+chord = "U W"
+command = "select.connected"
+
+[[bind]]
+chord = "U L"
+command = "select.loop"
+
+[[bind]]
+chord = "U B"
+command = "select.ring"
+
+# Modes: the reference has no default mode keys; Alt+1 .. 4 are ours, an extra (parity-pending G2)
 [[bind]]
 chord = "Alt+1"
 command = "select.mode"
@@ -72,17 +93,22 @@ chord = "Alt+4"
 command = "select.mode"
 args = { mode = "polys" }
 
-# Mesh
+# Make Editable (observed)
 [[bind]]
-chord = "Mod+Shift+E"
+chord = "C"
 command = "mesh.make_editable"
 
-# Command palette (brief 159)
+# Group (observed; Ungroup, Shift+G, has no command yet)
+[[bind]]
+chord = "Alt+G"
+command = "object.group"
+
+# Command palette (brief 159; ours)
 [[bind]]
 chord = "Mod+Shift+P"
 command = "ui.command_palette"
 
-# View: shading (moved off the bare digits by owner note N1; parity-pending G2)
+# View: shading (not observed; ours, moved off the bare digits by owner note N1; parity-pending G2)
 [[bind]]
 chord = "Mod+Shift+1"
 command = "view.shading"
@@ -108,7 +134,6 @@ chord = "Mod+Shift+5"
 command = "view.shading"
 args = { mode = "flat_wire" }
 
-# View: more display modes, the four-view layout (brief 143)
 [[bind]]
 chord = "Mod+Shift+6"
 command = "view.shading"
@@ -129,15 +154,37 @@ chord = "Mod+Shift+9"
 command = "view.shading"
 args = { mode = "bounding_box" }
 
+# Views (observed): F1 Perspective, F2 Top, F3 Right, F4 Front, F5 all views
+[[bind]]
+chord = "F1"
+command = "view.set_view"
+args = { view = "perspective" }
+
+[[bind]]
+chord = "F2"
+command = "view.set_view"
+args = { view = "top" }
+
+[[bind]]
+chord = "F3"
+command = "view.set_view"
+args = { view = "right" }
+
 [[bind]]
 chord = "F4"
+command = "view.set_view"
+args = { view = "front" }
+
+[[bind]]
+chord = "F5"
 command = "view.layout"
 
+# Maximize the active pane (ours)
 [[bind]]
 chord = "Mod+M"
 command = "view.maximize"
 
-# View: framing and named views (brief 153)
+# Framing (observed): H geometry, S selected elements, O selected objects (ours frames objects for both until there is a component framing)
 [[bind]]
 chord = "H"
 command = "view.frame_all"
@@ -146,6 +193,11 @@ command = "view.frame_all"
 chord = "S"
 command = "view.frame_selected"
 
+[[bind]]
+chord = "O"
+command = "view.frame_selected"
+
+# Named views on Mod+digit (ours; extras next to F1 .. F4, parity-pending G2)
 [[bind]]
 chord = "Mod+1"
 command = "view.set_view"
@@ -181,7 +233,7 @@ chord = "Mod+7"
 command = "view.set_view"
 args = { view = "bottom" }
 
-# Gizmo (owner note N2)
+# Tools: Move / Rotate / Scale (observed, owner note N2). Live Selection 9 and Rectangle Selection 0 have no command yet
 [[bind]]
 chord = "E"
 command = "view.gizmo_mode"
@@ -197,11 +249,12 @@ chord = "T"
 command = "view.gizmo_mode"
 args = { mode = "scale" }
 
+# Ours
 [[bind]]
 chord = "Q"
 command = "view.gizmo_space"
 
-# Snapping and axis mode (brief 032)
+# Snapping and axis mode (brief 032; ours)
 [[bind]]
 chord = "Shift+S"
 command = "snap.toggle"
@@ -210,42 +263,52 @@ command = "snap.toggle"
 chord = "L"
 command = "edit.axis_mode"
 
-# Animation
+# Playback and recording (observed). Play backwards F6 and Record Animated Alt+F9 have no command yet; Render View Mod+R and Render to Picture Viewer Shift+R have no command yet
 [[bind]]
-chord = "K"
+chord = "F8"
+command = "timeline.play"
+
+[[bind]]
+chord = "F7"
+command = "timeline.stop"
+
+[[bind]]
+chord = "F9"
 command = "key.record"
 
 [[bind]]
-chord = "Shift+K"
+chord = "Mod+F9"
 command = "key.autokey"
 
+[[bind]]
+chord = "G"
+command = "timeline.step"
+args = { delta = 1 }
+
+[[bind]]
+chord = "F"
+command = "timeline.step"
+args = { delta = -1 }
+
+[[bind]]
+chord = "Mod+G"
+command = "key.jump"
+args = { forward = true }
+
+[[bind]]
+chord = "Mod+F"
+command = "key.jump"
+args = { forward = false }
+
+# Space plays in the viewport (ANIM.md §2.7; observed in the timeline)
 [[bind]]
 chord = "Space"
 command = "timeline.toggle_play"
 scope = "viewport"
 
+# Markers (brief 094; ours: bare M is the mesh prefix)
 [[bind]]
-chord = "Comma"
-command = "timeline.step"
-args = { delta = -1 }
-
-[[bind]]
-chord = "Period"
-command = "timeline.step"
-args = { delta = 1 }
-
-[[bind]]
-chord = "Shift+Comma"
-command = "key.jump"
-args = { forward = false }
-
-[[bind]]
-chord = "Shift+Period"
-command = "key.jump"
-args = { forward = true }
-
-[[bind]]
-chord = "M"
+chord = "Shift+M"
 command = "marker.add"
 
 [[bind]]
@@ -257,3 +320,72 @@ args = { forward = false }
 chord = "Alt+Period"
 command = "marker.jump"
 args = { forward = true }
+
+# Two-key sequences (observed, G2 item 1 and the menu tables of G10): M = mesh tools, U = topology and selection. The pointer tools Line Cut K K, Loop/Path Cut K L, Plane Cut K J, Polygon Pen M E, Close Polygon Hole M D and the rest of the table have no argument-free command yet (UI.md §14.2)
+[[bind]]
+chord = "M T"
+command = "mesh.extrude"
+
+[[bind]]
+chord = "M W"
+command = "mesh.extrude_inner"
+
+[[bind]]
+chord = "M S"
+command = "mesh.bevel"
+
+[[bind]]
+chord = "M B"
+command = "mesh.bridge"
+
+[[bind]]
+chord = "M Q"
+command = "mesh.weld"
+
+[[bind]]
+chord = "M P"
+command = "mesh.stitch"
+
+[[bind]]
+chord = "M N"
+command = "mesh.dissolve"
+
+[[bind]]
+chord = "M H"
+command = "mesh.mirror"
+
+[[bind]]
+chord = "M M"
+command = "mesh.connect_points"
+
+[[bind]]
+chord = "M O"
+command = "mesh.slide"
+
+[[bind]]
+chord = "U S"
+command = "mesh.subdivide"
+
+[[bind]]
+chord = "U O"
+command = "mesh.optimize"
+
+[[bind]]
+chord = "U Z"
+command = "mesh.melt"
+
+[[bind]]
+chord = "U P"
+command = "mesh.split"
+
+[[bind]]
+chord = "U D"
+command = "mesh.disconnect"
+
+[[bind]]
+chord = "U U"
+command = "mesh.untriangulate"
+
+[[bind]]
+chord = "U R"
+command = "mesh.reverse_normals"

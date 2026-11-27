@@ -8,7 +8,7 @@ use egui::{Align2, Key, Modifiers, RichText};
 use forge_command::{CommandRegistry, schema};
 use serde_json::{Value, json};
 
-use crate::keymap::{Chord, KeyMap};
+use crate::keymap::{Binding, Chord, KeyMap};
 use crate::theme::Theme;
 
 /// How many recent keys the palette keeps.
@@ -88,7 +88,9 @@ pub struct Entry {
     /// The command has required arguments, so a generic entry opens a form.
     pub needs_form: bool,
     pub chord: Option<Chord>,
-    /// The chord as the platform spells it.
+    /// The canonical text of the keys (`Mod+Z`, `M T`); empty without a binding.
+    pub keys: String,
+    /// The keys as the platform spells them (a sequence's chords joined by a space).
     pub shown: String,
 }
 
@@ -103,8 +105,8 @@ impl Entry {
         if !self.args_text.is_empty() {
             f.push(self.args_text.clone());
         }
-        if let Some(c) = self.chord {
-            f.push(c.to_string());
+        if self.chord.is_some() {
+            f.push(self.keys.clone());
             f.push(self.shown.clone());
         }
         f
@@ -128,6 +130,13 @@ pub fn run_key(command: &str, args: &Value) -> String {
     }
 }
 
+fn shown_keys(b: &Binding, shown: &dyn Fn(Chord) -> String) -> String {
+    match b.then {
+        Some(t) => format!("{} {}", shown(b.chord), shown(t)),
+        None => shown(b.chord),
+    }
+}
+
 /// Every registry command plus one preset per key binding with arguments (UI.md §18.3).
 pub fn entries(
     registry: &CommandRegistry,
@@ -146,7 +155,8 @@ pub fn entries(
             preset: false,
             needs_form,
             chord: generic.map(|b| b.chord),
-            shown: generic.map(|b| shown(b.chord)).unwrap_or_default(),
+            keys: generic.map(Binding::keys_text).unwrap_or_default(),
+            shown: generic.map(|b| shown_keys(b, shown)).unwrap_or_default(),
         });
         for b in keys.for_command(h.id()).filter(|b| has_args(&b.args)) {
             let summary = b.args_summary();
@@ -158,7 +168,8 @@ pub fn entries(
                 preset: true,
                 needs_form: false,
                 chord: Some(b.chord),
-                shown: shown(b.chord),
+                keys: b.keys_text(),
+                shown: shown_keys(b, shown),
             });
         }
     }

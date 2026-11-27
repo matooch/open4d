@@ -1,5 +1,5 @@
-//! Viewport panes and the 4-view layout maths (docs/specs/VIEWPORT.md §9). Own design,
-//! parity-pending G8.
+//! Viewport panes and the 4-view layout maths (docs/specs/VIEWPORT.md §9). The quad order is
+//! observed (G2 item 1); the rest is our own design, parity-pending G8.
 
 use crate::camera::Camera;
 use crate::nav::{StandardView, view_camera};
@@ -14,7 +14,8 @@ pub enum Pane {
 
 impl Pane {
     pub const ALL: [Pane; 4] = [Pane::Perspective, Pane::Top, Pane::Front, Pane::Right];
-    /// Top-left, top-right, bottom-left, bottom-right of the 4-view layout.
+    /// Top-left, top-right, bottom-left, bottom-right of the 4-view layout (observed, G2 item 1:
+    /// Perspective, Top, Right, Front).
     pub const QUAD: [Pane; 4] = [Pane::Perspective, Pane::Top, Pane::Right, Pane::Front];
 
     /// Index into per-pane arrays (the position in [`Pane::ALL`]).

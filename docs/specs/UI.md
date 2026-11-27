@@ -121,10 +121,10 @@ Groups follow the reference order: Object, Spline, Generator, Deformer, Field,
 Volume, Camera, Light, Tag. The Clone toolset remains a separate submenu (see below).
 Types with `in_create_menu == false` (the polygon object) are left out.
 
-Key bindings (**parity-pending**, ours; now data in the key map, §14, these are its defaults): Ctrl+Z undo, Ctrl+Shift+Z / Ctrl+Y redo,
-Ctrl+A select all, Ctrl+Shift+A deselect all (Cmd on macOS),
-Delete delete selected, F2 rename active, 1–5 shading (Smooth, Flat, Wire,
-SmoothWire, FlatWire).
+Key bindings are data in the key map (§14.2, observed in G2 item 1 where listed there): Ctrl+Z undo,
+Ctrl+Y redo, Ctrl+A select all, Ctrl+Shift+A deselect all (Cmd on macOS),
+Backspace or Delete delete selected. Rename has no key (§13.4); shading is on Ctrl+Shift+1 ..
+(ours).
 
 ## 6. Viewport panel (`viewport_panel`)
 
@@ -136,7 +136,7 @@ nodes use the selection colour. GPU meshes are rebuilt only when `Scene::revisio
 the selection changes; nodes whose build is unsupported are skipped. Without a wgpu render state (tests) it shows a
 "Viewport unavailable" label.
 
-### 6.1 Navigation (brief 153; revised by brief 223, owner note N1, decision D22)
+### 6.1 Navigation (brief 153; revised by brief 223 and brief 233, owner note N1, decision D22)
 
 Camera maths is pure and lives in `forge_viewport::nav` (VIEWPORT.md §7). The panel only
 turns pointer input into calls. The hold keys come from **owner note N1** (GUI-SESSIONS.md,
@@ -146,7 +146,7 @@ answers G2); the wheel and Alt gestures stay our own design, parity-pending G2.
 
 | Input | Action |
 |---|---|
-| wheel `s` (points) at pointer `c` | `ZoomAt(0.999^s, c)`: zoom toward the cursor, `s > 0` zooms in |
+| wheel `s` (points) at pointer `c` | `ZoomAt(0.999^s, c)`: zoom toward the cursor, `s > 0` zooms in (scroll up zooms in, scroll down reverses it: observed, G2 item 2) |
 | hold `3` + primary drag, or Alt + primary drag | `Orbit(dx, dy)` |
 | hold `1` + primary drag, or middle drag (with or without Alt), or Alt + middle | `Pan(dx, dy)` |
 | hold `2` + primary drag, or Alt + secondary drag | `Dolly(dx)` (zoom), about the view centre |
@@ -176,11 +176,16 @@ unavailable" early return), so it is testable with egui_kittest.
 The viewport stores its aspect ratio (`EditorState.view_aspect`, width / height, default 16/9)
 each frame; the frame commands use it.
 
-Key-map bindings (UI.md §14.2) for the commands of COMMANDS.md §6: `H` = `view.frame_all`,
-`S` = `view.frame_selected`, `Mod+1` .. `Mod+7` = `view.set_view` perspective, front, right,
-top, back, left, bottom. (`F1`..`F5` of the area design collide with `F2` rename; Mod+digit is
-free.) View > menu entries: Frame all, Frame selected, and a "View" submenu with the seven
-views, each showing its chord.
+Key-map bindings (UI.md §14.2) for the commands of COMMANDS.md §6 (observed, G2 item 1): `H` =
+`view.frame_all` (Frame Geometry), `S` and `O` = `view.frame_selected` (the reference has `S`
+for the selected elements and `O` for the selected objects; ours has no component framing, so
+both frame the selected objects), `F1` Perspective, `F2` Top, `F3` Right, `F4` Front =
+`view.set_view` on the active pane (the reference shows that view; in the four-view layout ours
+sets the active pane's view, **parity-pending G2**), `F5` = `view.layout` (all views, toggling
+back to one: the toggle back is ours). `Mod+1` .. `Mod+7` = `view.set_view` perspective, front,
+right, top, back, left, bottom stay as our extras. View > menu entries: Frame all, Frame
+selected, and a "View" submenu with the seven views, each showing its chord. The wheel
+direction above is checked by the kittest wheel test (`the wheel zooms toward the cursor`).
 
 Tests (crates/ui/tests/navigation.rs): the input mapping of every gesture and hold key, `apply_nav`, the key table;
 `view.frame_all` / `view.frame_selected` fit the bounds (aspect-aware), nothing selected frames
@@ -593,7 +598,8 @@ search filter is active. Moving keeps local transforms, like `object.reparent`.
 
 ### 13.4 Rename
 
-Double-click (or F2, or the menu item) opens a text field on the row; Enter or focus loss
+Double-click (or the context menu item "Rename"; there is no key, `F2` is the Top view, §14.2,
+**parity-pending G1**) opens a text field on the row; Enter or focus loss
 commits via `object.rename` (an unchanged or empty name is not committed), Escape cancels.
 
 ### 13.5 Search / filter (pure, `tree::filter_rows`)
@@ -622,19 +628,23 @@ by drag, reorder by drag, dots and tick (each with undo), rename, search, contex
 actions, a drag onto an attribute link field.
 
 
-## 14. Key map (`keymap`, `keymap_editor`; brief 152)
+## 14. Key map (`keymap`, `keymap_editor`; brief 152, revised by brief 233)
 
-Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G2 (docs/parity/GUI-SESSIONS.md)
-is only partly answered (owner notes N1 and N2: hold keys 1 / 2 / 3, tool keys E / R / T), so
-**every default binding except those is parity-pending**: they follow common DCC
-conventions where those do not collide with our other keys, and they are ours to change once
-G2 is answered. Nothing is taken from the reference app's key files or presets.
+Sources: GUI session G2 item 1 (docs/parity/GUI-SESSIONS.md, "Owner's Cowork session,
+2026-11-27"): the owner read the reference app's Command Manager and menus, so every default
+below marked **observed** is the reference's. What the session did not cover (shading, the
+`Alt+digit` mode keys, `Mod+1 .. 7` views, `Mod+M`, `Q`, `L`, `Shift+S`, `Shift+M`, the marker
+jumps, `Mod+Shift+P`, `Space`'s viewport scope) stays **ours, parity-pending G2**. Owner notes N1
+(bare 1 / 2 / 3 are navigation hold keys) and N2 (E / R / T) still hold; N2 is observed too.
+Nothing is taken from the reference app's key files or presets.
 
 ### 14.1 Model
 
 A `Chord { command, alt, shift, key }` is one key press with modifiers. `command` means
-egui's `Modifiers::COMMAND`: Cmd on macOS, Ctrl elsewhere. A `Binding { chord, command,
-args, scope }` runs the registry command `command` with the JSON object `args`. `scope` is
+egui's `Modifiers::COMMAND`: Cmd on macOS, Ctrl elsewhere. A `Binding { chord, then, command,
+args, scope }` runs the registry command `command` with the JSON object `args`; `then` is
+`None` for a single key and the second key of a **two-key sequence** (§14.7), in which `chord`
+is the prefix key. `scope` is
 `global` (default) or `viewport` (only while the pointer was over the viewport; the Space
 rule of ANIM.md §2.7). `KeyMap { bindings }` is the resource, held by `EditorState.keymap`.
 Every shortcut runs a registry command through `commands::execute`; there is no key handling
@@ -663,52 +673,79 @@ scope = "global"         # optional, global | viewport
 
 Several `[[bind]]` entries may name the same command (redo has two chords). Loading rejects
 a version other than 1, an unparsable chord, an unknown scope and `args` that is not a table.
-Default bindings (all parity-pending, ours):
+A `chord` with a space is a two-key sequence (`"M T"`, §14.7). Default bindings. Rows marked
+**observed** are G2 item 1; the others are ours (parity-pending G2):
 
-| Chord | Command (args) |
-|---|---|
-| Mod+O / Mod+S / Mod+Shift+S | `file.open_dialog` / `file.save_dialog` / `file.save_as_dialog` |
-| Mod+Z | `edit.undo` |
-| Mod+Shift+Z, Mod+Y | `edit.redo` |
-| Delete | `object.delete` |
-| F2 | `object.begin_rename` |
-| Mod+A / Mod+Shift+A / Mod+I | `select.all` / `select.none` / `select.invert` |
-| Alt+1 / Alt+2 / Alt+3 / Alt+4 | `select.mode` model / points / edges / polys |
-| Mod+Shift+E | `mesh.make_editable` |
-| Mod+Shift+P | `ui.command_palette` (brief 159, §18) |
-| Mod+Shift+1 .. 5 | `view.shading` smooth, flat, wire, smooth_wire, flat_wire (moved off the digits by brief 223; parity-pending G2) |
-| Mod+Shift+6 .. 9 | `view.shading` quick, constant, hidden_line, bounding_box (brief 143; parity-pending G2) |
-| F4 | `view.layout` (toggle single / four; brief 143) |
-| Mod+M | `view.maximize` (toggle the active pane; brief 143) |
-| E / R / T | `view.gizmo_mode` move / rotate / scale (owner note N2; W is free) |
-| Q | `view.gizmo_space` (toggle) |
-| Shift+S | `snap.toggle` (brief 032) |
-| L | `edit.axis_mode` (toggle; brief 032) |
-| H / S | `view.frame_all` / `view.frame_selected` (brief 153) |
-| Mod+1 .. Mod+7 | `view.set_view` perspective, front, right, top, back, left, bottom (brief 153) |
-| K / Shift+K | `key.record` / `key.autokey` |
-| Space (viewport scope) | `timeline.toggle_play` |
-| Comma / Period | `timeline.step` delta -1 / +1 |
-| M | `marker.add` (brief 094) |
-| Alt+Comma / Alt+Period | `marker.jump` backward / forward (brief 094) |
-| Shift+Comma / Shift+Period | `key.jump` forward false / true |
+| Keys | Command (args) | Source |
+|---|---|---|
+| Mod+O / Mod+S / Mod+Shift+S | `file.open_dialog` / `file.save_dialog` / `file.save_as_dialog` | ours |
+| Mod+Z / Mod+Y | `edit.undo` / `edit.redo` | observed |
+| Backspace, Delete | `object.delete` | observed |
+| Mod+A / Mod+Shift+A | `select.all` / `select.none` | observed |
+| U I / U Y / U K | `select.invert` / `select.grow` / `select.shrink` | observed |
+| U W / U L / U B | `select.connected` / `select.loop` / `select.ring` | observed (Select menu) |
+| Alt+1 / Alt+2 / Alt+3 / Alt+4 | `select.mode` model / points / edges / polys | ours, an extra: the reference has no default mode keys (G2 item 1) |
+| C | `mesh.make_editable` | observed |
+| Alt+G | `object.group` | observed |
+| Mod+Shift+P | `ui.command_palette` (brief 159, §18) | ours |
+| Mod+Shift+1 .. 5 | `view.shading` smooth, flat, wire, smooth_wire, flat_wire | ours (G2 did not observe shading; owner note N1 moved it off the digits) |
+| Mod+Shift+6 .. 9 | `view.shading` quick, constant, hidden_line, bounding_box (brief 143) | ours |
+| F1 / F2 / F3 / F4 | `view.set_view` perspective / top / right / front (§6.1) | observed |
+| F5 | `view.layout` (toggle single / four; §6.2) | observed (opens four panes); the toggle back is ours |
+| Mod+M | `view.maximize` (toggle the active pane; brief 143) | ours |
+| H / S / O | `view.frame_all` / `view.frame_selected` / `view.frame_selected` | observed; S and O both frame objects |
+| Mod+1 .. Mod+7 | `view.set_view` perspective, front, right, top, back, left, bottom | ours, extras |
+| E / R / T | `view.gizmo_mode` move / rotate / scale (owner note N2; W is free) | observed |
+| Q | `view.gizmo_space` (toggle) | ours |
+| Shift+S / L | `snap.toggle` / `edit.axis_mode` (brief 032) | ours |
+| F8 / F7 | `timeline.play` / `timeline.stop` | observed |
+| F9 / Mod+F9 | `key.record` / `key.autokey` | observed |
+| G / F | `timeline.step` +1 / -1 (next / previous frame) | observed |
+| Mod+G / Mod+F | `key.jump` forward true / false (next / previous key) | observed |
+| Space (viewport scope) | `timeline.toggle_play` | the reference also plays with Space in the timeline (observed); the viewport scope is ours |
+| Shift+M | `marker.add` (brief 094; bare M is the mesh prefix, so it moved) | ours |
+| Alt+Comma / Alt+Period | `marker.jump` backward / forward (brief 094) | ours |
+| M T / M W / M S / M B | `mesh.extrude` / `mesh.extrude_inner` (Inset) / `mesh.bevel` / `mesh.bridge` | observed |
+| M Q / M P / M N / M H | `mesh.weld` / `mesh.stitch` / `mesh.dissolve` / `mesh.mirror` | observed (Mesh menu tables, G10) |
+| M M / M O | `mesh.connect_points` / `mesh.slide` | observed (G10) |
+| U S / U O | `mesh.subdivide` / `mesh.optimize` | observed |
+| U Z / U P / U D / U U / U R | `mesh.melt` / `mesh.split` / `mesh.disconnect` / `mesh.untriangulate` / `mesh.reverse_normals` | observed (G10) |
 
-These are the old hard-coded keys of §5 and ANIM.md §2.7 unchanged, plus the rows for
-`select.invert`, `select.mode` and `mesh.make_editable`, except the two changes of owner notes
-N1 and N2 (brief 223): the bare digits are the navigation hold keys (§6.1) and so cannot
-carry the shading commands, which moved to `Mod+Shift+1 .. 9` (**our choice,
-parity-pending G2**: the new G2 item asks what the reference uses; `Mod+digit` is the
-view-switch family and `Alt+digit` the mode family, so `Mod+Shift+digit` is the free one);
-the gizmo keys moved from W / E / R to E / R / T. The default map has no bare digit binding.
+**Replaced by brief 233** (the earlier own-design choices): `Mod+Shift+Z` redo (now Undo View, no
+command yet), `F2` rename (rename is the object manager's double-click or menu entry, §13.4;
+`object.begin_rename` has no default key, **parity-pending G1**), `Mod+I` invert (now `U I`),
+`Mod+Shift+E` make editable (now `C`), `F4` layout toggle (now `F5`; `F4` is the Front view),
+`K` record and `Shift+K` autokey (now `F9` and `Mod+F9`; `K` is free for the Line Cut family),
+`,` / `.` and `Shift+,` / `Shift+.` (now `F` / `G` and `Mod+F` / `Mod+G`), `M` marker (now
+`Shift+M`).
+
+**No command yet** (observed in G2 item 1, nothing bound until a command exists; the
+default-map test pins each as unbound): Live Selection `9`, Rectangle Selection `0` (tool
+selection has no command), Undo View / Redo View `Mod+Shift+Z` / `Mod+Shift+Y`, Render View
+`Mod+R`, Render to Picture Viewer `Shift+R`, Play backwards `F6` (`timeline.play` has no
+direction), Record Animated `Alt+F9`, Ungroup `Shift+G`, and the pointer tools Line Cut `K K`,
+Loop/Path Cut `K L`, Plane Cut `K J`, Polygon Pen `M E`, Close Polygon Hole `M D` (their commands
+need geometry arguments). Also unbound for lack of a command: `M A` Create Point, `M X`, `M Y`,
+`M R`, `M F`, `M G`, `M C`, `M I`, `M U`, `M V`, `M Z`, `U C`, `U H`, `U T`, `U G`, `U E`, `U A`,
+`U J`, `U Q`, `U F`, `U M`, `U N`, `U V`. The Spline menu repeats several sequences (`M A`, `U S`,
+`U O`, `M Q`, `M H`, `U D`, `U P`, `M I`, `M U`, `K K`) for spline objects; the key map has no
+selection-dependent dispatch, so the Mesh commands are bound (**parity-pending G2**). "Toggle
+Active View" (middle mouse or Page Up) is the viewport's own gesture, not a binding. The reference
+also shows the frame commands with an `Alt+` second chord (`Alt+H`, `Alt+S`, `Alt+O`); ours has
+one chord each.
+
+The default map has no bare digit binding, and no single key on a prefix key (§14.7).
 
 ### 14.3 User overrides (settings file)
 
 The shared settings file of RPC.md §2 (`forge_platform::settings_path()`: `$FORGE_SETTINGS`, else the per-OS config
 directory, PLATFORM.md §1-2) holds
-an optional object `keymap`, keyed by canonical or parseable chord text:
+an optional object `keymap`, keyed by canonical or parseable chord text, or by a two-key
+sequence (the two chords separated by a space, §14.7):
 
 ```json
 {"keymap": {"Mod+Shift+K": {"command": "key.autokey", "args": {}, "scope": "global"},
+            "M X": {"command": "mesh.extrude"},
             "Mod+Z": null}}
 ```
 
@@ -736,9 +773,11 @@ new table.
 
 ### 14.4 Conflicts
 
-Two bindings conflict when they have the same chord and their scopes overlap (`global`
-overlaps everything; `viewport` overlaps `viewport` and `global`). `KeyMap::conflicts()`
-lists them; the default map has none (tested). Dispatch with a conflict is deterministic:
+Two bindings conflict when they have the same keys and their scopes overlap (`global`
+overlaps everything; `viewport` overlaps `viewport` and `global`), or when one is a single key
+and the other a sequence that starts with it (§14.7). `KeyMap::conflicts()`
+lists them (`Conflict { chord, then, bindings }`: `then` is `None` for the single key and the
+sequences it starts); the default map has none (tested). Dispatch with a conflict is deterministic:
 the first matching binding in map order runs, and exactly one command runs per key press.
 Dispatch is matched exactly on `Mod`, `Alt`, `Shift` (so Mod+A and Mod+Shift+A need no
 ordering) and the matching key event is consumed. Nothing runs while a text field has the
@@ -750,13 +789,14 @@ never does that silently: it shows the conflicting command and asks to Replace o
 ### 14.5 Key map editor (Window > Key map...)
 
 A floating window (state in `Editor`, not in the layout). Top: a search field (matches
-command id, label, or the chord text, case-insensitive), a "Reset all" button, a count of
+command id, label, or the keys' text, case-insensitive; `m t` finds the sequence M T), a "Reset all" button, a count of
 conflicts and unknown commands, and the warnings of the last load. Below, a scrolling list,
 one row per binding plus one row for each registry command that has no binding: command
 label, id (weak), args summary, the chord as a button. Clicking the chord button starts
 capture ("Press keys..."): the next key press with its modifiers becomes the chord; Escape
 cancels. If the chord is taken by another binding the window shows "<chord> is bound to
-<label>" with Replace and Cancel; Replace rebinds and removes the other. Each row has
+<label>" with Replace and Cancel; Replace rebinds and removes the other (for a single key
+on a prefix key, every sequence it starts; §14.7). Each row has
 Clear (unbind) and, when it differs from the default, Reset. Every change is stored to the
 settings file at once (when the editor has one) and takes effect on the next key press.
 
@@ -769,6 +809,68 @@ runs against the registry's argument schema; conflict rules for scopes; override
 file keeps unrelated keys. egui_kittest (no GPU): pressing each kind of default shortcut
 runs its command and Mod+Z undoes it; a rebind in the editor takes effect; a conflicting
 rebind asks first; Reset and Clear; a changed map is written to the settings file.
+
+Brief 233 adds: the default table above (every observed binding, the "no command yet" keys
+pinned unbound), each replaced default checked, F2 is no longer rename, and the sequence rules
+of §14.7 (arm, run, time-out, Escape, no conflict with single keys, overrides, the editor's
+capture).
+
+### 14.7 Two-key sequences (brief 233; observed, G2 item 1: "M then a letter means two keypresses in sequence")
+
+The reference binds many commands to a prefix key followed by a second key (`M T` Extrude, `U S`
+Subdivide, `K L` Loop/Path Cut). The rest of this section (timing, cancel, conflicts, editor,
+file syntax) is ours: the session did not measure them (**parity-pending G2**).
+
+- **Model.** `Binding.then: Option<Chord>`; the keys of a binding are `chord` or `chord then`.
+  The text form is the chords joined by white space, `M T`, `Mod+K Mod+S`; spaces next to a `+`
+  belong to the chord (`Mod + A`). More than two keys, an empty text or an unknown key is an
+  error (`parse_keys`, `keys_text` print the canonical form). Used in `default.toml`
+  (`chord = "M T"`), in the settings file's `keymap` keys and in the editor. Bare `1`, `2`, `3`
+  (§6.1) are refused as the first or the second key.
+- **Prefix key.** A key press that is the first key of at least one sequence binding active in
+  the current scope **arms** the prefix: the press is consumed and nothing runs. State
+  (`KeyMapState.armed: Option<Armed { chord, at }>`) is editor state, not document state, never
+  saved. While armed, the status bar shows the prefix in the platform spelling and an ellipsis
+  (`M ...`).
+- **Second key.** The next key press, with its modifiers matched exactly like a single key,
+  runs the binding `chord then` (scope as for singles; one command per press) and disarms.
+  Any other key disarms the prefix and is then handled as an ordinary fresh press: it may run
+  a single-key binding or arm another prefix (`M` then `U` arms `U`). Modifier keys alone are not
+  key presses and change nothing.
+- **Time-out.** The prefix lapses 1.5 s (`SEQUENCE_TIMEOUT`) after it was pressed, measured on
+  the input clock; a key after that is a fresh press (`M`, wait, `T` is Scale). The window
+  repaints once so the status text clears.
+- **Escape** while armed disarms and is consumed (nothing runs; a later Escape is ordinary). A
+  text field taking the keyboard, an open palette or an active key capture also drop the prefix.
+- **Single keys on a prefix.** A key that starts a sequence cannot also run a single binding: a
+  single binding and a sequence starting with its chord conflict (§14.4). If such a map is
+  loaded anyway the prefix wins (the single key never runs), which keeps dispatch
+  deterministic. The default map has none: bare `M` marker became `Shift+M`, bare `K` record
+  became `F9`. `M T` and `M W` do not conflict; `M T` and `U T` do not conflict; two bindings
+  on the same two keys do.
+- **Binding over a collision** (`KeyMap::bind`, the editor's Replace, a settings file entry):
+  the new binding removes every binding it collides with. A single key on `M` therefore removes
+  all `M` sequences, a sequence on `M T` removes a single `M`, and the same two keys replace
+  the old sequence. A `null` entry unbinds exactly its own keys (`"M": null` leaves `M T`).
+  `KeyMap::overrides` writes canonical sequence text (`"M T"`) and stays the minimal inverse of
+  the merge.
+- **Key map editor (§14.5).** A row shows a sequence as its chords in the platform spelling,
+  separated by a space; the search matches its canonical or shown text. Capture takes the
+  first key press and then waits up to 1.5 s: a second press makes a two-key sequence at once;
+  with none the single key is bound when the time is up (the window repaints for it; the
+  button shows `M ...` meanwhile); Escape cancels at either step; a second press after the time
+  limit is dropped and the first key stands alone. Taken keys ask Replace / Cancel naming the
+  bindings that would go (§14.4). A bare navigation digit ends the capture with the message of §6.1.
+- **Menus and the palette** show the keys of the first binding of a command as the same text
+  (`Binding::display`; the palette's `Entry.keys` is the canonical text).
+
+Tests (crates/ui/tests/keymap.rs): text parse and print (spaces, aliases, three keys refused);
+arm then run; a prefix alone runs nothing; modifiers must match; time-out at 1.5 s; Escape
+cancels and is consumed; a foreign key disarms and acts fresh; prefix and single key conflict
+and the dispatch rule; bind-over replaces; settings-file syntax and the round trip through
+`overrides()`; navigation digits refused; kittest: the sequence runs in the window, the
+prefix alone does nothing, the status bar shows it, Escape drops it; the editor's capture
+(sequence, time-out single key, late second key, Escape, Replace over a prefix, refused digit).
 
 ## 15. Autosave and recovery (`autosave`, `app`; brief 179)
 
@@ -1768,7 +1870,7 @@ Steps and what is asserted after each:
 4. Bevel: Alt+3 (edge mode), select the outer top edge of the seat, Mesh > Bevel, offset 8,
    Apply: the point and polygon counts grow.
 5. Loop cut: Mesh > Loop/Path Cut, hover an edge, click: counts grow, one undo step.
-6. Ctrl+Z removes the cut, Ctrl+Shift+Z brings it back.
+6. Ctrl+Z removes the cut, Ctrl+Y brings it back.
 7. Symmetry (mirror plane ZY, default) is created and the polygon object moved under it;
    Subdivision is created and Symmetry moved under it (object manager hierarchy: Subdivision >
    Symmetry > polygon object). The evaluated Symmetry mesh is symmetric about x = 0 (bounds sum

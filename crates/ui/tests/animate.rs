@@ -881,24 +881,26 @@ fn shortcuts_record_autokey_and_frame_steps() {
     st.selection.click(id);
     let mut h = harness_with(st);
     h.run();
-    h.key_press(egui::Key::K);
+    // observed, G2 item 1: F9 records, G / F step a frame, Mod+G / Mod+F jump to a key,
+    // Mod+F9 toggles Autokey
+    h.key_press(egui::Key::F9);
     h.run();
     assert_eq!(tracks(&h.state().state, id).len(), 9);
-    h.key_press(egui::Key::Period);
+    h.key_press(egui::Key::G);
     h.run();
     assert_eq!(h.state().state.timeline.current, 1);
-    h.key_press(egui::Key::Comma);
+    h.key_press(egui::Key::F);
     h.run();
     assert_eq!(h.state().state.timeline.current, 0);
-    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Period);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::G);
     h.run();
     assert_eq!(h.state().state.timeline.current, 0, "no later key");
-    h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::K);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::F9);
     h.run();
     assert!(h.state().state.autokey);
     assert_eq!(
         h.state().state.doc.history().undo_labels().last(),
         Some(&"Record"),
-        "Shift+K must not record"
+        "Mod+F9 must not record"
     );
 }

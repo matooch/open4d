@@ -325,8 +325,9 @@ loosened to make a test pass; regenerate and review the images instead.
 
 ## 9. Panes and the 4-view layout (`panes`; brief 143)
 
-Own design, parity-pending G8 (G8 §2 asks which views sit in which corners). Pure maths; the editor
-turns it into egui (UI.md §6.2).
+The quad order is observed (GUI-SESSIONS.md, G2 item 1: four-view positions are upper left, upper
+right, lower left, lower right for Perspective, Top, Right, Front; brief 233). The rest of the
+arrangement is our own design, parity-pending G8. Pure maths; the editor turns it into egui (UI.md §6.2).
 
 - `Pane` = `Perspective | Top | Front | Right`; text ids `perspective`, `top`, `front`, `right`.
 - `Layout` = `Single | Four`.

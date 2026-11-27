@@ -121,25 +121,32 @@ fn default_bindings_table() {
     let got: Vec<(String, String, String)> = KeyMap::defaults()
         .bindings()
         .iter()
-        .map(|b| (b.chord.to_string(), b.command.clone(), b.args.to_string()))
+        .map(|b| (b.keys_text(), b.command.clone(), b.args.to_string()))
         .collect();
     let want = [
         ("Mod+O", "file.open_dialog", "{}"),
         ("Mod+S", "file.save_dialog", "{}"),
         ("Mod+Shift+S", "file.save_as_dialog", "{}"),
+        // observed, G2 item 1: undo / redo, delete, selection
         ("Mod+Z", "edit.undo", "{}"),
-        ("Mod+Shift+Z", "edit.redo", "{}"),
         ("Mod+Y", "edit.redo", "{}"),
         ("Delete", "object.delete", "{}"),
-        ("F2", "object.begin_rename", "{}"),
+        ("Backspace", "object.delete", "{}"),
         ("Mod+A", "select.all", "{}"),
         ("Mod+Shift+A", "select.none", "{}"),
-        ("Mod+I", "select.invert", "{}"),
+        ("U I", "select.invert", "{}"),
+        ("U Y", "select.grow", "{}"),
+        ("U K", "select.shrink", "{}"),
+        ("U W", "select.connected", "{}"),
+        ("U L", "select.loop", "{}"),
+        ("U B", "select.ring", "{}"),
+        // ours: the reference has no mode keys
         ("Alt+1", "select.mode", r#"{"mode":"model"}"#),
         ("Alt+2", "select.mode", r#"{"mode":"points"}"#),
         ("Alt+3", "select.mode", r#"{"mode":"edges"}"#),
         ("Alt+4", "select.mode", r#"{"mode":"polys"}"#),
-        ("Mod+Shift+E", "mesh.make_editable", "{}"),
+        ("C", "mesh.make_editable", "{}"),
+        ("Alt+G", "object.group", "{}"),
         ("Mod+Shift+P", "ui.command_palette", "{}"),
         ("Mod+Shift+1", "view.shading", r#"{"mode":"smooth"}"#),
         ("Mod+Shift+2", "view.shading", r#"{"mode":"flat"}"#),
@@ -150,10 +157,17 @@ fn default_bindings_table() {
         ("Mod+Shift+7", "view.shading", r#"{"mode":"constant"}"#),
         ("Mod+Shift+8", "view.shading", r#"{"mode":"hidden_line"}"#),
         ("Mod+Shift+9", "view.shading", r#"{"mode":"bounding_box"}"#),
-        ("F4", "view.layout", "{}"),
+        // observed: F1 Perspective, F2 Top, F3 Right, F4 Front, F5 all views
+        ("F1", "view.set_view", r#"{"view":"perspective"}"#),
+        ("F2", "view.set_view", r#"{"view":"top"}"#),
+        ("F3", "view.set_view", r#"{"view":"right"}"#),
+        ("F4", "view.set_view", r#"{"view":"front"}"#),
+        ("F5", "view.layout", "{}"),
         ("Mod+M", "view.maximize", "{}"),
+        // observed: H geometry, S elements, O objects
         ("H", "view.frame_all", "{}"),
         ("S", "view.frame_selected", "{}"),
+        ("O", "view.frame_selected", "{}"),
         ("Mod+1", "view.set_view", r#"{"view":"perspective"}"#),
         ("Mod+2", "view.set_view", r#"{"view":"front"}"#),
         ("Mod+3", "view.set_view", r#"{"view":"right"}"#),
@@ -167,16 +181,37 @@ fn default_bindings_table() {
         ("Q", "view.gizmo_space", "{}"),
         ("Shift+S", "snap.toggle", "{}"),
         ("L", "edit.axis_mode", "{}"),
-        ("K", "key.record", "{}"),
-        ("Shift+K", "key.autokey", "{}"),
+        // observed: F8 / F7 play and stop, F9 record, Mod+F9 autokey, G / F frames, Mod+G / Mod+F keys
+        ("F8", "timeline.play", "{}"),
+        ("F7", "timeline.stop", "{}"),
+        ("F9", "key.record", "{}"),
+        ("Mod+F9", "key.autokey", "{}"),
+        ("G", "timeline.step", r#"{"delta":1}"#),
+        ("F", "timeline.step", r#"{"delta":-1}"#),
+        ("Mod+G", "key.jump", r#"{"forward":true}"#),
+        ("Mod+F", "key.jump", r#"{"forward":false}"#),
         ("Space", "timeline.toggle_play", "{}"),
-        ("Comma", "timeline.step", r#"{"delta":-1}"#),
-        ("Period", "timeline.step", r#"{"delta":1}"#),
-        ("Shift+Comma", "key.jump", r#"{"forward":false}"#),
-        ("Shift+Period", "key.jump", r#"{"forward":true}"#),
-        ("M", "marker.add", "{}"),
+        ("Shift+M", "marker.add", "{}"),
         ("Alt+Comma", "marker.jump", r#"{"forward":false}"#),
         ("Alt+Period", "marker.jump", r#"{"forward":true}"#),
+        // observed two-key sequences
+        ("M T", "mesh.extrude", "{}"),
+        ("M W", "mesh.extrude_inner", "{}"),
+        ("M S", "mesh.bevel", "{}"),
+        ("M B", "mesh.bridge", "{}"),
+        ("M Q", "mesh.weld", "{}"),
+        ("M P", "mesh.stitch", "{}"),
+        ("M N", "mesh.dissolve", "{}"),
+        ("M H", "mesh.mirror", "{}"),
+        ("M M", "mesh.connect_points", "{}"),
+        ("M O", "mesh.slide", "{}"),
+        ("U S", "mesh.subdivide", "{}"),
+        ("U O", "mesh.optimize", "{}"),
+        ("U Z", "mesh.melt", "{}"),
+        ("U P", "mesh.split", "{}"),
+        ("U D", "mesh.disconnect", "{}"),
+        ("U U", "mesh.untriangulate", "{}"),
+        ("U R", "mesh.reverse_normals", "{}"),
     ];
     let want: Vec<(String, String, String)> = want
         .iter()
@@ -295,8 +330,10 @@ fn overrides_replace_unbind_and_add() {
     );
     // untouched defaults stay
     assert_eq!(
-        map.lookup(&Modifiers::NONE, Key::K, false).unwrap().command,
-        "key.record"
+        map.lookup(&Modifiers::NONE, Key::F7, false)
+            .unwrap()
+            .command,
+        "timeline.stop"
     );
     // Mod+Y (redo) was not overridden
     assert_eq!(
@@ -425,7 +462,7 @@ fn reset_binding_restores_a_moved_default() {
         keys.map.chord_of("edit.undo", &json!({})),
         Some(chord("Mod+Z"))
     );
-    assert_eq!(keys.map.for_command("edit.redo").count(), 2);
+    assert_eq!(keys.map.for_command("edit.redo").count(), 1);
     assert!(keys.map.for_command("edit.undo").count() == 1);
 }
 
@@ -444,7 +481,7 @@ fn editor_rows_list_commands_search_and_flag_changes() {
     let undo = rows(&keys, &registry, "  EDIT.undo ", &shown);
     assert_eq!(undo.len(), 1);
     assert_eq!(undo[0].chord, Some(chord("Mod+Z")));
-    assert_eq!(rows(&keys, &registry, "mod+shift+z", &shown).len(), 1);
+    assert_eq!(rows(&keys, &registry, "mod+y", &shown).len(), 1);
     assert_eq!(rows(&keys, &registry, "mode=wire", &shown).len(), 1);
     assert!(rows(&keys, &registry, "no such thing", &shown).is_empty());
     // a cleared default shows as an unbound, changed row
@@ -486,6 +523,14 @@ fn press(h: &mut Harness<'_, Editor>, mods: Modifiers, key: Key) {
     h.run();
 }
 
+/// Lets the frame clock run past the sequence time-out (the editor's capture waits that
+/// long for a second key, UI.md §14.7).
+fn settle(h: &mut Harness<'_, Editor>) {
+    for _ in 0..10 {
+        h.step();
+    }
+}
+
 fn labels(h: &Harness<'_, Editor>) -> Vec<String> {
     h.state()
         .state
@@ -513,13 +558,19 @@ fn default_shortcuts_run_their_commands_and_undo_undoes() {
     press(&mut h, Modifiers::COMMAND, Key::Z);
     assert!(h.state().state.doc.scene().contains(a));
     assert_eq!(labels(&h).len(), steps);
-    // Ctrl+Shift+Z and Ctrl+Y redo
+    // Ctrl+Y redoes; Ctrl+Shift+Z is Undo View (observed, G2 item 1), which has no command
+    // yet, so it does nothing and in particular does not redo
     press(&mut h, Modifiers::COMMAND | Modifiers::SHIFT, Key::Z);
-    assert!(!h.state().state.doc.scene().contains(a));
-    press(&mut h, Modifiers::COMMAND, Key::Z);
+    assert!(h.state().state.doc.scene().contains(a));
     press(&mut h, Modifiers::COMMAND, Key::Y);
     assert!(!h.state().state.doc.scene().contains(a));
     press(&mut h, Modifiers::COMMAND, Key::Z);
+    // Backspace deletes like Delete
+    h.state_mut().state.selection.click(a);
+    press(&mut h, Modifiers::NONE, Key::Backspace);
+    assert!(!h.state().state.doc.scene().contains(a));
+    press(&mut h, Modifiers::COMMAND, Key::Z);
+    assert!(h.state().state.doc.scene().contains(a));
 
     // select all / none / invert
     press(&mut h, Modifiers::COMMAND, Key::A);
@@ -527,7 +578,13 @@ fn default_shortcuts_run_their_commands_and_undo_undoes() {
     press(&mut h, Modifiers::COMMAND | Modifiers::SHIFT, Key::A);
     assert!(h.state().state.selection.nodes.is_empty());
     h.state_mut().state.selection.click(b);
-    press(&mut h, Modifiers::COMMAND, Key::I);
+    // invert is the sequence U, I (observed)
+    press(&mut h, Modifiers::NONE, Key::U);
+    assert!(
+        !h.state().state.selection.nodes.contains(&a),
+        "U alone does nothing"
+    );
+    press(&mut h, Modifiers::NONE, Key::I);
     assert!(h.state().state.selection.nodes.contains(&a));
     assert!(!h.state().state.selection.nodes.contains(&b));
 
@@ -589,10 +646,15 @@ fn default_shortcuts_run_their_commands_and_undo_undoes() {
     press(&mut h, Modifiers::ALT, Key::Num1);
     assert_eq!(h.state().state.edit_mode(), forge_command::ModeArg::Model);
 
-    // F2 starts the rename of the active object
+    // observed, G2 item 1: F2 is the Top view now, not rename (rename is the object
+    // manager's double-click and menu entry)
     h.state_mut().state.selection.click(a);
     press(&mut h, Modifiers::NONE, Key::F2);
-    assert_eq!(h.state().objects().renaming.as_ref().map(|r| r.0), Some(a));
+    assert!(h.state().objects().renaming.is_none());
+    assert!(matches!(
+        h.state().state.camera.projection,
+        forge_viewport::camera::Projection::Orthographic { .. }
+    ));
 }
 
 #[test]
@@ -600,7 +662,7 @@ fn a_shortcut_that_fails_reports_in_the_status_bar() {
     let mut e = Editor::new(common::state());
     e.state.selection.clear();
     let mut h = harness(e);
-    press(&mut h, Modifiers::NONE, Key::K); // key.record with nothing selected
+    press(&mut h, Modifiers::NONE, Key::F9); // key.record with nothing selected
     assert!(!h.state().state.status.is_empty());
 }
 
@@ -671,6 +733,7 @@ fn rebinding_in_the_editor_takes_effect_and_is_stored() {
     assert!(h.state().keymap_editor().is_capturing());
     h.get_by_label("Press keys\u{2026}");
     press(&mut h, Modifiers::COMMAND, Key::U);
+    settle(&mut h); // a single key is bound when no second key follows
     assert!(!h.state().keymap_editor().is_capturing());
     h.get_by_label("Ctrl+U");
     let keys = &h.state().state.keys;
@@ -703,10 +766,11 @@ fn a_taken_chord_asks_first_and_escape_cancels_capture() {
     let (e, path) = editor_with_file("conflict");
     let mut h = harness(e);
     open_editor_window(&mut h, "edit.redo");
-    // redo has two rows (Ctrl+Shift+Z and Ctrl+Y); rebind the Ctrl+Y one to Ctrl+Z (undo's)
+    // rebind redo's Ctrl+Y to Ctrl+Z (undo's)
     h.get_by_label("Ctrl+Y").click();
     h.run();
     press(&mut h, Modifiers::COMMAND, Key::Z);
+    settle(&mut h);
     assert!(h.state().keymap_editor().has_pending());
     h.get_by_label_contains("is bound to edit.undo");
     // nothing changed yet
@@ -720,12 +784,13 @@ fn a_taken_chord_asks_first_and_escape_cancels_capture() {
     h.get_by_label("Ctrl+Y").click();
     h.run();
     press(&mut h, Modifiers::COMMAND, Key::Z);
+    settle(&mut h);
     h.get_by_label("Replace").click();
     h.run();
     let keys = &h.state().state.keys;
     assert!(keys.map.conflicts().is_empty());
     assert_eq!(keys.map.chord_of("edit.undo", &json!({})), None);
-    assert_eq!(keys.map.for_command("edit.redo").count(), 2);
+    assert_eq!(keys.map.for_command("edit.redo").count(), 1);
     assert_eq!(
         keys.map
             .lookup(&Modifiers::COMMAND, Key::Z, false)
@@ -736,7 +801,7 @@ fn a_taken_chord_asks_first_and_escape_cancels_capture() {
 
     // Escape while capturing changes nothing
     let before = h.state().state.keys.map.clone();
-    h.get_by_label("Ctrl+Shift+Z").click();
+    h.get_by_label("Ctrl+Z").click();
     h.run();
     press(&mut h, Modifiers::NONE, Key::Escape);
     assert!(!h.state().keymap_editor().is_capturing());
@@ -760,7 +825,7 @@ fn clear_reset_and_reset_all() {
             .chord_of("select.invert", &json!({}))
             .is_none()
     );
-    assert_eq!(read_settings(&path)["keymap"]["Mod+I"], Value::Null);
+    assert_eq!(read_settings(&path)["keymap"]["U I"], Value::Null);
     h.get_by_label("(none)");
     h.get_by_label("Reset").click();
     h.run();
@@ -901,4 +966,517 @@ fn the_editor_refuses_to_bind_a_navigation_digit() {
     );
     assert!(read_settings(&path).get("keymap").is_none());
     std::fs::remove_dir_all(path.parent().unwrap()).ok();
+}
+
+// ---- observed defaults (brief 233, G2 item 1) ---------------------------------------
+
+#[test]
+fn observed_keys_run_their_commands() {
+    use forge_viewport::panes::Layout;
+    let mut e = Editor::new(common::state());
+    let cube = common::create(&mut e.state, "forge.cube");
+    let a = common::create(&mut e.state, "forge.null");
+    e.state.selection.click(cube);
+    let mut h = harness(e);
+
+    // C makes the selected generator editable (a polygon object now)
+    let cubes = |h: &Harness<'_, Editor>| {
+        let scene = h.state().state.doc.scene();
+        scene
+            .roots()
+            .iter()
+            .filter(|r| scene.node(**r).is_some_and(|n| n.type_id == "forge.cube"))
+            .count()
+    };
+    assert_eq!(cubes(&h), 1);
+    press(&mut h, Modifiers::NONE, Key::C);
+    assert_eq!(cubes(&h), 0, "the generator was made editable");
+    let _ = cube;
+
+    // F5 opens the four views, F5 again closes them
+    press(&mut h, Modifiers::NONE, Key::F5);
+    assert_eq!(h.state().state.views.layout, Layout::Four);
+    press(&mut h, Modifiers::NONE, Key::F5);
+    assert_eq!(h.state().state.views.layout, Layout::Single);
+    // F1 Perspective, F3 Right, F4 Front: orthographic except the first
+    press(&mut h, Modifiers::NONE, Key::F3);
+    assert!(matches!(
+        h.state().state.camera.projection,
+        forge_viewport::camera::Projection::Orthographic { .. }
+    ));
+    press(&mut h, Modifiers::NONE, Key::F1);
+    assert!(matches!(
+        h.state().state.camera.projection,
+        forge_viewport::camera::Projection::Perspective { .. }
+    ));
+
+    // F8 plays, F7 stops
+    // (playing repaints every frame, so step instead of run)
+    h.key_press(Key::F8);
+    h.step();
+    h.step();
+    assert!(h.state().state.timeline.playing);
+    h.key_press(Key::F7);
+    h.step();
+    h.step();
+    assert!(!h.state().state.timeline.playing);
+
+    // Alt+G groups the selection
+    h.state_mut().state.selection.click(a);
+    let roots = h.state().state.doc.scene().roots().len();
+    press(&mut h, Modifiers::ALT, Key::G);
+    assert_eq!(h.state().state.doc.scene().roots().len(), roots);
+    let grouped = h.state().state.doc.scene().node(a).unwrap().parent;
+    assert!(grouped.is_some(), "the null is inside a new group");
+}
+
+#[test]
+fn bindings_with_no_command_yet_stay_unbound() {
+    // observed in G2 but without an argument-free command: nothing may sit on them
+    let map = KeyMap::defaults();
+    for (text, what) in [
+        ("9", "Live Selection"),
+        ("0", "Rectangle Selection"),
+        ("Mod+R", "Render View"),
+        ("Shift+R", "Render to Picture Viewer"),
+        ("F6", "Play backwards"),
+        ("Alt+F9", "Record Animated"),
+        ("Shift+G", "Ungroup"),
+        ("Mod+Shift+Y", "Redo View"),
+        ("Mod+Shift+Z", "Undo View"),
+        ("K K", "Line Cut"),
+        ("K L", "Loop/Path Cut"),
+        ("K J", "Plane Cut"),
+    ] {
+        let (c, t) = forge_ui::keymap::parse_keys(text).unwrap();
+        assert!(
+            map.conflicts_with_keys(c, t, Scope::Global).is_empty(),
+            "{what} ({text}) must stay unbound until its command exists"
+        );
+    }
+}
+
+// ---- two-key sequences (UI.md §14.7) --------------------------------------------------
+
+#[test]
+fn key_sequence_text_parses_prints_and_round_trips() {
+    use forge_ui::keymap::{keys_text, parse_keys};
+    assert_eq!(parse_keys("M T"), Ok((chord("M"), Some(chord("T")))));
+    assert_eq!(parse_keys("  m   t "), Ok((chord("M"), Some(chord("T")))));
+    assert_eq!(
+        parse_keys("Mod + K  Mod + S"),
+        Ok((chord("Mod+K"), Some(chord("Mod+S"))))
+    );
+    assert_eq!(parse_keys("Mod+Shift+Z"), Ok((chord("Mod+Shift+Z"), None)));
+    for bad in ["", "M T U", "M Nope", "M Hyper+T", "M +"] {
+        assert!(parse_keys(bad).is_err(), "'{bad}' parsed");
+    }
+    assert_eq!(keys_text(chord("M"), Some(chord("T"))), "M T");
+    assert_eq!(keys_text(chord("ctrl+z"), None), "Mod+Z");
+    let b = Binding::sequence(chord("U"), chord("Mod+S"), "mesh.subdivide", json!({}));
+    assert_eq!(b.keys_text(), "U Mod+S");
+    // a TOML default may be a sequence; three keys are refused
+    let map =
+        KeyMap::from_toml("version = 1\n[[bind]]\nchord = \"M T\"\ncommand = \"a.b\"\n").unwrap();
+    assert_eq!(map.bindings()[0].then, Some(chord("T")));
+    assert!(
+        KeyMap::from_toml("version = 1\n[[bind]]\nchord = \"M T U\"\ncommand = \"a.b\"\n").is_err()
+    );
+}
+
+fn step<'a>(
+    map: &'a KeyMap,
+    armed: &mut Option<forge_ui::keymap::Armed>,
+    key: &str,
+    hot: bool,
+    now: f64,
+) -> forge_ui::keymap::Step<'a> {
+    map.step(chord(key), hot, armed, now)
+}
+
+fn runs(s: forge_ui::keymap::Step<'_>) -> Option<String> {
+    match s {
+        forge_ui::keymap::Step::Run(b) => Some(b.command.clone()),
+        _ => None,
+    }
+}
+
+#[test]
+fn a_prefix_arms_then_the_second_key_runs() {
+    use forge_ui::keymap::Step;
+    let map = KeyMap::defaults();
+    let mut armed = None;
+    // M alone runs nothing and arms
+    assert_eq!(step(&map, &mut armed, "M", false, 0.0), Step::Armed);
+    assert_eq!(armed.map(|a| a.chord), Some(chord("M")));
+    // the second key runs the command and disarms
+    let s = step(&map, &mut armed, "T", false, 0.4);
+    assert_eq!(runs(s).as_deref(), Some("mesh.extrude"));
+    assert!(armed.is_none());
+    // the same second key without the prefix is an ordinary press (T = scale)
+    let s = step(&map, &mut armed, "T", false, 1.0);
+    assert_eq!(runs(s).as_deref(), Some("view.gizmo_mode"));
+    // the other prefixes and a repeated key
+    step(&map, &mut armed, "U", false, 2.0);
+    assert_eq!(
+        runs(step(&map, &mut armed, "S", false, 2.1)).as_deref(),
+        Some("mesh.subdivide")
+    );
+    step(&map, &mut armed, "M", false, 3.0);
+    assert_eq!(
+        runs(step(&map, &mut armed, "M", false, 3.1)).as_deref(),
+        Some("mesh.connect_points")
+    );
+    // modifiers count: Mod+T after M is not M T
+    step(&map, &mut armed, "M", false, 4.0);
+    assert!(runs(step(&map, &mut armed, "Mod+T", false, 4.1)).is_none());
+    assert!(armed.is_none());
+}
+
+#[test]
+fn a_prefix_times_out_and_escape_cancels() {
+    use forge_ui::keymap::{SEQUENCE_TIMEOUT, Step};
+    let map = KeyMap::defaults();
+    let mut armed = None;
+    // within the timeout: runs; just after it: the second key is an ordinary press
+    step(&map, &mut armed, "M", false, 10.0);
+    assert_eq!(
+        runs(step(
+            &map,
+            &mut armed,
+            "T",
+            false,
+            10.0 + SEQUENCE_TIMEOUT - 0.01
+        ))
+        .as_deref(),
+        Some("mesh.extrude")
+    );
+    step(&map, &mut armed, "M", false, 20.0);
+    assert_eq!(
+        runs(step(
+            &map,
+            &mut armed,
+            "T",
+            false,
+            20.0 + SEQUENCE_TIMEOUT + 0.01
+        ))
+        .as_deref(),
+        Some("view.gizmo_mode"),
+        "after the timeout T is the scale key"
+    );
+    // a pending prefix expires for the status bar too
+    let mut state = KeyMapState::default();
+    state.armed = Some(forge_ui::keymap::Armed {
+        chord: chord("M"),
+        at: 5.0,
+    });
+    assert_eq!(state.pending_prefix(5.5), Some(chord("M")));
+    assert_eq!(state.pending_prefix(5.0 + SEQUENCE_TIMEOUT + 0.1), None);
+    // Escape cancels and is consumed; the next key is ordinary again
+    step(&map, &mut armed, "M", false, 30.0);
+    assert_eq!(
+        step(&map, &mut armed, "Escape", false, 30.1),
+        Step::Cancelled
+    );
+    assert!(armed.is_none());
+    assert_eq!(step(&map, &mut armed, "Escape", false, 30.2), Step::Pass);
+    // a key that continues nothing disarms and is handled as a fresh press
+    step(&map, &mut armed, "M", false, 40.0);
+    assert_eq!(step(&map, &mut armed, "X", false, 40.1), Step::Pass);
+    assert!(armed.is_none());
+    // ... which may itself be a prefix
+    step(&map, &mut armed, "M", false, 50.0);
+    assert_eq!(step(&map, &mut armed, "U", false, 50.1), Step::Armed);
+    assert_eq!(armed.map(|a| a.chord), Some(chord("U")));
+}
+
+#[test]
+fn a_prefix_and_a_single_key_on_the_same_chord_conflict() {
+    let sequence = |a: &str, b: &str, c: &str| Binding::sequence(chord(a), chord(b), c, json!({}));
+    // the defaults have none: M and U only start sequences
+    assert!(KeyMap::defaults().conflicts().is_empty());
+    let map = KeyMap::new(vec![
+        bind("M", "marker.add"),
+        sequence("M", "T", "mesh.extrude"),
+        sequence("M", "W", "mesh.extrude_inner"),
+        sequence("U", "S", "mesh.subdivide"),
+        sequence("U", "S", "mesh.optimize"),
+    ]);
+    let c = map.conflicts();
+    assert_eq!(c.len(), 2, "{c:?}");
+    // the single key against its sequences: one group on the prefix
+    assert_eq!((c[0].chord, c[0].then), (chord("M"), None));
+    assert_eq!(c[0].bindings, vec![0, 1, 2]);
+    // two sequences on the same two keys
+    assert_eq!((c[1].chord, c[1].then), (chord("U"), Some(chord("S"))));
+    assert_eq!(c[1].bindings, vec![3, 4]);
+    // dispatch is deterministic: the prefix arms, the single key never runs
+    let mut armed = None;
+    assert_eq!(
+        step(&map, &mut armed, "M", false, 0.0),
+        forge_ui::keymap::Step::Armed
+    );
+    // different second keys, different scopes
+    let mut viewport = sequence("K", "K", "mesh.knife");
+    viewport.scope = Scope::Viewport;
+    let map = KeyMap::new(vec![viewport, bind("K", "key.record")]);
+    assert_eq!(map.conflicts().len(), 1);
+    let mut armed = None;
+    assert_eq!(
+        runs(step(&map, &mut armed, "K", false, 0.0)).as_deref(),
+        Some("key.record"),
+        "outside the viewport the single key runs"
+    );
+    assert_eq!(
+        step(&map, &mut armed, "K", true, 1.0),
+        forge_ui::keymap::Step::Armed
+    );
+    // M T and M W do not conflict with each other
+    assert!(
+        KeyMap::new(vec![
+            sequence("M", "T", "a.b"),
+            sequence("M", "W", "a.c"),
+            sequence("U", "T", "a.d"),
+        ])
+        .conflicts()
+        .is_empty()
+    );
+}
+
+#[test]
+fn binding_over_sequences_and_a_prefix_replaces_what_it_collides_with() {
+    let mut map = KeyMap::defaults();
+    // a single key on a prefix removes every sequence it starts
+    let taken = map.conflicts_with(chord("M"), Scope::Global);
+    assert_eq!(taken.len(), 10);
+    let removed = map.bind(bind("M", "marker.add"));
+    assert_eq!(removed.len(), 10);
+    assert!(map.conflicts().is_empty());
+    // a sequence on a single key removes the single key
+    let mut map = KeyMap::new(vec![
+        bind("G", "timeline.step"),
+        bind("Mod+A", "select.all"),
+    ]);
+    let removed = map.bind(Binding::sequence(chord("G"), chord("G"), "a.b", json!({})));
+    assert_eq!(removed.len(), 1);
+    assert_eq!(removed[0].command, "timeline.step");
+    // the same two keys replace the old sequence
+    let removed = map.bind(Binding::sequence(chord("G"), chord("G"), "a.c", json!({})));
+    assert_eq!(removed.len(), 1);
+    // a different second key is free
+    assert!(
+        map.conflicts_with_keys(chord("G"), Some(chord("H")), Scope::Global)
+            .is_empty()
+    );
+}
+
+#[test]
+fn sequence_overrides_follow_the_settings_file_syntax() {
+    let defaults = KeyMap::defaults();
+    let mut map = defaults.clone();
+    let warnings = map.apply_overrides(&json!({
+        "M T": null,
+        "M  X": {"command": "mesh.extrude", "args": {}},
+        "Mod+K Mod+S": {"command": "select.all"},
+        "U S": {"command": "mesh.optimize"},
+    }));
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let mut armed = None;
+    step(&map, &mut armed, "M", false, 0.0);
+    assert_ne!(
+        runs(step(&map, &mut armed, "T", false, 0.1)).as_deref(),
+        Some("mesh.extrude"),
+        "M T is unbound (T alone is the scale key)"
+    );
+    step(&map, &mut armed, "M", false, 1.0);
+    assert_eq!(
+        runs(step(&map, &mut armed, "X", false, 1.1)).as_deref(),
+        Some("mesh.extrude")
+    );
+    step(&map, &mut armed, "Mod+K", false, 2.0);
+    assert_eq!(
+        runs(step(&map, &mut armed, "Mod+S", false, 2.1)).as_deref(),
+        Some("select.all")
+    );
+    step(&map, &mut armed, "U", false, 3.0);
+    assert_eq!(
+        runs(step(&map, &mut armed, "S", false, 3.1)).as_deref(),
+        Some("mesh.optimize"),
+        "the entry replaced the default on U S"
+    );
+    // the minimal inverse uses canonical sequence text and round-trips
+    let o = map.overrides(&defaults);
+    let keys: Vec<&String> = o.as_object().unwrap().keys().collect();
+    assert!(keys.iter().any(|k| *k == "M T"), "{keys:?}");
+    assert!(keys.iter().any(|k| *k == "Mod+K Mod+S"), "{keys:?}");
+    let mut again = defaults.clone();
+    assert!(again.apply_overrides(&o).is_empty());
+    assert!(same(&map, &again));
+    // a single-key entry on a prefix replaces the sequences; unbinding it keeps them
+    let mut m2 = defaults.clone();
+    m2.apply_overrides(&json!({"M": null}));
+    assert!(
+        same(&m2, &defaults),
+        "null on M unbinds only the single key M"
+    );
+    m2.apply_overrides(&json!({"M": {"command": "marker.add"}}));
+    assert!(m2.conflicts().is_empty());
+    assert!(
+        m2.bindings()
+            .iter()
+            .all(|b| b.chord != chord("M") || b.then.is_none())
+    );
+    let o2 = m2.overrides(&defaults);
+    let mut m3 = defaults.clone();
+    assert!(m3.apply_overrides(&o2).is_empty());
+    assert!(same(&m2, &m3));
+    // bare navigation digits are refused as a first or second key
+    let mut m4 = defaults.clone();
+    let w = m4.apply_overrides(
+        &json!({"1 A": {"command": "select.all"}, "A 2": {"command": "select.all"}}),
+    );
+    assert_eq!(w.len(), 2, "{w:?}");
+    assert!(same(&m4, &defaults));
+    // three keys are a warning
+    assert_eq!(
+        m4.apply_overrides(&json!({"A B C": {"command": "select.all"}}))
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn a_sequence_runs_in_the_window_and_the_prefix_alone_does_nothing() {
+    let mut e = Editor::new(common::state());
+    let a = common::create(&mut e.state, "forge.null");
+    let b = common::create(&mut e.state, "forge.null");
+    e.state.selection.click(a);
+    e.state.keys.map.bind(Binding::sequence(
+        chord("X"),
+        chord("Y"),
+        "select.all",
+        json!({}),
+    ));
+    let mut h = harness(e);
+    press(&mut h, Modifiers::NONE, Key::X);
+    assert_eq!(
+        h.state().state.selection.nodes.len(),
+        1,
+        "the prefix alone runs nothing"
+    );
+    assert!(h.state().state.keys.armed.is_some());
+    h.get_by_label_contains("X \u{2026}");
+    press(&mut h, Modifiers::NONE, Key::Y);
+    assert_eq!(h.state().state.selection.nodes.len(), 2);
+    assert!(h.state().state.selection.nodes.contains(&b));
+    assert!(h.state().state.keys.armed.is_none());
+    // Escape drops the prefix; the Y that follows does nothing
+    h.state_mut().state.selection.click(a);
+    press(&mut h, Modifiers::NONE, Key::X);
+    press(&mut h, Modifiers::NONE, Key::Escape);
+    press(&mut h, Modifiers::NONE, Key::Y);
+    assert_eq!(h.state().state.selection.nodes.len(), 1);
+}
+
+#[test]
+fn the_editor_captures_single_keys_and_sequences() {
+    use forge_ui::keymap_editor::{Captured, KeyMapEditor};
+    let mut keys = KeyMapState::default();
+    let registry = common::state().app.commands.clone();
+    let row_of = |keys: &KeyMapState, command: &str| {
+        rows(keys, &registry, "", &|c| c.to_string())
+            .into_iter()
+            .find(|r| r.command == command)
+            .unwrap()
+    };
+    let mut ed = KeyMapEditor::default();
+    // a free first key waits for a second one; a second key within the time makes a sequence
+    let row = row_of(&keys, "edit.symmetry");
+    assert!(row.chord.is_none());
+    ed.start_capture(row.clone());
+    ed.captured(Captured::Chord(chord("J")), &mut keys, 0.0);
+    assert_eq!(ed.first_key(), Some(chord("J")));
+    assert!(
+        keys.map
+            .bindings()
+            .iter()
+            .all(|b| b.command != "edit.symmetry")
+    );
+    ed.captured(Captured::Chord(chord("X")), &mut keys, 0.5);
+    let b = keys.map.binding_of("edit.symmetry", &json!({})).unwrap();
+    assert_eq!((b.chord, b.then), (chord("J"), Some(chord("X"))));
+    assert!(keys.map.conflicts().is_empty());
+    // the row now shows the sequence, searchable by its text
+    let r = row_of(&keys, "edit.symmetry");
+    assert_eq!((r.chord, r.then), (Some(chord("J")), Some(chord("X"))));
+    assert!(r.changed);
+    let found = rows(&keys, &registry, "j x", &|c| c.to_string());
+    assert!(found.iter().any(|r| r.command == "edit.symmetry"));
+    assert!(
+        rows(&keys, &registry, "m t", &|c| c.to_string())
+            .iter()
+            .any(|r| r.command == "mesh.extrude" && r.then == Some(chord("T")))
+    );
+    // without a second key the time-out binds the single key
+    let mut keys = KeyMapState::default();
+    let row = row_of(&keys, "edit.symmetry");
+    ed.start_capture(row);
+    ed.captured(Captured::Chord(chord("J")), &mut keys, 10.0);
+    assert!(!ed.tick(&mut keys, 11.0) || ed.first_key().is_some());
+    assert!(keys.map.binding_of("edit.symmetry", &json!({})).is_none());
+    ed.tick(&mut keys, 11.6);
+    let b = keys.map.binding_of("edit.symmetry", &json!({})).unwrap();
+    assert_eq!((b.chord, b.then), (chord("J"), None));
+    // a late second key is dropped and the first stands alone
+    let mut keys = KeyMapState::default();
+    let row = row_of(&keys, "edit.soft_selection");
+    ed.start_capture(row);
+    ed.captured(Captured::Chord(chord("J")), &mut keys, 20.0);
+    ed.captured(Captured::Chord(chord("X")), &mut keys, 22.0);
+    let b = keys
+        .map
+        .binding_of("edit.soft_selection", &json!({}))
+        .unwrap();
+    assert_eq!((b.chord, b.then), (chord("J"), None));
+    // Escape cancels at either step
+    let mut keys = KeyMapState::default();
+    let row = row_of(&keys, "edit.symmetry");
+    ed.start_capture(row.clone());
+    ed.captured(Captured::Chord(chord("J")), &mut keys, 0.0);
+    ed.captured(Captured::Cancel, &mut keys, 0.1);
+    assert!(!ed.is_capturing() && ed.first_key().is_none());
+    ed.start_capture(row);
+    ed.captured(Captured::Cancel, &mut keys, 0.2);
+    assert!(!ed.is_capturing());
+    assert_eq!(keys.map, KeyMap::defaults());
+    // a single key on a prefix asks first, naming the sequences; Replace removes them
+    let row = row_of(&keys, "marker.add");
+    ed.start_capture(row);
+    ed.captured(Captured::Chord(chord("M")), &mut keys, 0.0);
+    ed.tick(&mut keys, 2.0);
+    assert!(ed.has_pending());
+    assert!(
+        keys.map
+            .bindings()
+            .iter()
+            .any(|b| b.then == Some(chord("T")))
+    );
+    ed.replace_pending(&mut keys);
+    assert!(keys.map.conflicts().is_empty());
+    assert!(
+        keys.map
+            .bindings()
+            .iter()
+            .all(|b| b.then.is_none() || b.chord != chord("M"))
+    );
+    assert_eq!(
+        keys.map.binding_of("marker.add", &json!({})).unwrap().chord,
+        chord("M")
+    );
+    // a navigation digit is refused as the first key
+    let row = row_of(&keys, "edit.symmetry");
+    ed.start_capture(row);
+    ed.captured(Captured::Chord(chord("2")), &mut keys, 0.0);
+    assert!(!ed.is_capturing() && ed.first_key().is_none());
+    assert!(!ed.message.is_empty());
 }

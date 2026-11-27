@@ -640,15 +640,19 @@ impl Editor {
     fn shortcuts(&mut self, ctx: &egui::Context) {
         if self.keymap_editor.is_capturing() {
             if let Some(chord) = ctx.input_mut(crate::keymap_editor::take_captured) {
-                self.keymap_editor.captured(chord, &mut self.state.keys);
+                let now = ctx.input(|i| i.time);
+                self.keymap_editor
+                    .captured(chord, &mut self.state.keys, now);
             }
+            self.state.keys.armed = None;
             return;
         }
         if ctx.egui_wants_keyboard_input() || self.palette.open {
+            self.state.keys.armed = None;
             return;
         }
         let hot = self.viewport_hot;
-        let presses = ctx.input_mut(|i| self.state.keys.map.take_presses(i, hot));
+        let presses = ctx.input_mut(|i| self.state.keys.take_presses(i, hot));
         for (id, args) in presses {
             // Delete over the node editor deletes nodes, not objects (UI.md §17.4).
             if id == "object.delete" && self.state.node_editor.active_canvas().hot {
@@ -665,8 +669,8 @@ impl Editor {
         self.state
             .keys
             .map
-            .chord_of(id, args)
-            .map(|c| c.display(ctx))
+            .binding_of(id, args)
+            .map(|b| b.display(ctx))
     }
 
     fn file_action(&mut self, action: FileAction) {
@@ -1139,6 +1143,15 @@ impl Editor {
 
     fn status_bar(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
+            let now = ui.input(|i| i.time);
+            if let Some(prefix) = self.state.keys.pending_prefix(now) {
+                // a prefix key waits for its second key (UI.md §14.7)
+                ui.strong(format!("{} \u{2026}", prefix.display(ui.ctx())));
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_secs_f64(
+                        crate::keymap::SEQUENCE_TIMEOUT + 0.05,
+                    ));
+            }
             if self.state.status.is_empty() {
                 ui.weak("Ready");
             } else {

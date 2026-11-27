@@ -307,7 +307,7 @@ fn model_a_chair_save_reopen_and_export() {
     // 6. Undo and redo with the keys: the cut disappears and comes back.
     key(&mut h, Modifiers::COMMAND, Key::Z);
     assert_eq!(counts(&h, seat), before);
-    key(&mut h, Modifiers::COMMAND | Modifiers::SHIFT, Key::Z);
+    key(&mut h, Modifiers::COMMAND, Key::Y);
     assert_eq!(counts(&h, seat), after);
 
     // 7. Symmetry and a subdivision surface from the Create menu; the object manager shows
