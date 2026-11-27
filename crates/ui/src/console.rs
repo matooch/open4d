@@ -378,7 +378,7 @@ fn repl_ui(ui: &mut Ui, state: &mut EditorState) {
                 match line.kind {
                     ReplKind::Input => ui.label(text.weak()),
                     ReplKind::Output => ui.label(text),
-                    ReplKind::Result => ui.label(text.color(theme.accent)),
+                    ReplKind::Result => ui.label(text.color(theme.state)),
                     ReplKind::Error => ui.label(text.color(theme.error)),
                 };
             }

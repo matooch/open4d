@@ -474,6 +474,11 @@ fn paint_row_backdrop(
     }
     if look.selected {
         shapes.push(egui::Shape::rect_filled(rect, 0.0, look.colours.selected));
+        shapes.push(egui::Shape::rect_filled(
+            Rect::from_min_size(rect.left_top(), vec2(2.0, rect.height())),
+            0.0,
+            look.colours.bar,
+        ));
     }
     let guide = Stroke::new(1.0, look.colours.guide);
     for (a, b) in connector_segments(

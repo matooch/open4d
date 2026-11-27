@@ -637,6 +637,13 @@ pub struct Palette {
     pub gizmo_y: [f32; 3],
     pub gizmo_z: [f32; 3],
     pub gizmo_center: [f32; 3],
+    /// The selection outline of an object, and the stronger one of the active object
+    /// (docs/specs/VIEWPORT.md §16.1).
+    pub outline: [f32; 3],
+    pub outline_active: [f32; 3],
+    /// How far minor grid lines fade toward the background at the grid's edge: 0 = not at all
+    /// (the renderer's default), 1 = fully (§16.4).
+    pub grid_fade: f32,
 }
 
 impl Default for Palette {
@@ -654,6 +661,9 @@ impl Default for Palette {
             gizmo_y: [0.25, 0.85, 0.25],
             gizmo_z: [0.25, 0.40, 0.95],
             gizmo_center: [0.95, 0.95, 0.80],
+            outline: [243.0 / 255.0, 179.0 / 255.0, 107.0 / 255.0],
+            outline_active: [1.0, 214.0 / 255.0, 158.0 / 255.0],
+            grid_fade: 0.0,
         }
     }
 }
@@ -879,6 +889,63 @@ pub struct DrawInstanced<'a> {
     pub color: [f32; 3],
 }
 
+/// How a drawn object is marked as selected (docs/specs/VIEWPORT.md §16).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Highlight {
+    #[default]
+    None,
+    /// Selected: amber outline (amber edges in wire modes).
+    Selected,
+    /// The active object of the selection: a brighter, wider outline.
+    Active,
+}
+
+/// The selection display of one frame: a [`Highlight`] per `Frame.meshes` and `Frame.instanced`
+/// entry, and the outline widths. The default draws nothing extra.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SelectionDisplay {
+    /// `meshes[i]` marks `Frame.meshes[i]`; entries past the end are `None`.
+    pub meshes: Vec<Highlight>,
+    /// `instanced[i]` marks `Frame.instanced[i]`.
+    pub instanced: Vec<Highlight>,
+    /// Outline width of a selected object in pixels.
+    pub width_px: f32,
+    /// Outline width of the active object in pixels.
+    pub active_width_px: f32,
+    /// Draw only the outlines of the marked objects on a transparent target, hidden by every
+    /// mesh of the frame (the overlay for the render engine's image, §16.2).
+    pub overlay_only: bool,
+}
+
+impl Default for SelectionDisplay {
+    fn default() -> Self {
+        SelectionDisplay {
+            meshes: Vec::new(),
+            instanced: Vec::new(),
+            width_px: 2.0,
+            active_width_px: 3.0,
+            overlay_only: false,
+        }
+    }
+}
+
+impl SelectionDisplay {
+    fn mesh(&self, i: usize) -> Highlight {
+        self.meshes.get(i).copied().unwrap_or_default()
+    }
+
+    fn instance(&self, i: usize) -> Highlight {
+        self.instanced.get(i).copied().unwrap_or_default()
+    }
+
+    fn any(&self) -> bool {
+        self.meshes
+            .iter()
+            .chain(&self.instanced)
+            .any(|h| *h != Highlight::None)
+    }
+}
+
 /// What the last frame of a [`Renderer`] drew (for tests and the benchmarks).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct FrameStats {
@@ -890,6 +957,8 @@ pub struct FrameStats {
     pub culled: u32,
     /// Objects and instance ranges drawn with their LOD proxy.
     pub lod_draws: u32,
+    /// `draw` calls of the selection outline (§16.3); not part of `draw_calls`.
+    pub outline_draws: u32,
 }
 
 /// Coloured line segments on the GPU: the splines of one pane (docs/specs/VIEWPORT.md section 11).
@@ -1069,6 +1138,12 @@ pub struct Renderer {
     point_quad: wgpu::RenderPipeline,
     grid: wgpu::RenderPipeline,
     gizmo: wgpu::RenderPipeline,
+    /// The selection outline (§16.2): mask pipelines for a mesh and an instance set, the
+    /// dilation pass and the mask targets.
+    outline: OutlineGpu,
+    /// Depth only (no colour writes): the occluders of the overlay-only outline.
+    depth_only: wgpu::RenderPipeline,
+    depth_only_inst: wgpu::RenderPipeline,
     shadow_sampler: wgpu::Sampler,
     preview_sampler: wgpu::Sampler,
     dummy_preview: wgpu::TextureView,
@@ -1087,6 +1162,10 @@ struct PipelineSpec<'a> {
     topology: wgpu::PrimitiveTopology,
     depth_write: bool,
     depth_compare: wgpu::CompareFunction,
+    bias: wgpu::DepthBiasState,
+    writes: wgpu::ColorWrites,
+    /// The colour target format; `None` = the renderer's.
+    format: Option<wgpu::TextureFormat>,
 }
 
 impl Renderer {
@@ -1232,7 +1311,7 @@ impl Renderer {
                     depth_write_enabled: Some(s.depth_write),
                     depth_compare: Some(s.depth_compare),
                     stencil: Default::default(),
-                    bias: Default::default(),
+                    bias: s.bias,
                 }),
                 multisample: wgpu::MultisampleState {
                     count: samples,
@@ -1243,9 +1322,9 @@ impl Renderer {
                     entry_point: Some(s.fs),
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
-                        format: color_format,
+                        format: s.format.unwrap_or(color_format),
                         blend: None,
-                        write_mask: wgpu::ColorWrites::ALL,
+                        write_mask: s.writes,
                     })],
                 }),
                 multiview_mask: None,
@@ -1262,6 +1341,32 @@ impl Renderer {
             topology,
             depth_write,
             depth_compare,
+            bias: Default::default(),
+            writes: wgpu::ColorWrites::ALL,
+            format: None,
+        };
+        // the mask is tested against the depth the fills wrote, pulled slightly toward the
+        // camera so equal depths pass (no depth write)
+        let mask_spec = |label, vs, buffers| PipelineSpec {
+            bias: wgpu::DepthBiasState {
+                constant: -4,
+                slope_scale: -2.0,
+                clamp: 0.0,
+            },
+            format: Some(MASK_FORMAT),
+            ..spec(
+                label,
+                vs,
+                "fs_mask",
+                buffers,
+                TriangleList,
+                false,
+                LessEqual,
+            )
+        };
+        let depth_spec = |label, vs, buffers| PipelineSpec {
+            writes: wgpu::ColorWrites::empty(),
+            ..spec(label, vs, "fs_none", buffers, TriangleList, true, Less)
         };
         let make_shadow = |label, entry, buffers: &[Option<wgpu::VertexBufferLayout>]| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -1306,6 +1411,22 @@ impl Renderer {
         });
         Renderer {
             samples,
+            outline: OutlineGpu::new(
+                device,
+                color_format,
+                make(mask_spec("outline mask", "vs_tri", &tri_buf)),
+                make(mask_spec(
+                    "outline mask instanced",
+                    "vs_tri_inst",
+                    &tri_inst_buf,
+                )),
+            ),
+            depth_only: make(depth_spec("depth only", "vs_tri", &tri_buf)),
+            depth_only_inst: make(depth_spec(
+                "depth only instanced",
+                "vs_tri_inst",
+                &tri_inst_buf,
+            )),
             preview_sampler: device.create_sampler(&wgpu::SamplerDescriptor {
                 address_mode_u: wgpu::AddressMode::Repeat,
                 address_mode_v: wgpu::AddressMode::Repeat,
@@ -1486,6 +1607,36 @@ impl Renderer {
         cam: &Camera,
         frame: &Frame,
     ) {
+        self.render_with(
+            device,
+            encoder,
+            (color, depth, resolve),
+            (width, height),
+            cam,
+            frame,
+            &SelectionDisplay::default(),
+        );
+    }
+
+    /// [`Renderer::render`] with the selection display of docs/specs/VIEWPORT.md §16: outlines
+    /// of the highlighted objects, amber edges in the wire modes, or (with
+    /// `sel.overlay_only`) the outlines alone on a transparent target.
+    /// `(color, depth, resolve)` are the attachments, `(width, height)` their size.
+    #[allow(clippy::too_many_arguments)] // device, encoder, targets, size, camera, frame, selection
+    pub fn render_with(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        (color, depth, resolve): (
+            &wgpu::TextureView,
+            &wgpu::TextureView,
+            Option<&wgpu::TextureView>,
+        ),
+        (width, height): (u32, u32),
+        cam: &Camera,
+        frame: &Frame,
+        sel: &SelectionDisplay,
+    ) {
         let s = &frame.settings;
         let pal = &s.palette;
         let style = s.shading.style();
@@ -1511,18 +1662,29 @@ impl Renderer {
         };
         let (fill, wire) = (style.fill, style.wire);
         let bias = if fill { OVERLAY_BIAS } else { 0.0 };
+        // the edges of a highlighted object take the outline colour (§16.1)
+        let outline_of = |h: Highlight| match h {
+            Highlight::None => None,
+            Highlight::Selected => Some(pal.outline),
+            Highlight::Active => Some(pal.outline_active),
+        };
         let mesh_groups: Vec<wgpu::BindGroup> = frame
             .meshes
             .iter()
-            .map(|m| {
+            .enumerate()
+            .map(|(i, m)| {
                 let base = if style.hidden {
                     pal.background
                 } else {
                     m.color
                 };
+                let mut u = uniforms(base, style.smooth, bias, style.unlit);
+                if let Some(c) = outline_of(sel.mesh(i)) {
+                    u.wire = rgba(c);
+                }
                 self.bind(
                     device,
-                    uniforms(base, style.smooth, bias, style.unlit),
+                    u,
                     m.mesh.preview.as_deref().filter(|_| !style.hidden),
                 )
             })
@@ -1530,13 +1692,17 @@ impl Renderer {
         let inst_groups: Vec<wgpu::BindGroup> = frame
             .instanced
             .iter()
-            .map(|m| {
+            .enumerate()
+            .map(|(i, m)| {
                 let base = if style.hidden {
                     pal.background
                 } else {
                     m.color
                 };
                 let mut u = uniforms(base, style.smooth, bias, style.unlit);
+                if let Some(c) = outline_of(sel.instance(i)) {
+                    u.wire = rgba(c);
+                }
                 // clone colours tint the fill, except in Hidden Line (background colour)
                 u.params[3] = flag(!style.hidden);
                 self.bind(
@@ -1547,22 +1713,30 @@ impl Renderer {
             })
             .collect();
         let plain = self.bind(device, uniforms(pal.object, false, 0.0, false), None);
+        let overlay = sel.overlay_only;
+        // mask values of the two highlight classes (R: highlighted, G: active)
+        let mask_groups = (sel.any() && (fill || overlay)).then(|| {
+            let group = |v: [f32; 3]| self.bind(device, uniforms(v, true, 0.0, true), None);
+            (group([1.0, 0.0, 0.0]), group([1.0, 1.0, 0.0]))
+        });
         let grid = frame
             .grid
+            .filter(|_| !overlay)
             .map(|g| Vertices::new(device, "grid", &grid_vertices(g, pal)));
         let gizmo = frame
             .gizmo
+            .filter(|_| !overlay)
             .map(|g| Vertices::new(device, "gizmo", &gizmo_vertices(g, cam, height as f64, pal)));
-        let boxes = style.boxes.then(|| {
+        let boxes = (style.boxes && !overlay).then(|| {
             let mut out = Vec::new();
-            for m in frame.meshes {
+            for (i, m) in frame.meshes.iter().enumerate() {
                 if let Some(b) = m.mesh.bounds {
-                    box_vertices(&mut out, b, m.color);
+                    box_vertices(&mut out, b, outline_of(sel.mesh(i)).unwrap_or(m.color));
                 }
             }
-            for m in frame.instanced {
+            for (i, m) in frame.instanced.iter().enumerate() {
                 if let Some(b) = m.set.bounds() {
-                    box_vertices(&mut out, b, m.color);
+                    box_vertices(&mut out, b, outline_of(sel.instance(i)).unwrap_or(m.color));
                 }
             }
             Vertices::new(device, "bounding boxes", &out)
@@ -1583,7 +1757,7 @@ impl Renderer {
             .filter_map(|m| m.mesh.bounds)
             .chain(frame.instanced.iter().filter_map(|m| m.set.bounds()))
             .reduce(union_aabb);
-        let casting = s.shadows && fill && !style.unlit && !style.quick;
+        let casting = s.shadows && fill && !style.unlit && !style.quick && !overlay;
         let mut next_layer = 0u32;
         let layers: Vec<Option<(u32, DMat4)>> = light_list
             .iter()
@@ -1643,6 +1817,12 @@ impl Renderer {
         let light_group = self.bind_lights(device, &packed, maps);
 
         let [r, g, b] = pal.background.map(f64::from);
+        // the overlay-only target starts transparent
+        let clear = if overlay {
+            wgpu::Color::TRANSPARENT
+        } else {
+            wgpu::Color { r, g, b, a: 1.0 }
+        };
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("viewport"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1650,7 +1830,7 @@ impl Renderer {
                 depth_slice: None,
                 resolve_target: resolve,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color { r, g, b, a: 1.0 }),
+                    load: wgpu::LoadOp::Clear(clear),
                     store: if resolve.is_some() {
                         wgpu::StoreOp::Discard
                     } else {
@@ -1728,7 +1908,19 @@ impl Renderer {
             stats.draw_calls += calls;
             stats.instances_drawn += instances;
         };
-        if fill {
+        if overlay {
+            // occluders only: every mesh writes depth, nothing writes colour
+            pass.set_pipeline(&self.depth_only);
+            for (i, mesh) in &visible {
+                pass.set_bind_group(0, &mesh_groups[*i], &[]);
+                stats.culled += mesh.tris.draw_culled(&mut pass, &frustum);
+            }
+            pass.set_pipeline(&self.depth_only_inst);
+            for ((m, group), r) in frame.instanced.iter().zip(&inst_groups).zip(&ranges) {
+                pass.set_bind_group(0, group, &[]);
+                m.set.draw_ranges(&mut pass, r, |p| &p.tris);
+            }
+        } else if fill {
             pass.set_pipeline(&self.tri);
             for (i, mesh) in &visible {
                 pass.set_bind_group(0, &mesh_groups[*i], &[]);
@@ -1742,7 +1934,7 @@ impl Renderer {
                 draw(calls, n);
             }
         }
-        if wire || s.show_points {
+        if !overlay && (wire || s.show_points) {
             for (i, mesh) in &visible {
                 pass.set_bind_group(0, &mesh_groups[*i], &[]);
                 if wire {
@@ -1758,7 +1950,7 @@ impl Renderer {
                 }
             }
         }
-        if wire {
+        if wire && !overlay {
             pass.set_pipeline(&self.edge_inst);
             for ((m, group), r) in frame.instanced.iter().zip(&inst_groups).zip(&ranges) {
                 pass.set_bind_group(0, group, &[]);
@@ -1766,26 +1958,43 @@ impl Renderer {
                 draw(calls, n);
             }
         }
-        *self.stats.lock().unwrap_or_else(|e| e.into_inner()) = stats;
-        pass.set_bind_group(0, &plain, &[]);
-        if let Some(boxes) = &boxes {
-            pass.set_pipeline(&self.grid);
-            boxes.draw(&mut pass);
-        }
-        if let Some(grid) = &grid {
-            pass.set_pipeline(&self.grid);
-            grid.draw(&mut pass);
-        }
-        if !frame.lines.is_empty() {
-            pass.set_pipeline(&self.grid);
-            for set in frame.lines {
-                set.0.draw(&mut pass);
+        if !overlay {
+            pass.set_bind_group(0, &plain, &[]);
+            if let Some(boxes) = &boxes {
+                pass.set_pipeline(&self.grid);
+                boxes.draw(&mut pass);
+            }
+            if let Some(grid) = &grid {
+                pass.set_pipeline(&self.grid);
+                grid.draw(&mut pass);
+            }
+            if !frame.lines.is_empty() {
+                pass.set_pipeline(&self.grid);
+                for set in frame.lines {
+                    set.0.draw(&mut pass);
+                }
+            }
+            if let Some(gizmo) = &gizmo {
+                pass.set_pipeline(&self.gizmo);
+                gizmo.draw(&mut pass);
             }
         }
-        if let Some(gizmo) = &gizmo {
-            pass.set_pipeline(&self.gizmo);
-            gizmo.draw(&mut pass);
+        drop(pass);
+        // the selection outline: the mask of the highlighted objects, dilated over the image
+        // (§16.2)
+        if let Some((selected, active)) = &mask_groups {
+            self.outline_passes(
+                device,
+                encoder,
+                (depth, resolve.unwrap_or(color)),
+                (width, height),
+                (cam, frame, sel),
+                (&visible, &ranges),
+                (selected, active, &light_group),
+                &mut stats,
+            );
         }
+        *self.stats.lock().unwrap_or_else(|e| e.into_inner()) = stats;
     }
 
     /// Records the frame into `targets`, resolving MSAA if it has samples. `targets` must
@@ -1798,36 +2007,413 @@ impl Renderer {
         cam: &Camera,
         frame: &Frame,
     ) {
+        self.render_to_with(
+            device,
+            encoder,
+            targets,
+            cam,
+            frame,
+            &SelectionDisplay::default(),
+        );
+    }
+
+    /// [`Renderer::render_to`] with a selection display (§16).
+    pub fn render_to_with(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        targets: &RenderTargets,
+        cam: &Camera,
+        frame: &Frame,
+        sel: &SelectionDisplay,
+    ) {
         assert_eq!(
             targets.samples, self.samples,
             "render targets and renderer sample counts differ"
         );
         let resolved = targets.color.create_view(&Default::default());
         let depth = targets.depth.create_view(&Default::default());
+        let size = (targets.width, targets.height);
         match &targets.msaa_color {
-            Some(ms) => self.render(
+            Some(ms) => self.render_with(
                 device,
                 encoder,
-                &ms.create_view(&Default::default()),
-                &depth,
-                Some(&resolved),
-                targets.width,
-                targets.height,
+                (
+                    &ms.create_view(&Default::default()),
+                    &depth,
+                    Some(&resolved),
+                ),
+                size,
                 cam,
                 frame,
+                sel,
             ),
-            None => self.render(
+            None => self.render_with(
                 device,
                 encoder,
-                &resolved,
-                &depth,
-                None,
-                targets.width,
-                targets.height,
+                (&resolved, &depth, None),
+                size,
                 cam,
                 frame,
+                sel,
             ),
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Selection outline (docs/specs/VIEWPORT.md §16.2)
+// ---------------------------------------------------------------------------
+
+/// Format of the outline mask: R = highlighted coverage, G = active coverage.
+const MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg8Unorm;
+
+/// What `outline.wgsl` reads (docs/specs/VIEWPORT.md §16.2).
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct OutlineParams {
+    selected: [f32; 4],
+    stronger: [f32; 4],
+    widths: [f32; 4],
+}
+
+/// The mask textures of one frame size: a multisampled one (with MSAA) resolved into a single
+/// sample one the dilation reads.
+struct MaskTargets {
+    size: (u32, u32),
+    samples: u32,
+    msaa: Option<wgpu::TextureView>,
+    resolved: wgpu::TextureView,
+    // keep the textures alive; the views reference them
+    _textures: Vec<wgpu::Texture>,
+}
+
+/// Pipelines and targets of the selection outline.
+struct OutlineGpu {
+    mask_tri: wgpu::RenderPipeline,
+    mask_tri_inst: wgpu::RenderPipeline,
+    dilate: wgpu::RenderPipeline,
+    layout: wgpu::BindGroupLayout,
+    targets: Mutex<Option<std::sync::Arc<MaskTargets>>>,
+}
+
+impl OutlineGpu {
+    fn new(
+        device: &wgpu::Device,
+        color_format: wgpu::TextureFormat,
+        mask_tri: wgpu::RenderPipeline,
+        mask_tri_inst: wgpu::RenderPipeline,
+    ) -> OutlineGpu {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("outline shaders"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("outline.wgsl").into()),
+        });
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("outline"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+            ],
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("outline layout"),
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
+        });
+        let over = wgpu::BlendComponent {
+            src_factor: wgpu::BlendFactor::SrcAlpha,
+            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+            operation: wgpu::BlendOperation::Add,
+        };
+        let dilate = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("outline dilate"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_full"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: Default::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_dilate"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: color_format,
+                    blend: Some(wgpu::BlendState {
+                        color: over,
+                        // alpha accumulates like premultiplied coverage, so an overlay target
+                        // that starts transparent ends with the ring's coverage
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::SrcAlpha,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        OutlineGpu {
+            mask_tri,
+            mask_tri_inst,
+            dilate,
+            layout,
+            targets: Mutex::new(None),
+        }
+    }
+
+    /// The mask textures for `size` and `samples`, reusing the last ones if they fit.
+    fn targets(
+        &self,
+        device: &wgpu::Device,
+        size: (u32, u32),
+        samples: u32,
+    ) -> std::sync::Arc<MaskTargets> {
+        let mut cache = self.targets.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(t) = cache.as_ref()
+            && t.size == size
+            && t.samples == samples
+        {
+            return t.clone();
+        }
+        let make = |label, count| {
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width: size.0,
+                    height: size.1,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: count,
+                dimension: wgpu::TextureDimension::D2,
+                format: MASK_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+        };
+        let resolved = make("outline mask", 1);
+        let msaa = (samples > 1).then(|| make("outline mask (msaa)", samples));
+        let targets = std::sync::Arc::new(MaskTargets {
+            size,
+            samples,
+            msaa: msaa.as_ref().map(|t| t.create_view(&Default::default())),
+            resolved: resolved.create_view(&Default::default()),
+            _textures: std::iter::once(resolved).chain(msaa).collect(),
+        });
+        *cache = Some(targets.clone());
+        targets
+    }
+}
+
+/// The pixel rectangle `[x, y, w, h]` that bounds the highlighted objects of `frame` grown by
+/// `margin` pixels; `None` when it is off screen, the whole target when an object reaches
+/// behind the camera.
+fn outline_rect(
+    frame: &Frame,
+    sel: &SelectionDisplay,
+    view_proj: &DMat4,
+    (width, height): (u32, u32),
+    margin: f64,
+) -> Option<[u32; 4]> {
+    let boxes = frame
+        .meshes
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| sel.mesh(*i) != Highlight::None)
+        .filter_map(|(_, m)| m.mesh.bounds)
+        .chain(
+            frame
+                .instanced
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| sel.instance(*i) != Highlight::None)
+                .filter_map(|(_, m)| m.set.bounds()),
+        );
+    let (w, h) = (f64::from(width), f64::from(height));
+    let (mut lo, mut hi) = ((f64::MAX, f64::MAX), (f64::MIN, f64::MIN));
+    for (a, b) in boxes {
+        for k in 0..8u32 {
+            let p = DVec3::new(
+                if k & 1 == 1 { b.x } else { a.x },
+                if k & 2 == 2 { b.y } else { a.y },
+                if k & 4 == 4 { b.z } else { a.z },
+            );
+            let c = *view_proj * p.extend(1.0);
+            if c.w <= 1e-9 {
+                return Some([0, 0, width, height]);
+            }
+            let (x, y) = ((c.x / c.w * 0.5 + 0.5) * w, (0.5 - c.y / c.w * 0.5) * h);
+            lo = (lo.0.min(x), lo.1.min(y));
+            hi = (hi.0.max(x), hi.1.max(y));
+        }
+    }
+    if lo.0 > hi.0 {
+        return None;
+    }
+    let (x0, y0) = (
+        (lo.0 - margin).floor().max(0.0),
+        (lo.1 - margin).floor().max(0.0),
+    );
+    let (x1, y1) = ((hi.0 + margin).ceil().min(w), (hi.1 + margin).ceil().min(h));
+    (x1 > x0 && y1 > y0).then_some([x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32])
+}
+
+impl Renderer {
+    /// The mask pass and the dilation pass of the selection outline (docs/specs/VIEWPORT.md
+    /// §16.2), after the colour pass: the highlighted meshes are drawn into the mask with the
+    /// depth the fills wrote (so nearer objects hide them), then the ring around the mask is
+    /// drawn over `target`.
+    #[allow(clippy::too_many_arguments)] // the pieces of one frame, grouped by what they are
+    fn outline_passes(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        (depth, target): (&wgpu::TextureView, &wgpu::TextureView),
+        size: (u32, u32),
+        (cam, frame, sel): (&Camera, &Frame, &SelectionDisplay),
+        (visible, ranges): (&[(usize, &MeshBuffers)], &[Vec<DrawRange>]),
+        (selected, active, light_group): (&wgpu::BindGroup, &wgpu::BindGroup, &wgpu::BindGroup),
+        stats: &mut FrameStats,
+    ) {
+        let pal = &frame.settings.palette;
+        let (width, height) = size;
+        let reach = f64::from(sel.width_px.max(sel.active_width_px).max(0.0));
+        let view_proj = cam.view_proj(f64::from(width) / f64::from(height.max(1)));
+        let Some([rx, ry, rw, rh]) = outline_rect(frame, sel, &view_proj, size, reach + 1.0) else {
+            return;
+        };
+        let masks = self.outline.targets(device, size, self.samples);
+        let frustum = Frustum::from_view_proj(&view_proj);
+        {
+            let (view, resolve) = match &masks.msaa {
+                Some(ms) => (ms, Some(&masks.resolved)),
+                None => (&masks.resolved, None),
+            };
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("outline mask"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    depth_slice: None,
+                    resolve_target: resolve,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: if resolve.is_some() {
+                            wgpu::StoreOp::Discard
+                        } else {
+                            wgpu::StoreOp::Store
+                        },
+                    },
+                })],
+                // read-only: the fills' depth hides the objects behind others
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: depth,
+                    depth_ops: None,
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(1, light_group, &[]);
+            let group = |h: Highlight| match h {
+                Highlight::Active => Some(active),
+                Highlight::Selected => Some(selected),
+                Highlight::None => None,
+            };
+            pass.set_pipeline(&self.outline.mask_tri);
+            for (i, mesh) in visible {
+                let Some(g) = group(sel.mesh(*i)) else {
+                    continue;
+                };
+                pass.set_bind_group(0, g, &[]);
+                mesh.tris.draw_culled(&mut pass, &frustum);
+                stats.outline_draws += mesh.tris.0.len() as u32;
+            }
+            pass.set_pipeline(&self.outline.mask_tri_inst);
+            for (i, (m, r)) in frame.instanced.iter().zip(ranges).enumerate() {
+                let Some(g) = group(sel.instance(i)) else {
+                    continue;
+                };
+                pass.set_bind_group(0, g, &[]);
+                let (calls, _) = m.set.draw_ranges(&mut pass, r, |p| &p.tris);
+                stats.outline_draws += calls;
+            }
+        }
+        let params = OutlineParams {
+            selected: rgba(pal.outline),
+            stronger: rgba(pal.outline_active),
+            widths: [
+                sel.width_px.max(0.0),
+                sel.active_width_px.max(0.0),
+                0.0,
+                0.0,
+            ],
+        };
+        let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("outline params"),
+            contents: bytemuck::bytes_of(&params),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("outline"),
+            layout: &self.outline.layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&masks.resolved),
+                },
+            ],
+        });
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("outline"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&self.outline.dilate);
+        pass.set_bind_group(0, &group, &[]);
+        pass.set_scissor_rect(rx, ry, rw, rh);
+        pass.draw(0..3, 0..1);
     }
 }
 
@@ -1905,8 +2491,40 @@ fn line(out: &mut Vec<ColorVertex>, a: DVec3, b: DVec3, color: [f32; 3]) {
     out.push(ColorVertex { pos: f3(b), color });
 }
 
+/// Segments a minor line is cut into when the grid fades (§16.4).
+const FADE_SEGMENTS: usize = 16;
+
+/// Mix toward the background of a minor grid vertex at XZ distance `d` from the grid centre, for
+/// a grid of half extent `half` and fade strength `fade` (docs/specs/VIEWPORT.md §16.4).
+pub fn grid_fade_mix(d: f64, half: f64, fade: f32) -> f32 {
+    let t = ((d / half.max(1e-12) - 0.35) / 0.65).clamp(0.0, 1.0) as f32;
+    fade.clamp(0.0, 1.0) * t * t * (3.0 - 2.0 * t)
+}
+
+/// The `(position, colour)` of every vertex of the grid lines as the renderer draws them
+/// (two per segment), for tests of the fade (docs/specs/VIEWPORT.md §16.4).
+pub fn grid_vertex_list(grid: &Grid, pal: &Palette) -> Vec<([f32; 3], [f32; 3])> {
+    grid_vertices(grid, pal)
+        .into_iter()
+        .map(|v| (v.pos, v.color))
+        .collect()
+}
+
+/// The vertices of the grid lines. With `pal.grid_fade` > 0 minor lines are cut into segments
+/// whose vertex colours fade toward the background with the distance from the grid centre.
 fn grid_vertices(grid: &Grid, pal: &Palette) -> Vec<ColorVertex> {
     let mut out = Vec::with_capacity(grid.lines.len() * 2);
+    let n = grid.lines.len().max(1) as f64;
+    let centre = grid
+        .lines
+        .iter()
+        .fold(DVec3::ZERO, |acc, l| acc + (l.a + l.b) * 0.5)
+        / n;
+    let half = grid
+        .lines
+        .iter()
+        .map(|l| (l.b - l.a).length() * 0.5)
+        .fold(0.0, f64::max);
     for l in &grid.lines {
         let color = match l.kind {
             LineKind::Minor => pal.grid_minor,
@@ -1914,7 +2532,28 @@ fn grid_vertices(grid: &Grid, pal: &Palette) -> Vec<ColorVertex> {
             LineKind::AxisX => pal.axis_x,
             LineKind::AxisZ => pal.axis_z,
         };
-        line(&mut out, l.a, l.b, color);
+        if l.kind != LineKind::Minor || pal.grid_fade <= 0.0 {
+            line(&mut out, l.a, l.b, color);
+            continue;
+        }
+        let at = |k: usize| {
+            let p = l.a + (l.b - l.a) * (k as f64 / FADE_SEGMENTS as f64);
+            let d = DVec3::new(p.x - centre.x, 0.0, p.z - centre.z).length();
+            let m = grid_fade_mix(d, half, pal.grid_fade);
+            let c = std::array::from_fn(|i| color[i] + (pal.background[i] - color[i]) * m);
+            (p, c)
+        };
+        for k in 0..FADE_SEGMENTS {
+            let ((pa, ca), (pb, cb)) = (at(k), at(k + 1));
+            out.push(ColorVertex {
+                pos: f3(pa),
+                color: ca,
+            });
+            out.push(ColorVertex {
+                pos: f3(pb),
+                color: cb,
+            });
+        }
     }
     out
 }
@@ -1970,6 +2609,31 @@ fn gizmo_vertices(g: &Gizmo, cam: &Camera, viewport_h: f64, pal: &Palette) -> Ve
 /// Renders offscreen and returns tightly packed RGBA8 rows, top row first. Uses
 /// `frame.settings.msaa`.
 pub fn render_to_rgba(gpu: &Gpu, width: u32, height: u32, cam: &Camera, frame: &Frame) -> Vec<u8> {
+    render_to_rgba_with(gpu, width, height, cam, frame, &SelectionDisplay::default())
+}
+
+/// [`render_to_rgba`] with a selection display (docs/specs/VIEWPORT.md §16).
+pub fn render_to_rgba_with(
+    gpu: &Gpu,
+    width: u32,
+    height: u32,
+    cam: &Camera,
+    frame: &Frame,
+    sel: &SelectionDisplay,
+) -> Vec<u8> {
+    try_render_to_rgba_with(gpu, width, height, cam, frame, sel).expect("offscreen readback")
+}
+
+/// [`render_to_rgba_with`] that reports a failed readback instead of panicking (the tests of
+/// §16.5 use it, so a lost device fails with a message).
+pub fn try_render_to_rgba_with(
+    gpu: &Gpu,
+    width: u32,
+    height: u32,
+    cam: &Camera,
+    frame: &Frame,
+    sel: &SelectionDisplay,
+) -> Result<Vec<u8>, GpuError> {
     let device = &gpu.device;
     let renderer = gpu.renderer_for(frame.settings.msaa);
     let targets = RenderTargets::new(
@@ -1995,7 +2659,7 @@ pub fn render_to_rgba(gpu: &Gpu, width: u32, height: u32, cam: &Camera, frame: &
     });
 
     let mut encoder = device.create_command_encoder(&Default::default());
-    renderer.render_to(device, &mut encoder, &targets, cam, frame);
+    renderer.render_to_with(device, &mut encoder, &targets, cam, frame, sel);
     encoder.copy_texture_to_buffer(
         targets.color.as_image_copy(),
         wgpu::TexelCopyBufferInfo {
@@ -2011,14 +2675,22 @@ pub fn render_to_rgba(gpu: &Gpu, width: u32, height: u32, cam: &Camera, frame: &
     gpu.queue.submit([encoder.finish()]);
 
     let slice = readback.slice(..);
-    slice.map_async(wgpu::MapMode::Read, |r| r.expect("readback map"));
+    let (tx, rx) = std::sync::mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |r| {
+        let _ = tx.send(r);
+    });
     device
         .poll(wgpu::PollType::wait_indefinitely())
-        .expect("device poll");
-    let data = slice.get_mapped_range().expect("mapped readback");
+        .map_err(|e| GpuError(format!("device poll: {e}")))?;
+    rx.recv()
+        .map_err(|e| GpuError(format!("readback channel: {e}")))?
+        .map_err(|e| GpuError(format!("readback map: {e}")))?;
+    let data = slice
+        .get_mapped_range()
+        .map_err(|e| GpuError(format!("mapped readback: {e}")))?;
     let mut out = Vec::with_capacity((unpadded * height) as usize);
     for row in data.chunks(padded as usize) {
         out.extend_from_slice(&row[..unpadded as usize]);
     }
-    out
+    Ok(out)
 }

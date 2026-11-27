@@ -194,7 +194,7 @@ pub fn strip(ui: &mut Ui, scene: &Scene, current: i64, keys: &[f64], out: &mut V
     }
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 2.0, theme.faint);
-    // preview range: the outside is dimmed, the inside gets an accent band
+    // preview range: the outside is dimmed, the inside gets a time-coloured band
     if let Some((a, b)) = time.preview {
         let (xa, xb) = (scale.to_x(a as f64), scale.to_x(b as f64));
         let dim = Color32::from_black_alpha(110);
@@ -214,7 +214,7 @@ pub fn strip(ui: &mut Ui, scene: &Scene, current: i64, keys: &[f64], out: &mut V
                 Pos2::new(xb, body.bottom()),
             ),
             0.0,
-            theme.accent,
+            theme.time,
         );
     }
     // ruler
@@ -248,13 +248,13 @@ pub fn strip(ui: &mut Ui, scene: &Scene, current: i64, keys: &[f64], out: &mut V
         let x = scale.to_x(*f);
         painter.line_segment(
             [Pos2::new(x, body.top()), Pos2::new(x, body.top() + 8.0)],
-            Stroke::new(2.0, theme.accent),
+            Stroke::new(2.0, theme.time),
         );
     }
     let x = scale.to_x(current as f64);
     painter.line_segment(
         [Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())],
-        Stroke::new(1.5, theme.component_selection),
+        Stroke::new(1.5, theme.time),
     );
     // widgets on top of the scrub area: preview handles, then markers
     if let Some((a, b)) = time.preview {
@@ -272,7 +272,7 @@ pub fn strip(ui: &mut Ui, scene: &Scene, current: i64, keys: &[f64], out: &mut V
             ui.painter_at(rect).rect_filled(
                 Rect::from_center_size(Pos2::new(x, body.bottom() - 6.0), vec2(4.0, 12.0)),
                 1.0,
-                theme.accent,
+                theme.time,
             );
             if r.dragged()
                 && let Some(pos) = r.interact_pointer_pos()

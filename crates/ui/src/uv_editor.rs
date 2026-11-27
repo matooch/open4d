@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use egui::{Color32, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
+use egui::{PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
 use forge_app::uv_commands::{UvMesh, read};
 use forge_core::NodeId;
 use forge_geometry::mesh::Edge;
@@ -237,7 +237,7 @@ impl UvEditor {
         };
         for (edge, a, b) in lines {
             let stroke = if source.seams.contains(&edge) {
-                Stroke::new(2.0, Color32::from_rgb(239, 159, 65))
+                Stroke::new(2.0, crate::theme::Theme::current(ui.ctx()).record)
             } else {
                 Stroke::new(1.0, ui.visuals().weak_text_color())
             };
@@ -245,7 +245,7 @@ impl UvEditor {
         }
         for i in 0..coords.len() {
             let colour = if self.selected.contains(&i) {
-                ui.visuals().selection.stroke.color
+                crate::theme::Theme::current(ui.ctx()).selection
             } else {
                 ui.visuals().text_color()
             };

@@ -230,7 +230,7 @@ command that reads `state.camera` automatically acts on the active pane. `pane_c
   `pane_camera`, shading `SmoothWire` for Perspective and `Wire` for the three orthographic panes
   (they start as line drawings, our choice). File > New resets all of it (the dock layout stays).
 - `Single` shows the active pane only (the earlier behaviour). `Four` shows the 2×2 grid of
-  VIEWPORT.md §9 in the viewport area, with a 2 px gap; the active pane has an accent outline.
+  VIEWPORT.md §9 in the viewport area, with a 2 px gap; the active pane has a state (mint) outline.
   `maximized = Some(p)` in `Four` shows `p` alone, full size; toggling it off restores the quad.
 - Hovering a pane, or pressing/dragging in it, makes it active before the input is read, so
   navigation, picking, gizmos, tools and `view.frame_*` act on the pane under the pointer. A drag
@@ -288,7 +288,7 @@ Behaviour, data and rules: docs/specs/ANIM.md §2. Panel summary (own design,
   10 pt are the marker lane: each marker is a flag in its colour with its name (label "Marker
   <name>"): click goes to its frame, drag moves it (`marker.move`), the context menu has the
   name, "Color <name>" entries and "Delete Marker". The preview range shades the outside of the
-  strip, draws an accent band along the bottom and two handles (labels "Preview start handle" and
+  strip, draws a time-coloured band along the bottom and two handles (labels "Preview start handle" and
   "Preview end handle"; dragging runs `timeline.set_preview`, the handles cannot cross). Keys M
   and Alt+Comma / Alt+Period (ANIM.md §2.7).
 - `Timeline { current: 0, playing: false }` is editor state; start, end and fps live in
@@ -301,11 +301,14 @@ Behaviour, data and rules: docs/specs/ANIM.md §2. Panel summary (own design,
 Three themes (own palettes, §24.1): dark (default), light, high contrast. The text below is
 the dark one.
 
-Our own dark palette (sRGB): window `#1E2024`, panel `#25282D`, faint
-`#2E3238`, text `#D6D9DE`, weak text `#9AA0A8`, accent `#E08A2E` (selection), accent
-text `#1A1A1A`, error `#E5534B`, component selection `#38C6E8` (selected points, edges
-and polygons of the component target, EDITABLE.md §2.6). `apply(&egui::Context)`. Requirement: text on panel
-and on window has WCAG contrast ≥ 7, weak text ≥ 4.5, accent text on accent ≥ 4.5.
+Our own dark palette (sRGB; role tokens, §24.1, owner note N11): window `#171B21`, panel `#20262E`,
+viewport `#252C35`, input `#181D24`, divider `#343D49`, text `#E8EDF2`, weak text `#A7B2C0`;
+**state** (mint) `#73D6BC` marks the active tool, mode, toggle, layout tab and the playhead;
+**selection** (amber) `#F3B36B` marks what is selected everywhere; **record** (red) `#F17A80` marks
+recording and errors; component selection `#38C6E8` (selected points, edges and polygons of the
+component target, EDITABLE.md §2.6). There is no single `accent` any more. `apply(&egui::Context)`.
+Requirement: text on panel and on window has WCAG contrast ≥ 7, weak text ≥ 4.5, text on a state
+or selection fill ≥ 4.5.
 
 ## 9. App (`app`, `apps/studio`)
 
@@ -457,15 +460,18 @@ has **four states** (`key_indicator::KeyState`), told apart by fill and colour:
 | State | Look (observed) | Ours (theme tokens) |
 |---|---|---|
 | unkeyed: no track | hollow grey diamond | outline `weak_text`, no fill |
-| keyed: a key at this frame | solid red | solid `key` |
-| changed: an unkeyed draft (§12.1) | solid amber / orange | solid `modified` |
+| keyed: a key at this frame | solid red | solid `key` (the time colour, mint) |
+| changed: an unkeyed draft (§12.1) | solid amber / orange | solid `modified` (violet) |
 | animated: a track, no key at this frame | hollow red | outline `key`, no fill |
 
 The reference showed the amber diamond on a keyed frame after an unrecorded edit and after
 reselecting the object, so a draft wins over a key at this frame; scrubbing to another frame
-discards it and shows the hollow red one. Colours are our own (D22): `Theme.key` is a red and
-`Theme.modified` an amber in every theme; their hues differ by at least 30 degrees and both keep 3:1
-against the panel (tested), so the two solid states are never mistaken. The accessible label is
+discards it and shows the hollow `key` one. Colours are our own (D22; brief 234, owner note N11):
+`Theme.key` is the time colour (mint) and `Theme.modified` a violet in every theme, **not amber**:
+amber is selection, and a draft must not read as selected. Their hues differ by at least 30
+degrees, `modified` also differs from `selection` by at least 30 degrees, and both keep 3:1 against
+the panel (tested), so the two solid states are never mistaken; fill (solid or hollow) carries the
+rest in greyscale. The accessible label is
 `<row> unkeyed | keyed | changed | animated`. What a click does depends on the state
 (`RowKeys::click`):
 
@@ -566,8 +572,10 @@ agent gets the same behaviour. Each user gesture is one undo step.
    thin connector lines to the children, indented 12 px per depth (§13.1a). A click folds.
 2. Type icon: brief 227's icon goes here. Until it lands, the weak type label stands in for
    it, drawn after the name.
-3. Name, renamed in place (§13.4). **Selected rows draw the name in the accent colour**
-   (observed: amber; ours is the theme accent, D22) over a faint accent fill.
+3. Name, renamed in place (§13.4). **Selected rows draw the name in the selection colour**
+   (observed: amber; ours is the theme's `selection`, the same amber as the viewport outline, D22,
+   owner note N11) over a faint selection fill, with a 2 px selection bar at the row's left edge so
+   the row reads in greyscale.
 4. Layer glyph (a small bar in the layer's colour; §22.2), only for objects on a layer.
 5. Two **stacked visibility dots** in one column: the upper one is the editor visibility, the
    lower one the render visibility. Each is its own 14 x 10 px click target.
@@ -617,7 +625,7 @@ stay (**parity-pending G1**).
 | Disclosure box | a 10 x 10 px square outline centred in the gutter cell and in the row; a 6 px horizontal bar inside it when expanded (minus), plus a 6 px vertical bar when collapsed (plus); only on rows with children |
 | Connector lines | 1 px, colour `guide` |
 | Separator | 1 px line along the bottom edge of every row, colour `separator` |
-| Alternating shade | rows with an odd index in the visible list are filled with `alt`; a selected row is filled with `selected` (the accent at 16 % into the panel colour) |
+| Alternating shade | rows with an odd index in the visible list are filled with `alt`; a selected row is filled with `selected` (the selection colour at 16 % into the panel colour) |
 
 Connectors (`connectors(rows)` gives, per row, `trunks: Vec<bool>` of length `depth`, from the
 visible depth sequence alone): an ancestor at depth `k` has a **trunk**, a vertical line at
@@ -636,9 +644,9 @@ depths only.
 
 Colours come from the theme tokens (`row_colours(theme)`), so all three themes follow
 (§24.1): `guide` is `weak_text` mixed 75 % into `panel`, `separator` is `weak_text` mixed 18 % into
-`panel`, `alt` is `faint` mixed 55 % into `panel`, `selected` is `accent` mixed 16 % into `panel`.
+`panel`, `alt` is `faint` mixed 55 % into `panel`, `selected` is `selection` mixed 16 % into `panel`.
 The guide keeps at least 3:1 contrast against both `panel` and `alt` in dark, light and
-high-contrast (tested), and the accent name keeps 3:1 on `selected`.
+high-contrast (tested), and the selection-coloured name keeps 3:1 on `selected`.
 
 ### 13.2 Selection (pure, `tree::click_selection`)
 
@@ -662,8 +670,8 @@ dropping on a moved node, or into/next to a descendant of a moved node (a cycle)
 child (the position the line is drawn at). The empty area below the rows = root list, last.
 The drop runs `object.move` (`nodes` in visible order, `parent`, `index`). A drag hover
 shows what the drop does (`tree::drop_mark`; ours, **parity-pending G1**: the session's drag
-completed before a capture could be taken): **Into** fills the whole hovered row with the accent
-colour at 25 % alpha and outlines it 1.5 px (the row becomes the parent); **Before / After**
+completed before a capture could be taken): **Into** fills the whole hovered row with the state
+colour (mint) at 25 % alpha and outlines it 1.5 px (the row becomes the parent); **Before / After**
 draw a 2 px line across the row's bottom or top edge with a filled 3 px dot at its left end,
 placed at the indent of the depth the nodes would land at (`Before`: the row's depth; `After`:
 the row's depth, or one deeper for an expanded row with children, whose first child it becomes).
@@ -700,7 +708,7 @@ editor and render both Off, or Default when all are already Off), Disable / Enab
 Pure unit tests (crates/ui/tests/object_manager.rs): drop targets for every zone,
 cycles, ranges, filter, context items, visibility resolution (core), the row numbers (20 / 12),
 the boxed disclosure, the connector snapshot, the evaluation cell per type, the dot cycle,
-the accent name. egui_kittest: reparent
+the selection-coloured name. egui_kittest: reparent
 by drag, reorder by drag, dots and tick (each with undo), rename, search, context menu
 actions, a drag onto an attribute link field, the stacked dots (one column, editor above
 render, the check to their right), no check on nulls and a target on cameras.
@@ -1672,34 +1680,78 @@ Sources: own design from docs/roadmap/areas/L-ui.md ("HiDPI, IME, keyboard-only 
 high-contrast theme"); egui's public input model (`Event::Ime`, `Memory::focused`). No reference
 observation; the palettes are our own.
 
-### 24.1 Theme tokens (one module, `theme`)
+### 24.1 Theme tokens (one module, `theme`; revised by brief 234, owner note N11)
 `ThemeKind { Dark, Light, HighContrast }`, names `dark`, `light`, `high-contrast`
 (`name()`, `from_name()`, `ThemeKind::ALL`). `Theme::of(kind)` returns the token set; the UI
-takes its colours from it. Tokens: `window`, `panel`, `faint`, `text`, `weak_text`, `accent`,
-`accent_text`, `error`, `component_selection` and `focus` (keyboard focus ring and IME
-composition underline). `Theme::default()` is `of(Dark)`, unchanged (§8).
+takes its colours from it. Colour **roles** replace the single accent (the reference layout stays,
+D22; the proposal's palette is ours, source: design reference `WORKSPACE-DESIGN.md`, "Dark token"
+table, and owner note N11):
+
+| role | tokens | marks |
+|---|---|---|
+| surfaces | `window`, `panel`, `viewport`, `input`, `faint`, `divider` | shell, managers, canvas backdrop, recessed controls (text fields, drag values), hover/stripe fill, panel edges |
+| text | `text`, `weak_text` | controls and values; units and secondary labels |
+| **state** (mint) | `state`, `state_text` | the active tool, mode, checked toggle, active attribute tab, active layout tab (underline), links, "current" markers; `state_text` is the text on a `state` fill |
+| **time** (mint) | `time` (equal to `state` in every theme, tested) | the playhead and current-frame marker (timeline, dope sheet, F-curve), the timeline's key ticks, preview-range band and handles, key diamonds at or around the playhead (`key` is `time`) |
+| **selection** (amber) | `selection`, `selection_text` | selected objects (viewport outline, VIEWPORT.md §16), selected rows and names in the object manager and other lists, selected keys in the dope sheet and F-curve (drawn larger as well), selected nodes and UV points, box-select rectangles; `selection_text` is the text on a `selection` fill |
+| **record** (red) | `record`, `error` (equal, tested) | auto-key recording and errors; always paired with a label or shape |
+| **focus** | `focus` | keyboard focus ring, IME composition underline |
+| **component** | `component_selection` | selected points, edges and polygons of the component target (distinct from the amber object selection) |
+| **key** | `key` (= `time`), `modified` | the key diamond: key at this frame and animated-elsewhere use `key`; a draft uses `modified` |
+
+The *modified* hue is a **violet**, so it never reads as "selected" (amber), as the playhead and keys
+(mint) or as an error (red); its hue differs from `key` and from `selection` by at least 30 degrees
+(tested; §12).
 
 | token | dark | light | high contrast |
 |---|---|---|---|
-| window | `#1E2024` | `#F4F5F7` | `#000000` |
-| panel | `#25282D` | `#ECEEF1` | `#000000` |
-| faint | `#2E3238` | `#DDE0E5` | `#1A1A1A` |
-| text | `#D6D9DE` | `#1B1E22` | `#FFFFFF` |
-| weak text | `#9AA0A8` | `#4A515A` | `#D8D8D8` |
-| accent | `#E08A2E` | `#A64B00` | `#FFD400` |
-| accent text | `#1A1A1A` | `#FFFFFF` | `#000000` |
-| error | `#E5534B` | `#B3261E` | `#FF7B72` |
+| window | `#171B21` | `#EEF1F5` | `#000000` |
+| panel | `#20262E` | `#E6EAF0` | `#000000` |
+| viewport | `#252C35` | `#D9DFE7` | `#0A0A0A` |
+| input | `#181D24` | `#FFFFFF` | `#000000` |
+| faint | `#2A323C` | `#D8DEE6` | `#1A1A1A` |
+| divider | `#343D49` | `#B4BEC9` | `#BFBFBF` |
+| text | `#E8EDF2` | `#161B22` | `#FFFFFF` |
+| weak text | `#A7B2C0` | `#465162` | `#D8D8D8` |
+| state / time / key | `#73D6BC` | `#0B6B57` | `#5CFFD8` |
+| state text | `#0E221C` | `#FFFFFF` | `#000000` |
+| selection | `#F3B36B` | `#8F4C00` | `#FFC266` |
+| selection text | `#2A1805` | `#FFFFFF` | `#000000` |
+| record / error | `#F17A80` | `#B3202E` | `#FF8A90` |
+| modified | `#B79CF2` | `#6B3FC4` | `#D2B0FF` |
 | component selection | `#38C6E8` | `#006C99` | `#00E5FF` |
 | focus | `#5AA9FF` | `#0B57D0` | `#5CE1FF` |
 
-Contrast (WCAG ratio, tested for every theme): text on panel and window >= 7 (high contrast
->= 15), weak text on panel >= 4.5, accent text on accent >= 4.5, focus on panel >= 3, error on
-panel >= 3 (dark) or >= 4.5 (light, high contrast).
-`Theme::visuals()` builds from egui's dark visuals (light visuals for Light) and sets the focus
-style: the active/focused widget outline is a 2 point stroke in `focus`, and the IME
-composition underlines use `focus`. `Theme::apply(ctx)` installs visuals and fonts and stores
-the theme in the context; `Theme::current(&Context)` reads it back (dark before the first
-apply). `Theme::apply_visuals` does the same without reinstalling fonts (used when switching).
+The light and high-contrast values are derived from the dark ones: every role colour keeps its hue
+and is darkened (light) or brightened (high contrast) until it reaches the contrast below.
+Contrast (WCAG ratio, tested for every theme): text on panel, window, viewport and input >= 7 (high
+contrast >= 15); weak text on panel and viewport >= 4.5; `state_text` on `state` and
+`selection_text` on `selection` >= 4.5; `state`, `selection`, `record` and `modified` on panel,
+viewport and input >= 4.5 (text drawn in a role colour is then readable); `focus` on panel >= 3.
+**Greyscale:** colour is never the only cue. Dark mint and amber have almost the same luminance,
+so each role carries a shape, outline or text as well (checked by the role audit below): state is
+a filled or checked control or an underline, selection is an outline, a row bar or a larger key,
+time is a line, record has a label.
+`Theme::visuals()` builds from egui's dark visuals (light visuals for Light): `selection.bg_fill`
+is `state` and `selection.stroke` is `state_text` (egui's checked buttons, selectable labels and
+sliders are mode and tab states); `hyperlink_color` is `state`; `extreme_bg_color` is `input`;
+`widgets.noninteractive.bg_stroke` is `divider`; the active/focused widget outline is a 2 point
+stroke in `focus` and the IME composition underlines use `focus`. Lists whose rows are selected
+things (nodes, joints, UV points) draw them with `Theme::selection_scope`, which sets
+`selection.bg_fill` to `selection` and `selection.stroke` to `selection_text` for the closure.
+`Theme::apply(ctx)` installs visuals and fonts and stores the theme in the context;
+`Theme::current(&Context)` reads it back (dark before the first apply). `Theme::apply_visuals` does
+the same without reinstalling fonts (used when switching).
+
+**Role audit (`theme::role_audit() -> &[RoleUse]`, tested).** Every use of a role colour in
+`crates/ui` and `crates/viewport` maps to exactly one `Role` (`State`, `Time`, `Selection`, `Record`,
+`Focus`, `Component`). `RoleUse { role, widget, cue }` lists the widgets per role and the
+non-colour `Cue` that keeps the state legible in greyscale (`Fill`, `Outline`, `Underline`, `Line`,
+`Size`, `Text`). The test checks that every role has widgets, no entry is colour only, and that no
+source file under `crates/ui/src` or `crates/viewport/src` reads a token named `accent` (the token no
+longer exists). Fixed own colours that are not theme roles are named in the audit as such: the
+console WARN level (amber text, always with the word WARN), port-type colours of the node editor,
+the object palette's category hues (§29.2) and the clone axis marks.
 
 ### 24.2 Preferences (`prefs::UiPrefs`)
 `UiPrefs { theme: ThemeKind, scale: f32 }`, default dark and 1.0. `scale` is the UI scale
@@ -1766,7 +1818,8 @@ drawn with the focus ring (§24.1). Test: with the editor shown, Tab moves focus
 widget and then to a different one, Shift+Tab goes back.
 
 ### 24.7 Tests
-`crates/ui/tests/accessibility.rs`: token tables and contrast for the three themes, names round
+`crates/ui/tests/accessibility.rs`: token tables, role equalities (time = state = key, record =
+error), contrast of every role per theme, the modified hue, the role audit, names round
 trip, `Theme::of(Dark) == Theme::default()`, visuals (focus stroke, light base), `UiPrefs`
 clamp, settings round trip and leniency, commands (refused headless, argument validation),
 window (switching theme changes `Theme::current` and the saved file, scale sets the zoom
@@ -2021,7 +2074,7 @@ mode, with errors replacing it.
    placement and form.
 3. **Main area, left to right:**
    - **Tool strip** (43 px wide, one icon column, from the command bar down): search at the top, then
-     selection tools, then **Move, Rotate, Scale** (the active tool has an accent fill), then the other
+     selection tools, then **Move, Rotate, Scale** (the active tool has a state fill, mint), then the other
      transform tools, then sculpt/paint-style brushes. Groups are separated by a small gap, not lines.
      Hovering shows the tool name next to the strip (for example "Move" with its icon).
    - **Viewport column** (about 1429 px wide at 1920, the rest of the width):
@@ -2043,7 +2096,7 @@ mode, with errors replacing it.
        previous frame, play, next frame, next key, go to end; the loop and sound toggles; the
        current frame field ("0 F"); record and autokey (the autokey button turns red), the keying
        options; the key-type toggles (position, rotation, scale, parameter, point level). The ruler
-       is labelled every 5 frames at 1920 px (§29.1a), and the playhead is an accent marker. The range row
+       is labelled every 5 frames at 1920 px (§29.1a), and the playhead is a time (mint) marker. The range row
        has min, preview start, preview end and max fields ("0 F" … "90 F").
    - **Object palette strip** (43 px wide, one icon column, between the viewport and the
      managers): **creation categories**, each a drop-down group, colour-coded by category: object
@@ -2065,8 +2118,11 @@ mode, with errors replacing it.
 - **Dense:** small text, single-row bars, icon-only command bar and strips, and small gaps between
   groups instead of separator lines. The viewport gets almost all the space.
 - **Flat dark theme:** charcoal panels, slightly darker splitters, no bevels or drop shadows.
-  Text and icons are light grey. **Accent fill** (one accent colour) marks the active tool,
-  mode, attribute tab and timeline toggles. The active layout tab is underlined.
+  Text and icons are light grey. **Role colours** (brief 234, owner note N11; §24.1): the **state** fill (mint) marks the active
+  tool, mode, attribute tab and timeline toggles, and the active layout tab is underlined in it; the
+  **time** colour (mint) is the playhead; the **selection** colour (amber) marks selected things
+  everywhere (objects in the viewport and rows in the managers, keys, nodes); **record** (red) marks
+  recording and errors. Amber never marks a mode and mint never marks a selection.
 - **Icons:** monochrome light grey, except the object palette's category colours (primitives,
   generators/clone toolset, deformers/fields each have their own hue). Our hues and icon art are our own
   (D22). The rule is one hue per category, used for that category's icons everywhere (object
@@ -2076,12 +2132,12 @@ mode, with errors replacing it.
 
 - **Tabs are small toggle buttons that wrap onto several rows** when they don't fit (the Project
   example shows two rows: Project, an exchange-plug-in tab, Info, Dynamics, XRefs / To Do, Animation, Nodes).
-  The active tab is accent-filled. Some tabs have a small leading icon.
+  The active tab is state-filled (mint). Some tabs have a small leading icon.
 - Under the tabs: the tab's title in bold ("Project"), then rows. **Collapsible groups** have a
   ▾ header ("Time", "Execution", "Display").
 - **Rows:** a right-aligned label column, then the value. Number fields have small step arrows on
   both sides (‹ value ›) and show their unit ("0 F", "100 %"). Drop-downs show a ▾. Checkboxes are
-  small accent squares. A slider can follow a percent field. A colour swatch has a picker
+  small state-filled (mint) squares. A slider can follow a percent field. A colour swatch has a picker
   button.
 - **Two-column groups:** short related fields sit side by side, each with its own label
   (FPS | Project Time; Min Time | Max Time; the Execution checkboxes in two columns). Use this
@@ -2092,7 +2148,7 @@ mode, with errors replacing it.
 
 | Rule | Brief |
 |---|---|
-| Tool strip left, Move/Rotate/Scale with accent fill, hover name | 227 (icons, layout table), 223 (E/R/T) |
+| Tool strip left, Move/Rotate/Scale with state fill, hover name | 227 (icons, layout table), 223 (E/R/T) |
 | Command bar groups: axis locks, component modes (the one mode UI), snapping, workplane, render | 225 (one mode UI), 227 |
 | Viewport menu bar and the four navigation handle icons | 227 (handles drag = navigate, with 1/2/3, 223) |
 | Object palette strip with colour-coded creation groups, Cloner one click | 228 |

@@ -150,11 +150,14 @@ pub fn weight_manager_ui(ui: &mut egui::Ui, st: &mut EditorState) -> Vec<Cmd> {
         .max_height(160.0)
         .id_salt("weight_joints")
         .show(ui, |ui| {
-            for (j, label) in joints.iter().zip(&labels) {
-                if ui.selectable_label(active == Some(*j), label).clicked() {
-                    p.joint = Some(*j);
+            // the joint rows are selected things: the selection colour (UI.md §24.1)
+            crate::theme::Theme::current(ui.ctx()).selection_scope(ui, |ui| {
+                for (j, label) in joints.iter().zip(&labels) {
+                    if ui.selectable_label(active == Some(*j), label).clicked() {
+                        p.joint = Some(*j);
+                    }
                 }
-            }
+            });
         });
     ui.separator();
     ui.checkbox(&mut p.painting, "Paint");

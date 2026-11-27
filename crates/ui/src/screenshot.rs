@@ -5,7 +5,8 @@ use forge_viewport::camera::Camera;
 use forge_viewport::grid::grid_lines;
 use forge_viewport::panes::{PaneRect, arrange};
 use forge_viewport::render::{
-    DrawInstanced, DrawMesh, Frame, Gpu, LineSet, Palette, Settings, render_to_rgba,
+    DrawInstanced, DrawMesh, Frame, Gpu, Highlight, LineSet, Palette, SelectionDisplay, Settings,
+    render_to_rgba_with,
 };
 
 use crate::panes::{PANE_GAP, display_settings, scene_lights};
@@ -35,7 +36,7 @@ const GAP_COLOR: [u8; 4] = [18, 18, 20, 255];
 /// Renders the editor's view of the current frame at `width` x `height` pixels and
 /// returns an RGBA8 PNG. What the viewport shows is rendered: the active pane, the maximised
 /// pane, or the four panes side by side with the editor's lighting and anti-aliasing; the
-/// grid is drawn, selected objects are tinted, the gizmo is left out (UI.md §6.2).
+/// grid is drawn, selected objects are outlined in amber (VIEWPORT.md §16), the gizmo is left out (UI.md §6.2).
 pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Vec<u8>, String> {
     // the same scheduler pass the live viewport draws from
     let current = state.app.timeline.current;
@@ -79,24 +80,41 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
     .collect();
     let gpu = state.offscreen.get()?;
     let palette = Palette::default();
+    let drawn = scheduled_draw_items(&frame, &selected);
+    let ids: Vec<_> = drawn.iter().map(|d| d.id()).collect();
     let items = upload_items(
         &mut GpuCache::default(),
         (&gpu.device, &gpu.queue),
         &scene,
-        scheduled_draw_items(&frame, &selected),
+        drawn,
         None,
         &palette,
         UploadSettings::default(),
     );
+    let active = state.app.selection.active;
+    let highlight = |id: &forge_core::NodeId| {
+        if !selected.contains(id) {
+            Highlight::None
+        } else if active == Some(*id) {
+            Highlight::Active
+        } else {
+            Highlight::Selected
+        }
+    };
     let (mut draw, mut draw_instanced) = (Vec::new(), Vec::new());
-    for item in &items {
+    let mut outline = SelectionDisplay::default();
+    for (item, id) in items.iter().zip(&ids) {
         match item {
-            GpuItem::Mesh(mesh, color) => draw.push(DrawMesh {
-                mesh,
-                color: *color,
-            }),
+            GpuItem::Mesh(mesh, color) => {
+                draw.push(DrawMesh {
+                    mesh,
+                    color: *color,
+                });
+                outline.meshes.push(highlight(id));
+            }
             GpuItem::Instanced(set, color) => {
-                draw_instanced.push(DrawInstanced { set, color: *color })
+                draw_instanced.push(DrawInstanced { set, color: *color });
+                outline.instanced.push(highlight(id));
             }
         }
     }
@@ -129,7 +147,7 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
             gizmo: None,
             settings: *settings,
         };
-        render_to_rgba(gpu, width, height, camera, &frame)
+        render_to_rgba_with(gpu, width, height, camera, &frame, &outline)
     } else {
         let mut canvas = GAP_COLOR.repeat((width * height) as usize);
         for (r, camera, settings) in &panes {
@@ -163,7 +181,7 @@ pub fn render_png(state: &mut EditorState, width: u32, height: u32) -> Result<Ve
                 gizmo: None,
                 settings: *settings,
             };
-            let pane = render_to_rgba(gpu, w, h, camera, &frame);
+            let pane = render_to_rgba_with(gpu, w, h, camera, &frame, &outline);
             for row in 0..h.min(height.saturating_sub(y0)) {
                 let n = w.min(width.saturating_sub(x0)) as usize * 4;
                 let src = (row * w) as usize * 4;

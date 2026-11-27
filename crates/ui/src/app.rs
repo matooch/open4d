@@ -10,7 +10,7 @@ use forge_core::{NodeId, Value};
 use forge_generators::axis::AxisEdit;
 use forge_viewport::gizmo::{Drag, Gizmo, GizmoMode, Space as GizmoSpace};
 use forge_viewport::panes::{Layout as PaneLayout, Pane, arrange};
-use forge_viewport::render::Shading;
+use forge_viewport::render::{Settings, Shading};
 use glam::DVec3;
 use serde_json::{Value as Json, json};
 
@@ -1602,7 +1602,7 @@ impl Editor {
                 ui.painter().rect_stroke(
                     rect,
                     0.0,
-                    egui::Stroke::new(1.5, Theme::current(ui.ctx()).component_selection),
+                    egui::Stroke::new(1.5, Theme::current(ui.ctx()).state),
                     egui::StrokeKind::Inside,
                 );
             }
@@ -1705,7 +1705,7 @@ impl Editor {
             return;
         };
         if self.state.display == DisplayMode::Render {
-            self.paint_render_mode(ui, pane, rect, ppp);
+            self.paint_render_mode(ui, rs, pane, rect, ppp);
             return;
         }
         let gizmo = self.current_gizmo();
@@ -1756,6 +1756,10 @@ impl Editor {
                 splines: &crate::spline_edit::editor_draws(&shown, &self.state),
                 motion: &motion,
                 overlay: &overlay,
+                active: self.state.selection.active,
+                theme: Theme::current(ui.ctx()),
+                scale: ppp,
+                overlay_only: false,
             },
         );
         let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
@@ -1839,13 +1843,21 @@ impl Editor {
     /// The Render display mode: the real-time tier's frame of this pane's camera, without the
     /// overlays (UI.md §6.3, RENDER.md R22.7). A missing device keeps a note instead of the
     /// shaded image, since the shaded image needs the same device.
-    fn paint_render_mode(&mut self, ui: &mut Ui, pane: Pane, rect: egui::Rect, ppp: f32) {
+    fn paint_render_mode(
+        &mut self,
+        ui: &mut Ui,
+        rs: &egui_wgpu::RenderState,
+        pane: Pane,
+        rect: egui::Rect,
+        ppp: f32,
+    ) {
         let size = [
             ((rect.width() * ppp).round() as u32).clamp(1, 640),
             ((rect.height() * ppp).round() as u32).clamp(1, 400),
         ];
         let current = self.state.timeline.current;
-        let shown = self.state.app.scheduled_draw(current).scene.clone();
+        let scheduled = self.state.app.scheduled_draw(current);
+        let shown = scheduled.scene.clone();
         let camera = self.state.pane_camera(pane);
         let post = self.state.post;
         match self
@@ -1856,6 +1868,45 @@ impl Editor {
                 let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
                 ui.painter()
                     .image(texture.id(), rect, uv, egui::Color32::WHITE);
+                // the selection outline over the render engine's image: the viewport draws it
+                // alone on a transparent target, hidden by the scene's meshes (VIEWPORT.md §16.2)
+                if !self.state.selection.nodes.is_empty() {
+                    let full = [
+                        (rect.width() * ppp).round() as u32,
+                        (rect.height() * ppp).round() as u32,
+                    ];
+                    let lights = crate::panes::scene_lights(&shown);
+                    let base = Settings {
+                        shadows: false,
+                        ..display_settings(&self.state.views, Shading::Smooth, &lights)
+                    };
+                    let overlay = self.viewport.render(
+                        rs,
+                        pane,
+                        full,
+                        &camera,
+                        base,
+                        SceneView {
+                            scene: &shown,
+                            selected: &self.state.selection.nodes,
+                            gizmo: None,
+                            component: None,
+                            ctx: forge_core::EvalCtx::at_frame(
+                                current,
+                                f64::from(shown.settings().fps),
+                            ),
+                            frame: Some(&*scheduled),
+                            splines: &[],
+                            motion: &Default::default(),
+                            overlay: &Default::default(),
+                            active: self.state.selection.active,
+                            theme: Theme::current(ui.ctx()),
+                            scale: ppp,
+                            overlay_only: true,
+                        },
+                    );
+                    ui.painter().image(overlay, rect, uv, egui::Color32::WHITE);
+                }
                 ui.painter().text(
                     rect.left_top() + egui::vec2(8.0, 6.0),
                     egui::Align2::LEFT_TOP,
@@ -1893,7 +1944,7 @@ impl Editor {
         let tone = |t: Tone| match t {
             Tone::Normal => theme.text,
             Tone::Weak => theme.weak_text,
-            Tone::Guide => theme.accent,
+            Tone::Guide => theme.state,
         };
         let at = |p: [f32; 2]| rect.min + egui::vec2(p[0], p[1]);
         for prim in &list {
@@ -3067,7 +3118,13 @@ impl Editor {
                 }
             }
             let mut auto = self.state.autokey;
-            if ui.checkbox(&mut auto, "Auto-Key").clicked() {
+            // recording is the record role (red), with the word and the checked box as cues
+            let auto_label = if auto {
+                RichText::new("Auto-Key").color(Theme::current(ui.ctx()).record)
+            } else {
+                RichText::new("Auto-Key")
+            };
+            if ui.checkbox(&mut auto, auto_label).clicked() {
                 cmds.push(cmd("key.autokey"));
             }
             ui.separator();

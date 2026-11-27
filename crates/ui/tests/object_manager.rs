@@ -948,15 +948,17 @@ fn the_evaluation_cell_depends_on_the_type() {
 }
 
 #[test]
-fn selected_names_are_drawn_in_the_accent() {
+fn selected_names_are_drawn_in_the_selection_colour() {
     use forge_ui::theme::{Theme, ThemeKind, contrast};
     for kind in ThemeKind::ALL {
         let theme = Theme::of(kind);
-        assert_eq!(name_colour(&theme, true), Some(theme.accent), "{kind:?}");
+        assert_eq!(name_colour(&theme, true), Some(theme.selection), "{kind:?}");
         assert_eq!(name_colour(&theme, false), None);
-        // the accent name stays readable on the faint fill of a selected row
+        // the amber name stays readable on the faint fill of a selected row, and the row's left
+        // bar is the selection colour itself (the greyscale cue)
         let fill = row_colours(&theme).selected;
-        assert!(contrast(theme.accent, fill) >= 3.0, "{kind:?}");
+        assert!(contrast(theme.selection, fill) >= 3.0, "{kind:?}");
+        assert_eq!(row_colours(&theme).bar, theme.selection, "{kind:?}");
     }
 }
 

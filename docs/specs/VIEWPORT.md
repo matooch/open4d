@@ -164,6 +164,12 @@ Drags: `Drag::begin(gizmo, handle, cam, x, y, w, h) -> Option<Drag>`, then
   object (0.70, 0.70, 0.70), wire (0.05, 0.05, 0.06), selection (1.00, 0.55, 0.10),
   grid minor (0.22, 0.23, 0.25), major (0.30, 0.31, 0.34), axis X (0.55, 0.20, 0.20),
   axis Z (0.20, 0.25, 0.55).
+  Brief 234 adds `outline` (243, 179, 107)/255 and `outline_active` (255, 214, 158)/255 (the
+  selection amber and its brighter form, §16) and `grid_fade` (0 = off, the renderer default;
+  the editor sets 1, §16.4). The editor builds the whole palette from the theme tokens
+  (`viewport_panel::palette_from_theme`, UI.md §24.1): background = `viewport`, selection =
+  `selection` (object mode) or `component_selection` (component modes), minor/major grid from
+  `divider`.
 - `render_to_rgba(&Gpu, w, h, &cam, &scene) -> Vec<u8>`: offscreen render, tightly
   packed RGBA rows, top row first.
 - GPU tests run when an adapter exists; if none, they print a skip notice unless
@@ -776,10 +782,123 @@ derivatives and leave degenerate mappings unchanged. Use diffuse roughness and t
 metal flag with an ambient/direct-light approximation, a roughness-dependent highlight
 and tinted metal reflectance; this is not the offline BRDF or a material parity claim.
 The existing palette path, hidden line, and component overlays still work. Selected
-objects retain a selection tint without hiding the material. Features requiring per-pixel
+objects retain a faint selection tint (§16.1) without hiding the material. Features requiring per-pixel
 world-space evaluation, camera projection, transparency, or lighting-dependent shader
 inputs are outside this preview.
 
 The native offscreen baseline samples interior pixels away from silhouette edges to
 check colour and UV orientation against a fixed chart, and verifies lighting changes
 under roughness, metal and normal map edits.
+
+## 16. Selection display, outline and grid (brief 234; owner note N11)
+
+Sources: owner note N11 (docs/parity/GUI-SESSIONS.md, "Owner notes": selected objects in amber as an
+outline or wireframe, the same amber wherever selection appears); the design reference
+`WORKSPACE-DESIGN.md` on branch `design/forge3d-workspace`, "Standard workspace" viewport row (thin
+amber silhouette, fade minor grid lines with distance, depth-test the grid against opaque geometry,
+keep component highlights distinct from object outlines). Only colours and the selection display are
+taken from it; the layout stays UI.md §29. The colours are our own (D22).
+
+### 16.1 Look
+
+- **Selected objects** (object mode) get an **amber silhouette outline** (`Palette.outline`,
+  UI.md §24.1 `selection`), screen space, `SelectionDisplay.width_px` = 2 pt (pixels at scale 1), drawn over every shaded
+  display mode (Smooth, Flat, SmoothWire, FlatWire, Quick, Constant, Hidden Line). The fill keeps the
+  object colour with a faint selection tint (`viewport_panel::selected_fill`: the object colour mixed
+  14 % toward the selection colour), so the object does not turn orange.
+- The **active object** (`NodeSelection.active`) has a **stronger** outline: `outline_active` (a brighter
+  amber) and 3 px, so within a selection one object stands out in colour, in width and, in greyscale,
+  in width.
+- **Wireframe and lines display** (Wire, and the edges of the wire modes): the edges of a selected
+  object are drawn in the outline colour (the active object's in `outline_active`), the others in the
+  wire colour; the extra silhouette pass is not drawn when there is no fill (Wire), since the amber
+  edges are the display. **Bounding Box** draws a selected object's box in the outline colour.
+- **Component selection stays distinct**: the component target (and every selected polygon object next
+  to it, EDITABLE.md §6.1) gets no outline and no tint, and its selected points, edges and polygons
+  use the component colour (cyan), not amber.
+- **Splines, rig joints and null/clone overlays** that read `Palette.selection` are amber in object
+  mode because the editor sets `selection` to the amber token; in a component mode they use the
+  component colour as before.
+- **Gizmo**: the selected axis keeps the axis colours (X red, Y green, Z blue); nothing in §16 changes it.
+
+### 16.2 How it is drawn (`render::SelectionDisplay`)
+
+`Renderer::render_with(…, frame, &SelectionDisplay)` (and `render_to_with`, `render_to_rgba_with`,
+`try_render_to_rgba_with`; the plain `render`, `render_to` and `render_to_rgba` use
+`SelectionDisplay::default()`, which draws nothing extra, so existing callers and baselines are unchanged).
+`SelectionDisplay { meshes, instanced, width_px, active_width_px, overlay_only }`: `meshes[i]` and
+`instanced[i]` are the `Highlight` (`None`, `Selected`, `Active`) of `Frame.meshes[i]` and
+`Frame.instanced[i]` (a shorter list means `None` for the rest).
+
+The outline is a **screen-space dilation of a mask**, two small passes after the colour pass, so it works for
+any mesh (closed or open, hard-edged or smooth) and needs no normals:
+
+1. **Mask pass.** The highlighted meshes are drawn again (`vs_tri` / `vs_tri_inst`, fragment `fs_mask`) into a
+   two-channel mask (`Rg8Unorm`, same size and sample count as the colour target, resolved to one sample):
+   R = 1 where any highlighted object is, G = 1 where the active object is. The pass reads the colour pass's
+   depth, read-only, with `LessEqual` and a small bias toward the camera, so a nearer object hides the mask
+   behind it. No colour or depth is written. Instanced sets use the same visible ranges as the fill (culling,
+   LOD, chunks); a set is highlighted as a whole when its cloner is selected.
+2. **Dilation pass** (`outline.wgsl`, one full-screen triangle, scissored to the highlighted objects' screen
+   box grown by the widest outline): for each pixel not fully covered by the mask, the largest mask value
+   within `width_px` (R) and within `active_width_px` (G) pixels (a disc, taps at integer offsets with
+   `distance <= width + 0.5`) is the ring's alpha, scaled by `1 - own coverage`; the colour is
+   `outline_active` if an active object is within `active_width_px`, else `outline`. The result is blended
+   over the image (`SrcAlpha, OneMinusSrcAlpha` for colour and alpha), so a multisampled mask gives
+   anti-aliased ring edges and a binary mask gives pixels exactly in the outline colour.
+
+The ring is drawn over the grid, curves and gizmo (it is a pass of its own), but only where a highlighted
+object's silhouette is; a ring pixel on an occluder is possible along the boundary where a nearer object
+cuts a selected one (the mask is the visible part, dilated). Nothing is drawn when no `Highlight` is set or
+the display mode has no fill (Wire, Bounding Box; their edges and boxes are amber instead, §16.1), and the
+mask targets are reused between frames of the same size and sample count.
+
+**Render mode** (the real-time tier's frame, UI.md §6.3): the image is drawn by the render engine, so the
+panel draws the outline over it from a transparent overlay: `SelectionDisplay.overlay_only` clears the
+target to transparent black, draws every mesh into the depth buffer only (pipelines `depth_only`,
+`depth_only_inst`, colour writes off) so nearer objects hide the outline, runs the two passes above and
+draws nothing else (no fill, grid, lines, gizmo, shadows). egui blends the premultiplied result over the
+image. The render engine is not touched; the overlay uses the pane's camera, so it lines up with the image.
+
+**Picking** is CPU side (§2, §10.7) and reads no pixels; the outline neither changes nor is hit by it. The
+selection state that drives the highlight is the editor's `NodeSelection` (nodes and active), the same one
+the object manager draws; `viewport_panel::SceneView` carries `active`, the theme and the display scale
+(an outline is 2 pt, the active one 3 pt, so a 2x display draws 4 and 6 pixels).
+
+### 16.3 Cost
+
+Per frame with a highlight: the highlighted meshes once more through the vertex stage (a trivial fragment
+stage, no depth write), one extra render pass with the mask target, and one scissored full-screen pass whose
+fragment stage reads at most `(2·ceil(w)+1)²` mask texels (49 for the active width) for each pixel that is
+not inside an object. Without a highlight nothing is added and no target is allocated. Measured numbers
+(lavapipe, many objects and clones, with and without) are in PERFORMANCE.md §7.
+
+### 16.4 Grid
+
+- **Fade:** with `Palette.grid_fade` > 0, **minor** lines fade with their distance from the grid centre
+  (the camera target on the XZ plane, snapped as in §4): a minor line is cut into 16 segments and each
+  vertex colour is the minor colour mixed toward the background by
+  `grid_fade · smoothstep(0.35, 1.0, d / half_extent)`, `d` the XZ distance of the vertex from the
+  centre and `half_extent` = 50 · spacing. Major lines and the axes do not fade, so the structure stays
+  readable. With `grid_fade` = 0 (the renderer default) the vertices are the two endpoints as before.
+- **Depth test:** grid lines are depth-tested against opaque geometry (`LessEqual`, no depth write, §6)
+  and drawn after the fills, so a box standing on the grid hides the lines behind and under it. This is
+  tested by readback, not just stated.
+
+### 16.5 Tests
+
+crates/viewport/tests/selection_display.rs (lavapipe; `FORGE_REQUIRE_GPU=1` fails without a device; one
+shared device behind a lock; readback through `try_render_to_rgba_with`, which returns an error instead of
+panicking): every pixel that differs between a frame with and without a highlight is exactly the outline
+colour, was background before, and lies beside the selected box, and the unselected box is untouched; the
+active object's ring is brighter and wider; a nearer object hides the outline behind it; Wire mode draws amber
+edges for the selected object only; every display mode (all nine) changes only in the outline colour and only
+beside the selected object; MSAA x4 keeps solid outline pixels; instanced clones get a ring per clone and an
+unhighlighted set is identical to no highlight; an open surface (a single quad) is outlined from both sides
+with its interior untouched; the overlay-only target is transparent except exactly the ring of the shaded
+frame, and a nearer unselected mesh hides it; picking ignores the ring; grid fade (pure vertex test:
+smoothstep strength, majors and axes unfaded, a minor line ends at the background) and grid occlusion (a box
+hides the axis line under and behind it, the grid shows beside it).
+crates/viewport/tests/shader_translate.rs translates `render.wgsl` and `outline.wgsl` to SPIR-V, MSL and
+HLSL through naga, without a GPU. crates/ui/tests/theme_roles.rs and the viewport palette tests of §6 cover
+the theme side (UI.md §24.1).

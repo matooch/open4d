@@ -54,7 +54,11 @@ fn every_theme_meets_the_contrast_targets() {
         assert!(contrast(t.text, t.panel) >= min_text, "{n} text/panel");
         assert!(contrast(t.text, t.window) >= min_text, "{n} text/window");
         assert!(contrast(t.weak_text, t.panel) >= 4.5, "{n} weak");
-        assert!(contrast(t.accent_text, t.accent) >= 4.5, "{n} accent");
+        assert!(contrast(t.state_text, t.state) >= 4.5, "{n} state text");
+        assert!(
+            contrast(t.selection_text, t.selection) >= 4.5,
+            "{n} selection text"
+        );
         assert!(contrast(t.focus, t.panel) >= 3.0, "{n} focus");
         let min_error = if k == ThemeKind::Dark { 3.0 } else { 4.5 };
         assert!(contrast(t.error, t.panel) >= min_error, "{n} error");

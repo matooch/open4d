@@ -24,14 +24,14 @@ use forge_viewport::material_preview::PreviewMaterial;
 use forge_viewport::nav;
 use forge_viewport::panes::Pane;
 use forge_viewport::render::{
-    DrawInstanced, DrawMesh, Frame, InstanceSet, LineSet, MeshBuffers, Palette, RenderTargets,
-    Renderer, Settings, Shading,
+    DrawInstanced, DrawMesh, Frame, Highlight, InstanceSet, LineSet, MeshBuffers, Palette,
+    RenderTargets, Renderer, SelectionDisplay, Settings, Shading,
 };
 use glam::DMat4;
 
 use crate::components::{EditMode, display_selection, stored_selection};
 use crate::material_preview::Binding;
-use crate::theme::Theme;
+use crate::theme::{Theme, ThemeKind};
 
 /// What a held navigation key makes a primary drag do (UI.md §6.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,10 +125,70 @@ pub struct SceneView<'a> {
     pub motion: &'a forge_viewport::motion::MotionDraw,
     /// Joints, weight markers and volume boxes (VIEWPORT.md sections 13.4 and 14).
     pub overlay: &'a crate::scene_overlay::SceneOverlay,
+    /// The active object of the selection: its outline is the stronger one (VIEWPORT.md §16.1).
+    pub active: Option<NodeId>,
+    /// The theme the palette comes from.
+    pub theme: Theme,
+    /// Pixels per point, so outlines have the same apparent width on every display.
+    pub scale: f32,
+    /// Draw only the selection outlines on a transparent target, for the render engine's
+    /// image (VIEWPORT.md §16.2); nothing else is drawn.
+    pub overlay_only: bool,
 }
 
-/// Base colour of selected objects (our palette).
-pub(crate) const SELECTED_TINT: [f32; 3] = [0.95, 0.62, 0.30];
+/// How far the fill of a selected object is mixed toward the selection colour: a faint warm
+/// tint, so the object does not turn orange and the amber outline carries the selection
+/// (docs/specs/VIEWPORT.md §16.1).
+pub const SELECTED_TINT_MIX: f32 = 0.14;
+
+/// Base colour of selected objects: the object colour with a faint selection tint.
+pub fn selected_fill(palette: &Palette) -> [f32; 3] {
+    std::array::from_fn(|i| {
+        palette.object[i] + (palette.outline[i] - palette.object[i]) * SELECTED_TINT_MIX
+    })
+}
+
+/// The viewport palette of a theme (docs/specs/VIEWPORT.md §6 and §16, UI.md §24.1): the
+/// backdrop is the theme's `viewport` token, selected objects and curves use the `selection`
+/// token (the `component_selection` token in a component mode, so component highlights stay
+/// distinct from object outlines), the grid is drawn in `divider` tones and fades with distance.
+pub fn palette_from_theme(theme: &Theme, component: bool) -> Palette {
+    let base = Palette::default();
+    let rgb = palette_color;
+    let toward = |a: egui::Color32, b: egui::Color32, t: f32| {
+        let (a, b) = (rgb(a), rgb(b));
+        std::array::from_fn(|i| a[i] + (b[i] - a[i]) * t)
+    };
+    // the active outline is the selection colour pushed away from the backdrop
+    let pole = if theme.kind == ThemeKind::Light {
+        egui::Color32::BLACK
+    } else {
+        egui::Color32::WHITE
+    };
+    Palette {
+        background: rgb(theme.viewport),
+        object: match theme.kind {
+            ThemeKind::Dark => base.object,
+            ThemeKind::Light => [0.60; 3],
+            ThemeKind::HighContrast => [0.80; 3],
+        },
+        selection: if component {
+            rgb(theme.component_selection)
+        } else {
+            rgb(theme.selection)
+        },
+        outline: rgb(theme.selection),
+        outline_active: toward(theme.selection, pole, 0.30),
+        grid_minor: toward(theme.viewport, theme.divider, 0.45),
+        grid_major: toward(theme.viewport, theme.divider, 0.85),
+        grid_fade: 1.0,
+        ..base
+    }
+}
+
+/// Outline width of a selected object and of the active one, in points (VIEWPORT.md §16.1).
+const OUTLINE_PX: f32 = 2.0;
+const OUTLINE_ACTIVE_PX: f32 = 3.0;
 
 /// Side of a drawn point in component mode, in pixels.
 const POINT_SIZE: f32 = 7.0;
@@ -186,6 +246,8 @@ struct SceneItems {
     selection: BTreeSet<NodeId>,
     component: Option<(NodeId, EditMode)>,
     items: Vec<GpuItem>,
+    /// The node of each item.
+    ids: Vec<NodeId>,
 }
 
 /// An uploaded drawable with its base colour.
@@ -386,6 +448,8 @@ pub struct SlotCache<T> {
     slots: BTreeMap<NodeId, Slot<T>>,
     key: Option<SlotKey>,
     items: Vec<T>,
+    /// The node of each entry of `items`.
+    ids: Vec<NodeId>,
     /// Nodes built by the last refresh.
     pub rebuilt: usize,
 }
@@ -396,6 +460,7 @@ impl<T> Default for SlotCache<T> {
             slots: BTreeMap::new(),
             key: None,
             items: Vec::new(),
+            ids: Vec::new(),
             rebuilt: 0,
         }
     }
@@ -437,6 +502,7 @@ impl<T: Clone> SlotCache<T> {
         let mut slots = std::mem::take(&mut self.slots);
         let mut next = BTreeMap::new();
         let mut items = Vec::new();
+        let mut ids = Vec::new();
         for id in &frame.drawn {
             let Some(out) = frame.outputs.get(id) else {
                 continue;
@@ -468,17 +534,26 @@ impl<T: Clone> SlotCache<T> {
                     }
                 }
             };
-            items.extend(slot.item.clone());
+            if let Some(item) = slot.item.clone() {
+                items.push(item);
+                ids.push(*id);
+            }
             next.insert(*id, slot);
         }
         self.slots = next;
         self.items = items;
+        self.ids = ids;
         &self.items
     }
 
     /// The items of the last refresh.
     pub fn items(&self) -> &[T] {
         &self.items
+    }
+
+    /// The node of each of [`SlotCache::items`].
+    pub fn ids(&self) -> &[NodeId] {
+        &self.ids
     }
 
     /// The nodes that currently have an item.
@@ -629,7 +704,7 @@ pub fn upload_item(
                 })
             });
             let color = if selected && target.is_none() {
-                SELECTED_TINT
+                selected_fill(palette)
             } else {
                 palette.object
             };
@@ -683,7 +758,7 @@ pub fn upload_item(
                 Arc::new(set)
             });
             let color = if selected {
-                SELECTED_TINT
+                selected_fill(palette)
             } else {
                 palette.object
             };
@@ -715,6 +790,10 @@ impl ViewportPanel {
             splines,
             motion,
             overlay,
+            active,
+            theme,
+            scale,
+            overlay_only,
         } = view;
         let device = &rs.device;
         let samples = base.msaa.samples();
@@ -767,10 +846,7 @@ impl ViewportPanel {
                 texture_id,
             });
         }
-        let mut palette = Palette::default();
-        if component.is_some() {
-            palette.selection = palette_color(Theme::default().component_selection);
-        }
+        let palette = palette_from_theme(&theme, component.is_some());
         let opts = UploadSettings {
             lod_proxies: base.lod_px > 0.0,
         };
@@ -805,11 +881,13 @@ impl ViewportPanel {
                     || m.component != component
             })
         {
+            let drawn = scene_draw_items_at(scene, selected, &ctx);
+            let ids = drawn.iter().map(DrawItem::id).collect();
             let items = upload_items(
                 &mut self.cache,
                 (device, &rs.queue),
                 scene,
-                scene_draw_items_at(scene, selected, &ctx),
+                drawn,
                 component,
                 &palette,
                 opts,
@@ -819,24 +897,56 @@ impl ViewportPanel {
                 selection: selected.clone(),
                 component,
                 items,
+                ids,
             });
             // the scheduled path starts over when it is used again
             self.slots = SlotCache::default();
         }
         let (mut draw, mut draw_instanced) = (Vec::new(), Vec::new());
-        let shown: &[GpuItem] = if scheduled {
-            self.slots.items()
+        let (shown, shown_ids): (&[GpuItem], &[NodeId]) = if scheduled {
+            (self.slots.items(), self.slots.ids())
         } else {
-            self.items.as_ref().map_or(&[], |m| &m.items)
+            self.items
+                .as_ref()
+                .map_or((&[], &[]), |m| (&m.items, &m.ids))
         };
-        for item in shown {
+        // the component target and the polygon objects next to it show components, not an
+        // outline (VIEWPORT.md §16.1); every other selected object is outlined, the active
+        // one more strongly
+        let is_target = |id: &NodeId| {
+            component.is_some_and(|(t, _)| {
+                t == *id
+                    || (selected.contains(id)
+                        && scene.node(*id).is_some_and(|n| n.type_id == POLYGON))
+            })
+        };
+        let highlight = |id: &NodeId| {
+            if !selected.contains(id) || is_target(id) {
+                Highlight::None
+            } else if active == Some(*id) {
+                Highlight::Active
+            } else {
+                Highlight::Selected
+            }
+        };
+        let mut sel_display = SelectionDisplay {
+            width_px: OUTLINE_PX * scale,
+            active_width_px: OUTLINE_ACTIVE_PX * scale,
+            overlay_only,
+            ..SelectionDisplay::default()
+        };
+        for (item, id) in shown.iter().zip(shown_ids) {
             match item {
-                GpuItem::Mesh(mesh, color) => draw.push(DrawMesh {
-                    mesh,
-                    color: *color,
-                }),
+                GpuItem::Mesh(mesh, color) => {
+                    draw.push(DrawMesh {
+                        mesh,
+                        color: *color,
+                    });
+                    sel_display.meshes.push(highlight(id));
+                }
                 GpuItem::Instanced(set, color) => {
-                    draw_instanced.push(DrawInstanced { set, color: *color })
+                    draw_instanced.push(DrawInstanced { set, color: *color });
+                    sel_display.instanced.push(highlight(id));
                 }
             }
         }
@@ -879,7 +989,7 @@ impl ViewportPanel {
             },
         };
         let mut encoder = device.create_command_encoder(&Default::default());
-        renderer.render_to(device, &mut encoder, &t.targets, cam, &frame);
+        renderer.render_to_with(device, &mut encoder, &t.targets, cam, &frame, &sel_display);
         rs.queue.submit([encoder.finish()]);
         t.texture_id
     }

@@ -382,6 +382,9 @@ Linear / Step, Copy / Paste (at the current frame), Scale 1/2 and Scale 2 about 
 Ripple, Snap, "Selected objects only". Pan with the scroll wheel, zoom with pinch / ctrl-scroll about
 the cursor (`TimeView`). Shared pure logic (`TimeView`, `ValueView`, `KeySelection`, `hit_test`,
 `box_select`, `scale_about`, `rows`) is covered without egui.
+Colours (brief 234, owner note N11; UI.md §24.1): selected keys are drawn in the **selection** colour
+(amber) and one pixel larger, unselected keys in `text`, the box-select rectangle in `selection`, and the
+current-frame line in the **time** colour (mint); the same in the value graph.
 
 ### Value graph (`crates/ui/src/fcurve.rs`)
 One curve per numeric track of the selected objects, drawn by sampling `value_at_exact` (the

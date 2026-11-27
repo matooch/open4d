@@ -2058,6 +2058,7 @@ dependencies = [
  "forge-material",
  "forge-modeling",
  "glam 0.34.1",
+ "naga",
  "png",
  "pollster 1.0.1",
  "wgpu",

@@ -4,13 +4,13 @@ One page to check where the project stands. The planner updates it after every m
 Details live in the files linked at the bottom; when this page and those files disagree, the
 linked files win.
 
-**Last updated:** 2026-11-27, after 233 (the owner's GUI session applied), 046 (Null display), the run 10 checkpoint of 214 (Tier 1 at 100 fps) and the new area P (behaviours, live input, play mode; briefs 215–222).
+**Last updated:** 2026-11-27, after 234 (mint state, amber selection, outline), 233 (the owner's GUI session applied), 046 (Null display), the run 10 checkpoint of 214 (Tier 1 at 100 fps) and the new area P (behaviours, live input, play mode; briefs 215–222).
 
 ## At a glance
 
 | | Now |
 |---|---|
-| Implementation briefs | **206 of 222 done** (93 %) · 214 in progress · 15 ready · 231 waits on O64 |
+| Implementation briefs | **207 of 222 done** (93 %) · 214 in progress · 15 ready · 231 waits on O64 |
 | Golden reference cases | 1,117 (from the reference app, via the observer) |
 | Tests in the gate | 2,500 passing, 0 failing (Linux, macOS, Windows CI) |
 | Acceptance scenarios | S1–S9 pass (S6 with own-design Pose Morph, parity-pending) · S10: Tier 1 meets 60 fps, Tier 2 open (214) · S11 new (area P) |
@@ -51,7 +51,7 @@ all three OS. Definitions: [roadmap/README.md](roadmap/README.md).
 | I · Dynamics and particles | 8 / 8 | Parity-pending: particles, forces and their point-source use (own design D20, O40; statistical tests) |
 | J · Materials, shaders, UVs | 13 / 13 | Hands-on checks in GUI session G7 |
 | K · Rendering and viewport | 11 / 12 | 142 GPU path tracer (queued) |
-| L · UI and UX | 22 / 26 | Owner's first hands-on use (2026-11-26, D22): 223 nav 1/2/3 + E/R/T, 224 keyframe toggle, 232 keyframe drafts from the gizmo, Coordinates and inspector shown in the viewport (owner note N10; the frame-change and selection discard rules parity-pending G5), 225 one mode UI and 229 object manager cues are done (owner's feel check on the Mac pending; placements and numbers parity-pending G1/G2/G5); 233 applied the owner's Cowork session (observed key map with two-key sequences, 20 px object rows with boxed plus/minus, stacked visibility dots, four key diamond states, chevron number fields, Shift-click tab stacking, 1920 x 1080 window metrics; sequence timing, drop markers and scrub modifiers stay parity-pending); open: 226 docking, 227 icons and reference layout, 228 clone toolset at top level, 230 script lookup, 231 settings in tabs (waits on observation O64). GUI sessions G1/G2 give the exact layout |
+| L · UI and UX | 23 / 26 | Owner's first hands-on use (2026-11-26, D22): 223 nav 1/2/3 + E/R/T, 224 keyframe toggle, 232 keyframe drafts from the gizmo, Coordinates and inspector shown in the viewport (owner note N10; the frame-change and selection discard rules parity-pending G5), 225 one mode UI and 229 object manager cues are done (owner's feel check on the Mac pending; placements and numbers parity-pending G1/G2/G5); 233 applied the owner's Cowork session (observed key map with two-key sequences, 20 px object rows with boxed plus/minus, stacked visibility dots, four key diamond states, chevron number fields, Shift-click tab stacking, 1920 x 1080 window metrics; sequence timing, drop markers and scrub modifiers stay parity-pending); 234 gave the theme colour roles (mint for the active tool, mode and playhead, amber for selection everywhere with an amber outline on selected objects in the viewport, red for recording and errors; owner's Mac check of the look pending); open: 226 docking, 227 icons and reference layout, 228 clone toolset at top level, 230 script lookup, 231 settings in tabs (waits on observation O64). GUI sessions G1/G2 give the exact layout |
 | M · File exchange | 12 / 12 | Done: S9 passes (171). Open: glTF skin-pose KNOWN_MISMATCH, PLY/USD/morph not observed |
 | N · Platform, packaging, docs | 13 / 14 | 185 v1.0 release checklist (last) |
 | P · Behaviours, live input, play mode (Luau, Rust; D21) | 0 / 8 | Briefs 215–222 queued after 213: Luau runtime and builder scripts, behaviour tag with start/update and a per-frame cache, inputs (keyboard, gamepad, MIDI, OSC) through named actions, input tracks, play mode, bulk clone API, Rust behaviours, `forge play` and S11 |

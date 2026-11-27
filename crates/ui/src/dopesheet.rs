@@ -317,13 +317,19 @@ pub fn dope_sheet_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
         } else {
             *p
         };
-        let color = if selected { theme.accent } else { theme.text };
+        let color = if selected {
+            theme.selection
+        } else {
+            theme.text
+        };
+        // a selected key is one pixel larger, so it reads in greyscale (UI.md §24.1)
+        let r = if selected { KEY_R + 1.0 } else { KEY_R };
         painter.add(Shape::convex_polygon(
             vec![
-                p + vec2(0.0, -KEY_R),
-                p + vec2(KEY_R, 0.0),
-                p + vec2(0.0, KEY_R),
-                p + vec2(-KEY_R, 0.0),
+                p + vec2(0.0, -r),
+                p + vec2(r, 0.0),
+                p + vec2(0.0, r),
+                p + vec2(-r, 0.0),
             ],
             color,
             Stroke::new(1.0, theme.window),
@@ -334,7 +340,7 @@ pub fn dope_sheet_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
     if cx >= x0 && cx <= canvas.right() {
         painter.line_segment(
             [Pos2::new(cx, canvas.top()), Pos2::new(cx, canvas.bottom())],
-            Stroke::new(1.0, theme.accent),
+            Stroke::new(1.0, theme.time),
         );
     }
 
@@ -387,7 +393,7 @@ pub fn dope_sheet_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
                     painter.rect_stroke(
                         Rect::from_two_pos(origin, pos),
                         0.0,
-                        Stroke::new(1.0, theme.accent),
+                        Stroke::new(1.0, theme.selection),
                         egui::StrokeKind::Inside,
                     );
                 }

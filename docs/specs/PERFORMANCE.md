@@ -232,3 +232,31 @@ and the [S10 setup target](../agents/tasks/214-realtime-performance.md#steps-spe
 - Check program identity without timing assertions and compare warm and cold
   rendered output across material and bitmap edits. Measure full-size S10 and
   camera-only setup separately, as in §6.1.
+
+## 7. Viewport selection outline (brief 234)
+
+Sources: owner note N11 (amber selection outline); the design and the passes are VIEWPORT.md §16;
+the benchmark is `crates/viewport/benches/performance.rs`, group `outline_640x360`
+(`cargo bench -p forge-viewport --bench performance -- outline`).
+
+The outline is two extra passes only while something is highlighted (a mask of the highlighted meshes
+through the vertex stage again, then a scissored full-screen dilation, VIEWPORT.md §16.3); with nothing
+highlighted the frame is unchanged and no target is allocated. Measured on the development container
+(software adapter llvmpipe, 256-bit; release build; 640 × 360; median of criterion's interval; the time
+includes the readback, so absolute numbers are the software rasteriser's, not a GPU's; two runs give the
+spread):
+
+| Scene (640 × 360, Smooth shading) | nothing selected | outline on | extra |
+|---|---|---|---|
+| 400 separate cube objects, one active | 17.1 – 19.4 ms | 16.6 ms | within the noise |
+| 400 separate cube objects, all selected | 17.1 – 19.4 ms | 22.8 – 27.0 ms | + 5.7 to + 7.5 ms (+ 30 to 40 %) |
+| one cloner, 10 000 clones, selected | 32.1 ms | 56.9 ms | + 24.8 ms (+ 77 %) |
+
+Reading: the cost has two parts. The mask repeats the selected geometry once (the 10 000-clone case pays
+for drawing the clones twice, as expected, about the cost of the colour pass's geometry on this rasteriser),
+and the dilation costs by the pixels of the highlighted objects' screen box, which is why one selected
+object among 400 is free and selecting everything is not. Typical editing (one to a few objects selected)
+adds the scissored dilation only. The pass count is two extra render passes and one extra target of
+`Rg8Unorm` (+ a multisampled one with MSAA); `FrameStats.outline_draws` counts the mask draw calls (not part
+of `draw_calls`). **Not measured:** a hardware adapter (the numbers above are the software rasteriser's); the owner's Mac
+check of the look and the frame rate with a large selection is part of brief 234's "Done when".

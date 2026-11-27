@@ -75,7 +75,7 @@ pub fn history_panel_ui(ui: &mut Ui, doc: &Document) -> Option<usize> {
                         jump = Some(row.position);
                     }
                     if current {
-                        ui.label(RichText::new("current").small().color(theme.accent));
+                        ui.label(RichText::new("current").small().color(theme.state));
                     }
                 });
             }

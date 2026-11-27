@@ -15,6 +15,7 @@ pollster = "1"
 wgpu = { version = "30", features = ["static-dxc"] }
 
 [dev-dependencies]
+naga = { version = "30", features = ["wgsl-in", "spv-out", "msl-out", "hlsl-out"] }
 png = "0.18"
 # Benchmarks (docs/specs/VIEWPORT.md §10.10); no plotting or parallel features, so the
 # dependency set stays small and permissive (deny.toml).

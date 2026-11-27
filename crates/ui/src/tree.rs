@@ -606,8 +606,11 @@ pub struct RowColours {
     pub guide: egui::Color32,
     pub separator: egui::Color32,
     pub alt: egui::Color32,
-    /// The faint fill behind a selected row; the name itself is drawn in the accent.
+    /// The faint fill behind a selected row; the name itself is drawn in the selection colour.
     pub selected: egui::Color32,
+    /// The 2 px bar along the left edge of a selected row: the selection colour itself, so a
+    /// selected row reads in greyscale too (UI.md §24.1).
+    pub bar: egui::Color32,
 }
 
 pub fn row_colours(theme: &crate::theme::Theme) -> RowColours {
@@ -615,12 +618,14 @@ pub fn row_colours(theme: &crate::theme::Theme) -> RowColours {
         guide: theme.panel.lerp_to_gamma(theme.weak_text, 0.75),
         separator: theme.panel.lerp_to_gamma(theme.weak_text, 0.18),
         alt: theme.panel.lerp_to_gamma(theme.faint, 0.55),
-        selected: theme.panel.lerp_to_gamma(theme.accent, 0.16),
+        selected: theme.panel.lerp_to_gamma(theme.selection, 0.16),
+        bar: theme.selection,
     }
 }
 
-/// The colour of a row's name: the accent while selected (observed, G1 item 2: selected
-/// names are amber; ours is the theme's accent, D22), else `None` for the plain text colour.
+/// The colour of a row's name: the selection colour while selected (observed, G1 item 2: selected
+/// names are amber; ours is the theme's `selection`, D22, owner note N11), else `None` for the
+/// plain text colour.
 pub fn name_colour(theme: &crate::theme::Theme, selected: bool) -> Option<egui::Color32> {
-    selected.then_some(theme.accent)
+    selected.then_some(theme.selection)
 }

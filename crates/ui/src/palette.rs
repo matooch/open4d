@@ -620,7 +620,7 @@ impl Palette {
                                 |ui| {
                                     if e.chord.is_some() {
                                         ui.label(
-                                            RichText::new(&e.shown).monospace().color(theme.accent),
+                                            RichText::new(&e.shown).monospace().color(theme.state),
                                         );
                                     }
                                 },
