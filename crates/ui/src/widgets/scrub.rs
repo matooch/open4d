@@ -1,7 +1,7 @@
 //! Number scrubbing (own design, **parity-pending G4**; the chevron step is observed, G4 item 1).
 //!
-//! Dragging a number field changes it by `step` display units per pixel. Shift makes the
-//! step 10 times finer, Ctrl 10 times coarser; any other combination leaves it unchanged.
+//! Dragging changes the value by the base display step per pixel. Shift or Control uses 10×;
+//! Shift+Control uses 100×.
 //! Up/Down arrow keys in a focused field add one step. Pure maths, no egui state.
 
 use forge_core::Unit;
@@ -29,8 +29,8 @@ impl Mods {
 /// The step multiplier of the held modifiers.
 pub fn factor(m: Mods) -> f64 {
     match (m.shift, m.ctrl, m.alt) {
-        (true, false, false) => FINE,
-        (false, true, false) => COARSE,
+        (true, true, false) => 100.0,
+        (true, false, false) | (false, true, false) => COARSE,
         _ => 1.0,
     }
 }
@@ -70,7 +70,11 @@ pub fn step(base: f64, m: Mods) -> f64 {
 /// during a drag, so that case is compensated to land on [`step`].
 pub fn drag_speed(base: f64, m: Mods) -> f64 {
     let shift_only = m.shift && !m.ctrl && !m.alt;
-    if shift_only { base } else { step(base, m) }
+    if shift_only {
+        step(base, m) * 10.0
+    } else {
+        step(base, m)
+    }
 }
 
 /// Value after dragging `pixels` (positive = right/up) from `start`.

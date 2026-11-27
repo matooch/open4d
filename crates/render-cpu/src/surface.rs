@@ -79,8 +79,14 @@ impl Surface {
         let mut alpha = 0.02f64.powi(2);
         if let Some(s) = &o.specular {
             spec = v3(g.eval(s.color, sampler, &ctx)) * s.strength;
-            alpha = s.width.clamp(0.02, 1.0).powi(2);
-            if s.metal {
+            let width = o
+                .roughness_input
+                .map_or(s.width, |i| g.eval(i, sampler, &ctx)[0]);
+            alpha = width.clamp(0.02, 1.0).powi(2);
+            let metal = o
+                .metallic_input
+                .map_or(s.metal, |i| g.eval(i, sampler, &ctx)[0] > 0.5);
+            if metal {
                 albedo *= (1.0 - s.strength).max(0.0);
             }
         }

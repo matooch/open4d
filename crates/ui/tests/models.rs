@@ -63,7 +63,15 @@ fn default_dock_layout_is_ours() {
     assert_eq!(d.tabs(Area::Center), [Panel::Viewport]);
     assert_eq!(d.tabs(Area::RightTop), [Panel::ObjectTree]);
     assert_eq!(d.tabs(Area::RightBottom), [Panel::Attributes]);
-    assert_eq!(d.tabs(Area::Bottom), [Panel::Timeline, Panel::Coordinates]);
+    assert_eq!(
+        d.tabs(Area::Bottom),
+        [
+            Panel::Timeline,
+            Panel::DopeSheet,
+            Panel::ValueGraph,
+            Panel::Coordinates
+        ]
+    );
     assert_eq!(d.tabs(Area::Left), [Panel::ToolPalette]);
     assert_eq!(d.tabs(Area::Top), [Panel::CommandBar]);
     assert_eq!(d.area_of(Panel::Attributes), Some(Area::RightBottom));
@@ -102,7 +110,7 @@ fn moving_and_closing_panels() {
     assert_eq!(d.area_of(Panel::Attributes), Some(Area::Left));
     // each panel appears once
     let all: Vec<Panel> = Area::ALL.iter().flat_map(|a| d.tabs(*a).to_vec()).collect();
-    assert_eq!(all.len(), 7);
+    assert_eq!(all.len(), Panel::DEFAULT.len());
 }
 
 #[test]

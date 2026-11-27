@@ -114,3 +114,17 @@ pub fn show(ui: &mut egui::Ui, cx: &Cx, row: &AttrRow) -> Option<Edit> {
         W::ReadOnly => readonly::show(ui, row),
     }
 }
+
+/// Keep the normal single-click caret and select the entire value on double-click.
+pub(crate) fn text_field(ui: &mut egui::Ui, edit: egui::TextEdit<'_>) -> egui::Response {
+    let mut result = edit.show(ui);
+    if result.response.double_clicked() {
+        result
+            .state
+            .cursor
+            .set_char_range(Some(egui::text::CCursorRange::select_all(&result.galley)));
+        result.state.store(ui.ctx(), result.response.id);
+        ui.ctx().request_repaint();
+    }
+    result.response.response
+}

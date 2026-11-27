@@ -46,6 +46,7 @@ fn map_is_sorted_unique_and_files_match_glyphs() {
                 .into_iter()
                 .map(|button| button.icon),
         )
+        .chain(forge_ui::timeline::NAVIGATION.map(|step| step.presentation().0))
         .collect();
     let listed: BTreeSet<String> = icons::glyphs().iter().map(|g| g.0.to_string()).collect();
     let files = names_in_dir();

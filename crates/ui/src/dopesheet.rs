@@ -16,8 +16,8 @@ use crate::state::EditorState;
 use crate::theme::Theme;
 
 pub const ROW_H: f32 = 18.0;
-pub const RULER_H: f32 = 18.0;
-pub const LABEL_W: f32 = 170.0;
+pub const RULER_H: f32 = crate::timeline::EDITOR_RULER_HEIGHT;
+pub const LABEL_W: f32 = crate::timeline::MAX_TRACK_WIDTH;
 const KEY_R: f32 = 5.0;
 
 /// A copied key: its track and the offset from the earliest copied frame.
@@ -39,6 +39,7 @@ pub struct DopeSheet {
     pub only_selected: bool,
     pub clipboard: Vec<ClipKey>,
     collapsed: BTreeSet<u64>,
+    navigation: crate::navigation::CanvasNavigation,
     drag: Option<(DragKind, Pos2)>,
     /// Canvas rectangle of the last frame (for tests).
     pub canvas: Option<Rect>,
@@ -72,7 +73,10 @@ impl DopeSheet {
     /// The screen point of a key at `frame` on row `row_index` of the canvas.
     pub fn key_point(&self, canvas: Rect, row_index: usize, frame: f64) -> Pos2 {
         Pos2::new(
-            self.view.to_x(frame, canvas.left() + LABEL_W),
+            self.view.to_x(
+                frame,
+                canvas.left() + crate::timeline::track_column_width(canvas.width()),
+            ),
             canvas.top() + RULER_H + (row_index as f32 + 0.5) * ROW_H,
         )
     }
@@ -160,12 +164,18 @@ fn interp_name(i: Interp) -> &'static str {
 pub fn dope_sheet_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
     let mut sheet = sheet_state(ui.ctx());
     let mut cmds: Vec<Cmd> = Vec::new();
-    let theme = Theme::current(ui.ctx());
     let current = st.timeline.current as f64;
+    use crate::icons::action;
 
     ui.horizontal_wrapped(|ui| {
         let has = !sheet.selection.keys.is_empty();
-        if ui.add_enabled(has, egui::Button::new("Delete")).clicked() {
+        if ui
+            .add_enabled_ui(has, |ui| {
+                action(ui, "delete", "Delete", "Remove the selected keys", None)
+            })
+            .inner
+            .clicked()
+        {
             cmds.push(("key.delete", json!({"keys": sheet.selection.json()})));
             sheet.selection.clear();
         }
@@ -178,11 +188,26 @@ pub fn dope_sheet_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
             }
         }
         ui.separator();
-        if ui.add_enabled(has, egui::Button::new("Copy")).clicked() {
+        if ui
+            .add_enabled_ui(has, |ui| {
+                action(ui, "duplicate", "Copy", "Copy the selected keys", None)
+            })
+            .inner
+            .clicked()
+        {
             sheet.copy(st);
         }
         if ui
-            .add_enabled(!sheet.clipboard.is_empty(), egui::Button::new("Paste"))
+            .add_enabled_ui(!sheet.clipboard.is_empty(), |ui| {
+                action(
+                    ui,
+                    "transfer",
+                    "Paste",
+                    "Paste copied keys at the playhead",
+                    None,
+                )
+            })
+            .inner
             .clicked()
             && let Some(c) = sheet.paste_command(current)
         {
@@ -198,9 +223,12 @@ pub fn dope_sheet_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
             }
         }
         ui.separator();
-        ui.checkbox(&mut sheet.ripple, "Ripple");
-        ui.checkbox(&mut sheet.view.snap, "Snap");
-        ui.checkbox(&mut sheet.only_selected, "Selected objects only");
+        ui.checkbox(&mut sheet.ripple, "Ripple")
+            .on_hover_text("Move following keys with a retime");
+        ui.checkbox(&mut sheet.view.snap, "Snap")
+            .on_hover_text("Snap key edits to whole frames");
+        ui.checkbox(&mut sheet.only_selected, "Selected objects only")
+            .on_hover_text("Show tracks for the objects selected in the scene");
     });
 
     let only: Vec<NodeId> = if sheet.only_selected {
@@ -211,41 +239,54 @@ pub fn dope_sheet_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
     let all_rows = logic::rows(st.doc.scene(), &only);
     let rows = sheet.visible(all_rows);
 
+    let visible_height = ui.available_height().clamp(70.0, 550.0);
+    egui::ScrollArea::vertical()
+        .id_salt("dope_tracks")
+        .max_height(visible_height)
+        .auto_shrink(false)
+        .show(ui, |ui| {
+            sheet_canvas(ui, st, &mut sheet, rows, visible_height, &mut cmds)
+        });
+    set_sheet_state(ui.ctx(), sheet);
+    cmds
+}
+
+/// Paint and interact with the tracks inside the scrollable body.
+fn sheet_canvas(
+    ui: &mut Ui,
+    st: &EditorState,
+    sheet: &mut DopeSheet,
+    rows: Vec<Row>,
+    visible_height: f32,
+    cmds: &mut Vec<Cmd>,
+) {
+    let theme = Theme::current(ui.ctx());
+    let current = st.timeline.current as f64;
     let avail = ui.available_rect_before_wrap();
-    let height = (RULER_H + rows.len() as f32 * ROW_H).max(avail.height().min(300.0));
+    let rows_height = RULER_H + rows.len() as f32 * ROW_H;
+    let height = rows_height.max(visible_height);
     let (canvas, resp) =
         ui.allocate_exact_size(vec2(avail.width(), height), Sense::click_and_drag());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, "Dope sheet"));
-    let x0 = canvas.left() + LABEL_W;
+    let x0 = canvas.left() + crate::timeline::track_column_width(canvas.width());
     let painter = ui.painter_at(canvas);
     painter.rect_filled(canvas, 0.0, theme.panel);
 
-    // ruler
-    let ruler = Rect::from_min_size(canvas.min, vec2(canvas.width(), RULER_H));
-    painter.rect_filled(ruler, 0.0, theme.faint);
-    let step = ruler_step(sheet.view.ppf);
-    let first = (sheet.view.to_frame(x0, x0) / step).floor() * step;
-    let mut f = first;
-    while sheet.view.to_x(f, x0) < canvas.right() {
-        let x = sheet.view.to_x(f, x0);
-        if x >= x0 {
-            painter.line_segment(
-                [
-                    Pos2::new(x, ruler.bottom() - 6.0),
-                    Pos2::new(x, ruler.bottom()),
-                ],
-                Stroke::new(1.0, theme.weak_text),
-            );
-            painter.text(
-                Pos2::new(x + 2.0, ruler.top()),
-                Align2::LEFT_TOP,
-                format!("{f:.0}"),
-                FontId::proportional(10.0),
-                theme.weak_text,
-            );
-        }
-        f += step;
-    }
+    let tracks = Rect::from_min_max(canvas.min, Pos2::new(x0, canvas.bottom()));
+    painter.rect_filled(tracks, 0.0, theme.window);
+    painter.vline(x0, canvas.y_range(), Stroke::new(1.0, theme.divider));
+    painter.text(
+        Pos2::new(canvas.left() + 6.0, canvas.top() + RULER_H / 2.0),
+        Align2::LEFT_CENTER,
+        "Tracks",
+        FontId::proportional(12.0),
+        theme.weak_text,
+    );
+    let ruler = Rect::from_min_max(
+        Pos2::new(x0, canvas.top()),
+        Pos2::new(canvas.right(), canvas.top() + RULER_H),
+    );
+    let body = Rect::from_min_max(ruler.left_bottom(), canvas.right_bottom());
 
     // rows, labels and keys
     let mut points: Vec<(Vec<KeyId>, Pos2)> = Vec::new();
@@ -266,7 +307,7 @@ pub fn dope_sheet_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
             }
             RowKind::Track { .. } => (row.label.clone(), 14.0),
         };
-        painter.text(
+        ui.painter_at(tracks).text(
             Pos2::new(canvas.left() + 4.0 + indent, y + ROW_H / 2.0),
             Align2::LEFT_CENTER,
             text,
@@ -335,12 +376,14 @@ pub fn dope_sheet_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
             Stroke::new(1.0, theme.window),
         ));
     }
-    // current frame
-    let cx = sheet.view.to_x(current, x0);
-    if cx >= x0 && cx <= canvas.right() {
-        painter.line_segment(
-            [Pos2::new(cx, canvas.top()), Pos2::new(cx, canvas.bottom())],
-            Stroke::new(1.0, theme.time),
+    crate::timeline::paint_editor_ruler(ui, ruler, body, &sheet.view, current);
+    if rows.is_empty() {
+        painter.text(
+            body.center(),
+            Align2::CENTER_CENTER,
+            "No animation tracks",
+            FontId::proportional(12.0),
+            theme.weak_text,
         );
     }
 
@@ -362,8 +405,22 @@ pub fn dope_sheet_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
             .collect();
         logic::hit_test(&p, [pos.x, pos.y], KEY_R + 2.0)
     };
+    use crate::navigation::CanvasMotion;
+    let (navigating, motion) = sheet.navigation.read(&resp);
+    if let Some(motion) = motion {
+        match motion {
+            CanvasMotion::Pan(delta) => {
+                sheet.view.pan(delta.x);
+            }
+            CanvasMotion::Zoom { anchor, factor } => {
+                sheet.view.zoom_about(anchor.x, x0, f64::from(factor));
+            }
+        }
+        ui.ctx().request_repaint();
+    }
     let mods = ui.input(|i| i.modifiers);
-    if resp.drag_started_by(egui::PointerButton::Primary)
+    if !navigating
+        && resp.drag_started_by(egui::PointerButton::Primary)
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
     {
         sheet.drag = Some(if pos.y < canvas.top() + RULER_H {
@@ -420,7 +477,7 @@ pub fn dope_sheet_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
                         cmds.push((
                             "key.move",
                             json!({"keys": sheet.selection.json(), "delta_frames": d,
-                                   "ripple": sheet.ripple}),
+                           "ripple": sheet.ripple}),
                         ));
                         sheet.selection = sheet.selection.moved(d);
                     }
@@ -429,7 +486,8 @@ pub fn dope_sheet_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
             }
             sheet.drag = None;
         }
-    } else if resp.clicked()
+    } else if !navigating
+        && resp.clicked()
         && let Some(pos) = resp.interact_pointer_pos()
     {
         if pos.y < canvas.top() + RULER_H || pos.x < x0 {
@@ -463,7 +521,14 @@ pub fn dope_sheet_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
         if zoom != 1.0 {
             sheet.view.zoom_about(pos.x, x0, f64::from(zoom));
         } else if scroll.x != 0.0 || scroll.y != 0.0 {
-            sheet.view.pan(scroll.x + scroll.y);
+            sheet.view.pan(
+                scroll.x
+                    + if rows_height > visible_height {
+                        0.0
+                    } else {
+                        scroll.y
+                    },
+            );
         }
         if ui.input(|i| i.key_pressed(egui::Key::Delete)) && !sheet.selection.keys.is_empty() {
             cmds.push(("key.delete", json!({"keys": sheet.selection.json()})));
@@ -472,21 +537,11 @@ pub fn dope_sheet_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
     }
     sheet.canvas = Some(canvas);
     sheet.shown = rows;
-    set_sheet_state(ui.ctx(), sheet);
-    cmds
 }
 
 fn row_at(rows: &[Row], canvas: Rect, y: f32) -> Option<&Row> {
     let i = ((y - canvas.top() - RULER_H) / ROW_H).floor();
     (i >= 0.0).then(|| rows.get(i as usize)).flatten()
-}
-
-/// A ruler tick spacing in frames that keeps ticks at least 40 points apart.
-fn ruler_step(ppf: f64) -> f64 {
-    [1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0]
-        .into_iter()
-        .find(|s| s * ppf >= 40.0)
-        .unwrap_or(1000.0)
 }
 
 /// Frames all keys into the view (the "frame all" button and the key shortcut).
@@ -496,6 +551,8 @@ pub fn frame_all(sheet: &mut DopeSheet, width: f32) {
         frames.iter().copied().reduce(f64::min),
         frames.iter().copied().reduce(f64::max),
     ) {
-        sheet.view.frame_range(lo, hi, width - LABEL_W);
+        sheet
+            .view
+            .frame_range(lo, hi, width - crate::timeline::track_column_width(width));
     }
 }

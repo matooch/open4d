@@ -10,16 +10,18 @@ pub enum Area {
     RightBottom,
     Bottom,
     Center,
+    LowerRight,
 }
 
 impl Area {
-    pub const ALL: [Area; 6] = [
+    pub const ALL: [Area; 7] = [
         Area::Top,
         Area::Left,
         Area::RightTop,
         Area::RightBottom,
         Area::Bottom,
         Area::Center,
+        Area::LowerRight,
     ];
 
     pub fn label(self) -> &'static str {
@@ -30,6 +32,7 @@ impl Area {
             Area::RightBottom => "right bottom",
             Area::Bottom => "bottom",
             Area::Center => "centre",
+            Area::LowerRight => "below attributes",
         }
     }
 }
@@ -84,13 +87,15 @@ impl Panel {
     ];
 
     /// The panels `Dock::default()` opens; the others open from the Window menu.
-    pub const DEFAULT: [Panel; 7] = [
+    pub const DEFAULT: [Panel; 9] = [
         Panel::CommandBar,
         Panel::ToolPalette,
         Panel::Viewport,
         Panel::ObjectTree,
         Panel::Attributes,
         Panel::Timeline,
+        Panel::DopeSheet,
+        Panel::ValueGraph,
         Panel::Coordinates,
     ];
 
@@ -116,6 +121,27 @@ impl Panel {
             Panel::PictureViewer => "Picture Viewer",
             Panel::InteractiveRender => "Interactive Render",
             Panel::UvEditor => "UV Editor",
+        }
+    }
+
+    pub(crate) fn animation_tab(self) -> Option<(&'static str, &'static str, &'static str)> {
+        match self {
+            Panel::Timeline => Some((
+                "clock",
+                "Timeline",
+                "Scrub frames and manage the playback range and markers",
+            )),
+            Panel::DopeSheet => Some((
+                "key",
+                "Dope Sheet",
+                "Select and retime keys across animation tracks",
+            )),
+            Panel::ValueGraph => Some((
+                "graph_node",
+                "F-Curve",
+                "Edit values, speeds and tangents across frames",
+            )),
+            _ => None,
         }
     }
 
@@ -152,7 +178,18 @@ struct AreaState {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Dock {
-    areas: [AreaState; 6],
+    #[serde(deserialize_with = "read_areas")]
+    areas: [AreaState; 7],
+}
+
+fn read_areas<'de, D: serde::Deserializer<'de>>(d: D) -> Result<[AreaState; 7], D::Error> {
+    let mut areas = Vec::<AreaState>::deserialize(d)?;
+    if areas.len() == 6 {
+        areas.push(AreaState::default());
+    }
+    areas
+        .try_into()
+        .map_err(|_| serde::de::Error::custom("invalid number of dock areas"))
 }
 
 impl Default for Dock {
@@ -264,4 +301,62 @@ impl Dock {
             self.move_panel(panel, panel.default_area());
         }
     }
+}
+
+/// Dropping inside a dock joins its tabs. The edges of the center provide a target
+/// for side docks, including ones that currently have no tabs.
+pub(crate) fn drop_target(
+    rects: &[Option<egui::Rect>; Area::ALL.len()],
+    pointer: egui::Pos2,
+) -> Option<(Area, egui::Rect)> {
+    use egui::{Rect, pos2};
+    if let Some(center) = rects[Area::Center as usize].filter(|r| r.contains(pointer)) {
+        let edge_y = (center.height() * 0.18).min(38.0);
+        let edge_x = (center.width() * 0.18).min(44.0);
+        if pointer.y <= center.top() + edge_y {
+            let preview =
+                Rect::from_min_max(center.min, pos2(center.right(), center.top() + edge_y));
+            return Some((Area::Top, preview));
+        }
+        if pointer.y >= center.bottom() - edge_y {
+            let preview =
+                Rect::from_min_max(pos2(center.left(), center.bottom() - edge_y), center.max);
+            return Some((Area::Bottom, preview));
+        }
+        if pointer.x <= center.left() + edge_x {
+            let preview =
+                Rect::from_min_max(center.min, pos2(center.left() + edge_x, center.bottom()));
+            return Some((Area::Left, preview));
+        }
+        if pointer.x >= center.right() - edge_x {
+            let y = center.center().y;
+            let (target, top, bottom) = if pointer.y < y {
+                (Area::RightTop, center.top(), y)
+            } else {
+                (Area::RightBottom, y, center.bottom())
+            };
+            return Some((
+                target,
+                Rect::from_min_max(
+                    pos2(center.right() - edge_x, top),
+                    pos2(center.right(), bottom),
+                ),
+            ));
+        }
+        return Some((Area::Center, center));
+    }
+    if let Some(r) = rects[Area::RightBottom as usize]
+        && r.contains(pointer)
+        && pointer.y > r.bottom() - r.height().min(120.0) * 0.3
+    {
+        return Some((
+            Area::LowerRight,
+            Rect::from_min_max(pos2(r.left(), r.center().y), r.max),
+        ));
+    }
+    Area::ALL.into_iter().find_map(|area| {
+        rects[area as usize]
+            .filter(|r| r.contains(pointer))
+            .map(|r| (area, r))
+    })
 }

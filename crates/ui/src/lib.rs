@@ -48,6 +48,7 @@ pub mod render_mode;
 pub mod scene_overlay;
 pub mod screenshot;
 pub mod script_panel;
+mod size_handles;
 pub mod snapping;
 pub mod spline_edit;
 pub mod state;

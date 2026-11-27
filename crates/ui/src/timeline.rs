@@ -15,6 +15,136 @@ use crate::theme::Theme;
 /// A command id with its arguments.
 pub type Cmd = (&'static str, serde_json::Value);
 
+/// Transport navigation order, shared by Timeline, Dope Sheet and F-Curve.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum TransportStep {
+    First,
+    PreviousKey,
+    PreviousFrame,
+    Play,
+    NextFrame,
+    NextKey,
+    Last,
+}
+
+pub const NAVIGATION: [TransportStep; 7] = [
+    TransportStep::First,
+    TransportStep::PreviousKey,
+    TransportStep::PreviousFrame,
+    TransportStep::Play,
+    TransportStep::NextFrame,
+    TransportStep::NextKey,
+    TransportStep::Last,
+];
+
+impl TransportStep {
+    pub fn presentation(self) -> (&'static str, &'static str, &'static str) {
+        match self {
+            Self::First => (
+                "range_start",
+                "Go to Start",
+                "Jump to the first project frame",
+            ),
+            Self::PreviousKey => (
+                "previous_key",
+                "Previous Key",
+                "Jump to the previous key on the selected objects",
+            ),
+            Self::PreviousFrame => (
+                "previous_frame",
+                "Previous Frame",
+                "Move backward one frame",
+            ),
+            Self::Play => ("play", "Play", "Play from the current frame"),
+            Self::NextFrame => ("next_frame", "Next Frame", "Move forward one frame"),
+            Self::NextKey => (
+                "next_key",
+                "Next Key",
+                "Jump to the next key on the selected objects",
+            ),
+            Self::Last => ("range_end", "Go to End", "Jump to the last project frame"),
+        }
+    }
+}
+
+pub(crate) fn navigation_command(step: TransportStep, first: i64, last: i64) -> Cmd {
+    match step {
+        TransportStep::First => ("timeline.set_frame", json!({"frame": first})),
+        TransportStep::PreviousKey => ("key.jump", json!({"forward": false})),
+        TransportStep::PreviousFrame => ("timeline.step", json!({"delta": -1})),
+        TransportStep::Play => ("timeline.toggle_play", json!({})),
+        TransportStep::NextFrame => ("timeline.step", json!({"delta": 1})),
+        TransportStep::NextKey => ("key.jump", json!({"forward": true})),
+        TransportStep::Last => ("timeline.set_frame", json!({"frame": last})),
+    }
+}
+
+pub(crate) const EDITOR_RULER_HEIGHT: f32 = 20.0;
+pub(crate) const MAX_TRACK_WIDTH: f32 = 170.0;
+
+/// Keep room for a timeline canvas when a user docks an editor in a narrow area.
+pub(crate) fn track_column_width(width: f32) -> f32 {
+    (width * 0.40).min(MAX_TRACK_WIDTH)
+}
+
+/// Shared ruler and vertical frame guides for the two expanded animation views.
+pub(crate) fn paint_editor_ruler(
+    ui: &Ui,
+    ruler: Rect,
+    body: Rect,
+    view: &crate::fcurve_logic::TimeView,
+    current: f64,
+) {
+    let theme = Theme::current(ui.ctx());
+    let painter = ui.painter_at(ruler);
+    let guide = ui.painter_at(body);
+    painter.rect_filled(ruler, 0.0, theme.input);
+    let rect = Rect::from_min_max(ruler.min, body.max);
+    let width = ruler.width();
+    if width <= 0.0 {
+        return;
+    }
+    let span = f64::from(width) / view.ppf;
+    let step = ruler_step(span as f32, width) as f64;
+    let mut frame = (view.to_frame(ruler.left(), ruler.left()) / step).ceil() * step;
+    let end = view.to_frame(ruler.right(), ruler.left());
+    for _ in 0..((width / 40.0).ceil() as usize + 3) {
+        if frame > end {
+            break;
+        }
+        let x = view.to_x(frame, ruler.left());
+        painter.line_segment(
+            [
+                Pos2::new(x, ruler.bottom() - 5.0),
+                Pos2::new(x, ruler.bottom()),
+            ],
+            Stroke::new(1.0, theme.weak_text),
+        );
+        painter.text(
+            Pos2::new(x + 3.0, ruler.center().y - 1.0),
+            Align2::LEFT_CENTER,
+            format!("{frame:.0}"),
+            FontId::monospace(10.0),
+            theme.weak_text,
+        );
+        guide.line_segment(
+            [Pos2::new(x, body.top()), Pos2::new(x, body.bottom())],
+            Stroke::new(1.0, theme.divider.gamma_multiply(0.65)),
+        );
+        frame += step;
+    }
+    let x = view.to_x(current, ruler.left());
+    painter.rect_filled(
+        Rect::from_min_size(Pos2::new(x - 3.0, ruler.top()), vec2(6.0, 4.0)),
+        1.0,
+        theme.time,
+    );
+    ui.painter_at(rect).line_segment(
+        [Pos2::new(x, ruler.top()), Pos2::new(x, body.bottom())],
+        Stroke::new(1.0, theme.time),
+    );
+}
+
 /// Height of the marker flags at the top of the strip, in points. The strip keeps its old
 /// height of 30 so the panel does not grow.
 const MARKER_LANE: f32 = 10.0;
@@ -40,16 +170,17 @@ pub struct StripScale {
 
 impl StripScale {
     fn span(&self) -> f32 {
-        (self.end - self.start).max(1) as f32
+        (self.end as i128 - self.start as i128).max(1) as f32
     }
 
     pub fn to_x(&self, frame: f64) -> f32 {
-        self.x0 + (frame as f32 - self.start as f32) / self.span() * (self.x1 - self.x0)
+        self.x0
+            + ((frame - self.start as f64) / f64::from(self.span())) as f32 * (self.x1 - self.x0)
     }
 
     /// The nearest frame inside the project range.
     pub fn to_frame(&self, x: f32) -> i64 {
-        let f = self.start as f32 + (x - self.x0) / (self.x1 - self.x0) * self.span();
+        let f = self.start as f64 + f64::from((x - self.x0) / (self.x1 - self.x0) * self.span());
         (f.round() as i64).clamp(self.start, self.end)
     }
 }
@@ -129,14 +260,29 @@ pub fn range_controls(ui: &mut Ui, scene: &Scene, out: &mut Vec<Cmd>) {
             }
         }
         ui.separator();
-        if ui.button("Add Marker").clicked() {
-            out.push(("marker.add", json!({})));
-        }
-        if ui.button("Previous Marker").clicked() {
-            out.push(("marker.jump", json!({"forward": false})));
-        }
-        if ui.button("Next Marker").clicked() {
-            out.push(("marker.jump", json!({"forward": true})));
+        for (icon, label, help, command) in [
+            (
+                "marker",
+                "Add Marker",
+                "Add a marker at the current frame",
+                ("marker.add", json!({})),
+            ),
+            (
+                "previous_key",
+                "Previous Marker",
+                "Jump to the previous timeline marker",
+                ("marker.jump", json!({"forward": false})),
+            ),
+            (
+                "next_key",
+                "Next Marker",
+                "Jump to the next timeline marker",
+                ("marker.jump", json!({"forward": true})),
+            ),
+        ] {
+            if crate::icons::action(ui, icon, label, help, None).clicked() {
+                out.push(command);
+            }
         }
     }
 }
@@ -160,10 +306,15 @@ fn color32(c: [u8; 3]) -> Color32 {
 /// 1920 x 1080 window the strip is about 1413 points wide for a 0 - 90 project, which labels
 /// every 5 frames (observed, G10 A7).
 pub fn ruler_step(span: f32, width: f32) -> i64 {
-    [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 5000]
-        .into_iter()
-        .find(|s| (*s as f32 / span) * width >= 40.0)
-        .unwrap_or(10000)
+    let minimum = f64::from(span) * 40.0 / f64::from(width.max(1.0));
+    let base = 10.0_f64.powf(minimum.max(1.0).log10().floor());
+    for factor in [1.0, 2.0, 5.0, 10.0] {
+        let step = base * factor;
+        if step >= minimum {
+            return (step as i64).max(1);
+        }
+    }
+    i64::MAX
 }
 
 /// The frame strip: scrubbing, ruler, key ticks, the preview range with its two handles and
@@ -193,7 +344,17 @@ pub fn strip(ui: &mut Ui, scene: &Scene, current: i64, keys: &[f64], out: &mut V
         ));
     }
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 2.0, theme.faint);
+    painter.rect_filled(rect, 2.0, theme.input);
+    painter.rect_filled(
+        Rect::from_min_max(rect.min, body.right_top()),
+        0.0,
+        theme.faint,
+    );
+    painter.hline(
+        rect.x_range(),
+        rect.bottom() - 1.0,
+        Stroke::new(1.0, theme.divider),
+    );
     // preview range: the outside is dimmed, the inside gets a time-coloured band
     if let Some((a, b)) = time.preview {
         let (xa, xb) = (scale.to_x(a as f64), scale.to_x(b as f64));
@@ -220,7 +381,7 @@ pub fn strip(ui: &mut Ui, scene: &Scene, current: i64, keys: &[f64], out: &mut V
     // ruler
     let span = scale.span();
     let step = ruler_step(span, scale.x1 - scale.x0);
-    let first = settings.start.div_euclid(step) * step;
+    let first = settings.start.div_euclid(step).saturating_mul(step);
     for f in (first..=settings.end).step_by(step as usize) {
         if f < settings.start {
             continue;
@@ -246,12 +407,24 @@ pub fn strip(ui: &mut Ui, scene: &Scene, current: i64, keys: &[f64], out: &mut V
             continue;
         }
         let x = scale.to_x(*f);
-        painter.line_segment(
-            [Pos2::new(x, body.top()), Pos2::new(x, body.top() + 8.0)],
-            Stroke::new(2.0, theme.time),
-        );
+        let y = body.top() + 5.0;
+        painter.add(egui::Shape::convex_polygon(
+            vec![
+                Pos2::new(x, y - 3.5),
+                Pos2::new(x + 3.5, y),
+                Pos2::new(x, y + 3.5),
+                Pos2::new(x - 3.5, y),
+            ],
+            theme.selection,
+            Stroke::NONE,
+        ));
     }
     let x = scale.to_x(current as f64);
+    painter.rect_filled(
+        Rect::from_min_size(Pos2::new(x - 3.0, rect.top()), vec2(6.0, 4.0)),
+        1.0,
+        theme.time,
+    );
     painter.line_segment(
         [Pos2::new(x, rect.top()), Pos2::new(x, rect.bottom())],
         Stroke::new(1.5, theme.time),

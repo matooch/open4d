@@ -197,6 +197,51 @@ fn the_transform_rail_and_cloner_buttons_use_the_editor_commands() {
 }
 
 #[test]
+fn animation_editors_share_the_playhead_and_expand_below_the_viewport() {
+    let mut h = harness();
+    let compact = rect(&h, "Frame strip");
+    assert!(compact.max.x < rect(&h, "Attributes").min.x);
+    h.get_by_label("Next Frame").click();
+    h.run();
+    let frame = h.state().state.timeline.current;
+    assert_eq!(frame, 1);
+
+    h.get_by_label("Dope Sheet").click();
+    h.run();
+    let sheet = rect(&h, "Dope sheet");
+    assert!(sheet.height() > compact.height());
+    assert_eq!(h.state().state.timeline.current, frame);
+    h.get_by_label("F-Curve").click();
+    h.run();
+    h.run();
+    let ruler = rect(&h, "Curve frame ruler");
+    for _ in 0..3 {
+        h.run();
+        assert_eq!(rect(&h, "Curve frame ruler"), ruler);
+    }
+    assert_eq!(h.state().state.timeline.current, frame);
+    let time = forge_ui::fcurve::graph_state(&h.ctx).tview;
+    let pos = egui::pos2(time.to_x(15.0, ruler.left()), ruler.center().y);
+    h.hover_at(pos);
+    h.run();
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos,
+            pressed,
+            button: egui::PointerButton::Primary,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run();
+    }
+    assert_eq!(h.state().state.timeline.current, 15);
+    h.get_by_label("Timeline").click();
+    h.run();
+    assert_eq!(rect(&h, "Frame strip").height(), compact.height());
+    assert!(rect(&h, "Frame strip").min.y > sheet.min.y);
+    assert_eq!(h.state().state.timeline.current, 15);
+}
+
+#[test]
 fn reset_layout_restores_the_standard_layout() {
     let mut h = harness();
     h.state_mut().state.dock.close(Panel::ToolPalette);
@@ -321,4 +366,175 @@ fn the_timeline_ruler_labels_every_five_frames_at_the_reference_width() {
         let step = ruler_step(90.0, width);
         assert!(step as f32 / 90.0 * width >= 40.0);
     }
+}
+
+#[test]
+fn dragging_a_panel_tab_to_the_viewport_edge_creates_a_side_dock() {
+    use egui::{Event, Modifiers, PointerButton};
+
+    let mut h = harness();
+    h.run();
+    let start = rect(&h, "Attributes").center();
+    let view = h.state().view_rect();
+    let end = view.left_center() + egui::vec2(14.0, 0.0);
+    h.hover_at(start);
+    h.run();
+    h.event(Event::PointerButton {
+        pos: start,
+        button: PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    h.run();
+    for i in 1..=5 {
+        h.hover_at(start.lerp(end, i as f32 / 5.0));
+        h.run();
+    }
+    h.event(Event::PointerButton {
+        pos: end,
+        button: PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    h.run();
+    assert_eq!(
+        h.state().state.dock.area_of(Panel::Attributes),
+        Some(Area::Left)
+    );
+}
+
+#[test]
+fn object_shortcuts_duplicate_beside_source_and_paste_under_selected_parent() {
+    use egui::{Key, Modifiers};
+    use forge_core::NodeId;
+    use forge_ui::commands::execute;
+    use serde_json::json;
+
+    let mut h = harness();
+    let add = |h: &mut Harness<'_, Editor>, ty| {
+        NodeId(
+            execute(
+                &mut h.state_mut().state,
+                "object.create",
+                json!({"type": ty}),
+            )
+            .unwrap()["node"]
+                .as_u64()
+                .unwrap(),
+        )
+    };
+    let parent = add(&mut h, "forge.null");
+    let source = add(&mut h, "forge.cube");
+    execute(
+        &mut h.state_mut().state,
+        "object.reparent",
+        json!({"node": source.0, "parent": parent.0}),
+    )
+    .unwrap();
+    h.key_press_modifiers(Modifiers::COMMAND, Key::D);
+    h.run();
+    let duplicate = h.state().state.selection.active.unwrap();
+    assert_ne!(source, duplicate);
+    assert_eq!(
+        h.state().state.doc.scene().node(parent).unwrap().children,
+        [source, duplicate]
+    );
+
+    h.event(egui::Event::Copy);
+    h.run();
+    let target = add(&mut h, "forge.null");
+    let before = h.state().state.doc.undo_depth();
+    h.event(egui::Event::Paste("Forge3D scene objects".into()));
+    h.run();
+    let pasted = h.state().state.selection.active.unwrap();
+    assert_ne!(duplicate, pasted);
+    let scene = h.state().state.doc.scene();
+    assert_eq!(scene.node(pasted).unwrap().parent, Some(target));
+    assert_eq!(h.state().state.doc.undo_depth(), before + 1);
+}
+
+#[test]
+fn a_viewport_size_handle_changes_the_primitive_in_one_undo_step() {
+    use egui::{Event, Modifiers, PointerButton};
+    use forge_core::{NodeId, Value};
+    use forge_ui::commands::execute;
+    use glam::DVec3;
+    use serde_json::json;
+
+    let mut h = harness();
+    let cube = NodeId(
+        execute(
+            &mut h.state_mut().state,
+            "object.create",
+            json!({"type": "forge.cube"}),
+        )
+        .unwrap()["node"]
+            .as_u64()
+            .unwrap(),
+    );
+    h.run();
+    let rect = h.state().view_rect();
+    let camera = h.state().state.camera;
+    let project = |x| {
+        let p = camera
+            .project(
+                DVec3::X * x,
+                f64::from(rect.width()),
+                f64::from(rect.height()),
+            )
+            .unwrap();
+        rect.min + egui::vec2(p.x as f32, p.y as f32)
+    };
+    let start = project(100.0);
+    let end = project(145.0);
+    let before = h.state().state.doc.undo_depth();
+    h.hover_at(start);
+    h.run();
+    h.event(Event::PointerButton {
+        pos: start,
+        button: PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    h.run();
+    for i in 1..=4 {
+        h.hover_at(start.lerp(end, i as f32 / 4.0));
+        h.run();
+    }
+    h.event(Event::PointerButton {
+        pos: end,
+        button: PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    h.run();
+    let doc = &mut h.state_mut().state.doc;
+    assert!(
+        matches!(doc.scene().param(cube, "size_x"), Some(Value::Float(x)) if (*x - 290.0).abs() < 3.0)
+    );
+    assert_eq!(doc.undo_depth(), before + 1);
+    assert!(doc.undo());
+    assert_eq!(
+        doc.scene().param(cube, "size_x"),
+        Some(&Value::Float(200.0))
+    );
+}
+
+#[test]
+fn the_lights_menu_creates_an_area_light_in_one_undo_step() {
+    use forge_core::Value;
+
+    let mut h = harness();
+    let before = h.state().state.doc.undo_depth();
+    h.get_by_label("Lights").click();
+    h.run();
+    h.get_by_label("Area light").click();
+    h.run();
+    let state = &h.state().state;
+    let id = state.selection.active.unwrap();
+    assert_eq!(
+        state.doc.scene().param(id, "type"),
+        Some(&Value::Enum("area".into()))
+    );
+    assert_eq!(state.doc.undo_depth(), before + 1);
 }

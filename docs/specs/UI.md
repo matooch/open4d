@@ -270,31 +270,39 @@ note. Switching back to Shaded shows the shaded panes exactly as before.
 
 Behaviour, data and rules: docs/specs/ANIM.md §2. Panel summary (own design,
 **parity-pending**):
-- Row 1: Play / Stop, Record, Auto-Key toggle, Previous / Next key, Delete Keys.
-- Row 2: Start, End and FPS fields (edit the scene settings, undoable), the current frame
-  field, and the label of the current time.
-- Row 3: a frame strip. Click or drag scrubs the current frame; the playhead and one tick
-  per key frame of the selected objects are drawn by us.
-- Time controls (brief 094, own design, **parity-pending G5**), added to the two button rows so
-  the panel keeps its height (view tests depend on the pane geometry): at the end of row 1 a
-  "Playback mode" combo (Once, Loop, Ping-Pong), an "Every frame" checkbox (off = real-time with
-  frame dropping) and a "Time display" combo (Frames, SMPTE, Seconds); at the end of row 2 a
-  "Preview range" checkbox with "Preview start" / "Preview end" fields (while on) and the buttons
-  "Add Marker", "Previous Marker", "Next Marker". The label after the frame field shows the
-  current time (seconds in Frames display, else the chosen format). The FPS field runs
-  `timeline.set_fps` (keys keep their seconds, ranges and markers convert); Start and End run
-  `timeline.settings`.
-- The 30 pt strip keeps its ruler and key ticks (ticks now start 10 pt from the top). The top
-  10 pt are the marker lane: each marker is a flag in its colour with its name (label "Marker
-  <name>"): click goes to its frame, drag moves it (`marker.move`), the context menu has the
-  name, "Color <name>" entries and "Delete Marker". The preview range shades the outside of the
-  strip, draws a time-coloured band along the bottom and two handles (labels "Preview start handle" and
-  "Preview end handle"; dragging runs `timeline.set_preview`, the handles cannot cross). Keys M
-  and Alt+Comma / Alt+Period (ANIM.md §2.7).
+- The common transport holds playback, frame and key jumps, current frame and keying
+  controls. The time label uses seconds in Frames display and the chosen format otherwise.
+  The Playback menu has Start, End, FPS, mode (Once, Loop or Ping-Pong), frame dropping,
+  and time display (Frames, SMPTE or Seconds). FPS runs `timeline.set_fps` so keys keep
+  their seconds and range and markers convert. Start and End run `timeline.settings`.
+- The compact strip has a 10 pt marker lane, a ruler, and diamonds for selected-object
+  keyframes. Scrub by clicking or dragging. Click a marker to go to its frame or drag
+  it to move it. Its context menu renames, recolors, or deletes it. The preview range
+  dims the outside of the strip. Its two handles cannot cross. The footer includes
+  preview start and end fields and marker actions. The existing marker shortcuts stay
+  available (ANIM.md §2.7).
 - `Timeline { current: 0, playing: false }` is editor state; start, end and fps live in
   the scene (`SceneSettings`, default 0, 90, 30). `set_current` clamps to the range.
 - The Attributes panel draws a marker left of every animatable row: filled diamond =
   key on this frame, hollow = animated without a key here (ANIM.md §2.5).
+
+### 7.1 Animation dock and transport
+
+Sources: GUI sessions G5 and G10 A7–A8, plus the owner's supplied frame, Dope Sheet and curve
+captures. The Forge layout uses a shared transport below the viewport. Right-side managers
+keep their height. The compact Timeline tab has a marker lane, ruler, key diamonds, frame
+playhead and preview handles. The Stop/Play action, project boundaries, frame and key
+stepping, current frame, Record and Auto-Key stay available in the Dope Sheet and F-Curve.
+Playback settings group end points, FPS, playback mode, time format and frame dropping.
+The preview range and marker actions live together below the scrub strip.
+
+Standard shows Timeline first, followed by Dope Sheet, F-Curve and Coordinates. Animate
+opens the Dope Sheet and keeps the Timeline and F-Curve one tab away. The compact and
+expanded editor heights are independent. The F-Curve keeps its existing Value and Speed
+modes and gains a scrubbable frame ruler above the graph. Both editors paint a labeled
+frame ruler and keep their view zoom and selections when switching. All transport actions
+use the same existing frame, playback, marker and key commands. Each icon control exposes
+its action name and a hover description.
 
 ## 8. Theme (`theme`)
 
@@ -363,7 +371,7 @@ configured widths until reset. The panels grow to the widest content, so the num
 of §12 is sized to keep three fields in 402 pt.
 
 Standard arrangement, top to bottom: menu bar; Top area: command bar; Left: tool rail;
-Centre: viewport; right column: Objects above Attributes; Bottom: Timeline and Coordinates;
+Centre: viewport; right column: Objects above Attributes; Bottom: Timeline, Dope Sheet, F-Curve and Coordinates;
 status bar.
 
 The command bar and rail use the original Forge glyph atlas (§25). Their controls are
@@ -400,11 +408,11 @@ key diamond and the stacking of two tabs. What stays **parity-pending G4**: the 
 beyond what is written below. Every row is derived from a `ParamDesc`; nothing is hand-laid per
 type.
 
-Tabs and groups: `UiHint.group` is `"Tab/Group"` (split at the first `/`) or just `"Group"`
-(tab `Basic`; empty group is `Parameters`). `AttributeView.tabs()` lists tabs in
-first-appearance order, `groups_of(tab)` the groups of one; a tab bar is drawn only with two
-or more tabs, groups are collapsible. The shown tab is editor state (`attr_tab`); a tab
-that no longer exists falls back to the first.
+Tab and group names come from `UiHint.group`. An explicit `"Tab/Group"` splits at the first
+slash. The inspector assigns legacy flat groups to the tabs described in §12.1.
+`AttributeView.tabs()` gives the display order, and `groups_of(tab)` gives the collapsible
+groups for a tab. If the selection has no rows for a tab, the inspector shows a tab
+available for that selection.
 
 **Stacked tabs** (observed, G1 item 3: Shift-clicking the Light's Details with General active
 showed both tab bodies in one vertical scroll area, General first, Details below). The shown
@@ -413,8 +421,7 @@ on a tab shows only that tab. A Shift-click on another tab adds its body below t
 the one that was active first stays on top and the others follow in click order, all in one
 scroll area with a separator line between the bodies. The tab buttons of every shown tab are drawn
 selected. A second Shift-click on a shown tab removes it (ours, **parity-pending G1**; removing the
-top one promotes the next, and the last shown tab cannot be removed). Tabs that the new selection
-does not have drop out; with none left the first tab shows.
+top one promotes the next, and the last shown tab cannot be removed). Tabs unavailable for a selection are hidden. Returning to that object type restores its tab preference when the selected objects share those properties.
 
 Widgets, one module per kind in `widgets/`: `float` (scrub, display units), `int` (scrub,
 range), `boolean` (checkbox with the row label), `enumeration` (drop-down), `vector` (X, Y, Z
@@ -556,6 +563,21 @@ edits write the document; Auto-Key keys at once; the Coordinates panel and the i
 same layer; a mixed selection; Record keys drafts; render, export and save ignore drafts; Escape).
 
 Not in this brief: lock/unlock, history back/forward, the field-list widget.
+
+### 12.1 Inspector tabs
+
+Sources: owner note N9, GUI session G1 item 3, G4 inspector observations, and the supplied
+Cloner, Light and Linear Field captures. A wrapped strip below the object header shows
+labeled tabs with Forge icons where available. The header keeps the object's type and
+editable name visible. Tabs show collapsible groups of the existing typed parameter rows.
+Shared scene transforms use Transform. Ordinary Forge objects use Object for their
+type-specific settings. Cloners and matrix objects separate clone transforms and effectors.
+Camera, Light, fields and effectors use their relevant named sections where the settings
+exist. Explicit descriptor tab paths take precedence; ungrouped plugin properties use Basic,
+and ungrouped custom properties use User Data. A new type opens its first property tab
+when it has one. The chosen tabs are remembered per object type for the editor session.
+Click a tab to show it alone or Shift-click to stack it. Scene values, drafts, units, key
+states and undo are handled by the same row widgets and commands.
 
 ## 13. Object manager (`tree`, `object_manager`; brief 149, revised by briefs 229 and 233)
 
@@ -1495,9 +1517,9 @@ brief 129 adds it), and panels not listed are closed (reopen from the Window men
 
 | Workspace | Top | Left | Centre | Right top | Right bottom | Bottom | Sizes (left, right, fraction, bottom) |
 |---|---|---|---|---|---|---|---|
-| Standard | Command bar | Tools | Viewport | Objects | Attributes | Timeline, Coordinates | 43, 402, 0.47, 92 |
+| Standard | Command bar | Tools | Viewport | Objects | Attributes | Timeline, Dope Sheet, F-Curve, Coordinates | 43, 402, 0.47, 92 |
 | Modeling | Command bar | Tools | Viewport | Objects | Attributes, Coordinates | History, Console | 43, 360, 0.35, 150 |
-| Animate | Command bar | Tools | Viewport | Objects | Attributes, Coordinates | Timeline, History | 43, 340, 0.40, 240 |
+| Animate | Command bar | Tools | Viewport | Objects | Attributes, Coordinates | Dope Sheet, Timeline, F-Curve, History | 43, 340, 0.40, 276 |
 | UV | Command bar | Tools | Viewport | - | Attributes, Coordinates, Objects | History | 43, 400, 0.45, 120 |
 | Rigging | Command bar | Tools | Viewport | Objects | Attributes | Timeline, Coordinates, Script | 43, 380, 0.60, 160 |
 | Node | Command bar | - | Node Editor, Viewport | Objects | Attributes | Console, History, Script | 43, 340, 0.45, 200 |
@@ -2156,3 +2178,34 @@ mode, with errors replacing it.
 | Timeline row composition | 227 |
 | Attribute tabs as wrapping toggle buttons, two-column groups, step arrows | 231 (and §12) |
 | Document tabs and the layout switcher row | 227, 226 (layouts = §21 workspaces) |
+
+### Navigation and editing
+
+- In the node, UV, Dope Sheet, and F-Curve editors, hold 1 and drag to pan
+  or 2 and drag to zoom about the press position. Orbit (3) belongs to the 3D viewport.
+- Drag a material card to a scene object to assign it. Double-click the card
+  to open its node graph or inspect a Standard material. Inspecting a
+  material preserves scene selection.
+- The node search popup grows up to 420 × 380 logical pixels, within the
+  available window. Color constants expose a picker, sRGB hex and 8-bit
+  RGB. Graph socket values remain linear.
+- Hold Shift or Control to scrub numeric attributes at 10× speed. Hold both
+  for 100×. Click text to place a caret or double-click to select its value.
+- The command bar exposes light creation next to clone tools. The scene
+  hierarchy uses object type and tag icons with descriptive tooltips.
+- Drag a panel tab or grip to an existing dock to join its tabs. Drop
+  on a viewport edge for an adjacent dock, then resize it at the divider.
+- Command+D duplicates selected branches beside their sources. Command+C
+  copies a scene-local snapshot. Command+V pastes into the active object's
+  hierarchy, or at the scene root with no selection. Both edits are undoable.
+- The Node Material editor offers a two-stop Gradient Ramp driven by a
+  scalar. Connect it to color or vector sockets, or use Luminance
+  and Vector Components for scalar sockets.
+- In the viewport's object mode, diamond handles edit primitive dimensions
+  and supported area light sizes with one undo step per drag. Rectangular
+  and disc area lights show their footprint and a forward arrow. Spherical
+  area lights show the radius in three planes.
+- Fresnel exposes a scalar facing factor and an IOR input. Connect it to
+  a ramp position, a mix factor, a color or vector, or Surface Roughness
+  and Metallic. Rendered surfaces evaluate Fresnel at each shaded point.
+  The Shaded viewport uses its UV-baked material preview.

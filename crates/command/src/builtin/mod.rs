@@ -7,7 +7,7 @@ use crate::context::CommandContext;
 use crate::error::CommandError;
 use crate::registry::{CommandRegistry, CommandSpec, NoArgs};
 
-mod arrange;
+pub(crate) mod arrange;
 mod axis;
 mod browser;
 mod building;

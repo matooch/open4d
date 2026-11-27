@@ -1138,6 +1138,7 @@ pub struct Renderer {
     point_quad: wgpu::RenderPipeline,
     grid: wgpu::RenderPipeline,
     gizmo: wgpu::RenderPipeline,
+    gizmo_tips: wgpu::RenderPipeline,
     /// The selection outline (§16.2): mask pipelines for a mesh and an instance set, the
     /// dilation pass and the mask targets.
     outline: OutlineGpu,
@@ -1487,6 +1488,15 @@ impl Renderer {
             gizmo: make(spec(
                 "gizmo", "vs_color", "fs_color", &color_buf, LineList, false, Always,
             )),
+            gizmo_tips: make(spec(
+                "gizmo tips",
+                "vs_color",
+                "fs_color",
+                &color_buf,
+                TriangleList,
+                false,
+                Always,
+            )),
             layout,
             light_layout,
             shadow_sampler,
@@ -1727,6 +1737,13 @@ impl Renderer {
             .gizmo
             .filter(|_| !overlay)
             .map(|g| Vertices::new(device, "gizmo", &gizmo_vertices(g, cam, height as f64, pal)));
+        let gizmo_tips = frame
+            .gizmo
+            .filter(|g| !overlay && g.mode != GizmoMode::Rotate)
+            .and_then(|g| {
+                let vertices = gizmo_tip_vertices(g, cam, width as f64, height as f64, pal);
+                (!vertices.is_empty()).then(|| Vertices::new(device, "gizmo tips", &vertices))
+            });
         let boxes = (style.boxes && !overlay).then(|| {
             let mut out = Vec::new();
             for (i, m) in frame.meshes.iter().enumerate() {
@@ -1977,6 +1994,10 @@ impl Renderer {
             if let Some(gizmo) = &gizmo {
                 pass.set_pipeline(&self.gizmo);
                 gizmo.draw(&mut pass);
+            }
+            if let Some(tips) = &gizmo_tips {
+                pass.set_pipeline(&self.gizmo_tips);
+                tips.draw(&mut pass);
             }
         }
         drop(pass);
@@ -2558,13 +2579,63 @@ fn grid_vertices(grid: &Grid, pal: &Palette) -> Vec<ColorVertex> {
     out
 }
 
-fn gizmo_vertices(g: &Gizmo, cam: &Camera, viewport_h: f64, pal: &Palette) -> Vec<ColorVertex> {
-    let l = g.world_length(cam, viewport_h);
-    let axis_color = |a: Axis| match a {
+fn gizmo_axis_color(pal: &Palette, axis: Axis) -> [f32; 3] {
+    match axis {
         Axis::X => pal.gizmo_x,
         Axis::Y => pal.gizmo_y,
         Axis::Z => pal.gizmo_z,
+    }
+}
+
+fn gizmo_tip_vertices(g: &Gizmo, cam: &Camera, w: f64, h: f64, pal: &Palette) -> Vec<ColorVertex> {
+    let screen = |point| cam.project(point, w, h).map(|p| p.truncate());
+    let Some(origin) = screen(g.origin) else {
+        return Vec::new();
     };
+    let l = g.world_length(cam, h);
+    let forward = cam.forward_world();
+    let light = (-0.35 * cam.right_world() + 0.5 * cam.up_world() - 0.75 * forward).normalize();
+    let mut faces = Vec::new();
+    for axis in Axis::ALL {
+        if g.projected_axis_end(axis, l, origin, screen).is_none() {
+            continue;
+        }
+        let Some(tip) = g.axis_tip(axis, l) else {
+            continue;
+        };
+        for points @ [a, b, c] in tip.triangles {
+            let center = (a + b + c) / 3.0;
+            let mut normal = (b - a).cross(c - a).normalize_or_zero();
+            if normal.dot(center - tip.inside) < 0.0 {
+                normal = -normal;
+            }
+            let toward_camera = match cam.projection {
+                crate::camera::Projection::Perspective { .. } => cam.eye_world() - center,
+                crate::camera::Projection::Orthographic { .. } => -forward,
+            };
+            // Only visible faces of the closed tips. They overlay the scene, so its depth
+            // cannot be used to order the gizmo's own geometry.
+            if normal.dot(toward_camera) <= 0.0 {
+                continue;
+            }
+            let shade = 0.68 + 0.32 * normal.dot(light).max(0.0) as f32;
+            let color = gizmo_axis_color(pal, axis).map(|c| c * shade);
+            faces.push((
+                center.dot(forward),
+                points.map(|p| ColorVertex { pos: f3(p), color }),
+            ));
+        }
+    }
+    faces.sort_by(|a, b| b.0.total_cmp(&a.0));
+    faces
+        .into_iter()
+        .flat_map(|(_, vertices)| vertices)
+        .collect()
+}
+
+fn gizmo_vertices(g: &Gizmo, cam: &Camera, viewport_h: f64, pal: &Palette) -> Vec<ColorVertex> {
+    let l = g.world_length(cam, viewport_h);
+    let axis_color = |axis| gizmo_axis_color(pal, axis);
     let mut out = Vec::new();
     if g.mode == GizmoMode::Rotate {
         for a in Axis::ALL {
@@ -2576,7 +2647,7 @@ fn gizmo_vertices(g: &Gizmo, cam: &Camera, viewport_h: f64, pal: &Palette) -> Ve
         return out;
     }
     for a in Axis::ALL {
-        line(&mut out, g.origin, g.origin + g.axis(a) * l, axis_color(a));
+        line(&mut out, g.origin, g.shaft_end(a, l), axis_color(a));
     }
     for p in Plane::ALL {
         let c = g.plane_corners(p, l);

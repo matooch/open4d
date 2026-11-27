@@ -161,3 +161,57 @@ pub fn camera_json(c: &Camera) -> Value {
     }
     out
 }
+
+#[derive(Clone, Copy)]
+pub(crate) enum CanvasMotion {
+    Pan(egui::Vec2),
+    Zoom { anchor: egui::Pos2, factor: f32 },
+}
+
+/// Latch navigation at the start of the drag so it cannot turn into an edit.
+#[derive(Default, Clone, Debug)]
+pub(crate) struct CanvasNavigation {
+    drag: Option<(egui::Key, egui::Pos2)>,
+}
+
+impl CanvasNavigation {
+    pub fn read(&mut self, response: &egui::Response) -> (bool, Option<CanvasMotion>) {
+        use egui::{Key, PointerButton::Primary};
+        let typing = response.ctx.egui_wants_keyboard_input();
+        let (key, origin) = response.ctx.input(|i| {
+            let key = if typing || i.modifiers.command || i.modifiers.alt {
+                None
+            } else {
+                [Key::Num1, Key::Num2]
+                    .into_iter()
+                    .find(|key| i.key_down(*key))
+            };
+            (key, i.pointer.press_origin())
+        });
+        if response.drag_started_by(Primary)
+            && let Some(key) = key
+            && let Some(anchor) = origin
+        {
+            self.drag = Some((key, anchor));
+        }
+        let motion = self
+            .drag
+            .filter(|_| response.dragged_by(Primary))
+            .map(|(key, anchor)| {
+                let delta = response.drag_delta();
+                if key == Key::Num1 {
+                    CanvasMotion::Pan(delta)
+                } else {
+                    CanvasMotion::Zoom {
+                        anchor,
+                        factor: (0.01 * (delta.x - delta.y)).exp(),
+                    }
+                }
+            });
+        let captured = self.drag.is_some() || (key.is_some() && response.clicked_by(Primary));
+        if response.drag_stopped_by(Primary) {
+            self.drag = None;
+        }
+        (captured, motion)
+    }
+}

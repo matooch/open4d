@@ -154,3 +154,64 @@ impl IconAtlas {
         )
     }
 }
+
+/// An atlas uploaded once per editor context and display scale.
+pub(crate) fn ui_image(
+    ui: &egui::Ui,
+    name: &str,
+    size: f32,
+    tint: egui::Color32,
+) -> Option<egui::Image<'static>> {
+    type Cache = std::sync::Arc<(IconAtlas, egui::TextureHandle)>;
+    let ctx = ui.ctx();
+    let key = egui::Id::unique("forge-ui-icon-cache");
+    let scale = ctx.pixels_per_point().clamp(0.5, 4.0);
+    let atlas = ctx
+        .data(|data| data.get_temp::<Cache>(key))
+        .filter(|cache| cache.0.pixels_per_point == scale)
+        .unwrap_or_else(|| {
+            let atlas = IconAtlas::build(scale);
+            let texture = atlas.texture(ctx);
+            let cache = std::sync::Arc::new((atlas, texture));
+            ctx.data_mut(|data| data.insert_temp(key, cache.clone()));
+            cache
+        });
+    let uv = atlas.0.uv(name)?;
+    Some(
+        egui::Image::new((atlas.1.id(), egui::Vec2::splat(size)))
+            .uv(uv)
+            .tint(tint),
+    )
+}
+
+/// An icon-only action with a readable accessibility label and hover help.
+pub(crate) fn action(
+    ui: &mut egui::Ui,
+    icon: &str,
+    label: &str,
+    help: &str,
+    active: Option<bool>,
+) -> egui::Response {
+    let tint = if active == Some(true) {
+        ui.visuals().selection.stroke.color
+    } else {
+        ui.visuals().text_color()
+    };
+    let button = ui_image(ui, icon, 15.0, tint)
+        .map_or_else(|| egui::Button::new(label), egui::Button::image);
+    let response = ui.add(
+        button
+            .selected(active == Some(true))
+            .min_size(egui::vec2(25.0, 23.0)),
+    );
+    response.widget_info(|| match active {
+        Some(active) => {
+            egui::WidgetInfo::selected(egui::Role::Button, response.enabled(), active, label)
+        }
+        None => egui::WidgetInfo::labeled(egui::Role::Button, response.enabled(), label),
+    });
+    response.on_disabled_hover_text(help).on_hover_ui(|ui| {
+        ui.strong(label);
+        ui.label(help);
+    })
+}

@@ -898,7 +898,7 @@ fn the_two_visibility_dots_are_stacked_editor_above_render() {
     );
     // the evaluation check sits to the right of the dots, and the row stays 20 px high
     let tick = h.get_by_label("Enabled: B1").rect();
-    assert!(tick.min.x >= editor.max.x);
+    assert!(tick.max.x <= editor.min.x);
     assert!(editor.height() + render.height() <= METRICS.row_height + 0.5);
 }
 

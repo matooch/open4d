@@ -13,6 +13,19 @@ pub struct PreviewMaterial {
 fn textures(graph: &ShadingGraph, ix: usize, present: &impl Fn(&str) -> bool) -> bool {
     match &graph.nodes[ix] {
         IrNode::Color(_) => false,
+        IrNode::Fresnel { ior } => textures(graph, *ior, present),
+        IrNode::Luminance(input) | IrNode::Component { input, .. } => {
+            textures(graph, *input, present)
+        }
+        IrNode::Ramp {
+            a,
+            b,
+            position,
+            start,
+            end,
+        } => [a, b, position, start, end]
+            .into_iter()
+            .any(|i| textures(graph, *i, present)),
         IrNode::Texture(name) => present(name),
         IrNode::Scale { input, .. } => textures(graph, *input, present),
         IrNode::Mix { base, top, .. } => {

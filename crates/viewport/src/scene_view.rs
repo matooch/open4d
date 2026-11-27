@@ -174,6 +174,15 @@ pub fn light_lines(world: DMat4, shape: LightGizmo, selected: bool) -> Vec<DrawL
     };
     let p = |v: DVec3| world.transform_point3(v);
     let mut out = Vec::new();
+    let normal = |length: f64| {
+        let end = p(DVec3::Z * length);
+        let barb = length * 0.23;
+        [
+            line(p(DVec3::ZERO), end, color),
+            line(p(DVec3::new(-barb, 0.0, length - barb)), end, color),
+            line(p(DVec3::new(barb, 0.0, length - barb)), end, color),
+        ]
+    };
     match shape {
         LightGizmo::Omni { radius } => {
             for plane in 0..3 {
@@ -206,11 +215,11 @@ pub fn light_lines(world: DMat4, shape: LightGizmo, selected: bool) -> Vec<DrawL
             ];
             out.extend(closed(&c, color));
             let tick = hw.min(hh).max(1e-6);
-            out.push(line(p(DVec3::ZERO), p(DVec3::new(0.0, 0.0, tick)), color));
+            out.extend(normal(tick));
         }
         LightGizmo::AreaDisc { radius } => {
             out.extend(circle(world, 0.0, radius, 0, color));
-            out.push(line(p(DVec3::ZERO), p(DVec3::new(0.0, 0.0, radius)), color));
+            out.extend(normal(radius));
         }
         LightGizmo::AreaSphere { radius } => {
             for plane in 0..3 {

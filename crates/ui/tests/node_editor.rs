@@ -982,3 +982,70 @@ fn an_expression_built_in_the_editor_drives_the_scene_and_undo_takes_it_back() {
     redo(&mut h);
     assert_eq!(pos_at(&mut h, 0), [42.0, 0.0, 0.0]);
 }
+
+#[test]
+fn number_keys_pan_and_zoom_without_moving_nodes() {
+    let (mut s, f) = state();
+    let (node, _) = two_adds(&mut s, &f);
+    let mut h = harness(s);
+    let before = steps(&h);
+    let start_pan = canvas(&h).view.pan;
+    let start_zoom = canvas(&h).view.zoom;
+    for key in [egui::Key::Num1, egui::Key::Num2] {
+        let from = title(&h, node);
+        let key_event = |pressed| egui::Event::Key {
+            key,
+            pressed,
+            repeat: false,
+            physical_key: None,
+            modifiers: Modifiers::NONE,
+        };
+        h.event(key_event(true));
+        h.run();
+        drag(&mut h, from, from + vec2(64.0, 0.0));
+        h.event(key_event(false));
+        h.run();
+        if key == egui::Key::Num1 {
+            assert!(canvas(&h).view.pan.x - start_pan.x > 40.0);
+        }
+    }
+    assert!(canvas(&h).view.zoom > start_zoom);
+    assert_eq!(steps(&h), before);
+}
+
+#[test]
+fn color_node_hex_input_stores_a_linear_graph_color() {
+    use forge_material::node_material::{COLOR, NODE_MATERIAL, load_graph};
+    use forge_nodes::PortValue;
+
+    let (mut s, _) = state();
+    let material = NodeId(
+        execute(&mut s, "material.create", json!({"type": NODE_MATERIAL})).unwrap()["material"]
+            .as_u64()
+            .unwrap(),
+    );
+    s.node_editor.show_material(material);
+    let mut h = harness(s);
+    let add_at = at(&h, 390.0, 70.0);
+    add_via_menu(&mut h, add_at, "material.color", "material.color");
+    let read = |h: &Harness<'_, Editor>| {
+        load_graph(h.state().state.doc.scene().node(material).unwrap()).unwrap()
+    };
+    let id = read(&h)
+        .nodes()
+        .find(|node| node.type_id == COLOR)
+        .unwrap()
+        .id;
+    h.get_by_label(&format!("Color #{} Value", id.0)).click();
+    h.run();
+    h.get_by_label("Hex color").focus();
+    h.run();
+    h.key_press_modifiers(Modifiers::COMMAND, egui::Key::A);
+    h.get_by_label("Hex color").type_text("#FF8000");
+    h.run();
+    let graph = read(&h);
+    let Some(PortValue::Colour([r, g, b])) = graph.node(id).unwrap().values.get("value") else {
+        panic!("expected a stored color");
+    };
+    assert!((*r - 1.0).abs() < 1e-6 && (*g - 0.21586).abs() < 1e-4 && b.abs() < 1e-6);
+}

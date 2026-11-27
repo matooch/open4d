@@ -23,6 +23,8 @@ struct CreateArgs {
     /// Node type id, e.g. `forge.cube`.
     #[serde(rename = "type")]
     type_id: String,
+    /// Initial Type for a light, such as `spot` or `area`.
+    light_type: Option<String>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -717,6 +719,11 @@ pub(super) fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
 
 fn create(ctx: &mut dyn CommandContext, a: CreateArgs) -> Result<Value, CommandError> {
     let type_id = a.type_id;
+    if a.light_type.is_some() && type_id != "forge.light" {
+        return Err(CommandError::InvalidArgs(
+            "light_type requires forge.light".into(),
+        ));
+    }
     let ty = ctx
         .doc()
         .scene()
@@ -746,6 +753,9 @@ fn create(ctx: &mut dyn CommandContext, a: CreateArgs) -> Result<Value, CommandE
         .doc_mut()
         .transact(&format!("Create {}", ty.label), |tx| {
             let id = tx.create(&type_id, None, None)?;
+            if let Some(kind) = a.light_type {
+                tx.set_param(id, "type", forge_core::Value::Enum(kind))?;
+            }
             if smooth {
                 tx.attach_tag(forge_core::smoothing::TAG, id, None)?;
             }

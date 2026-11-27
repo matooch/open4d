@@ -1,7 +1,7 @@
 //! The number field shared by the float, int and vector widgets (docs/specs/UI.md §12;
 //! observed, G4 item 1): a dark box with a left and a right chevron. A chevron steps the
-//! value by one unit; double-clicking the value edits its text and Return commits; dragging
-//! the value scrubs it (the scrub modifiers stay **parity-pending G4**).
+//! value by one unit. Click to edit the text, double-click to select it, or drag to scrub.
+//! Return commits the typed value.
 
 use egui::accesskit::{Action, ActionData};
 use egui::{Align2, FontId, Key, Pos2, Rect, Response, Sense, Stroke, TextEdit, Ui, vec2};
@@ -73,7 +73,10 @@ fn clamp(v: f64, f: &NumberField) -> f64 {
 
 /// The edit buffer of a field being edited, kept in egui's memory under the field's id.
 #[derive(Clone)]
-struct Editing(String);
+struct Editing {
+    text: String,
+    first_click_x: Option<f32>,
+}
 
 fn chevron(ui: &mut Ui, left: bool, label: String) -> Response {
     let (rect, r) = ui.allocate_exact_size(vec2(CHEVRON_W, HEIGHT), Sense::click());
@@ -147,13 +150,13 @@ pub fn show(ui: &mut Ui, value: &mut f64, f: &NumberField) -> (Response, bool) {
             result = Some(r.clone());
         }
         let editing: Option<Editing> = ui.data(|d| d.get_temp(id));
-        if let Some(Editing(mut buf)) = editing {
+        if let Some(mut editing) = editing {
             let mut edit = ui.new_child(egui::UiBuilder::new().max_rect(rect));
-            let te = edit.add(
-                TextEdit::singleline(&mut buf)
-                    .desired_width(VALUE_W)
-                    .align(Align2::CENTER_CENTER),
-            );
+            let mut output = TextEdit::singleline(&mut editing.text)
+                .desired_width(VALUE_W)
+                .align(Align2::CENTER_CENTER)
+                .show(&mut edit);
+            let te = output.response.response;
             te.widget_info(|| {
                 egui::WidgetInfo::labeled(
                     egui::Role::TextInput,
@@ -161,8 +164,25 @@ pub fn show(ui: &mut Ui, value: &mut f64, f: &NumberField) -> (Response, bool) {
                     format!("Edit {}{}", f.prefix, f.name),
                 )
             });
-            if !te.has_focus() && !te.lost_focus() {
+            let clicked = editing.first_click_x.take();
+            if clicked.is_some() {
                 te.request_focus();
+            }
+            let cursor = if te.double_clicked() {
+                Some(egui::text::CCursorRange::select_all(&output.galley))
+            } else {
+                clicked.map(|x| {
+                    egui::text::CCursorRange::one(
+                        output
+                            .galley
+                            .cursor_from_pos(vec2(x - output.galley_pos.x, 0.0)),
+                    )
+                })
+            };
+            if let Some(cursor) = cursor {
+                output.state.cursor.set_char_range(Some(cursor));
+                output.state.store(ui.ctx(), te.id);
+                ui.ctx().request_repaint();
             }
             let escape = ui.input(|i| i.key_pressed(Key::Escape));
             let enter = ui.input(|i| i.key_pressed(Key::Enter));
@@ -170,7 +190,7 @@ pub fn show(ui: &mut Ui, value: &mut f64, f: &NumberField) -> (Response, bool) {
                 ui.data_mut(|d| d.remove::<Editing>(id));
             } else if enter || te.lost_focus() {
                 ui.data_mut(|d| d.remove::<Editing>(id));
-                if let Some(v) = parse_value(&buf, f) {
+                if let Some(v) = parse_value(&editing.text, f) {
                     let v = clamp(v, f);
                     if v != *value || f.mixed {
                         *value = v;
@@ -179,7 +199,7 @@ pub fn show(ui: &mut Ui, value: &mut f64, f: &NumberField) -> (Response, bool) {
                     }
                 }
             } else {
-                ui.data_mut(|d| d.insert_temp(id, Editing(buf)));
+                ui.data_mut(|d| d.insert_temp(id, editing));
             }
         } else {
             let fill = ui.visuals().extreme_bg_color;
@@ -205,13 +225,23 @@ pub fn show(ui: &mut Ui, value: &mut f64, f: &NumberField) -> (Response, bool) {
                     egui::StrokeKind::Inside,
                 );
             }
-            if r.double_clicked() {
-                let start = if f.mixed {
+            if r.clicked() {
+                let text = if f.mixed {
                     String::new()
                 } else {
                     format_value(*value, f.is_int)
                 };
-                ui.data_mut(|d| d.insert_temp(id, Editing(start)));
+                let first_click_x = Some(r.interact_pointer_pos().map_or(rect.center().x, |p| p.x));
+                ui.data_mut(|d| {
+                    d.insert_temp(
+                        id,
+                        Editing {
+                            text,
+                            first_click_x,
+                        },
+                    )
+                });
+                ui.ctx().request_repaint();
             } else if r.dragged() && r.drag_delta().x != 0.0 {
                 let speed = scrub::step(f.base, mods);
                 let v = clamp(*value + f64::from(r.drag_delta().x) * speed, f);

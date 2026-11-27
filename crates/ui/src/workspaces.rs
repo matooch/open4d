@@ -50,8 +50,8 @@ impl Workspace {
     pub fn layout(self) -> Layout {
         use Area::{Bottom, Center, Left, RightBottom, RightTop, Top};
         use Panel::{
-            Attributes, CommandBar, Console, Coordinates, History, NodeEditor, ObjectTree, Script,
-            Timeline, ToolPalette, UvEditor, Viewport,
+            Attributes, CommandBar, Console, Coordinates, DopeSheet, History, NodeEditor,
+            ObjectTree, Script, Timeline, ToolPalette, UvEditor, ValueGraph, Viewport,
         };
         let sizes = |right_width, right_top_fraction, bottom_height| Sizes {
             left_width: crate::layout::WINDOW.tool_strip,
@@ -79,9 +79,9 @@ impl Workspace {
                     (Center, &[Viewport]),
                     (RightTop, &[ObjectTree]),
                     (RightBottom, &[Attributes, Coordinates]),
-                    (Bottom, &[Timeline, History]),
+                    (Bottom, &[DopeSheet, Timeline, ValueGraph, History]),
                 ],
-                sizes(340.0, 0.40, 240.0),
+                sizes(340.0, 0.40, 276.0),
             ),
             Workspace::Uv => (
                 vec![

@@ -143,10 +143,10 @@ fn light_gizmos_are_closed_and_oriented() {
         },
         false,
     );
-    assert_eq!(rect.len(), 5);
+    assert_eq!(rect.len(), 7);
     assert!(
         rect.iter().any(|l| (l.b.z - 50.0).abs() < 1e-9),
-        "normal tick toward +Z"
+        "direction arrow toward +Z"
     );
     assert!(
         !light_lines(

@@ -111,13 +111,18 @@ of a pixel at the origin's depth (perspective: `2·d·tan(fov/2)/h`, `d` = origi
 distance along `forward`; orthographic: `height/h`).
 
 Handles:
-- `Axis(X|Y|Z)`: segment `origin → origin + L·axis`.
+- `Axis(X|Y|Z)`: an RGB shaft along the gizmo's axis. Move ends in a solid cone with
+  its apex at `origin + L·axis`. Scale ends in a solid cube centered at that point.
+  Both tips follow the gizmo orientation and use the shaft's view-scaled length.
+  Faces use subdued lighting so the end shape reads over geometry. Source: owner-supplied
+  viewport captures and the requested cone and cube shapes. The relative dimensions are
+  Forge's own design.
 - `Plane(XY|YZ|XZ)`: square with corners at `0.2L` and `0.45L` along both plane axes.
 - `Center`: disc of radius 8 px around the projected origin.
 
 `hit_test(cam, x, y, w, h)`: `Center` if within 8 px; else a plane whose projected
 quad contains the cursor (order XY, YZ, XZ); else the axis with the smallest screen
-distance ≤ 6 px (ties: X, Y, Z order). Otherwise `None`. Handles seen edge-on are
+distance ≤ 6 px, with the projected solid tips included in the hit area (ties: X, Y, Z order). Otherwise `None`. Handles seen edge-on are
 not pickable: planes whose projected quad has area < 25 px², axes whose projected
 length is < 6 px.
 

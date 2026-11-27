@@ -63,7 +63,8 @@ fn constant_of(ty: PortType, v: &PortValue) -> Constant {
         (_, PortValue::Int(i)) => Constant::Int(*i),
         (_, PortValue::Bool(b)) => Constant::Bool(*b),
         (_, PortValue::String(s)) => Constant::Text(s.clone()),
-        (_, PortValue::Vec3(v) | PortValue::Colour(v)) => Constant::Vec3(*v),
+        (_, PortValue::Vec3(v)) => Constant::Vec3(*v),
+        (_, PortValue::Colour(v)) => Constant::Color(*v),
     }
 }
 
@@ -364,7 +365,7 @@ fn value_json(c: &Constant) -> Json {
         Constant::Int(i) => json!(i),
         Constant::Bool(b) => json!(b),
         Constant::Text(s) => json!(s),
-        Constant::Vec3(v) => json!(v),
+        Constant::Vec3(v) | Constant::Color(v) => json!(v),
         Constant::Fixed(_) => Json::Null,
     }
 }
@@ -739,7 +740,7 @@ mod tests {
         );
         assert_eq!(
             constant_of(PortType::Colour, &PortValue::Colour([1.0, 0.0, 0.5])),
-            Constant::Vec3([1.0, 0.0, 0.5])
+            Constant::Color([1.0, 0.0, 0.5])
         );
         assert!(matches!(
             constant_of(PortType::Any, &PortValue::Float(1.0)),

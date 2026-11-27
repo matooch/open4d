@@ -11,7 +11,7 @@ use std::sync::Arc;
 use crate::ir::{DiffuseModel, IrNode, MixMode, ShadingGraph};
 
 /// Bumped whenever the emitted source changes; part of the cache key.
-pub const CODEGEN_VERSION: u32 = 2;
+pub const CODEGEN_VERSION: u32 = 3;
 
 /// The colour a shader-node (`Texture`) channel compiles to in part 1.
 pub const FALLBACK_COLOR: [f64; 3] = [0.8, 0.8, 0.8];
@@ -122,6 +122,18 @@ impl TextureCodegen for WhiteShaders {
 
 /// The material surface, mirroring [`crate::ir::Outputs`] (REALTIME.md §1.1).
 pub const SURFACE_WGSL: &str = r#"
+fn forge_node_fresnel(ior_in: f32, normal: vec3<f32>, view: vec3<f32>) -> f32 {
+    let ior = clamp(ior_in, 1.0, 10.0);
+    let r = (ior - 1.0) / (ior + 1.0);
+    let f0 = r * r;
+    let lengths = sqrt(dot(normal, normal) * dot(view, view));
+    let cosine = min(1.0, abs(dot(normal, view)) / max(lengths, 1e-8));
+    return f0 + (1.0 - f0) * pow(1.0 - select(1.0, cosine, lengths > 1e-8), 5.0);
+}
+fn forge_ramp_factor(position: f32, start: f32, end: f32) -> f32 {
+    if (start == end) { return select(0.0, 1.0, position >= end); }
+    return clamp((position - start) / (end - start), 0.0, 1.0);
+}
 struct ShadeCtx {
     uvw: vec3<f32>,
     position: vec3<f32>,
@@ -293,6 +305,29 @@ pub fn compile_into(
     for (ix, node) in graph.nodes.iter().enumerate() {
         let (expr, fallback) = match node {
             IrNode::Color(c) => (vec3(*c), None),
+            IrNode::Fresnel { ior } => (
+                format!("vec3<f32>(forge_node_fresnel(ir{ior}(ctx).x, ctx.normal, ctx.view))"),
+                None,
+            ),
+            IrNode::Ramp {
+                a,
+                b,
+                position,
+                start,
+                end,
+            } => (
+                format!(
+                    "mix(ir{a}(ctx), ir{b}(ctx), forge_ramp_factor(ir{position}(ctx).x, ir{start}(ctx).x, ir{end}(ctx).x))"
+                ),
+                None,
+            ),
+            IrNode::Luminance(input) => (
+                format!("vec3<f32>(dot(ir{input}(ctx), {}))", vec3(crate::ir::LUMA)),
+                None,
+            ),
+            IrNode::Component { input, index } => {
+                (format!("vec3<f32>(ir{input}(ctx)[{index}])"), None)
+            }
             IrNode::Texture(name) => {
                 let e = exprs
                     .entry(name.as_str())
@@ -335,6 +370,10 @@ pub fn compile_into(
     out.push_str("fn forge_surface(ctx: ShadeCtx) -> Surface {\n    var s: Surface;\n");
     out.push_str("    s.alpha = vec4<f32>(1.0, 1.0, 1.0, 0.0);\n");
     let o = &graph.outputs;
+    let roughness = |fallback| {
+        o.roughness_input
+            .map_or_else(|| f(fallback), |i| format!("clamp(ir{i}(ctx).x, 0.0, 1.0)"))
+    };
     if let Some(d) = &o.diffuse {
         let model = match d.model {
             DiffuseModel::Lambertian => 0u32,
@@ -350,7 +389,7 @@ pub fn compile_into(
             out,
             "    s.diffuse_params = vec4<f32>({}, {}, {}.0, 1.0);",
             f(d.falloff),
-            f(d.roughness),
+            roughness(d.roughness),
             model
         );
     }
@@ -363,11 +402,14 @@ pub fn compile_into(
         );
         let _ = writeln!(
             out,
-            "    s.specular_params = vec4<f32>({}, {}, {}, {}.0);",
-            f(sp.width),
+            "    s.specular_params = vec4<f32>({}, {}, {}, {});",
+            roughness(sp.width),
             f(sp.falloff),
             f(sp.inner_width),
-            u32::from(sp.metal)
+            o.metallic_input.map_or_else(
+                || f(f64::from(sp.metal)),
+                |i| format!("clamp(ir{i}(ctx).x, 0.0, 1.0)"),
+            )
         );
         let _ = writeln!(
             out,

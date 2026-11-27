@@ -1,14 +1,16 @@
 //! Pure typed material graphs lowered to the Standard shading IR (MATERIAL.md M8).
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
 use forge_core::{Category, Node, NodeType, ParamDesc, Value};
 use forge_nodes::{
-    EvalEnv, Evaluation, Graph, GraphError, GraphNodeId, NodeDef, NodeRegistry, PortType, PortValue,
+    EvalEnv, Evaluation, Graph, GraphError, GraphNodeId, NodeDef, NodeRegistry, PortRef, PortType,
+    PortValue,
 };
 
-use crate::{MATERIAL, Material, MixMode, ShadingGraph, compile, mix};
+use crate::ir::{LUMA, fresnel, ramp_factor};
+use crate::{IrNode, MATERIAL, Material, MixMode, ShadingGraph, compile, mix};
 
 pub const NODE_MATERIAL: &str = "forge.material.node";
 pub const GRAPH: &str = "graph";
@@ -17,6 +19,10 @@ pub const COLOR: &str = "material.color";
 pub const SCALAR: &str = "material.scalar";
 pub const TEXTURE: &str = "material.texture";
 pub const MIX: &str = "material.mix";
+pub const FRESNEL: &str = "material.fresnel";
+pub const GRADIENT: &str = "material.gradient";
+pub const LUMINANCE: &str = "material.luminance";
+pub const VECTOR: &str = "material.vector";
 
 // Keep Surface descriptors, defaults, and graph-to-value conversion in one table.
 macro_rules! surface {
@@ -37,12 +43,16 @@ macro_rules! surface {
 
             pub fn from_graph(graph: &Graph) -> Result<Self, Error> {
                 let (id, eval) = evaluate_surface(graph)?;
-                Ok(Self {
+                Ok(Self::from_evaluation(id, &eval))
+            }
+
+            fn from_evaluation(id: GraphNodeId, eval: &Evaluation) -> Self {
+                Self {
                     $($field: match eval.output(id, stringify!($field)) {
                         Some(PortValue::$port(value)) => value.clone(),
                         _ => unreachable!("a Surface declares this typed output"),
                     }),+
-                })
+                }
             }
 
             pub fn to_graph(&self) -> Result<Graph, Error> {
@@ -108,6 +118,44 @@ pub fn registry() -> &'static NodeRegistry {
         .input("b", T::Colour, V::Colour([1.0; 3]))
         .input("factor", T::Float, V::Float(0.5))
         .output("color", T::Colour);
+        let gradient = NodeDef::new(GRADIENT, "Gradient Ramp", "Color", |cx| {
+            let t = ramp_factor(cx.float("position"), cx.float("start"), cx.float("end"));
+            Ok(vec![V::Colour(mix(
+                cx.vec3("a"),
+                cx.vec3("b"),
+                MixMode::Normal,
+                t,
+            ))])
+        })
+        .input("a", T::Colour, V::Colour([0.0; 3]))
+        .input("b", T::Colour, V::Colour([1.0; 3]))
+        .input("start", T::Float, V::Float(0.0))
+        .input("end", T::Float, V::Float(1.0))
+        .input("position", T::Float, V::Float(0.5))
+        .output("color", T::Colour);
+        let luminance = NodeDef::new(LUMINANCE, "Luminance", "Convert", |cx| {
+            Ok(vec![V::Float(
+                cx.vec3("color")
+                    .into_iter()
+                    .zip(LUMA)
+                    .map(|(a, b)| a * b)
+                    .sum(),
+            )])
+        })
+        .input("color", T::Colour, V::Colour([0.0; 3]))
+        .output("value", T::Float);
+        let vector = NodeDef::new(VECTOR, "Vector Components", "Convert", |cx| {
+            Ok(cx.vec3("vector").into_iter().map(V::Float).collect())
+        })
+        .input("vector", T::Vec3, V::Vec3([0.0; 3]))
+        .output("x", T::Float)
+        .output("y", T::Float)
+        .output("z", T::Float);
+        let view = NodeDef::new(FRESNEL, "Fresnel", "Input", |cx| {
+            Ok(vec![V::Float(fresnel(cx.float("ior"), [0.0; 3], [0.0; 3]))])
+        })
+        .input("ior", T::Float, V::Float(1.5))
+        .output("factor", T::Float);
         let mut surface = NodeDef::new(SURFACE, "Surface", "Output", |cx| {
             Ok(PORTS.iter().map(|p| cx.value(p).clone()).collect())
         })
@@ -117,7 +165,9 @@ pub fn registry() -> &'static NodeRegistry {
                 .input(id, value.ty(), value.clone())
                 .output(id, value.ty());
         }
-        for def in [color, scalar, texture, blend, surface] {
+        for def in [
+            color, scalar, texture, blend, gradient, luminance, vector, view, surface,
+        ] {
             registry
                 .register(def)
                 .expect("material node definition is valid");
@@ -208,7 +258,8 @@ fn evaluate_surface(graph: &Graph) -> Result<(GraphNodeId, Evaluation), Error> {
 
 /// Evaluate the typed surface and convert its inputs into the common source material.
 pub fn compile_graph(graph: &Graph) -> Result<ShadingGraph, Error> {
-    let s = SurfaceValues::from_graph(graph)?;
+    let (surface, evaluated) = evaluate_surface(graph)?;
+    let s = SurfaceValues::from_evaluation(surface, &evaluated);
     let mut material = Material::new();
     for (id, value) in [
         ("color.color", Value::Color(s.base_color)),
@@ -220,7 +271,7 @@ pub fn compile_graph(graph: &Graph) -> Result<ShadingGraph, Error> {
         material.set("reflectance.spec.attenuation", Value::Enum("metal".into()));
     }
     if !s.base_texture.is_empty() {
-        material.set("color.texture", Value::String(s.base_texture));
+        material.set("color.texture", Value::String(s.base_texture.clone()));
         material.set("color.mix_mode", Value::Enum("multiply".into()));
     }
     if !s.normal_texture.is_empty() {
@@ -235,9 +286,151 @@ pub fn compile_graph(graph: &Graph) -> Result<ShadingGraph, Error> {
         material.set("enable.luminance", Value::Bool(true));
         material.set("luminance.color", Value::Color(s.emission));
         if !s.emissive_texture.is_empty() {
-            material.set("luminance.texture", Value::String(s.emissive_texture));
+            material.set(
+                "luminance.texture",
+                Value::String(s.emissive_texture.clone()),
+            );
             material.set("luminance.mix_mode", Value::Enum("multiply".into()));
         }
     }
-    Ok(compile(&material))
+    let mut ir = compile(&material);
+    if graph.nodes().any(|node| node.type_id == FRESNEL) {
+        let mut lower = Lower {
+            graph,
+            evaluated: &evaluated,
+            memo: BTreeMap::new(),
+            ir: &mut ir,
+        };
+        let base = lower.dynamic(surface, "base_color");
+        let emission = lower.dynamic(surface, "emission");
+        let roughness = lower.dynamic(surface, "roughness");
+        let metallic = lower.dynamic(surface, "metallic");
+        if let Some(base) = base {
+            let color = multiply_texture(&mut ir, base, &s.base_texture);
+            if let Some(diffuse) = &mut ir.outputs.diffuse {
+                diffuse.color = color;
+            }
+        }
+        if let Some(emission) = emission {
+            ir.outputs.emission = Some(multiply_texture(&mut ir, emission, &s.emissive_texture));
+        }
+        ir.outputs.roughness_input = roughness;
+        ir.outputs.metallic_input = metallic;
+    }
+    Ok(ir)
+}
+
+fn multiply_texture(ir: &mut ShadingGraph, base: usize, texture: &str) -> usize {
+    if texture.is_empty() {
+        return base;
+    }
+    let top = ir.push(IrNode::Texture(texture.to_owned()));
+    ir.push(IrNode::Mix {
+        base,
+        top,
+        mode: MixMode::Multiply,
+        strength: 1.0,
+    })
+}
+
+fn numeric(value: &PortValue) -> [f64; 3] {
+    match value {
+        PortValue::Float(v) => [*v; 3],
+        PortValue::Colour(v) | PortValue::Vec3(v) => *v,
+        _ => unreachable!("the material node's supported input is numeric"),
+    }
+}
+
+/// Lower only view-dependent branches. The other branches still use graph evaluation.
+struct Lower<'a> {
+    graph: &'a Graph,
+    evaluated: &'a Evaluation,
+    memo: BTreeMap<PortRef, Option<usize>>,
+    ir: &'a mut ShadingGraph,
+}
+
+impl Lower<'_> {
+    fn dynamic(&mut self, node: GraphNodeId, port: &str) -> Option<usize> {
+        let from = self
+            .graph
+            .link_into(&PortRef::new(node, port))?
+            .from
+            .clone();
+        self.output(&from)
+    }
+
+    fn input(&mut self, node: GraphNodeId, port: &str) -> usize {
+        if let Some(index) = self.dynamic(node, port) {
+            return index;
+        }
+        let definition = self.graph.node(node).expect("validated graph node");
+        let value = self
+            .graph
+            .link_into(&PortRef::new(node, port))
+            .and_then(|link| self.evaluated.output(link.from.node, &link.from.port))
+            .or_else(|| definition.values.get(port))
+            .unwrap_or_else(|| {
+                &registry()
+                    .get(&definition.type_id)
+                    .and_then(|d| d.find_input(port))
+                    .expect("known material input")
+                    .default
+            });
+        self.ir.push(IrNode::Color(numeric(value)))
+    }
+
+    fn output(&mut self, from: &PortRef) -> Option<usize> {
+        if let Some(cached) = self.memo.get(from) {
+            return *cached;
+        }
+        let id = from.node;
+        let node = self.graph.node(id).expect("validated source");
+        let ir = match node.type_id.as_str() {
+            FRESNEL => Some(IrNode::Fresnel {
+                ior: self.input(id, "ior"),
+            }),
+            COLOR | SCALAR => return self.dynamic(id, "value"),
+            GRADIENT | MIX
+                if self
+                    .graph
+                    .links()
+                    .iter()
+                    .any(|link| link.to.node == id && self.output(&link.from).is_some()) =>
+            {
+                let (position, start, end) = if node.type_id == MIX {
+                    (
+                        self.input(id, "factor"),
+                        self.ir.push(IrNode::Color([0.0; 3])),
+                        self.ir.push(IrNode::Color([1.0; 3])),
+                    )
+                } else {
+                    (
+                        self.input(id, "position"),
+                        self.input(id, "start"),
+                        self.input(id, "end"),
+                    )
+                };
+                Some(IrNode::Ramp {
+                    a: self.input(id, "a"),
+                    b: self.input(id, "b"),
+                    position,
+                    start,
+                    end,
+                })
+            }
+            LUMINANCE => self.dynamic(id, "color").map(IrNode::Luminance),
+            VECTOR => self.dynamic(id, "vector").map(|input| IrNode::Component {
+                input,
+                index: match from.port.as_str() {
+                    "x" => 0,
+                    "y" => 1,
+                    _ => 2,
+                },
+            }),
+            _ => None,
+        };
+        let index = ir.map(|ir| self.ir.push(ir));
+        self.memo.insert(from.clone(), index);
+        index
+    }
 }

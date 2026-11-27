@@ -71,6 +71,7 @@ pub enum Constant {
     Bool(bool),
     Text(String),
     Vec3([f64; 3]),
+    Color([f64; 3]),
     /// Shown as text, not editable (matrix, node link).
     Fixed(String),
 }
@@ -441,6 +442,9 @@ pub fn category_colour(category: &str) -> Color32 {
 enum Drag {
     None,
     Pan,
+    Zoom {
+        anchor: Pos2,
+    },
     Move {
         /// Selected nodes with their world positions at the start.
         start: Vec<(NodeKey, Pos2)>,
@@ -628,7 +632,16 @@ impl CanvasState {
     ) {
         use egui::PointerButton::{Middle, Primary};
         let origin = self.rect.min;
-        let (mods, space) = ui.input(|i| (i.modifiers, i.key_down(Key::Space)));
+        let typing = ui.ctx().egui_wants_keyboard_input();
+        let (mods, space, pan, zoom) = ui.input(|i| {
+            let navigate = !i.modifiers.command && !typing;
+            (
+                i.modifiers,
+                i.key_down(Key::Space),
+                navigate && i.key_down(Key::Num1),
+                navigate && i.key_down(Key::Num2),
+            )
+        });
         let additive = mods.shift || mods.command;
 
         if resp.drag_started() {
@@ -637,7 +650,9 @@ impl CanvasState {
             let press = ui
                 .input(|i| i.pointer.press_origin())
                 .unwrap_or(self.rect.center());
-            if resp.drag_started_by(Middle) || (mods.alt || space) {
+            if resp.drag_started_by(Primary) && zoom && !pan {
+                self.drag = Drag::Zoom { anchor: press };
+            } else if resp.drag_started_by(Middle) || mods.alt || space || pan {
                 self.drag = Drag::Pan;
             } else if resp.drag_started_by(Primary) {
                 self.drag = match self.layout.hit(&self.view, origin, press) {
@@ -673,6 +688,11 @@ impl CanvasState {
             let now = resp.interact_pointer_pos().or(self.pointer);
             match &self.drag {
                 Drag::Pan => self.view.pan += resp.drag_delta(),
+                Drag::Zoom { anchor } => {
+                    let delta = resp.drag_delta();
+                    self.view
+                        .zoom_about(origin, *anchor, (0.01 * (delta.x - delta.y)).exp());
+                }
                 Drag::Move {
                     start,
                     origin: press,
@@ -717,7 +737,7 @@ impl CanvasState {
             }
         }
 
-        if resp.clicked_by(Primary) {
+        if resp.clicked_by(Primary) && !pan && !zoom {
             self.notice = None;
             self.menu = None;
             if let Some(p) = resp.interact_pointer_pos() {
@@ -741,6 +761,8 @@ impl CanvasState {
             }
         }
         if resp.double_clicked_by(Primary)
+            && !pan
+            && !zoom
             && let Some(p) = resp.interact_pointer_pos()
             && self.layout.hit(&self.view, origin, p) == Hit::Nothing
         {
@@ -1128,12 +1150,34 @@ impl CanvasState {
         let ctx = ui.ctx().clone();
         let mut close = false;
         let mut query = menu.query.clone();
+        let screen = ctx.content_rect();
+        let add = matches!(menu.target, MenuTarget::Add { .. });
+        let width = if add {
+            420.0_f32.min((screen.width() - 24.0).max(160.0))
+        } else {
+            220.0
+        };
+        let height = if add {
+            380.0_f32.min((screen.height() - 86.0).max(78.0))
+        } else {
+            160.0
+        };
+        let at = Pos2::new(
+            menu.screen
+                .x
+                .min(screen.right() - width - 14.0)
+                .max(screen.left()),
+            menu.screen
+                .y
+                .min(screen.bottom() - height - 66.0)
+                .max(screen.top()),
+        );
         let area = egui::Area::new(ui.scope_id().with("node_canvas_menu"))
             .order(egui::Order::Foreground)
-            .fixed_pos(menu.screen)
+            .fixed_pos(at)
             .show(&ctx, |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.set_min_width(220.0);
+                    ui.set_width(width);
                     match &menu.target {
                         MenuTarget::Add { world } => {
                             let r = ui.add(
@@ -1153,7 +1197,7 @@ impl CanvasState {
                                 chosen = Some(first.id.clone());
                             }
                             egui::ScrollArea::vertical()
-                                .max_height(280.0)
+                                .max_height(height)
                                 .id_salt("node_menu_scroll")
                                 .show(ui, |ui| {
                                     if found.is_empty() {
@@ -1240,6 +1284,7 @@ fn constant_text(p: &PortView) -> Option<String> {
             fmt_float(v[1]),
             fmt_float(v[2])
         ),
+        Constant::Color(rgb) => color_hex(linear_bytes(*rgb)),
         Constant::Fixed(s) => s.clone(),
     })
 }
@@ -1297,9 +1342,11 @@ fn edit_constant(ui: &mut Ui, c: &Constant, name: &str) -> Option<(Constant, boo
             let id = ui.scope_id().with("text_buffer");
             let editing: Option<String> = ui.data(|d| d.get_temp(id));
             let mut buf = editing.unwrap_or_else(|| s.clone());
-            let r = ui
-                .add(egui::TextEdit::singleline(&mut buf).desired_width(f32::INFINITY))
-                .accessible_name(name);
+            let r = crate::widgets::text_field(
+                ui,
+                egui::TextEdit::singleline(&mut buf).desired_width(f32::INFINITY),
+            )
+            .accessible_name(name);
             if r.has_focus() {
                 ui.data_mut(|d| d.insert_temp(id, buf.clone()));
             }
@@ -1322,8 +1369,90 @@ fn edit_constant(ui: &mut Ui, c: &Constant, name: &str) -> Option<(Constant, boo
             }
             out.map(|(d, s)| (Constant::Vec3(x), d, s))
         }
+        Constant::Color(v) => color_constant(ui, *v, name),
         Constant::Fixed(_) => None,
     }
+}
+
+fn linear_bytes(rgb: [f64; 3]) -> [u8; 3] {
+    let [r, g, b] = rgb.map(|v| v.clamp(0.0, 1.0) as f32);
+    let color = Color32::from(egui::Rgba::from_rgb(r, g, b));
+    [color.r(), color.g(), color.b()]
+}
+
+fn color_hex([r, g, b]: [u8; 3]) -> String {
+    format!("#{r:02X}{g:02X}{b:02X}")
+}
+
+fn parse_hex(text: &str) -> Option<[u8; 3]> {
+    let text = text.trim().trim_start_matches('#');
+    if text.len() != 6 || !text.bytes().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let n = u32::from_str_radix(text, 16).ok()?;
+    let [_, r, g, b] = n.to_be_bytes();
+    Some([r, g, b])
+}
+
+fn color_constant(ui: &mut Ui, original: [f64; 3], name: &str) -> Option<(Constant, bool, bool)> {
+    let mut rgb = linear_bytes(original);
+    let initial = rgb;
+    let color = Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+    let mut dragged = false;
+    let mut started = false;
+    ui.menu_button(color_hex(rgb), |ui| {
+        ui.horizontal(|ui| {
+            ui.color_edit_button_srgb(&mut rgb)
+                .accessible_name("Color picker");
+            let id = ui.scope_id().with("hex");
+            let mut value = ui
+                .data(|data| data.get_temp::<String>(id))
+                .unwrap_or_else(|| color_hex(rgb));
+            let edit = crate::widgets::text_field(
+                ui,
+                egui::TextEdit::singleline(&mut value).desired_width(76.0),
+            )
+            .accessible_name("Hex color");
+            if edit.has_focus() {
+                ui.data_mut(|data| data.insert_temp(id, value.clone()));
+            }
+            if edit.changed()
+                && let Some(parsed) = parse_hex(&value)
+            {
+                rgb = parsed;
+            }
+            if edit.lost_focus() {
+                ui.data_mut(|data| data.remove::<String>(id));
+            }
+        });
+        ui.horizontal(|ui| {
+            for (channel, label) in rgb.iter_mut().zip(["R", "G", "B"]) {
+                let edit = ui
+                    .add(
+                        egui::DragValue::new(channel)
+                            .range(0..=255)
+                            .prefix(format!("{label} ")),
+                    )
+                    .accessible_name(label);
+                dragged |= edit.dragged();
+                started |= edit.drag_started();
+            }
+        });
+    })
+    .response
+    .accessible_name(name)
+    .on_hover_text("Edit color using a picker, hex, or RGB");
+    // A small swatch next to the hex value stays legible at both ends of the tone range.
+    let (swatch, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
+    ui.painter().rect_filled(swatch, 2.0, color);
+    (rgb != initial).then(|| {
+        let [r, g, b, _] = egui::Rgba::from(Color32::from_rgb(rgb[0], rgb[1], rgb[2])).to_array();
+        (
+            Constant::Color([r as f64, g as f64, b as f64]),
+            dragged,
+            started,
+        )
+    })
 }
 
 #[cfg(test)]

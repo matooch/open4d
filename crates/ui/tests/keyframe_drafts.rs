@@ -108,6 +108,8 @@ fn a_gizmo_move_of_a_keyed_object_is_a_draft_until_the_key_is_clicked() {
 
     let mut h = harness(s);
     h.run();
+    h.get_by_label("Transform").click();
+    h.run();
     h.get_by_label("Position changed").click();
     h.run();
     let s = st(&h);
@@ -268,6 +270,8 @@ fn the_inspector_stages_a_row_edit_and_the_key_button_commits_it() {
     let id = keyed(&mut s);
     let (before, n) = (tracks(&s, id), steps(&s));
     let mut h = harness(s);
+    h.run();
+    h.get_by_label("Transform").click();
     h.run();
     h.get_all_by_label("Position")
         .next()

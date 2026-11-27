@@ -53,7 +53,38 @@ fn hit_test_priorities() {
         g.hit_test(&c, x, y + 5.0, W, H),
         Some(Handle::Axis(Axis::X))
     );
-    assert_eq!(g.hit_test(&c, x, y + 7.0, W, H), None);
+    assert_eq!(
+        g.hit_test(&c, x, y + 9.0, W, H),
+        Some(Handle::Axis(Axis::X))
+    );
+    assert_eq!(g.hit_test(&c, x, y + 11.0, W, H), None);
+}
+
+#[test]
+fn solid_axis_tips_are_pickable_and_preserve_axis_constraints() {
+    for (mode, offset) in [
+        (GizmoMode::Translate, DVec3::new(0.89, 0.033, 0.0)),
+        (GizmoMode::Scale, DVec3::new(1.055, 0.055, 0.035)),
+    ] {
+        let (cam, gizmo, length) = setup(mode);
+        let from = offset * length;
+        let (x, y) = px(&cam, from);
+        let handle = gizmo.hit_test(&cam, x, y, W, H);
+        assert_eq!(handle, Some(Handle::Axis(Axis::X)), "{mode:?}");
+        let delta = drag(
+            &cam,
+            &gizmo,
+            handle.unwrap(),
+            from,
+            from + DVec3::X * 1.5,
+            None,
+        );
+        match delta {
+            DragDelta::Translate(by) => assert!(by.x > 1.0 && by.y == 0.0 && by.z == 0.0),
+            DragDelta::Scale(by) => assert!(by.x > 1.0 && by.y == 1.0 && by.z == 1.0),
+            other => panic!("unexpected drag delta: {other:?}"),
+        }
+    }
 }
 
 fn drag(c: &Camera, g: &Gizmo, h: Handle, from: DVec3, to: DVec3, snap: Option<f64>) -> DragDelta {
