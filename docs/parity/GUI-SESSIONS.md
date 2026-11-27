@@ -32,6 +32,7 @@ reference app's behaviour, in the owner's own words. They answer parts of G1, G2
 | N6 | Model / point / edge / polygon mode is set in **one** place, the way the reference does it; our editor has two interfaces for it | G1, G2 | duplicate mode UI |
 | N7 | The object manager shows clearly that an object is a child (hierarchy cues) and separates rows more, so the tree is easier to read | G1 | UI.md §13 rows |
 | N8 | Buttons are laid out like the reference (menus and layout) and show **icons** for their action | G1 | text buttons |
+| N10 | Keyframe drafts (owner, after testing the 224 build): on a property that **has a key track**, with Auto-Key off, changing the value by **any** route (moving the object with the gizmo, the Coordinates panel, the inspector) shows the new value **in the viewport and the inspector** and marks the key button as *modified*, but **does not store it** in the animation. Clicking the key button stores it as a key at the current frame. (Not stated by the owner, parity-pending G5: what happens to an unkeyed draft when the frame changes; our rule is that it is discarded and the animated value returns.) | G5 | inspector-only drafts; gizmo and Coordinates edits not staged |
 | N9 | In the inspector (attribute manager), not every setting is at the same level: the reference divides settings into **tabs** (and groups) | G1 item 3, O64 | one flat list per object |
 
 Still open for the owner's sitting: the exact layout (G1 items 1, 4, 5 and the new G1 items 7–9),
