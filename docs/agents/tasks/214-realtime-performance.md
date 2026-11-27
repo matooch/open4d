@@ -36,6 +36,14 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Standalone GPU AO spatial reconstruction:** A cropped 3×3 film
+  chained raw quarter-rate AO into the new scalar filter on Compute and
+  actual Metal. All four phases matched one CPU filter pass, with exact
+  default-open visibility outside the crop. The fixture distinguishes one
+  pass from zero or two. Five required-GPU unit, R24 hybrid and
+  shader-translation runs passed. Live AO still uses the CPU filter; no
+  new S10 measurement was taken for the standalone probe.
+  `GATE: all passed` (2786 tests).
 - **Live GPU direct-shadow history:** Inline shadows now keep both padded
   planes on the GPU and copy them into compact layers zero and one in
   the same submission as resident bounce layers. The cropped probe

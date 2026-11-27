@@ -2,7 +2,6 @@
 
 use bytemuck::{Pod, Zeroable};
 use forge_render_api::{RenderError, RenderSettings};
-use forge_render_gpu::{await_mapped, map_read};
 use wgpu::util::DeviceExt;
 
 use crate::ray::{BackendKind, InlineScene};
@@ -106,10 +105,27 @@ impl AmbientProgram {
         settings: &RenderSettings,
         frame: AmbientFrame,
     ) -> Result<Vec<f32>, RenderError> {
-        let size = u64::from(settings.width) * u64::from(settings.height) * 4;
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("raw AO"),
+        });
+        let visibility = self.encode(device, &mut encoder, scene, textures, settings, frame)?;
+        super::direct_shadow::read_encoded((device, queue), encoder, &visibility)
+    }
+
+    pub(super) fn encode(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        scene: InlineScene<'_>,
+        textures: [&wgpu::TextureView; 2],
+        settings: &RenderSettings,
+        frame: AmbientFrame,
+    ) -> Result<wgpu::Buffer, RenderError> {
+        let size = (u64::from(settings.width) * u64::from(settings.height)).saturating_mul(4);
         let limits = device.limits();
         let groups = [settings.width.div_ceil(16), settings.height.div_ceil(16)];
-        if size > limits.max_buffer_size
+        if size == 0
+            || size > limits.max_buffer_size
             || size > limits.max_storage_buffer_binding_size
             || groups
                 .iter()
@@ -124,16 +140,12 @@ impl AmbientProgram {
             contents: bytemuck::bytes_of(&frame),
             usage: wgpu::BufferUsages::UNIFORM,
         });
-        let alloc = |usage| {
-            device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("raw AO visibility"),
-                size,
-                usage,
-                mapped_at_creation: false,
-            })
-        };
-        let visibility = alloc(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
-        let staging = alloc(wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ);
+        let visibility = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("raw AO visibility"),
+            size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
         let bind = |layout, resources: &[wgpu::BindingResource<'_>]| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("raw AO"),
@@ -164,9 +176,6 @@ impl AmbientProgram {
             ),
             InlineScene::Hardware(tlas) => bind(&self.layouts[2], &[tlas.as_binding()]),
         };
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("raw AO"),
-        });
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
             pass.set_pipeline(&self.pipeline);
@@ -175,13 +184,6 @@ impl AmbientProgram {
             pass.set_bind_group(2, &scene_bind, &[]);
             pass.dispatch_workgroups(groups[0], groups[1], 1);
         }
-        encoder.copy_buffer_to_buffer(&visibility, 0, &staging, 0, size);
-        queue.submit([encoder.finish()]);
-        let slice = staging.slice(..);
-        await_mapped(device, &map_read(&slice))?;
-        let data = slice
-            .get_mapped_range()
-            .map_err(|err| RenderError::Output(err.to_string()))?;
-        Ok(bytemuck::cast_slice(&data).to_vec())
+        Ok(visibility)
     }
 }

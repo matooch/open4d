@@ -1,16 +1,21 @@
-//! GPU spatial reconstruction of Tier 2 bounce and direct-shadow signals (R24.11).
+//! GPU spatial reconstruction of Tier 2 signals (R24.11 and R24.13).
 
 use wgpu::util::DeviceExt;
 
 const LABEL: &str = "Tier 2 signal spatial";
 
-pub(super) struct BounceSpatialProgram {
+struct SpatialProgram {
     pipeline: wgpu::ComputePipeline,
     layout: wgpu::BindGroupLayout,
 }
 
+pub(super) struct BounceSpatialProgram(SpatialProgram);
+
+#[cfg(test)]
+pub(super) struct AmbientSpatialProgram(SpatialProgram);
+
 pub(super) struct BounceSpatialPass<'a> {
-    program: &'a BounceSpatialProgram,
+    program: &'a SpatialProgram,
     limits: SpatialLimits,
 }
 
@@ -23,8 +28,8 @@ struct SpatialLimits {
     _padding: u32,
 }
 
-impl BounceSpatialProgram {
-    pub fn new(device: &wgpu::Device) -> Self {
+impl SpatialProgram {
+    fn new(device: &wgpu::Device, source: &'static str, entry_point: &str) -> Self {
         use wgpu::{BindingType, BufferBindingType};
         let buffer = |ty| BindingType::Buffer {
             ty,
@@ -59,17 +64,27 @@ impl BounceSpatialProgram {
         });
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(LABEL),
-            source: wgpu::ShaderSource::Wgsl(crate::shader::BOUNCE_SPATIAL_WGSL.into()),
+            source: wgpu::ShaderSource::Wgsl(source.into()),
         });
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some(LABEL),
             layout: Some(&pipeline_layout),
             module: &module,
-            entry_point: Some("bounce_spatial"),
+            entry_point: Some(entry_point),
             compilation_options: Default::default(),
             cache: None,
         });
         Self { pipeline, layout }
+    }
+}
+
+impl BounceSpatialProgram {
+    pub fn new(device: &wgpu::Device) -> Self {
+        Self(SpatialProgram::new(
+            device,
+            crate::shader::BOUNCE_SPATIAL_WGSL,
+            "bounce_spatial",
+        ))
     }
 
     pub fn pass(&self, limit: f64) -> BounceSpatialPass<'_> {
@@ -82,14 +97,51 @@ impl BounceSpatialProgram {
 
     fn pass_with_lanes(&self, limit: f64, lanes: u32) -> BounceSpatialPass<'_> {
         BounceSpatialPass {
-            program: self,
-            limits: SpatialLimits {
-                distance_squared: (limit * limit) as f32,
-                depth: (limit * 0.1) as f32,
-                lanes,
-                _padding: 0,
-            },
+            program: &self.0,
+            limits: SpatialLimits::new(limit, lanes),
         }
+    }
+}
+
+impl SpatialLimits {
+    fn new(limit: f64, lanes: u32) -> Self {
+        Self {
+            distance_squared: (limit * limit) as f32,
+            depth: (limit * 0.1) as f32,
+            lanes,
+            _padding: 0,
+        }
+    }
+}
+
+#[cfg(test)]
+impl AmbientSpatialProgram {
+    pub fn new(device: &wgpu::Device) -> Self {
+        Self(SpatialProgram::new(
+            device,
+            crate::shader::AMBIENT_SPATIAL_WGSL,
+            "ambient_spatial",
+        ))
+    }
+
+    pub fn encode(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        primary: [&wgpu::TextureView; 2],
+        raw: &wgpu::Buffer,
+        film: [u32; 2],
+        limit: f64,
+    ) -> wgpu::Buffer {
+        assert_eq!(raw.size(), u64::from(film[0]) * u64::from(film[1]) * 4);
+        self.0.encode(
+            device,
+            encoder,
+            primary,
+            raw,
+            film,
+            SpatialLimits::new(limit, 1),
+        )
     }
 }
 
@@ -107,9 +159,24 @@ impl BounceSpatialPass<'_> {
             u64::from(film[0]) * u64::from(film[1]) * u64::from(self.limits.lanes) * 16,
             "spatial signal stride mismatch"
         );
+        self.program
+            .encode(device, encoder, primary, raw, film, self.limits)
+    }
+}
+
+impl SpatialProgram {
+    fn encode(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        primary: [&wgpu::TextureView; 2],
+        raw: &wgpu::Buffer,
+        film: [u32; 2],
+        limits: SpatialLimits,
+    ) -> wgpu::Buffer {
         let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(LABEL),
-            contents: bytemuck::bytes_of(&self.limits),
+            contents: bytemuck::bytes_of(&limits),
             usage: wgpu::BufferUsages::UNIFORM,
         });
         let filtered = device.create_buffer(&wgpu::BufferDescriptor {
@@ -128,7 +195,7 @@ impl BounceSpatialPass<'_> {
         ];
         let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some(LABEL),
-            layout: &self.program.layout,
+            layout: &self.layout,
             entries: &std::array::from_fn::<_, 5, _>(|i| wgpu::BindGroupEntry {
                 binding: i as u32,
                 resource: resources[i].clone(),
@@ -139,7 +206,7 @@ impl BounceSpatialPass<'_> {
                 label: Some(LABEL),
                 timestamp_writes: None,
             });
-            pass.set_pipeline(&self.program.pipeline);
+            pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &bind, &[]);
             pass.dispatch_workgroups(film[0].div_ceil(8), film[1].div_ceil(8), 1);
         }

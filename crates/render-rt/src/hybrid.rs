@@ -10,8 +10,8 @@ use forge_render_cpu::scene::{Hit, HitGeom, Scene};
 use forge_render_cpu::surface::Surface;
 use glam::DVec3;
 
-use crate::ambient::{AmbientFrame, AmbientProgram};
 use crate::ray::{self, BackendKind, DeviceQueries, Ray, RtBackend};
+use ambient::{AmbientFrame, AmbientProgram};
 use bounce_spatial::BounceSpatialProgram;
 use diffuse_history::{DiffuseHistory, DiffuseHistoryProgram};
 use direct_shadow::{DirectShadowBindings, DirectShadowFrame, DirectShadowProgram, read_encoded};
@@ -1029,6 +1029,9 @@ struct PrimaryGeometry {
     ends: Vec<usize>,
 }
 
+#[path = "ambient.rs"]
+mod ambient;
+
 #[path = "direct_shadow.rs"]
 mod direct_shadow;
 
@@ -1625,8 +1628,11 @@ mod tests {
                 texture.create_view(&Default::default())
             };
             let textures = [texture_view(&positions), texture_view(&normals)];
+            let views = [&textures[0], &textures[1]];
             let program = AmbientProgram::new(&device, kind);
+            let spatial = bounce_spatial::AmbientSpatialProgram::new(&device);
             let control = Control::new();
+            let mut distinguishes_pass_count = false;
             for phase in 0..4 {
                 let reference =
                     raw_ambient_visibility(&*backend, &settings, input, phase, &control).unwrap();
@@ -1634,7 +1640,7 @@ mod tests {
                     .read(
                         (&device, &queue),
                         backend.inline_scene().unwrap(),
-                        [&textures[0], &textures[1]],
+                        views,
                         &settings,
                         AmbientFrame::new(&settings, phase, input.epsilon),
                     )
@@ -1642,7 +1648,38 @@ mod tests {
                 assert_eq!(raw, reference, "{kind:?} phase {phase}");
                 let shared = if phase == 1 { 1.0 } else { 0.0 };
                 assert_eq!(raw, [shared, shared, 1., 0., 1., 0., 1., 0., 1.]);
+
+                let limit = settings.hybrid.ao_radius * 0.15;
+                let expected = spatial_filter(3, &input, &raw, limit);
+                let twice = spatial_filter(3, &input, &expected, limit);
+                distinguishes_pass_count |= expected != raw && expected != twice;
+                let mut encoder = device.create_command_encoder(&Default::default());
+                let encoded = program
+                    .encode(
+                        &device,
+                        &mut encoder,
+                        backend.inline_scene().unwrap(),
+                        views,
+                        &settings,
+                        AmbientFrame::new(&settings, phase, input.epsilon),
+                    )
+                    .unwrap();
+                let filtered =
+                    spatial.encode(&device, &mut encoder, views, &encoded, [3, 3], limit);
+                let actual: Vec<f32> = read_encoded((&device, &queue), encoder, &filtered).unwrap();
+                assert_eq!(actual.len(), expected.len());
+                assert_eq!(actual[2].to_bits(), 1.0_f32.to_bits());
+                for (i, (actual, expected)) in actual.into_iter().zip(expected).enumerate() {
+                    assert!(
+                        (actual - expected).abs() <= 2e-6,
+                        "{kind:?} phase {phase} pixel {i}: {actual} != {expected}"
+                    );
+                }
             }
+            assert!(
+                distinguishes_pass_count,
+                "fixture must distinguish a single pass"
+            );
         }
     }
 

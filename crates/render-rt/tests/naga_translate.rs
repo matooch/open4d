@@ -53,6 +53,14 @@ fn bounce_spatial_reconstruction_translates_to_all_backends() {
 }
 
 #[test]
+fn ambient_spatial_reconstruction_translates_to_all_backends() {
+    translate(
+        "ambient spatial reconstruction",
+        forge_render_rt::shader::AMBIENT_SPATIAL_WGSL,
+    );
+}
+
+#[test]
 fn diffuse_history_translates_to_all_backends() {
     translate(
         "diffuse history",

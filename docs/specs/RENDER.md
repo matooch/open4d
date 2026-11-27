@@ -1582,6 +1582,31 @@ This is our own design.
   cancellation, fallback and reset. Retain the existing mixed AOV
   comparisons and strict R26 budgets, then measure unchanged S10.
 
+### R24.13 GPU ambient-visibility spatial reconstruction (brief 214)
+
+Sources: the R24.3 spatial filter, R24.6 raw ambient visibility and the
+[S10 effect budgets](../agents/tasks/214-realtime-performance.md#steps-spec-first-measure-after-each-step-on-the-m5-pro-record-in-the-report).
+This is our own design.
+
+- After raw AO, encode one full-film spatial pass over compact `f32`
+  visibility. Within the same command encoder, read the raw buffer, use
+  the existing primary texture views as guides and write a separate
+  compact scalar buffer. Do not change quarter-rate grouping, phase
+  selection or raw default-open visibility.
+- Use the R24.11 row-major neighbourhood and exact coverage-tag test.
+  Pass through uncovered centers unchanged. The CPU AO world-space limit
+  is `0.15 * ao_radius`, independent of camera projection. Pass its square
+  and one tenth of the limit as f32; use the same normal threshold (0.95),
+  center weight (2), and reciprocal normalization as the CPU filter.
+  As in R24.11, guide decisions near a threshold can differ in f32.
+- Chain the raw pass and standalone scalar filter on a cropped odd film
+  for all four phases. Compare to one CPU filter pass with the same raw
+  values, within the R24.11 arithmetic limit; require exact default-open
+  passthrough and a fixture that distinguishes zero, one and two passes.
+  Translate the standalone shader to SPIR-V, MSL and HLSL.
+- This probe does not change live filtering, AO strength, temporal history,
+  fallback, or lighting layer formats.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),
