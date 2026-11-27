@@ -552,7 +552,9 @@ impl Scene {
         self.slot_list_mut(owner).remove(index);
         if let Some(stamp) = owner.node() {
             self.stamp(stamp);
-        } else if owner == SlotOwner::Materials {
+        } else {
+            // Root objects and materials have no owner node to stamp; the scene revision
+            // still rises, since any edit raises it (CORE.md: revisions).
             self.revision += 1;
         }
         slot
@@ -569,7 +571,9 @@ impl Scene {
         }
         if let Some(stamp) = owner.node() {
             self.stamp(stamp);
-        } else if owner == SlotOwner::Materials {
+        } else {
+            // Root objects and materials have no owner node to stamp; the scene revision
+            // still rises, since any edit raises it (CORE.md: revisions).
             self.revision += 1;
         }
     }
