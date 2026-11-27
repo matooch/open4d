@@ -271,3 +271,12 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
   CPU reference on the same rule. Don't loosen the tolerance. To check without the runner, add a
   regression case where a shadow ray leaves at an angle below 1° and is not self-shadowed on
   Compute or Vulkan.
+- **New evidence (2026-11-27, CI run on b9bdaeb):** the same test also failed in a second case:
+  `Vulkan mode infinite history 0 pixel 63 channel 0: 0.011363231 vs 0.011355296` (the "dark"
+  receiver under the infinite light, +0.07 %). Across five Ubuntu runs it failed in four (three
+  times `near`/pixel 28, once `infinite`/pixel 63) and passed in two others. So the Vulkan
+  (lavapipe ray-query) path differs from the batched reference by up to about 0.25 % in more than one
+  scenario, and only on some runner CPUs. The grazing self-shadow is still a likely contributor,
+  but also compare the hardware hit attributes (`hit.t` rescaled by `speed`, the barycentrics,
+  `instance_geometry` reconstruction) against Compute's for the same rays. Print both for pixels
+  28 and 63 in the failing modes. Fix the cause; the tolerance stays.
