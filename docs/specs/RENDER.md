@@ -1647,6 +1647,29 @@ This is our own design.
   and reset. Retain the R24 AO quality and mixed-layer checks and measure
   the same full-size S10 workload under the R26 budgets.
 
+### R24.14 Demand-driven primary readback (brief 214)
+
+Sources: R24.5 primary visibility, the R24.12–13 resident effects and
+[S10 profiling](PERFORMANCE.md#6-s10-real-time-render-frame-r8-brief-204).
+This is an internal performance rule, not a change to the estimators.
+
+- Inline transport and spatial dispatch consume G0/G1 texture views and
+  scalar frame metadata (jitter and epsilon), not host copies. Batched
+  transport and host spatial filtering request the host pixels lazily.
+  The first request copies and maps both planes; all later requests in that
+  raster sample reuse the same successful read. Propagate read errors.
+- Empty shadow signals and AO with zero radius or strength do not request
+  host pixels. Do not change fallback, history adoption or cancellation.
+- Output reuses any primary planes already read by hybrid effects. Otherwise
+  use the existing AOV dependency selection: beauty alone reads neither
+  plane; Depth reads G0; Normal and Object ID require both. Preserve output
+  and coverage exactly with and without a fallback read.
+- On a profiled frame, record only actual primary read time, once per
+  raster sample and separately from the requesting effect. Do not record
+  `hybrid-primary` when no hybrid CPU request occurs. Retain existing
+  synchronization for other passes, without adding clock reads to normal
+  rendering. Check both fully inline and shared batched routes.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),

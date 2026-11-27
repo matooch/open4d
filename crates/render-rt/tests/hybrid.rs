@@ -8,6 +8,7 @@ use common::{centre_mean, cube, diffuse, golden, material, plane};
 use forge_core::Value;
 use forge_render_api::*;
 use forge_render_cpu::CpuEngine;
+use forge_render_rt::ray::BackendKind;
 use forge_render_rt::{RtEngine, request_default_device, request_rt_device};
 use glam::{DMat4, DVec3};
 use std::sync::Mutex;
@@ -178,7 +179,13 @@ fn synchronized_profiling_preserves_render_and_names_executed_passes() {
         let scene = fixture(Effect::Shadows);
         for hybrid in [false, true] {
             let settings = RenderSettings {
-                aovs: vec![Aov::Diffuse, Aov::Albedo, Aov::ObjectId],
+                aovs: vec![
+                    Aov::Diffuse,
+                    Aov::Albedo,
+                    Aov::Depth,
+                    Aov::Normal,
+                    Aov::ObjectId,
+                ],
                 hybrid: HybridSettings {
                     enabled: hybrid,
                     ao: true,
@@ -206,7 +213,6 @@ fn synchronized_profiling_preserves_render_and_names_executed_passes() {
             let mut expected = vec!["setup", "shadow-atlas", "g-buffer"];
             if hybrid {
                 expected.extend([
-                    "hybrid-primary",
                     "rt-shadows",
                     "rt-reflections",
                     "rt-gi",
@@ -220,6 +226,56 @@ fn synchronized_profiling_preserves_render_and_names_executed_passes() {
                 passes.iter().map(|pass| pass.name).collect::<Vec<_>>(),
                 expected
             );
+            let mut beauty_only = settings;
+            beauty_only.aovs.clear();
+            let (beauty, _, passes) = engine()
+                .render_profiled(&scene, &beauty_only, &Control::new())
+                .unwrap();
+            assert_eq!(beauty.beauty.data, profiled.beauty.data);
+            assert!(!passes.iter().any(|pass| pass.name == "hybrid-primary"));
+        }
+    });
+}
+
+#[test]
+fn native_empty_scene_shares_batched_primary_readback_across_effects_and_output() {
+    with_gpu(|device, queue| {
+        let mut scene = fixture(Effect::Shadows);
+        scene.instances.clear();
+        scene.meshes.clear();
+        let mut settings = Effect::Shadows.raster_settings();
+        settings.hybrid = HybridSettings {
+            enabled: true,
+            shadows: true,
+            ao: true,
+            reflections: true,
+            gi: true,
+            ..HybridSettings::default()
+        };
+        settings.aovs = vec![Aov::Depth, Aov::Normal, Aov::ObjectId];
+        let engine = || RtEngine::with_device(device.clone(), queue.clone());
+        let (fallback, backend, passes) = engine()
+            .render_profiled(&scene, &settings, &Control::new())
+            .unwrap();
+        let backend = backend.expect("empty scene still runs hybrid effects");
+        if backend != BackendKind::Compute {
+            let primary: Vec<_> = passes
+                .iter()
+                .enumerate()
+                .filter(|(_, pass)| pass.name == "hybrid-primary")
+                .map(|(i, _)| i)
+                .collect();
+            assert_eq!(primary.len(), 1);
+            assert_eq!(passes[primary[0] + 1].name, "rt-shadows");
+        }
+        for name in ["rt-shadows", "rt-reflections", "rt-gi", "rt-ao"] {
+            assert!(passes.iter().any(|pass| pass.name == name), "{name}");
+        }
+        settings.hybrid.enabled = false;
+        let raster = engine().render(&scene, &settings, &Control::new()).unwrap();
+        assert_eq!(fallback.beauty.data, raster.beauty.data);
+        for (aov, image) in &raster.aovs {
+            assert_eq!(image.data, fallback.aovs[aov].data, "{aov:?}");
         }
     });
 }

@@ -151,6 +151,50 @@ pub(crate) struct PrimaryInput<'a> {
     pub epsilon: f64,
 }
 
+/// Metadata is available before the first CPU consumer requests either plane.
+#[derive(Clone, Copy)]
+pub(crate) struct PrimarySource<'a> {
+    pub jitter: [f32; 2],
+    pub epsilon: f64,
+    pub pixels: PrimaryPixels<'a>,
+}
+
+type Plane = [[f32; 4]];
+
+#[derive(Clone, Copy)]
+pub(crate) enum PrimaryPixels<'a> {
+    #[cfg(test)]
+    Borrowed([&'a Plane; 2]),
+    Lazy(&'a dyn Fn() -> Result<[&'a Plane; 2], RenderError>),
+}
+
+impl<'a> PrimarySource<'a> {
+    fn read(self) -> Result<PrimaryInput<'a>, RenderError> {
+        let [positions, normals] = match self.pixels {
+            #[cfg(test)]
+            PrimaryPixels::Borrowed(planes) => planes,
+            PrimaryPixels::Lazy(read) => read()?,
+        };
+        Ok(PrimaryInput {
+            positions,
+            normals,
+            jitter: self.jitter,
+            epsilon: self.epsilon,
+        })
+    }
+}
+
+#[cfg(test)]
+impl<'a> From<PrimaryInput<'a>> for PrimarySource<'a> {
+    fn from(input: PrimaryInput<'a>) -> Self {
+        Self {
+            jitter: input.jitter,
+            epsilon: input.epsilon,
+            pixels: PrimaryPixels::Borrowed([input.positions, input.normals]),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct AmbientGpu<'a> {
     pub device: &'a wgpu::Device,
@@ -268,18 +312,23 @@ impl HybridView {
         Ok(())
     }
 
-    pub fn ambient_visibility(
+    pub fn ambient_visibility<'a>(
         &mut self,
         settings: &RenderSettings,
-        input: PrimaryInput<'_>,
+        input: impl Into<PrimarySource<'a>>,
         control: &Control,
         gpu: Option<AmbientGpu<'_>>,
         format: wgpu::TextureFormat,
     ) -> Result<AmbientSignal, RenderError> {
         let radius = settings.hybrid.ao_radius;
         if radius == 0.0 || settings.post.ssao_strength == 0.0 {
-            return Ok(AmbientSignal::Cpu(vec![1.0; input.positions.len()]));
+            return Ok(AmbientSignal::Cpu(vec![
+                1.0;
+                settings.width as usize
+                    * settings.height as usize
+            ]));
         }
+        let input = input.into();
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
@@ -346,6 +395,7 @@ impl HybridView {
                 Err(err) => return Err(err),
             }
         }
+        let input = input.read()?;
         let visibility =
             raw_ambient_visibility(&**backend, settings, input, history.frames(), control)?;
         if control.is_cancelled() {
@@ -460,11 +510,11 @@ fn raw_ambient_visibility(
 }
 
 impl HybridView {
-    pub fn direct_shadows(
+    pub fn direct_shadows<'a>(
         &mut self,
         snapshot: &Snapshot,
         settings: &RenderSettings,
-        input: PrimaryInput<'_>,
+        input: impl Into<PrimarySource<'a>>,
         control: &Control,
         gpu: Option<MaterialGpu<'_>>,
     ) -> Result<ShadowSignal, RenderError> {
@@ -478,6 +528,7 @@ impl HybridView {
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
+        let input = input.into();
         if self.geometry.is_none() {
             self.geometry = Some(PrimaryGeometry::new(snapshot)?);
         }
@@ -527,7 +578,7 @@ impl HybridView {
                 let frame = DirectShadowFrame::new(
                     snapshot,
                     settings,
-                    input,
+                    (input.jitter, input.epsilon),
                     geometry.scene.scale,
                     history.frames(),
                     lights.len(),
@@ -583,6 +634,7 @@ impl HybridView {
         };
         let signal = match inline {
             Err(RenderError::Unsupported(_)) => {
+                let input = input.read()?;
                 let pixels = raw_direct_shadows(
                     (geometry, &**backend),
                     snapshot,
@@ -730,26 +782,40 @@ fn raw_direct_shadows(
 }
 
 impl HybridView {
-    pub fn reflections(
+    pub fn reflections<'a>(
         &mut self,
         snapshot: &Snapshot,
         settings: &RenderSettings,
-        input: PrimaryInput<'_>,
+        input: impl Into<PrimarySource<'a>>,
         control: &Control,
         gpu: Option<MaterialGpu<'_>>,
     ) -> Result<BounceSignal, RenderError> {
-        self.indirect(Bounce::Reflection, snapshot, settings, input, control, gpu)
+        self.indirect(
+            Bounce::Reflection,
+            snapshot,
+            settings,
+            input.into(),
+            control,
+            gpu,
+        )
     }
 
-    pub fn diffuse(
+    pub fn diffuse<'a>(
         &mut self,
         snapshot: &Snapshot,
         settings: &RenderSettings,
-        input: PrimaryInput<'_>,
+        input: impl Into<PrimarySource<'a>>,
         control: &Control,
         gpu: Option<MaterialGpu<'_>>,
     ) -> Result<BounceSignal, RenderError> {
-        self.indirect(Bounce::Diffuse, snapshot, settings, input, control, gpu)
+        self.indirect(
+            Bounce::Diffuse,
+            snapshot,
+            settings,
+            input.into(),
+            control,
+            gpu,
+        )
     }
 
     fn indirect(
@@ -757,7 +823,7 @@ impl HybridView {
         bounce: Bounce,
         snapshot: &Snapshot,
         settings: &RenderSettings,
-        input: PrimaryInput<'_>,
+        input: PrimarySource<'_>,
         control: &Control,
         gpu: Option<MaterialGpu<'_>>,
     ) -> Result<BounceSignal, RenderError> {
@@ -781,7 +847,8 @@ impl HybridView {
         let frame = ReflectionInput {
             snapshot,
             settings,
-            input,
+            jitter: input.jitter,
+            epsilon: input.epsilon,
             scale: geometry.scene.scale,
             history: history.frames(),
         };
@@ -886,6 +953,7 @@ impl HybridView {
                     (geometry, &**backend),
                     bounce,
                     frame,
+                    input.read()?,
                     &lights,
                     control,
                 )?),
@@ -902,7 +970,7 @@ impl HybridView {
         let filtered = if spatial_done {
             pixels
         } else {
-            spatial_filter(width, &input, &pixels, limit)
+            spatial_filter(width, &input.read()?, &pixels, limit)
         };
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
@@ -938,10 +1006,10 @@ fn raw_indirect(
     ReflectionInput {
         snapshot,
         settings,
-        input,
         history,
         ..
     }: ReflectionInput<'_>,
+    input: PrimaryInput<'_>,
     lights: &[lights::PLight],
     control: &Control,
 ) -> Result<Vec<[f32; 4]>, RenderError> {

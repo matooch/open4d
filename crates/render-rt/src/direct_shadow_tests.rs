@@ -157,7 +157,7 @@ fn gpu_raw_direct_shadows_match_batched_reference() {
                         DirectShadowFrame::new(
                             &snapshot,
                             &settings,
-                            input,
+                            (input.jitter, input.epsilon),
                             geometry.scene.scale,
                             history,
                             lights.len(),
@@ -207,7 +207,7 @@ fn gpu_raw_direct_shadows_match_batched_reference() {
                             DirectShadowFrame::new(
                                 &snapshot,
                                 &settings,
-                                input,
+                                (input.jitter, input.epsilon),
                                 geometry.scene.scale,
                                 history,
                                 lights.len(),

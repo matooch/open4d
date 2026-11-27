@@ -76,6 +76,30 @@ fn ten_percent_is_allowed_but_one_more_nanosecond_is_a_regression() {
 }
 
 #[test]
+fn skipped_hybrid_primary_compares_as_zero_without_allowing_missing_passes() {
+    let mut baseline = run();
+    baseline.median_ns.insert("hybrid-primary".into(), 100);
+    let mut skipped = baseline.clone();
+    skipped.median_ns.insert("hybrid-primary".into(), 0);
+    assert_eq!(regression_check(&baseline, &skipped), Ok(()));
+    assert_eq!(regression_check(&skipped, &skipped), Ok(()));
+    assert_eq!(
+        regression_check(&skipped, &baseline),
+        Err(BaselineError::Regressed(vec!["hybrid-primary".into()]))
+    );
+    skipped.median_ns.remove("hybrid-primary");
+    assert_eq!(
+        regression_check(&baseline, &skipped),
+        Err(BaselineError::Missing("hybrid-primary".into()))
+    );
+    skipped.median_ns.insert("g-buffer".into(), 0);
+    assert_eq!(
+        regression_check(&baseline, &skipped),
+        Err(BaselineError::Zero("g-buffer".into()))
+    );
+}
+
+#[test]
 fn missing_pass_and_mismatched_workload_identity_are_errors() {
     let baseline = run();
     let mut current = baseline.clone();

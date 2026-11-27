@@ -227,12 +227,8 @@ fn gpu_reduced_diffuse_reuses_only_compatible_absolute_quad_lanes() {
     let frame = ReflectionInput {
         snapshot: &snapshot,
         settings: &settings,
-        input: PrimaryInput {
-            positions: &positions,
-            normals: &normals,
-            epsilon: 1e-5,
-            jitter: [-0.375, 0.25],
-        },
+        epsilon: 1e-5,
+        jitter: [-0.375, 0.25],
         // Radius 0.6, with depth threshold 0.06, independent of fixture bounds.
         scale: 40.,
         history: 0,
@@ -520,7 +516,8 @@ fn gpu_raw_diffuse_matches_batched_reference() {
                 let frame = ReflectionInput {
                     snapshot: &snapshot,
                     settings: &settings,
-                    input,
+                    jitter: input.jitter,
+                    epsilon: input.epsilon,
                     scale: geometry.scene.scale,
                     history,
                 };
@@ -528,6 +525,7 @@ fn gpu_raw_diffuse_matches_batched_reference() {
                     (&geometry, &*backend),
                     Bounce::Diffuse,
                     frame,
+                    input,
                     &prepared,
                     &Control::new(),
                 )
@@ -755,7 +753,8 @@ fn gpu_raw_diffuse_matches_batched_reference() {
             let frame = ReflectionInput {
                 snapshot: &snapshot,
                 settings: &settings,
-                input,
+                jitter: input.jitter,
+                epsilon: input.epsilon,
                 scale: geometry.scene.scale,
                 history: history.frames,
             };
@@ -788,6 +787,7 @@ fn gpu_raw_diffuse_matches_batched_reference() {
                     (geometry, &**backend),
                     Bounce::Diffuse,
                     frame,
+                    input,
                     &prepared,
                     &control,
                 )
@@ -1122,7 +1122,8 @@ fn gpu_raw_reflections_match_batched_reference() {
                         ReflectionInput {
                             snapshot: &snapshot,
                             settings: &settings,
-                            input,
+                            jitter: input.jitter,
+                            epsilon: input.epsilon,
                             scale,
                             history,
                         },
@@ -1242,7 +1243,8 @@ fn gpu_raw_reflections_match_batched_reference() {
             let frame = ReflectionInput {
                 snapshot: &snapshot,
                 settings: &settings,
-                input,
+                jitter: input.jitter,
+                epsilon: input.epsilon,
                 scale,
                 history: history.frames,
             };
@@ -1265,6 +1267,7 @@ fn gpu_raw_reflections_match_batched_reference() {
                     (geometry, backend),
                     Bounce::Reflection,
                     frame,
+                    input,
                     &prepared,
                     &control,
                 )

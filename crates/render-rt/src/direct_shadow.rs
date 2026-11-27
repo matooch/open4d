@@ -9,7 +9,7 @@ use forge_render_gpu::{
 };
 use wgpu::util::DeviceExt;
 
-use super::{PrimaryInput, bounce_spatial::BounceSpatialPass};
+use super::bounce_spatial::BounceSpatialPass;
 use crate::ray::{BackendKind, InlineScene};
 
 #[repr(C)]
@@ -29,7 +29,7 @@ impl DirectShadowFrame {
     pub fn new(
         snapshot: &Snapshot,
         settings: &RenderSettings,
-        input: PrimaryInput<'_>,
+        (jitter, epsilon): ([f32; 2], f64),
         scale: f64,
         history: u32,
         light_count: usize,
@@ -42,12 +42,12 @@ impl DirectShadowFrame {
         Self {
             camera: [u, v, w],
             film_scale: [f as f32, x as f32, y as f32, scale as f32],
-            jitter: input.jitter,
+            jitter,
             seed: [settings.seed as u32, (settings.seed >> 32) as u32],
             history,
             instance_count: snapshot.instances.len() as u32,
             light_count: light_count as u32,
-            epsilon: input.epsilon as f32,
+            epsilon: epsilon as f32,
         }
     }
 }

@@ -7,7 +7,7 @@ use forge_render_cpu::lights::PLight;
 use super::direct_shadow::{
     RawSignalBindings, RawSignalProgram, SignalFrameLayout, read_encoded, upload_lights,
 };
-use super::{Bounce, PrimaryInput, bounce_spatial::BounceSpatialPass};
+use super::{Bounce, bounce_spatial::BounceSpatialPass};
 use crate::ray::{BackendKind, InlineScene};
 
 #[repr(C)]
@@ -77,7 +77,8 @@ pub(super) struct ReflectionBindings<'a> {
 pub(super) struct ReflectionInput<'a> {
     pub snapshot: &'a Snapshot,
     pub settings: &'a RenderSettings,
-    pub input: PrimaryInput<'a>,
+    pub jitter: [f32; 2],
+    pub epsilon: f64,
     pub scale: f64,
     pub history: u32,
 }
@@ -183,7 +184,8 @@ impl ReflectionProgram {
         ReflectionInput {
             snapshot,
             settings,
-            input,
+            jitter,
+            epsilon,
             scale,
             history,
         }: ReflectionInput<'_>,
@@ -198,11 +200,11 @@ impl ReflectionProgram {
         let mut frame = ReflectionFrame {
             camera: [u, v, w],
             film_scale: [f as f32, x as f32, y as f32, scale as f32],
-            jitter: input.jitter,
+            jitter,
             seed: [settings.seed as u32, (settings.seed >> 32) as u32],
             history,
             instance_count: snapshot.instances.len() as u32,
-            epsilon: input.epsilon as f32,
+            epsilon: epsilon as f32,
             light_count: bindings.lights.len() as u32,
             ..ReflectionFrame::zeroed()
         };

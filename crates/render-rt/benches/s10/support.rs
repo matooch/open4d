@@ -79,7 +79,9 @@ pub fn regression_check(baseline: &Run, current: &Run) -> Result<(), BaselineErr
             .median_ns
             .get(name)
             .ok_or_else(|| BaselineError::Missing(name.clone()))?;
-        if actual == 0 || reference == 0 {
+        if (actual == 0 || reference == 0)
+            && !(baseline.identity.hybrid && name == "hybrid-primary")
+        {
             return Err(BaselineError::Zero(name.clone()));
         }
         if u128::from(actual) * 10 > u128::from(reference) * 11 {

@@ -36,6 +36,18 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Demand-driven primary readback:** Inline effects use G0/G1 textures
+  without mapping either plane. Batched effects share a single readback
+  with each other and with AOV output. The profile fixture checks inline
+  beauty and requested AOVs; a native-empty fixture checks one shared
+  read for four fallbacks and exact raster AOVs. Five required-GPU unit,
+  R24 hybrid and shader-translation runs, the explicit Compute hybrid
+  suite and five S10 support runs passed. Strict R26 reproduced all 207
+  scores and unchanged pins. Unchanged full-size Metal S10 Tier 2 improved
+  from 100.053 ms / 9.995 fps to 93.315 ms / **10.716 fps**; primary
+  readback went from 6.899 ms to no work, and the baseline regression check
+  passed. Tier 2 still misses 30 fps; bounce transport is the largest cost.
+  `GATE: all passed` (2790 tests).
 - **Live GPU ambient visibility:** Inline AO now keeps its unstrengthened
   history on the GPU and copies the strengthened result to the AO-only
   R32Float or mixed RGBA32Float lighting texture. The cropped test matched
@@ -45,8 +57,8 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
   207 scores with unchanged pins. Unchanged Metal S10 Tier 2 went from
   115.322 ms / 8.671 fps to 100.053 ms / **9.995 fps** (AO 15.419 →
   3.839 ms, upload 8.184 → 4.764 ms), with no phase exceeding the
-  baseline regression limit. Tier 2 still misses 30 fps; primary readback
-  and transport budgets remain open. `GATE: all passed` (2788 tests).
+  baseline regression limit. Tier 2 still missed 30 fps at this checkpoint.
+  `GATE: all passed` (2788 tests).
 - **Standalone GPU AO history and layer copy:** On Metal, an odd 19×11
   film matched the CPU running mean through first, discarded, accepted and
   saturated samples. The probe copied strengthened visibility into

@@ -1,5 +1,6 @@
 //! The raster engine: resources, passes, readback and outputs (docs/specs/RENDER.md R21).
 
+use std::cell::{Cell, OnceCell};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -19,7 +20,8 @@ use wgpu::util::DeviceExt;
 use crate::frame;
 use crate::framegraph::FrameGraph;
 use crate::hybrid::{
-    AmbientGpu, AmbientSignal, BounceSignal, HybridView, MaterialGpu, PrimaryInput, ShadowSignal,
+    AmbientGpu, AmbientSignal, BounceSignal, HybridView, MaterialGpu, PrimaryPixels, PrimarySource,
+    ShadowSignal,
 };
 use crate::ray::BackendKind;
 use crate::shadow::{self, ATLAS_X, ATLAS_Y, ShadowPlan, TILE_PX};
@@ -116,6 +118,16 @@ struct Profile {
     passes: Vec<PassTiming>,
 }
 
+impl Profile {
+    fn record(&mut self, name: &'static str, elapsed: Duration) {
+        if let Some(pass) = self.passes.iter_mut().find(|pass| pass.name == name) {
+            pass.elapsed += elapsed;
+        } else {
+            self.passes.push(PassTiming { name, elapsed });
+        }
+    }
+}
+
 fn wait_for_gpu(device: &wgpu::Device) -> Result<(), RenderError> {
     device
         .poll(wgpu::PollType::wait_indefinitely())
@@ -133,11 +145,7 @@ fn finish_phase(
         wait_for_gpu(device)?;
         let now = Instant::now();
         let elapsed = now - profile.start;
-        if let Some(pass) = profile.passes.iter_mut().find(|pass| pass.name == name) {
-            pass.elapsed += elapsed;
-        } else {
-            profile.passes.push(PassTiming { name, elapsed });
-        }
+        profile.record(name, elapsed);
         profile.start = now;
     }
     Ok(())
@@ -1552,20 +1560,39 @@ impl RtEngine {
         if control.is_cancelled() {
             return Err(RenderError::Cancelled);
         }
-        let mut primary = None;
+        let primary = OnceCell::new();
         let mut used_backend = None;
         let hybrid_view = if rt_ao || rt_shadows || rt_reflections || rt_gi {
             let mut view = self.hybrid.lock().unwrap_or_else(|e| e.into_inner());
             let signals = view
                 .prepare(snapshot, settings, device, queue)
                 .and_then(|()| {
-                    let g = self.read_rgba(&[&targets.g[0], &targets.g[1]], w, h)?;
-                    finish_phase(profile, device, "hybrid-primary")?;
-                    let input = PrimaryInput {
-                        positions: &g[0],
-                        normals: &g[1],
+                    let profiled = profile.is_some();
+                    let read_time = Cell::new(None);
+                    let read_primary = || {
+                        let g = if let Some(g) = primary.get() {
+                            g
+                        } else {
+                            let start = profiled.then(Instant::now);
+                            let g = self.read_rgba(&[&targets.g[0], &targets.g[1]], w, h)?;
+                            read_time.set(start.map(|start| start.elapsed()));
+                            primary.get_or_init(|| g)
+                        };
+                        Ok([g[0].as_slice(), g[1].as_slice()])
+                    };
+                    let mut finish_effect = |name| {
+                        if let Some(elapsed) = read_time.take()
+                            && let Some(profile) = profile.as_mut()
+                        {
+                            profile.record("hybrid-primary", elapsed);
+                            profile.start += elapsed;
+                        }
+                        finish_phase(profile, device, name)
+                    };
+                    let input = PrimarySource {
                         jitter,
                         epsilon: packed.scale.max(1e-6) * 1e-6,
+                        pixels: PrimaryPixels::Lazy(&read_primary),
                     };
                     let primary_gpu = AmbientGpu {
                         device,
@@ -1585,7 +1612,7 @@ impl RtEngine {
                             control,
                             Some(material_gpu),
                         )?;
-                        finish_phase(profile, device, "rt-shadows")?;
+                        finish_effect("rt-shadows")?;
                         result
                     } else {
                         ShadowSignal::Cpu(Vec::new())
@@ -1598,7 +1625,7 @@ impl RtEngine {
                             control,
                             Some(material_gpu),
                         )?;
-                        finish_phase(profile, device, "rt-reflections")?;
+                        finish_effect("rt-reflections")?;
                         result
                     } else {
                         BounceSignal::Cpu(Vec::new())
@@ -1606,7 +1633,7 @@ impl RtEngine {
                     let gi = if rt_gi {
                         let result =
                             view.diffuse(snapshot, settings, input, control, Some(material_gpu))?;
-                        finish_phase(profile, device, "rt-gi")?;
+                        finish_effect("rt-gi")?;
                         result
                     } else {
                         BounceSignal::Cpu(Vec::new())
@@ -1625,12 +1652,11 @@ impl RtEngine {
                             Some(primary_gpu),
                             format,
                         )?;
-                        finish_phase(profile, device, "rt-ao")?;
+                        finish_effect("rt-ao")?;
                         result
                     } else {
                         AmbientSignal::Cpu(Vec::new())
                     };
-                    primary = Some(g);
                     Ok((shadows, ao, reflections, gi))
                 });
             match signals {
@@ -1772,6 +1798,7 @@ impl RtEngine {
         }
 
         use OutputAttachment::*;
+        let primary = primary.into_inner();
         let order = output_attachments(&settings.aovs, primary.is_some());
         let textures: Vec<_> = order
             .iter()

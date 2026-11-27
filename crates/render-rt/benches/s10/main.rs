@@ -164,7 +164,6 @@ impl Measurement<'_> {
         let mut expected_passes = vec!["setup", "shadow-atlas", "g-buffer"];
         if self.hybrid {
             expected_passes.extend([
-                "hybrid-primary",
                 "rt-shadows",
                 "rt-reflections",
                 "rt-gi",
@@ -177,14 +176,37 @@ impl Measurement<'_> {
             let (output, backend) = if profiled {
                 let (output, backend, passes) =
                     engine.render_profiled(self.snapshot, &settings, &control)?;
+                let mut primary = false;
+                for (i, pass) in passes.iter().enumerate() {
+                    if pass.name == "hybrid-primary" {
+                        if !self.hybrid
+                            || primary
+                            || !passes.get(i + 1).is_some_and(|pass| {
+                                matches!(
+                                    pass.name,
+                                    "rt-shadows" | "rt-reflections" | "rt-gi" | "rt-ao"
+                                )
+                            })
+                        {
+                            return Err(
+                                format!("unexpected passes for {backend:?}: {passes:?}").into()
+                            );
+                        }
+                        primary = true;
+                    }
+                }
                 if !passes
                     .iter()
                     .map(|pass| pass.name)
+                    .filter(|&name| name != "hybrid-primary")
                     .eq(expected_passes.iter().copied())
                 {
                     return Err(format!("unexpected passes for {backend:?}: {passes:?}").into());
                 }
                 if i >= WARMUPS {
+                    if self.hybrid && !primary {
+                        timings.entry("hybrid-primary".into()).or_default().push(0);
+                    }
                     for pass in passes {
                         timings
                             .entry(pass.name.into())
