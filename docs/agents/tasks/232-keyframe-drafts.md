@@ -1,6 +1,6 @@
 # 232 · Keyframe drafts from every edit route, shown in the viewport
 
-Status: in-progress (planner subagent) · Area: L, G · Depends on: 224, 097, 151 · Observations: owner note N10 (GUI-SESSIONS.md) · Touches: ui, app, anim, viewport
+Status: done (parity-pending: G5 discard rules and the multi-object/Record choices) · Area: L, G · Depends on: 224, 097, 151 · Observations: owner note N10 (GUI-SESSIONS.md) · Touches: ui, app, anim, viewport
 
 ## Goal
 On an animated property, with Auto-Key off, any edit (gizmo drag in the viewport, the Coordinates
@@ -40,9 +40,9 @@ straight through.
    - Render, export and save ignore drafts.
 
 ## Done when
-- [ ] Move a keyed object with the gizmo: it moves, the key button shows modified, the track is unchanged; click the key and the key is stored (egui_kittest and app tests).
+- [x] Move a keyed object with the gizmo: it moves, the key button shows modified, the track is unchanged; click the key and the key is stored (egui_kittest and app tests).
 - [ ] The owner confirms it matches the reference (Report).
-- [ ] The gate passes and BACKLOG.md is updated; Finish below is followed.
+- [x] The gate passes and BACKLOG.md is updated; Finish below is followed.
 
 ## Finish (every brief)
 1. Follow [../IMPLEMENTER.md](../IMPLEMENTER.md): spec first, then tests, then code. Don't edit golden data or observation forms, and never loosen a tolerance.
@@ -53,8 +53,9 @@ straight through.
 
 ## Report (implementer fills in)
 
-- Spec: UI.md §13.1a (new; the numbers and rules below), §13.1 item 1 and §13.3 amended.
-- Row geometry (ours, `parity-pending G1` item 7; all in `tree::METRICS` and pure functions): row height 22 px with no gap between rows (was about 18 px plus 3 px spacing); indent 18 px per level (was 14); fold arrow cell 16 px wide at the start of the row's own column, a painted triangle (right = collapsed, down = expanded), replacing the `+` / `-` text buttons (accessible labels now "Expand: <name>" / "Collapse: <name>"); connector lines 1 px: a trunk at `x = 18 k + 8` per ancestor level, an elbow per child (vertical to the row centre, or to the bottom when a later sibling exists, then a horizontal to the arrow cell, or 14 px into the cell for a leaf); 1 px separator along every row's bottom edge; odd rows shaded. Colours derive from theme tokens (`tree::row_colours`): guide = weak_text 75 % into panel (>= 3:1 on both row shades in dark, light and high-contrast, tested), separator = weak_text 18 %, alt = faint 55 %.
-- Drag and drop: `tree::drop_mark` gives Into (whole row filled at 25 % accent and outlined) or a 2 px line on the top/bottom edge with a 3 px dot at the indent of the depth the nodes land at (one level deeper below an expanded parent = first child). Rows touching also fixed a latent gap where the pointer between rows fell through to "end of the root list".
-- Per-type icon from brief 227: not present yet (227 is `ready`); the spec says its 16 px cell goes between the arrow and the name and does not change the numbers.
-- Tests (crates/ui/tests/object_manager.rs): `row_geometry_numbers_are_fixed`, `connectors_follow_the_visible_depth_sequence`, `the_three_level_tree_draws_these_connector_lines` (the "snapshot": exact segment list of a three-level tree, text-compared rather than an image, so fonts and GPUs cannot change it), `drop_marks_tell_between_rows_from_inside_a_row`, `row_colours_stay_readable_in_every_theme`, and the kittest `children_are_nested_connected_and_rows_are_separated_in_the_panel` (names indent exactly 18 px per level, rows one row height apart, fold arrows only on parents and they fold). The existing 26 object manager tests (drag tests included) pass unchanged. 5 runs green; clippy clean.
+- Spec: UI.md §12.1 (new; replaces the inspector-only draft rule), ANIM.md §2.4 note and §2.4b, MANIPULATE.md §3, UI.md §20.2 note; all cite owner note N10.
+- Rules (ours where N10 is silent, `parity-pending G5`): one draft layer `(node, param) -> whole value` in `forge_app::drafts::DraftLayer` (held by `App`); a draft is made when Auto-Key is off and the node has a track on the parameter (any component), multi-object edits decide per object (animated ones draft, the rest are written in one step and the drafts survive it), a partly animated Vec3 drafts whole. Key button (and the context-menu "Add / Update Key") commits every selected object's draft of that row through `key.set_parameter` in one undo step, other rows' drafts stay. Record / K keys drafted Position, Rotation, Scale and the selection's other drafts in one step "Record"; a selection with a draft never takes Record's toggle-off branch. Discard (lazy, by scope): frame change, any document change (edit, undo, redo, load; node count included because root add/remove does not raise the scene revision), selection change, Auto-Key toggle, Escape over the viewport; dragging back to the animated value removes the draft. Behaviours and expressions see the drafted value (the layer replaces the parameter's tracks in the displayed scene). No extra "modified" hint beyond the key button. Scripted `param.edit` / `transform.edit` / `transform.set` keep ANIM.md rule 5 (write the key); only the three interactive routes draft.
+- Per route: gizmo `apply_drag_edit` -> `apply_transform_edits`; Coordinates `coord_run_drafts` (`forge_app::coords::edit_results`, the maths of `transform.edit`, then `apply_transform_edits`; untracked selections still run the command); inspector `attribute_row` stages per selected object, untracked ones still go through `param.edit`.
+- Display: `App::evaluated()` and `scheduled_draw()` apply the layer (via `Scene::with_drafts`); `App::eval`, `scheduled`, `eval_mesh`, export, render and save do not.
+- Tests: crates/ui/tests/keyframe_drafts.rs (12 tests, 5 runs green); existing attribute_manager, animate, coordinates_manager pass unchanged (no existing test asserted an interactive write-through; the library-level rule 5 tests remain valid because `apply_drag_anim` and `transform.edit` keep it).
+- Not verified: a real gizmo drag in a window (the test calls `apply_drag_edit`, which the editor's drag handler calls); the owner's feel check is pending.
