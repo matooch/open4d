@@ -36,6 +36,13 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
 5. Fill in the Report below and set the Status line to `done`, or `blocked` with the reason.
 
 ## Report (implementer fills in)
+- **Standalone GPU AO history and layer copy:** On Metal, an odd 19×11
+  film matched the CPU running mean through first, discarded, accepted and
+  saturated samples. The probe copied strengthened visibility into
+  R32Float and RGBA32Float, preserving exact open pixels, zero padding and
+  neighboring layers. Five required-GPU renderer unit, R24 hybrid and
+  three-backend shader-translation runs passed. Live AO is unchanged and
+  no new S10 measurement was taken. `GATE: all passed` (2788 tests).
 - **Standalone GPU AO spatial reconstruction:** A cropped 3×3 film
   chained raw quarter-rate AO into the new scalar filter on Compute and
   actual Metal. All four phases matched one CPU filter pass, with exact

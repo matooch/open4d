@@ -61,6 +61,14 @@ fn ambient_spatial_reconstruction_translates_to_all_backends() {
 }
 
 #[test]
+fn ambient_history_translates_to_all_backends() {
+    translate(
+        "ambient history",
+        forge_render_rt::shader::AMBIENT_HISTORY_WGSL,
+    );
+}
+
+#[test]
 fn diffuse_history_translates_to_all_backends() {
     translate(
         "diffuse history",

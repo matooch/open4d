@@ -1032,6 +1032,10 @@ struct PrimaryGeometry {
 #[path = "ambient.rs"]
 mod ambient;
 
+#[cfg(test)]
+#[path = "ambient_history.rs"]
+mod ambient_history;
+
 #[path = "direct_shadow.rs"]
 mod direct_shadow;
 
@@ -1541,6 +1545,195 @@ mod tests {
             assert_eq!(copied[PLANE + pixel], pair[0]);
             assert_eq!(copied[2 * PLANE + pixel], pair[1]);
             assert_eq!(copied[3 * PLANE + pixel], sentinels[1]);
+        }
+    }
+
+    #[test]
+    fn gpu_ambient_history_preserves_raw_mean_and_copies_both_lighting_formats() {
+        use super::ambient_history::{AmbientHistory, AmbientHistoryFrame, AmbientHistoryProgram};
+        use forge_render_gpu::{await_mapped, map_read};
+        use wgpu::{BufferUsages as Usage, TextureFormat, util::DeviceExt};
+
+        let _serial = crate::gpu_test_serial();
+        let Some((device, queue)) = gpu(false) else {
+            return;
+        };
+        const W: u32 = 19;
+        const H: u32 = 11;
+        let program = AmbientHistoryProgram::new(&device);
+        let mut accepted: Option<AmbientHistory> = None;
+        let mut cpu = History::default();
+        for (step, (format, strength)) in [
+            (TextureFormat::R32Float, 1.0),
+            (TextureFormat::Rgba32Float, 1.0),
+            (TextureFormat::Rgba32Float, 0.35),
+            (TextureFormat::R32Float, 0.75),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let samples: Vec<f32> = (0..W * H)
+                .map(|i| match i % W {
+                    x if x == W - 1 => 1.0,
+                    0 if step < 3 => 0.0,
+                    1 if step == 0 => f32::EPSILON / 16.0,
+                    _ => ((i * 17 + step as u32 * 23) % 97) as f32 / 101.0,
+                })
+                .collect();
+            let filtered = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None,
+                contents: bytemuck::cast_slice(&samples),
+                usage: Usage::STORAGE,
+            });
+            let mut encoder = device.create_command_encoder(&Default::default());
+            let frame = AmbientHistoryFrame {
+                film: [W, H],
+                strength,
+                format,
+            };
+            if step == 0 {
+                for film in [[0, H], [u32::MAX, H], [W, u32::MAX]] {
+                    assert!(matches!(
+                        program.encode(
+                            &device,
+                            &mut encoder,
+                            &filtered,
+                            None,
+                            AmbientHistoryFrame { film, ..frame },
+                        ),
+                        Err(RenderError::Unsupported(_))
+                    ));
+                }
+            } else if step == 3 {
+                cpu.frames = u32::MAX;
+                accepted.as_mut().unwrap().frames = u32::MAX;
+            }
+            let next = program
+                .encode(&device, &mut encoder, &filtered, accepted.as_ref(), frame)
+                .unwrap();
+            if step == 1 {
+                queue.submit([encoder.finish()]);
+                continue;
+            }
+            cpu.accumulate(samples);
+            assert_eq!(next.frames, cpu.frames);
+            let channels = if format == TextureFormat::R32Float {
+                1
+            } else {
+                4
+            };
+            let layer = u32::from(channels == 4);
+            let extent = wgpu::Extent3d {
+                width: W,
+                height: H,
+                depth_or_array_layers: 1 + 2 * layer,
+            };
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: None,
+                size: extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            for (z, sentinel) in [(0, [2.0_f32, 3., 5., 7.]), (2, [11., 13., 17., 19.])]
+                .into_iter()
+                .filter(|_| layer != 0)
+            {
+                let mut dst = texture.as_image_copy();
+                dst.origin.z = z;
+                queue.write_texture(
+                    dst,
+                    bytemuck::cast_slice(&[sentinel; (W * H) as usize]),
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(W * 16),
+                        rows_per_image: None,
+                    },
+                    wgpu::Extent3d {
+                        depth_or_array_layers: 1,
+                        ..extent
+                    },
+                );
+            }
+            next.copy_to_layer(&mut encoder, &texture, layer);
+            let pitch = (W * channels * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+            let plane = u64::from(pitch * H);
+            let staging = device.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: plane * u64::from(extent.depth_or_array_layers + 1),
+                usage: Usage::COPY_DST | Usage::MAP_READ,
+                mapped_at_creation: false,
+            });
+            encoder.copy_texture_to_buffer(
+                texture.as_image_copy(),
+                wgpu::TexelCopyBufferInfo {
+                    buffer: &staging,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(pitch),
+                        rows_per_image: Some(H),
+                    },
+                },
+                extent,
+            );
+            encoder.copy_buffer_to_buffer(
+                &next.output,
+                0,
+                &staging,
+                plane * u64::from(extent.depth_or_array_layers),
+                plane,
+            );
+            queue.submit([encoder.finish()]);
+            let slice = staging.slice(..);
+            await_mapped(&device, &map_read(&slice)).unwrap();
+            let mapped = slice.get_mapped_range().unwrap();
+            let copied: &[f32] = bytemuck::cast_slice(&mapped);
+            let mean = next.read_mean(&device, &queue).unwrap();
+            assert_eq!(mean.len(), cpu.mean.len());
+            let stride = (pitch / 4) as usize;
+            let plane = stride * H as usize;
+            for (i, (&actual, &expected)) in mean.iter().zip(&cpu.mean).enumerate() {
+                if step == 0 || i % W as usize == W as usize - 1 {
+                    assert_eq!(actual.to_bits(), expected.to_bits());
+                } else if step == 3 && i % W as usize == 0 && expected > 0.0 {
+                    assert!((actual - expected).abs() <= 2e-6 * expected);
+                } else {
+                    assert!((actual - expected).abs() <= 2e-6);
+                }
+                let offset = i / W as usize * stride + i % W as usize * channels as usize;
+                let pixel = offset + layer as usize * plane;
+                if expected == 1.0 {
+                    assert_eq!(copied[pixel].to_bits(), 1.0_f32.to_bits());
+                } else if step == 0 && i % W as usize == 1 {
+                    assert_eq!(copied[pixel].to_bits(), 0);
+                } else {
+                    assert!((copied[pixel] - (1.0 - (1.0 - expected) * strength)).abs() <= 2e-6);
+                }
+                if layer != 0 {
+                    assert_eq!(copied[offset..offset + 4], [2., 3., 5., 7.]);
+                    assert!(
+                        copied[pixel + 1..pixel + 4]
+                            .iter()
+                            .all(|x| x.to_bits() == 0)
+                    );
+                    assert_eq!(
+                        copied[2 * plane + offset..2 * plane + offset + 4],
+                        [11., 13., 17., 19.]
+                    );
+                }
+            }
+            for row in copied[extent.depth_or_array_layers as usize * plane..].chunks_exact(stride)
+            {
+                assert!(
+                    row[(W * channels) as usize..]
+                        .iter()
+                        .all(|x| x.to_bits() == 0)
+                );
+            }
+            accepted = Some(next);
         }
     }
 

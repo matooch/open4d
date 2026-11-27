@@ -19,6 +19,9 @@ pub const BOUNCE_SPATIAL_WGSL: &str = include_str!("bounce_spatial.wgsl");
 /// Standalone R24.13 spatial reconstruction of scalar ambient visibility.
 pub const AMBIENT_SPATIAL_WGSL: &str = include_str!("ambient_spatial.wgsl");
 
+/// Standalone R24.13 scalar ambient history and lighting-layer packing.
+pub const AMBIENT_HISTORY_WGSL: &str = include_str!("ambient_history.wgsl");
+
 /// Standalone R24.12 temporal mean of a spatially filtered diffuse signal.
 pub const DIFFUSE_HISTORY_WGSL: &str = include_str!("diffuse_history.wgsl");
 

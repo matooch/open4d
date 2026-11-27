@@ -1607,6 +1607,25 @@ This is our own design.
 - This probe does not change live filtering, AO strength, temporal history,
   fallback, or lighting layer formats.
 
+#### Standalone scalar ambient history and layer copy
+
+- Starting from compact filtered visibility, use the R24.12 saturated
+  sample count and host-computed reciprocal for the running mean. Store
+  the unstrengthened mean in a new compact scalar buffer. A first sample
+  is copied exactly; encoding an abandoned sample cannot modify its parent.
+- In the same dispatch, write a separate 256-byte-row-aligned copy source.
+  Evaluate `1 - (1 - mean) * strength` only for that output, including at
+  strength one. Write one scalar for the AO-only R32Float texture or
+  `[visibility, 0, 0, 0]` for the mixed RGBA32Float array. Keep open pixels
+  exactly one, row padding zero and adjacent layers untouched. Reject
+  empty or oversized footprints before allocating or encoding.
+- On an odd film, compare compact fallback means and accepted counts with
+  the CPU history, including discarded and saturated samples. Compare both
+  texture copies against CPU-strengthened visibility within the R24.12
+  arithmetic limit, including a strength change and exact open pixels.
+  Translate the standalone module to SPIR-V, MSL and HLSL. This probe does
+  not change the live AO route.
+
 ## R25 Progressive GPU path tracing (brief 202)
 
 Sources: [area R, tier 3](../roadmap/areas/R-realtime.md),
