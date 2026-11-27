@@ -14,7 +14,7 @@ use forge_viewport::render::Shading;
 use glam::DVec3;
 use serde_json::{Value as Json, json};
 
-use crate::animate::{AnimEdit, key_frames};
+use crate::animate::key_frames;
 use crate::attributes::{Gesture, Widget, attribute_rows_multi};
 use crate::clone_overlay::{OverlayOptions, selected_cloner_marks};
 use crate::commands::{
@@ -31,7 +31,7 @@ use crate::coordinates::{CoordDraft, Mixed, Space, Third, coord_view_multi};
 use crate::dock::{Area, Panel};
 use crate::keymap_editor::KeyMapEditor;
 use crate::layout::{ButtonGroup, Layout, Sizes, command_bar, tool_palette};
-use crate::manipulate::{apply_axis_drag, apply_drag_anim};
+use crate::manipulate::{apply_axis_drag, apply_drag_edit, apply_transform_edits, edit_drafts};
 use crate::object_manager::ObjectManager;
 use crate::palette::Palette;
 use crate::panes::{PANE_GAP, display_settings};
@@ -128,7 +128,6 @@ pub struct Editor {
     name_edit: Option<(NodeId, String)>,
     /// The attribute manager tab shown (UI.md §12).
     attr_tab: String,
-    key_drafts: crate::key_indicator::Drafts,
     /// Counter for drag/typing gestures (each is one undo step).
     gesture_seq: u64,
     gesture: Option<u64>,
@@ -234,7 +233,6 @@ impl Editor {
             palette: Palette::default(),
             name_edit: None,
             attr_tab: String::new(),
-            key_drafts: Default::default(),
             gesture_seq: 0,
             gesture: None,
             viewport_hot: false,
@@ -2145,6 +2143,15 @@ impl Editor {
             self.build_interaction(response, rect, ppp, size);
             return;
         }
+        // Escape over the viewport discards the keyframe drafts (UI.md §12, owner note N10)
+        if response.hovered()
+            && !self.state.app.drafts().is_empty()
+            && ui
+                .ctx()
+                .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+        {
+            self.state.app.clear_drafts();
+        }
         let (w, h) = (size[0].max(1) as f64, size[1].max(1) as f64);
         let to_pixels = |pos: egui::Pos2| {
             (
@@ -2334,19 +2341,12 @@ impl Editor {
                 );
                 self.state.snap_hit = hit;
                 let (id, start, n) = (*id, *start, *n);
-                let (ctx, eval) = (self.state.anim_ctx(), self.state.evaluated());
-                let anim = AnimEdit { ctx, eval: &eval };
-                self.state.status = match apply_drag_anim(
-                    &mut self.state.doc,
-                    id,
-                    &start,
-                    delta,
-                    Gesture::Drag(n),
-                    Some(&anim),
-                ) {
-                    Ok(()) => String::new(),
-                    Err(e) => e.to_string(),
-                };
+                self.state.status =
+                    match apply_drag_edit(&mut self.state.app, id, &start, delta, Gesture::Drag(n))
+                    {
+                        Ok(()) => String::new(),
+                        Err(e) => e.to_string(),
+                    };
             }
             if response.drag_stopped() {
                 self.gizmo_drag = None;
@@ -2558,6 +2558,9 @@ impl Editor {
     /// `transform.edit` (UI.md §20.3).
     fn coord_run(&mut self, draft: &CoordDraft, component: bool, gesture: Option<u64>) {
         let world = self.coord_space == Space::World;
+        if !component && self.coord_run_drafts(draft, gesture) {
+            return;
+        }
         let cmd = if component {
             component_transform_args(&self.state, draft, world, gesture)
                 .map(|a| ("mesh.transform", a))
@@ -2569,6 +2572,39 @@ impl Editor {
         if let Some((id, args)) = cmd {
             self.state.status = execute(&mut self.state, id, args).err().unwrap_or_default();
         }
+    }
+
+    /// The Coordinates edit of animated objects with Auto-Key off: the same transforms
+    /// `transform.edit` would write, staged as drafts (UI.md §12, owner note N10). Returns
+    /// false when no selected object has a track, so the command runs as before.
+    fn coord_run_drafts(&mut self, draft: &CoordDraft, gesture: Option<u64>) -> bool {
+        let ids: Vec<NodeId> = self.state.selection.nodes.iter().copied().collect();
+        if !edit_drafts(&self.state.app, &ids) {
+            return false;
+        }
+        let Some(args) = draft.transform_args(self.coord_space, self.coord_third, gesture) else {
+            return true;
+        };
+        let eval = self.state.evaluated();
+        let merge = gesture.map(|g| {
+            let nodes: Vec<String> = ids.iter().map(ToString::to_string).collect();
+            format!("coords:{}:{g}", nodes.join(","))
+        });
+        self.state.status = match forge_app::coords::edit_results(&eval, &ids, &args)
+            .map_err(|e| e.to_string())
+            .and_then(|edits| {
+                apply_transform_edits(
+                    &mut self.state.app,
+                    &edits,
+                    "Set Coordinates",
+                    merge.as_deref(),
+                )
+                .map_err(|e| e.to_string())
+            }) {
+            Ok(()) => String::new(),
+            Err(e) => e,
+        };
+        true
     }
 
     fn tree_ui(&mut self, ui: &mut Ui) {
@@ -2731,7 +2767,6 @@ impl Editor {
             self.tool_ui(ui);
         }
         let Some(id) = self.state.selection.active else {
-            self.key_drafts.clear();
             ui.weak("Nothing selected");
             return;
         };
@@ -2750,13 +2785,7 @@ impl Editor {
             ui.weak("Nothing selected");
             return;
         };
-        let can_draft = !self.state.autokey && ids.len() == 1;
-        self.key_drafts.refresh(
-            self.state.doc.scene().revision(),
-            id,
-            self.state.timeline.current,
-            can_draft,
-        );
+        let can_draft = !self.state.autokey;
         let theme = Theme::current(ui.ctx());
         let mut rename = None;
         ui.horizontal(|ui| {
@@ -2829,17 +2858,14 @@ impl Editor {
         use crate::key_indicator::{RowKeys, draft_value};
         use crate::widgets::{self, Cx, Phase};
         let keys = RowKeys::of(scene, id, &row.param, self.state.timeline.current);
-        let draft = self.key_drafts.values.get(&row.param).map(|value| {
-            let mut copy = row.clone();
-            copy.value = value.clone();
-            copy
-        });
-        let shown = draft.as_ref().unwrap_or(row);
+        // `scene` is the shown scene, so the row already carries the drafted value
+        let changed = self.state.app.draft(id, &row.param).is_some();
+        let shown = row;
         let mut key_cmd = None;
         let cx_label = ui
             .horizontal(|ui| {
                 if let Some(keys) = &keys {
-                    key_cmd = keys.show(ui, &row.label, &shown.value, draft.is_some());
+                    key_cmd = keys.show(ui, &row.label, &shown.value, changed);
                 }
                 if row.widget == Widget::Checkbox {
                     // The checkbox keeps its own label in the value column.
@@ -2849,10 +2875,12 @@ impl Editor {
                 }
             })
             .inner;
-        if let Some(cmd) = key_cmd
-            && self.run(cmd)
-        {
-            self.key_drafts.values.remove(&row.param);
+        if let Some(cmd) = key_cmd {
+            if changed && cmd.0 == "key.set_parameter" {
+                self.commit_row_drafts(&row.param);
+            } else {
+                self.run(cmd);
+            }
         }
         let cx = Cx {
             scene,
@@ -2861,18 +2889,41 @@ impl Editor {
             distance: self.state.prefs.distance,
         };
         if let Some(edit) = widgets::show(ui, &cx, shown) {
-            if can_draft
-                && keys.as_ref().is_some_and(|keys| keys.animated)
-                && let Some(desc) = scene.param_desc(id, &row.param)
-                && let Some(value) = draft_value(desc, &shown.value, &edit)
-            {
-                if value == row.value {
-                    self.key_drafts.values.remove(&row.param);
-                } else {
-                    self.key_drafts.values.insert(row.param.clone(), value);
+            let mut nodes: Vec<NodeId> = self.state.selection.nodes.iter().copied().collect();
+            if !nodes.contains(&id) {
+                nodes.insert(0, id);
+            }
+            if can_draft && edit.create.is_none() {
+                // every selected object whose row has a track stages a draft (UI.md §12,
+                // owner note N10); the others are edited below as before
+                let animated = self.state.animated();
+                let mut direct = Vec::with_capacity(nodes.len());
+                for node in nodes {
+                    let staged =
+                        forge_app::drafts::has_tracks(self.state.doc.scene(), node, &row.param)
+                            && scene.param_desc(node, &row.param).is_some_and(|desc| {
+                                let Some(current) = scene.param(node, &row.param) else {
+                                    return false;
+                                };
+                                let Some(value) = draft_value(desc, current, &edit) else {
+                                    return false;
+                                };
+                                if animated.param(node, &row.param) == Some(&value) {
+                                    self.state.app.remove_draft(node, &row.param);
+                                } else {
+                                    let _ = self.state.app.set_draft(node, &row.param, value);
+                                }
+                                true
+                            });
+                    if !staged {
+                        direct.push(node);
+                    }
                 }
                 ui.ctx().request_repaint();
-                return;
+                if direct.is_empty() {
+                    return;
+                }
+                nodes = direct;
             }
             let gesture = match edit.phase {
                 Phase::Commit => None,
@@ -2881,10 +2932,6 @@ impl Editor {
                     Gesture::Commit => None,
                 },
             };
-            let mut nodes: Vec<NodeId> = self.state.selection.nodes.iter().copied().collect();
-            if !nodes.contains(&id) {
-                nodes.insert(0, id);
-            }
             let mut edit = edit;
             if let Some(type_id) = edit.create.take() {
                 // The field list's folder button (UI.md §16.6): create the group, put it
@@ -2904,10 +2951,40 @@ impl Editor {
                     return;
                 }
             }
-            self.run(("param.edit", edit.args(&row.param, &nodes, gesture)));
+            let args = ("param.edit", edit.args(&row.param, &nodes, gesture));
+            let kept = self.state.app.drafts();
+            self.run(args);
+            self.state.app.restore_drafts(kept);
         }
         if ui.input(|i| i.pointer.any_released()) && ui.ctx().dragged_id().is_none() {
             self.gesture = None;
+        }
+    }
+
+    /// The key button of an edited row (UI.md §12, owner note N10): every selected object's
+    /// draft of `param` becomes a key at the current frame, in one undo step. The drafts of
+    /// other rows stay.
+    fn commit_row_drafts(&mut self, param: &str) {
+        let frame = self.state.timeline.current;
+        let all = self.state.app.drafts();
+        let (row, kept): (Vec<_>, Vec<_>) = all.into_iter().partition(|(_, p, _)| p == param);
+        let depth = self.state.doc.undo_depth();
+        let mut done = true;
+        for (node, param, value) in &row {
+            let unit = self
+                .state
+                .doc
+                .scene()
+                .param_desc(*node, param)
+                .map_or(forge_core::Unit::None, |d| d.ui.unit);
+            let Some(cmd) = crate::key_indicator::key_args(*node, param, frame, unit, value) else {
+                continue;
+            };
+            done &= self.run(cmd);
+        }
+        self.state.doc.group_undo_since(depth, "Set Parameter Key");
+        if done {
+            self.state.app.restore_drafts(kept);
         }
     }
 
@@ -2928,7 +3005,14 @@ impl Editor {
                 self.state.timeline.current,
                 settings.fps,
             );
-            let remove = !recorded.is_empty();
+            // a draft in the selection is an uncommitted edit: Record keys it (N10)
+            let drafted = self
+                .state
+                .app
+                .drafts()
+                .iter()
+                .any(|(node, _, _)| ids.contains(node));
+            let remove = !recorded.is_empty() && !drafted;
             if ui
                 .add(egui::Button::new("Record").selected(remove))
                 .clicked()

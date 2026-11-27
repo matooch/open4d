@@ -253,7 +253,24 @@ pub fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
     )
 }
 
-fn edit(ctx: &mut dyn CommandContext, a: TransformEditArgs) -> Result<Json, CommandError> {
+/// The transforms a `transform.edit` argument object makes of `selected` (or of its own
+/// `nodes`) in `eval`, without writing anything. The editor uses this to stage the same
+/// edit as drafts (UI.md §12, owner note N10).
+pub fn edit_results(
+    eval: &Scene,
+    selected: &[NodeId],
+    args: &Json,
+) -> Result<Vec<(NodeId, Transform)>, CommandError> {
+    let a: TransformEditArgs = serde_json::from_value(args.clone())
+        .map_err(|e| CommandError::InvalidArgs(e.to_string()))?;
+    edit_results_of(eval, selected, &a)
+}
+
+fn edit_results_of(
+    eval: &Scene,
+    selected: &[NodeId],
+    a: &TransformEditArgs,
+) -> Result<Vec<(NodeId, Transform)>, CommandError> {
     let space = match a.space.as_deref() {
         None | Some("local") => Space::Local,
         Some("world") => Space::World,
@@ -275,9 +292,8 @@ fn edit(ctx: &mut dyn CommandContext, a: TransformEditArgs) -> Result<Json, Comm
     }
     let ids: Vec<NodeId> = match &a.nodes {
         Some(n) => n.iter().map(|i| NodeId(*i)).collect(),
-        None => ctx.selection().nodes.iter().copied().collect(),
+        None => selected.to_vec(),
     };
-    let eval = ctx.evaluated_scene();
     let third = if a.size.is_some() {
         Third::Size
     } else {
@@ -290,7 +306,7 @@ fn edit(ctx: &mut dyn CommandContext, a: TransformEditArgs) -> Result<Json, Comm
             continue;
         };
         let size = (third == Third::Size)
-            .then(|| mesh_size(&eval, id))
+            .then(|| mesh_size(eval, id))
             .flatten();
         let mut t = start;
         let rows = [
@@ -322,6 +338,13 @@ fn edit(ctx: &mut dyn CommandContext, a: TransformEditArgs) -> Result<Json, Comm
     if results.is_empty() {
         return Err(CommandError::Failed("no object with a transform".into()));
     }
+    Ok(results)
+}
+
+fn edit(ctx: &mut dyn CommandContext, a: TransformEditArgs) -> Result<Json, CommandError> {
+    let selected: Vec<NodeId> = ctx.selection().nodes.iter().copied().collect();
+    let eval = ctx.evaluated_scene();
+    let results = edit_results_of(&eval, &selected, &a)?;
     let anim = AnimCtx {
         frame: ctx.timeline().current,
         fps: ctx.doc().scene().settings().fps,

@@ -71,16 +71,34 @@ fn channels(desc: &ParamDesc, value: Value) -> Option<(Vec<f64>, Interp)> {
 
 fn set(ctx: &mut dyn CommandContext, args: SetArgs) -> Result<Json, CommandError> {
     let node = NodeId(args.node);
-    let scene = ctx.doc().scene();
-    let desc = scene
+    let desc = ctx
+        .doc()
+        .scene()
         .param_desc(node, &args.param)
         .ok_or_else(|| CommandError::failed("unknown parameter"))?;
+    let value = param_value_from_json(desc, &args.value)?;
+    let count = key_parameter(ctx.doc_mut(), node, &args.param, args.frame, value)?;
+    Ok(json!({"keys": count}))
+}
+
+/// Keys the whole parameter `param` of `node` with `value` at `frame` (all three components
+/// of a vector or colour), one undo step. Returns how many keys were written or changed.
+/// The command `key.set_parameter` and the draft commits of the editor call this.
+pub fn key_parameter(
+    doc: &mut forge_core::Document,
+    node: NodeId,
+    param: &str,
+    frame: i64,
+    value: Value,
+) -> Result<usize, CommandError> {
+    let scene = doc.scene();
+    let desc = scene
+        .param_desc(node, param)
+        .ok_or_else(|| CommandError::failed("unknown parameter"))?;
     let tracks = tracks(desc);
-    let value = desc
-        .validate(param_value_from_json(desc, &args.value)?)
-        .map_err(CommandError::failed)?;
+    let value = desc.validate(value).map_err(CommandError::failed)?;
     if let (ParamKind::Link { accepts }, Value::Link(Some(target))) = (&desc.kind, &value) {
-        let valid = if args.param == forge_core::layers::LAYER {
+        let valid = if param == forge_core::layers::LAYER {
             scene.layers().contains(*target)
         } else {
             node != *target
@@ -98,8 +116,8 @@ fn set(ctx: &mut dyn CommandContext, args: SetArgs) -> Result<Json, CommandError
         return Err(CommandError::failed("parameter cannot be keyed"));
     }
     let fps = f64::from(scene.settings().fps);
-    let time = args.frame as f64 / fps;
-    let count = ctx.doc_mut().transact("Set Parameter Key", |tx| {
+    let time = frame as f64 / fps;
+    let count = doc.transact("Set Parameter Key", |tx| {
         let mut count = 0;
         for (track, value) in tracks.iter().zip(values) {
             let existing = tx
@@ -109,7 +127,7 @@ fn set(ctx: &mut dyn CommandContext, args: SetArgs) -> Result<Json, CommandError
                 .and_then(|t| {
                     t.keys
                         .iter()
-                        .find(|k| (k.time * fps - args.frame as f64).abs() < 1e-6)
+                        .find(|k| (k.time * fps - frame as f64).abs() < 1e-6)
                 })
                 .copied();
             if existing.is_some_and(|key| key.value == value) {
@@ -126,5 +144,5 @@ fn set(ctx: &mut dyn CommandContext, args: SetArgs) -> Result<Json, CommandError
         }
         Ok(count)
     })?;
-    Ok(json!({"keys": count}))
+    Ok(count)
 }

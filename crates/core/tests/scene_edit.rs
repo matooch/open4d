@@ -294,3 +294,22 @@ fn tx_sees_its_own_edits() {
     })
     .unwrap();
 }
+
+/// CORE.md: any edit raises `scene.revision()`, including adding, deleting and undoing a
+/// root object (root slots have no owner node to stamp).
+#[test]
+fn root_create_delete_and_undo_raise_the_scene_revision() {
+    let mut doc = common::doc();
+    let r0 = doc.scene().revision();
+    let id = add(&mut doc, "test.box", "A");
+    let r1 = doc.scene().revision();
+    assert!(r1 > r0, "create");
+    doc.transact("delete", move |tx| tx.delete(id)).unwrap();
+    let r2 = doc.scene().revision();
+    assert!(r2 > r1, "delete of a root object");
+    assert!(doc.undo(), "undo the delete");
+    let r3 = doc.scene().revision();
+    assert!(r3 > r2, "undo restoring a root object");
+    assert!(doc.undo(), "undo the create");
+    assert!(doc.scene().revision() > r3, "undo removing a root object");
+}

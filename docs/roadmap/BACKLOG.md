@@ -219,7 +219,9 @@ implementers can avoid collisions.
 | 228 | [Clone toolset at the top level](../agents/tasks/228-mograph-top-level.md) | L | 079, 227 | ready | ui |
 | 229 | [Object manager hierarchy cues and row separation](../agents/tasks/229-object-manager-visuals.md) | L | 149 | done | ui |
 | 230 | [Script Manager: scene lookup and context search](../agents/tasks/230-script-lookup.md) | L | 160, 215 | ready | ui, script, luau |
-| 231 | [Attribute manager: settings divided into tabs and groups](../agents/tasks/231-attribute-tabs.md) | L | 150, O64 | waiting (O64) | core, generators, ui, all node crates |
+| 231 | [Attribute manager: settings divided into tabs and groups](../agents/tasks/231-attribute-tabs.md) | L | 150 | ready | core, generators, ui, all node crates |
+| 232 | [Keyframe drafts from every edit route, shown in the viewport](../agents/tasks/232-keyframe-drafts.md) | L, G | 224, 097, 151 | done (parity-pending: G5 discard rules) | ui, app, anim, viewport |
+| 233 | [Apply the owner's GUI session: key map, object manager rows, key indicators, window metrics](../agents/tasks/233-apply-gui-session.md) | L | 223, 229, 232 | in-progress (planner subagent) | ui, viewport |
 | 215 | [Luau runtime and builder scripts](../agents/tasks/215-luau-runtime.md) | A, P | – | ready | luau (new), script, app, command, rpc, mcp |
 | 216 | [Behaviour tag, lifecycle and timeline mode](../agents/tasks/216-behaviour-tag.md) | P | 215 | ready | behaviour (new), luau, core, app |
 | 217 | [Input system: devices, input map, injection](../agents/tasks/217-input-system.md) | P | 216 | ready | input (new), ui, command |

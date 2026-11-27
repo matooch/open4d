@@ -1,6 +1,6 @@
 # 231 · Attribute manager: settings divided into tabs and groups, like the reference
 
-Status: waiting (O64) · Area: L · Depends on: 150, O64 · Observations: owner note N9 (GUI-SESSIONS.md), O64 [attribute-tabs.md](../../parity/attribute-tabs.md) · Touches: core, generators, modifiers, clone-engine, fields, rig, dynamics, material, volume, ui
+Status: ready (tab lists for 18 types observed in GUI-SESSIONS.md G1 item 3 and G4 "Supplemental inspector observations"; O64 adds the groups inside tabs and the remaining types) · Area: L · Depends on: 150, O64 · Observations: owner note N9 (GUI-SESSIONS.md), O64 [attribute-tabs.md](../../parity/attribute-tabs.md) · Touches: core, generators, modifiers, clone-engine, fields, rig, dynamics, material, volume, ui
 
 ## Goal
 Not every setting sits at the same level. Each object's settings are divided into tabs (and
@@ -9,6 +9,12 @@ already draws tabs from `UiHint.group = "Tab/Group"` (UI.md §12), but almost ev
 all its params in one group, so the user sees one flat list.
 
 ## Steps
+0. **Data now available:** use the observed tab lists (Cube, Sphere, Circle spline, Text, Extrude,
+   Subdivision Surface, Bend, Cloner, Matrix, Fracture, Random and Plain effectors, Linear Field,
+   Camera, Light, material, Phong tag) from GUI-SESSIONS.md. Shared pattern: objects start with
+   Basic, Coord., then the type's tabs (Object, …). Effectors use Basic, Coord., Effector, Parameter,
+   Deformer, Fields. Shift-click stacks tabs (G1 item 3). Types without data follow the closest
+   observed pattern, `parity-pending O64`.
 1. **Spec:** UI.md §12, with the tab rules from O64's behaviour notes: shared tabs (transform /
    coordinates, display, basic), their order, and whether the tab bar is always shown (today
    only with two or more tabs). Add a short table per type to the type's own spec (or one table in

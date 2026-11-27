@@ -356,6 +356,30 @@ impl Scene {
         skipped
     }
 
+    /// A copy of the scene for showing editor drafts (docs/specs/UI.md §12, owner note N10):
+    /// each `(node, param, value, tracks)` stores `value` (validated like `set_param`) and
+    /// drops the listed `tracks` of that node, so evaluating the copy at any time gives
+    /// `value`. An entry that fails validation is skipped. The copy is not an edit and is
+    /// never saved.
+    pub fn with_drafts(
+        &self,
+        drafts: impl IntoIterator<Item = (NodeId, String, Value, Vec<String>)>,
+    ) -> Scene {
+        let mut scene = self.clone();
+        for (id, param, value, tracks) in drafts {
+            let Ok(value) = scene.check_override(id, &param, value) else {
+                continue;
+            };
+            let n = Arc::make_mut(scene.nodes.get_mut(&id).expect("checked node"));
+            n.params.insert(param, value);
+            for track in tracks {
+                n.tracks.remove(&track);
+            }
+            scene.stamp_unique(id);
+        }
+        scene
+    }
+
     fn check_override(&self, id: NodeId, param: &str, value: Value) -> Result<Value, EditError> {
         let node = self.node(id).ok_or(EditError::UnknownNode(id))?;
         self.registry
@@ -528,7 +552,9 @@ impl Scene {
         self.slot_list_mut(owner).remove(index);
         if let Some(stamp) = owner.node() {
             self.stamp(stamp);
-        } else if owner == SlotOwner::Materials {
+        } else {
+            // Root objects and materials have no owner node to stamp; the scene revision
+            // still rises, since any edit raises it (CORE.md: revisions).
             self.revision += 1;
         }
         slot
@@ -545,7 +571,9 @@ impl Scene {
         }
         if let Some(stamp) = owner.node() {
             self.stamp(stamp);
-        } else if owner == SlotOwner::Materials {
+        } else {
+            // Root objects and materials have no owner node to stamp; the scene revision
+            // still rises, since any edit raises it (CORE.md: revisions).
             self.revision += 1;
         }
     }
