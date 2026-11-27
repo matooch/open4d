@@ -26,6 +26,27 @@ pub struct TreeRow {
     pub dim: bool,
     /// The object's own layer: id, name and colour (UI.md §22.2).
     pub layer: Option<(LayerId, String, [f64; 3])>,
+    /// What the evaluation cell shows for this type (UI.md §13.1).
+    pub eval: EvalCell,
+}
+
+/// The type-dependent cell after the visibility dots (observed, G1 item 2): an evaluation
+/// check on most types, an active-camera target on cameras, nothing on nulls.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EvalCell {
+    None,
+    Check,
+    ActiveCamera,
+}
+
+/// The evaluation cell of a node type. Which other types lack the check is
+/// **parity-pending G1**: ours is every type but the null.
+pub fn eval_cell(type_id: &str) -> EvalCell {
+    match type_id {
+        "forge.null" => EvalCell::None,
+        t if t == forge_generators::scene_objects::CAMERA => EvalCell::ActiveCamera,
+        _ => EvalCell::Check,
+    }
 }
 
 /// Label of a node's type, and whether the type is missing from the registry.
@@ -59,6 +80,7 @@ fn make_row(scene: &Scene, id: NodeId, depth: usize, expanded: bool) -> TreeRow 
         enabled,
         dim: false,
         layer: layers::of(scene, id).map(|l| (l.id, l.name.clone(), l.color)),
+        eval: eval_cell(&n.type_id),
     }
 }
 
@@ -417,26 +439,31 @@ pub fn layer_menu(scene: &Scene, selection: &BTreeSet<NodeId>) -> Vec<LayerMenuI
     out
 }
 
-// ---- row geometry and hierarchy cues (UI.md §13.1a; owner note N7, parity-pending G1) --
+// ---- row geometry and hierarchy cues (UI.md §13.1a; observed, G1 item 7) ---------------
 
 /// The numbers of the object manager's rows, in points.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Metrics {
     /// Height of a row; rows touch (no gap), so every y of the list belongs to a row.
+    /// Observed: the row pitch is 20 px.
     pub row_height: f32,
-    /// Indent per depth level.
+    /// Indent per depth level. Observed: about 12 px.
     pub indent: f32,
-    /// Width of the fold arrow cell at the start of a row's own column.
+    /// Width of the gutter cell at the start of a row's own column, holding the
+    /// disclosure box.
     pub arrow_width: f32,
+    /// Side of the square disclosure box (a boxed minus or plus), centred in the cell.
+    pub box_size: f32,
     /// How far into its own cell a leaf row's connector runs.
     pub leaf_reach: f32,
 }
 
 pub const METRICS: Metrics = Metrics {
-    row_height: 22.0,
-    indent: 18.0,
-    arrow_width: 16.0,
-    leaf_reach: 14.0,
+    row_height: 20.0,
+    indent: 12.0,
+    arrow_width: 12.0,
+    box_size: 10.0,
+    leaf_reach: 8.0,
 };
 
 /// Where a row's parts sit, relative to the left edge of the list.
@@ -444,13 +471,13 @@ pub const METRICS: Metrics = Metrics {
 pub struct RowLayout {
     /// Left edge of the row's own column.
     pub start: f32,
-    /// The fold arrow cell, `(left, right)`.
+    /// The gutter cell, `(left, right)`.
     pub arrow: (f32, f32),
     /// The trunk x of the row's parent, where the row's elbow hangs (none for roots).
     pub parent_trunk: Option<f32>,
 }
 
-/// The x of the vertical trunk of a node at `level`: the centre of its arrow cell.
+/// The x of the vertical trunk of a node at `level`: the centre of its gutter cell.
 pub fn trunk_x(level: usize) -> f32 {
     METRICS.indent * level as f32 + METRICS.arrow_width / 2.0
 }
@@ -462,6 +489,28 @@ pub fn row_layout(depth: usize) -> RowLayout {
         arrow: (start, start + METRICS.arrow_width),
         parent_trunk: depth.checked_sub(1).map(trunk_x),
     }
+}
+
+/// The disclosure box of a row at `depth`, relative to the row's top-left corner: a square
+/// of [`Metrics::box_size`] centred in the gutter cell, as `(left, top, right, bottom)`.
+pub fn disclosure_box(depth: usize) -> (f32, f32, f32, f32) {
+    let c = trunk_x(depth);
+    let half = METRICS.box_size / 2.0;
+    let mid = METRICS.row_height / 2.0;
+    (c - half, mid - half, c + half, mid + half)
+}
+
+/// The glyph inside the box: a minus when expanded, a plus when collapsed (observed, G1
+/// item 7). The segments are relative to the row's top-left corner: the horizontal bar, and
+/// for a plus also the vertical bar; each 6 px long, centred in the box.
+pub fn disclosure_glyph(depth: usize, expanded: bool) -> Vec<([f32; 2], [f32; 2])> {
+    let (l, t, r, b) = disclosure_box(depth);
+    let (cx, cy) = ((l + r) / 2.0, (t + b) / 2.0);
+    let mut out = vec![([cx - 3.0, cy], [cx + 3.0, cy])];
+    if !expanded {
+        out.push(([cx, cy - 3.0], [cx, cy + 3.0]));
+    }
+    out
 }
 
 /// Which ancestor trunks pass through a row.
@@ -491,31 +540,38 @@ pub fn connectors(rows: &[TreeRow]) -> Vec<Connector> {
 }
 
 /// The line segments of a row's connectors, relative to the row's top-left corner (the
-/// list's left edge): full-height trunks of the higher ancestors, then the elbow.
+/// list's left edge): full-height trunks of the higher ancestors, the elbow (a right angle
+/// from the parent's trunk to this row), and for an expanded parent the stub from its
+/// disclosure box down to the row's bottom edge, where the children's trunk starts.
 pub fn connector_segments(
     depth: usize,
     has_children: bool,
+    expanded: bool,
     trunks: &[bool],
 ) -> Vec<([f32; 2], [f32; 2])> {
     let h = METRICS.row_height;
     let mid = h / 2.0;
     let mut out = Vec::new();
-    let Some(parent) = depth.checked_sub(1) else {
-        return out;
-    };
-    for (k, _) in trunks.iter().enumerate().take(parent).filter(|(_, t)| **t) {
-        out.push(([trunk_x(k), 0.0], [trunk_x(k), h]));
+    if let Some(parent) = depth.checked_sub(1) {
+        for (k, _) in trunks.iter().enumerate().take(parent).filter(|(_, t)| **t) {
+            out.push(([trunk_x(k), 0.0], [trunk_x(k), h]));
+        }
+        let x = trunk_x(parent);
+        let below = trunks.get(parent).copied().unwrap_or(false);
+        out.push(([x, 0.0], [x, if below { h } else { mid }]));
+        let start = row_layout(depth).start;
+        let end = if has_children {
+            // up to the left edge of the disclosure box
+            disclosure_box(depth).0
+        } else {
+            start + METRICS.leaf_reach
+        };
+        out.push(([x, mid], [end, mid]));
     }
-    let x = trunk_x(parent);
-    let below = trunks.get(parent).copied().unwrap_or(false);
-    out.push(([x, 0.0], [x, if below { h } else { mid }]));
-    let start = row_layout(depth).start;
-    let end = if has_children {
-        start
-    } else {
-        start + METRICS.leaf_reach
-    };
-    out.push(([x, mid], [end, mid]));
+    if has_children && expanded {
+        let x = trunk_x(depth);
+        out.push(([x, disclosure_box(depth).3], [x, h]));
+    }
     out
 }
 
@@ -550,6 +606,8 @@ pub struct RowColours {
     pub guide: egui::Color32,
     pub separator: egui::Color32,
     pub alt: egui::Color32,
+    /// The faint fill behind a selected row; the name itself is drawn in the accent.
+    pub selected: egui::Color32,
 }
 
 pub fn row_colours(theme: &crate::theme::Theme) -> RowColours {
@@ -557,5 +615,12 @@ pub fn row_colours(theme: &crate::theme::Theme) -> RowColours {
         guide: theme.panel.lerp_to_gamma(theme.weak_text, 0.75),
         separator: theme.panel.lerp_to_gamma(theme.weak_text, 0.18),
         alt: theme.panel.lerp_to_gamma(theme.faint, 0.55),
+        selected: theme.panel.lerp_to_gamma(theme.accent, 0.16),
     }
+}
+
+/// The colour of a row's name: the accent while selected (observed, G1 item 2: selected
+/// names are amber; ours is the theme's accent, D22), else `None` for the plain text colour.
+pub fn name_colour(theme: &crate::theme::Theme, selected: bool) -> Option<egui::Color32> {
+    selected.then_some(theme.accent)
 }

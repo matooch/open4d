@@ -502,69 +502,96 @@ same layer; a mixed selection; Record keys drafts; render, export and save ignor
 
 Not in this brief: lock/unlock, history back/forward, the field-list widget.
 
-## 13. Object manager (`tree`, `object_manager`; brief 149)
+## 13. Object manager (`tree`, `object_manager`; brief 149, revised by briefs 229 and 233)
 
-Sources: own design from docs/roadmap/areas/L-ui.md; GUI session G1 (docs/parity/GUI-SESSIONS.md)
-is unanswered, so **the column order, what the dots and tick show, the dot click cycle, the
-drop zones and the context menu items are parity-pending**. Look and labels are ours.
+Sources: own design from docs/roadmap/areas/L-ui.md, replaced where GUI session G1 items 2 and 7
+(docs/parity/GUI-SESSIONS.md, "Owner's Cowork session, 2026-11-27") observed the reference: the
+row order, the dot click cycle, what the evaluation cell shows, the row pitch, the indent and
+the boxed disclosure. What stays **parity-pending G1**: the drop zones and the in-progress drop
+markers (the session's drag completed before a capture), the context menu items, the lower dot's
+rendered result, and the context list. Look and labels are ours (D22).
 All edits are registry commands (COMMANDS.md §6); the panel only computes arguments, so an
 agent gets the same behaviour. Each user gesture is one undo step.
 
-### 13.1 Columns (left to right, parity-pending)
+### 13.1 Columns (left to right; the order is observed, G1 item 2)
 
-1. Expand arrow (a painted triangle, only for rows with children), indented 18 px per depth (§13.1a).
-2. Name (type label as a weak suffix), renamed in place.
-3. Editor dot, Render dot, Enable tick.
-4. Tags: one weak `[label]` per tag on the host.
+1. Gutter: a boxed minus (expanded) or boxed plus (collapsed), only for rows with children, with
+   thin connector lines to the children, indented 12 px per depth (§13.1a). A click folds.
+2. Type icon: brief 227's icon goes here. Until it lands, the weak type label stands in for
+   it, drawn after the name.
+3. Name, renamed in place (§13.4). **Selected rows draw the name in the accent colour**
+   (observed: amber; ours is the theme accent, D22) over a faint accent fill.
+4. Layer glyph (a small bar in the layer's colour; §22.2), only for objects on a layer.
+5. Two **stacked visibility dots** in one column: the upper one is the editor visibility, the
+   lower one the render visibility. Each is its own 14 x 10 px click target.
+6. The type-dependent evaluation cell (`tree::eval_cell`): a **check** (`EvalCell::Check`) on
+   most types, an **active-camera target** on cameras (`EvalCell::ActiveCamera`), **nothing**
+   on nulls (`EvalCell::None`), as observed for the Light (check), the camera and the null. Which
+   other types lack the check is **parity-pending G1**: ours is every type but the null.
+7. Tags: one weak `[label]` per tag on the host (observed: small tag glyphs further right).
+
+Columns 4 to 7 sit right aligned in that order, the name column takes the rest.
 
 Dot state (`object.editor_vis`, `object.render_vis`, `Vis`): `Default` (grey: follows the
-parent, root = on), `Off` (red), `On` (green, forced on even under an Off parent). A click
-cycles Default -> Off -> On -> Default and runs `object.visibility` for the clicked row (or
-for the whole selection when the row is selected). The tick is `object.enabled`; a click runs
-`object.enable` with the inverted value. A node is shown in the viewport iff it and every
-ancestor are enabled and its resolved editor visibility (`forge_core::visibility`) is on.
-Render visibility is stored and resolved the same way (`render_visible`) but honouring it in
-the render bridge is a follow-up (the renderer does not read it yet).
+parent, root = on), `On` (green, forced on even under an Off parent), `Off` (red). **A click
+cycles Default -> On -> Off -> Default** (observed, G1 item 2: two clicks on the Cube's upper
+dot first kept it visible, then hid it, and a third restored the default), and runs
+`object.visibility` for the clicked row (or for the whole selection when the row is selected).
+The evaluation check is `object.enabled`; a click runs `object.enable` with the inverted value
+(observed for the Light: the check became a red X and the object stopped evaluating; ours draws
+an empty box when off). The camera's target runs `view.look_through_camera` for the row, our
+stand-in for the reference's active camera (**parity-pending G1**; the target does not show which
+camera is active). A node is shown in the viewport iff it and every ancestor are enabled and its
+resolved editor visibility (`forge_core::visibility`) is on. Render visibility is stored and
+resolved the same way (`render_visible`) but honouring it in the render bridge is a follow-up
+(the renderer does not read it yet).
 Accessibility labels (used by the tests): `Editor visibility: <name>`, `Render visibility:
-<name>`, `Enabled: <name>`.
+<name>`, `Enabled: <name>`, `Active camera: <name>`.
 
-### 13.1a Row geometry and hierarchy cues (brief 229, owner note N7, **parity-pending G1 item 7**)
+### 13.1a Row geometry and hierarchy cues (brief 229; numbers observed by brief 233, G1 item 7)
 
 Owner note N7 asks that a child is clearly shown as a child and that rows are separated more.
-G1 item 7 (pixel numbers, lines or brackets, shading) is unanswered, so the numbers below are
-ours; they live in one place, `tree::METRICS` and the pure functions `tree::row_layout`,
-`tree::connectors`, `tree::connector_segments`, `tree::drop_mark` and `tree::row_colours`,
-which replace the earlier 14 px indent and `+` / `-` text buttons (§13.1 item 1).
+G1 item 7 measured the reference: **row pitch 20 px** (row centres at y 112, 132, 152, 172),
+**child indent about 12 px** (between the left edges of a parent's and a child's icon), and a
+**small boxed minus** in the gutter of an expanded parent with a **thin right-angle connector**
+to its child; a collapsed branch shows a boxed plus. The numbers below follow; they live in one
+place, `tree::METRICS` and the pure functions `tree::row_layout`, `tree::disclosure_box`,
+`tree::disclosure_glyph`, `tree::connectors`, `tree::connector_segments`, `tree::drop_mark` and
+`tree::row_colours`. They replace brief 229's 22 px rows, 18 px indent and painted triangles.
+The separator, the alternating shade, the colours and the drop marks of brief 229 are ours and
+stay (**parity-pending G1**).
 
 | Quantity | Value |
 |---|---|
-| Row height | 22 px (was about 18 px plus 3 px item spacing) |
+| Row height | 20 px (observed) |
 | Gap between rows | 0 px: rows touch, so every y in the list belongs to a row (drop zones, §13.3) |
-| Indent per depth level | 18 px; the row of depth `d` starts at `x = 18 d` |
-| Fold arrow cell | 16 px wide, at the start of the row's own column, `x = 18 d .. 18 d + 16`, full row height as the click target |
-| Fold arrow glyph | a filled triangle about 8 px: pointing right when collapsed, down when expanded; only on rows with children |
+| Indent per depth level | 12 px (observed, "about"); the row of depth `d` starts at `x = 12 d` |
+| Gutter cell | 12 px wide, at the start of the row's own column, `x = 12 d .. 12 d + 12`, full row height as the click target |
+| Disclosure box | a 10 x 10 px square outline centred in the gutter cell and in the row; a 6 px horizontal bar inside it when expanded (minus), plus a 6 px vertical bar when collapsed (plus); only on rows with children |
 | Connector lines | 1 px, colour `guide` |
 | Separator | 1 px line along the bottom edge of every row, colour `separator` |
-| Alternating shade | rows with an odd index in the visible list are filled with `alt`; the selected row keeps the selection fill |
+| Alternating shade | rows with an odd index in the visible list are filled with `alt`; a selected row is filled with `selected` (the accent at 16 % into the panel colour) |
 
 Connectors (`connectors(rows)` gives, per row, `trunks: Vec<bool>` of length `depth`, from the
 visible depth sequence alone): an ancestor at depth `k` has a **trunk**, a vertical line at
-`x = 18 k + 8` (the centre of that ancestor's arrow cell), which runs down through the rows of
-its subtree. Row `i` of depth `d > 0`: for `k < d - 1`, `trunks[k]` is true when a later row of
-depth `k + 1` follows before the list returns to a depth `<= k`, and a full-height vertical is
-drawn at the trunk of `k`; the **elbow** is at `k = d - 1`: a vertical from the row's top to its
-vertical centre, continuing to the bottom when `trunks[d - 1]` is true (a later sibling exists),
-then a horizontal at the vertical centre from the trunk to `x = 18 d` (the arrow cell) for a row
-with children or to `x = 18 d + 14` for a leaf. Root rows (depth 0) have no connector. Rows of
-the search result (§13.5) use the same rules over their own depth sequence; a layer with the
-manager off (§22) does not appear, its children move up one level, the rules read depths only.
+`x = 12 k + 6` (the centre of that ancestor's gutter cell and box), which runs down through
+the rows of its subtree. Row `i` of depth `d > 0`: for `k < d - 1`, `trunks[k]` is true when a
+later row of depth `k + 1` follows before the list returns to a depth `<= k`, and a full-height
+vertical is drawn at the trunk of `k`; the **elbow** is at `k = d - 1`: a vertical from the row's
+top to its vertical centre, continuing to the bottom when `trunks[d - 1]` is true (a later
+sibling exists), then a horizontal at the vertical centre from the trunk to the left edge of the
+row's disclosure box (`x = 12 d + 1`) for a row with children, or to `x = 12 d + 8` for a leaf.
+A row with children that is expanded also draws a **stub** on its own trunk from the bottom of
+its box to the row's bottom edge, so the line continues into its children. Root rows have no
+elbow. Rows of the search result (§13.5) use the same rules over their own depth sequence; a
+layer with the manager off (§22) does not appear, its children move up one level, the rules read
+depths only.
 
 Colours come from the theme tokens (`row_colours(theme)`), so all three themes follow
 (§24.1): `guide` is `weak_text` mixed 75 % into `panel`, `separator` is `weak_text` mixed 18 % into
-`panel`, `alt` is `faint` mixed 55 % into `panel`. The guide keeps at least 3:1 contrast against
-both `panel` and `alt` in dark, light and high-contrast (tested). The per-type icon of brief
-227 goes between the arrow cell and the name when that brief lands; it adds a 16 px cell and does
-not change the numbers above.
+`panel`, `alt` is `faint` mixed 55 % into `panel`, `selected` is `accent` mixed 16 % into `panel`.
+The guide keeps at least 3:1 contrast against both `panel` and `alt` in dark, light and
+high-contrast (tested), and the accent name keeps 3:1 on `selected`.
 
 ### 13.2 Selection (pure, `tree::click_selection`)
 
@@ -587,7 +614,8 @@ dropping on a moved node, or into/next to a descendant of a moved node (a cycle)
 `After` = right after it, except an expanded row with children: `After` then means first
 child (the position the line is drawn at). The empty area below the rows = root list, last.
 The drop runs `object.move` (`nodes` in visible order, `parent`, `index`). A drag hover
-shows what the drop does (`tree::drop_mark`): **Into** fills the whole hovered row with the accent
+shows what the drop does (`tree::drop_mark`; ours, **parity-pending G1**: the session's drag
+completed before a capture could be taken): **Into** fills the whole hovered row with the accent
 colour at 25 % alpha and outlines it 1.5 px (the row becomes the parent); **Before / After**
 draw a 2 px line across the row's bottom or top edge with a filled 3 px dot at its left end,
 placed at the indent of the depth the nodes would land at (`Before`: the row's depth; `After`:
@@ -623,9 +651,12 @@ editor and render both Off, or Default when all are already Off), Disable / Enab
 ### 13.7 Tests
 
 Pure unit tests (crates/ui/tests/object_manager.rs): drop targets for every zone,
-cycles, ranges, filter, context items, visibility resolution (core). egui_kittest: reparent
+cycles, ranges, filter, context items, visibility resolution (core), the row numbers (20 / 12),
+the boxed disclosure, the connector snapshot, the evaluation cell per type, the dot cycle,
+the accent name. egui_kittest: reparent
 by drag, reorder by drag, dots and tick (each with undo), rename, search, context menu
-actions, a drag onto an attribute link field.
+actions, a drag onto an attribute link field, the stacked dots (one column, editor above
+render, the check to their right), no check on nulls and a target on cameras.
 
 
 ## 14. Key map (`keymap`, `keymap_editor`; brief 152, revised by brief 233)
