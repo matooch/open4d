@@ -38,7 +38,16 @@ fn every_node_type_and_command_has_an_icon() {
 fn map_is_sorted_unique_and_files_match_glyphs() {
     let map = icons::icon_map();
     assert!(map.windows(2).all(|w| w[0].0 < w[1].0), "sorted, no dups");
-    let used: BTreeSet<&str> = map.iter().map(|m| m.1).collect();
+    let used: BTreeSet<&str> = map
+        .iter()
+        .map(|m| m.1)
+        .chain(
+            forge_ui::layout::all_buttons()
+                .into_iter()
+                .map(|button| button.icon),
+        )
+        .chain(forge_ui::timeline::NAVIGATION.map(|step| step.presentation().0))
+        .collect();
     let listed: BTreeSet<String> = icons::glyphs().iter().map(|g| g.0.to_string()).collect();
     let files = names_in_dir();
     assert_eq!(files, listed, "icons/ folder vs compiled glyph list");

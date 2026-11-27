@@ -29,8 +29,9 @@ use crate::components::{
 use crate::content_browser::{BrowserAction, menu_entries};
 use crate::coordinates::{CoordDraft, Mixed, Space, Third, coord_view_multi};
 use crate::dock::{Area, Panel};
+use crate::icons::{icon_name, ui_image};
 use crate::keymap_editor::KeyMapEditor;
-use crate::layout::{ButtonGroup, Layout, Sizes, command_bar, tool_palette};
+use crate::layout::{CLONE_TOOLSET, CommandButton, Layout, Sizes, command_bar, tool_palette};
 use crate::manipulate::{apply_axis_drag, apply_drag_edit, apply_transform_edits, edit_drafts};
 use crate::object_manager::ObjectManager;
 use crate::palette::Palette;
@@ -106,6 +107,9 @@ enum FileAction {
     ExportSelectedObj,
 }
 
+const SIZE_HANDLE_HIT: f32 = 9.0;
+const OBJECT_CLIPBOARD_TEXT: &str = "Forge3D scene objects";
+
 pub struct Editor {
     pub state: EditorState,
     /// Initial sizes of the resizable areas (docs/specs/UI.md §11).
@@ -127,7 +131,7 @@ pub struct Editor {
     /// Name field buffer in the attribute panel.
     name_edit: Option<(NodeId, String)>,
     /// The attribute manager tab shown (UI.md §12).
-    attr_tabs: crate::attributes::TabSelection,
+    attr_tabs: std::collections::BTreeMap<String, crate::attributes::TabSelection>,
     /// Counter for drag/typing gestures (each is one undo step).
     gesture_seq: u64,
     gesture: Option<u64>,
@@ -139,6 +143,7 @@ pub struct Editor {
     layout_store: LayoutStore,
     /// Bumped on every `set_layout`: egui forgets the remembered panel sizes (UI.md §21.2).
     layout_gen: u32,
+    dock_rects: [Option<egui::Rect>; Area::ALL.len()],
     /// The name field of the "Save layout as" window while it is open.
     save_layout_name: Option<String>,
     coord_space: Space,
@@ -149,6 +154,7 @@ pub struct Editor {
     coord_draft_key: String,
     /// The gizmo drag in progress: drag state, node, its transform at the start, gesture.
     gizmo_drag: Option<(Drag, NodeId, Transform, u64)>,
+    size_drag: Option<crate::size_handles::SizeDrag>,
     /// The gizmo drag on components in progress: drag state, component drag, gesture.
     component_drag: Option<(Drag, ComponentDrag, u64)>,
     /// A drag of spline control points or a handle (VIEWPORT.md section 11.2).
@@ -232,13 +238,14 @@ impl Editor {
             keymap_editor: KeyMapEditor::default(),
             palette: Palette::default(),
             name_edit: None,
-            attr_tabs: crate::attributes::TabSelection::default(),
+            attr_tabs: Default::default(),
             gesture_seq: 0,
             gesture: None,
             viewport_hot: false,
             workspace: "Standard".into(),
             layout_store: LayoutStore::default(),
             layout_gen: 0,
+            dock_rects: [None; Area::ALL.len()],
             save_layout_name: None,
             coord_space: Space::Local,
             coord_third: Third::Scale,
@@ -246,6 +253,7 @@ impl Editor {
             coord_draft: CoordDraft::default(),
             coord_draft_key: String::new(),
             gizmo_drag: None,
+            size_drag: None,
             component_drag: None,
             spline_drag: None,
             axis_drag: None,
@@ -570,41 +578,54 @@ impl Editor {
         egui::Panel::bottom("status")
             .exact_size(crate::layout::WINDOW.status_bar)
             .show(ui, |ui| self.status_bar(ui));
+        self.dock_rects.fill(None);
         let sizes = self.sizes;
         let salt = self.layout_gen;
         if !self.state.dock.tabs(Area::Top).is_empty() {
-            egui::Panel::top("area_top")
-                .resizable(false)
+            let panel = egui::Panel::top("area_top")
+                .resizable(true)
                 .min_size(crate::layout::WINDOW.command_bar)
                 .show(ui, |ui| self.area(ui, Area::Top, rs));
+            self.dock_rects[Area::Top as usize] = Some(panel.response.rect);
         }
-        if !self.state.dock.tabs(Area::Bottom).is_empty() {
-            egui::Panel::bottom(("area_bottom", salt))
-                .resizable(true)
-                .default_size(sizes.bottom_height)
-                .show(ui, |ui| self.area(ui, Area::Bottom, rs));
+        let animation_dock = self
+            .state
+            .dock
+            .tabs(Area::Bottom)
+            .iter()
+            .any(|panel| panel.animation_tab().is_some());
+        if !animation_dock {
+            self.bottom_dock(ui, rs);
         }
         if !self.state.dock.tabs(Area::Left).is_empty() {
-            egui::Panel::left(("area_left", salt))
+            let panel = egui::Panel::left(("area_left", salt))
                 .resizable(true)
                 .default_size(sizes.left_width)
                 .show(ui, |ui| self.area(ui, Area::Left, rs));
+            self.dock_rects[Area::Left as usize] = Some(panel.response.rect);
         }
         let (top, bottom) = (
             !self.state.dock.tabs(Area::RightTop).is_empty(),
             !self.state.dock.tabs(Area::RightBottom).is_empty(),
         );
-        if top || bottom {
+        if top || bottom || self.state.dock.active(Area::LowerRight).is_some() {
             egui::Panel::right(("area_right", salt))
                 .resizable(true)
                 .default_size(sizes.right_width)
                 .show(ui, |ui| {
+                    if self.state.dock.active(Area::LowerRight).is_some() {
+                        egui::Panel::bottom(("lower_right", salt))
+                            .resizable(true)
+                            .default_size(ui.available_height() * 0.28)
+                            .show(ui, |ui| self.area(ui, Area::LowerRight, rs));
+                    }
                     if top && bottom {
                         let h = ui.available_height();
-                        egui::Panel::top(("area_right_top", salt))
+                        let panel = egui::Panel::top(("area_right_top", salt))
                             .resizable(true)
                             .default_size(h * sizes.right_top_fraction)
                             .show(ui, |ui| self.area(ui, Area::RightTop, rs));
+                        self.dock_rects[Area::RightTop as usize] = Some(panel.response.rect);
                         self.area(ui, Area::RightBottom, rs);
                     } else if top {
                         self.area(ui, Area::RightTop, rs);
@@ -613,7 +634,11 @@ impl Editor {
                     }
                 });
         }
+        if animation_dock {
+            self.bottom_dock(ui, rs);
+        }
         egui::CentralPanel::no_frame().show(ui, |ui| self.area(ui, Area::Center, rs));
+        self.dock_drop(ui);
         self.keymap_editor.show(ui.ctx(), &mut self.state);
         self.save_layout_window(ui.ctx());
         self.io_dialog_window(ui.ctx());
@@ -657,6 +682,9 @@ impl Editor {
             self.state.keys.armed = None;
             return;
         }
+        if self.object_clipboard_shortcut(ctx) {
+            return;
+        }
         let hot = self.viewport_hot;
         let presses = ctx.input_mut(|i| self.state.keys.take_presses(i, hot));
         for (id, args) in presses {
@@ -668,6 +696,67 @@ impl Editor {
             }
             self.run_id(&id, args);
         }
+    }
+
+    fn object_clipboard_shortcut(&mut self, ctx: &egui::Context) -> bool {
+        let chord = egui::Modifiers::COMMAND;
+        let key = ctx.input_mut(|input| {
+            for key in [egui::Key::D, egui::Key::C, egui::Key::V] {
+                if input.consume_key(chord, key) {
+                    return Some(key);
+                }
+            }
+            if input
+                .events
+                .iter()
+                .any(|event| matches!(event, egui::Event::Copy))
+            {
+                Some(egui::Key::C)
+            } else if input.events.iter().any(
+                |event| matches!(event, egui::Event::Paste(text) if text == OBJECT_CLIPBOARD_TEXT),
+            ) {
+                Some(egui::Key::V)
+            } else {
+                None
+            }
+        });
+        let Some(key) = key else { return false };
+        let active = self.state.selection.active;
+        let selected: Vec<_> = self.state.selection.nodes.iter().copied().collect();
+        let snapshot =
+            || forge_command::ObjectClipboard::capture(self.state.doc.scene(), &selected);
+        if key == egui::Key::C {
+            if let Some(clipboard) = snapshot() {
+                self.state.object_clipboard = Some(clipboard);
+                ctx.copy_text(OBJECT_CLIPBOARD_TEXT.into());
+                self.state.status = "Copied objects".into();
+            }
+            return true;
+        }
+
+        let duplicate;
+        let clipboard = if key == egui::Key::D {
+            duplicate = snapshot();
+            duplicate.as_ref()
+        } else {
+            self.state.object_clipboard.as_ref()
+        };
+        if let Some(clipboard) = clipboard {
+            match clipboard.paste(&mut self.state.app.doc, active, key == egui::Key::D) {
+                Ok(created) => {
+                    self.state
+                        .expanded
+                        .extend(active.filter(|_| key == egui::Key::V));
+                    self.state.selection.nodes = created.iter().copied().collect();
+                    self.state.selection.active = created.last().copied();
+                    self.state.selection.anchor = self.state.selection.active;
+                    self.state.inspect_material = None;
+                    self.state.status.clear();
+                }
+                Err(error) => self.state.status = error.to_string(),
+            }
+        }
+        true
     }
 
     /// The platform spelling of the first chord bound to the command, for menus.
@@ -886,15 +975,7 @@ impl Editor {
                 }
             });
             ui.menu_button("Create", |ui| {
-                ui.menu_button("Clone toolset", |ui| {
-                    let entries = clone_toolset_menu(self.state.doc.scene().registry());
-                    for entry in entries {
-                        if ui.button(&entry.label).clicked() {
-                            self.run((entry.command, entry.args));
-                            ui.close();
-                        }
-                    }
-                });
+                ui.menu_button(CLONE_TOOLSET, |ui| self.clone_toolset_ui(ui));
                 ui.menu_button("Scene", |ui| {
                     for entry in scene_menu(self.state.doc.scene().registry()) {
                         if ui.button(&entry.label).clicked() {
@@ -1173,18 +1254,135 @@ impl Editor {
         });
     }
 
-    fn area(&mut self, ui: &mut Ui, area: Area, rs: Option<&egui_wgpu::RenderState>) {
-        let tabs = self.state.dock.tabs(area).to_vec();
-        let Some(active) = self.state.dock.active(area) else {
+    fn bottom_dock(&mut self, ui: &mut Ui, rs: Option<&egui_wgpu::RenderState>) {
+        let Some(active) = self.state.dock.active(Area::Bottom) else {
             return;
         };
-        // single-panel Centre, Top and Left areas have no tab header
-        if tabs.len() > 1 || !matches!(area, Area::Center | Area::Top | Area::Left) {
-            ui.horizontal(|ui| {
+        let expanded = matches!(active, Panel::DopeSheet | Panel::ValueGraph);
+        let compact = active == Panel::Timeline;
+        let compact_height = if ui.available_width() < 650.0 {
+            148.0
+        } else {
+            120.0
+        };
+        let height = if expanded {
+            self.sizes.bottom_height.max(276.0)
+        } else if compact && self.workspace == Workspace::Animate.name() {
+            compact_height
+        } else if compact {
+            self.sizes.bottom_height.max(compact_height)
+        } else {
+            self.sizes.bottom_height
+        };
+        let ceiling = (ui.available_height() - 84.0).max(1.0);
+        let minimum: f32 = if expanded {
+            218.0
+        } else if compact {
+            compact_height
+        } else {
+            30.0
+        };
+        let panel = egui::Panel::bottom(("area_bottom", self.layout_gen, expanded, compact))
+            .resizable(true)
+            .size_range(minimum.min(ceiling)..=ceiling)
+            .default_size(height.min(ceiling))
+            .show(ui, |ui| {
+                if expanded || compact {
+                    let bounds = ui.available_rect_before_wrap();
+                    // Reserve the user's dock size once. A wrapping editor toolbar must not
+                    // expand the resizable panel a little more on every frame.
+                    ui.expand_to_include_rect(bounds);
+                    let mut content = ui.new_child(egui::UiBuilder::new().max_rect(bounds));
+                    content.set_clip_rect(ui.clip_rect().intersect(bounds));
+                    self.area(&mut content, Area::Bottom, rs);
+                } else {
+                    self.area(ui, Area::Bottom, rs);
+                }
+            });
+        self.dock_rects[Area::Bottom as usize] = Some(panel.response.rect);
+    }
+
+    fn dock_drop(&mut self, ui: &Ui) {
+        let ctx = ui.ctx();
+        let Some(panel) = egui::DragAndDrop::payload::<Panel>(ctx) else {
+            return;
+        };
+        let Some(pointer) = ctx.pointer_hover_pos() else {
+            return;
+        };
+        let Some((target, preview)) = crate::dock::drop_target(&self.dock_rects, pointer) else {
+            return;
+        };
+        if self.state.dock.area_of(*panel) == Some(target) {
+            return;
+        }
+        let color = Theme::current(ctx).state;
+        let layer = egui::LayerId::new(
+            egui::Order::Foreground,
+            egui::Id::unique("dock drop preview"),
+        );
+        let painter = ctx.layer_painter(layer);
+        painter.rect_filled(preview, 3.0, color.gamma_multiply(0.24));
+        painter.rect_stroke(
+            preview,
+            3.0,
+            egui::Stroke::new(2.0, color),
+            egui::StrokeKind::Inside,
+        );
+        if ctx.input(|i| i.pointer.primary_released()) {
+            egui::DragAndDrop::take_payload::<Panel>(ctx);
+            self.state.dock.move_panel(*panel, target);
+            ctx.request_repaint();
+        }
+    }
+
+    fn dock_grip(ui: &mut Ui, panel: Panel) {
+        let (rect, response) = ui.allocate_exact_size(egui::vec2(12.0, 20.0), Sense::drag());
+        let color = ui.visuals().weak_text_color();
+        for x in [-2.0, 2.0] {
+            for y in [-4.0, 0.0, 4.0] {
+                ui.painter()
+                    .circle_filled(rect.center() + egui::vec2(x, y), 0.9, color);
+            }
+        }
+        response.dnd_set_drag_payload(panel);
+        response.on_hover_text(format!("Drag to dock {}", panel.title()));
+    }
+
+    fn area(&mut self, ui: &mut Ui, area: Area, rs: Option<&egui_wgpu::RenderState>) {
+        self.dock_rects[area as usize] = Some(ui.available_rect_before_wrap());
+        let tabs = self.state.dock.tabs(area).to_vec();
+        let Some(mut active) = self.state.dock.active(area) else {
+            return;
+        };
+        // The full-width toolbars and viewport have a dock handle in their own header.
+        if tabs.len() > 1
+            || !matches!(
+                active,
+                Panel::CommandBar | Panel::ToolPalette | Panel::Viewport
+            )
+        {
+            ui.horizontal_wrapped(|ui| {
                 for (i, p) in tabs.iter().enumerate() {
-                    let title = RichText::new(p.title()).strong();
-                    if ui.selectable_label(*p == active, title).clicked() {
+                    let response = if area == Area::Bottom
+                        && let Some((icon, label, hint)) = p.animation_tab()
+                    {
+                        let button = Self::tab_button(ui, label, Some(icon), *p == active)
+                            .sense(Sense::click_and_drag());
+                        ui.add(button).on_hover_text(hint)
+                    } else {
+                        ui.add(
+                            egui::Button::selectable(
+                                *p == active,
+                                RichText::new(p.title()).strong(),
+                            )
+                            .sense(Sense::click_and_drag()),
+                        )
+                    };
+                    response.dnd_set_drag_payload(*p);
+                    if response.clicked() {
                         self.state.dock.set_active(area, i);
+                        active = *p;
                     }
                 }
             });
@@ -1237,11 +1435,15 @@ impl Editor {
                 }
             }
             Panel::DopeSheet => {
+                self.animation_transport(ui);
+                ui.separator();
                 for c in crate::dopesheet::dope_sheet_ui(ui, &mut self.state) {
                     self.run(c);
                 }
             }
             Panel::ValueGraph => {
+                self.animation_transport(ui);
+                ui.separator();
                 for c in crate::fcurve::value_graph_ui(ui, &mut self.state) {
                     self.run(c);
                 }
@@ -1267,63 +1469,236 @@ impl Editor {
 
     /// The command bar: grouped buttons, each running one registry command.
     fn command_bar_ui(&mut self, ui: &mut Ui) {
-        let mut clicked: Option<Cmd> = None;
         ui.horizontal_wrapped(|ui| {
-            for (i, group) in command_bar().iter().enumerate() {
+            Self::dock_grip(ui, Panel::CommandBar);
+            for (i, group) in command_bar().into_iter().enumerate() {
                 if i > 0 {
                     ui.separator();
                 }
-                if let Some(c) = self.button_group(ui, group, crate::theme::BUTTONS.command) {
-                    clicked = Some(c);
+                for button in group.buttons {
+                    self.chrome_button(ui, button, false);
+                }
+                if group.name == CLONE_TOOLSET {
+                    for (group, title, icon) in [
+                        ("Object", "Primitives", "cube"),
+                        ("Generator", "Generators", "cloner"),
+                        ("Deformer", "Deformers", "bend"),
+                    ] {
+                        let mut label = egui::Atoms::new(title);
+                        if let Some(image) = ui_image(ui, icon, 14.0, ui.visuals().text_color()) {
+                            label.push_left(image);
+                        }
+                        ui.menu_button(label, |ui| {
+                            egui::ScrollArea::vertical()
+                                .max_height(400.0)
+                                .show(ui, |ui| {
+                                    for (_, items) in create_menu(self.state.doc.scene().registry())
+                                        .into_iter()
+                                        .filter(|(category, _)| category == group)
+                                    {
+                                        for (id, name) in items {
+                                            if ui.button(name).clicked() {
+                                                self.run(("object.create", json!({"type":id})));
+                                                ui.close();
+                                            }
+                                        }
+                                    }
+                                });
+                        })
+                        .response
+                        .on_hover_text(format!("Create {title}"));
+                    }
+                    ui.menu_button("Render Settings", |ui| {
+                        let mut config = self
+                            .state
+                            .doc
+                            .scene()
+                            .render_config()
+                            .cloned()
+                            .unwrap_or_default();
+                        for (label, key, value) in [
+                            ("Width", "width", &mut config.width),
+                            ("Height", "height", &mut config.height),
+                            ("Samples", "samples", &mut config.samples),
+                            ("Max depth", "max_depth", &mut config.max_depth),
+                        ] {
+                            ui.horizontal(|ui| {
+                                ui.label(label);
+                                if ui
+                                    .add(egui::DragValue::new(value).range(1..=65535))
+                                    .changed()
+                                {
+                                    self.run(("render.settings", json!({(key): *value})));
+                                }
+                            });
+                        }
+                    });
+                    let mut clones = egui::Atoms::new("Clone tools");
+                    if let Some(image) = ui_image(ui, "cloner", 14.0, ui.visuals().text_color()) {
+                        clones.push_left(image);
+                    }
+                    ui.menu_button(clones, |ui| self.clone_toolset_ui(ui))
+                        .response
+                        .on_hover_text("Create clone tools, effectors or fields");
+                    let mut label = egui::Atoms::new("Lights");
+                    if let Some(image) = ui_image(ui, "light", 14.0, ui.visuals().text_color()) {
+                        label.push_left(image);
+                    }
+                    ui.menu_button(label, |ui| {
+                        for (name, kind) in [
+                            ("Point light", "omni"),
+                            ("Spot light", "spot"),
+                            ("Directional light", "infinite"),
+                            ("Area light", "area"),
+                        ] {
+                            if ui.button(name).clicked() {
+                                self.run((
+                                    "object.create",
+                                    json!({"type": "forge.light", "light_type": kind}),
+                                ));
+                                ui.close();
+                            }
+                        }
+                        ui.separator();
+                        for entry in scene_menu(self.state.doc.scene().registry())
+                            .into_iter()
+                            .filter(|entry| entry.args["type"] != "forge.floor")
+                        {
+                            if ui.button(entry.label).clicked() {
+                                self.run((entry.command, entry.args));
+                                ui.close();
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text("Create a light, environment or sky");
                 }
             }
         });
-        if let Some(c) = clicked {
-            self.run(c);
-        }
     }
 
-    /// The tool palette: the groups stacked in a column.
-    fn tool_palette_ui(&mut self, ui: &mut Ui) {
-        let mut clicked: Option<Cmd> = None;
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for group in tool_palette() {
-                ui.weak(group.name);
-                ui.horizontal_wrapped(|ui| {
-                    if let Some(c) = self.button_group(ui, &group, crate::theme::BUTTONS.palette) {
-                        clicked = Some(c);
+    fn clone_toolset_ui(&mut self, ui: &mut Ui) {
+        let entries = clone_toolset_menu(self.state.doc.scene().registry());
+        let max_height = (ui.ctx().content_rect().height() - 110.0).max(80.0);
+        egui::ScrollArea::vertical()
+            .max_height(max_height)
+            .show(ui, |ui| {
+                for entry in entries {
+                    let id = entry.args["type"].as_str().unwrap_or(entry.command);
+                    let image = icon_name(id)
+                        .and_then(|name| ui_image(ui, name, 16.0, ui.visuals().text_color()));
+                    if ui
+                        .add(egui::Button::opt_image_and_text(
+                            image,
+                            Some(entry.label.into()),
+                        ))
+                        .clicked()
+                    {
+                        self.run((entry.command, entry.args));
+                        ui.close();
                     }
-                });
-                ui.separator();
+                }
+            });
+    }
+
+    /// A single column of tools with a gap between groups.
+    fn tool_palette_ui(&mut self, ui: &mut Ui) {
+        Self::dock_grip(ui, Panel::ToolPalette);
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for (index, group) in tool_palette().into_iter().enumerate() {
+                if index > 0 {
+                    ui.add_space(5.0);
+                }
+                for button in group.buttons {
+                    self.chrome_button(ui, button, true);
+                }
             }
         });
-        if let Some(c) = clicked {
-            self.run(c);
-        }
     }
 
-    /// Draws a group's buttons; the command of the one clicked, if any.
-    fn button_group(&self, ui: &mut Ui, group: &ButtonGroup, min: [f32; 2]) -> Option<Cmd> {
-        let mut clicked = None;
-        for b in &group.buttons {
-            let selected = b.command == "select.mode"
-                && b.args["mode"] == json!(forge_command::ModeArg::from(self.state.mode))
-                || (b.command == "view.shading"
-                    && b.args["mode"]
-                        == json!(crate::commands::shading_mode_of(self.state.shading)));
-            let response = ui
-                .add(
-                    egui::Button::new(b.text())
-                        .selected(selected)
-                        .min_size(egui::vec2(min[0], min[1])),
-                )
-                .on_hover_text(b.tip);
-            if response.clicked() {
-                // the registry owns the ids; `Cmd` borrows them as 'static
-                clicked = Some((b.command, b.args.clone()));
+    fn named_tab(ui: &mut Ui, label: &str, icon: Option<&str>, active: bool) -> egui::Response {
+        let button = Self::tab_button(ui, label, icon, active);
+        ui.add(button)
+    }
+
+    fn tab_button<'a>(
+        ui: &Ui,
+        label: &'a str,
+        icon: Option<&str>,
+        active: bool,
+    ) -> egui::Button<'a> {
+        let tint = if active {
+            ui.visuals().selection.stroke.color
+        } else {
+            ui.visuals().text_color()
+        };
+        let image = icon.and_then(|name| ui_image(ui, name, 13.0, tint));
+        egui::Button::opt_image_and_text(image, Some(label.into())).selected(active)
+    }
+
+    fn chrome_button(&mut self, ui: &mut Ui, button: CommandButton, rail: bool) {
+        let command = (button.command, button.args);
+        let state = match command.0 {
+            "select.mode" => {
+                Some(command.1["mode"] == json!(forge_command::ModeArg::from(self.state.mode)))
             }
+            "view.shading" => Some(
+                command.1["mode"] == json!(crate::commands::shading_mode_of(self.state.shading)),
+            ),
+            "view.gizmo_mode" => {
+                let active = match self.state.gizmo_mode {
+                    GizmoMode::Translate => "move",
+                    GizmoMode::Rotate => "rotate",
+                    GizmoMode::Scale => "scale",
+                };
+                Some(command.1["mode"] == active)
+            }
+            _ => None,
+        };
+        let selected = state.unwrap_or(false);
+        let visuals = ui.visuals();
+        let tint = if selected {
+            visuals.selection.stroke.color
+        } else {
+            visuals.text_color()
+        };
+        let metrics = crate::theme::BUTTONS;
+        let (size, min, location) = if rail {
+            (20.0, metrics.palette, "tool rail")
+        } else {
+            (17.0, metrics.command, "toolbar")
+        };
+        let widget = match ui_image(ui, button.icon, size, tint) {
+            Some(image) => egui::Button::image(image),
+            None => egui::Button::new(button.label),
+        };
+        let widget = widget
+            .selected(selected)
+            .min_size(egui::vec2(min[0], min[1]));
+        let response = ui.add(widget);
+        response.widget_info(|| {
+            let label = format!("{} ({location})", button.label);
+            match state {
+                Some(selected) => egui::WidgetInfo::selected(
+                    egui::Role::Button,
+                    response.enabled(),
+                    selected,
+                    label,
+                ),
+                None => egui::WidgetInfo::labeled(egui::Role::Button, response.enabled(), label),
+            }
+        });
+        let response = response.on_hover_ui(|ui| {
+            let shortcut = self.chord_text(ui.ctx(), &command);
+            ui.strong(match shortcut {
+                Some(shortcut) => format!("{}  {shortcut}", button.label),
+                None => button.label.to_owned(),
+            });
+            ui.label(button.tip);
+        });
+        if response.clicked() {
+            self.run(command);
         }
-        clicked
     }
 
     /// Soft selection and symmetry controls of component modes (EDITABLE.md §5.6).
@@ -1546,6 +1921,7 @@ impl Editor {
         // header: the soft-selection bar of the component modes and the render toggle. The
         // modes themselves are switched in the tool palette only (UI.md §6.1, owner note N6).
         ui.horizontal(|ui| {
+            Self::dock_grip(ui, Panel::Viewport);
             if self.state.mode != EditMode::Model {
                 self.component_bar(ui);
                 ui.separator();
@@ -1652,7 +2028,11 @@ impl Editor {
                 .hover_pos()
                 .map_or([0.0, 0.0], |p| (p - rect.min).into()),
         });
-        let action = nav_action(&input);
+        let action = if self.size_drag.is_some() {
+            NavAction::None
+        } else {
+            nav_action(&input)
+        };
         let view_size = [rect.width() as f64, rect.height() as f64];
         if pane == self.state.views.active {
             if action != NavAction::None {
@@ -1689,7 +2069,7 @@ impl Editor {
                     self.run(assign_to(*material, node));
                 }
             }
-        } else if input.navigating() {
+        } else if input.navigating() && self.size_drag.is_none() {
             self.rect_drag = None;
         } else {
             self.viewport_interaction(ui, &response, rect, ppp, size);
@@ -1701,6 +2081,7 @@ impl Editor {
                 egui::Label::new("Viewport unavailable").selectable(false),
             );
             let frame = self.state.app.scheduled_draw(self.state.timeline.current);
+            self.paint_size_handles(ui, &response, pane, rect, ppp);
             self.paint_hud(ui, pane, rect, &frame);
             return;
         };
@@ -1778,6 +2159,64 @@ impl Editor {
                 egui::StrokeKind::Inside,
             );
         }
+        self.paint_size_handles(ui, &response, pane, rect, ppp);
+        if let Some(g) = gizmo {
+            use forge_viewport::gizmo::{Axis, Handle, Plane};
+            let camera = self.state.pane_camera(pane);
+            let (w, h) = (f64::from(size[0]), f64::from(size[1]));
+            let hovered = ui
+                .ctx()
+                .pointer_hover_pos()
+                .filter(|p| rect.contains(*p))
+                .and_then(|p| {
+                    let q = (p - rect.min) * ppp;
+                    g.hit_test(&camera, q.x.into(), q.y.into(), w, h)
+                });
+            let l = g.world_length(&camera, h);
+            let painter = ui.painter_at(rect);
+            let draw = |a, b, handle, color| {
+                if let (Some(a), Some(b)) = (camera.project(a, w, h), camera.project(b, w, h)) {
+                    let active = hovered == Some(handle);
+                    painter.line_segment(
+                        [a, b].map(|p| rect.min + egui::vec2(p.x as f32, p.y as f32) / ppp),
+                        egui::Stroke::new(
+                            if active { 3.5 } else { 2.0 },
+                            if active { egui::Color32::GOLD } else { color },
+                        ),
+                    );
+                }
+            };
+            for (axis, color) in Axis::ALL.into_iter().zip([
+                egui::Color32::LIGHT_RED,
+                egui::Color32::LIGHT_GREEN,
+                egui::Color32::LIGHT_BLUE,
+            ]) {
+                let handle = Handle::Axis(axis);
+                if g.mode == GizmoMode::Rotate {
+                    let ring = g.ring_points(axis, l);
+                    for i in 0..ring.len() {
+                        draw(ring[i], ring[(i + 1) % ring.len()], handle, color);
+                    }
+                } else {
+                    draw(g.origin, g.origin + g.axis(axis) * l * 0.85, handle, color);
+                }
+            }
+            if g.mode != GizmoMode::Rotate {
+                for plane in Plane::ALL {
+                    if hovered == Some(Handle::Plane(plane)) {
+                        let corners = g.plane_corners(plane, l);
+                        for i in 0..4 {
+                            draw(
+                                corners[i],
+                                corners[(i + 1) % 4],
+                                Handle::Plane(plane),
+                                egui::Color32::GOLD,
+                            );
+                        }
+                    }
+                }
+            }
+        }
         self.paint_clone_overlay(ui, &shown, pane, rect);
         self.paint_field_overlay(ui, &shown, pane, rect);
         if pane == self.state.views.active {
@@ -1837,6 +2276,73 @@ impl Editor {
                 4.0,
                 Theme::current(ui.ctx()).component_selection,
             );
+        }
+    }
+
+    fn viewport_size_handles(&self) -> Vec<crate::size_handles::Handle> {
+        let Some(node) = self.state.selection.active else {
+            return Vec::new();
+        };
+        if self.state.mode != EditMode::Model
+            || self.state.display == DisplayMode::Render
+            || self.state.app.transform_settings.axis_mode
+            || self.state.tool.is_some()
+            || forge_core::layers::locked(self.state.doc.scene(), node)
+        {
+            return Vec::new();
+        }
+        crate::size_handles::for_node(&self.state.evaluated(), node)
+    }
+
+    fn paint_size_handles(
+        &self,
+        ui: &Ui,
+        response: &egui::Response,
+        pane: Pane,
+        rect: egui::Rect,
+        ppp: f32,
+    ) {
+        let camera = self.state.pane_camera(pane);
+        let painter = ui.painter_at(rect);
+        let w = f64::from((rect.width() * ppp).round().max(1.0));
+        let h = f64::from((rect.height() * ppp).round().max(1.0));
+        let theme = Theme::current(ui.ctx());
+        for handle in self.viewport_size_handles() {
+            let Some(projected) = camera.project(handle.point(), w, h) else {
+                continue;
+            };
+            let point = rect.min + egui::vec2(projected.x as f32, projected.y as f32) / ppp;
+            let hovered = response.hovered()
+                && ui
+                    .ctx()
+                    .pointer_hover_pos()
+                    .is_some_and(|pos| pos.distance(point) <= SIZE_HANDLE_HIT);
+            if hovered {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+                if let Some(node) = self.state.selection.active
+                    && let Some(param) = self.state.doc.scene().param_desc(node, handle.param)
+                {
+                    response
+                        .clone()
+                        .on_hover_text_at_pointer(format!("Drag to adjust {}", param.label));
+                }
+            }
+            let colour = if hovered {
+                theme.text
+            } else {
+                theme.component_selection
+            };
+            let radius = if hovered { 6.0 } else { 4.5 };
+            painter.add(egui::Shape::convex_polygon(
+                vec![
+                    point + egui::vec2(radius, 0.0),
+                    point + egui::vec2(0.0, radius),
+                    point - egui::vec2(radius, 0.0),
+                    point - egui::vec2(0.0, radius),
+                ],
+                colour,
+                egui::Stroke::new(1.0, theme.panel),
+            ));
         }
     }
 
@@ -2242,6 +2748,53 @@ impl Editor {
             shift: modifiers.shift,
             command: modifiers.command,
         };
+        if response.drag_started_by(egui::PointerButton::Primary)
+            && let Some(node) = self.state.selection.active
+            && let Some(origin) = ui.input(|i| i.pointer.press_origin())
+        {
+            let (x, y) = to_pixels(origin);
+            let camera = self.state.camera;
+            let closest = self
+                .viewport_size_handles()
+                .into_iter()
+                .filter_map(|handle| {
+                    let point = camera.project(handle.point(), w, h)?;
+                    let distance = (point.x - x).hypot(point.y - y);
+                    (distance <= f64::from(SIZE_HANDLE_HIT * ppp)).then_some((distance, handle))
+                })
+                .min_by(|a, b| a.0.total_cmp(&b.0));
+            if let Some((_, handle)) = closest {
+                self.gesture_seq += 1;
+                self.size_drag = crate::size_handles::SizeDrag::begin(
+                    node,
+                    handle,
+                    &camera,
+                    [x, y],
+                    [w, h],
+                    self.gesture_seq,
+                );
+            }
+        }
+        if let Some(drag) = self.size_drag {
+            if let Some(pos) = response.interact_pointer_pos()
+                && (response.dragged_by(egui::PointerButton::Primary) || response.drag_stopped())
+            {
+                let (x, y) = to_pixels(pos);
+                if let Some(value) =
+                    drag.value(self.state.doc.scene(), &self.state.camera, [x, y], [w, h])
+                {
+                    let edit = crate::widgets::Edit::on_node(drag.node, drag.param, json!(value));
+                    self.run((
+                        "param.edit",
+                        edit.args(drag.param, &[drag.node], Some(drag.gesture)),
+                    ));
+                }
+            }
+            if response.drag_stopped() {
+                self.size_drag = None;
+            }
+            return;
+        }
         // End of a rectangle select: the release may not report a pointer position
         if response.drag_stopped_by(egui::PointerButton::Primary)
             && let Some(mut r) = self.rect_drag.take()
@@ -2314,8 +2867,11 @@ impl Editor {
         let mode = self.state.gizmo_mode;
         if response.drag_started_by(egui::PointerButton::Primary)
             && let Some(g) = self.current_gizmo()
-            && let Some(handle) = g.hit_test(&cam, x, y, w, h)
-            && let Some(drag) = Drag::begin(&g, handle, &cam, x, y, w, h)
+            && let Some((sx, sy)) = ui.input(|i| i.pointer.press_origin()).map(to_pixels)
+            && let Some(handle) = g.hit_test(&cam, sx, sy, w, h).or_else(|| {
+                (mode == GizmoMode::Scale).then_some(forge_viewport::gizmo::Handle::Center)
+            })
+            && let Some(drag) = Drag::begin(&g, handle, &cam, sx, sy, w, h)
         {
             if axis_mode {
                 // axis mode: the drag edits the axis of the active object (MANIPULATE.md §7.4)
@@ -2841,10 +3397,19 @@ impl Editor {
     }
 
     fn attributes_ui(&mut self, ui: &mut Ui) {
-        if self.state.tool.is_some() {
+        self.state.inspect_material = self
+            .state
+            .inspect_material
+            .filter(|id| self.state.doc.scene().materials().contains(id));
+        if self.state.inspect_material.is_some() {
+            if ui.button("Back to object attributes").clicked() {
+                self.state.inspect_material = None;
+            }
+            ui.separator();
+        } else if self.state.tool.is_some() {
             self.tool_ui(ui);
         }
-        let Some(id) = self.state.selection.active else {
+        let Some(id) = self.state.inspect_material.or(self.state.selection.active) else {
             ui.weak("Nothing selected");
             return;
         };
@@ -2857,22 +3422,32 @@ impl Editor {
                 .nodes
                 .iter()
                 .copied()
-                .filter(|n| *n != id),
+                .filter(|n| *n != id && self.state.inspect_material.is_none()),
         );
         let Some(view) = attribute_rows_multi(&shown, &ids) else {
             ui.weak("Nothing selected");
             return;
         };
-        let can_draft = !self.state.autokey;
+        let can_draft = !self.state.autokey && self.state.inspect_material.is_none();
         let theme = Theme::current(ui.ctx());
         let mut rename = None;
+        let type_id = shown
+            .node(id)
+            .map(|node| node.type_id.clone())
+            .unwrap_or_default();
         ui.horizontal(|ui| {
+            if let Some(icon) =
+                icon_name(&type_id).and_then(|name| ui_image(ui, name, 16.0, theme.text))
+            {
+                ui.add(icon);
+            }
             let type_label = ui.label(RichText::new(&view.type_label).color(theme.weak_text));
             let buf = match &mut self.name_edit {
                 Some((nid, b)) if *nid == id => b,
                 slot => &mut slot.insert((id, view.name.clone())).1,
             };
-            let r = ui.text_edit_singleline(buf).labelled_by(type_label.id);
+            let r = crate::widgets::text_field(ui, egui::TextEdit::singleline(buf))
+                .labelled_by(type_label.id);
             if r.lost_focus() && *buf != view.name {
                 rename = Some(buf.clone());
             } else if !r.has_focus() {
@@ -2886,30 +3461,55 @@ impl Editor {
             self.run(("object.rename", json!({"node": id.0, "name": name})));
         }
         let tabs = view.tabs();
-        self.attr_tabs.normalise(&tabs);
-        if tabs.len() > 1 {
-            ui.horizontal(|ui| {
-                let shown = self.attr_tabs.shown(&tabs);
-                for t in &tabs {
-                    let r = ui.selectable_label(shown.contains(t), t);
-                    if r.clicked() {
-                        // Shift-click stacks a second tab body under the first (G1 item 3)
-                        let shift = ui.input(|i| i.modifiers.shift);
-                        self.attr_tabs.click(t, shift, &tabs);
+        let selection = self.attr_tabs.entry(type_id.clone()).or_insert_with(|| {
+            crate::attributes::TabSelection {
+                active: crate::attributes::AttributeView::default_tab(&tabs),
+                ..Default::default()
+            }
+        });
+        let was_shown = selection.shown(&tabs);
+        if !tabs.is_empty() {
+            ui.horizontal_wrapped(|ui| {
+                for tab in &tabs {
+                    let icon = match tab.as_str() {
+                        "Transform" | "Clone Transform" => Some("axis"),
+                        "Basic" => Some("info"),
+                        "Object" => icon_name(&type_id),
+                        "Effectors" => Some("effector_plain"),
+                        "Field" | "Fields" => Some("field_linear"),
+                        "Remapping" => Some("field_remap_layer"),
+                        "Color" => Some("color"),
+                        _ => None,
+                    };
+                    if Self::named_tab(ui, tab, icon, was_shown.contains(tab))
+                        .on_hover_text(
+                            "Click to show this tab. Shift-click to stack it with another tab.",
+                        )
+                        .clicked()
+                    {
+                        selection.click(tab, ui.input(|i| i.modifiers.shift), &tabs);
                     }
                 }
             });
+            ui.separator();
         }
-        ui.separator();
-        let shown_tabs = self.attr_tabs.shown(&tabs);
+        let shown_tabs = selection.shown(&tabs);
+        let scroll_id = (
+            "attribute_tabs",
+            type_id.clone(),
+            shown_tabs.first().cloned(),
+        );
         egui::ScrollArea::vertical()
+            .id_salt(scroll_id)
             .auto_shrink(false)
             .show(ui, |ui| {
                 ui.add_enabled_ui(view.editable, |ui| {
                     for (n, tab) in shown_tabs.iter().enumerate() {
                         if n > 0 {
-                            // stacked bodies are told apart by a line
                             ui.separator();
+                        }
+                        if shown_tabs.len() > 1 {
+                            ui.strong(format!("{tab} properties"));
                         }
                         for (group, rows) in view.groups_of(tab) {
                             egui::CollapsingHeader::new(group)
@@ -2976,7 +3576,11 @@ impl Editor {
             distance: self.state.prefs.distance,
         };
         if let Some(edit) = widgets::show(ui, &cx, shown) {
-            let mut nodes: Vec<NodeId> = self.state.selection.nodes.iter().copied().collect();
+            let mut nodes: Vec<NodeId> = if self.state.inspect_material.is_some() {
+                vec![id]
+            } else {
+                self.state.selection.nodes.iter().copied().collect()
+            };
             if !nodes.contains(&id) {
                 nodes.insert(0, id);
             }
@@ -3075,24 +3679,53 @@ impl Editor {
         }
     }
 
-    fn timeline_ui(&mut self, ui: &mut Ui) {
+    fn animation_transport(&mut self, ui: &mut Ui) {
+        use crate::icons::action;
+        use crate::timeline::{NAVIGATION, TransportStep, navigation_command};
         let settings = self.state.settings();
         let ids: Vec<NodeId> = self.state.selection.nodes.iter().copied().collect();
         let mut cmds: Vec<Cmd> = Vec::new();
         ui.horizontal_wrapped(|ui| {
-            let playing = self.state.timeline.playing;
-            if ui.button(if playing { "Stop" } else { "Play" }).clicked() {
-                cmds.push(cmd("timeline.toggle_play"));
+            for step in NAVIGATION {
+                if step == TransportStep::Play {
+                    let (icon, label, help) = if self.state.timeline.playing {
+                        ("stop", "Stop", "Stop playback at the current frame")
+                    } else {
+                        ("play", "Play", "Play from the current frame")
+                    };
+                    if action(ui, icon, label, help, None).clicked() {
+                        cmds.push(cmd("timeline.toggle_play"));
+                    }
+                } else {
+                    let (icon, label, help) = step.presentation();
+                    if action(ui, icon, label, help, None).clicked() {
+                        cmds.push(navigation_command(step, settings.start, settings.end));
+                    }
+                }
             }
-            // key-all toggles (UI.md §12, owner note N3): when every record key of the
-            // selection is here already, the button is selected and removes them
+            ui.separator();
+            let mut frame = self.state.timeline.current;
+            let frame_label = ui.label("Frame");
+            let r = ui
+                .add(
+                    egui::DragValue::new(&mut frame)
+                        .range(settings.start..=settings.end)
+                        .suffix(" f"),
+                )
+                .labelled_by(frame_label.id);
+            if r.on_hover_text("Current frame. Click to type a number or drag to scrub.")
+                .changed()
+            {
+                cmds.push(("timeline.set_frame", json!({"frame": frame})));
+            }
+            ui.weak(crate::timeline::time_label(frame, self.state.doc.scene()));
+            ui.separator();
             let recorded = forge_app::animate::recorded_keys_here(
                 self.state.doc.scene(),
                 &ids,
                 self.state.timeline.current,
                 settings.fps,
             );
-            // a draft in the selection is an uncommitted edit: Record keys it (N10)
             let drafted = self
                 .state
                 .app
@@ -3100,88 +3733,106 @@ impl Editor {
                 .iter()
                 .any(|(node, _, _)| ids.contains(node));
             let remove = !recorded.is_empty() && !drafted;
-            if ui
-                .add(egui::Button::new("Record").selected(remove))
-                .clicked()
-            {
+            let help = if remove {
+                "Remove the recorded keys at this frame"
+            } else {
+                "Record keys for the selected objects at this frame"
+            };
+            if action(ui, "record", "Record", help, Some(remove)).clicked() {
                 if remove {
                     let fps = f64::from(settings.fps);
-                    let keys: Vec<serde_json::Value> = recorded
-                        .iter()
-                        .map(|(id, track, time)| {
-                            json!({"node": id.0, "track": track, "frame": time * fps})
-                        })
-                        .collect();
+                    let keys: Vec<_> = recorded.iter().map(|(id, track, time)| {
+                        json!({"node": id.0, "track": track, "frame": time * fps})
+                    }).collect();
                     cmds.push(("key.delete", json!({"keys": keys})));
                 } else {
                     cmds.push(cmd("key.record"));
                 }
             }
-            let mut auto = self.state.autokey;
-            // recording is the record role (red), with the word and the checked box as cues
-            let auto_label = if auto {
-                RichText::new("Auto-Key").color(Theme::current(ui.ctx()).record)
-            } else {
-                RichText::new("Auto-Key")
-            };
-            if ui.checkbox(&mut auto, auto_label).clicked() {
-                cmds.push(cmd("key.autokey"));
-            }
-            ui.separator();
-            if ui.button("Previous Key").clicked() {
-                cmds.push(("key.jump", json!({"forward": false})));
-            }
-            if ui.button("Next Key").clicked() {
-                cmds.push(("key.jump", json!({"forward": true})));
-            }
-            if ui.button("Delete Keys").clicked() {
+            let auto = self.state.autokey;
+            ui.scope(|ui| {
+                let theme = Theme::current(ui.ctx());
+                ui.visuals_mut().selection.bg_fill = theme.record;
+                ui.visuals_mut().selection.stroke.color = theme.window;
+                if action(
+                    ui,
+                    "key",
+                    "Auto-Key",
+                    "Automatically record property changes at the current frame",
+                    Some(auto),
+                )
+                .clicked()
+                {
+                    cmds.push(cmd("key.autokey"));
+                }
+            });
+            if action(
+                ui,
+                "delete",
+                "Delete Keys",
+                "Delete keys at this frame for the selected objects",
+                None,
+            )
+            .clicked()
+            {
                 cmds.push(cmd("key.delete_at_frame"));
             }
-            ui.separator();
-            crate::timeline::playback_controls(ui, self.state.doc.scene(), &mut cmds);
-        });
-        ui.horizontal_wrapped(|ui| {
-            let mut next = settings;
-            let l = ui.label("Start");
-            ui.add(egui::DragValue::new(&mut next.start).range(i64::MIN..=settings.end))
-                .labelled_by(l.id);
-            let l = ui.label("End");
-            ui.add(egui::DragValue::new(&mut next.end).range(settings.start..=i64::MAX))
-                .labelled_by(l.id);
-            let l = ui.label("FPS");
-            ui.add(egui::DragValue::new(&mut next.fps).range(1..=240))
-                .labelled_by(l.id);
-            if next.fps != settings.fps {
-                cmds.push(("timeline.set_fps", json!({"fps": next.fps})));
-            } else if next != settings {
-                cmds.push((
-                    "timeline.settings",
-                    json!({"fps": next.fps, "start": next.start, "end": next.end}),
-                ));
+            ui.menu_button("Playback", |ui| {
+                let scene = self.state.doc.scene();
+                let mut next = settings;
+                for (label, value, range) in [
+                    ("Start", &mut next.start, i64::MIN..=settings.end),
+                    ("End", &mut next.end, settings.start..=i64::MAX),
+                ] {
+                    ui.horizontal(|ui| {
+                        let caption = ui.label(label);
+                        ui.add(egui::DragValue::new(value).range(range))
+                            .labelled_by(caption.id);
+                    });
+                }
+                ui.horizontal(|ui| {
+                    let l = ui.label("FPS");
+                    ui.add(egui::DragValue::new(&mut next.fps).range(1..=240))
+                        .labelled_by(l.id);
+                });
+                if next.fps != settings.fps {
+                    cmds.push(("timeline.set_fps", json!({"fps": next.fps})));
+                } else if next != settings {
+                    cmds.push((
+                        "timeline.settings",
+                        json!({"fps": next.fps, "start": next.start, "end": next.end}),
+                    ));
+                }
+                crate::timeline::playback_controls(ui, scene, &mut cmds);
+            })
+            .response
+            .on_hover_text("Project range, frame rate, looping and time display");
+
+            // Existing custom and saved layouts can open editors without resetting the dock.
+            for panel in [Panel::DopeSheet, Panel::ValueGraph] {
+                if self.state.dock.area_of(panel).is_none()
+                    && let Some((icon, label, hint)) = panel.animation_tab()
+                    && action(ui, icon, label, hint, None).clicked()
+                {
+                    self.state.dock.reveal(panel);
+                }
             }
-            ui.separator();
-            let mut frame = self.state.timeline.current;
-            let l = ui.label("Frame");
-            let r = ui
-                .add(egui::DragValue::new(&mut frame).range(settings.start..=settings.end))
-                .labelled_by(l.id);
-            if r.changed() {
-                cmds.push(("timeline.set_frame", json!({"frame": frame})));
-            }
-            ui.weak(crate::timeline::time_label(frame, self.state.doc.scene()));
-            ui.separator();
-            crate::timeline::range_controls(ui, self.state.doc.scene(), &mut cmds);
         });
-        let keys = key_frames(self.state.doc.scene(), &ids);
-        crate::timeline::strip(
-            ui,
-            self.state.doc.scene(),
-            self.state.timeline.current,
-            &keys,
-            &mut cmds,
-        );
-        for c in cmds {
-            self.run(c);
+        for cmd in cmds {
+            self.run(cmd);
+        }
+    }
+
+    fn timeline_ui(&mut self, ui: &mut Ui) {
+        self.animation_transport(ui);
+        let ids: Vec<_> = self.state.selection.nodes.iter().copied().collect();
+        let scene = self.state.doc.scene();
+        let keys = key_frames(scene, &ids);
+        let mut cmds = Vec::new();
+        crate::timeline::strip(ui, scene, self.state.timeline.current, &keys, &mut cmds);
+        ui.horizontal_wrapped(|ui| crate::timeline::range_controls(ui, scene, &mut cmds));
+        for cmd in cmds {
+            self.run(cmd);
         }
     }
 }

@@ -27,6 +27,21 @@ impl MixMode {
 pub enum IrNode {
     Color([f64; 3]),
     Texture(String),
+    Fresnel {
+        ior: NodeIx,
+    },
+    Ramp {
+        a: NodeIx,
+        b: NodeIx,
+        position: NodeIx,
+        start: NodeIx,
+        end: NodeIx,
+    },
+    Luminance(NodeIx),
+    Component {
+        input: NodeIx,
+        index: usize,
+    },
     Scale {
         input: NodeIx,
         factor: f64,
@@ -37,6 +52,36 @@ pub enum IrNode {
         mode: MixMode,
         strength: f64,
     },
+}
+
+pub(crate) fn ramp_factor(position: f64, start: f64, end: f64) -> f64 {
+    if start == end {
+        f64::from(position >= end)
+    } else {
+        ((position - start) / (end - start)).clamp(0.0, 1.0)
+    }
+}
+
+pub(crate) const LUMA: [f64; 3] = [0.2126, 0.7152, 0.0722];
+
+pub(crate) fn fresnel(ior: f64, normal: [f64; 3], view: [f64; 3]) -> f64 {
+    let ior = ior.clamp(1.0, 10.0);
+    let f0 = ((ior - 1.0) / (ior + 1.0)).powi(2);
+    let length2 = |v: [f64; 3]| v.into_iter().map(|x| x * x).sum::<f64>();
+    let lengths = (length2(normal) * length2(view)).sqrt();
+    let cosine = if lengths > 1e-8 {
+        (normal
+            .into_iter()
+            .zip(view)
+            .map(|(a, b)| a * b)
+            .sum::<f64>()
+            .abs()
+            / lengths)
+            .min(1.0)
+    } else {
+        1.0
+    };
+    f0 + (1.0 - f0) * (1.0 - cosine).powi(5)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,6 +184,9 @@ pub struct Outputs {
     pub normal: Option<NormalMap>,
     pub displacement: Option<Displacement>,
     pub diffusion: Option<Diffusion>,
+    /// Per-hit overrides emitted by node materials.
+    pub roughness_input: Option<NodeIx>,
+    pub metallic_input: Option<NodeIx>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -199,7 +247,7 @@ pub fn mix(base: [f64; 3], top: [f64; 3], mode: MixMode, strength: f64) -> [f64;
 }
 
 impl ShadingGraph {
-    fn push(&mut self, n: IrNode) -> NodeIx {
+    pub(crate) fn push(&mut self, n: IrNode) -> NodeIx {
         self.nodes.push(n);
         self.nodes.len() - 1
     }
@@ -241,7 +289,25 @@ impl ShadingGraph {
 
     /// Evaluates node `ix` (M3 rule 8).
     pub fn eval(&self, ix: NodeIx, sampler: &dyn TextureSampler, ctx: &ShadeCtx) -> [f64; 3] {
+        let at = |input: NodeIx| self.eval(input, sampler, ctx);
         match &self.nodes[ix] {
+            IrNode::Fresnel { ior } => [fresnel(at(*ior)[0], ctx.normal, ctx.view); 3],
+            IrNode::Ramp {
+                a,
+                b,
+                position,
+                start,
+                end,
+            } => mix(
+                at(*a),
+                at(*b),
+                MixMode::Normal,
+                ramp_factor(at(*position)[0], at(*start)[0], at(*end)[0]),
+            ),
+            IrNode::Luminance(input) => {
+                [at(*input).into_iter().zip(LUMA).map(|(a, b)| a * b).sum(); 3]
+            }
+            IrNode::Component { input, index } => [at(*input)[*index]; 3],
             IrNode::Color(c) => *c,
             IrNode::Texture(name) => sampler.sample(name, ctx),
             IrNode::Scale { input, factor } => self.eval(*input, sampler, ctx).map(|v| v * factor),

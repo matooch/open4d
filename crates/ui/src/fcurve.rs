@@ -16,8 +16,8 @@ use crate::fcurve_logic::{self as logic, KeyId, KeySelection, RowKind, TimeView,
 use crate::object_manager::Cmd;
 use crate::state::EditorState;
 use crate::theme::Theme;
+pub const LIST_W: f32 = crate::timeline::MAX_TRACK_WIDTH;
 
-pub const LIST_W: f32 = 170.0;
 const KEY_R: f32 = 4.5;
 const HANDLE_R: f32 = 4.0;
 const SPEED_GRIP_X: f32 = 12.0;
@@ -47,6 +47,7 @@ pub struct ValueGraph {
     pub mode: GraphMode,
     alternate_vview: ValueView,
     hidden: BTreeSet<(u64, String)>,
+    navigation: crate::navigation::CanvasNavigation,
     drag: Option<(DragKind, Pos2, Option<KeyId>)>,
     pub canvas: Option<Rect>,
 }
@@ -168,6 +169,7 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
     let theme = Theme::current(ui.ctx());
     let fps = f64::from(st.doc.scene().settings().fps);
     let current = st.timeline.current as f64;
+    use crate::icons::action;
     let mut curves = curves(st, &g.hidden, g.mode == GraphMode::Speed);
     let (mut frame_all, mut frame_sel) = (false, false);
 
@@ -181,9 +183,24 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
             g.drag = None;
             curves = self::curves(st, &g.hidden, speed);
         }
-        frame_all = ui.button("Frame all").clicked();
-        frame_sel = ui.button("Frame selected").clicked();
-        ui.checkbox(&mut g.tview.snap, "Snap");
+        frame_all = action(
+            ui,
+            "frame",
+            "Frame all",
+            "Fit all visible animation curves",
+            None,
+        )
+        .clicked();
+        frame_sel = action(
+            ui,
+            "center",
+            "Frame selected",
+            "Fit the selected keys in the graph",
+            None,
+        )
+        .clicked();
+        ui.checkbox(&mut g.tview.snap, "Snap")
+            .on_hover_text("Snap key timing to whole frames");
         ui.add_enabled(!speed, egui::Checkbox::new(&mut g.normalised, "Normalised"));
         ui.separator();
         let has = !g.selection.keys.is_empty();
@@ -216,7 +233,11 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
         } else {
             value_presets.as_slice()
         } {
-            if ui.add_enabled(has, egui::Button::new(label)).clicked() {
+            if ui
+                .add_enabled(has, egui::Button::new(label))
+                .on_hover_text("Apply to the selected keys")
+                .clicked()
+            {
                 for k in &g.selection.keys {
                     cmds.push((
                         "key.set_tangent",
@@ -232,7 +253,11 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
             ("Weighted", None, Some(true)),
             ("Unweighted", None, Some(false)),
         ] {
-            if ui.add_enabled(has, egui::Button::new(label)).clicked() {
+            if ui
+                .add_enabled(has, egui::Button::new(label))
+                .on_hover_text("Apply to the selected keys")
+                .clicked()
+            {
                 for k in &g.selection.keys {
                     let mut a = json!({"node": k.node, "track": k.track, "frame": k.frame,
                                        "preset": "user"});
@@ -287,9 +312,31 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
     let speed = g.mode == GraphMode::Speed;
     let normalised = g.normalised && !speed;
 
+    let width = ui.available_width();
+    let tracks_width = crate::timeline::track_column_width(width);
+    let ruler_height = crate::timeline::EDITOR_RULER_HEIGHT;
+    let (tracks_header, ruler, scrub) = ui
+        .horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 0.0;
+            let (tracks, _) =
+                ui.allocate_exact_size(vec2(tracks_width, ruler_height), Sense::hover());
+            let (ruler, scrub) = ui.allocate_exact_size(
+                vec2(width - tracks_width, ruler_height),
+                Sense::click_and_drag(),
+            );
+            (tracks, ruler, scrub)
+        })
+        .inner;
+    scrub.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Slider, true, "Curve frame ruler"));
+    if (scrub.clicked() || scrub.dragged())
+        && let Some(pos) = scrub.interact_pointer_pos()
+    {
+        let frame = g.tview.to_frame(pos.x, ruler.left()).round() as i64;
+        cmds.push(("timeline.set_frame", json!({"frame": frame})));
+    }
     let avail = ui.available_rect_before_wrap();
     let (outer, resp) = ui.allocate_exact_size(
-        vec2(avail.width(), avail.height().clamp(160.0, 420.0)),
+        vec2(avail.width(), avail.height().clamp(84.0, 550.0)),
         Sense::click_and_drag(),
     );
     resp.widget_info(|| {
@@ -299,7 +346,10 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
             if speed { "Speed graph" } else { "Value graph" },
         )
     });
-    let canvas = Rect::from_min_max(Pos2::new(outer.left() + LIST_W, outer.top()), outer.max);
+    let canvas = Rect::from_min_max(
+        Pos2::new(outer.left() + tracks_width, outer.top()),
+        outer.max,
+    );
     let painter = ui.painter_at(outer);
     painter.rect_filled(outer, 0.0, theme.panel);
 
@@ -307,9 +357,27 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
         frame(&mut g, &curves, st, frame_sel, canvas);
     }
 
+    let tracks = Rect::from_min_max(outer.min, Pos2::new(canvas.left(), outer.bottom()));
+    painter.rect_filled(tracks, 0.0, theme.window);
+    painter.vline(
+        canvas.left(),
+        outer.y_range(),
+        Stroke::new(1.0, theme.divider),
+    );
+    let left = ui.painter_at(tracks_header);
+    left.rect_filled(tracks_header, 0.0, theme.input);
+    left.text(
+        tracks_header.left_center() + vec2(6.0, 0.0),
+        Align2::LEFT_CENTER,
+        "Tracks",
+        FontId::proportional(12.0),
+        theme.weak_text,
+    );
+    crate::timeline::paint_editor_ruler(ui, ruler, canvas, &g.tview, current);
+
     // curve list
     for (i, c) in curves.iter().enumerate() {
-        painter.text(
+        ui.painter_at(tracks).text(
             Pos2::new(outer.left() + 6.0, outer.top() + 4.0 + i as f32 * 16.0),
             Align2::LEFT_TOP,
             format!(
@@ -342,12 +410,15 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
         );
         v += step;
     }
-    let cx = g.tview.to_x(current, canvas.left());
-    painter.line_segment(
-        [Pos2::new(cx, canvas.top()), Pos2::new(cx, canvas.bottom())],
-        Stroke::new(1.0, theme.time),
-    );
-
+    if curves.is_empty() {
+        painter.text(
+            canvas.center(),
+            Align2::CENTER_CENTER,
+            "No visible animation curves",
+            FontId::proportional(12.0),
+            theme.weak_text,
+        );
+    }
     // curves
     let to_screen = |c: &Curve, frame: f64, value: f64| {
         Pos2::new(
@@ -440,6 +511,23 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
     }
 
     // interaction
+    use crate::navigation::CanvasMotion;
+    let (navigating, motion) = g.navigation.read(&resp);
+    if let Some(motion) = motion {
+        match motion {
+            CanvasMotion::Pan(delta) => {
+                g.tview.pan(delta.x);
+                g.vview.pan(delta.y);
+            }
+            CanvasMotion::Zoom { anchor, factor } => {
+                g.tview
+                    .zoom_about(anchor.x, canvas.left(), f64::from(factor));
+                g.vview
+                    .zoom_about(anchor.y, canvas.top(), f64::from(factor));
+            }
+        }
+        ui.ctx().request_repaint();
+    }
     let mods = ui.input(|i| i.modifiers);
     let handle_hit = |pos: Pos2| {
         grips
@@ -449,7 +537,8 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
     };
     let key_hit =
         |pos: Pos2| logic::hit_test(&keys, [pos.x, pos.y], KEY_R + 3.0).map(|i| keys[i].0.clone());
-    if resp.drag_started_by(egui::PointerButton::Primary)
+    if !navigating
+        && resp.drag_started_by(egui::PointerButton::Primary)
         && let Some(pos) = ui.input(|i| i.pointer.press_origin())
         && pos.x >= canvas.left()
     {
@@ -546,7 +635,8 @@ pub fn value_graph_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<Cmd> {
             }
             g.drag = None;
         }
-    } else if resp.clicked()
+    } else if !navigating
+        && resp.clicked()
         && let Some(pos) = resp.interact_pointer_pos()
         && pos.x >= canvas.left()
     {

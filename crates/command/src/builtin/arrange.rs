@@ -5,7 +5,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use forge_core::transform::{POS, ROT, SCALE, Transform, hpb_from_rotation, rotation_part};
-use forge_core::{EditError, NodeId, Track, Tx, Value};
+use forge_core::{Document, EditError, NodeId, Scene, Track, Tx, Value};
 use forge_modeling::{
     Settings, ToolDesc, arrange_positions, object_descs, randomize_draw, step_of,
 };
@@ -186,16 +186,22 @@ fn points_inside(v: &Value, inside: &BTreeSet<NodeId>) -> bool {
     }
 }
 
-fn remap(v: &Value, map: &BTreeMap<NodeId, NodeId>) -> Value {
-    let to = |t: &NodeId| map.get(t).copied().unwrap_or(*t);
+fn remap(v: &Value, map: &BTreeMap<NodeId, NodeId>, scene: &Scene) -> Value {
+    let to = |t: &NodeId| {
+        map.get(t)
+            .copied()
+            .or_else(|| scene.contains(*t).then_some(*t))
+    };
     match v {
-        Value::Link(Some(t)) => Value::Link(Some(to(t))),
-        Value::LinkList(l) => Value::LinkList(l.iter().map(to).collect()),
+        Value::Link(Some(t)) => Value::Link(to(t)),
+        Value::LinkList(l) => Value::LinkList(l.iter().filter_map(to).collect()),
         Value::LinkRows(rows) => Value::LinkRows(
             rows.iter()
-                .map(|r| forge_core::LinkRow {
-                    target: to(&r.target),
-                    ..r.clone()
+                .filter_map(|r| {
+                    Some(forge_core::LinkRow {
+                        target: to(&r.target)?,
+                        ..r.clone()
+                    })
                 })
                 .collect(),
         ),
@@ -204,18 +210,22 @@ fn remap(v: &Value, map: &BTreeMap<NodeId, NodeId>) -> Value {
 }
 
 struct Copier<'a> {
+    source: &'a Scene,
     inside: &'a BTreeSet<NodeId>,
     map: BTreeMap<NodeId, NodeId>,
     pending: Vec<Pending>,
     /// Skip the transform tracks of the root copy: its placement is the step.
-    root: NodeId,
+    root: Option<NodeId>,
 }
 
 impl Copier<'_> {
     fn fill(&mut self, tx: &mut Tx, src: NodeId, new: NodeId) -> Result<(), EditError> {
-        let node = tx.scene().node(src).ok_or(EditError::UnknownNode(src))?;
+        let node = self.source.node(src).ok_or(EditError::UnknownNode(src))?;
         let (name, params, tracks) = (node.name.clone(), node.params.clone(), node.tracks.clone());
         tx.rename(new, &name)?;
+        for desc in &node.user_data {
+            tx.add_user_data(new, desc.clone())?;
+        }
         for (key, value) in params {
             if points_inside(&value, self.inside) {
                 self.pending.push(Pending {
@@ -224,10 +234,10 @@ impl Copier<'_> {
                     value,
                 });
             } else {
-                tx.set_param(new, &key, value)?;
+                tx.set_param(new, &key, remap(&value, &self.map, tx.scene()))?;
             }
         }
-        let skip_transform = src == self.root;
+        let skip_transform = Some(src) == self.root;
         for (key, track) in tracks {
             if skip_transform && key.starts_with(forge_core::transform::PREFIX) {
                 continue;
@@ -245,7 +255,7 @@ impl Copier<'_> {
         parent: Option<NodeId>,
         index: Option<usize>,
     ) -> Result<NodeId, EditError> {
-        let node = tx.scene().node(src).ok_or(EditError::UnknownNode(src))?;
+        let node = self.source.node(src).ok_or(EditError::UnknownNode(src))?;
         let (type_id, tags, children) = (
             node.type_id.clone(),
             node.tags.clone(),
@@ -254,8 +264,8 @@ impl Copier<'_> {
         let new = tx.create(&type_id, parent, index)?;
         self.fill(tx, src, new)?;
         for tag in tags {
-            let t_type = tx
-                .scene()
+            let t_type = self
+                .source
                 .node(tag)
                 .ok_or(EditError::UnknownNode(tag))?
                 .type_id
@@ -271,9 +281,95 @@ impl Copier<'_> {
 
     fn finish(self, tx: &mut Tx) -> Result<(), EditError> {
         for p in self.pending {
-            tx.set_param(p.node, &p.key, remap(&p.value, &self.map))?;
+            tx.set_param(p.node, &p.key, remap(&p.value, &self.map, tx.scene()))?;
         }
         Ok(())
+    }
+}
+
+/// An in-document snapshot of selected hierarchy branches.
+pub struct ObjectClipboard {
+    source: Scene,
+    roots: Vec<NodeId>,
+}
+
+impl ObjectClipboard {
+    pub fn capture(source: &Scene, ids: &[NodeId]) -> Option<Self> {
+        let wanted: BTreeSet<_> = top_level(source, ids).into_iter().collect();
+        if wanted.is_empty() {
+            return None;
+        }
+        let roots = source
+            .roots()
+            .iter()
+            .flat_map(|id| std::iter::once(*id).chain(source.descendants(*id)))
+            .filter(|id| wanted.contains(id))
+            .collect();
+        Some(Self {
+            source: source.clone(),
+            roots,
+        })
+    }
+
+    /// Paste into the selected object, or paste duplicates after their sources.
+    pub fn paste(
+        &self,
+        doc: &mut Document,
+        active: Option<NodeId>,
+        adjacent: bool,
+    ) -> Result<Vec<NodeId>, EditError> {
+        let inside = self
+            .roots
+            .iter()
+            .flat_map(|id| subtree_ids(&self.source, *id))
+            .collect();
+        doc.transact(
+            if adjacent {
+                "Duplicate"
+            } else {
+                "Paste Objects"
+            },
+            |tx| {
+                let mut copier = Copier {
+                    source: &self.source,
+                    inside: &inside,
+                    map: BTreeMap::new(),
+                    pending: Vec::new(),
+                    root: None,
+                };
+                let parent = active.and_then(|id| {
+                    tx.scene()
+                        .node(id)
+                        .and_then(|node| if node.is_tag() { node.host } else { Some(id) })
+                });
+                let mut created = Vec::new();
+                for &src in &self.roots {
+                    let (parent, index) = if adjacent {
+                        let parent = self.source.node(src).and_then(|n| n.parent);
+                        let index = siblings(tx.scene(), parent)
+                            .iter()
+                            .position(|id| *id == src)
+                            .ok_or(EditError::UnknownNode(src))?;
+                        (parent, Some(index + 1))
+                    } else {
+                        (parent, None)
+                    };
+                    let new = copier.copy(tx, src, parent, index)?;
+                    if adjacent {
+                        let base = &self
+                            .source
+                            .node(src)
+                            .ok_or(EditError::UnknownNode(src))?
+                            .name;
+                        let name = free_name(tx.scene(), base, &BTreeSet::new());
+                        tx.rename(new, &name)?;
+                    }
+                    created.push(new);
+                }
+                copier.finish(tx)?;
+                Ok(created)
+            },
+        )
     }
 }
 
@@ -315,15 +411,17 @@ fn duplicate(
                 let name = scene.node(*src).map(|n| n.name.clone()).unwrap_or_default();
                 (parent, index, name, t)
             };
-            let inside = subtree_ids(tx.scene(), *src);
+            let source = tx.scene().clone();
+            let inside = subtree_ids(&source, *src);
             let mut used = BTreeSet::new();
             for k in 1..=copies {
                 let step = step_of(k, s);
                 let mut copier = Copier {
+                    source: &source,
                     inside: &inside,
                     map: BTreeMap::new(),
                     pending: Vec::new(),
-                    root: *src,
+                    root: Some(*src),
                 };
                 let new = copier.copy(tx, *src, parent, Some(index + k))?;
                 copier.finish(tx)?;

@@ -71,6 +71,9 @@ pub struct EditorState {
     pub browser_panel: BrowserPanel,
     /// The Node Editor's tag, canvas and cache (docs/specs/UI.md §17).
     pub node_editor: NodeEditorState,
+    /// Material shown in the inspector without replacing the scene selection.
+    pub(crate) inspect_material: Option<NodeId>,
+    pub(crate) object_clipboard: Option<forge_command::ObjectClipboard>,
     /// The headless GPU device `viewport.screenshot` renders with (RPC.md §10.2).
     pub offscreen: OffscreenGpu,
     /// The active modeling tool and its values (docs/specs/MODELING.md §0.2).
@@ -154,6 +157,8 @@ impl EditorState {
             weight_panel: WeightPanel::default(),
             browser_panel: BrowserPanel::default(),
             node_editor: NodeEditorState::default(),
+            inspect_material: None,
+            object_clipboard: None,
             offscreen: OffscreenGpu::default(),
             tool: None,
             keys: KeyMapState::default(),

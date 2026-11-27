@@ -15,7 +15,7 @@ pub fn show(ui: &mut egui::Ui, cx: &Cx, row: &AttrRow) -> Option<Edit> {
     if row.mixed {
         te = te.hint_text("mixed");
     }
-    let r = ui.add(te).labelled_by(cx.label);
+    let r = super::text_field(ui, te).labelled_by(cx.label);
     r.changed().then(|| Edit {
         value: json!(buf),
         component: None,

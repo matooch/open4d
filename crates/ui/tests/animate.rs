@@ -807,6 +807,8 @@ fn clicking_record_shows_the_key_markers_in_the_attributes_panel() {
     st.selection.click(id);
     let mut h = harness_with(st);
     h.run();
+    h.get_by_label("Transform").click();
+    h.run();
     assert!(h.query_by_label("Position keyed").is_none());
     h.get_by_label("Record").click();
     h.run();

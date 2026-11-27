@@ -11,6 +11,7 @@ pub mod schema;
 mod state;
 mod timeline;
 
+pub use builtin::arrange::ObjectClipboard;
 pub use builtin::timeline_state;
 pub use builtin::{display_to_stored, param_value_from_json, register_editor_commands};
 pub use context::CommandContext;

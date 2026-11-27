@@ -1,7 +1,8 @@
 //! Attribute panel rows derived from parameter descriptors (docs/specs/UI.md §4).
 
 use forge_core::{
-    Category, Document, EditError, EnumOption, NodeId, ParamKind, Scene, Unit, Value,
+    Category, Document, EditError, EnumOption, NodeId, NodeType, ParamDesc, ParamKind, Scene, Unit,
+    Value,
 };
 
 use crate::animate::{AnimCtx, write_param};
@@ -140,7 +141,7 @@ pub fn split_group(key: &str) -> (&str, &str) {
 }
 
 impl AttributeView {
-    /// Tab names in first-appearance order.
+    /// Basic and Transform lead. Other tabs follow descriptor order, with User Data last.
     pub fn tabs(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for (key, _) in &self.groups {
@@ -149,7 +150,23 @@ impl AttributeView {
                 out.push(t.to_string());
             }
         }
+        out.sort_by_key(|tab| match tab.as_str() {
+            "Basic" => 0,
+            "Transform" => 1,
+            "Effectors" => 3,
+            "User Data" => 4,
+            _ => 2,
+        });
         out
+    }
+
+    /// The initial page shows type settings when available.
+    pub(crate) fn default_tab(tabs: &[String]) -> String {
+        tabs.iter()
+            .find(|tab| !matches!(tab.as_str(), "Transform" | "User Data"))
+            .or_else(|| tabs.first())
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// The groups of `tab` as (group name, rows).
@@ -225,10 +242,53 @@ fn value_of(scene: &Scene, id: NodeId, desc: &forge_core::ParamDesc) -> Value {
         .unwrap_or_else(|| desc.default.clone())
 }
 
+/// Resolve legacy groups for the inspector only. The descriptors remain the source of
+/// row order and keep their existing IDs and grouping for script and registry consumers.
+fn inspector_group(ty: &NodeType, desc: &ParamDesc, custom: bool) -> String {
+    let group = desc.ui.group.as_str();
+    if group
+        .split_once('/')
+        .is_some_and(|(tab, section)| !tab.is_empty() && !section.is_empty())
+    {
+        return group.to_owned();
+    }
+    let section = if group.is_empty() {
+        DEFAULT_GROUP
+    } else {
+        group
+    };
+    let tab = if custom {
+        "User Data"
+    } else if desc.id.starts_with(forge_core::transform::PREFIX) {
+        "Transform"
+    } else if !ty.id.starts_with("forge.") || group == "Basic" {
+        DEFAULT_TAB
+    } else {
+        match (ty.category, ty.id.as_str(), group) {
+            (_, "forge.cloner" | "forge.matrix", "Transform") => "Clone Transform",
+            (_, "forge.cloner" | "forge.matrix" | "forge.fracture", _)
+                if desc.id == "effectors" =>
+            {
+                "Effectors"
+            }
+            (_, "forge.camera" | "forge.light", _) | (Category::Material, _, _) => section,
+            (Category::Field, _, _) if desc.id == "color" => "Color",
+            (Category::Field, _, "Remapping") => "Remapping",
+            (Category::Field, _, _) => "Field",
+            (Category::Effector, _, _) if desc.id == "fields" => "Fields",
+            (Category::Effector, _, "Parameter" | "Color" | "Weight" | "Deformer") => section,
+            (Category::Effector, _, _) => "Effector",
+            _ => "Object",
+        }
+    };
+    format!("{tab}/{section}")
+}
+
 fn push_row(
     scene: &Scene,
     id: NodeId,
-    desc: &forge_core::ParamDesc,
+    desc: &ParamDesc,
+    group: &str,
     others: &[NodeId],
     groups: &mut Vec<(String, Vec<AttrRow>)>,
 ) {
@@ -260,7 +320,7 @@ fn push_row(
         step: desc.ui.step,
         animatable: desc.animatable,
     };
-    push(groups, &desc.ui.group, row);
+    push(groups, group, row);
 }
 
 /// The attribute view of several objects at once (multi-edit). The first id is the active
@@ -289,7 +349,14 @@ pub fn attribute_rows_multi(scene: &Scene, ids: &[NodeId]) -> Option<AttributeVi
                 if !common {
                     continue;
                 }
-                push_row(scene, id, desc, &others, &mut groups);
+                push_row(
+                    scene,
+                    id,
+                    desc,
+                    &inspector_group(ty, desc, false),
+                    &others,
+                    &mut groups,
+                );
             }
             for desc in node.user_data.iter().filter(|d| !d.ui.hidden) {
                 let common = others.iter().all(|o| {
@@ -302,7 +369,14 @@ pub fn attribute_rows_multi(scene: &Scene, ids: &[NodeId]) -> Option<AttributeVi
                 if !common {
                     continue;
                 }
-                push_row(scene, id, desc, &others, &mut groups);
+                push_row(
+                    scene,
+                    id,
+                    desc,
+                    &inspector_group(ty, desc, true),
+                    &others,
+                    &mut groups,
+                );
             }
         }
         None => {

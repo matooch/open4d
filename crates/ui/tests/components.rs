@@ -633,10 +633,10 @@ fn palette_buttons_switch_the_mode() {
     let (st, id) = setup(EditMode::Model);
     let mut h = harness(st);
     for (label, mode) in [
-        (". Pts", EditMode::Points),
-        ("/ Edg", EditMode::Edges),
-        ("\\ Pol", EditMode::Polys),
-        ("[] Objects", EditMode::Model),
+        ("Point Mode (tool rail)", EditMode::Points),
+        ("Edge Mode (tool rail)", EditMode::Edges),
+        ("Polygon Mode (tool rail)", EditMode::Polys),
+        ("Object Mode (tool rail)", EditMode::Model),
     ] {
         h.get_by_label(label).click();
         h.run();
@@ -662,7 +662,12 @@ fn there_is_exactly_one_widget_per_mode() {
     let (st, _) = setup(EditMode::Points);
     let h = harness(st);
     // one button per mode, all in the palette ...
-    for label in [". Pts", "/ Edg", "\\ Pol", "[] Objects"] {
+    for label in [
+        "Point Mode (tool rail)",
+        "Edge Mode (tool rail)",
+        "Polygon Mode (tool rail)",
+        "Object Mode (tool rail)",
+    ] {
         assert_eq!(
             h.query_all_by_role_and_label(Role::Button, label).count(),
             1,
@@ -693,9 +698,21 @@ fn there_is_exactly_one_widget_per_mode() {
 
 #[test]
 fn shortcuts_and_menus_act_on_the_current_set() {
+    use egui_kittest::kittest::NodeT;
+
     let (st, id) = setup(EditMode::Points);
     let mut h = harness(st);
     let points = |h: &Harness<'_, Editor>| sel(&h.state().state, id, EditMode::Points);
+    let click_edit_action = |h: &Harness<'_, Editor>, label| {
+        h.get_all_by_label_contains(label)
+            .find(|node| {
+                node.accesskit_node()
+                    .label()
+                    .is_some_and(|name| !name.ends_with("(tool rail)"))
+            })
+            .unwrap()
+            .click();
+    };
 
     h.key_press_modifiers(Modifiers::COMMAND, Key::A);
     h.run();
@@ -706,17 +723,17 @@ fn shortcuts_and_menus_act_on_the_current_set() {
 
     h.get_by_label("Edit").click();
     h.run();
-    h.get_by_label_contains("Select All").click();
+    click_edit_action(&h, "Select All");
     h.run();
     assert_eq!(points(&h).len(), 8);
     h.get_by_label("Edit").click();
     h.run();
-    h.get_by_label_contains("Invert Selection").click();
+    click_edit_action(&h, "Invert Selection");
     h.run();
     assert!(points(&h).is_empty());
     h.get_by_label("Edit").click();
     h.run();
-    h.get_by_label_contains("Deselect All").click();
+    click_edit_action(&h, "Deselect All");
     h.run();
 
     h.state_mut()
@@ -728,12 +745,12 @@ fn shortcuts_and_menus_act_on_the_current_set() {
         .unwrap();
     h.get_by_label("Select").click();
     h.run();
-    h.get_by_label_contains("Grow Selection").click();
+    h.get_by_label("Grow Selection").click();
     h.run();
     assert_eq!(points(&h).len(), 4);
     h.get_by_label("Select").click();
     h.run();
-    h.get_by_label_contains("Shrink Selection").click();
+    h.get_by_label("Shrink Selection").click();
     h.run();
     assert_eq!(points(&h), set(&[0]));
 }

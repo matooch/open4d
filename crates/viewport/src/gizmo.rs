@@ -9,12 +9,16 @@ use crate::camera::{Camera, Projection};
 use crate::snap::{line_param_closest_to_ray, ray_plane, snap_scalar};
 
 const CENTER_PX: f64 = 8.0;
-const AXIS_TOL_PX: f64 = 6.0;
+const AXIS_TOL_PX: f64 = 10.0;
 const PLANE_LO: f64 = 0.2;
 const PLANE_HI: f64 = 0.45;
 /// Handles seen (nearly) edge-on are not pickable.
 const MIN_PLANE_AREA_PX: f64 = 25.0;
 const MIN_AXIS_LEN_PX: f64 = 6.0;
+const CONE_HEIGHT: f64 = 0.16;
+const CONE_RADIUS: f64 = 0.058;
+const CONE_SEGMENTS: usize = 16;
+const CUBE_HALF: f64 = 0.06;
 /// Polyline resolution of rotate rings.
 pub const RING_SEGMENTS: usize = 64;
 
@@ -106,7 +110,7 @@ impl Default for Gizmo {
         Gizmo {
             origin: DVec3::ZERO,
             mode: GizmoMode::Translate,
-            size_px: 100.0,
+            size_px: 120.0,
             axes: [DVec3::X, DVec3::Y, DVec3::Z],
         }
     }
@@ -149,6 +153,34 @@ fn in_convex_quad(p: DVec2, q: [DVec2; 4]) -> bool {
     sides.iter().all(|s| *s >= 0.0) || sides.iter().all(|s| *s <= 0.0)
 }
 
+pub(crate) struct AxisTip {
+    pub inside: DVec3,
+    pub triangles: Vec<[DVec3; 3]>,
+}
+
+fn inside_triangle(cursor: DVec2, [a, b, c]: [DVec2; 3]) -> bool {
+    let area = (b - a).perp_dot(c - a);
+    if area.abs() < 1e-6 {
+        return false;
+    }
+    let sign = area.signum();
+    [(a, b), (b, c), (c, a)]
+        .iter()
+        .all(|&(from, to)| sign * (to - from).perp_dot(cursor - from) >= 0.0)
+}
+
+impl AxisTip {
+    fn hit(&self, cursor: DVec2, screen: impl Fn(DVec3) -> Option<DVec2>) -> bool {
+        self.triangles.iter().any(|face| {
+            if let [Some(a), Some(b), Some(c)] = face.map(&screen) {
+                inside_triangle(cursor, [a, b, c])
+            } else {
+                false
+            }
+        })
+    }
+}
+
 impl Gizmo {
     pub fn axis(&self, a: Axis) -> DVec3 {
         self.axes[a.index()]
@@ -157,6 +189,75 @@ impl Gizmo {
     /// World length of an axis handle (and the rotate ring radius).
     pub fn world_length(&self, cam: &Camera, viewport_h: f64) -> f64 {
         self.size_px * world_per_pixel_at(cam, self.origin, viewport_h)
+    }
+
+    pub(crate) fn shaft_end(&self, axis: Axis, l: f64) -> DVec3 {
+        let tip_size = match self.mode {
+            GizmoMode::Translate => CONE_HEIGHT,
+            GizmoMode::Scale => CUBE_HALF,
+            GizmoMode::Rotate => 0.0,
+        };
+        self.origin + self.axis(axis) * (l * (1.0 - tip_size))
+    }
+
+    /// Solid cap geometry in the gizmo's frame, used for both drawing and hit testing.
+    pub(crate) fn axis_tip(&self, axis: Axis, l: f64) -> Option<AxisTip> {
+        let index = axis.index();
+        let a = self.axis(axis);
+        let [u, v] = [self.axes[(index + 1) % 3], self.axes[(index + 2) % 3]];
+        let end = self.origin + a * l;
+        match self.mode {
+            GizmoMode::Translate => {
+                let base = self.shaft_end(axis, l);
+                let ring: [DVec3; CONE_SEGMENTS] = std::array::from_fn(|i| {
+                    let angle = TAU * i as f64 / CONE_SEGMENTS as f64;
+                    base + (u * angle.cos() + v * angle.sin()) * (l * CONE_RADIUS)
+                });
+                let mut triangles = Vec::with_capacity(CONE_SEGMENTS * 2);
+                for i in 0..CONE_SEGMENTS {
+                    let next = (i + 1) % CONE_SEGMENTS;
+                    triangles.push([ring[i], ring[next], end]);
+                    triangles.push([base, ring[next], ring[i]]);
+                }
+                Some(AxisTip {
+                    inside: base.lerp(end, 0.25),
+                    triangles,
+                })
+            }
+            GizmoMode::Scale => {
+                let half = l * CUBE_HALF;
+                let mut triangles = Vec::with_capacity(12);
+                for (normal, across, up) in [(a, u, v), (u, v, a), (v, a, u)] {
+                    let (across, up) = (across * half, up * half);
+                    for sign in [-1.0, 1.0] {
+                        let face = end + normal * (half * sign);
+                        let [p, q, r, s] = [
+                            face - across - up,
+                            face + across - up,
+                            face + across + up,
+                            face - across + up,
+                        ];
+                        triangles.extend([[p, q, r], [p, r, s]]);
+                    }
+                }
+                Some(AxisTip {
+                    inside: end,
+                    triangles,
+                })
+            }
+            GizmoMode::Rotate => None,
+        }
+    }
+
+    pub(crate) fn projected_axis_end(
+        &self,
+        axis: Axis,
+        l: f64,
+        origin: DVec2,
+        project: impl Fn(DVec3) -> Option<DVec2>,
+    ) -> Option<DVec2> {
+        let end = project(self.origin + self.axis(axis) * l)?;
+        ((end - origin).length() >= MIN_AXIS_LEN_PX).then_some(end)
     }
 
     /// World-space corners of a plane handle.
@@ -218,12 +319,17 @@ impl Gizmo {
         Axis::ALL
             .iter()
             .filter_map(|&axis| {
-                let end = screen(self.origin + self.axis(axis) * l)?;
-                if (end - o).length() < MIN_AXIS_LEN_PX {
-                    return None; // pointing at the camera
-                }
+                let end = self.projected_axis_end(axis, l, o, screen)?;
                 let d = seg_distance(cursor, o, end);
-                (d <= AXIS_TOL_PX).then_some((d, axis))
+                if d <= AXIS_TOL_PX
+                    || self
+                        .axis_tip(axis, l)
+                        .is_some_and(|tip| tip.hit(cursor, screen))
+                {
+                    Some((d, axis))
+                } else {
+                    None
+                }
             })
             .min_by(|a, b| a.0.total_cmp(&b.0))
             .map(|(_, axis)| Handle::Axis(axis))

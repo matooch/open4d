@@ -392,7 +392,7 @@ fn tabs_split_the_groups_and_switch_on_click() {
     let mut s = state();
     let a = make(&mut s, "am.thing");
     let view = attribute_rows_multi(s.doc.scene(), &[a]).unwrap();
-    assert_eq!(view.tabs(), vec!["Basic", "Extra"]);
+    assert_eq!(view.tabs(), vec!["Basic", "Transform", "Extra"]);
     let names: Vec<&str> = view.groups_of("Extra").iter().map(|g| g.0).collect();
     assert_eq!(names, vec!["Look", "Links"]);
     assert_eq!(split_group("Shape"), ("Basic", "Shape"));
@@ -404,6 +404,33 @@ fn tabs_split_the_groups_and_switch_on_click() {
     tab(&mut h, "Extra");
     assert!(h.query_by_label("Note").is_some());
     assert!(h.query_by_label("Angle").is_none());
+}
+
+#[test]
+fn built_in_objects_remember_inspector_tabs_per_type() {
+    let mut s = EditorState::new(Arc::new(forge_app::default_registry().unwrap()));
+    make(&mut s, "forge.sphere");
+    let mut h = harness(s);
+    h.run();
+    assert!(h.query_by_label("Radius").is_some());
+    assert!(h.query_all_by_label("Position").next().is_none());
+    tab(&mut h, "Transform");
+    assert!(h.query_all_by_label("Position").next().is_some());
+    assert!(h.query_by_label("Radius").is_none());
+
+    let cloner = make(&mut h.state_mut().state, "forge.cloner");
+    h.run();
+    let view = attribute_rows_multi(h.state().state.doc.scene(), &[cloner]).unwrap();
+    assert_eq!(
+        view.tabs(),
+        ["Transform", "Object", "Clone Transform", "Effectors"]
+    );
+    h.get_by_label("Effectors");
+    assert!(h.query_by_label("Clones").is_some());
+    make(&mut h.state_mut().state, "forge.sphere");
+    h.run();
+    assert!(h.query_all_by_label("Position").next().is_some());
+    assert!(h.query_by_label("Radius").is_none());
 }
 
 #[test]
@@ -670,19 +697,19 @@ fn scrub_modifiers_scale_the_step() {
     };
     let alt = Mods { alt: true, ..none };
     assert_eq!(scrub::factor(none), 1.0);
-    assert_eq!(scrub::factor(shift), 0.1);
+    assert_eq!(scrub::factor(shift), 10.0);
     assert_eq!(scrub::factor(ctrl), 10.0);
-    assert_eq!(scrub::factor(both), 1.0);
+    assert_eq!(scrub::factor(both), 100.0);
     assert_eq!(scrub::factor(alt), 1.0);
-    assert!((scrub::step(0.01, shift) - 0.001).abs() < 1e-15);
+    assert!((scrub::step(0.01, shift) - 0.1).abs() < 1e-15);
     assert!((scrub::step(0.01, ctrl) - 0.1).abs() < 1e-15);
     // egui divides by ten itself while Shift alone is held, so it gets the base speed
-    assert_eq!(scrub::drag_speed(0.01, shift), 0.01);
+    assert_eq!(scrub::drag_speed(0.01, shift), 1.0);
     assert_eq!(scrub::drag_speed(0.01, ctrl), 0.1);
     assert_eq!(scrub::drag_speed(0.01, none), 0.01);
     assert!((scrub::scrubbed(1.0, 10.0, 0.01, none) - 1.1).abs() < 1e-12);
     assert!((scrub::scrubbed(1.0, 10.0, 0.01, ctrl) - 2.0).abs() < 1e-12);
-    assert!((scrub::scrubbed(1.0, -10.0, 0.01, shift) - 0.99).abs() < 1e-12);
+    assert!((scrub::scrubbed(1.0, -10.0, 0.01, shift) - 0.0).abs() < 1e-12);
 }
 
 #[test]

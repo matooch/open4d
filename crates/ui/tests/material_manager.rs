@@ -178,3 +178,51 @@ fn the_panel_is_in_the_window_menu_list() {
     assert!(Panel::ALL.contains(&Panel::Materials));
     assert_eq!(Panel::Materials.title(), "Materials");
 }
+
+#[test]
+fn double_click_opens_the_material_editor_without_changing_object_selection() {
+    use egui::{Event, Modifiers, PointerButton};
+    use egui_kittest::{Harness, kittest::Queryable};
+    use forge_ui::{app::Editor, dock::Area};
+
+    for (name, ty) in [
+        ("Paint", forge_material::MATERIAL),
+        ("Coating", forge_material::node_material::NODE_MATERIAL),
+    ] {
+        let mut s = state();
+        let selected = NodeId(
+            execute(&mut s, "object.create", json!({"type": "forge.cube"})).unwrap()["node"]
+                .as_u64()
+                .unwrap(),
+        );
+        execute(&mut s, "material.create", json!({"type": ty, "name": name})).unwrap();
+        s.dock.reveal(Panel::Materials);
+        let mut h = Harness::builder()
+            .with_size([1280.0, 800.0])
+            .build_ui_state(|ui, e: &mut Editor| e.show(ui, None), Editor::new(s));
+        h.ctx
+            .options_mut(|o| o.input_options.max_double_click_delay = 2.0);
+        h.run();
+        let pos = h.get_by_label(name).rect().center();
+        h.hover_at(pos);
+        h.run();
+        for pressed in [true, false, true, false] {
+            h.event(Event::PointerButton {
+                pos,
+                button: PointerButton::Primary,
+                pressed,
+                modifiers: Modifiers::NONE,
+            });
+            h.run();
+        }
+        assert_eq!(h.state().state.selection.active, Some(selected));
+        if name == "Paint" {
+            h.get_by_label("Back to object attributes");
+        } else {
+            assert_eq!(
+                h.state().state.dock.active(Area::Center),
+                Some(Panel::NodeEditor)
+            );
+        }
+    }
+}

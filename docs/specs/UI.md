@@ -201,8 +201,8 @@ Undo: camera moves, frames and view switches are **not** undo steps (the camera 
 not document state; COMMANDS.md §6). Gestures and `view.*` commands never touch the history.
 
 Component modes (EDITABLE.md §2): `EditorState.mode` is switched in **one place** (owner note N6,
-decision D22): the four "Mode" buttons at the top of the left tool palette (§11: Objects, Pts,
-Edg, Pol; the selected one is drawn selected) and the Alt+1 .. Alt+4 keys of the key map (§14.2).
+decision D22): the four mode buttons in the left tool rail (§11: Object, Point,
+Edge and Polygon, with the active mode highlighted) and the Alt+1 .. Alt+4 keys of the key map (§14.2).
 The viewport header used to repeat the four buttons as "Model", "Points", "Edges", "Polygons";
 that duplicate is removed (brief 225). Which one stays follows G1 item 8, still unanswered:
 **parity-pending G1**, our choice is the palette, which the owner's note names as the place of
@@ -270,31 +270,39 @@ note. Switching back to Shaded shows the shaded panes exactly as before.
 
 Behaviour, data and rules: docs/specs/ANIM.md §2. Panel summary (own design,
 **parity-pending**):
-- Row 1: Play / Stop, Record, Auto-Key toggle, Previous / Next key, Delete Keys.
-- Row 2: Start, End and FPS fields (edit the scene settings, undoable), the current frame
-  field, and the label of the current time.
-- Row 3: a frame strip. Click or drag scrubs the current frame; the playhead and one tick
-  per key frame of the selected objects are drawn by us.
-- Time controls (brief 094, own design, **parity-pending G5**), added to the two button rows so
-  the panel keeps its height (view tests depend on the pane geometry): at the end of row 1 a
-  "Playback mode" combo (Once, Loop, Ping-Pong), an "Every frame" checkbox (off = real-time with
-  frame dropping) and a "Time display" combo (Frames, SMPTE, Seconds); at the end of row 2 a
-  "Preview range" checkbox with "Preview start" / "Preview end" fields (while on) and the buttons
-  "Add Marker", "Previous Marker", "Next Marker". The label after the frame field shows the
-  current time (seconds in Frames display, else the chosen format). The FPS field runs
-  `timeline.set_fps` (keys keep their seconds, ranges and markers convert); Start and End run
-  `timeline.settings`.
-- The 30 pt strip keeps its ruler and key ticks (ticks now start 10 pt from the top). The top
-  10 pt are the marker lane: each marker is a flag in its colour with its name (label "Marker
-  <name>"): click goes to its frame, drag moves it (`marker.move`), the context menu has the
-  name, "Color <name>" entries and "Delete Marker". The preview range shades the outside of the
-  strip, draws a time-coloured band along the bottom and two handles (labels "Preview start handle" and
-  "Preview end handle"; dragging runs `timeline.set_preview`, the handles cannot cross). Keys M
-  and Alt+Comma / Alt+Period (ANIM.md §2.7).
+- The common transport holds playback, frame and key jumps, current frame and keying
+  controls. The time label uses seconds in Frames display and the chosen format otherwise.
+  The Playback menu has Start, End, FPS, mode (Once, Loop or Ping-Pong), frame dropping,
+  and time display (Frames, SMPTE or Seconds). FPS runs `timeline.set_fps` so keys keep
+  their seconds and range and markers convert. Start and End run `timeline.settings`.
+- The compact strip has a 10 pt marker lane, a ruler, and diamonds for selected-object
+  keyframes. Scrub by clicking or dragging. Click a marker to go to its frame or drag
+  it to move it. Its context menu renames, recolors, or deletes it. The preview range
+  dims the outside of the strip. Its two handles cannot cross. The footer includes
+  preview start and end fields and marker actions. The existing marker shortcuts stay
+  available (ANIM.md §2.7).
 - `Timeline { current: 0, playing: false }` is editor state; start, end and fps live in
   the scene (`SceneSettings`, default 0, 90, 30). `set_current` clamps to the range.
 - The Attributes panel draws a marker left of every animatable row: filled diamond =
   key on this frame, hollow = animated without a key here (ANIM.md §2.5).
+
+### 7.1 Animation dock and transport
+
+Sources: GUI sessions G5 and G10 A7–A8, plus the owner's supplied frame, Dope Sheet and curve
+captures. The Forge layout uses a shared transport below the viewport. Right-side managers
+keep their height. The compact Timeline tab has a marker lane, ruler, key diamonds, frame
+playhead and preview handles. The Stop/Play action, project boundaries, frame and key
+stepping, current frame, Record and Auto-Key stay available in the Dope Sheet and F-Curve.
+Playback settings group end points, FPS, playback mode, time format and frame dropping.
+The preview range and marker actions live together below the scrub strip.
+
+Standard shows Timeline first, followed by Dope Sheet, F-Curve and Coordinates. Animate
+opens the Dope Sheet and keeps the Timeline and F-Curve one tab away. The compact and
+expanded editor heights are independent. The F-Curve keeps its existing Value and Speed
+modes and gains a scrubbable frame ruler above the graph. Both editors paint a labeled
+frame ruler and keep their view zoom and selections when switching. All transport actions
+use the same existing frame, playback, marker and key commands. Each icon control exposes
+its action name and a hover description.
 
 ## 8. Theme (`theme`)
 
@@ -354,35 +362,37 @@ being plain data over that model.
 `from_json` rejects a version other than `LAYOUT_VERSION`, a panel listed twice and an
 active tab out of range). `Layout::standard()` is the default; `Editor::layout()` /
 `set_layout()` read and apply one, and Window > Reset layout applies the standard layout.
-`Sizes { left_width 150, right_width 402, right_top_fraction 0.47, bottom_height 92 }` are
+`Sizes { left_width 43, right_width 402, right_top_fraction 0.47, bottom_height 92 }` are
 initial sizes of the resizable areas (egui remembers later drags). Right width, split and
 timeline height are the reference's measured numbers (observed, G10 item 1; §29.1, `layout::WINDOW`).
-`left_width` stays 150 because our tool palette still holds labelled buttons; the reference's strip
-is 43 px (`WINDOW.tool_strip`) and brief 227 sets it when the buttons become icons. The panels
-grow to the widest content, so a tab or a number field that is wider than the managers column
-pushes it out: the number field of §12 is sized to keep three of them in 402 px.
+The tool rail starts at the observed 43 pt width (G10 item 1). Its 34 pt buttons fit in
+one column, with vertical scrolling and gaps between groups. Saved layouts retain their
+configured widths until reset. The panels grow to the widest content, so the number field
+of §12 is sized to keep three fields in 402 pt.
 
-Standard arrangement, top to bottom: menu bar; Top area: command bar; Left: tool palette
-column; Centre: viewport; right column: Object manager above Attribute manager; Bottom
-strip: Timeline, with Coordinates as a second tab; status bar. Menus are unchanged
-(File, Edit, Select, Mesh, Create, Animate, View, Window).
+Standard arrangement, top to bottom: menu bar; Top area: command bar; Left: tool rail;
+Centre: viewport; right column: Objects above Attributes; Bottom: Timeline, Dope Sheet, F-Curve and Coordinates;
+status bar.
 
-Every button is a `CommandButton { command, args, glyph, label, tip }` that runs the
-registry command `command` with `args` through `Editor::run`; nothing else happens on a
-click. Button text is `"<glyph> <label>"` (a short ASCII placeholder symbol, since the bundled fonts lack most Unicode symbols; icons are
-brief 148), which also keeps labels distinct from the menu items. `command_bar()` groups:
-History (`edit.undo`, `edit.redo`, `object.delete`); Objects (`object.create` for
-`forge.cube`, `forge.sphere`, `forge.cylinder`, `forge.cone`, `forge.plane`, `forge.torus`;
-`mesh.make_editable`); View (`view.shading` smooth and wire, `view.frame_all`); Animation
-(`timeline.play`, `timeline.stop`, `key.record`). `tool_palette()` groups: Mode
-(`select.mode` model, points, edges, polys); Selection (`select.all`, `select.none`,
-`select.invert`, `select.grow`, `select.shrink`); Modeling (`mesh.extrude`,
-`mesh.extrude_inner`, `mesh.bevel`, `mesh.subdivide`, `mesh.triangulate`, `mesh.optimize`,
-`mesh.reverse_normals`, run with the stored selection and default settings). The
-`select.mode` and `view.shading` buttons show as selected for the current value. The Mode group
-is the only mode switch in the default layout (§6.1, owner note N6): no other panel, bar or menu
-repeats it; a test counts the widgets per mode. A failed
-command goes to the status bar like any other.
+The command bar and rail use the original Forge glyph atlas (§25). Their controls are
+`CommandButton { command, args, icon, label, tip }`. Accessible names include the action
+and its toolbar location. Hover text gives the label, a short description and the current
+shortcut when one exists. The atlas follows the current UI scale. Active icons use the
+theme's selected-button foreground color. Sources: owner notes N2, N6 and N8 and the
+measured button sizes in G10 item 1 (docs/parity/GUI-SESSIONS.md). Exact group order remains
+**parity-pending G1**.
+
+The command bar groups History (Undo, Redo, Remove), Objects (the six existing primitives,
+Make editable), Clone toolset (one-click Cloner and a labeled menu), View (Shaded, Wireframe,
+Frame all), and Animation (Play, Stop, Record Key). The rail groups Move/Rotate/Scale,
+Object/Point/Edge/Polygon mode, selection operations, and immediate mesh commands.
+The active transform, component mode and shading buttons use the theme's active state.
+The rail is the only default component mode switch (owner note N6). All actions run
+their existing registry commands and report failures in the status bar.
+
+The command bar's Clone toolset menu and Create > Clone toolset share the same registered
+entries and commands (§16.2, owner note N4). The direct Cloner button uses the same create
+command as its menu entry. This is the first pass on briefs 227 and 228.
 
 Snapping and axis mode exist as commands (`snap.*`, `edit.axis_mode`, MANIPULATE.md §6–7) and as Edit menu entries; they are not palette buttons yet.
 Pointer-driven tools (cuts, bridge, pen) stay in the Mesh menu, as do the arrangement tools
@@ -398,11 +408,11 @@ key diamond and the stacking of two tabs. What stays **parity-pending G4**: the 
 beyond what is written below. Every row is derived from a `ParamDesc`; nothing is hand-laid per
 type.
 
-Tabs and groups: `UiHint.group` is `"Tab/Group"` (split at the first `/`) or just `"Group"`
-(tab `Basic`; empty group is `Parameters`). `AttributeView.tabs()` lists tabs in
-first-appearance order, `groups_of(tab)` the groups of one; a tab bar is drawn only with two
-or more tabs, groups are collapsible. The shown tab is editor state (`attr_tab`); a tab
-that no longer exists falls back to the first.
+Tab and group names come from `UiHint.group`. An explicit `"Tab/Group"` splits at the first
+slash. The inspector assigns legacy flat groups to the tabs described in §12.1.
+`AttributeView.tabs()` gives the display order, and `groups_of(tab)` gives the collapsible
+groups for a tab. If the selection has no rows for a tab, the inspector shows a tab
+available for that selection.
 
 **Stacked tabs** (observed, G1 item 3: Shift-clicking the Light's Details with General active
 showed both tab bodies in one vertical scroll area, General first, Details below). The shown
@@ -411,8 +421,7 @@ on a tab shows only that tab. A Shift-click on another tab adds its body below t
 the one that was active first stays on top and the others follow in click order, all in one
 scroll area with a separator line between the bodies. The tab buttons of every shown tab are drawn
 selected. A second Shift-click on a shown tab removes it (ours, **parity-pending G1**; removing the
-top one promotes the next, and the last shown tab cannot be removed). Tabs that the new selection
-does not have drop out; with none left the first tab shows.
+top one promotes the next, and the last shown tab cannot be removed). Tabs unavailable for a selection are hidden. Returning to that object type restores its tab preference when the selected objects share those properties.
 
 Widgets, one module per kind in `widgets/`: `float` (scrub, display units), `int` (scrub,
 range), `boolean` (checkbox with the row label), `enumeration` (drop-down), `vector` (X, Y, Z
@@ -554,6 +563,21 @@ edits write the document; Auto-Key keys at once; the Coordinates panel and the i
 same layer; a mixed selection; Record keys drafts; render, export and save ignore drafts; Escape).
 
 Not in this brief: lock/unlock, history back/forward, the field-list widget.
+
+### 12.1 Inspector tabs
+
+Sources: owner note N9, GUI session G1 item 3, G4 inspector observations, and the supplied
+Cloner, Light and Linear Field captures. A wrapped strip below the object header shows
+labeled tabs with Forge icons where available. The header keeps the object's type and
+editable name visible. Tabs show collapsible groups of the existing typed parameter rows.
+Shared scene transforms use Transform. Ordinary Forge objects use Object for their
+type-specific settings. Cloners and matrix objects separate clone transforms and effectors.
+Camera, Light, fields and effectors use their relevant named sections where the settings
+exist. Explicit descriptor tab paths take precedence; ungrouped plugin properties use Basic,
+and ungrouped custom properties use User Data. A new type opens its first property tab
+when it has one. The chosen tabs are remembered per object type for the editor session.
+Click a tab to show it alone or Shift-click to stack it. Scene values, drafts, units, key
+states and undo are handled by the same row widgets and commands.
 
 ## 13. Object manager (`tree`, `object_manager`; brief 149, revised by briefs 229 and 233)
 
@@ -1493,12 +1517,12 @@ brief 129 adds it), and panels not listed are closed (reopen from the Window men
 
 | Workspace | Top | Left | Centre | Right top | Right bottom | Bottom | Sizes (left, right, fraction, bottom) |
 |---|---|---|---|---|---|---|---|
-| Standard | Command bar | Tools | Viewport | Objects | Attributes | Timeline, Coordinates | 150, 340, 0.45, 120 |
-| Modeling | Command bar | Tools | Viewport | Objects | Attributes, Coordinates | History, Console | 150, 360, 0.35, 150 |
-| Animate | Command bar | Tools | Viewport | Objects | Attributes, Coordinates | Timeline, History | 150, 340, 0.40, 240 |
-| UV | Command bar | Tools | Viewport | - | Attributes, Coordinates, Objects | History | 150, 400, 0.45, 120 |
-| Rigging | Command bar | Tools | Viewport | Objects | Attributes | Timeline, Coordinates, Script | 150, 380, 0.60, 160 |
-| Node | Command bar | - | Node Editor, Viewport | Objects | Attributes | Console, History, Script | 150, 340, 0.45, 200 |
+| Standard | Command bar | Tools | Viewport | Objects | Attributes | Timeline, Dope Sheet, F-Curve, Coordinates | 43, 402, 0.47, 92 |
+| Modeling | Command bar | Tools | Viewport | Objects | Attributes, Coordinates | History, Console | 43, 360, 0.35, 150 |
+| Animate | Command bar | Tools | Viewport | Objects | Attributes, Coordinates | Dope Sheet, Timeline, F-Curve, History | 43, 340, 0.40, 276 |
+| UV | Command bar | Tools | Viewport | - | Attributes, Coordinates, Objects | History | 43, 400, 0.45, 120 |
+| Rigging | Command bar | Tools | Viewport | Objects | Attributes | Timeline, Coordinates, Script | 43, 380, 0.60, 160 |
+| Node | Command bar | - | Node Editor, Viewport | Objects | Attributes | Console, History, Script | 43, 340, 0.45, 200 |
 
 `Standard` equals `Layout::standard()`. Each tab list starts with the shown tab. Switching
 applies the dock and the sizes (egui forgets its remembered panel sizes: a new size generation
@@ -2052,13 +2076,11 @@ px, so the capture is 1x), origin at the window's top-left:
 `layout::WINDOW` holds the numbers (rows 28 / 24 / 42 / 20 / 92 / 24, columns 43 / 43 / 402, the
 split 0.47, a 1 px separator between regions: three across, two down); `layout::regions(w, h)`
 lays the regions out and reproduces the table above at 1920 x 1080 (tested). The default layout's
-`Sizes` read them (§11): right width 402, split 0.47, timeline 92; the document row, the command
+`Sizes` read them (§11): tool rail 43, right width 402, split 0.47, timeline 92; the document row, the command
 bar and the status bar use them as their panel heights (24 minimum, 42 minimum, 24 exact).
 `theme::BUTTONS` holds the button sizes, used as the minimum size of the command bar's and the
-palette's buttons (27 x 26 and 34 x 34; our text-labelled buttons are wider). **Parity-pending
-G10:** our tool column is still 150 wide with labelled buttons (43 once the icons of brief 227
-land), the object palette strip (43) comes with brief 228, the title bar is the window system's,
-and the viewport menu row (20) comes with brief 227. The timeline ruler labels every 5 frames at
+rail's icon buttons (27 x 26 and 34 x 34). The title bar is the window system's.
+**Parity-pending G10:** the dedicated object palette strip (43) and viewport menu row (20). The timeline ruler labels every 5 frames at
 this width (`timeline::ruler_step(90, 1413) = 5`, label spacing at least 40 px: observed, G10 A7;
 this replaces the "every 2 frames" read from the earlier screenshot). The status bar shows the
 active tool's help text (G10 A8), here `tools::help_text` for the transform tool and the selection
@@ -2156,3 +2178,34 @@ mode, with errors replacing it.
 | Timeline row composition | 227 |
 | Attribute tabs as wrapping toggle buttons, two-column groups, step arrows | 231 (and §12) |
 | Document tabs and the layout switcher row | 227, 226 (layouts = §21 workspaces) |
+
+### Navigation and editing
+
+- In the node, UV, Dope Sheet, and F-Curve editors, hold 1 and drag to pan
+  or 2 and drag to zoom about the press position. Orbit (3) belongs to the 3D viewport.
+- Drag a material card to a scene object to assign it. Double-click the card
+  to open its node graph or inspect a Standard material. Inspecting a
+  material preserves scene selection.
+- The node search popup grows up to 420 × 380 logical pixels, within the
+  available window. Color constants expose a picker, sRGB hex and 8-bit
+  RGB. Graph socket values remain linear.
+- Hold Shift or Control to scrub numeric attributes at 10× speed. Hold both
+  for 100×. Click text to place a caret or double-click to select its value.
+- The command bar exposes light creation next to clone tools. The scene
+  hierarchy uses object type and tag icons with descriptive tooltips.
+- Drag a panel tab or grip to an existing dock to join its tabs. Drop
+  on a viewport edge for an adjacent dock, then resize it at the divider.
+- Command+D duplicates selected branches beside their sources. Command+C
+  copies a scene-local snapshot. Command+V pastes into the active object's
+  hierarchy, or at the scene root with no selection. Both edits are undoable.
+- The Node Material editor offers a two-stop Gradient Ramp driven by a
+  scalar. Connect it to color or vector sockets, or use Luminance
+  and Vector Components for scalar sockets.
+- In the viewport's object mode, diamond handles edit primitive dimensions
+  and supported area light sizes with one undo step per drag. Rectangular
+  and disc area lights show their footprint and a forward arrow. Spherical
+  area lights show the radius in three planes.
+- Fresnel exposes a scalar facing factor and an IOR input. Connect it to
+  a ramp position, a mix factor, a color or vector, or Surface Roughness
+  and Metallic. Rendered surfaces evaluate Fresnel at each shaded point.
+  The Shaded viewport uses its UV-baked material preview.

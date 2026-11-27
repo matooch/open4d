@@ -211,7 +211,7 @@ impl ObjectManager {
             if let Some((id, buf)) = &mut self.renaming
                 && *id == row.id
             {
-                let r = ui.text_edit_singleline(buf);
+                let r = crate::widgets::text_field(ui, egui::TextEdit::singleline(buf));
                 r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Rename"));
                 if !r.has_focus() && !r.lost_focus() {
                     r.request_focus();
@@ -226,6 +226,30 @@ impl ObjectManager {
                 }
                 return;
             }
+            let target_nodes = |st: &EditorState| {
+                if st.selection.nodes.contains(&row.id) {
+                    st.selection.nodes.iter().map(|n| n.0).collect::<Vec<_>>()
+                } else {
+                    vec![row.id.0]
+                }
+            };
+            let name = &row.name;
+            match row.eval {
+                EvalCell::Check => {
+                    if tick(ui, row.enabled, format!("Enabled: {name}")).clicked() {
+                        cmds.push((
+                            "object.enable",
+                            json!({"nodes": target_nodes(st), "enabled": !row.enabled}),
+                        ));
+                    }
+                }
+                EvalCell::ActiveCamera => {
+                    if target(ui, format!("Active camera: {name}")).clicked() {
+                        cmds.push(("view.look_through_camera", json!({"node": row.id.0})));
+                    }
+                }
+                EvalCell::None => {}
+            }
             let selected = st.selection.nodes.contains(&row.id);
             let theme = Theme::current(ui.ctx());
             let mut text = RichText::new(&row.name);
@@ -237,8 +261,16 @@ impl ObjectManager {
             } else if row.dim || !row.enabled {
                 text = text.weak();
             }
+            let icon = st
+                .doc
+                .scene()
+                .node(row.id)
+                .and_then(|node| crate::icons::icon_name(&node.type_id))
+                .unwrap_or("mode_object");
+            let image = crate::icons::ui_image(ui, icon, 14.0, theme.text);
             let r = ui
-                .add(egui::Button::new(text).frame(false))
+                .add(egui::Button::opt_image_and_text(image, Some(text.into())).frame(false))
+                .on_hover_text(&row.type_label)
                 .interact(Sense::click_and_drag());
             r.dnd_set_drag_payload(row.id);
             // egui takes the payload before checking its type. Leave object reordering alone.
@@ -279,49 +311,10 @@ impl ObjectManager {
                     }
                 });
             });
-            // the type label stands in for the per-type icon of brief 227
-            ui.weak(&row.type_label);
             // Layer glyph, the stacked visibility dots, the evaluation cell, then the tags,
             // right aligned (UI.md §13.1; observed order, G1 item 2). The layout is right to
             // left, so the last cell is added first.
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let target_nodes = |st: &EditorState| {
-                    if st.selection.nodes.contains(&row.id) {
-                        st.selection.nodes.iter().map(|n| n.0).collect::<Vec<_>>()
-                    } else {
-                        vec![row.id.0]
-                    }
-                };
-                let name = &row.name;
-                for (tag_id, tag) in row.tags.iter().rev() {
-                    let text = RichText::new(format!("[{tag}]")).weak();
-                    let r = ui.add(egui::Label::new(text).sense(Sense::click()));
-                    if r.double_clicked()
-                        && st
-                            .doc
-                            .scene()
-                            .node(*tag_id)
-                            .is_some_and(|n| n.type_id == forge_nodes::TAG)
-                    {
-                        self.open_tag = Some(*tag_id);
-                    }
-                }
-                match row.eval {
-                    EvalCell::Check => {
-                        if tick(ui, row.enabled, format!("Enabled: {name}")).clicked() {
-                            cmds.push((
-                                "object.enable",
-                                json!({"nodes": target_nodes(st), "enabled": !row.enabled}),
-                            ));
-                        }
-                    }
-                    EvalCell::ActiveCamera => {
-                        if target(ui, format!("Active camera: {name}")).clicked() {
-                            cmds.push(("view.look_through_camera", json!({"node": row.id.0})));
-                        }
-                    }
-                    EvalCell::None => {}
-                }
                 let (editor_clicked, render_clicked) =
                     dot_pair(ui, row.id, row.editor_vis, row.render_vis, name);
                 if editor_clicked {
@@ -335,6 +328,29 @@ impl ObjectManager {
                         "object.visibility",
                         json!({"nodes": target_nodes(st), "render": row.render_vis.next().id()}),
                     ));
+                }
+                for (tag_id, tag) in row.tags.iter().rev() {
+                    let icon = st
+                        .doc
+                        .scene()
+                        .node(*tag_id)
+                        .and_then(|node| crate::icons::icon_name(&node.type_id))
+                        .unwrap_or("tag_expression");
+                    let image = crate::icons::ui_image(ui, icon, 13.0, theme.weak_text);
+                    let button = image.map_or_else(|| egui::Button::new(tag), egui::Button::image);
+                    let r = ui
+                        .add(button.frame(false))
+                        .accessible_name(format!("[{tag}]"))
+                        .on_hover_text(tag);
+                    if r.double_clicked()
+                        && st
+                            .doc
+                            .scene()
+                            .node(*tag_id)
+                            .is_some_and(|n| n.type_id == forge_nodes::TAG)
+                    {
+                        self.open_tag = Some(*tag_id);
+                    }
                 }
                 // the layer glyph (UI.md §22.2)
                 if let Some((_, layer_name, c)) = &row.layer {

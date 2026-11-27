@@ -19,6 +19,9 @@ struct Move {
 
 pub struct UvEditor {
     object: Option<NodeId>,
+    navigation: crate::navigation::CanvasNavigation,
+    pan: Vec2,
+    zoom: f64,
     selected: BTreeSet<usize>,
     gesture: Option<Move>,
     seams: bool,
@@ -31,6 +34,9 @@ impl Default for UvEditor {
     fn default() -> Self {
         Self {
             object: None,
+            navigation: Default::default(),
+            pan: Vec2::ZERO,
+            zoom: 1.0,
             selected: BTreeSet::new(),
             gesture: None,
             seams: false,
@@ -107,6 +113,8 @@ impl UvEditor {
         let object = state.selection.active;
         if object != self.object {
             self.object = object;
+            self.pan = Vec2::ZERO;
+            self.zoom = 1.0;
             self.selected.clear();
             self.gesture = None;
         }
@@ -165,10 +173,27 @@ impl UvEditor {
             ui.available_size().max(Vec2::splat(16.0)),
             Sense::click_and_drag(),
         );
-        let view = View::fit(rect, &coords);
+        use crate::navigation::CanvasMotion;
+        let (navigating, motion) = self.navigation.read(&response);
+        if let Some(motion) = motion {
+            match motion {
+                CanvasMotion::Pan(delta) => self.pan += delta,
+                CanvasMotion::Zoom { anchor, factor } => {
+                    let zoom = (self.zoom * f64::from(factor)).clamp(0.1, 64.0);
+                    let origin = rect.center() + self.pan;
+                    self.pan += (origin - anchor) * ((zoom / self.zoom) as f32 - 1.0);
+                    self.zoom = zoom;
+                }
+            }
+        }
+        let mut view = View::fit(rect, &coords);
+        view.origin += self.pan;
+        view.zoom *= self.zoom;
         let base_positions: Vec<_> = coords.iter().copied().map(|p| view.point(p)).collect();
         let lines = edges(&source).collect::<Vec<_>>();
-        if self.seams {
+        if navigating {
+            self.gesture = None;
+        } else if self.seams {
             if response.clicked_by(PointerButton::Primary)
                 && let Some(p) = response.interact_pointer_pos()
                 && let Some(edge) = lines

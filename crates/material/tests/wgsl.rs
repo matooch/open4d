@@ -89,6 +89,7 @@ fn sample_graph() -> ShadingGraph {
             affect_specular: false,
             affect_reflection: true,
         }),
+        ..Default::default()
     };
     ShadingGraph { nodes, outputs }
 }
@@ -181,6 +182,56 @@ fn a_fifty_node_material_compiles_under_100_ms() {
     let elapsed = start.elapsed();
     assert!(elapsed.as_millis() < 100, "compiled in {elapsed:?}");
     assert_eq!(m.hash, hash_graph(&graph));
-    assert_eq!(CODEGEN_VERSION, 2);
+    assert_eq!(CODEGEN_VERSION, 3);
     validate(&m.source);
+}
+
+#[test]
+fn fresnel_drives_a_ramp_and_scalar_surface_inputs_per_hit() {
+    use forge_material::node_material::{self, FRESNEL, GRADIENT, LUMINANCE, VECTOR};
+    use forge_material::{ShadeCtx, TextureSampler};
+    use forge_nodes::PortRef;
+
+    struct White;
+    impl TextureSampler for White {
+        fn sample(&self, _: &str, _: &ShadeCtx) -> [f64; 3] {
+            [1.0; 3]
+        }
+    }
+    let mut graph = node_material::default_graph();
+    let surface = graph.nodes().next().unwrap().id;
+    let registry = node_material::registry();
+    let view = graph.add_node(registry, FRESNEL).unwrap();
+    let ramp = graph.add_node(registry, GRADIENT).unwrap();
+    let luma = graph.add_node(registry, LUMINANCE).unwrap();
+    let vector = graph.add_node(registry, VECTOR).unwrap();
+    for (a, output, b, input) in [
+        (view, "factor", ramp, "position"),
+        (ramp, "color", luma, "color"),
+        (ramp, "color", vector, "vector"),
+        (ramp, "color", surface, "base_color"),
+        (luma, "value", surface, "roughness"),
+        (vector, "x", surface, "metallic"),
+    ] {
+        graph
+            .connect(registry, PortRef::new(a, output), PortRef::new(b, input))
+            .unwrap();
+    }
+
+    let ir = node_material::compile_graph(&graph).unwrap();
+    let diffuse = ir.outputs.diffuse.as_ref().unwrap().color;
+    let roughness = ir.outputs.roughness_input.unwrap();
+    let metallic = ir.outputs.metallic_input.unwrap();
+    for (view, expected) in [([0.0, 0.0, 1.0], 0.04), ([1.0, 0.0, 0.0], 1.0)] {
+        let ctx = ShadeCtx {
+            normal: [0.0, 0.0, 1.0],
+            view,
+            ..Default::default()
+        };
+        for port in [diffuse, roughness, metallic] {
+            assert!((ir.eval(port, &White, &ctx)[0] - expected).abs() < 1e-12);
+        }
+    }
+    let source = compile(&ir).source;
+    validate(&source);
 }

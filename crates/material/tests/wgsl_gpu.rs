@@ -99,6 +99,7 @@ fn graph() -> ShadingGraph {
             affect_specular: false,
             affect_reflection: true,
         }),
+        ..Default::default()
     };
     ShadingGraph { nodes, outputs }
 }

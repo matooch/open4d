@@ -104,6 +104,12 @@ fn scale0(h: &Harness<'_, Editor>, cloner: NodeId) -> f64 {
     data(h, cloner).matrices[0].x_axis.length()
 }
 
+fn inspector_tab(h: &mut Harness<'_, Editor>, label: &str) {
+    h.get_by_role_and_label(egui::accesskit::Role::Button, label)
+        .click();
+    h.run();
+}
+
 fn combo(h: &mut Harness<'_, Editor>, label: &str) {
     h.get_by_role_and_label(egui::accesskit::Role::ComboBox, label)
         .click();
@@ -210,6 +216,7 @@ fn adding_effectors_through_the_list_applies_them_in_order_and_undoes() {
     let (s, cloner, abs, rel) = scene();
     let mut h = harness(s);
     h.run();
+    inspector_tab(&mut h, "Effectors");
     assert!((scale0(&h, cloner) - 1.0).abs() < 1e-12);
     let before = undo_steps(&h);
     add_via_list(&mut h, "Absolute");
@@ -233,6 +240,7 @@ fn dragging_an_effector_from_the_object_manager_adds_it() {
     let (s, cloner, abs, _) = scene();
     let mut h = harness(s);
     h.run();
+    inspector_tab(&mut h, "Effectors");
     let before = undo_steps(&h);
     let src = h.get_by_label("Absolute").rect().center();
     let dst = h
@@ -265,6 +273,7 @@ fn reordering_the_list_changes_the_clone_matrices() {
     let (s, cloner, abs, rel) = scene();
     let mut h = harness(s);
     h.run();
+    inspector_tab(&mut h, "Effectors");
     add_via_list(&mut h, "Absolute");
     add_via_list(&mut h, "Relative");
     let first = data(&h, cloner);
@@ -292,6 +301,7 @@ fn the_enable_box_switches_one_effector_without_leaving_the_list() {
     let (s, cloner, abs, rel) = scene();
     let mut h = harness(s);
     h.run();
+    inspector_tab(&mut h, "Effectors");
     add_via_list(&mut h, "Absolute");
     add_via_list(&mut h, "Relative");
     let before = undo_steps(&h);
@@ -318,6 +328,7 @@ fn removing_an_effector_keeps_the_node_and_undoes() {
     let (s, cloner, abs, _) = scene();
     let mut h = harness(s);
     h.run();
+    inspector_tab(&mut h, "Effectors");
     add_via_list(&mut h, "Absolute");
     h.get_by_label("Remove Absolute").click();
     h.run();
@@ -359,6 +370,7 @@ fn a_field_row_has_an_enable_box_and_a_strength_that_drive_the_effect() {
     let (s, cloner, eff, field) = field_scene();
     let mut h = harness(s);
     h.run();
+    inspector_tab(&mut h, "Fields");
     let none = shift1(&h, cloner);
     assert!((none - 100.0).abs() < 1e-9, "{none}");
     combo(&mut h, "Fields");

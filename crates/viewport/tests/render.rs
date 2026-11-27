@@ -428,6 +428,47 @@ fn grid_and_gizmo_overlays() {
 }
 
 #[test]
+fn move_and_scale_render_solid_tips_beyond_the_axis_line() {
+    let Some((_lock, gpu)) = gpu() else { return };
+    let cam = Camera::default();
+    for (mode, sample) in [
+        (GizmoMode::Translate, DVec3::new(0.89, 0.028, 0.0)),
+        (GizmoMode::Scale, DVec3::new(1.025, 0.035, 0.0)),
+    ] {
+        let gizmo = Gizmo {
+            mode,
+            size_px: 75.0,
+            ..Gizmo::default()
+        };
+        let length = gizmo.world_length(&cam, H as f64);
+        let img = Image(render_to_rgba(
+            gpu,
+            W,
+            H,
+            &cam,
+            &Frame {
+                instanced: &[],
+                meshes: &[],
+                grid: None,
+                lines: &[],
+                gizmo: Some(&gizmo),
+                settings: Settings::default(),
+            },
+        ));
+        let pixel = img.under(&cam, sample * length);
+        assert!(
+            i32::from(pixel[0]) > i32::from(pixel[1]) + 65,
+            "{mode:?}: {pixel:?}"
+        );
+        let clear = img.under(&cam, DVec3::new(sample.x, 0.085, 0.0) * length);
+        assert!(
+            close(clear, u8c(Palette::default().background, 1.0)),
+            "{mode:?}: {clear:?}"
+        );
+    }
+}
+
+#[test]
 fn rotate_gizmo_draws_rings() {
     let Some((_lock, gpu)) = gpu() else { return };
     let cam = Camera::default(); // looking down -Z: the Z ring faces the camera
