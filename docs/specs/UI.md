@@ -482,16 +482,16 @@ A draft is the whole parameter value (a Vec3 is one draft, never a component).
   Animate menu) is the key-all: it keys the drafted value of Position, Rotation and Scale and
   also keys the selection's drafts of other parameters whole, in one step "Record". A selection
   with a draft never takes Record's toggle-off branch (uncommitted edit, as the button rule).
-- **Discarding.** A draft is dropped when its scope changes: the current frame (N10 does not say
-  what happens to an uncommitted draft on a frame change; ours discards it and the animated value
-  returns), the document (any edit, undo, redo, load; this is how "a document edit of the same
-  parameter" is met, our rule is any edit), the selection, Auto-Key, or Escape pressed over the
-  viewport. Setting a draft back to the animated value removes it. Dropping is lazy and
+- **Discarding.** A draft is dropped when its scope changes: the current frame (observed, G4 item
+  2: scrubbing to another frame re-evaluates and the unkeyed edit is gone), the document (any edit,
+  undo, redo, load; our rule, parity-pending G5), Auto-Key, or Escape pressed over the viewport.
+  A **selection change keeps** the drafts (observed, G4 item 2: selecting another object and
+  reselecting kept the edited value and its *modified* indicator). Setting a draft back to the animated value removes it. Dropping is lazy and
   needs no hook: each read compares the scope.
 
 Tests: `crates/ui/tests/keyframe_drafts.rs` (gizmo drag leaves the track unchanged, moves the
 shown object and marks the button; the key click is one undo step and undo removes it; frame
-change, undo, document edit and selection discard; dragging back removes the draft; unanimated
+change, undo and document edit discard, a selection change keeps it; dragging back removes the draft; unanimated
 edits write the document; Auto-Key keys at once; the Coordinates panel and the inspector use the
 same layer; a mixed selection; Record keys drafts; render, export and save ignore drafts; Escape).
 

@@ -200,18 +200,11 @@ impl App {
     }
 
     fn drafts_scope(&self) -> drafts::Scope {
-        let mut selection: Vec<NodeId> = self.selection.nodes.iter().copied().collect();
-        if let Some(active) = self.selection.active
-            && !selection.contains(&active)
-        {
-            selection.push(active);
-        }
         drafts::Scope {
             revision: self.doc.scene().revision(),
             nodes: self.doc.scene().len(),
             frame: self.timeline.current,
             autokey: self.autokey,
-            selection,
         }
     }
 

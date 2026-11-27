@@ -16,7 +16,8 @@ use crate::parameter_keys;
 
 /// What a set of drafts was made against; a different scope discards them. The frame
 /// (owner note N10 leaves this open, parity-pending G5), the scene revision (undo, redo,
-/// any document edit, load), the selection and Auto-Key.
+/// any document edit, load) and Auto-Key. A selection change keeps them: the reference keeps
+/// an unkeyed edit when another object is selected and the first is reselected (G4 item 2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Scope {
     pub revision: u64,
@@ -24,7 +25,6 @@ pub struct Scope {
     pub nodes: usize,
     pub frame: i64,
     pub autokey: bool,
-    pub selection: Vec<NodeId>,
 }
 
 /// One draft: the node, the parameter id (without a component suffix) and the whole value.

@@ -462,9 +462,9 @@ key. It becomes a draft of the editor (UI.md §12.1): shown in the viewport and 
 on the key button, never stored, rendered, exported or saved. The key button stores it as a key
 at the current frame (`key.set_parameter`, one undo step, a Vec3 keys all components). Record
 (§2.3) keys the drafted values of the 9 record tracks, and the drafts of other parameters of the
-selection, in one step. A frame change, any document edit, undo, selection change, an Auto-Key
-toggle or Escape in the viewport discards the drafts (open in N10: the frame change; ours
-discards). Auto-Key on and parameters without a track are unchanged. `record_keys_with(doc, ids,
+selection, in one step. A frame change (observed, GUI-SESSIONS.md G4 item 2), any document edit, undo, an
+Auto-Key toggle or Escape in the viewport discards the drafts; a selection change keeps them
+(observed, G4 item 2). Auto-Key on and parameters without a track are unchanged. `record_keys_with(doc, ids,
 ctx, drafts)` is the Record entry that takes the drafts.
 
 ### 2.4a S7 CLI acceptance (brief 099)

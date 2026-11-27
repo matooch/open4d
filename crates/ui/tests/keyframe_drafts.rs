@@ -126,7 +126,7 @@ fn a_gizmo_move_of_a_keyed_object_is_a_draft_until_the_key_is_clicked() {
 }
 
 #[test]
-fn a_frame_change_undo_and_a_document_edit_discard_the_draft() {
+fn a_frame_change_undo_and_a_document_edit_discard_the_draft_but_a_selection_change_keeps_it() {
     let mut s = state();
     let id = keyed(&mut s);
     drag(&mut s, id, DVec3::new(0.0, 40.0, 0.0), 1);
@@ -154,11 +154,17 @@ fn a_frame_change_undo_and_a_document_edit_discard_the_draft() {
     .unwrap();
     assert!(s.app.draft(id, POS).is_none(), "document edit");
 
-    // Auto-Key and the selection
+    // a selection change keeps the draft (GUI-SESSIONS.md G4 item 2: the reference kept an
+    // unkeyed edit across selecting another object and reselecting this one)
     drag(&mut s, id, DVec3::new(0.0, 40.0, 0.0), 4);
+    let drafted = shown_pos(&s, id);
     s.selection.nodes.clear();
     s.selection.active = None;
-    assert!(s.app.draft(id, POS).is_none(), "selection change");
+    assert!(s.app.draft(id, POS).is_some(), "deselect keeps the draft");
+    s.selection.nodes = [id].into_iter().collect();
+    s.selection.active = Some(id);
+    assert!(s.app.draft(id, POS).is_some(), "reselect keeps the draft");
+    near(shown_pos(&s, id), drafted);
 }
 
 #[test]
