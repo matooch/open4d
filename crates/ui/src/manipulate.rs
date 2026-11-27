@@ -1,7 +1,7 @@
 //! Gizmo drags → transform params, and object picking (docs/specs/MANIPULATE.md §3, §5).
 
-use forge_core::transform::{Transform, hpb_from_rotation, rotation_part};
-use forge_core::{Document, EditError, EvalCtx, NodeId, Scene, Tx};
+use forge_core::transform::{self, Transform, hpb_from_rotation, rotation_part};
+use forge_core::{Document, EditError, EvalCtx, NodeId, Scene, Tx, Value};
 use forge_generators::axis::AxisEdit;
 use forge_viewport::camera::Camera;
 use forge_viewport::gizmo::DragDelta;
@@ -45,6 +45,95 @@ pub fn apply_drag_anim(
         Gesture::Commit => doc.transact(label, edit),
         Gesture::Drag(n) => doc.transact_merged(label, &format!("gizmo:{id}:{n}"), edit),
     }
+}
+
+/// An interactive drag of the gizmo on the editor state: [`dragged_transform`], then
+/// [`apply_transform_edits`] (UI.md §12, owner note N10).
+pub fn apply_drag_edit(
+    app: &mut forge_app::App,
+    id: NodeId,
+    start: &Transform,
+    delta: DragDelta,
+    gesture: Gesture,
+) -> Result<(), EditError> {
+    let parent = app
+        .evaluated()
+        .parent_world_matrix(id)
+        .ok_or(EditError::UnknownNode(id))?;
+    let (label, next) = dragged_transform(start, &parent, delta);
+    let merge = match gesture {
+        Gesture::Commit => None,
+        Gesture::Drag(n) => Some(format!("gizmo:{id}:{n}")),
+    };
+    apply_transform_edits(app, &[(id, next)], label, merge.as_deref())
+}
+
+/// True when an interactive transform edit of `ids` would stage drafts: Auto-Key is off and
+/// one of them has a track on Position, Rotation or Scale.
+pub fn edit_drafts(app: &forge_app::App, ids: &[NodeId]) -> bool {
+    !app.autokey
+        && ids.iter().any(|id| {
+            [transform::POS, transform::ROT, transform::SCALE]
+                .iter()
+                .any(|param| forge_app::drafts::has_tracks(app.doc.scene(), *id, param))
+        })
+}
+
+/// Applies edited transforms the way every interactive route does (gizmo, Coordinates
+/// panel; UI.md §12 "Keyframe drafts", owner note N10). With Auto-Key off, a parameter that
+/// has a track becomes a draft (or stops being one when the value is the animated value
+/// again) and nothing is written to the document. Every other parameter is written as
+/// before: keyed under Auto-Key, a plain `set_param` when it has no track, skipped when it
+/// already shows the value. The document part is one undo step, merged by `merge`.
+pub fn apply_transform_edits(
+    app: &mut forge_app::App,
+    edits: &[(NodeId, Transform)],
+    label: &str,
+    merge: Option<&str>,
+) -> Result<(), EditError> {
+    let ctx = app.anim_ctx();
+    let shown = app.evaluated();
+    let animated = app.animated();
+    let (shown_edit, animated_edit) = (
+        AnimEdit { ctx, eval: &shown },
+        AnimEdit {
+            ctx,
+            eval: &animated,
+        },
+    );
+    let mut writes: Vec<(NodeId, &str, Value)> = Vec::new();
+    for (id, t) in edits {
+        for (param, v) in [
+            (transform::POS, t.pos),
+            (transform::ROT, t.rot),
+            (transform::SCALE, t.scale),
+        ] {
+            let value = Value::Vec3(v.to_array());
+            if !ctx.autokey && forge_app::drafts::has_tracks(app.doc.scene(), *id, param) {
+                if forge_app::animate::unchanged(Some(&animated_edit), *id, param, &value) {
+                    app.remove_draft(*id, param);
+                } else {
+                    app.set_draft(*id, param, value)?;
+                }
+            } else if !forge_app::animate::unchanged(Some(&shown_edit), *id, param, &value) {
+                writes.push((*id, param, value));
+            }
+        }
+    }
+    if writes.is_empty() {
+        return Ok(());
+    }
+    app.keep_drafts(|app| {
+        let run = |tx: &mut Tx| {
+            writes.iter().try_for_each(|(id, param, value)| {
+                forge_app::animate::write_param(tx, *id, param, value.clone(), Some(&ctx))
+            })
+        };
+        match merge {
+            Some(key) => app.doc.transact_merged(label, key, run),
+            None => app.doc.transact(label, run),
+        }
+    })
 }
 
 /// The transform a gizmo `delta` makes of `start` under a parent with world matrix `parent`

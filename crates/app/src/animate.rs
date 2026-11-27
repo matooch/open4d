@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use forge_anim::{scene_at, value_at};
 
+use crate::drafts::Draft;
 use crate::schedule;
 use forge_core::transform::{POS, ROT, SCALE};
 use forge_core::{
@@ -272,18 +273,54 @@ pub fn recorded_keys_here(
 /// Command Record: keys the current evaluated transform of `ids` on the 9 tracks at the
 /// current frame, one undo step. Returns the number of keys written.
 pub fn record_keys(doc: &mut Document, ids: &[NodeId], ctx: &AnimCtx) -> Result<usize, String> {
+    record_keys_with(doc, ids, ctx, &[])
+}
+
+/// [`record_keys`] for the editor with its drafts (docs/specs/UI.md §12, owner note N10):
+/// a drafted transform parameter is keyed with the draft value, and the drafts of other
+/// parameters of `ids` are keyed whole as `key.set_parameter` does. One undo step.
+pub fn record_keys_with(
+    doc: &mut Document,
+    ids: &[NodeId],
+    ctx: &AnimCtx,
+    drafts: &[Draft],
+) -> Result<usize, String> {
     let eval = scene_at(doc.scene(), ctx.time());
     let targets: Vec<NodeId> = ids
         .iter()
         .copied()
         .filter(|id| recordable(doc.scene(), *id))
         .collect();
-    if targets.is_empty() {
+    let extra: Vec<&Draft> = drafts
+        .iter()
+        .filter(|(id, param, _)| ids.contains(id) && ![POS, ROT, SCALE].contains(&param.as_str()))
+        .collect();
+    if targets.is_empty() && extra.is_empty() {
         return Err("Record: select an object with a transform first".into());
+    }
+    let depth = doc.undo_depth();
+    let mut count = record_tracks(doc, &targets, &eval, ctx, drafts)?;
+    for (id, param, value) in extra {
+        count += crate::parameter_keys::key_parameter(doc, *id, param, ctx.frame, value.clone())
+            .map_err(|e| e.to_string())?;
+    }
+    doc.group_undo_since(depth, "Record");
+    Ok(count)
+}
+
+fn record_tracks(
+    doc: &mut Document,
+    targets: &[NodeId],
+    eval: &Scene,
+    ctx: &AnimCtx,
+    drafts: &[Draft],
+) -> Result<usize, String> {
+    if targets.is_empty() {
+        return Ok(0);
     }
     doc.transact("Record", |tx| {
         let mut n = 0;
-        for id in &targets {
+        for id in targets {
             for track_key in RECORD_TRACKS {
                 let (param, axis) = track_key
                     .rsplit_once('.')
@@ -292,7 +329,11 @@ pub fn record_keys(doc: &mut Document, ids: &[NodeId], ctx: &AnimCtx) -> Result<
                     .iter()
                     .position(|a| *a == axis)
                     .expect("record keys end in x, y or z");
-                let Some(Value::Vec3(v)) = eval.param(*id, param) else {
+                let drafted = drafts
+                    .iter()
+                    .find(|(n, p, _)| n == id && p == param)
+                    .map(|(_, _, v)| v);
+                let Some(Value::Vec3(v)) = drafted.or_else(|| eval.param(*id, param)) else {
                     continue;
                 };
                 write_key(tx, *id, track_key, v[axis], ctx)?;

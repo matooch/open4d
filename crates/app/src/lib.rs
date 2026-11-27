@@ -7,6 +7,7 @@ pub mod animate;
 mod clone_commands;
 pub mod coords;
 pub mod diagnostics;
+pub mod drafts;
 pub mod dynamics;
 mod dynamics_commands;
 mod graph_commands;
@@ -114,8 +115,14 @@ pub struct App {
     pub timeline: Timeline,
     /// Autokey: edits of animatable parameters write keys (docs/specs/ANIM.md §2.4).
     pub autokey: bool,
-    /// The scene at the current frame, cached.
+    /// The scene at the current frame, cached. Never shows drafts: render, export and
+    /// scripts read this one.
     pub eval: Evaluated,
+    /// The same with the draft layer applied, for what the editor shows
+    /// ([`App::evaluated`], [`App::scheduled_draw`]).
+    eval_view: Evaluated,
+    /// Edits of animated parameters that wait for the key button (UI.md §12, owner note N10).
+    drafts: drafts::DraftLayer,
     /// Dirty-only, parallel evaluation of the drawn nodes (docs/specs/CORE.md section 5b).
     pub scheduler: schedule::Scheduler,
     /// The same for the viewport: showable cloners come out as instances.
@@ -154,6 +161,8 @@ impl App {
             timeline: Timeline::default(),
             autokey: false,
             eval: Evaluated::default(),
+            eval_view: Evaluated::default(),
+            drafts: drafts::DraftLayer::default(),
             scheduler: schedule::Scheduler::default(),
             draw_scheduler: schedule::Scheduler::default().with_instancing(true),
             status: String::new(),
@@ -176,9 +185,86 @@ impl App {
         }
     }
 
-    /// The scene at the current frame.
+    /// The scene at the current frame as the editor shows it: animation, then the draft
+    /// layer (owner note N10). Without drafts this is [`App::animated`].
     pub fn evaluated(&self) -> Arc<Scene> {
+        match self.drafted_scene() {
+            Some(scene) => self.eval_view.get(&scene, self.timeline.current),
+            None => self.animated(),
+        }
+    }
+
+    /// The scene at the current frame with animation only, no drafts.
+    pub fn animated(&self) -> Arc<Scene> {
         self.eval.get(self.doc.scene(), self.timeline.current)
+    }
+
+    fn drafts_scope(&self) -> drafts::Scope {
+        let mut selection: Vec<NodeId> = self.selection.nodes.iter().copied().collect();
+        if let Some(active) = self.selection.active
+            && !selection.contains(&active)
+        {
+            selection.push(active);
+        }
+        drafts::Scope {
+            revision: self.doc.scene().revision(),
+            nodes: self.doc.scene().len(),
+            frame: self.timeline.current,
+            autokey: self.autokey,
+            selection,
+        }
+    }
+
+    fn drafted_scene(&self) -> Option<Arc<Scene>> {
+        self.drafts.shown(self.drafts_scope(), self.doc.scene())
+    }
+
+    /// The draft of `node`'s parameter `param`, if any.
+    pub fn draft(&self, node: NodeId, param: &str) -> Option<forge_core::Value> {
+        self.drafts.get(self.drafts_scope(), node, param)
+    }
+
+    /// Every draft of the selection.
+    pub fn drafts(&self) -> Vec<drafts::Draft> {
+        self.drafts.all(self.drafts_scope())
+    }
+
+    /// Stages `value` (validated like `set_param`) for the parameter; nothing is written to
+    /// the document.
+    pub fn set_draft(
+        &self,
+        node: NodeId,
+        param: &str,
+        value: forge_core::Value,
+    ) -> Result<(), forge_core::EditError> {
+        let value = drafts::validated(self.doc.scene(), node, param, value)?;
+        self.drafts.set(self.drafts_scope(), node, param, value);
+        Ok(())
+    }
+
+    pub fn remove_draft(&self, node: NodeId, param: &str) {
+        self.drafts.remove(self.drafts_scope(), node, param);
+    }
+
+    /// Discards every draft.
+    pub fn clear_drafts(&self) {
+        self.drafts.clear();
+    }
+
+    /// Runs `f` (a document edit that is not about the drafts) and keeps the drafts through
+    /// it, which would otherwise be discarded by the revision change.
+    pub fn keep_drafts<R>(&mut self, f: impl FnOnce(&mut App) -> R) -> R {
+        let kept = self.drafts();
+        let result = f(self);
+        self.restore_drafts(kept);
+        result
+    }
+
+    /// Stages `drafts` again (after an edit that discarded them).
+    pub fn restore_drafts(&self, drafts: impl IntoIterator<Item = drafts::Draft>) {
+        for (node, param, value) in drafts {
+            let _ = self.set_draft(node, &param, value);
+        }
     }
 
     /// The drawn nodes' outputs at `frame`, recomputing only what changed since the last
@@ -188,8 +274,17 @@ impl App {
     }
 
     /// [`App::scheduled`] for drawing (the viewport and screenshots): cloners are instances.
+    /// The viewport shows the drafts of the current frame (owner note N10).
     pub fn scheduled_draw(&mut self, frame: i64) -> Arc<schedule::Frame> {
-        self.draw_scheduler.evaluate(self.doc.scene(), frame)
+        let drafted = if frame == self.timeline.current {
+            self.drafted_scene()
+        } else {
+            None
+        };
+        match drafted {
+            Some(scene) => self.draw_scheduler.evaluate(&scene, frame),
+            None => self.draw_scheduler.evaluate(self.doc.scene(), frame),
+        }
     }
 
     /// Keeps the current frame inside the project range (after undo, load, range edits).
@@ -293,7 +388,9 @@ impl App {
             self.browser = browser;
         }
         self.doc = doc;
+        self.drafts.clear();
         self.eval.clear();
+        self.eval_view.clear();
         self.scheduler.clear();
         self.draw_scheduler.clear();
         self.timeline = Timeline::default();
@@ -396,7 +493,8 @@ impl CommandContext for App {
     fn record_keys(&mut self) -> Result<usize, String> {
         let ids = self.selected_ids();
         let ctx = self.anim_ctx();
-        animate::record_keys(&mut self.doc, &ids, &ctx)
+        let drafts = self.drafts();
+        animate::record_keys_with(&mut self.doc, &ids, &ctx, &drafts)
     }
 
     fn delete_keys(&mut self) -> Result<usize, String> {

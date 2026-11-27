@@ -53,6 +53,13 @@ and `R_P = rotation_part(P)`:
 - `Scale(f)` (factors along the object's own axes): `scale = start.scale · f`.
 One continuous drag is one undo step (`Gesture::Drag`).
 
+The editor's gizmo calls `apply_drag_edit(app, id, start, delta, gesture)`: the same maths,
+then `apply_transform_edits`. With Auto-Key off, a parameter that has a key track becomes a
+keyframe draft (UI.md §12.1, owner note N10) and the document is not touched; `start` is read
+from the shown (drafted) scene, so a second drag continues from the drafted pose. Other
+parameters follow the rules above. `apply_drag` / `apply_drag_anim` stay the library entries
+(rule 5 of ANIM.md §2.4).
+
 ## 4. Coordinate panel (`forge_ui::coordinates`; new dock panel `Coordinates`)
 
 Our layout: three rows (Position, Rotation, Scale-or-Size) × three fields, a space

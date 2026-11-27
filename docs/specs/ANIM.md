@@ -447,10 +447,25 @@ A parameter edit (Attributes panel, Coordinates panel, gizmo) with value `v` at 
    did not change (within `1e-9` relative to the shown value) are left alone; components
    without a track change the stored value.
 3. **Autokey off, parameter not animated:** the stored value changes, as before.
+Rule 5 is what scripted and agent edits do (`param.edit`, `transform.edit`, library
+calls). The three **interactive routes** (gizmo, Coordinates panel, Attributes panel) stage a
+draft instead of writing the key, see §2.4b.
 A gizmo or Coordinates edit writes `transform.pos|rot|scale` and skips a Vec3 whose value
 did not change, so a move with autokey on keys only Position.
 Values go through the parameter's range clamp first (`ParamDesc::validate`), like
 `set_param`.
+
+### 2.4b Keyframe drafts (brief 232, owner note N10)
+Source: owner note N10 in docs/parity/GUI-SESSIONS.md; our rules are **parity-pending G5**.
+With Auto-Key off, an interactive edit of a parameter that has a track does not write rule 5's
+key. It becomes a draft of the editor (UI.md §12.1): shown in the viewport and panels, marked
+on the key button, never stored, rendered, exported or saved. The key button stores it as a key
+at the current frame (`key.set_parameter`, one undo step, a Vec3 keys all components). Record
+(§2.3) keys the drafted values of the 9 record tracks, and the drafts of other parameters of the
+selection, in one step. A frame change, any document edit, undo, selection change, an Auto-Key
+toggle or Escape in the viewport discards the drafts (open in N10: the frame change; ours
+discards). Auto-Key on and parameters without a track are unchanged. `record_keys_with(doc, ids,
+ctx, drafts)` is the Record entry that takes the drafts.
 
 ### 2.4a S7 CLI acceptance (brief 099)
 

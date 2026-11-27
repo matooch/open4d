@@ -441,11 +441,59 @@ Vector and colour rows key their three component tracks together. This is an own
 design based on [G4](../parity/GUI-SESSIONS.md#g4--attribute-manager-widgets-and-field-lists)
 and is **parity-pending**.
 
-With Auto-Key off and a single selected object, editing a row that already has tracks
-stages the value in the Attributes panel (not the document or viewport) until the key
-button commits it. Leaving the current frame or selection, changing Auto-Key, or
-editing the document discards the draft. Unanimated edits, multi-edits, scripted
-`param.edit`, and the Coordinates/gizmo path keep their existing behaviour.
+### 12.1 Keyframe drafts (brief 232; owner note N10)
+
+Source: owner note N10 ([GUI-SESSIONS.md](../parity/GUI-SESSIONS.md), owner notes table): on a
+property that has a key track, with Auto-Key off, changing the value by any route (the gizmo,
+the Coordinates panel, the inspector) shows the new value in the viewport and the inspector,
+marks the key button as modified, and does not store it; clicking the key button stores it as a
+key at the current frame. Everything else below is our own rule and **parity-pending G5**.
+This replaces the earlier inspector-only draft.
+
+**One draft layer** (`forge_app::drafts::DraftLayer`, held by `App`): `(node, param) -> value`.
+It is the only mechanism: the inspector, the gizmo and the Coordinates panel all write into it.
+A draft is the whole parameter value (a Vec3 is one draft, never a component).
+
+- **When an edit is a draft:** Auto-Key is off and the node has at least one key track on the
+  parameter (any component). Auto-Key on keys at once (ANIM.md §2.4). A parameter without a track
+  edits the document as before. A multi-object edit decides per object: the animated ones get
+  drafts, the others are written in one undo step (the drafts survive that step). A vector edit
+  of a partly animated parameter drafts the whole vector; the commit keys all three components
+  (as the key button already did).
+- **Routes.** Gizmo (`apply_drag_edit`) and Coordinates (`edit_results` +
+  `apply_transform_edits`, the same transforms `transform.edit` computes) stage Position,
+  Rotation and Scale drafts. The inspector row (`param.edit`'s value rules, `draft_value`) stages
+  the row. Scripted and agent edits (`param.edit`, `transform.edit`, `transform.set`) are not
+  interactive routes and keep ANIM.md §2.4 rule 5 (they write the key).
+- **Display.** `App::evaluated()` is the animation with the layer on top: the viewport
+  (`scheduled_draw`), picking, snapping, the gizmo, the Attributes and Coordinates panels read
+  it. A drag that starts on a drafted object starts from the drafted pose. The key button shows
+  the *changed* state (warning fill, §12 indicators). No other "modified" hint is shown (the
+  object manager and HUD stay as they are; parity-pending G5).
+- **Behaviours and expressions** see the drafted value while it is shown (our choice,
+  parity-pending G5): the layer replaces the parameter's tracks in the scene that is evaluated
+  for display, so tags, dependants and deformers read the drafted value.
+- **Never in the output.** `App::eval`, `App::scheduled`, `eval_mesh`, export, render, `save`
+  and every command read the animation only; the layer is not saved, not undoable, not part of
+  the document revision.
+- **Committing.** The key button (and the "Add / Update Key" menu entry) of a changed row keys
+  the draft of every selected object at the current frame through `key.set_parameter`, one undo
+  step; the other rows' drafts stay. The timeline Record button (and `key.record`, K, the
+  Animate menu) is the key-all: it keys the drafted value of Position, Rotation and Scale and
+  also keys the selection's drafts of other parameters whole, in one step "Record". A selection
+  with a draft never takes Record's toggle-off branch (uncommitted edit, as the button rule).
+- **Discarding.** A draft is dropped when its scope changes: the current frame (N10 does not say
+  what happens to an uncommitted draft on a frame change; ours discards it and the animated value
+  returns), the document (any edit, undo, redo, load; this is how "a document edit of the same
+  parameter" is met, our rule is any edit), the selection, Auto-Key, or Escape pressed over the
+  viewport. Setting a draft back to the animated value removes it. Dropping is lazy and
+  needs no hook: each read compares the scope.
+
+Tests: `crates/ui/tests/keyframe_drafts.rs` (gizmo drag leaves the track unchanged, moves the
+shown object and marks the button; the key click is one undo step and undo removes it; frame
+change, undo, document edit and selection discard; dragging back removes the draft; unanimated
+edits write the document; Auto-Key keys at once; the Coordinates panel and the inspector use the
+same layer; a mixed selection; Record keys drafts; render, export and save ignore drafts; Escape).
 
 Not in this brief: lock/unlock, history back/forward, the field-list widget.
 
@@ -1203,6 +1251,10 @@ behaviour are parity-pending**. Component rows are EDITABLE.md §6.7 (brief 034)
 - Rotation is shown as H / P / B in degrees (MANIPULATE.md §1).
 
 ### 20.2 Several objects (brief 150 multi-edit rules)
+With Auto-Key off, an edit of an object that has a Position, Rotation or Scale track stages a
+keyframe draft instead of running `transform.edit` (§12.1, owner note N10); every other object of
+the selection is edited by the same maths as before.
+
 The panel shows the active object. An axis is `mixed` when its value in the chosen space
 differs (more than 1e-9 relative) between the selected objects: the field then reads "mixed".
 Typing into a field sets that axis on every selected object and keeps each object's other

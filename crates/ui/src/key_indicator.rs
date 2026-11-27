@@ -1,7 +1,5 @@
 //! Descriptor-derived key indicator, row commands and transient edits (UI.md §12).
 
-use std::collections::BTreeMap;
-
 use egui::{Color32, Sense, Stroke, Ui};
 use forge_app::parameter_keys;
 use forge_command::{display_to_stored, param_value_from_json};
@@ -12,27 +10,6 @@ use crate::attributes::to_display;
 use crate::object_manager::Cmd;
 use crate::theme::Theme;
 use crate::widgets::Edit;
-
-#[derive(Default)]
-pub(crate) struct Drafts {
-    scope: Option<(u64, NodeId, i64, bool)>,
-    pub values: BTreeMap<String, Value>,
-}
-
-impl Drafts {
-    pub fn refresh(&mut self, revision: u64, node: NodeId, frame: i64, enabled: bool) {
-        let scope = (revision, node, frame, enabled);
-        if self.scope != Some(scope) {
-            self.values.clear();
-            self.scope = Some(scope);
-        }
-    }
-
-    pub fn clear(&mut self) {
-        self.values.clear();
-        self.scope = None;
-    }
-}
 
 pub(crate) fn draft_value(desc: &ParamDesc, current: &Value, edit: &Edit) -> Option<Value> {
     let value = if let Some(axis) = edit.component {
@@ -45,6 +22,30 @@ pub(crate) fn draft_value(desc: &ParamDesc, current: &Value, edit: &Edit) -> Opt
         param_value_from_json(desc, &edit.value).ok()?
     };
     desc.validate(value).ok()
+}
+
+/// The `key.set_parameter` command that keys `value` (stored units) of `node`'s `param`.
+pub(crate) fn key_args(
+    node: NodeId,
+    param: &str,
+    frame: i64,
+    unit: forge_core::Unit,
+    value: &Value,
+) -> Option<Cmd> {
+    let value = match value {
+        Value::Float(v) => json!(to_display(unit, *v)),
+        Value::Int(v) => json!(v),
+        Value::Vec3(v) => json!(v.map(|v| to_display(unit, v))),
+        Value::Color(v) => json!(v),
+        Value::Bool(v) => json!(v),
+        Value::Enum(v) => json!(v),
+        Value::Link(v) => json!(v.map(|id| id.0)),
+        _ => return None,
+    };
+    Some((
+        "key.set_parameter",
+        json!({"node": node.0, "param": param, "frame": frame, "value": value}),
+    ))
 }
 
 pub(crate) struct RowKeys {
@@ -101,22 +102,7 @@ impl RowKeys {
     }
 
     fn set(&self, value: &Value) -> Option<Cmd> {
-        let value = match value {
-            Value::Float(v) => json!(to_display(self.unit, *v)),
-            Value::Int(v) => json!(v),
-            Value::Vec3(v) => json!(v.map(|v| to_display(self.unit, v))),
-            Value::Color(v) => json!(v),
-            Value::Bool(v) => json!(v),
-            Value::Enum(v) => json!(v),
-            Value::Link(v) => json!(v.map(|id| id.0)),
-            _ => return None,
-        };
-        Some((
-            "key.set_parameter",
-            json!({
-                "node": self.node.0, "param": self.param, "frame": self.frame, "value": value,
-            }),
-        ))
+        key_args(self.node, &self.param, self.frame, self.unit, value)
     }
 
     /// What a click on the button does (UI.md §12, owner note N3): with a key at this frame
