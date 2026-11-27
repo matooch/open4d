@@ -273,8 +273,8 @@ Brief 204 measured the S10 scene (1 M polygons, 10 000 clones, 1080p) on the M5 
   Compute or Vulkan.
 - **New evidence (2026-11-27, CI run on b9bdaeb):** the same test also failed in a second case:
   `Vulkan mode infinite history 0 pixel 63 channel 0: 0.011363231 vs 0.011355296` (the "dark"
-  receiver under the infinite light, +0.07 %). Across five Ubuntu runs it failed in four (three
-  times `near`/pixel 28, once `infinite`/pixel 63) and passed in two others. So the Vulkan
+  receiver under the infinite light, +0.07 %). Across ten Ubuntu runs since #63 it failed in seven
+  (six times `near`/pixel 28, once `infinite`/pixel 63) and passed in three. So the Vulkan
   (lavapipe ray-query) path differs from the batched reference by up to about 0.25 % in more than one
   scenario, and only on some runner CPUs. The grazing self-shadow is still a likely contributor,
   but also compare the hardware hit attributes (`hit.t` rescaled by `speed`, the barycentrics,
