@@ -82,7 +82,9 @@ fn queued_renders_appear_in_history_and_can_be_compared() {
     let expected: Vec<_> = frame
         .beauty
         .data
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|raw| {
             let [r, g, b] = [raw[0], raw[1], raw[2]].map(forge_image::linear_to_srgb8);
             egui::Color32::from_rgb(r, g, b)
