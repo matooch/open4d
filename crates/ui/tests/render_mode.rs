@@ -109,6 +109,18 @@ fn the_render_mode_frame_follows_the_pane_camera() {
         handedness: Handedness::Right,
     };
     let mut view = RenderView::default();
+    let ctx = egui::Context::default();
+    let native = view
+        .image(
+            &ctx,
+            &scene,
+            &camera,
+            0,
+            [931, 517],
+            PostSettings::default(),
+        )
+        .unwrap();
+    assert_eq!(native.size(), [931, 517]);
     let (w, h) = (64usize, 48usize);
     let image = view
         .frame(

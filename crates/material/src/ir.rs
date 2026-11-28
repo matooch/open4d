@@ -179,6 +179,7 @@ pub struct Outputs {
     pub transmission: Option<Transmission>,
     pub environment: Option<NodeIx>,
     pub fog: Option<Fog>,
+    pub subsurface_distance: f64,
     pub alpha: Option<Alpha>,
     pub bump: Option<Bump>,
     pub normal: Option<NormalMap>,
@@ -340,6 +341,16 @@ pub fn compile(m: &Material) -> ShadingGraph {
     };
     if m.enabled("color") {
         let color = ch(&mut g, "color", "color.color", "color.brightness");
+        let color = if let Some(top) = g.texture(m.e("color.occlusion_texture")) {
+            g.push(IrNode::Mix {
+                base: color,
+                top,
+                mode: MixMode::Multiply,
+                strength: 1.0,
+            })
+        } else {
+            color
+        };
         g.outputs.diffuse = Some(Diffuse {
             color,
             level: m.f("color.diffuse_level"),
@@ -405,6 +416,18 @@ pub fn compile(m: &Material) -> ShadingGraph {
             input: base,
             factor: m.f("reflectance.spec.mask_amount"),
         });
+        let color = if let Some(top) = g.texture(m.e("reflectance.spec.strength_texture")) {
+            g.push(IrNode::Mix {
+                base: color,
+                top,
+                mode: MixMode::Multiply,
+                strength: 1.0,
+            })
+        } else {
+            color
+        };
+        g.outputs.roughness_input = g.texture(m.e("reflectance.spec.roughness_texture"));
+        g.outputs.metallic_input = g.texture(m.e("reflectance.spec.metallic_texture"));
         g.outputs.specular = Some(Specular {
             kind,
             width: m.f("reflectance.spec.width"),
@@ -424,6 +447,7 @@ pub fn compile(m: &Material) -> ShadingGraph {
             "environment.brightness",
         ));
     }
+    g.outputs.subsurface_distance = m.f("subsurface.distance").max(0.0);
     if m.enabled("fog") {
         let color = g.channel(m.c("fog.color"), m.f("fog.brightness"), "", "normal", 1.0);
         g.outputs.fog = Some(Fog {

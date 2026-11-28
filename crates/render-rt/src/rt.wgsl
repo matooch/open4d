@@ -229,6 +229,27 @@ fn env_radiance(d_in: vec3<f32>) -> vec3<f32> {
     return tex.xyz * intensity;
 }
 
+// Approximate Lambertian irradiance divided by pi with equal-area samples
+// on the projected hemisphere. Constant lighting integrates exactly.
+fn diffuse_environment(n: vec3<f32>) -> vec3<f32> {
+    if (fr(F_LIGHTING_KIND) < 1.5) {
+        return env_radiance(n);
+    }
+    let pole = select(vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(1.0, 0.0, 0.0), abs(n.y) > 0.999);
+    let tangent = normalize(cross(pole, n));
+    let bitangent = cross(n, tangent);
+    var sum = vec3<f32>(0.0);
+    for (var ring = 0u; ring < 4u; ring += 1u) {
+        let r2 = (f32(ring) + 0.5) * 0.25;
+        for (var sector = 0u; sector < 8u; sector += 1u) {
+            let phi = (f32(sector) + 0.5 * f32(ring % 2u)) * (PI_F / 4.0);
+            let disk = cos(phi) * tangent + sin(phi) * bitangent;
+            sum += env_radiance(sqrt(r2) * disk + sqrt(1.0 - r2) * n);
+        }
+    }
+    return sum / 32.0;
+}
+
 fn background(px: vec2<f32>) -> vec3<f32> {
     if (u32(fr(F_BG_KIND) + 0.5) == 0u) {
         return vec3<f32>(fr(F_BG_X), fr(F_BG_Y), fr(F_BG_Z));
@@ -436,6 +457,7 @@ fn vs_full(@builtin(vertex_index) vi: u32) -> FullOut {
 
 /// The IR surface values of a G-buffer pixel (R21.3).
 struct SurfaceVals {
+    opaque: vec3<f32>,
     albedo: vec3<f32>,
     spec: vec3<f32>,
     alpha: f32,
@@ -508,6 +530,11 @@ fn surface_vals(g0: vec4<f32>, g1: vec4<f32>) -> SurfaceVals {
             out.albedo = out.albedo * max(1.0 - s.specular.w, 0.0);
         }
     }
+    out.opaque = vec3<f32>(1.0);
+    if (s.transmission_present.x > 0.5) {
+        out.opaque -= clamp(s.transmission.xyz, vec3<f32>(0.0), vec3<f32>(1.0));
+    }
+    out.spec *= out.opaque;
     out.emission = s.emission.xyz;
     var nb = ns;
     if (s.bump_present.x > 0.5) {
@@ -530,6 +557,7 @@ fn surface_vals(g0: vec4<f32>, g1: vec4<f32>) -> SurfaceVals {
             nb = normalize(n);
         }
     }
+    nb = forge_tangent_normal(s, nb, tri.e1.xyz, tri.e2.xyz, (tri.u1-tri.u0).xy, (tri.u2-tri.u0).xy);
     out.n = select(nb, -nb, flip);
     return out;
 }
@@ -562,7 +590,7 @@ fn shade_pixel(px: vec2<i32>, frag: vec2<f32>) -> Shaded {
     let sv = surface_vals(g0, g1);
     let n = sv.n;
     var m: Mat;
-    m.albedo = sv.albedo;
+    m.albedo = sv.albedo * sv.opaque;
     m.spec = sv.spec;
     m.alpha = sv.alpha;
     var diffuse = vec3<f32>(0.0);
@@ -691,7 +719,7 @@ fn shade_pixel(px: vec2<i32>, frag: vec2<f32>) -> Shaded {
         } else {
             ao = ssao_at(p, n);
         }
-        diffuse += sv.albedo * env_radiance(n) * ao;
+        diffuse += m.albedo * diffuse_environment(n) * ao;
         if (fr(F_RT_REFLECTIONS_ON) < 0.5) {
             let r = reflect(-view, n);
             specular += sv.spec * env_radiance(normalize(r)) * ao;

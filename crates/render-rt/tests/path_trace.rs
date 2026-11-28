@@ -506,3 +506,41 @@ fn mirrored_and_nonuniform_instances_keep_authored_normals_and_ids() {
         assert_eq!(out.aovs[&Aov::MaterialId].pixel(48, 24)[0], 1.0);
     }
 }
+
+#[test]
+fn backlit_wax_dims_with_thickness() {
+    with_devices(|(device, queue)| {
+        let engine = PathTraceEngine::with_device(device.clone(), queue.clone());
+        let render = |thickness: f64, distance: f64| {
+            let wax = common::material(&[
+                ("color.color", forge_core::Value::Color([0.9, 0.4, 0.2])),
+                ("enable.reflectance", forge_core::Value::Bool(false)),
+                ("subsurface.distance", forge_core::Value::Float(distance)),
+            ]);
+            let mut scene = common::snapshot_with(
+                common::cube(1.0),
+                wax,
+                DMat4::from_scale(DVec3::new(25.0, 25.0, thickness / 2.0)),
+                common::looking_at_origin(100.0),
+            );
+            scene.lights.push(Light::new(
+                LightKind::Omni,
+                DMat4::from_translation(DVec3::new(0.0, 0.0, 100.0)),
+            ));
+            let settings = RenderSettings {
+                default_light: false,
+                max_depth: 1,
+                ..RenderSettings::new(24, 24, 2)
+            };
+            let out = engine.render(&scene, &settings, &Control::new()).unwrap();
+            common::centre_mean(&out, 2)[0]
+        };
+        let opaque = render(5.0, 0.0);
+        let thin = render(5.0, 10.0);
+        let thick = render(20.0, 10.0);
+        assert!(
+            thin > thick * 2.0 && thick > opaque,
+            "{thin}, {thick}, {opaque}"
+        );
+    });
+}

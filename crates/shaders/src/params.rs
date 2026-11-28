@@ -172,6 +172,11 @@ pub fn shader_types() -> Vec<NodeType> {
             ))
             .param(ParamDesc::bool("cycle", "Cycle", false)),
         blur(ty("bitmap", "Bitmap"))
+            .param(ParamDesc::bool(
+                "srgb_input",
+                "Decode sRGB Color",
+                false,
+            ))
             .param(ParamDesc::file_path("file", "File", ""))
             .param(ParamDesc::bool("repeat", "Repeat", true))
             .param(ParamDesc::bool("interpolate", "Interpolate", true)),

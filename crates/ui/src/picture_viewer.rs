@@ -42,6 +42,7 @@ impl Channel {
 }
 
 struct Job {
+    gpu_path_trace: bool,
     id: u64,
     frame: i64,
     scene: Scene,
@@ -155,7 +156,17 @@ pub(crate) fn prepare_render(
 
 fn render(mut job: Job, control: &Control) -> Result<Completed, RenderError> {
     let (snap, warnings) = prepare_render(&job.scene, job.frame, &mut job.settings, control)?;
-    let output = CpuEngine::new().render(&snap, &job.settings, control)?;
+    let output = if job.gpu_path_trace {
+        let (device, queue) =
+            forge_render_rt::request_rt_device().map_err(RenderError::Unsupported)?;
+        forge_render_rt::PathTraceEngine::with_device(device, queue).render(
+            &snap,
+            &job.settings,
+            control,
+        )?
+    } else {
+        CpuEngine::new().render(&snap, &job.settings, control)?
+    };
     Ok(Completed {
         id: job.id,
         frame: job.frame,
@@ -206,6 +217,7 @@ pub struct PictureViewer {
     channel: Channel,
     exposure: f32,
     all_passes: bool,
+    gpu_path_trace: bool,
     notice: String,
     texture: Option<((u64, Channel, u32), TextureHandle)>,
 }
@@ -259,6 +271,7 @@ impl PictureViewer {
         }
         self.next_id += 1;
         self.waiting.push_back(Job {
+            gpu_path_trace: self.gpu_path_trace,
             id: self.next_id,
             frame,
             scene: scene.clone(),
@@ -403,6 +416,8 @@ impl PictureViewer {
                 self.queue(scene, frame);
                 self.tick(ui.ctx());
             }
+            ui.checkbox(&mut self.gpu_path_trace, "GPU path tracing")
+                .on_hover_text("Trace queued frames on the GPU. Supports thickness-based subsurface backlighting.");
             ui.checkbox(&mut self.all_passes, "All passes");
             if let Some(job) = &self.running {
                 let total = job.progress.total.load(Ordering::Relaxed);
@@ -537,5 +552,38 @@ fn data_rgb(aov: Aov, [r, g, b]: [f32; 3]) -> [f32; 3] {
             [0x8e9c, 0x15bf, 0x6cbd].map(|v| ((id.wrapping_mul(v) >> 4) & 255) as f32 / 255.0)
         }
         _ => [r, g, b],
+    }
+}
+
+#[cfg(test)]
+mod sample_scene_tests {
+    use super::*;
+    #[test]
+    fn showcase_materials_reach_the_picture_viewer() {
+        let registry = Arc::new(forge_app::default_registry().unwrap());
+        for sample in forge_command::browser::SAMPLE_SCENES {
+            let (scene, report) = forge_core::file::load(registry.clone(), sample.file).unwrap();
+            assert!(
+                report.warnings.is_empty(),
+                "{}: {:?}",
+                sample.name,
+                report.warnings
+            );
+            let mut settings = editor_render_settings(&scene, None);
+            assert_eq!((settings.width, settings.height), (640, 360));
+            let (snapshot, _) = prepare_render(&scene, 0, &mut settings, &Control::new()).unwrap();
+            assert_eq!(snapshot.lights.len(), 2);
+            for id in scene.materials() {
+                let name = &scene.node(*id).unwrap().name;
+                assert!(
+                    snapshot
+                        .instances
+                        .iter()
+                        .any(|i| snapshot.materials[i.material].name == *name),
+                    "{}: missing {name}",
+                    sample.name
+                );
+            }
+        }
     }
 }

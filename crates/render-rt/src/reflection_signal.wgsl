@@ -3,7 +3,7 @@ const BOUNCE_SAMPLES: u32 = REFLECTION_SAMPLES;
 @group(0) @binding(3) var reflection_environment: texture_2d<f32>;
 
 fn bounce_sample(m: Mat, n: vec3<f32>, ng: vec3<f32>, wo: vec3<f32>,
-    rng: ptr<function, Rng>) -> ReflectionSample {
+    sample_index: u32, rng: ptr<function, Rng>) -> ReflectionSample {
     return reflection_sample(m, n, ng, wo, rng);
 }
 

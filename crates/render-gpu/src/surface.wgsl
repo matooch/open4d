@@ -8,6 +8,7 @@ struct Mat {
     emission: vec3<f32>,
     trans: vec3<f32>,
     ior: f32,
+    scattering_distance: f32,
     n: vec3<f32>,
 };
 
@@ -63,6 +64,7 @@ fn surface_at(mat: u32, g: Geom, wo: vec3<f32>, scale: f32) -> Mat {
         m.trans = clamp(s.transmission.xyz, vec3<f32>(0.0), vec3<f32>(1.0));
         m.ior = max(s.transmission.w, 1e-3);
     }
+    m.scattering_distance = s.diffusion_present.y;
     m.n = g.ns;
     if (s.bump_present.x > 0.5) {
         let eps = 1e-3 * scale;
@@ -83,6 +85,8 @@ fn surface_at(mat: u32, g: Geom, wo: vec3<f32>, scale: f32) -> Mat {
             m.n = normalize(n);
         }
     }
+    m.n = forge_tangent_normal(s, m.n, g.corners[1]-g.corners[0], g.corners[2]-g.corners[0],
+        (g.corner_uvw[1]-g.corner_uvw[0]).xy, (g.corner_uvw[2]-g.corner_uvw[0]).xy);
     return m;
 }
 

@@ -54,6 +54,17 @@ fn build_at(
         && !path.is_empty()
     {
         inputs.image = images(path);
+        if node.params.get("srgb_input") == Some(&Value::Bool(true))
+            && let Some(image) = &mut inputs.image
+        {
+            // Image loaders supply stored samples. Only color textures marked sRGB
+            // need the transfer function removed before shading.
+            for pixel in Arc::make_mut(image).data.chunks_exact_mut(4) {
+                for channel in &mut pixel[..3] {
+                    *channel = forge_image::srgb_to_linear(*channel);
+                }
+            }
+        }
     }
     build(&node.type_id, &values, &inputs)
 }
@@ -92,7 +103,9 @@ impl ShaderSet {
             }
         }
         for v in node.params.values() {
-            if let Value::Link(Some(root)) = v {
+            if let Value::Link(Some(root)) = v
+                && !set.shaders.contains_key(&shader_name(*root))
+            {
                 match build_node(scene, *root, images) {
                     Ok(s) => {
                         set.shaders.insert(shader_name(*root), s);

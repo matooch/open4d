@@ -147,7 +147,7 @@ impl RenderView {
         size: [u32; 2],
         post: PostSettings,
     ) -> Result<TextureHandle, String> {
-        let size = [size[0].clamp(1, 640), size[1].clamp(1, 400)];
+        let size = size.map(|v| v.max(1));
         let key = Key {
             revision: scene.revision(),
             frame,

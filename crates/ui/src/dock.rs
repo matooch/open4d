@@ -87,7 +87,7 @@ impl Panel {
     ];
 
     /// The panels `Dock::default()` opens; the others open from the Window menu.
-    pub const DEFAULT: [Panel; 9] = [
+    pub const DEFAULT: [Panel; 10] = [
         Panel::CommandBar,
         Panel::ToolPalette,
         Panel::Viewport,
@@ -97,6 +97,7 @@ impl Panel {
         Panel::DopeSheet,
         Panel::ValueGraph,
         Panel::Coordinates,
+        Panel::Materials,
     ];
 
     pub fn title(self) -> &'static str {
@@ -161,7 +162,7 @@ impl Panel {
             Panel::Layers => Area::RightBottom,
             Panel::ContentBrowser => Area::RightBottom,
             Panel::WeightManager => Area::RightBottom,
-            Panel::Materials => Area::RightBottom,
+            Panel::Materials => Area::Bottom,
             Panel::PictureViewer => Area::Center,
             Panel::InteractiveRender => Area::Center,
             Panel::UvEditor => Area::Center,

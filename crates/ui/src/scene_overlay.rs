@@ -172,7 +172,7 @@ impl SceneOverlay {
                 joint_style(enum_param(scene, *id, "display_joint")),
             ));
         }
-        out.objects = object_lines(scene, selected);
+        out.objects = object_lines(scene, selected, false);
         out.nulls = null_objects(scene)
             .into_iter()
             .filter(|n| forge_core::visibility::editor_visible(scene, n.node))
@@ -215,14 +215,21 @@ const FLOOR_HALF: f64 = 1000.0;
 const FLOOR_CELLS: usize = 10;
 
 /// The gizmo lines of the scene's cameras, lights and floors that the editor shows.
-fn object_lines(scene: &Scene, selected: &BTreeSet<NodeId>) -> Vec<DrawLine> {
+pub(crate) fn object_lines(
+    scene: &Scene,
+    selected: &BTreeSet<NodeId>,
+    selected_only: bool,
+) -> Vec<DrawLine> {
     use forge_generators::scene_objects::{AreaKind, Lens as ObjLens, LightShape, scene_objects};
     use forge_viewport::scene_view::{Lens, LightGizmo, camera_lines, floor_lines, light_lines};
     let objs = scene_objects(scene);
     let aspect = scene
         .render_config()
         .map_or(16.0 / 9.0, |c| f64::from(c.width) / f64::from(c.height));
-    let shown = |id: NodeId| forge_core::visibility::editor_visible(scene, id);
+    let shown = |id: NodeId| {
+        (!selected_only || selected.contains(&id))
+            && forge_core::visibility::editor_visible(scene, id)
+    };
     let mut out = Vec::new();
     for c in objs.cameras.iter().filter(|c| shown(c.node)) {
         let lens = match c.lens {

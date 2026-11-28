@@ -93,7 +93,7 @@ fn bounce_signal(pixel: vec2<u32>) {
             var rng = rng_new(seed, vec2<u32>(index, 0u));
             var secondary: array<BounceHit, BOUNCE_SAMPLES>;
             for (var attempt = 0u; attempt < BOUNCE_SAMPLES; attempt += 1u) {
-                let s = bounce_sample(m, n, ng, wo, &rng);
+                let s = bounce_sample(m, n, ng, wo, attempt, &rng);
                 if s.accepted {
                     let hit = rt_closest(origin, s.direction, 1e30);
                     if hit.ids.x == RT_MISS {

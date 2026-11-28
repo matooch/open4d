@@ -243,3 +243,80 @@ fn the_commands_work_in_a_window_less_state_too() {
     let r = execute(&mut plain, "browser.recent", json!({})).unwrap();
     assert_eq!(r["files"].as_array().unwrap().len(), 0);
 }
+
+#[test]
+fn material_library_adds_editable_copper_in_one_undo_step() {
+    let mut h = harness(EditorState::new(std::sync::Arc::new(
+        forge_app::default_registry().unwrap(),
+    )));
+    click(&mut h, "Material library");
+    let undo = st(&h).doc.undo_depth();
+    click(&mut h, "Warm copper");
+    let doc = &st(&h).doc;
+    let scene = doc.scene();
+    let id = *scene.materials().last().unwrap();
+    assert_eq!(scene.node(id).unwrap().name, "Warm copper");
+    assert_eq!(
+        scene.param(id, "reflectance.spec.width"),
+        Some(&forge_core::Value::Float(0.23))
+    );
+    assert_eq!(
+        scene.param(id, "reflectance.spec.attenuation"),
+        Some(&forge_core::Value::Enum("metal".into()))
+    );
+    assert_eq!(doc.undo_depth(), undo + 1);
+}
+
+#[test]
+fn sample_opens_an_untitled_copy_after_the_unsaved_work_prompt() {
+    let mut s = EditorState::new(std::sync::Arc::new(forge_app::default_registry().unwrap()));
+    create(&mut s, "forge.cube");
+    let mut h = harness(s);
+    h.state_mut()
+        .set_dialogs(Box::new(Choose(Rc::new(RefCell::new(vec![
+            Unsaved::Cancel,
+            Unsaved::DontSave,
+        ])))));
+    click(&mut h, "Scenes");
+    click(&mut h, "Softbox Studio");
+    assert_eq!(node_count(st(&h)), 1);
+    click(&mut h, "Softbox Studio");
+    assert_eq!(st(&h).doc.scene().materials().len(), 4);
+    assert!(st(&h).file_path.is_none());
+}
+
+#[test]
+fn an_imported_catalog_entry_adds_its_material_and_remaps_the_bitmap() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(dir.join("library.json"), r#"{"format":"forge-material-library-v1","materials":[{"name":"Weave","category":"Fabric","file":"weave.forge","swatch":[120,90,80]}]}"#).unwrap();
+    std::fs::write(dir.join("weave.forge"), r#"(format:"forge3d-scene",version:13,roots:[],materials:[(id:1,type_id:"forge.material.standard",name:"Weave",params:{"reflectance.spec.roughness_texture":Link(Some(2))},tags:[],children:[(id:2,type_id:"forge.shader.bitmap",name:"Roughness",params:{"file":String("weave.png"),"srgb_input":Bool(false)},tags:[],children:[])])])"#).unwrap();
+    std::fs::write(
+        dir.join("weave.png"),
+        forge_command::browser::SAMPLE_SCENES[0].preview,
+    )
+    .unwrap();
+    let mut s = EditorState::new(std::sync::Arc::new(forge_app::default_registry().unwrap()));
+    let existing = create(&mut s, "forge.cube");
+    s.app.browser.use_files(None, Some(dir.into()));
+    std::fs::write(
+        dir.join("material-library-location.json"),
+        serde_json::to_vec(&dir.join("library.json")).unwrap(),
+    )
+    .unwrap();
+    let mut h = harness(s);
+    click(&mut h, "Material library");
+    click(&mut h, "Weave");
+    let scene = st(&h).doc.scene();
+    assert!(scene.node(existing).is_some());
+    let mat = scene.node(scene.materials()[0]).unwrap();
+    assert_eq!(mat.name, "Weave");
+    assert_eq!(
+        scene.param(mat.id, "reflectance.spec.roughness_texture"),
+        Some(&forge_core::Value::Link(Some(mat.children[0])))
+    );
+    let graph = forge_material::node_material::compile_hosted(mat).unwrap();
+    assert!(graph.outputs.roughness_input.is_some());
+    assert!(h.state_mut().state.doc.undo());
+    assert!(st(&h).doc.scene().materials().is_empty());
+}

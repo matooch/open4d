@@ -98,6 +98,7 @@ pub fn standard_type() -> NodeType {
     b.col("color.color", "Color", [0.8, 0.8, 0.8]);
     b.pct("color.brightness", "Brightness", 100.0, 0.0, 10000.0);
     b.tex("color", "normal");
+    b.slot("color.occlusion_texture", "Occlusion Map");
     b.en(
         "color.model",
         "Model",
@@ -240,6 +241,9 @@ pub fn standard_type() -> NodeType {
         "additive",
         &[("additive", "Additive"), ("metal", "Metal")],
     );
+    b.slot("reflectance.spec.roughness_texture", "Roughness Map");
+    b.slot("reflectance.spec.metallic_texture", "Metallic Map");
+    b.slot("reflectance.spec.strength_texture", "Specular Level Map");
     b.pct("reflectance.spec.width", "Width", 50.0, 0.0, 100.0);
     b.pct("reflectance.spec.falloff", "Falloff", 0.0, -100.0, 100.0);
     b.pct(
@@ -340,6 +344,14 @@ pub fn standard_type() -> NodeType {
     b.num("environment.tiles_x", "Tiles X", 1.0, 0.0, 999999999.0);
     b.num("environment.tiles_y", "Tiles Y", 1.0, 0.0, 999999999.0);
     b.on("environment.exclusive", "Exclusive", true);
+    b.group = "Subsurface";
+    b.dist(
+        "subsurface.distance",
+        "Scattering Distance",
+        0.0,
+        0.0,
+        999999999.0,
+    );
     b.group = "Fog";
     b.col("fog.color", "Fog Color", [1.0, 1.0, 1.0]);
     b.pct("fog.brightness", "Fog Brightness", 100.0, 0.0, 100.0);

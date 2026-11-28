@@ -730,3 +730,35 @@ fn cpu_references_resolve_each_secondary_signal() {
         assert!(signal > 0.01, "{effect:?}: centre red {with} vs {without}");
     }
 }
+
+#[test]
+fn emissive_panel_lights_the_receiver_through_an_opening() {
+    with_gpu(|device, queue| {
+        let engine = RtEngine::with_device(device.clone(), queue.clone());
+        let mut scene = fixture(Effect::Gi);
+        let mut settings = Effect::Gi.raster_settings();
+        settings.hybrid.enabled = true;
+        settings.hybrid.gi = true;
+        let floor_light = |scene: &Snapshot| {
+            let out = engine.render(scene, &settings, &Control::new()).unwrap();
+            centre_mean(&out, 4)[0]
+        };
+        scene.materials.push(diffuse([0.0; 3]));
+        scene.meshes.push(cube(1.0));
+        let screen = |x, width| {
+            DMat4::from_translation(DVec3::new(x, 12.0, 0.0))
+                * DMat4::from_scale(DVec3::new(width, 0.5, 80.0))
+        };
+        for (id, x) in [(3, -43.0), (4, 43.0)] {
+            scene
+                .instances
+                .push(Instance::new(2, screen(x, 37.0), 2, id));
+        }
+        let open = floor_light(&scene);
+        scene
+            .instances
+            .push(Instance::new(2, screen(0.0, 6.0), 2, 5));
+        let closed = floor_light(&scene);
+        assert!(open > 0.001 && closed < open * 0.05, "{open} vs {closed}");
+    });
+}

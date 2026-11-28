@@ -30,6 +30,11 @@ fn queued_renders_appear_in_history_and_can_be_compared() {
         },
         (PictureViewer::default(), st),
     );
+    // GPU-enabled validation runs the same end-to-end queue and AOV checks on the path tracer.
+    if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") {
+        h.get_by_label("GPU path tracing").click();
+        h.run();
+    }
     h.get_by_label("All passes").click();
     h.run();
     h.get_by_label("Queue frame").click();
