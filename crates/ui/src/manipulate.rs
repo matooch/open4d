@@ -3,14 +3,14 @@
 use forge_core::transform::{self, Transform, hpb_from_rotation, rotation_part};
 use forge_core::{Document, EditError, EvalCtx, NodeId, Scene, Tx, Value};
 use forge_generators::axis::AxisEdit;
-use forge_viewport::camera::Camera;
+use forge_viewport::camera::{Camera, Ray};
 use forge_viewport::gizmo::DragDelta;
 use forge_viewport::picking::{pick_instances, pick_poly};
 use glam::DMat3;
 
 use crate::animate::AnimEdit;
 use crate::attributes::Gesture;
-use crate::viewport_panel::{DrawItem, instance_input, scene_draw_items_at};
+use crate::viewport_panel::{DrawItem, instance_input, scene_draw_items_at, scheduled_draw_items};
 
 pub(crate) use forge_app::coords::write_transform;
 
@@ -206,12 +206,32 @@ pub struct PickHit {
 /// expanding the clone geometry (docs/specs/VIEWPORT.md §10.7).
 pub fn pick_object(scene: &Scene, cam: &Camera, x: f64, y: f64, w: f64, h: f64) -> Option<PickHit> {
     let ray = cam.ray(x, y, w, h);
-    scene_draw_items_at(scene, &Default::default(), &EvalCtx::default())
+    let items = scene_draw_items_at(scene, &Default::default(), &EvalCtx::default());
+    // A locked layer cannot be selected.
+    let selectable = items
         .into_iter()
-        // a locked layer's objects cannot be picked (CORE.md §7.4)
-        .filter(|item| !forge_core::layers::locked(scene, item.id()))
+        .filter(|item| !forge_core::layers::locked(scene, item.id()));
+    nearest_surface(selectable, &ray).map(|(_, hit)| hit)
+}
+
+/// Navigation can anchor to any visible surface, including locked objects.
+pub(crate) fn navigation_anchor(
+    frame: &forge_app::schedule::Frame,
+    camera: &Camera,
+    [x, y]: [f64; 2],
+    [width, height]: [f64; 2],
+) -> Option<glam::DVec3> {
+    let ray = camera.ray(x, y, width, height);
+    nearest_surface(scheduled_draw_items(frame, &Default::default()), &ray)
+        .map(|(t, _)| ray.at(t))
+        .or_else(|| forge_viewport::grid::grid_hit(camera, height, &ray))
+}
+
+fn nearest_surface(items: impl IntoIterator<Item = DrawItem>, ray: &Ray) -> Option<(f64, PickHit)> {
+    items
+        .into_iter()
         .filter_map(|item| match item {
-            DrawItem::Mesh { id, mesh, .. } => pick_poly(&mesh, &ray).map(|hit| (hit.t, id, None)),
+            DrawItem::Mesh { id, mesh, .. } => pick_poly(&mesh, ray).map(|hit| (hit.t, id, None)),
             DrawItem::Instanced {
                 id,
                 instances,
@@ -221,12 +241,12 @@ pub fn pick_object(scene: &Scene, cam: &Camera, x: f64, y: f64, w: f64, h: f64) 
                 &instances.prototypes,
                 &instance_input(&instances),
                 &world,
-                &ray,
+                ray,
             )
             .map(|hit| (hit.t, id, Some(hit.clone))),
         })
         .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
-        .map(|(_, node, clone)| PickHit { node, clone })
+        .map(|(t, node, clone)| (t, PickHit { node, clone }))
 }
 
 /// The generator node whose world-space mesh (or instance) is nearest under the cursor.

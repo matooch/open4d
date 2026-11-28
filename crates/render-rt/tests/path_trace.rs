@@ -544,3 +544,115 @@ fn backlit_wax_dims_with_thickness() {
         );
     });
 }
+
+#[test]
+fn path_lighting_switches_affect_cpu_and_gpu_beauty() {
+    let snapshot = load("cube-plane").snapshot;
+    let glossy_snapshot = load("mat-glossy").snapshot;
+    let check = |engine: &dyn RenderEngine| {
+        let mut settings = image_parity::settings((32, 24), vec![Aov::Specular]);
+        settings.samples = 16;
+        let render = |scene: &Snapshot, settings: &RenderSettings| {
+            engine.render(scene, settings, &Control::new()).unwrap()
+        };
+        let normal = render(&snapshot, &settings);
+        settings.path.indirect_diffuse = false;
+        assert_ne!(normal.beauty.data, render(&snapshot, &settings).beauty.data);
+        settings.path.indirect_diffuse = true;
+        settings.path.ao_radius = 150.0;
+        assert_ne!(normal.beauty.data, render(&snapshot, &settings).beauty.data);
+        settings.path.ao_radius = 0.0;
+        let glossy = render(&glossy_snapshot, &settings);
+        settings.path.glossy_reflections = false;
+        let matte = render(&glossy_snapshot, &settings);
+        assert_ne!(glossy.beauty.data, matte.beauty.data);
+        assert!(
+            matte.aovs[&Aov::Specular]
+                .data
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|p| p[..3] == [0.0; 3])
+        );
+    };
+    check(&CpuEngine::new());
+    with_devices(|(device, queue)| {
+        check(&PathTraceEngine::with_device(device.clone(), queue.clone()));
+    });
+}
+
+#[test]
+fn node_roughness_broadens_the_reflection_of_a_small_area_light() {
+    use forge_material::node_material::{SurfaceValues, compile_graph};
+    use std::f64::consts::FRAC_PI_2;
+
+    let material = |roughness| {
+        let values = SurfaceValues {
+            base_color: [0.0; 3],
+            roughness,
+            metallic: 1.0,
+            ..SurfaceValues::default()
+        };
+        MaterialData::new(
+            "Mirror",
+            compile_graph(&values.to_graph().unwrap()).unwrap(),
+        )
+    };
+    let camera = Camera::from_hpb(
+        DVec3::new(0.0, 4.0, 0.0),
+        [0.0, -FRAC_PI_2, 0.0],
+        Projection::Orthographic { width: 4.0 },
+    );
+    let mut snapshot =
+        common::snapshot_with(common::plane(3.0), material(0.0), DMat4::IDENTITY, camera);
+    snapshot.lights.push(Light::new(
+        LightKind::Area {
+            shape: AreaShape::Rectangle {
+                width: 0.6,
+                height: 0.6,
+            },
+            two_sided: true,
+        },
+        forge_render_api::camera::hpb_matrix(DVec3::new(0.0, 1.0, 0.0), [0.0, -FRAC_PI_2, 0.0]),
+    ));
+    let settings = RenderSettings {
+        samples: 128,
+        default_light: false,
+        max_depth: 2,
+        ..RenderSettings::new(25, 25, 128)
+    };
+    let check = |engine: &dyn RenderEngine| {
+        let mut scene = snapshot.clone();
+        let mut samples = Vec::new();
+        for roughness in [0.0, 0.5, 1.0] {
+            scene.materials[0] = material(roughness);
+            let output = engine.render(&scene, &settings, &Control::new()).unwrap();
+            samples.push((
+                output.beauty.pixel(12, 12)[0],
+                output.beauty.pixel(18, 12)[0],
+            ));
+        }
+        let [
+            (sharp_peak, sharp_tail),
+            (mid_peak, _),
+            (rough_peak, rough_tail),
+        ] = samples.as_slice()
+        else {
+            unreachable!()
+        };
+        assert!(
+            sharp_peak > mid_peak && mid_peak > rough_peak,
+            "{}: {samples:?}",
+            engine.id()
+        );
+        assert!(
+            *rough_tail > *sharp_tail && rough_tail / rough_peak > 0.1,
+            "{}: {samples:?}",
+            engine.id()
+        );
+    };
+    check(&CpuEngine::new());
+    with_devices(|(device, queue)| {
+        check(&PathTraceEngine::with_device(device.clone(), queue.clone()));
+    });
+}

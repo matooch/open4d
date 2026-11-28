@@ -113,7 +113,7 @@ pub fn standard_type() -> NodeType {
         1000.0,
     );
     b.pct("color.diffuse_level", "Diffuse Level", 100.0, 0.0, 1000.0);
-    b.pct("color.roughness", "Roughness", 50.0, 0.0, 200.0);
+    b.pct("color.roughness", "Diffuse Roughness", 50.0, 0.0, 200.0);
     b.group = "Diffusion";
     b.pct(
         "diffusion.brightness",
@@ -241,10 +241,10 @@ pub fn standard_type() -> NodeType {
         "additive",
         &[("additive", "Additive"), ("metal", "Metal")],
     );
+    b.pct("reflectance.spec.width", "Roughness", 50.0, 0.0, 100.0);
     b.slot("reflectance.spec.roughness_texture", "Roughness Map");
     b.slot("reflectance.spec.metallic_texture", "Metallic Map");
     b.slot("reflectance.spec.strength_texture", "Specular Level Map");
-    b.pct("reflectance.spec.width", "Width", 50.0, 0.0, 100.0);
     b.pct("reflectance.spec.falloff", "Falloff", 0.0, -100.0, 100.0);
     b.pct(
         "reflectance.spec.inner_width",

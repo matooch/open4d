@@ -16,7 +16,7 @@ use serde_json::{Value as Json, json};
 use crate::commands::execute;
 use crate::node_canvas::{
     CanvasAction, CanvasModel, CanvasState, Constant, MenuEntry, NodeKey, NodeView, PortAddr,
-    PortView, Side, View, cut, fmt_float,
+    PortView, RampView, Side, View, cut, fmt_float,
 };
 use crate::state::EditorState;
 
@@ -95,11 +95,44 @@ pub struct ExpressionModel {
     /// `"node.port"` to the value from the dry run.
     pub values: Arc<BTreeMap<String, Json>>,
     registry: &'static NodeRegistry,
+    ramp_values: Option<forge_nodes::Evaluation>,
 }
 
 impl ExpressionModel {
     fn port_key(node: GraphNodeId, port: &str) -> String {
         format!("{node}.{port}")
+    }
+
+    fn ramp(&self, id: GraphNodeId) -> Option<RampView> {
+        let node = self.graph.node(id)?;
+        if node.type_id != node_material::GRADIENT {
+            return None;
+        }
+        let input = |port: &str, ty| {
+            self.graph
+                .link_into(&PortRef::new(id, port))
+                .and_then(|link| {
+                    self.ramp_values
+                        .as_ref()?
+                        .output(link.from.node, &link.from.port)
+                })
+                .and_then(|value| forge_nodes::convert(value, ty).ok())
+                .or_else(|| self.graph.constant_of(self.registry, id, port).ok())
+        };
+        let scalar = |port| match input(port, PortType::Float) {
+            Some(PortValue::Float(value)) => value,
+            _ => unreachable!("declared float input"),
+        };
+        let color = |port| match input(port, PortType::Colour) {
+            Some(PortValue::Colour(value)) => value,
+            _ => unreachable!("declared color input"),
+        };
+        let ports = ["start", "midpoint", "end"];
+        Some(RampView {
+            levels: ports.map(scalar),
+            colors: ["a", "b"].map(color),
+            editable: ports.map(|port| self.graph.link_into(&PortRef::new(id, port)).is_none()),
+        })
     }
 }
 
@@ -167,6 +200,7 @@ impl CanvasModel for ExpressionModel {
             pos: [n.pos[0] as f32, n.pos[1] as f32],
             inputs,
             outputs,
+            ramp: self.ramp(n.id),
         })
     }
 
@@ -532,6 +566,7 @@ pub fn node_editor_ui(ui: &mut Ui, st: &mut EditorState) {
             .unwrap_or_else(|| Arc::new(Vec::new())),
         values: cache.values.clone(),
         registry: NodeRegistry::builtin(),
+        ramp_values: None,
     };
     let actions = st.node_editor.canvas.show(ui, &model);
     for a in actions {
@@ -577,7 +612,10 @@ fn material_editor_ui(ui: &mut Ui, st: &mut EditorState) {
     });
     st.node_editor.show_material(material);
     let node = st.doc.scene().node(material).expect("listed material");
-    let graph = match node_material::load_graph(node).and_then(|g| {
+    if node_material::is_converted(node) {
+        ui.weak("Surface inputs use the material's settings until you edit or connect them.");
+    }
+    let graph = match node_material::graph_with_inherited_inputs(node, true).and_then(|g| {
         node_material::compile_graph(&g)?;
         Ok(g)
     }) {
@@ -589,6 +627,15 @@ fn material_editor_ui(ui: &mut Ui, st: &mut EditorState) {
         }
     };
     let registry = node_material::registry();
+    let ramp_values = if graph.nodes().any(|n| n.type_id == node_material::GRADIENT)
+        && !graph.links().is_empty()
+    {
+        graph
+            .evaluate_all(registry, &forge_nodes::EvalEnv::headless(0.0))
+            .ok()
+    } else {
+        None
+    };
     let model = ExpressionModel {
         graph: Arc::new(graph),
         registry,
@@ -604,6 +651,7 @@ fn material_editor_ui(ui: &mut Ui, st: &mut EditorState) {
                 .collect(),
         ),
         values: Arc::default(),
+        ramp_values,
     };
     let actions = st.node_editor.material_canvas.show(ui, &model);
     for action in actions {

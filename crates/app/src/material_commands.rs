@@ -6,7 +6,7 @@ use forge_command::{
 };
 use forge_core::{Category, NodeId, Value};
 use forge_generators::{POLYGON, to_poly_mesh};
-use forge_material::node_material::{GRAPH, NODE_MATERIAL, compile_graph};
+use forge_material::node_material::{FROM_STANDARD, GRAPH, NODE_MATERIAL, compile_graph};
 use forge_material::{Camera, MATERIAL, Projection, TEXTURE_TAG, TagSpace, UVW_TAG, generate_uvw};
 use glam::DVec3;
 use schemars::JsonSchema;
@@ -23,6 +23,12 @@ struct CreateArgs {
     params: Option<Map<String, Json>>,
     /// Position in the material list (default: the end).
     index: Option<usize>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct ConvertArgs {
+    material: u64,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -47,7 +53,7 @@ struct AssignArgs {
     material: u64,
     /// Objects (default: the selection).
     nodes: Option<Vec<u64>>,
-    /// Projection of the new tags (a texture tag `projection` id).
+    /// Projection of the new tags (a texture tag `projection` id, defaults to UVW mapping).
     projection: Option<String>,
 }
 
@@ -97,6 +103,14 @@ pub fn register(r: &mut CommandRegistry) -> Result<(), CommandError> {
     r.register_fn(
         spec("material.create", "Create Material", || json!({})),
         create,
+    )?;
+    r.register_fn(
+        spec(
+            "material.convert_to_node",
+            "Convert to Node Material",
+            || json!({"material": 1}),
+        ),
+        convert_to_node,
     )?;
     r.register_fn(
         spec("material.set_graph", "Edit Material Graph", || {
@@ -173,6 +187,25 @@ fn create(ctx: &mut dyn CommandContext, a: CreateArgs) -> Result<Json, CommandEr
     Ok(json!({"material": id.0}))
 }
 
+fn convert_to_node(ctx: &mut dyn CommandContext, a: ConvertArgs) -> Result<Json, CommandError> {
+    let id = require_material(ctx, a.material)?;
+    if !ctx
+        .doc()
+        .scene()
+        .node(id)
+        .is_some_and(|n| n.type_id == MATERIAL)
+    {
+        return Err(CommandError::failed(
+            "select a Standard material to convert",
+        ));
+    }
+    ctx.doc_mut().transact("Convert to Node Material", |tx| {
+        tx.upgrade_material_type(id, NODE_MATERIAL)?;
+        tx.set_param(id, FROM_STANDARD, Value::Bool(true))
+    })?;
+    Ok(json!({"material": id.0}))
+}
+
 fn set_graph(ctx: &mut dyn CommandContext, a: GraphArgs) -> Result<Json, CommandError> {
     let id = require_material(ctx, a.material)?;
     let scene = ctx.doc().scene();
@@ -224,14 +257,13 @@ fn assign(ctx: &mut dyn CommandContext, a: AssignArgs) -> Result<Json, CommandEr
             "select objects to assign the material to",
         ));
     }
+    let projection = Value::Enum(a.projection.unwrap_or_else(|| "uvw".to_owned()));
     let tags = ctx.doc_mut().transact("Assign Material", |tx| {
         let mut tags = Vec::new();
         for n in &nodes {
             let tag = tx.attach_tag(TEXTURE_TAG, *n, None)?;
             tx.set_param(tag, "material", Value::Link(Some(material)))?;
-            if let Some(p) = &a.projection {
-                tx.set_param(tag, "projection", Value::Enum(p.clone()))?;
-            }
+            tx.set_param(tag, "projection", projection.clone())?;
             tags.push(tag.0);
         }
         Ok(tags)

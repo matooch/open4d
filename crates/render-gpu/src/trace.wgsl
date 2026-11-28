@@ -408,7 +408,14 @@ fn trace_path(o_in: vec3<f32>, d_in: vec3<f32>, rng: ptr<function, Rng>) -> Trac
         let wo = -d;
         let front = dot(g.ng, wo) > 0.0;
         let ngv = select(-g.ng, g.ng, front);
-        let surf = surface_at(mat_ix, g, wo, fr(F_SCALE));
+        var surf = surface_at(mat_ix, g, wo, fr(F_SCALE));
+        if fr(F_GLOSSY) < 0.5 {
+            surf.spec = vec3<f32>(0.0);
+        }
+        var scatter = surf;
+        if fr(F_INDIRECT_DIFFUSE) < 0.5 {
+            scatter.albedo = vec3<f32>(0.0);
+        }
         let nv = select(-surf.n, surf.n, front);
         var n = nv;
         if (dot(nv, ngv) < 0.0) {
@@ -428,6 +435,11 @@ fn trace_path(o_in: vec3<f32>, d_in: vec3<f32>, rng: ptr<function, Rng>) -> Trac
         }
         let origin = g.p + ngv * eps;
 
+        var ao = 1.0;
+        if depth == 0u && fr(F_AO_RADIUS) > 0.0 {
+            let wi = to_world(ngv, cosine_hemisphere(rng_f2(rng)));
+            ao = select(1.0, 0.0, scene_occluded(origin, wi, fr(F_AO_RADIUS)));
+        }
         // Next-event estimation.
         for (var i = 0u; i < lights; i = i + 1u) {
             let l = forge_lights[i];
@@ -454,11 +466,11 @@ fn trace_path(o_in: vec3<f32>, d_in: vec3<f32>, rng: ptr<function, Rng>) -> Trac
                     acc_add(&out, radiance, depth, scatter_lobe, clamp_value);
                 }
             }
-            nee(&out, surf, n, ngv, wo, origin, ls, l.flags.z > 0.5, l.flags.w > 0.5, l.params.z > 0.5, l.params.w, l.shadow_color.xyz, throughput, depth, cat, clamp_value);
+            nee(&out, surf, scatter, ao, n, ngv, wo, origin, ls, l.flags.z > 0.5, l.flags.w > 0.5, l.params.z > 0.5, l.params.w, l.shadow_color.xyz, throughput, depth, cat, clamp_value);
         }
         if (has_env()) {
             let ls = sample_env(rng);
-            nee(&out, surf, n, ngv, wo, origin, ls, true, true, true, 1.0, vec3<f32>(0.0), throughput, depth, cat, clamp_value);
+            nee(&out, surf, scatter, ao, n, ngv, wo, origin, ls, true, true, true, 1.0, vec3<f32>(0.0), throughput, depth, cat, clamp_value);
         }
 
         if (depth + 1u >= max_depth) {
@@ -505,7 +517,7 @@ fn trace_path(o_in: vec3<f32>, d_in: vec3<f32>, rng: ptr<function, Rng>) -> Trac
                 cat = 1u;
             }
         } else {
-            let bs = mat_sample_opaque(surf, n, wo, rng);
+            let bs = mat_sample_opaque(scatter, n, wo, rng);
             if (!bs.ok || dot(ngv, bs.wi) <= 0.0) {
                 break;
             }
@@ -560,6 +572,8 @@ fn target_of(lobe: u32) -> u32 {
 fn nee(
     out: ptr<function, TraceOut>,
     surf: Mat,
+    scatter: Mat,
+    ao: f32,
     n: vec3<f32>,
     ngv: vec3<f32>,
     wo: vec3<f32>,
@@ -593,7 +607,7 @@ fn nee(
     }
     var w = 1.0;
     if (ls.pdf > 0.0) {
-        w = power_heuristic(ls.pdf, mat_pdf(surf, n, wo, ls.wi));
+        w = power_heuristic(ls.pdf, mat_pdf(scatter, n, wo, ls.wi));
     }
     var visible = true;
     if (shadow_cast && ls.dist < 1e29) {
@@ -608,7 +622,8 @@ fn nee(
         (*out).sample.shadow_total += lum(un);
         (*out).sample.shadow_visible += lum(un * factor);
     }
-    let cd = fd * cos * ls.weight * w * factor;
+    let diffuse_weight = select(1.0, w, fr(F_INDIRECT_DIFFUSE) > 0.5);
+    let cd = fd * cos * ls.weight * diffuse_weight * factor * ao;
     let cs = fs * cos * ls.weight * w * factor;
     var td = TARGET_DIFFUSE;
     var ts = TARGET_SPECULAR;

@@ -57,6 +57,7 @@ fn equivalent_standard_and_node_materials_compile_to_equal_ir() {
         ("color.texture", Value::String("base.png".into())),
         ("color.mix_mode", Value::Enum("multiply".into())),
         ("color.roughness", Value::Float(0.34)),
+        ("reflectance.spec.width", Value::Float(0.34)),
         ("reflectance.spec.attenuation", Value::Enum("metal".into())),
         ("enable.normal", Value::Bool(true)),
         ("normal.texture", Value::String("normal.png".into())),
@@ -69,4 +70,33 @@ fn equivalent_standard_and_node_materials_compile_to_equal_ir() {
     assert_eq!(compile_graph(&graph).unwrap(), compile(&standard));
     graph.add_node(r, SURFACE).unwrap();
     assert!(compile_graph(&graph).is_err());
+}
+
+#[test]
+fn levels_clip_endpoints_and_map_the_gray_point_to_half() {
+    use forge_material::node_material::GRADIENT;
+    use forge_nodes::EvalEnv;
+
+    let mut graph = forge_nodes::Graph::new();
+    let r = registry();
+    let ramp = graph.add_node(r, GRADIENT).unwrap();
+    for (port, value) in [("start", 0.2), ("end", 0.8), ("midpoint", 0.25)] {
+        graph
+            .set_value(r, ramp, port, PortValue::Float(value))
+            .unwrap();
+    }
+    for (input, expected) in [(0.1, 0.0), (0.35, 0.5), (0.5, 0.5_f64.sqrt()), (0.9, 1.0)] {
+        graph
+            .set_value(r, ramp, "position", PortValue::Float(input))
+            .unwrap();
+        let out = graph.evaluate_all(r, &EvalEnv::headless(0.0)).unwrap();
+        assert!((out.float(ramp, "factor").unwrap() - expected).abs() < 1e-12);
+        let Some(PortValue::Colour(rgb)) = out.output(ramp, "color") else {
+            panic!("missing ramp color");
+        };
+        assert!(
+            rgb.iter()
+                .all(|component| (component - expected).abs() < 1e-12)
+        );
+    }
 }

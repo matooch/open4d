@@ -24,6 +24,7 @@ pub(crate) fn load_image(path: &str) -> Option<Arc<forge_image::Image>> {
 pub(crate) struct Binding<'a> {
     pub tag: &'a Node,
     pub material: &'a Node,
+    object: &'a Node,
     uvw: Option<&'a Node>,
 }
 
@@ -48,6 +49,7 @@ impl<'a> Binding<'a> {
         Some(Self {
             tag,
             material,
+            object: host,
             uvw: tags.find(|n| n.type_id == UVW_TAG),
         })
     }
@@ -62,8 +64,11 @@ impl<'a> Binding<'a> {
         use forge_viewport::cache::combine;
         let mut rev = combine(self.tag.rev, self.material_revision(scene));
         rev = combine(rev, self.tag.id.0);
-        if let Some(uvw) = self.uvw {
-            rev = combine(rev, uvw.rev);
+        if self.projection() == "uvw" {
+            rev = combine(rev, self.object.rev);
+            if let Some(uvw) = self.uvw {
+                rev = combine(rev, uvw.rev);
+            }
         }
         rev
     }
@@ -86,13 +91,17 @@ impl<'a> Binding<'a> {
         ))
     }
 
-    pub fn coords(&self, mesh: &PolyMesh, world_to_local: DMat4, stored: bool) -> CornerUvs {
-        let kind = match self.tag.params.get("projection") {
-            Some(Value::Enum(s)) => s.as_str(),
+    fn projection(&self) -> &str {
+        match self.tag.params.get("projection") {
+            Some(Value::Enum(s)) => s,
             _ => "cubic",
-        };
+        }
+    }
+
+    pub fn coords(&self, mesh: &PolyMesh, world_to_local: DMat4, host_mesh: bool) -> CornerUvs {
+        let kind = self.projection();
         if kind == "uvw"
-            && stored
+            && host_mesh
             && let Some(uv) = self.stored_coords(mesh)
         {
             return uv;
@@ -105,6 +114,16 @@ impl<'a> Binding<'a> {
                 .collect(),
             polys: mesh.polys.clone(),
         };
+        if kind == "uvw"
+            && host_mesh
+            && let Some(uv) = forge_generators::uv::primitive_uvs(
+                &self.object.type_id,
+                &self.object.params,
+                &local,
+            )
+        {
+            return uv;
+        }
         let vec = |key, fallback| match self.tag.params.get(key) {
             Some(Value::Vec3(v)) => *v,
             _ => fallback,

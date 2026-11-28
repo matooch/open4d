@@ -29,6 +29,9 @@ pub enum IrNode {
     Texture(String),
     Fresnel {
         ior: NodeIx,
+        falloff: NodeIx,
+        center_darkening: NodeIx,
+        center_hold: NodeIx,
     },
     Ramp {
         a: NodeIx,
@@ -36,6 +39,7 @@ pub enum IrNode {
         position: NodeIx,
         start: NodeIx,
         end: NodeIx,
+        midpoint: NodeIx,
     },
     Luminance(NodeIx),
     Component {
@@ -54,19 +58,31 @@ pub enum IrNode {
     },
 }
 
-pub(crate) fn ramp_factor(position: f64, start: f64, end: f64) -> f64 {
+/// Levels remapping. The midpoint is relative to the input black and white points
+/// and specifies which input becomes 0.5.
+pub fn ramp_factor(position: f64, start: f64, end: f64, midpoint: f64) -> f64 {
     if start == end {
-        f64::from(position >= end)
-    } else {
-        ((position - start) / (end - start)).clamp(0.0, 1.0)
+        return f64::from(position >= end);
     }
+    let t = ((position - start) / (end - start)).clamp(0.0, 1.0);
+    if midpoint == 0.5 {
+        return t;
+    }
+    t.powf(0.5_f64.ln() / midpoint.clamp(0.001, 0.999).ln())
 }
 
 pub(crate) const LUMA: [f64; 3] = [0.2126, 0.7152, 0.0722];
 
-pub(crate) fn fresnel(ior: f64, normal: [f64; 3], view: [f64; 3]) -> f64 {
+pub(crate) fn fresnel(
+    ior: f64,
+    falloff: f64,
+    center_darkening: f64,
+    center_hold: f64,
+    normal: [f64; 3],
+    view: [f64; 3],
+) -> f64 {
     let ior = ior.clamp(1.0, 10.0);
-    let f0 = ((ior - 1.0) / (ior + 1.0)).powi(2);
+    let f0 = ((ior - 1.0) / (ior + 1.0)).powi(2) * (1.0 - center_darkening.clamp(0.0, 1.0));
     let length2 = |v: [f64; 3]| v.into_iter().map(|x| x * x).sum::<f64>();
     let lengths = (length2(normal) * length2(view)).sqrt();
     let cosine = if lengths > 1e-8 {
@@ -81,7 +97,9 @@ pub(crate) fn fresnel(ior: f64, normal: [f64; 3], view: [f64; 3]) -> f64 {
     } else {
         1.0
     };
-    f0 + (1.0 - f0) * (1.0 - cosine).powi(5)
+    let hold = center_hold.clamp(0.0, 0.99);
+    let edge = ((1.0 - cosine - hold) / (1.0 - hold)).clamp(0.0, 1.0);
+    f0 + (1.0 - f0) * edge.powf(falloff.clamp(0.1, 32.0))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,7 +203,7 @@ pub struct Outputs {
     pub normal: Option<NormalMap>,
     pub displacement: Option<Displacement>,
     pub diffusion: Option<Diffusion>,
-    /// Per-hit overrides emitted by node materials.
+    /// Per-hit inputs from material maps or node graphs.
     pub roughness_input: Option<NodeIx>,
     pub metallic_input: Option<NodeIx>,
 }
@@ -292,18 +310,38 @@ impl ShadingGraph {
     pub fn eval(&self, ix: NodeIx, sampler: &dyn TextureSampler, ctx: &ShadeCtx) -> [f64; 3] {
         let at = |input: NodeIx| self.eval(input, sampler, ctx);
         match &self.nodes[ix] {
-            IrNode::Fresnel { ior } => [fresnel(at(*ior)[0], ctx.normal, ctx.view); 3],
+            IrNode::Fresnel {
+                ior,
+                falloff,
+                center_darkening,
+                center_hold,
+            } => {
+                [fresnel(
+                    at(*ior)[0],
+                    at(*falloff)[0],
+                    at(*center_darkening)[0],
+                    at(*center_hold)[0],
+                    ctx.normal,
+                    ctx.view,
+                ); 3]
+            }
             IrNode::Ramp {
                 a,
                 b,
                 position,
                 start,
                 end,
+                midpoint,
             } => mix(
                 at(*a),
                 at(*b),
                 MixMode::Normal,
-                ramp_factor(at(*position)[0], at(*start)[0], at(*end)[0]),
+                ramp_factor(
+                    at(*position)[0],
+                    at(*start)[0],
+                    at(*end)[0],
+                    at(*midpoint)[0],
+                ),
             ),
             IrNode::Luminance(input) => {
                 [at(*input).into_iter().zip(LUMA).map(|(a, b)| a * b).sum(); 3]
@@ -426,11 +464,28 @@ pub fn compile(m: &Material) -> ShadingGraph {
         } else {
             color
         };
-        g.outputs.roughness_input = g.texture(m.e("reflectance.spec.roughness_texture"));
+        let roughness = m.f("reflectance.spec.width");
+        g.outputs.roughness_input =
+            g.texture(m.e("reflectance.spec.roughness_texture"))
+                .map(|map| {
+                    // At the original default, use the authored map as-is. Moving the control
+                    // towards either endpoint fades the map towards that endpoint.
+                    if roughness == 0.5 {
+                        return map;
+                    }
+                    let end = f64::from(roughness > 0.5);
+                    let top = g.push(IrNode::Color([end; 3]));
+                    g.push(IrNode::Mix {
+                        base: map,
+                        top,
+                        mode: MixMode::Normal,
+                        strength: (2.0 * roughness - 1.0).abs(),
+                    })
+                });
         g.outputs.metallic_input = g.texture(m.e("reflectance.spec.metallic_texture"));
         g.outputs.specular = Some(Specular {
             kind,
-            width: m.f("reflectance.spec.width"),
+            width: roughness,
             falloff: m.f("reflectance.spec.falloff"),
             inner_width: m.f("reflectance.spec.inner_width"),
             strength: m.f("reflectance.spec.strength") * global,

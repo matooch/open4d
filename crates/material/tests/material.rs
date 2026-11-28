@@ -133,3 +133,31 @@ fn texture_tag_defaults() {
     assert_eq!(d("length_u"), Value::Float(1.0));
     assert_eq!(d("size"), Value::Vec3([100.0; 3]));
 }
+
+#[test]
+fn reflection_roughness_adjusts_a_connected_map_through_both_endpoints() {
+    struct RoughnessMap;
+    impl forge_material::TextureSampler for RoughnessMap {
+        fn sample(&self, _: &str, _: &forge_material::ShadeCtx) -> [f64; 3] {
+            [0.25; 3]
+        }
+    }
+    let mut material = Material::new();
+    material.set(
+        "reflectance.spec.roughness_texture",
+        forge_core::Value::String("map".into()),
+    );
+    let ctx = forge_material::ShadeCtx::default();
+    for (control, expected) in [
+        (0.0, 0.0),
+        (0.25, 0.125),
+        (0.5, 0.25),
+        (0.75, 0.625),
+        (1.0, 1.0),
+    ] {
+        material.set("reflectance.spec.width", forge_core::Value::Float(control));
+        let graph = forge_material::compile(&material);
+        let input = graph.outputs.roughness_input.unwrap();
+        assert_eq!(graph.eval(input, &RoughnessMap, &ctx), [expected; 3]);
+    }
+}

@@ -286,6 +286,7 @@ impl ObjectManager {
             } else if r.clicked() {
                 let m = ui.input(|i| i.modifiers);
                 click_selection(&mut st.selection, order, row.id, m.shift, m.command);
+                st.inspect(None);
             }
             if r.secondary_clicked() {
                 menu_target(&mut st.selection, row.id);
@@ -338,10 +339,23 @@ impl ObjectManager {
                         .unwrap_or("tag_expression");
                     let image = crate::icons::ui_image(ui, icon, 13.0, theme.weak_text);
                     let button = image.map_or_else(|| egui::Button::new(tag), egui::Button::image);
+                    let scene = st.doc.scene();
+                    let tooltip = match scene.param(*tag_id, "material") {
+                        Some(forge_core::Value::Link(Some(id)))
+                            if scene.materials().contains(id) =>
+                        {
+                            let name = &scene.node(*id).expect("listed material").name;
+                            format!("{name} · Material tag\nClick to edit projection")
+                        }
+                        _ => tag.clone(),
+                    };
                     let r = ui
                         .add(button.frame(false))
                         .accessible_name(format!("[{tag}]"))
-                        .on_hover_text(tag);
+                        .on_hover_text(tooltip);
+                    if r.clicked() {
+                        st.inspect(Some(*tag_id));
+                    }
                     if r.double_clicked()
                         && st
                             .doc

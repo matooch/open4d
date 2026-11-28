@@ -32,7 +32,7 @@ pub fn primitive_uvs(
     let p = Params { ty: &ty, values };
     let up = |p: &Params| p.enumeration("orientation") == "pos_y";
     let corners = match type_id {
-        "forge.plane" if up(&p) => plane(mesh),
+        "forge.plane" => plane(mesh, p.int("segments_w"), p.int("segments_h")),
         "forge.cube" if !p.bool("fillet") && !p.bool("separate_surfaces") => cube(mesh),
         "forge.disc" if up(&p) && !p.bool("slice") => planar(mesh, 1.0),
         "forge.sphere" if p.enumeration("type") == "standard" => {
@@ -85,16 +85,25 @@ fn norm(v: f64, lo: f64, hi: f64) -> f64 {
     }
 }
 
-fn plane(mesh: &PolyMesh) -> Option<Corners> {
-    let (lo, hi) = bounds(mesh);
+fn plane(mesh: &PolyMesh, width_segments: usize, height_segments: usize) -> Option<Corners> {
+    let stride = width_segments + 1;
+    if mesh.points.len() != stride * (height_segments + 1)
+        || mesh.polys.len() != width_segments * height_segments
+    {
+        return None;
+    }
+    // The plane is built row by row, independent of its orientation.
     Some(
         mesh.polys
             .iter()
             .map(|poly| {
                 poly.iter()
-                    .map(|&i| {
-                        let p = mesh.points[i as usize];
-                        [norm(p.x, lo.x, hi.x), norm(p.z, lo.z, hi.z)]
+                    .map(|&vertex| {
+                        let index = vertex as usize;
+                        [
+                            (index % stride) as f64 / width_segments as f64,
+                            (index / stride) as f64 / height_segments as f64,
+                        ]
                     })
                     .collect()
             })

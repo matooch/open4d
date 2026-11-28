@@ -167,7 +167,7 @@ fn material_preview_image_baseline() {
     let diffuse = graph.outputs.diffuse.as_mut().unwrap();
     diffuse.color = graph.nodes.len();
     diffuse.level = 1.0;
-    diffuse.roughness = 0.2;
+    graph.outputs.specular.as_mut().unwrap().width = 0.2;
     graph.nodes.push(IrNode::Texture("chart".into()));
     let shot = |graph: &forge_material::ShadingGraph, settings| {
         let surface = PreviewMaterial::bake(&gpu.device, &gpu.queue, graph, &Chart, |_| true);
@@ -255,7 +255,7 @@ fn material_preview_image_baseline() {
     )]));
     let sample = |image: Image| image.under(&cam, DVec3::new(-0.5, -0.5, 0.0));
     let original = sample(shot(&graph, lit));
-    graph.outputs.diffuse.as_mut().unwrap().roughness = 0.95;
+    graph.outputs.specular.as_mut().unwrap().width = 0.95;
     let rough = sample(shot(&graph, lit));
     assert!(
         !close(rough, original),

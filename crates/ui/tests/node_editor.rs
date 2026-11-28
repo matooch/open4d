@@ -1049,3 +1049,64 @@ fn color_node_hex_input_stores_a_linear_graph_color() {
     };
     assert!((*r - 1.0).abs() < 1e-6 && (*g - 0.21586).abs() < 1e-4 && b.abs() < 1e-6);
 }
+
+#[test]
+fn material_levels_knots_drag_independently_and_undo_by_gesture() {
+    use forge_material::node_material::{self, GRADIENT, NODE_MATERIAL};
+    use forge_nodes::PortValue;
+
+    let (mut st, _) = state();
+    let material = execute(&mut st, "material.create", json!({"type": NODE_MATERIAL})).unwrap();
+    let material = NodeId(material["material"].as_u64().unwrap());
+    let mut graph = node_material::default_graph();
+    let surface = graph.nodes().next().unwrap().id;
+    graph.set_position(surface, [350.0, 60.0]).unwrap();
+    let ramp = graph.add_node(node_material::registry(), GRADIENT).unwrap();
+    graph.set_position(ramp, [40.0, 30.0]).unwrap();
+    execute(
+        &mut st,
+        "material.set_graph",
+        json!({
+            "material": material.0, "graph": graph.to_json()
+        }),
+    )
+    .unwrap();
+    st.node_editor.show_material(material);
+    let mut h = harness(st);
+    let depth = h.state().state.doc.undo_depth();
+    let read_graph = |h: &Harness<'_, Editor>| {
+        node_material::load_graph(h.state().state.doc.scene().node(material).unwrap()).unwrap()
+    };
+    for (name, port, dx) in [
+        ("Black point", "start", 30.0),
+        ("White point", "end", -26.0),
+        ("Gray point", "midpoint", -23.0),
+    ] {
+        let label = format!("Gradient Ramp #{} {name} handle", ramp.0);
+        let start = h.get_by_label(&label).rect().center();
+        drag(&mut h, start, start + vec2(dx, 0.0));
+        let graph = read_graph(&h);
+        let node = graph.node(ramp).unwrap();
+        let Some(PortValue::Float(value)) = node.values.get(port) else {
+            panic!("{name} did not update {port}");
+        };
+        assert!(
+            match port {
+                "start" => *value > 0.12 && *value < 0.23,
+                "end" => *value > 0.8 && *value < 0.9,
+                _ => *value > 0.25 && *value < 0.4,
+            },
+            "{port} = {value}"
+        );
+        assert_eq!(node.pos, [40.0, 30.0]);
+    }
+    assert_eq!(h.state().state.doc.undo_depth(), depth + 3);
+    assert!(h.state_mut().state.doc.undo());
+    assert!(
+        !read_graph(&h)
+            .node(ramp)
+            .unwrap()
+            .values
+            .contains_key("midpoint")
+    );
+}

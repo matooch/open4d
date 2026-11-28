@@ -96,6 +96,9 @@ pub mod frame {
     pub const SAMPLE_START: usize = 74;
     pub const SAMPLE_END: usize = 75;
     pub const PREVIEW: usize = 76;
+    pub const INDIRECT_DIFFUSE: usize = 77;
+    pub const GLOSSY: usize = 78;
+    pub const AO_RADIUS: usize = 79;
 
     pub const SLOTS: usize = 96;
 
@@ -154,6 +157,9 @@ pub mod frame {
         ("SAMPLE_START", SAMPLE_START),
         ("SAMPLE_END", SAMPLE_END),
         ("PREVIEW", PREVIEW),
+        ("INDIRECT_DIFFUSE", INDIRECT_DIFFUSE),
+        ("GLOSSY", GLOSSY),
+        ("AO_RADIUS", AO_RADIUS),
     ];
 }
 

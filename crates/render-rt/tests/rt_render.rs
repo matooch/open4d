@@ -559,7 +559,10 @@ fn an_image_environment_matches_a_constant_one() {
     let top = split.beauty.pixel(cx, cy - 15)[0];
     let bottom = split.beauty.pixel(cx, cy + 15)[0];
     // Both sides receive some light from the opposite hemisphere.
-    assert!(top > 0.05 && bottom < 0.79, "split environment: {top}, {bottom}");
+    assert!(
+        top > 0.05 && bottom < 0.79,
+        "split environment: {top}, {bottom}"
+    );
     assert!(top < bottom, "top {top} is not darker than bottom {bottom}");
 }
 

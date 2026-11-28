@@ -1,4 +1,4 @@
-//! Dynamics Settings window and selection bake controls (DYNAMICS.md §5.2).
+//! Dynamics Settings panel and selection bake controls (DYNAMICS.md §5.2).
 
 use forge_app::dynamics::DynamicsSettings;
 use forge_core::{Scene, SceneSettings};
@@ -9,61 +9,58 @@ use crate::state::EditorState;
 
 #[derive(Default)]
 pub(crate) struct DynamicsPanel {
-    open: bool,
+    initialized: bool,
     start: i64,
     end: i64,
 }
 
 impl DynamicsPanel {
-    pub fn open(&mut self, settings: &SceneSettings) {
-        self.open = true;
+    pub fn reset_range(&mut self, settings: &SceneSettings) {
+        self.initialized = true;
         self.start = settings.start;
         self.end = settings.end;
     }
 
-    pub fn show(&mut self, ctx: &egui::Context, editor: &EditorState) -> Vec<Cmd> {
+    pub fn show(&mut self, ui: &mut egui::Ui, editor: &EditorState) -> Vec<Cmd> {
         let mut cmds = Vec::new();
-        if !self.open {
-            return cmds;
-        }
-        let mut open = self.open;
         let scene = editor.doc.scene();
         let project = scene.settings();
+        if !self.initialized {
+            self.reset_range(&project);
+        }
         let nodes: Vec<_> = editor.selection.nodes.iter().map(|id| id.0).collect();
         self.start = self.start.clamp(project.start, project.end);
         self.end = self.end.clamp(self.start, project.end);
-        egui::Window::new("Dynamics Settings")
-            .id(egui::Id::unique("forge-dynamics-settings-window"))
-            .open(&mut open)
-            .show(ctx, |ui| {
-                controls(ui, scene, &mut cmds);
-                ui.separator();
-                ui.heading("Bake Selection");
-                egui::Grid::new("dynamics-bake-range").show(ui, |ui| {
-                    let label = ui.label("Bake Start");
-                    ui.add(egui::DragValue::new(&mut self.start).range(project.start..=self.end))
-                        .labelled_by(label.id);
-                    ui.end_row();
-                    let label = ui.label("Bake End");
-                    ui.add(egui::DragValue::new(&mut self.end).range(self.start..=project.end))
-                        .labelled_by(label.id);
-                    ui.end_row();
-                });
-                ui.horizontal(|ui| {
-                    for (label, mode) in [("Bake to Keys", "keys"), ("Bake to Cache Tag", "cache")]
-                    {
-                        if ui
-                            .add_enabled(!nodes.is_empty(), egui::Button::new(label))
-                            .clicked()
-                        {
-                            cmds.push(("dynamics.bake", json!({
-                                "nodes": nodes, "start": self.start, "end": self.end, "mode": mode,
-                            })));
-                        }
-                    }
-                });
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            controls(ui, scene, &mut cmds);
+            ui.separator();
+            ui.heading("Bake Selection");
+            egui::Grid::new("dynamics-bake-range").show(ui, |ui| {
+                let label = ui.label("Bake Start");
+                ui.add(egui::DragValue::new(&mut self.start).range(project.start..=self.end))
+                    .labelled_by(label.id);
+                ui.end_row();
+                let label = ui.label("Bake End");
+                ui.add(egui::DragValue::new(&mut self.end).range(self.start..=project.end))
+                    .labelled_by(label.id);
+                ui.end_row();
             });
-        self.open = open;
+            ui.horizontal(|ui| {
+                for (label, mode) in [("Bake to Keys", "keys"), ("Bake to Cache Tag", "cache")] {
+                    if ui
+                        .add_enabled(!nodes.is_empty(), egui::Button::new(label))
+                        .clicked()
+                    {
+                        cmds.push((
+                            "dynamics.bake",
+                            json!({
+                                "nodes": nodes, "start": self.start, "end": self.end, "mode": mode,
+                            }),
+                        ));
+                    }
+                }
+            });
+        });
         cmds
     }
 }

@@ -2,7 +2,7 @@
 
 use glam::DVec3;
 
-use crate::camera::Camera;
+use crate::camera::{Camera, Ray};
 
 const HALF_CELLS: i64 = 50;
 const MIN_PX: f64 = 10.0;
@@ -44,12 +44,33 @@ pub fn grid_spacing(cam: &Camera, viewport_h: f64) -> f64 {
     ceil_pow10(MIN_PX * cam.world_per_pixel(viewport_h))
 }
 
-pub fn grid_lines(cam: &Camera, viewport_h: f64) -> Grid {
+fn grid_extent(cam: &Camera, viewport_h: f64) -> (f64, f64, f64, f64) {
     let spacing = grid_spacing(cam, viewport_h);
     let major = 10.0 * spacing;
     let cx = (cam.target_world().x / major).round() * major;
     let cz = (cam.target_world().z / major).round() * major;
-    let half = HALF_CELLS as f64 * spacing;
+    (spacing, cx, cz, HALF_CELLS as f64 * spacing)
+}
+
+/// Intersection with the visible ground grid, within its drawn bounds.
+pub fn grid_hit(cam: &Camera, viewport_h: f64, ray: &Ray) -> Option<DVec3> {
+    if ray.dir.y.abs() < 1e-9 {
+        return None;
+    }
+    let t = -ray.origin.y / ray.dir.y;
+    let point = ray.at(t);
+    let (_, cx, cz, half) = grid_extent(cam, viewport_h);
+    (t >= 0.0
+        && cam
+            .project(point, viewport_h, viewport_h)
+            .is_some_and(|p| (0.0..=1.0).contains(&p.z))
+        && (point.x - cx).abs() <= half
+        && (point.z - cz).abs() <= half)
+        .then_some(point)
+}
+
+pub fn grid_lines(cam: &Camera, viewport_h: f64) -> Grid {
+    let (spacing, cx, cz, half) = grid_extent(cam, viewport_h);
     let kind = |coord: f64, axis: LineKind| {
         let index = (coord / spacing).round() as i64;
         if index == 0 {

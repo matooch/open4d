@@ -38,6 +38,24 @@ fn graph() -> ShadingGraph {
             mode: MixMode::Multiply,
             strength: 0.25,
         },
+        IrNode::Color([1.5; 3]),
+        IrNode::Color([0.8; 3]),
+        IrNode::Color([1.0; 3]),
+        IrNode::Color([0.1; 3]),
+        IrNode::Fresnel {
+            ior: 4,
+            falloff: 5,
+            center_darkening: 6,
+            center_hold: 7,
+        },
+        IrNode::Ramp {
+            a: 0,
+            b: 6,
+            position: 8,
+            start: 7,
+            end: 6,
+            midpoint: 0,
+        },
     ];
     let outputs = Outputs {
         diffuse: Some(d(3, 0.2)),
@@ -51,7 +69,7 @@ fn graph() -> ShadingGraph {
             metal: true,
             colored: false,
         }),
-        emission: Some(2),
+        emission: Some(9),
         transmission: Some(Transmission {
             color: 0,
             ior: 1.5,
@@ -110,7 +128,7 @@ fn ctx(i: usize) -> ShadeCtx {
         uvw: [t, 1.0 - t, t * 0.5],
         position: [t * 200.0, t * 40.0, -t * 100.0],
         normal: [0.0, 0.0, 1.0],
-        view: [0.0, 0.0, -1.0],
+        view: [(1.0 - t * t).sqrt(), 0.0, -t],
         time: t * 10.0,
         vertex_weight: None,
         ao: None,

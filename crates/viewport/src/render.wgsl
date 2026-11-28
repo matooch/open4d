@@ -5,7 +5,7 @@ struct Uniforms {
     base: vec4<f32>,
     selection: vec4<f32>,
     wire: vec4<f32>,
-    // x: preview enabled, y: roughness, z: metal, w: normal strength
+    // x: preview enabled, z: metal, w: normal strength
     preview: vec4<f32>,
     // x: 1 = smooth normals, y: depth bias in NDC (toward the camera), z: 1 = unlit,
     // w: 1 = instanced draws multiply the base colour by the clone colour
@@ -173,9 +173,11 @@ fn fs_tri(i: TriOut) -> @location(0) vec4<f32> {
     let material = u.preview.x > 0.5;
     var base = u.base.rgb;
     var view = vec3<f32>(0.0);
+    var roughness = 0.5;
     if material {
-        let albedo = textureSampleLevel(preview_maps, preview_sampler, i.uv, 0, 0.0).rgb;
-        base = mix(albedo, u.base.rgb, 0.35 * u.eye.w);
+        let albedo = textureSampleLevel(preview_maps, preview_sampler, i.uv, 0, 0.0);
+        base = mix(albedo.rgb, u.base.rgb, 0.35 * u.eye.w);
+        roughness = albedo.a;
         let to_eye = u.eye.xyz - i.wpos;
         view = to_eye / max(length(to_eye), 1e-8);
         n = select(-n, n, dot(n, view) >= 0.0);
@@ -211,7 +213,7 @@ fn fs_tri(i: TriOut) -> @location(0) vec4<f32> {
             let no_l = max(dot(n, l), 0.0);
             let half = l + view;
             let no_h = max(dot(n, half / max(length(half), 1e-8)), 0.0);
-            let gloss = 1.0 - u.preview.y;
+            let gloss = 1.0 - roughness;
             let highlight = pow(no_h, mix(2.0, 128.0, gloss * gloss));
             let fresnel = mix(vec3<f32>(0.04), base, metal);
             let response = (diffuse + fresnel * highlight * mix(0.5, 2.0, gloss)) * no_l;

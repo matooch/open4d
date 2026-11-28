@@ -232,6 +232,40 @@ fn fresnel_drives_a_ramp_and_scalar_surface_inputs_per_hit() {
             assert!((ir.eval(port, &White, &ctx)[0] - expected).abs() < 1e-12);
         }
     }
+    for (id, port, value) in [
+        (view, "falloff", 0.5),
+        (view, "center_darkening", 1.0),
+        (view, "center_hold", 0.1),
+        (ramp, "midpoint", 0.25),
+    ] {
+        graph
+            .set_value(registry, id, port, forge_nodes::PortValue::Float(value))
+            .unwrap();
+    }
+    graph
+        .connect(
+            registry,
+            PortRef::new(ramp, "factor"),
+            PortRef::new(surface, "roughness"),
+        )
+        .unwrap();
+    let ir = node_material::compile_graph(&graph).unwrap();
+    let roughness = ir.outputs.roughness_input.unwrap();
+    let at = |cosine: f64| {
+        ir.eval(
+            roughness,
+            &White,
+            &ShadeCtx {
+                normal: [0.0, 0.0, 1.0],
+                view: [(1.0 - cosine * cosine).sqrt(), 0.0, cosine],
+                ..Default::default()
+            },
+        )[0]
+    };
+    assert_eq!(at(1.0), 0.0);
+    assert_eq!(at(0.95), 0.0, "a section around the center stays black");
+    assert!(at(0.6) > 0.75, "falloff and gray point pull the rim inward");
+    assert_eq!(at(0.0), 1.0);
     let source = compile(&ir).source;
     validate(&source);
 }
