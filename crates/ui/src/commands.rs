@@ -176,7 +176,7 @@ impl CommandContext for EditorState {
         self.autosave
             .document_replaced(self.app.file_path.as_deref());
         self.app.reset(doc, path, full);
-        self.inspect_material = None;
+        self.inspection_override = None;
         self.object_clipboard = None;
         self.expanded.clear();
         self.tool = None;

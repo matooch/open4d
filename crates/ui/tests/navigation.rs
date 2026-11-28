@@ -427,13 +427,15 @@ fn a_held_digit_turns_a_plain_drag_into_navigation() {
     // 3 orbits
     let mut h = harness(Editor::new(common::state()));
     let c0 = h.state().state.camera;
+    let orbit_anchor = grid_anchor(&h, &c0);
     h.key_down(Key::Num3);
     drag(&mut h, egui::PointerButton::Primary, Modifiers::NONE, by);
     h.key_up(Key::Num3);
     h.run();
     let c1 = h.state().state.camera;
     assert!(c1.yaw != c0.yaw);
-    assert_eq!((c1.target, c1.distance), (c0.target, c0.distance));
+    assert_eq!(c1.distance, c0.distance);
+    assert_anchor_stays_put(&h, &c0, orbit_anchor);
     // without the key the same drag leaves the camera alone
     drag(&mut h, egui::PointerButton::Primary, Modifiers::NONE, by);
     assert_eq!(h.state().state.camera, c1);
@@ -448,14 +450,15 @@ fn a_held_digit_turns_a_plain_drag_into_navigation() {
     assert!((c2.target - c1.target).dot(c1.forward()).abs() < 1e-6);
     assert_eq!((c2.yaw, c2.distance), (c1.yaw, c1.distance));
 
-    // 2 zooms: dragging right moves closer, the target stays
+    // 2 zooms toward the clicked grid point
+    let zoom_anchor = grid_anchor(&h, &c2);
     h.key_down(Key::Num2);
     drag(&mut h, egui::PointerButton::Primary, Modifiers::NONE, by);
     h.key_up(Key::Num2);
     h.run();
     let c3 = h.state().state.camera;
     assert!(c3.distance < c2.distance);
-    assert_eq!(c3.target, c2.target);
+    assert_anchor_stays_put(&h, &c2, zoom_anchor);
     assert!(h.state().state.doc.history().undo_labels().is_empty());
 }
 
@@ -589,4 +592,71 @@ fn frame_and_view_keys_run_their_commands() {
         labels.iter().all(|l| !l.to_lowercase().contains("view")),
         "{labels:?}"
     );
+}
+
+fn grid_anchor(h: &Harness<'_, Editor>, camera: &forge_viewport::camera::Camera) -> DVec3 {
+    let rect = h.state().view_rect();
+    let pixel = viewport_point(h) - rect.min;
+    let ray = camera.ray(
+        pixel.x.into(),
+        pixel.y.into(),
+        rect.width().into(),
+        rect.height().into(),
+    );
+    forge_viewport::grid::grid_hit(camera, rect.height().into(), &ray).unwrap()
+}
+
+fn assert_anchor_stays_put(
+    h: &Harness<'_, Editor>,
+    before: &forge_viewport::camera::Camera,
+    anchor: DVec3,
+) {
+    let rect = h.state().view_rect();
+    let project = |camera: &forge_viewport::camera::Camera| {
+        camera
+            .project(anchor, rect.width().into(), rect.height().into())
+            .unwrap()
+            .truncate()
+    };
+    assert!(project(before).distance(project(&h.state().state.camera)) < 0.001);
+}
+
+#[test]
+fn orbit_and_zoom_use_the_hit_surface_before_the_grid() {
+    for key in [Key::Num2, Key::Num3] {
+        let mut state = common::state();
+        cube_at(&mut state, [0.0, 0.0, 0.0]);
+        state.camera.yaw = 0.0;
+        state.camera.pitch = 0.0;
+        state.camera.distance = 500.0;
+        let mut h = harness(Editor::new(state));
+        let before = h.state().state.camera;
+        let rect = h.state().view_rect();
+        let start = rect.center() + egui::vec2(28.0, 24.0);
+        let pixel = start - rect.min;
+        let ray = before.ray(
+            pixel.x.into(),
+            pixel.y.into(),
+            rect.width().into(),
+            rect.height().into(),
+        );
+        // The head-on view can look along either Z direction depending on handedness.
+        let face_z = 100.0 * before.eye_world().z.signum();
+        let anchor = ray.at((face_z - ray.origin.z) / ray.dir.z);
+        assert!(anchor.x.abs() < 100.0 && anchor.y.abs() < 100.0);
+        h.key_down(key);
+        drag_from(&mut h, start, egui::vec2(47.0, 16.0));
+        h.key_up(key);
+        h.run();
+        assert_ne!(h.state().state.camera, before);
+        assert_anchor_stays_put(&h, &before, anchor);
+        if key == Key::Num3 {
+            assert!(
+                (before.eye_world().distance(anchor)
+                    - h.state().state.camera.eye_world().distance(anchor))
+                .abs()
+                    < 1e-6
+            );
+        }
+    }
 }

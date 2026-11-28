@@ -7,7 +7,6 @@ use std::sync::Arc;
 use forge_app::App;
 use forge_command::UiRequest;
 use forge_core::{NodeId, Registry};
-use forge_render_api::PostSettings;
 use forge_viewport::camera::{Camera, Handedness};
 use forge_viewport::gizmo::{GizmoMode, Space as GizmoSpace};
 use forge_viewport::panes::Pane;
@@ -58,7 +57,6 @@ pub struct EditorState {
     /// UI.md §6.3). UI state: switching it pushes no undo entry and saves no document.
     pub display: DisplayMode,
     /// The post effects the Render display mode uses (RENDER.md R22.1).
-    pub post: PostSettings,
     /// Script Manager source, console and recent list (docs/specs/UI.md §10).
     pub script: ScriptPanelState,
     /// The Console panel: log filter and the REPL (docs/specs/UI.md §19).
@@ -71,8 +69,8 @@ pub struct EditorState {
     pub browser_panel: BrowserPanel,
     /// The Node Editor's tag, canvas and cache (docs/specs/UI.md §17).
     pub node_editor: NodeEditorState,
-    /// Material shown in the inspector without replacing the scene selection.
-    pub(crate) inspect_material: Option<NodeId>,
+    /// Material or tag shown in Attributes while the object selection is retained.
+    pub(crate) inspection_override: Option<NodeId>,
     pub(crate) object_clipboard: Option<forge_command::ObjectClipboard>,
     /// The headless GPU device `viewport.screenshot` renders with (RPC.md §10.2).
     pub offscreen: OffscreenGpu,
@@ -123,6 +121,16 @@ impl DerefMut for EditorState {
 }
 
 impl EditorState {
+    pub(crate) fn inspect(&mut self, id: Option<NodeId>) {
+        self.inspection_override = id;
+        self.dock.reveal(crate::dock::Panel::Attributes);
+    }
+
+    pub(crate) fn open_material_nodes(&mut self, id: NodeId) {
+        self.node_editor.show_material(id);
+        self.dock.reveal(crate::dock::Panel::NodeEditor);
+    }
+
     /// Left-handed view matching the reference default directions; the exact default
     /// pose is not shown by the reference app (docs/specs/SMOOTHING.md §4).
     pub fn default_camera() -> Camera {
@@ -150,14 +158,13 @@ impl EditorState {
             shading: DEFAULT_SHADING,
             views: Views::new(&Self::default_camera()),
             display: DisplayMode::Shaded,
-            post: PostSettings::default(),
             script: ScriptPanelState::default(),
             console: ConsoleState::default(),
             layer_panel: LayerPanel::default(),
             weight_panel: WeightPanel::default(),
             browser_panel: BrowserPanel::default(),
             node_editor: NodeEditorState::default(),
-            inspect_material: None,
+            inspection_override: None,
             object_clipboard: None,
             offscreen: OffscreenGpu::default(),
             tool: None,

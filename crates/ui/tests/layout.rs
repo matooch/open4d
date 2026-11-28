@@ -75,6 +75,61 @@ fn default_layout_places_the_panels() {
 }
 
 #[test]
+fn clicking_empty_panel_space_clears_object_and_material_selection() {
+    use egui::{Event, Modifiers, PointerButton, pos2};
+    use serde_json::json;
+
+    let mut h = harness();
+    h.get_by_label("Cube (toolbar)").click();
+    h.run();
+    let cube = h.state().state.selection.active.unwrap();
+    let st = &mut h.state_mut().state;
+    forge_ui::commands::execute(st, "material.create", json!({"name": "Paint"})).unwrap();
+    st.dock.reveal(Panel::Materials);
+    h.run();
+    h.get_by_label("Inspect Paint").click();
+    h.run();
+    h.get_by_label("Convert to Node Material");
+    h.get_by_label("Find").click();
+    h.run();
+    assert_eq!(h.state().state.selection.active, Some(cube));
+    h.get_by_label("Convert to Node Material");
+
+    let objects = rect(&h, "Objects");
+    let attributes = rect(&h, "Attributes");
+    let timeline = rect(&h, "Materials");
+    let above_attributes = pos2(objects.center().x, attributes.top() - 24.0);
+    let below_cards = pos2(timeline.right() + 200.0, timeline.bottom() + 130.0);
+    let click_empty = |h: &mut Harness<'_, Editor>, pos| {
+        h.hover_at(pos);
+        h.run();
+        for pressed in [true, false] {
+            h.event(Event::PointerButton {
+                pos,
+                button: PointerButton::Primary,
+                pressed,
+                modifiers: Modifiers::NONE,
+            });
+            h.run();
+        }
+    };
+    let depth = h.state().state.doc.undo_depth();
+    for pos in [above_attributes, below_cards] {
+        click_empty(&mut h, pos);
+        assert!(h.state().state.selection.nodes.is_empty());
+        assert_eq!(h.state().state.selection.active, None);
+        assert_eq!(h.state().state.selection.anchor, None);
+        h.get_by_label("Nothing selected");
+        h.get_by_label("Cube").click();
+        h.run();
+        assert_eq!(h.state().state.selection.active, Some(cube));
+        h.get_by_label("Inspect Paint").click();
+        h.run();
+    }
+    assert_eq!(h.state().state.doc.undo_depth(), depth);
+}
+
+#[test]
 fn standard_layout_is_the_dock_default() {
     let l = Layout::standard();
     assert_eq!(l.dock, Dock::default());
@@ -543,4 +598,22 @@ fn the_lights_menu_creates_an_area_light_in_one_undo_step() {
         Some(&Value::Enum("area".into()))
     );
     assert_eq!(state.doc.undo_depth(), before + 1);
+}
+
+#[test]
+fn creation_rail_buttons_have_equal_size_and_share_a_centerline() {
+    let h = harness();
+    let rects = [
+        "Primitives",
+        "Generators",
+        "Deformers",
+        "Clone tools",
+        "Lights",
+    ]
+    .map(|label| h.get_by_label(label).rect());
+    for pair in rects.windows(2) {
+        assert_eq!(pair[0].center().x, pair[1].center().x);
+        assert_eq!(pair[0].size(), pair[1].size());
+        assert!((pair[1].center().y - pair[0].center().y - 33.0).abs() < 0.01);
+    }
 }

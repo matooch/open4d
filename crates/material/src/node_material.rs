@@ -14,6 +14,7 @@ use crate::{IrNode, MATERIAL, Material, MixMode, ShadingGraph, compile, mix};
 
 pub const NODE_MATERIAL: &str = "forge.material.node";
 pub const GRAPH: &str = "graph";
+pub const FROM_STANDARD: &str = "from_standard";
 pub const SURFACE: &str = "material.surface";
 pub const COLOR: &str = "material.color";
 pub const SCALAR: &str = "material.scalar";
@@ -118,21 +119,38 @@ pub fn registry() -> &'static NodeRegistry {
         .input("b", T::Colour, V::Colour([1.0; 3]))
         .input("factor", T::Float, V::Float(0.5))
         .output("color", T::Colour);
-        let gradient = NodeDef::new(GRADIENT, "Gradient Ramp", "Color", |cx| {
-            let t = ramp_factor(cx.float("position"), cx.float("start"), cx.float("end"));
-            Ok(vec![V::Colour(mix(
-                cx.vec3("a"),
-                cx.vec3("b"),
-                MixMode::Normal,
-                t,
-            ))])
+        let mut gradient = NodeDef::new(GRADIENT, "Gradient Ramp", "Color", |cx| {
+            let t = ramp_factor(
+                cx.float("position"),
+                cx.float("start"),
+                cx.float("end"),
+                cx.float("midpoint"),
+            );
+            Ok(vec![
+                V::Colour(mix(cx.vec3("a"), cx.vec3("b"), MixMode::Normal, t)),
+                V::Float(t),
+            ])
         })
         .input("a", T::Colour, V::Colour([0.0; 3]))
         .input("b", T::Colour, V::Colour([1.0; 3]))
         .input("start", T::Float, V::Float(0.0))
         .input("end", T::Float, V::Float(1.0))
+        .input("midpoint", T::Float, V::Float(0.5))
         .input("position", T::Float, V::Float(0.5))
-        .output("color", T::Colour);
+        .output("color", T::Colour)
+        .output("factor", T::Float);
+        for port in &mut gradient.inputs {
+            port.label = match port.id.as_str() {
+                "a" => "Black Color",
+                "b" => "White Color",
+                "start" => "Black Point",
+                "end" => "White Point",
+                "midpoint" => "Gray Point",
+                "position" => "Input",
+                _ => continue,
+            }
+            .into();
+        }
         let luminance = NodeDef::new(LUMINANCE, "Luminance", "Convert", |cx| {
             Ok(vec![V::Float(
                 cx.vec3("color")
@@ -151,11 +169,22 @@ pub fn registry() -> &'static NodeRegistry {
         .output("x", T::Float)
         .output("y", T::Float)
         .output("z", T::Float);
-        let view = NodeDef::new(FRESNEL, "Fresnel", "Input", |cx| {
-            Ok(vec![V::Float(fresnel(cx.float("ior"), [0.0; 3], [0.0; 3]))])
+        let mut view = NodeDef::new(FRESNEL, "Fresnel", "Input", |cx| {
+            Ok(vec![V::Float(fresnel(
+                cx.float("ior"),
+                cx.float("falloff"),
+                cx.float("center_darkening"),
+                cx.float("center_hold"),
+                [0.0; 3],
+                [0.0; 3],
+            ))])
         })
         .input("ior", T::Float, V::Float(1.5))
+        .input("falloff", T::Float, V::Float(5.0))
+        .input("center_darkening", T::Float, V::Float(0.0))
+        .input("center_hold", T::Float, V::Float(0.0))
         .output("factor", T::Float);
+        view.inputs[2].label = "Darken Center".into();
         let mut surface = NodeDef::new(SURFACE, "Surface", "Output", |cx| {
             Ok(PORTS.iter().map(|p| cx.value(p).clone()).collect())
         })
@@ -185,10 +214,21 @@ pub fn default_graph() -> Graph {
 }
 
 pub fn node_material_type() -> NodeType {
-    NodeType::new(NODE_MATERIAL, "Node Material", Category::Material)
+    let mut ty = NodeType::new(NODE_MATERIAL, "Node Material", Category::Material)
         .not_in_create_menu()
-        .param(ParamDesc::color("icon_color", "Color", [0.65, 0.52, 0.95]))
-        .param(ParamDesc::string(GRAPH, "Graph", &default_graph().to_json()).hidden())
+        .param(ParamDesc::bool(FROM_STANDARD, "Converted from Standard", false).hidden())
+        .param(ParamDesc::string(GRAPH, "Graph", &default_graph().to_json()).hidden());
+    ty.params.extend(crate::params::standard_type().params);
+    ty.params
+        .iter_mut()
+        .find(|p| p.id == "icon_color")
+        .unwrap()
+        .default = Value::Color([0.65, 0.52, 0.95]);
+    ty
+}
+
+pub fn is_converted(node: &Node) -> bool {
+    node.type_id == NODE_MATERIAL && node.params.get(FROM_STANDARD) == Some(&Value::Bool(true))
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -211,9 +251,66 @@ pub fn load_graph(node: &Node) -> Result<Graph, Error> {
     )))
 }
 
+/// Supplies inherited values for presenting a converted graph. Edits must still be applied
+/// to the stored graph so unedited channels continue to follow Attributes.
+pub fn graph_with_inherited_inputs(node: &Node, include_shader_refs: bool) -> Result<Graph, Error> {
+    let mut graph = load_graph(node)?;
+    if !is_converted(node) {
+        return Ok(graph);
+    }
+    let (surface, _) = evaluate_surface(&graph)?;
+    let standard = Material::from_node(node);
+    let texture = |param| {
+        PortValue::String(if include_shader_refs {
+            standard.e(param).to_owned()
+        } else {
+            String::new()
+        })
+    };
+    for (port, value) in [
+        ("base_color", PortValue::Colour(standard.c("color.color"))),
+        ("base_texture", texture("color.texture")),
+        (
+            "roughness",
+            PortValue::Float(standard.f("reflectance.spec.width")),
+        ),
+        (
+            "metallic",
+            PortValue::Float(if standard.e("reflectance.spec.attenuation") == "metal" {
+                1.0
+            } else {
+                0.0
+            }),
+        ),
+        ("normal_texture", texture("normal.texture")),
+        (
+            "normal_strength",
+            PortValue::Float(standard.f("normal.strength")),
+        ),
+        (
+            "emission",
+            PortValue::Colour(if standard.enabled("luminance") {
+                standard.c("luminance.color")
+            } else {
+                [0.0; 3]
+            }),
+        ),
+        ("emissive_texture", texture("luminance.texture")),
+        ("occlusion_texture", texture("color.occlusion_texture")),
+    ] {
+        if !surface_has_input(&graph, surface, port) {
+            graph.set_value(registry(), surface, port, value)?;
+        }
+    }
+    Ok(graph)
+}
+
 pub fn compile_hosted(node: &Node) -> Result<ShadingGraph, Error> {
     match node.type_id.as_str() {
-        NODE_MATERIAL => compile_graph(&load_graph(node)?),
+        NODE_MATERIAL => compile_surface(
+            &load_graph(node)?,
+            is_converted(node).then(|| Material::from_node(node)),
+        ),
         MATERIAL => Ok(compile(&Material::from_node(node))),
         _ => Err(Error::Invalid(format!(
             "unsupported material type {}",
@@ -258,39 +355,126 @@ fn evaluate_surface(graph: &Graph) -> Result<(GraphNodeId, Evaluation), Error> {
 
 /// Evaluate the typed surface and convert its inputs into the common source material.
 pub fn compile_graph(graph: &Graph) -> Result<ShadingGraph, Error> {
+    compile_surface(graph, None)
+}
+
+fn surface_has_input(graph: &Graph, surface: GraphNodeId, port: &str) -> bool {
+    graph
+        .node(surface)
+        .is_some_and(|n| n.values.contains_key(port))
+        || graph
+            .links()
+            .iter()
+            .any(|link| link.to.node == surface && link.to.port == port)
+}
+
+fn compile_surface(graph: &Graph, standard: Option<Material>) -> Result<ShadingGraph, Error> {
     let (surface, evaluated) = evaluate_surface(graph)?;
     let s = SurfaceValues::from_evaluation(surface, &evaluated);
-    let mut material = Material::new();
-    for (id, value) in [
-        ("color.color", Value::Color(s.base_color)),
-        ("color.roughness", Value::Float(s.roughness.clamp(0.0, 1.0))),
-    ] {
-        material.set(id, value);
-    }
-    if s.metallic >= 0.5 {
-        material.set("reflectance.spec.attenuation", Value::Enum("metal".into()));
-    }
-    if !s.base_texture.is_empty() {
-        material.set("color.texture", Value::String(s.base_texture.clone()));
-        material.set("color.mix_mode", Value::Enum("multiply".into()));
-    }
-    if !s.normal_texture.is_empty() {
-        material.set("enable.normal", Value::Bool(true));
-        material.set("normal.texture", Value::String(s.normal_texture));
-        material.set(
-            "normal.strength",
-            Value::Float(s.normal_strength.clamp(0.0, 1000.0)),
-        );
-    }
-    if s.emission != [0.0; 3] {
-        material.set("enable.luminance", Value::Bool(true));
-        material.set("luminance.color", Value::Color(s.emission));
-        if !s.emissive_texture.is_empty() {
-            material.set(
+    let converted = standard.is_some();
+    let has_input = |port| surface_has_input(graph, surface, port);
+    let mut material = standard.unwrap_or_default();
+    if converted {
+        for (port, param, value) in [
+            ("base_color", "color.color", Value::Color(s.base_color)),
+            (
+                "base_texture",
+                "color.texture",
+                Value::String(s.base_texture.clone()),
+            ),
+            (
+                "roughness",
+                "color.roughness",
+                Value::Float(s.roughness.clamp(0.0, 1.0)),
+            ),
+            (
+                "roughness",
+                "reflectance.spec.width",
+                Value::Float(s.roughness.clamp(0.0, 1.0)),
+            ),
+            (
+                "metallic",
+                "reflectance.spec.attenuation",
+                Value::Enum(
+                    if s.metallic >= 0.5 {
+                        "metal"
+                    } else {
+                        "additive"
+                    }
+                    .into(),
+                ),
+            ),
+            (
+                "normal_texture",
+                "normal.texture",
+                Value::String(s.normal_texture.clone()),
+            ),
+            (
+                "normal_strength",
+                "normal.strength",
+                Value::Float(s.normal_strength.clamp(0.0, 1000.0)),
+            ),
+            ("emission", "luminance.color", Value::Color(s.emission)),
+            (
+                "emissive_texture",
                 "luminance.texture",
                 Value::String(s.emissive_texture.clone()),
+            ),
+            (
+                "occlusion_texture",
+                "color.occlusion_texture",
+                Value::String(s.occlusion_texture.clone()),
+            ),
+        ] {
+            if has_input(port) {
+                material.set(param, value);
+            }
+        }
+        if has_input("base_color") || has_input("base_texture") {
+            material.set("enable.color", Value::Bool(true));
+        }
+        if has_input("normal_texture") {
+            material.set("enable.normal", Value::Bool(!s.normal_texture.is_empty()));
+        }
+        if has_input("emission") || has_input("emissive_texture") {
+            material.set("enable.luminance", Value::Bool(true));
+        }
+    } else {
+        for (id, value) in [
+            ("color.color", Value::Color(s.base_color)),
+            ("color.roughness", Value::Float(s.roughness.clamp(0.0, 1.0))),
+            (
+                "reflectance.spec.width",
+                Value::Float(s.roughness.clamp(0.0, 1.0)),
+            ),
+        ] {
+            material.set(id, value);
+        }
+        if s.metallic >= 0.5 {
+            material.set("reflectance.spec.attenuation", Value::Enum("metal".into()));
+        }
+        if !s.base_texture.is_empty() {
+            material.set("color.texture", Value::String(s.base_texture.clone()));
+            material.set("color.mix_mode", Value::Enum("multiply".into()));
+        }
+        if !s.normal_texture.is_empty() {
+            material.set("enable.normal", Value::Bool(true));
+            material.set("normal.texture", Value::String(s.normal_texture));
+            material.set(
+                "normal.strength",
+                Value::Float(s.normal_strength.clamp(0.0, 1000.0)),
             );
-            material.set("luminance.mix_mode", Value::Enum("multiply".into()));
+        }
+        if s.emission != [0.0; 3] {
+            material.set("enable.luminance", Value::Bool(true));
+            material.set("luminance.color", Value::Color(s.emission));
+            if !s.emissive_texture.is_empty() {
+                material.set(
+                    "luminance.texture",
+                    Value::String(s.emissive_texture.clone()),
+                );
+                material.set("luminance.mix_mode", Value::Enum("multiply".into()));
+            }
         }
     }
     let mut ir = compile(&material);
@@ -306,16 +490,24 @@ pub fn compile_graph(graph: &Graph) -> Result<ShadingGraph, Error> {
         let roughness = lower.dynamic(surface, "roughness");
         let metallic = lower.dynamic(surface, "metallic");
         if let Some(base) = base {
-            let color = multiply_texture(&mut ir, base, &s.base_texture);
+            let color = multiply_texture(&mut ir, base, material.e("color.texture"));
             if let Some(diffuse) = &mut ir.outputs.diffuse {
                 diffuse.color = color;
             }
         }
         if let Some(emission) = emission {
-            ir.outputs.emission = Some(multiply_texture(&mut ir, emission, &s.emissive_texture));
+            ir.outputs.emission = Some(multiply_texture(
+                &mut ir,
+                emission,
+                material.e("luminance.texture"),
+            ));
         }
-        ir.outputs.roughness_input = roughness;
-        ir.outputs.metallic_input = metallic;
+        if roughness.is_some() {
+            ir.outputs.roughness_input = roughness;
+        }
+        if metallic.is_some() {
+            ir.outputs.metallic_input = metallic;
+        }
     }
     Ok(ir)
 }
@@ -388,6 +580,9 @@ impl Lower<'_> {
         let ir = match node.type_id.as_str() {
             FRESNEL => Some(IrNode::Fresnel {
                 ior: self.input(id, "ior"),
+                falloff: self.input(id, "falloff"),
+                center_darkening: self.input(id, "center_darkening"),
+                center_hold: self.input(id, "center_hold"),
             }),
             COLOR | SCALAR => return self.dynamic(id, "value"),
             GRADIENT | MIX
@@ -397,25 +592,36 @@ impl Lower<'_> {
                     .iter()
                     .any(|link| link.to.node == id && self.output(&link.from).is_some()) =>
             {
-                let (position, start, end) = if node.type_id == MIX {
+                let (position, start, end, midpoint) = if node.type_id == MIX {
                     (
                         self.input(id, "factor"),
                         self.ir.push(IrNode::Color([0.0; 3])),
                         self.ir.push(IrNode::Color([1.0; 3])),
+                        self.ir.push(IrNode::Color([0.5; 3])),
                     )
                 } else {
                     (
                         self.input(id, "position"),
                         self.input(id, "start"),
                         self.input(id, "end"),
+                        self.input(id, "midpoint"),
                     )
                 };
+                let (a, b) = if node.type_id == GRADIENT && from.port == "factor" {
+                    (
+                        self.ir.push(IrNode::Color([0.0; 3])),
+                        self.ir.push(IrNode::Color([1.0; 3])),
+                    )
+                } else {
+                    (self.input(id, "a"), self.input(id, "b"))
+                };
                 Some(IrNode::Ramp {
-                    a: self.input(id, "a"),
-                    b: self.input(id, "b"),
+                    a,
+                    b,
                     position,
                     start,
                     end,
+                    midpoint,
                 })
             }
             LUMINANCE => self.dynamic(id, "color").map(IrNode::Luminance),

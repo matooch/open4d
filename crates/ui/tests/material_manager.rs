@@ -226,3 +226,70 @@ fn double_click_opens_the_material_editor_without_changing_object_selection() {
         }
     }
 }
+
+#[test]
+fn clicking_cards_tags_and_objects_updates_attributes_and_converts_from_the_panel() {
+    use egui_kittest::{Harness, kittest::Queryable};
+    use forge_ui::{app::Editor, dock::Area};
+
+    let mut s = state();
+    let object = id_for(
+        &execute(&mut s, "object.create", json!({"type": "forge.cube"})).unwrap(),
+        "node",
+    );
+    execute(
+        &mut s,
+        "object.rename",
+        json!({"node": object.0, "name": "Test cube"}),
+    )
+    .unwrap();
+    let material = id_for(
+        &execute(&mut s, "material.create", json!({"name": "Test paint"})).unwrap(),
+        "material",
+    );
+    let assigned = execute(&mut s, "material.assign", json!({"material": material.0})).unwrap();
+    let tag = NodeId(assigned["tags"][0].as_u64().unwrap());
+    s.dock.reveal(Panel::Materials);
+    s.dock.reveal(Panel::ContentBrowser);
+    let mut h = Harness::builder()
+        .with_size([1280.0, 800.0])
+        .build_ui_state(|ui, e: &mut Editor| e.show(ui, None), Editor::new(s));
+    h.run();
+
+    h.get_by_label("Inspect Test paint").click();
+    h.run();
+    assert_eq!(
+        h.state().state.dock.active(Area::RightBottom),
+        Some(Panel::Attributes)
+    );
+    h.get_by_label("Convert to Node Material");
+    h.get_by_label("Test cube").click();
+    h.run();
+    assert_eq!(h.state().state.selection.active, Some(object));
+    assert_eq!(h.query_all_by_label("Back to object attributes").count(), 0);
+
+    h.get_by_label("[Texture]").click();
+    h.run();
+    h.get_by_label("Projection").click();
+    h.run();
+    h.get_by_label("Cubic").click();
+    h.run();
+    assert_eq!(
+        h.state().state.doc.scene().param(tag, "projection"),
+        Some(&Value::Enum("cubic".into()))
+    );
+    h.get_by_label("Edit Material").click();
+    h.run();
+    h.get_by_label("Convert to Node Material").click();
+    h.run();
+    h.get_by_label("Edit Nodes");
+    assert_eq!(
+        h.state().state.doc.scene().node(material).unwrap().type_id,
+        forge_material::node_material::NODE_MATERIAL
+    );
+    assert_eq!(h.state().state.selection.active, Some(object));
+}
+
+fn id_for(result: &serde_json::Value, name: &str) -> NodeId {
+    NodeId(result[name].as_u64().unwrap())
+}

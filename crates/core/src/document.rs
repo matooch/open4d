@@ -54,6 +54,11 @@ enum Edit {
     Remove {
         id: NodeId,
     },
+    SetMaterialType {
+        id: NodeId,
+        type_id: String,
+        params: BTreeMap<String, Value>,
+    },
     SetParam {
         id: NodeId,
         param: String,
@@ -96,6 +101,21 @@ fn apply(scene: &mut Scene, edit: Edit) -> Edit {
         Edit::Remove { id } => {
             let (subtree, slot) = scene.remove_subtree(id);
             Edit::Insert { subtree, slot }
+        }
+        Edit::SetMaterialType {
+            id,
+            type_id,
+            params,
+        } => {
+            let node = scene.node_mut(id).expect("validated material");
+            let type_id = std::mem::replace(&mut node.type_id, type_id);
+            let params = std::mem::replace(&mut node.params, params);
+            scene.stamp(id);
+            Edit::SetMaterialType {
+                id,
+                type_id,
+                params,
+            }
         }
         Edit::SetParam { id, param, value } => {
             let n = scene.node_mut(id).expect("validated node");
@@ -331,6 +351,43 @@ impl Tx<'_> {
             slot: Slot::Material { index },
         });
         Ok(id)
+    }
+
+    /// Changes a material to a type with a compatible parameter schema, preserving its ID,
+    /// shader children and animated parameters.
+    pub fn upgrade_material_type(&mut self, id: NodeId, type_id: &str) -> Result<(), EditError> {
+        let node = self.require(id)?;
+        let old_type = self.type_of(&node.type_id)?;
+        let new_type = self.type_of(type_id)?;
+        if old_type.category != Category::Material || new_type.category != Category::Material {
+            return Err(EditError::WrongCategory(
+                "expected two material types".into(),
+            ));
+        }
+        for old in &old_type.params {
+            if !new_type
+                .find_param(&old.id)
+                .is_some_and(|new| new.kind == old.kind && (!old.animatable || new.animatable))
+            {
+                return Err(EditError::UnknownParam(old.id.clone()));
+            }
+        }
+        let mut params = node.params.clone();
+        for desc in &new_type.params {
+            if node.user_data.iter().any(|d| d.id == desc.id) {
+                return Err(EditError::UnknownParam(desc.id.clone()));
+            }
+            let value = params
+                .entry(desc.id.clone())
+                .or_insert_with(|| desc.default.clone());
+            desc.validate(value.clone())?;
+        }
+        self.push(Edit::SetMaterialType {
+            id,
+            type_id: type_id.into(),
+            params,
+        });
+        Ok(())
     }
 
     /// Creates a shader as a child of a material or of another shader, at `index`

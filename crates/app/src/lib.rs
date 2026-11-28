@@ -208,7 +208,8 @@ impl App {
         }
     }
 
-    fn drafted_scene(&self) -> Option<Arc<Scene>> {
+    /// A scene snapshot with the current parameter drafts applied.
+    pub fn drafted_scene(&self) -> Option<Arc<Scene>> {
         self.drafts.shown(self.drafts_scope(), self.doc.scene())
     }
 

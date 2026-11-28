@@ -4,7 +4,7 @@ use forge_render_api::{Background, RenderSettings, Snapshot};
 use glam::DVec3;
 
 use crate::lights::{EnvDist, PLight, env_pdf, env_radiance, has_env, sample_env};
-use crate::sampling::{Rng, lum, power_heuristic};
+use crate::sampling::{Rng, cosine_hemisphere, lum, power_heuristic, to_world};
 use crate::scene::Scene;
 use crate::surface::{Lobe, Surface, fresnel, refract};
 
@@ -132,7 +132,14 @@ pub fn trace_path(cx: &Ctx, mut o: DVec3, mut d: DVec3, rng: &mut Rng) -> Sample
         let wo = -d;
         let front = geom.ng.dot(wo) > 0.0;
         let ngv = if front { geom.ng } else { -geom.ng };
-        let surf = Surface::at(&mat.graph, &*mat.sampler, &geom, wo, scene.scale);
+        let mut surf = Surface::at(&mat.graph, &*mat.sampler, &geom, wo, scene.scale);
+        if !cx.settings.path.glossy_reflections {
+            surf.spec = DVec3::ZERO;
+        }
+        let mut scatter = surf.clone();
+        if !cx.settings.path.indirect_diffuse {
+            scatter.albedo = DVec3::ZERO;
+        }
         // Shading normal on the viewer side, never below the geometric surface.
         let nv = if front { surf.n } else { -surf.n };
         let n = if nv.dot(ngv) < 0.0 { ngv } else { nv };
@@ -150,6 +157,13 @@ pub fn trace_path(cx: &Ctx, mut o: DVec3, mut d: DVec3, rng: &mut Rng) -> Sample
         }
         let origin = geom.p + ngv * eps;
 
+        let mut ao = 1.0;
+        if depth == 0 && cx.settings.path.ao_radius > 0.0 {
+            let wi = to_world(ngv, cosine_hemisphere(rng.f2()));
+            if scene.occluded(origin, wi, cx.settings.path.ao_radius) {
+                ao = 0.0;
+            }
+        }
         // Next-event estimation.
         let nee = |ls: crate::lights::LightSample,
                    mode: (bool, bool, crate::lights::ShadowInfo),
@@ -171,7 +185,7 @@ pub fn trace_path(cx: &Ctx, mut o: DVec3, mut d: DVec3, rng: &mut Rng) -> Sample
                 return;
             }
             let w = if ls.pdf > 0.0 {
-                power_heuristic(ls.pdf, surf.pdf(n, wo, ls.wi))
+                power_heuristic(ls.pdf, scatter.pdf(n, wo, ls.wi))
             } else {
                 1.0
             };
@@ -196,8 +210,13 @@ pub fn trace_path(cx: &Ctx, mut o: DVec3, mut d: DVec3, rng: &mut Rng) -> Sample
                 s.shadow_total += lum(un);
                 s.shadow_visible += lum(un * factor);
             }
+            let diffuse_weight = if cx.settings.path.indirect_diffuse {
+                w
+            } else {
+                1.0
+            };
             let (cd, cs) = (
-                fd * cos * ls.weight * w * factor,
+                fd * cos * ls.weight * diffuse_weight * factor * ao,
                 fs * cos * ls.weight * w * factor,
             );
             let (td, ts) = match cat {
@@ -269,7 +288,7 @@ pub fn trace_path(cx: &Ctx, mut o: DVec3, mut d: DVec3, rng: &mut Rng) -> Sample
             prev_delta = true;
             cat.get_or_insert(Lobe::Specular);
         } else {
-            let Some((wi, w, pdf, lobe)) = surf.sample_opaque(n, wo, rng) else {
+            let Some((wi, w, pdf, lobe)) = scatter.sample_opaque(n, wo, rng) else {
                 break;
             };
             if ngv.dot(wi) <= 0.0 {

@@ -59,7 +59,7 @@ fn build_at(
         {
             // Image loaders supply stored samples. Only color textures marked sRGB
             // need the transfer function removed before shading.
-            for pixel in Arc::make_mut(image).data.chunks_exact_mut(4) {
+            for pixel in Arc::make_mut(image).data.as_chunks_mut::<4>().0 {
                 for channel in &mut pixel[..3] {
                     *channel = forge_image::srgb_to_linear(*channel);
                 }
@@ -83,6 +83,18 @@ impl ShaderSet {
         let Some(node) = scene.node(material) else {
             return (set, failed);
         };
+        for v in node.params.values() {
+            if let Value::Link(Some(root)) = v
+                && !set.shaders.contains_key(&shader_name(*root))
+            {
+                match build_node(scene, *root, images) {
+                    Ok(s) => {
+                        set.shaders.insert(shader_name(*root), s);
+                    }
+                    Err(e) => failed.push((*root, e)),
+                }
+            }
+        }
         if node.type_id == NODE_MATERIAL
             && let Ok(graph) = compile_hosted(node)
         {
@@ -99,18 +111,6 @@ impl ShaderSet {
                             interpolate: true,
                         }),
                     );
-                }
-            }
-        }
-        for v in node.params.values() {
-            if let Value::Link(Some(root)) = v
-                && !set.shaders.contains_key(&shader_name(*root))
-            {
-                match build_node(scene, *root, images) {
-                    Ok(s) => {
-                        set.shaders.insert(shader_name(*root), s);
-                    }
-                    Err(e) => failed.push((*root, e)),
                 }
             }
         }

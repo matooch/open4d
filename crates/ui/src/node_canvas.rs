@@ -19,6 +19,7 @@ pub const TITLE_H: f32 = 24.0;
 pub const ROW_H: f32 = 22.0;
 pub const NODE_PAD: f32 = 8.0;
 pub const PORT_R: f32 = 5.0;
+const RAMP_H: f32 = 34.0;
 /// Hit radius of a port, in screen pixels.
 pub const PORT_HIT: f32 = 10.0;
 /// Hit distance of a link, in screen pixels.
@@ -97,6 +98,17 @@ pub struct NodeView {
     pub pos: [f32; 2],
     pub inputs: Vec<PortView>,
     pub outputs: Vec<PortView>,
+    pub ramp: Option<RampView>,
+}
+
+/// Preview and controls for a three-point Levels ramp.
+#[derive(Debug, Clone)]
+pub struct RampView {
+    /// Black and white points are in input space. Gray is relative to the two endpoints.
+    pub levels: [f64; 3],
+    pub colors: [[f64; 3]; 2],
+    /// Ports driven by wires can't be edited with a knot.
+    pub editable: [bool; 3],
 }
 
 /// An entry of the add menu.
@@ -260,7 +272,8 @@ impl Layout {
             .into_iter()
             .filter_map(|key| {
                 let view = model.node(key)?;
-                let h = node_height(view.outputs.len(), view.inputs.len());
+                let h = node_height(view.outputs.len(), view.inputs.len())
+                    + if view.ramp.is_some() { RAMP_H } else { 0.0 };
                 let rect = Rect::from_min_size(pos2(view.pos[0], view.pos[1]), vec2(NODE_W, h));
                 Some(NodeBox { key, view, rect })
             })
@@ -1104,7 +1117,13 @@ impl CanvasState {
                 };
                 let y = view.to_screen(origin, pos2(0.0, b.row_y(n_out + j))).y;
                 let sr = view.rect_to_screen(origin, b.rect);
-                let left = sr.left() + 70.0 * view.zoom;
+                let label_width = ui
+                    .painter()
+                    .layout_no_wrap(p.label.clone(), font(12.0, view.zoom), TEXT)
+                    .size()
+                    .x;
+                let left = sr.left()
+                    + (label_width + 16.0 * view.zoom).clamp(70.0 * view.zoom, 115.0 * view.zoom);
                 let row = Rect::from_min_max(
                     pos2(left, y - ROW_H * view.zoom * 0.5 + 1.0),
                     pos2(
@@ -1137,6 +1156,145 @@ impl CanvasState {
                         port: p.id.clone(),
                         value,
                         gesture,
+                    });
+                }
+            }
+            if let Some(ramp) = &b.view.ramp {
+                self.ramp_editor(ui, b, ramp, actions);
+            }
+        }
+    }
+
+    fn ramp_editor(
+        &mut self,
+        ui: &Ui,
+        node: &NodeBox,
+        ramp: &RampView,
+        actions: &mut Vec<CanvasAction>,
+    ) {
+        let zoom = self.view.zoom;
+        let node_rect = self.view.rect_to_screen(self.rect.min, node.rect);
+        let top = node_rect.bottom() - (RAMP_H + 3.0) * zoom;
+        let track = Rect::from_min_max(
+            pos2(node_rect.left() + 14.0 * zoom, top),
+            pos2(node_rect.right() - 14.0 * zoom, top + 15.0 * zoom),
+        );
+        let clip = self.rect.intersect(ui.clip_rect());
+        if !node_rect.intersects(clip) {
+            return;
+        }
+        let painter = ui.painter().with_clip_rect(clip);
+        let [black, gray, white] = ramp.levels;
+        let color_at = |position| {
+            let t = forge_material::ir::ramp_factor(position, black, white, gray);
+            let [a, b] = ramp.colors;
+            let [r, g, b] = linear_bytes(std::array::from_fn(|i| a[i] + t * (b[i] - a[i])));
+            Color32::from_rgb(r, g, b)
+        };
+        let mut strip = egui::Mesh::default();
+        for i in 0..=48 {
+            let t = i as f32 / 48.0;
+            let x = egui::lerp(track.x_range(), t);
+            let color = color_at(f64::from(t));
+            strip.colored_vertex(pos2(x, track.top()), color);
+            strip.colored_vertex(pos2(x, track.bottom()), color);
+            if i > 0 {
+                let v = 2 * i;
+                strip.add_triangle(v - 2, v - 1, v);
+                strip.add_triangle(v, v - 1, v + 1);
+            }
+        }
+        painter.add(egui::Shape::mesh(strip));
+        painter.rect_stroke(
+            track,
+            0.0,
+            Stroke::new(1.0, NODE_STROKE),
+            StrokeKind::Inside,
+        );
+        if zoom < EDITOR_ZOOM {
+            return;
+        }
+
+        let knots = [black, black + (white - black) * gray, white];
+        for (i, (port, name, hint, fill)) in [
+            (
+                "start",
+                "Black point",
+                "Input that becomes black. Drag to clip shadows.",
+                Color32::BLACK,
+            ),
+            (
+                "midpoint",
+                "Gray point",
+                "Drag toward black to brighten midtones, or toward white to darken them.",
+                Color32::GRAY,
+            ),
+            (
+                "end",
+                "White point",
+                "Input that becomes white. Drag to clip highlights.",
+                Color32::WHITE,
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let x = egui::lerp(track.x_range(), knots[i].clamp(0.0, 1.0) as f32);
+            let tip = pos2(x, track.bottom() + 2.0 * zoom);
+            let foot = tip.y + (if i == 1 { 13.0 } else { 9.0 }) * zoom;
+            let writable = ramp.editable[i] && (i != 1 || black != white);
+            painter.add(egui::Shape::convex_polygon(
+                vec![tip, pos2(x + 5.0 * zoom, foot), pos2(x - 5.0 * zoom, foot)],
+                if writable {
+                    fill
+                } else {
+                    fill.gamma_multiply(0.5)
+                },
+                Stroke::new(1.0, WEAK),
+            ));
+            let handle = Rect::from_min_max(
+                pos2(
+                    x - 6.0 * zoom,
+                    if i == 1 { foot - 5.0 * zoom } else { tip.y },
+                ),
+                pos2(x + 6.0 * zoom, foot + 2.0 * zoom),
+            )
+            .intersect(clip);
+            if !writable || !handle.is_positive() {
+                continue;
+            }
+            let r = ui
+                .interact(
+                    handle,
+                    ui.make_persistent_id(("ramp_knot", node.key, port)),
+                    Sense::click_and_drag(),
+                )
+                .accessible_name(format!("Gradient Ramp #{} {name} handle", node.key))
+                .on_hover_cursor(egui::CursorIcon::ResizeHorizontal)
+                .on_hover_text(hint);
+            use egui::PointerButton::Primary;
+            if r.drag_started_by(Primary) {
+                self.gesture_seq += 1;
+                self.value_gesture = Some(self.gesture_seq);
+            }
+            if (r.dragged_by(Primary) || r.drag_stopped_by(Primary))
+                && let Some(cursor) = r.interact_pointer_pos()
+            {
+                let x = f64::from(((cursor.x - track.left()) / track.width()).clamp(0.0, 1.0));
+                let forward = black <= white;
+                let value = match i {
+                    0 if forward => x.min(white.clamp(0.0, 1.0)),
+                    0 => x.max(white.clamp(0.0, 1.0)),
+                    1 => ((x - black) / (white - black)).clamp(0.001, 0.999),
+                    _ if forward => x.max(black.clamp(0.0, 1.0)),
+                    _ => x.min(black.clamp(0.0, 1.0)),
+                };
+                if (value - ramp.levels[i]).abs() > 1e-6 {
+                    actions.push(CanvasAction::SetConstant {
+                        node: node.key,
+                        port: port.into(),
+                        value: Constant::Float(value),
+                        gesture: self.value_gesture,
                     });
                 }
             }
@@ -1489,6 +1647,7 @@ mod tests {
                 pos: *pos,
                 inputs: (0..*i).map(|k| port(&format!("i{k}"))).collect(),
                 outputs: (0..*o).map(|k| port(&format!("o{k}"))).collect(),
+                ramp: None,
             })
         }
 

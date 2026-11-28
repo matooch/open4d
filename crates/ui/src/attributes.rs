@@ -272,6 +272,7 @@ fn inspector_group(ty: &NodeType, desc: &ParamDesc, custom: bool) -> String {
                 "Effectors"
             }
             (_, "forge.camera" | "forge.light", _) | (Category::Material, _, _) => section,
+            (Category::Tag, forge_material::TEXTURE_TAG, _) => "Mapping",
             (Category::Field, _, _) if desc.id == "color" => "Color",
             (Category::Field, _, "Remapping") => "Remapping",
             (Category::Field, _, _) => "Field",
@@ -310,10 +311,21 @@ fn push_row(
     } else {
         [mixed; 3]
     };
+    let mut widget = widget(&desc.kind, desc.ui.unit);
+    if desc.id == "projection"
+        && scene
+            .node(id)
+            .is_some_and(|node| node.type_id == forge_material::TEXTURE_TAG)
+        && let Widget::Combo { options } = &mut widget
+    {
+        options.retain(|option| {
+            option.id == "uvw" || forge_material::Projection::from_id(&option.id, None).is_ok()
+        });
+    }
     let row = AttrRow {
         param: desc.id.clone(),
         label: desc.label.clone(),
-        widget: widget(&desc.kind, desc.ui.unit),
+        widget,
         value,
         mixed,
         mixed_axes,
@@ -339,7 +351,13 @@ pub fn attribute_rows_multi(scene: &Scene, ids: &[NodeId]) -> Option<AttributeVi
     let mut groups = Vec::new();
     match scene.node_type(id) {
         Some(ty) => {
-            for desc in ty.params.iter().filter(|d| !d.ui.hidden) {
+            let use_standard_rows = node.type_id != forge_material::node_material::NODE_MATERIAL
+                || forge_material::node_material::is_converted(node);
+            for desc in ty
+                .params
+                .iter()
+                .filter(|d| !d.ui.hidden && (use_standard_rows || d.id == "icon_color"))
+            {
                 let common = others.iter().all(|o| {
                     scene
                         .node_type(*o)

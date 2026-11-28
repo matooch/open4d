@@ -1,4 +1,4 @@
-//! RENDER.md §R17: submit real CPU jobs and drive history comparison in egui.
+//! RENDER.md §R17: submit real path-traced jobs and drive history comparison in egui.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -11,6 +11,14 @@ use forge_ui::state::EditorState;
 
 #[test]
 fn queued_renders_appear_in_history_and_can_be_compared() {
+    if let Err(error) = forge_render_rt::request_rt_device() {
+        assert_ne!(
+            std::env::var("FORGE_REQUIRE_GPU").as_deref(),
+            Ok("1"),
+            "{error}"
+        );
+        return;
+    }
     let mut st = EditorState::new(Arc::new(forge_app::default_registry().unwrap()));
     let cube = st
         .doc
@@ -18,7 +26,7 @@ fn queued_renders_appear_in_history_and_can_be_compared() {
             tx.set_render_config(Some(RenderConfig {
                 width: 32,
                 height: 32,
-                samples: 1,
+                samples: 4,
                 ..RenderConfig::default()
             }))?;
             tx.create("forge.cube", None, None)
@@ -26,15 +34,10 @@ fn queued_renders_appear_in_history_and_can_be_compared() {
         .unwrap();
     let mut h = Harness::new_ui_state(
         |ui, (viewer, st): &mut (PictureViewer, EditorState)| {
-            viewer.show(ui, st.doc.scene(), st.timeline.current);
+            viewer.show(ui, st.doc.scene(), st.timeline.current, Some(st.camera));
         },
         (PictureViewer::default(), st),
     );
-    // GPU-enabled validation runs the same end-to-end queue and AOV checks on the path tracer.
-    if std::env::var("FORGE_REQUIRE_GPU").as_deref() == Ok("1") {
-        h.get_by_label("GPU path tracing").click();
-        h.run();
-    }
     h.get_by_label("All passes").click();
     h.run();
     h.get_by_label("Queue frame").click();
@@ -64,6 +67,44 @@ fn queued_renders_appear_in_history_and_can_be_compared() {
     h.run();
     assert_eq!(h.state().0.viewed_id(), Some(1));
     let first = h.state().0.viewed_output().unwrap().beauty.data.clone();
+    let mut preview = forge_ui::interactive_render::InteractiveRender::default();
+    let scene = h.state().1.doc.scene().clone();
+    let camera = forge_ui::render_mode::render_camera(&h.state().1.camera, 32, 32);
+    let context = egui::Context::default();
+    let mut settings = forge_render_bridge::settings_from_scene(
+        &scene,
+        forge_render_api::RenderSettings::default(),
+    );
+    settings.tile = 64;
+    h.get_by_label("Render #2 · Frame 7").click();
+    h.run();
+    let frame = h.state().0.viewed_output().unwrap();
+    let expected: Vec<_> = frame
+        .beauty
+        .data
+        .chunks_exact(4)
+        .map(|raw| {
+            let [r, g, b] = [raw[0], raw[1], raw[2]].map(forge_image::linear_to_srgb8);
+            egui::Color32::from_rgb(r, g, b)
+        })
+        .collect();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        preview.update(&context, &scene, 7, settings.clone(), Some(camera));
+        if let Some(image) = preview.take_image()
+            && image.pixels == expected
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "refined viewport never matched the four-sample render"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    h.get_by_label("Render #1 · Frame 0").click();
+    h.run();
+
     h.get_by_label("Set A").click();
     h.run();
     h.get_by_label("Render #2 · Frame 7").click();

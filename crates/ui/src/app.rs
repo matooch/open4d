@@ -107,6 +107,7 @@ enum FileAction {
     ExportSelectedObj,
 }
 
+const NAVIGATION_PREVIEW_GRACE: f64 = 0.15;
 const SIZE_HANDLE_HIT: f32 = 9.0;
 const OBJECT_CLIPBOARD_TEXT: &str = "Forge3D scene objects";
 
@@ -116,12 +117,13 @@ pub struct Editor {
     sizes: Sizes,
     viewport: ViewportPanel,
     /// The Render display mode's frames and their cache (UI.md §6.3, R22.7).
-    render_view: crate::render_mode::RenderView,
+    viewport_renders: [crate::interactive_render::InteractiveRender; 4],
+    viewport_motion_until: [f64; 4],
+    viewport_samples: u32,
     /// The object manager's panel state: rename buffer, search text (UI.md §13).
     objects: ObjectManager,
     material_previews: crate::material_manager::MaterialPreviews,
     picture_viewer: crate::picture_viewer::PictureViewer,
-    interactive_render: crate::interactive_render::InteractiveRender,
     uv_editor: crate::uv_editor::UvEditor,
     preferences_draft: Option<crate::prefs::UiPrefs>,
     /// The key map editor window (UI.md §14.5).
@@ -165,6 +167,7 @@ pub struct Editor {
     drag_sources: SnapScene,
     /// Where the viewport was drawn last (egui points); tests aim pointers with it.
     view_rect: egui::Rect,
+    nav_anchor: Option<(Pane, egui::Pos2, Option<DVec3>)>,
     /// The rectangle select in progress, `[x0, y0, x1, y1]` in render pixels.
     rect_drag: Option<[f64; 4]>,
     /// The interactive drag of the active modeling tool (docs/specs/MODELING.md §0.2).
@@ -228,11 +231,12 @@ impl Editor {
             state,
             sizes: Sizes::default(),
             viewport: ViewportPanel::default(),
-            render_view: crate::render_mode::RenderView::default(),
+            viewport_renders: Default::default(),
+            viewport_motion_until: [0.0; 4],
+            viewport_samples: 16,
             objects: ObjectManager::default(),
             material_previews: crate::material_manager::MaterialPreviews::default(),
             picture_viewer: crate::picture_viewer::PictureViewer::default(),
-            interactive_render: crate::interactive_render::InteractiveRender::default(),
             uv_editor: crate::uv_editor::UvEditor::default(),
             preferences_draft: None,
             keymap_editor: KeyMapEditor::default(),
@@ -259,6 +263,7 @@ impl Editor {
             axis_drag: None,
             drag_sources: SnapScene::default(),
             view_rect: egui::Rect::NOTHING,
+            nav_anchor: None,
             rect_drag: None,
             tool_drag: None,
             dialogs: Box::new(NativeDialogs),
@@ -405,8 +410,7 @@ impl Editor {
             .prefs
             .use_render_defaults
             .then(|| self.state.prefs.render_defaults.clone());
-        self.picture_viewer.set_defaults(defaults.clone());
-        self.interactive_render.set_defaults(defaults);
+        self.picture_viewer.set_defaults(defaults);
         let wanted = (self.state.prefs.theme, self.state.prefs.scale);
         if self.applied_prefs == Some(wanted) {
             return;
@@ -418,26 +422,23 @@ impl Editor {
         self.applied_prefs = Some(wanted);
     }
 
-    fn preferences_window(&mut self, ctx: &egui::Context) {
-        let Some(draft) = &mut self.preferences_draft else {
-            return;
-        };
-        let mut open = true;
-        let mut apply = false;
-        let mut cancel = false;
-        egui::Window::new("Preferences")
-            .open(&mut open)
-            .resizable(true)
-            .show(ctx, |ui| {
-                egui::ScrollArea::vertical()
-                    .max_height(510.0)
-                    .show(ui, |ui| draft.form(ui));
+    fn preferences_ui(&mut self, ui: &mut Ui) {
+        let draft = self
+            .preferences_draft
+            .get_or_insert_with(|| self.state.prefs.clone());
+        let (apply, cancel) = egui::ScrollArea::vertical()
+            .show(ui, |ui| {
+                draft.form(ui);
                 ui.separator();
                 ui.horizontal(|ui| {
-                    apply = ui.button("Apply preferences").clicked();
-                    cancel = ui.button("Cancel").clicked();
-                });
-            });
+                    (
+                        ui.button("Apply preferences").clicked(),
+                        ui.button("Cancel").clicked(),
+                    )
+                })
+                .inner
+            })
+            .inner;
         if apply {
             match draft.save_all() {
                 Ok(()) => {
@@ -446,12 +447,14 @@ impl Editor {
                     self.state.prefs = draft.clone();
                     self.state.status = "Preferences saved".into();
                     self.preferences_draft = None;
-                    ctx.request_repaint();
+                    self.state.dock.close(Panel::Preferences);
+                    ui.ctx().request_repaint();
                 }
                 Err(e) => self.state.status = e,
             }
-        } else if cancel || !open {
+        } else if cancel {
             self.preferences_draft = None;
+            self.state.dock.close(Panel::Preferences);
         }
     }
 
@@ -537,16 +540,19 @@ impl Editor {
 
     /// Draws the whole editor. `rs` is `None` without a GPU (tests).
     pub fn show(&mut self, ui: &mut Ui, rs: Option<&egui_wgpu::RenderState>) {
-        self.picture_viewer.tick(ui.ctx());
-        if self
-            .state
-            .dock
-            .area_of(Panel::InteractiveRender)
-            .and_then(|area| self.state.dock.active(area))
-            != Some(Panel::InteractiveRender)
-        {
-            self.interactive_render.suspend();
+        // Older saved layouts can contain the retired standalone preview.
+        if let Some(area) = self.state.dock.area_of(Panel::InteractiveRender) {
+            let showing_preview = self.state.dock.active(area) == Some(Panel::InteractiveRender);
+            self.state.dock.close(Panel::InteractiveRender);
+            if showing_preview {
+                self.state.dock.reveal(Panel::Viewport);
+                self.state.display = DisplayMode::Render;
+            }
         }
+        if !ui.input(|input| input.pointer.any_down()) {
+            self.nav_anchor = None;
+        }
+        self.picture_viewer.tick(ui.ctx());
         // RPC jobs run here, before anything is drawn: one command is one undo step.
         if let Some(inbox) = self.rpc.take() {
             if inbox.drain(&mut self.state) > 0 {
@@ -639,13 +645,29 @@ impl Editor {
         }
         egui::CentralPanel::no_frame().show(ui, |ui| self.area(ui, Area::Center, rs));
         self.dock_drop(ui);
-        self.keymap_editor.show(ui.ctx(), &mut self.state);
+        let viewport_active = self
+            .state
+            .dock
+            .area_of(Panel::Viewport)
+            .and_then(|area| self.state.dock.active(area))
+            == Some(Panel::Viewport)
+            && self.state.display == DisplayMode::Render;
+        let visible = self.state.views.visible();
+        for pane in Pane::ALL {
+            if !viewport_active || !visible.contains(&pane) {
+                self.viewport_renders[pane as usize].suspend();
+            }
+        }
+        let key_map_area = self.state.dock.area_of(Panel::KeyMap);
+        self.keymap_editor.open = key_map_area.is_some();
+        if key_map_area.and_then(|area| self.state.dock.active(area)) != Some(Panel::KeyMap) {
+            self.keymap_editor.cancel();
+        }
+        if self.state.dock.area_of(Panel::Preferences).is_none() {
+            self.preferences_draft = None;
+        }
         self.save_layout_window(ui.ctx());
         self.io_dialog_window(ui.ctx());
-        self.preferences_window(ui.ctx());
-        for cmd in self.dynamics_panel.show(ui.ctx(), &self.state) {
-            self.run(cmd);
-        }
         let ctx = ui.ctx().clone();
         let registry = self.state.app.commands.clone();
         if let Some((id, args)) = self.palette.show(&ctx, &registry, &self.state.keys.map) {
@@ -750,7 +772,7 @@ impl Editor {
                     self.state.selection.nodes = created.iter().copied().collect();
                     self.state.selection.active = created.last().copied();
                     self.state.selection.anchor = self.state.selection.active;
-                    self.state.inspect_material = None;
+                    self.state.inspection_override = None;
                     self.state.status.clear();
                 }
                 Err(error) => self.state.status = error.to_string(),
@@ -877,7 +899,7 @@ impl Editor {
                 }
                 ui.separator();
                 if ui.button("Preferences").clicked() {
-                    self.preferences_draft = Some(self.state.prefs.clone());
+                    self.state.dock.reveal(Panel::Preferences);
                     ui.close();
                 }
                 ui.separator();
@@ -1055,7 +1077,8 @@ impl Editor {
             {
                 ui.menu_button("Dynamics", |ui| {
                     if ui.button("Dynamics Settings").clicked() {
-                        self.dynamics_panel.open(&self.state.settings());
+                        self.dynamics_panel.reset_range(&self.state.settings());
+                        self.state.dock.reveal(Panel::DynamicsSettings);
                         ui.close();
                     }
                 });
@@ -1148,7 +1171,7 @@ impl Editor {
                     ui.close();
                 }
                 if ui.button("Key map\u{2026}").clicked() {
-                    self.keymap_editor.open = true;
+                    self.state.dock.reveal(Panel::KeyMap);
                     ui.close();
                 }
                 if ui.button("Reset layout").clicked() {
@@ -1353,11 +1376,18 @@ impl Editor {
     }
 
     fn area(&mut self, ui: &mut Ui, area: Area, rs: Option<&egui_wgpu::RenderState>) {
-        self.dock_rects[area as usize] = Some(ui.available_rect_before_wrap());
+        let bounds = ui.available_rect_before_wrap();
+        self.dock_rects[area as usize] = Some(bounds);
         let tabs = self.state.dock.tabs(area).to_vec();
         let Some(mut active) = self.state.dock.active(area) else {
             return;
         };
+        // Register the background first so controls drawn over it get the click or drag.
+        let background = ui.interact(
+            bounds,
+            ui.make_persistent_id(("panel_background", area as usize)),
+            Sense::CLICK,
+        );
         // The full-width toolbars and viewport have a dock handle in their own header.
         if tabs.len() > 1
             || !matches!(
@@ -1418,15 +1448,21 @@ impl Editor {
                     self.run(c);
                 }
             }
-            Panel::PictureViewer => {
-                self.picture_viewer
-                    .show(ui, self.state.doc.scene(), self.state.timeline.current)
+            Panel::Preferences => self.preferences_ui(ui),
+            Panel::KeyMap => self.keymap_editor.show_panel(ui, &mut self.state),
+            Panel::DynamicsSettings => {
+                for cmd in self.dynamics_panel.show(ui, &self.state) {
+                    self.run(cmd);
+                }
             }
-            Panel::InteractiveRender => self.interactive_render.show(
+            Panel::RenderSettings => self.render_settings_ui(ui),
+            Panel::PictureViewer => self.picture_viewer.show(
                 ui,
                 self.state.doc.scene(),
                 self.state.timeline.current,
+                Some(self.state.pane_camera(self.state.views.active)),
             ),
+            Panel::InteractiveRender => {}
             Panel::UvEditor => {
                 for cmd in self.uv_editor.show(ui, &self.state) {
                     self.run(cmd);
@@ -1475,6 +1511,13 @@ impl Editor {
                 }
             }
         }
+        if background.clicked_by(egui::PointerButton::Primary)
+            && (!self.state.selection.nodes.is_empty() || self.state.inspection_override.is_some())
+        {
+            self.state.selection.clear();
+            self.state.inspection_override = None;
+            ui.ctx().request_repaint();
+        }
     }
 
     /// The command bar: grouped buttons, each running one registry command.
@@ -1489,102 +1532,113 @@ impl Editor {
                     self.chrome_button(ui, button, false);
                 }
                 if group.name == CLONE_TOOLSET {
-                    for (group, title, icon) in [
-                        ("Object", "Primitives", "cube"),
-                        ("Generator", "Generators", "cloner"),
-                        ("Deformer", "Deformers", "bend"),
-                    ] {
-                        let mut label = egui::Atoms::new(title);
-                        if let Some(image) = ui_image(ui, icon, 14.0, ui.visuals().text_color()) {
-                            label.push_left(image);
-                        }
-                        ui.menu_button(label, |ui| {
-                            egui::ScrollArea::vertical()
-                                .max_height(400.0)
-                                .show(ui, |ui| {
-                                    for (_, items) in create_menu(self.state.doc.scene().registry())
-                                        .into_iter()
-                                        .filter(|(category, _)| category == group)
-                                    {
-                                        for (id, name) in items {
-                                            if ui.button(name).clicked() {
-                                                self.run(("object.create", json!({"type":id})));
-                                                ui.close();
-                                            }
-                                        }
-                                    }
-                                });
-                        })
-                        .response
-                        .on_hover_text(format!("Create {title}"));
+                    if ui
+                        .button("Full Render")
+                        .on_hover_text("Render the active viewport camera into Picture Viewer")
+                        .clicked()
+                    {
+                        self.picture_viewer.queue(
+                            self.state.doc.scene(),
+                            self.state.timeline.current,
+                            Some(self.state.pane_camera(self.state.views.active)),
+                        );
+                        self.state.dock.reveal(Panel::PictureViewer);
                     }
-                    ui.menu_button("Render Settings", |ui| {
-                        let mut config = self
-                            .state
-                            .doc
-                            .scene()
-                            .render_config()
-                            .cloned()
-                            .unwrap_or_default();
-                        for (label, key, value) in [
-                            ("Width", "width", &mut config.width),
-                            ("Height", "height", &mut config.height),
-                            ("Samples", "samples", &mut config.samples),
-                            ("Max depth", "max_depth", &mut config.max_depth),
-                        ] {
-                            ui.horizontal(|ui| {
-                                ui.label(label);
-                                if ui
-                                    .add(egui::DragValue::new(value).range(1..=65535))
-                                    .changed()
-                                {
-                                    self.run(("render.settings", json!({(key): *value})));
-                                }
-                            });
-                        }
-                    });
-                    let mut clones = egui::Atoms::new("Clone tools");
-                    if let Some(image) = ui_image(ui, "cloner", 14.0, ui.visuals().text_color()) {
-                        clones.push_left(image);
+                    if ui.button("Render Settings").clicked() {
+                        self.state.dock.reveal(Panel::RenderSettings);
                     }
-                    ui.menu_button(clones, |ui| self.clone_toolset_ui(ui))
-                        .response
-                        .on_hover_text("Create clone tools, effectors or fields");
-                    let mut label = egui::Atoms::new("Lights");
-                    if let Some(image) = ui_image(ui, "light", 14.0, ui.visuals().text_color()) {
-                        label.push_left(image);
-                    }
-                    ui.menu_button(label, |ui| {
-                        for (name, kind) in [
-                            ("Point light", "omni"),
-                            ("Spot light", "spot"),
-                            ("Directional light", "infinite"),
-                            ("Area light", "area"),
-                        ] {
-                            if ui.button(name).clicked() {
-                                self.run((
-                                    "object.create",
-                                    json!({"type": "forge.light", "light_type": kind}),
-                                ));
-                                ui.close();
-                            }
-                        }
-                        ui.separator();
-                        for entry in scene_menu(self.state.doc.scene().registry())
-                            .into_iter()
-                            .filter(|entry| entry.args["type"] != "forge.floor")
-                        {
-                            if ui.button(entry.label).clicked() {
-                                self.run((entry.command, entry.args));
-                                ui.close();
-                            }
-                        }
-                    })
-                    .response
-                    .on_hover_text("Create a light, environment or sky");
                 }
             }
         });
+    }
+
+    fn creation_rail(&mut self, ui: &mut Ui, rail: egui::Rect) {
+        for (row, (category, title, icon)) in [
+            ("Object", "Primitives", "cube"),
+            ("Generator", "Generators", "cloner"),
+            ("Deformer", "Deformers", "bend"),
+            ("Clone", "Clone tools", "effector_plain"),
+            ("Light", "Lights", "light"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let image = ui_image(ui, icon, 18.0, ui.visuals().text_color());
+            let button = egui::Rect::from_center_size(
+                egui::pos2(rail.center().x, rail.top() + 19.0 + row as f32 * 33.0),
+                egui::vec2(29.0, 29.0),
+            );
+            let response = ui.put(button, egui::Button::opt_image_and_text(image, None));
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, title));
+            let response = response.on_hover_text(title);
+            egui::Popup::menu(&response).show(|ui| {
+                if category == "Clone" {
+                    self.clone_toolset_ui(ui);
+                } else if category == "Light" {
+                    for (name, kind) in [
+                        ("Point light", "omni"),
+                        ("Spot light", "spot"),
+                        ("Directional light", "infinite"),
+                        ("Area light", "area"),
+                    ] {
+                        self.creation_item(
+                            ui,
+                            name,
+                            "forge.light",
+                            (
+                                "object.create",
+                                json!({"type":"forge.light", "light_type": kind}),
+                            ),
+                        );
+                    }
+                    ui.separator();
+                    for entry in scene_menu(self.state.doc.scene().registry())
+                        .into_iter()
+                        .filter(|entry| entry.args["type"] != "forge.floor")
+                    {
+                        let icon = entry.args["type"]
+                            .as_str()
+                            .unwrap_or("forge.light")
+                            .to_owned();
+                        self.creation_item(ui, &entry.label, &icon, (entry.command, entry.args));
+                    }
+                } else {
+                    egui::ScrollArea::vertical()
+                        .max_height(400.0)
+                        .show(ui, |ui| {
+                            for (_, items) in create_menu(self.state.doc.scene().registry())
+                                .into_iter()
+                                .filter(|(group, _)| group == category)
+                            {
+                                for (id, name) in items {
+                                    self.creation_item(
+                                        ui,
+                                        &name,
+                                        &id,
+                                        ("object.create", json!({"type": id})),
+                                    );
+                                }
+                            }
+                        });
+                }
+            });
+        }
+    }
+
+    fn creation_item(&mut self, ui: &mut Ui, label: &str, icon_id: &str, command: Cmd) {
+        let image = ui_image(
+            ui,
+            icon_name(icon_id).unwrap_or("cube"),
+            16.0,
+            ui.visuals().text_color(),
+        );
+        if ui
+            .add(egui::Button::opt_image_and_text(image, Some(label.into())))
+            .clicked()
+        {
+            self.run(command);
+            ui.close();
+        }
     }
 
     fn clone_toolset_ui(&mut self, ui: &mut Ui) {
@@ -1936,7 +1990,7 @@ impl Editor {
                 self.component_bar(ui);
                 ui.separator();
             }
-            // what the panes draw: the shaded scene or the real-time tier (UI.md §6.3).
+            // Choose editing shading or the live path-traced view.
             // UI state only: no undo entry, no document change.
             let render = self.state.display == DisplayMode::Render;
             if ui
@@ -1949,21 +2003,38 @@ impl Editor {
                     DisplayMode::Render
                 };
             }
-            ui.add_enabled_ui(render, |ui| {
-                ui.menu_button("Post", |ui| {
-                    for (label, on) in [
-                        ("SSAO", &mut self.state.post.ssao),
-                        ("SSR", &mut self.state.post.ssr),
-                        ("Bloom", &mut self.state.post.bloom),
-                        ("TAA", &mut self.state.post.taa),
-                        ("Tone map", &mut self.state.post.tonemap),
-                    ] {
-                        ui.checkbox(on, label);
+            let shading = self.state.pane_shading(self.state.views.active);
+            let name = SHADINGS
+                .iter()
+                .find(|(mode, _)| *mode == shading)
+                .map_or("Shading", |(_, label)| *label);
+            ui.menu_button(name, |ui| {
+                for (mode, label) in SHADINGS {
+                    if ui
+                        .selectable_label(!render && mode == shading, label)
+                        .clicked()
+                    {
+                        self.state.display = DisplayMode::Shaded;
+                        self.run(shading_cmd(mode));
+                        ui.close();
                     }
-                });
+                }
+            })
+            .response
+            .on_hover_text("Viewport shading")
+            .widget_info(|| {
+                egui::WidgetInfo::labeled(egui::Role::Button, true, "Viewport shading")
             });
         });
-        let area = ui.available_rect_before_wrap();
+        let mut area = ui.available_rect_before_wrap();
+        let rail = egui::Rect::from_min_max(
+            egui::pos2((area.right() - 38.0).max(area.left()), area.top()),
+            area.max,
+        );
+        area.max.x = rail.min.x;
+        let theme = Theme::current(ui.ctx());
+        ui.painter().rect_filled(rail, 0.0, theme.panel);
+        self.creation_rail(ui, rail);
         let rects = arrange(
             self.state.views.layout,
             self.state.views.active,
@@ -2043,12 +2114,53 @@ impl Editor {
         } else {
             nav_action(&input)
         };
+        let ppp = ui.ctx().pixels_per_point();
+        let size = [
+            (rect.width() * ppp).round() as u32,
+            (rect.height() * ppp).round() as u32,
+        ];
         let view_size = [rect.width() as f64, rect.height() as f64];
+        let previous_camera = self.state.camera;
         if pane == self.state.views.active {
             if action != NavAction::None {
                 self.state.touch_view();
             }
-            apply_nav(&mut self.state.camera, action, view_size);
+            let press = ui.input(|input| input.pointer.press_origin());
+            let anchor = if input.held.is_some()
+                && matches!(action, NavAction::Orbit(..) | NavAction::Dolly(..))
+                && (response.is_pointer_button_down_on() || response.dragged())
+                && let Some(press) = press.filter(|point| rect.contains(*point))
+                && view_size.iter().all(|&extent| extent > 0.0)
+            {
+                if self
+                    .nav_anchor
+                    .is_none_or(|(p, start, _)| p != pane || start != press)
+                {
+                    let frame = self.state.app.scheduled_draw(self.state.timeline.current);
+                    let [x, y]: [f32; 2] = ((press - rect.min) * ppp).into();
+                    let point = crate::manipulate::navigation_anchor(
+                        &frame,
+                        &self.state.camera,
+                        [f64::from(x), f64::from(y)],
+                        size.map(|extent| f64::from(extent.max(1))),
+                    );
+                    self.nav_anchor = Some((pane, press, point));
+                }
+                self.nav_anchor.and_then(|(_, _, point)| point)
+            } else {
+                None
+            };
+            match (action, anchor) {
+                (NavAction::Orbit(dx, dy), Some(point)) if dx != 0.0 || dy != 0.0 => {
+                    self.state.camera =
+                        forge_viewport::nav::orbit_around(&self.state.camera, point, dx, dy);
+                }
+                (NavAction::Dolly(dx), Some(point)) if dx != 0.0 => {
+                    self.state.camera =
+                        forge_viewport::nav::dolly_around(&self.state.camera, point, dx);
+                }
+                _ => apply_nav(&mut self.state.camera, action, view_size),
+            }
             if view_size[1] > 0.0 {
                 self.state.view_aspect = view_size[0] / view_size[1];
             }
@@ -2056,11 +2168,6 @@ impl Editor {
         if pane == self.state.views.active {
             self.view_rect = rect;
         }
-        let ppp = ui.ctx().pixels_per_point();
-        let size = [
-            (rect.width() * ppp).round() as u32,
-            (rect.height() * ppp).round() as u32,
-        ];
         use crate::material_manager::{MaterialDrag, assign_to};
         if egui::DragAndDrop::has_payload_of_type::<MaterialDrag>(ui.ctx()) {
             if let Some(material) = response.dnd_release_payload::<MaterialDrag>()
@@ -2096,11 +2203,16 @@ impl Editor {
             return;
         };
         if self.state.display == DisplayMode::Render {
+            if self.state.camera != previous_camera {
+                self.viewport_motion_until[pane as usize] =
+                    ui.input(|i| i.time) + NAVIGATION_PREVIEW_GRACE;
+            }
             let gizmo = self.current_gizmo();
-            self.paint_render_mode(ui, rs, pane, rect, ppp, gizmo.as_ref());
-            self.paint_transform_handles(ui, pane, rect, ppp, size, gizmo);
-            self.paint_size_handles(ui, &response, pane, rect, ppp);
-            return;
+            if self.paint_render_mode(ui, rs, pane, rect, ppp, gizmo.as_ref()) {
+                self.paint_transform_handles(ui, pane, rect, ppp, size, gizmo);
+                self.paint_size_handles(ui, &response, pane, rect, ppp);
+                return;
+            }
         }
         let gizmo = self.current_gizmo();
         // the scheduler's pass: only what changed since the last frame is evaluated and
@@ -2201,6 +2313,15 @@ impl Editor {
             Theme::current(ui.ctx()).weak_text,
         );
         self.paint_hud(ui, pane, rect, &scheduled);
+        if self.state.display == DisplayMode::Render {
+            ui.painter_at(rect).text(
+                rect.left_bottom() + egui::vec2(8.0, -6.0),
+                egui::Align2::LEFT_BOTTOM,
+                self.viewport_renders[pane as usize].status(),
+                egui::FontId::proportional(12.0),
+                Theme::current(ui.ctx()).text,
+            );
+        }
         // cutting tools: the knife line being dragged and the heads-up line (MODELING.md §5.5)
         if let Some(hud) =
             crate::cutting::hud(&self.state).or_else(|| crate::building::hud(&self.state))
@@ -2370,6 +2491,94 @@ impl Editor {
         }
     }
 
+    fn render_settings_ui(&mut self, ui: &mut Ui) {
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            use crate::picture_viewer::{RenderDevice, RenderMode};
+            let old_device = self.picture_viewer.device;
+            egui::ComboBox::from_label("Render device")
+                .selected_text(match old_device { RenderDevice::Gpu => "GPU", RenderDevice::Cpu => "CPU" })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.picture_viewer.device, RenderDevice::Gpu, "GPU");
+                    ui.selectable_value(&mut self.picture_viewer.device, RenderDevice::Cpu, "CPU");
+                });
+            if old_device != self.picture_viewer.device {
+                for preview in &mut self.viewport_renders {
+                    let engine: std::sync::Arc<dyn forge_render_api::RenderEngine> = match self.picture_viewer.device {
+                        RenderDevice::Gpu => std::sync::Arc::new(crate::render_mode::StudioPathTracer::default()),
+                        RenderDevice::Cpu => std::sync::Arc::new(forge_render_cpu::CpuEngine::new()),
+                    };
+                    preview.set_engine(engine);
+                }
+            }
+            let lighting = &mut self.picture_viewer.lighting;
+            ui.checkbox(&mut lighting.indirect_diffuse, "Global illumination")
+                .on_hover_text("Trace indirect diffuse bounces.");
+            ui.checkbox(&mut lighting.glossy_reflections, "Glossy reflections")
+                .on_hover_text("Enable glossy surface reflections and highlights. Glass transmission keeps its own Fresnel reflections.");
+            let mut ao = lighting.ao_radius > 0.0;
+            if ui.checkbox(&mut ao, "Ambient occlusion").changed() {
+                lighting.ao_radius = if ao { 40.0 } else { 0.0 };
+            }
+            if ao {
+                ui.horizontal(|ui| {
+                    let label = ui.label("AO radius");
+                    ui.add(egui::DragValue::new(&mut lighting.ao_radius).range(0.1..=10_000.0))
+                        .labelled_by(label.id);
+                });
+            }
+            ui.separator();
+            ui.heading("Viewport render");
+            ui.horizontal(|ui| {
+                let label = ui.label("Preview samples");
+                ui.add(egui::DragValue::new(&mut self.viewport_samples).range(1..=128))
+                    .labelled_by(label.id)
+                    .on_hover_text("Maximum samples per pixel for the progressive viewport.");
+            });
+            ui.separator();
+            ui.heading("Final render");
+            egui::ComboBox::from_label("Render order")
+                .selected_text(match self.picture_viewer.mode { RenderMode::Buckets => "Buckets", RenderMode::Progressive => "Progressive" })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.picture_viewer.mode, RenderMode::Buckets, "Buckets");
+                    ui.selectable_value(&mut self.picture_viewer.mode, RenderMode::Progressive, "Progressive");
+                });
+            let mut config = self
+                .state
+                .doc
+                .scene()
+                .render_config()
+                .cloned()
+                .unwrap_or_default();
+            for (label, key, value, max) in [
+                (
+                    "Width",
+                    "width",
+                    &mut config.width,
+                    forge_core::RenderConfig::MAX_SIZE,
+                ),
+                (
+                    "Height",
+                    "height",
+                    &mut config.height,
+                    forge_core::RenderConfig::MAX_SIZE,
+                ),
+                ("Samples", "samples", &mut config.samples, 1_000_000),
+                ("Max depth", "max_depth", &mut config.max_depth, 256),
+            ] {
+                ui.horizontal(|ui| {
+                    let label = ui.label(label);
+                    if ui
+                        .add(egui::DragValue::new(value).range(1..=max))
+                        .labelled_by(label.id)
+                        .changed()
+                    {
+                        self.run(("render.settings", json!({(key): *value})));
+                    }
+                });
+            }
+        });
+    }
+
     /// Render the pane camera at native resolution, then composite the selection guides.
     fn paint_render_mode(
         &mut self,
@@ -2379,92 +2588,106 @@ impl Editor {
         rect: egui::Rect,
         ppp: f32,
         gizmo: Option<&Gizmo>,
-    ) {
+    ) -> bool {
         let full = rect.size() * ppp;
         let size = [full.x, full.y].map(|v| v.round().max(1.0) as u32);
         let current = self.state.timeline.current;
         let scheduled = self.state.app.scheduled_draw(current);
         let shown = scheduled.scene.clone();
         let camera = self.state.pane_camera(pane);
-        let post = self.state.post;
-        match self
-            .render_view
-            .image(ui.ctx(), &shown, &camera, current, size, post)
-        {
-            Ok(texture) => {
-                let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
-                ui.painter()
-                    .image(texture.id(), rect, uv, egui::Color32::WHITE);
-                // the selection outline over the render engine's image: the viewport draws it
-                // alone on a transparent target, hidden by the scene's meshes (VIEWPORT.md §16.2)
-                if !self.state.selection.nodes.is_empty() {
-                    let lights = crate::panes::scene_lights(&shown);
-                    let base = Settings {
-                        shadows: false,
-                        ..display_settings(&self.state.views, Shading::Smooth, &lights)
-                    };
-                    let overlay = self.viewport.render(
-                        rs,
-                        pane,
-                        size,
-                        &camera,
-                        base,
-                        SceneView {
-                            scene: &shown,
-                            selected: &self.state.selection.nodes,
-                            gizmo,
-                            component: None,
-                            ctx: forge_core::EvalCtx::at_frame(
-                                current,
-                                f64::from(shown.settings().fps),
-                            ),
-                            frame: Some(&*scheduled),
-                            splines: &[],
-                            motion: &Default::default(),
-                            overlay: &Default::default(),
-                            active: self.state.selection.active,
-                            theme: Theme::current(ui.ctx()),
-                            scale: ppp,
-                            overlay_only: true,
-                        },
-                    );
-                    ui.painter().image(overlay, rect, uv, egui::Color32::WHITE);
-                    let painter = ui.painter_at(rect);
-                    for line in crate::scene_overlay::object_lines(
-                        &shown,
-                        &self.state.selection.nodes,
-                        true,
-                    ) {
-                        let project = |v| {
-                            camera
-                                .project(v, size[0] as f64, size[1] as f64)
-                                .map(|p| rect.min + egui::vec2(p.x as f32, p.y as f32) / ppp)
-                        };
-                        if let (Some(a), Some(b)) = (project(line.a), project(line.b)) {
-                            let color =
-                                egui::Rgba::from_rgb(line.color[0], line.color[1], line.color[2]);
-                            painter.line_segment(
-                                [a, b],
-                                egui::Stroke::new(1.5, egui::Color32::from(color)),
-                            );
-                        }
-                    }
+        let mut settings = crate::picture_viewer::editor_render_settings(
+            self.state.doc.scene(),
+            self.state
+                .prefs
+                .use_render_defaults
+                .then_some(&self.state.prefs.render_defaults),
+        );
+        [settings.width, settings.height] = size;
+        settings.samples = self.viewport_samples;
+        settings.path = self.picture_viewer.lighting;
+        settings.aovs.clear();
+        settings.tile = 64;
+        let draft = self.state.app.drafted_scene();
+        let source = draft.as_deref().unwrap_or(self.state.doc.scene());
+        let remaining = self.viewport_motion_until[pane as usize] - ui.input(|i| i.time);
+        let moving = remaining > 0.0;
+        if moving {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_secs_f64(remaining));
+        }
+        let preview = &mut self.viewport_renders[pane as usize];
+        preview.update_viewport(
+            ui.ctx(),
+            source,
+            current,
+            settings,
+            Some(crate::render_mode::render_camera(&camera, size[0], size[1])),
+            moving,
+        );
+        let Some(texture) = preview.texture(ui.ctx()).map(|texture| texture.id()) else {
+            return false;
+        };
+        let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+        ui.painter().image(texture, rect, uv, egui::Color32::WHITE);
+        // the selection outline over the render engine's image: the viewport draws it
+        // alone on a transparent target, hidden by the scene's meshes (VIEWPORT.md §16.2)
+        if !self.state.selection.nodes.is_empty() {
+            let lights = crate::panes::scene_lights(&shown);
+            let base = Settings {
+                shadows: false,
+                ..display_settings(&self.state.views, Shading::Smooth, &lights)
+            };
+            let overlay = self.viewport.render(
+                rs,
+                pane,
+                size,
+                &camera,
+                base,
+                SceneView {
+                    scene: &shown,
+                    selected: &self.state.selection.nodes,
+                    gizmo,
+                    component: None,
+                    ctx: forge_core::EvalCtx::at_frame(current, f64::from(shown.settings().fps)),
+                    frame: Some(&*scheduled),
+                    splines: &[],
+                    motion: &Default::default(),
+                    overlay: &Default::default(),
+                    active: self.state.selection.active,
+                    theme: Theme::current(ui.ctx()),
+                    scale: ppp,
+                    overlay_only: true,
+                },
+            );
+            ui.painter().image(overlay, rect, uv, egui::Color32::WHITE);
+            let painter = ui.painter_at(rect);
+            for line in
+                crate::scene_overlay::object_lines(&shown, &self.state.selection.nodes, true)
+            {
+                let project = |v| {
+                    camera
+                        .project(v, size[0] as f64, size[1] as f64)
+                        .map(|p| rect.min + egui::vec2(p.x as f32, p.y as f32) / ppp)
+                };
+                if let (Some(a), Some(b)) = (project(line.a), project(line.b)) {
+                    let color = egui::Rgba::from_rgb(line.color[0], line.color[1], line.color[2]);
+                    painter
+                        .line_segment([a, b], egui::Stroke::new(1.5, egui::Color32::from(color)));
                 }
-                ui.painter().text(
-                    rect.left_top() + egui::vec2(8.0, 6.0),
-                    egui::Align2::LEFT_TOP,
-                    format!("{} · Render", pane.label()),
-                    egui::FontId::proportional(12.0),
-                    Theme::current(ui.ctx()).weak_text,
-                );
-            }
-            Err(_) => {
-                ui.put(
-                    rect,
-                    egui::Label::new("Render unavailable").selectable(false),
-                );
             }
         }
+        ui.painter().text(
+            rect.left_top() + egui::vec2(8.0, 6.0),
+            egui::Align2::LEFT_TOP,
+            format!(
+                "{} · Render · {}",
+                pane.label(),
+                self.viewport_renders[pane as usize].status()
+            ),
+            egui::FontId::proportional(12.0),
+            Theme::current(ui.ctx()).weak_text,
+        );
+        true
     }
 
     /// The HUD items of `pane` over its image (UI.md §23.6).
@@ -3049,10 +3272,12 @@ impl Editor {
             }
             return;
         }
-        if response.clicked()
-            && let Err(e) = viewport_click(&mut self.state, [x, y], [w, h], mods)
-        {
-            self.state.status = e;
+        if response.clicked() {
+            match viewport_click(&mut self.state, [x, y], [w, h], mods) {
+                Ok(()) if component_target(&self.state).is_none() => self.state.inspect(None),
+                Ok(()) => {}
+                Err(e) => self.state.status = e,
+            }
         }
     }
 
@@ -3434,19 +3659,23 @@ impl Editor {
     }
 
     fn attributes_ui(&mut self, ui: &mut Ui) {
-        self.state.inspect_material = self
+        self.state.inspection_override = self
             .state
-            .inspect_material
-            .filter(|id| self.state.doc.scene().materials().contains(id));
-        if self.state.inspect_material.is_some() {
+            .inspection_override
+            .filter(|id| self.state.doc.scene().node(*id).is_some());
+        if self.state.inspection_override.is_some() {
             if ui.button("Back to object attributes").clicked() {
-                self.state.inspect_material = None;
+                self.state.inspection_override = None;
             }
             ui.separator();
         } else if self.state.tool.is_some() {
             self.tool_ui(ui);
         }
-        let Some(id) = self.state.inspect_material.or(self.state.selection.active) else {
+        let Some(id) = self
+            .state
+            .inspection_override
+            .or(self.state.selection.active)
+        else {
             ui.weak("Nothing selected");
             return;
         };
@@ -3459,13 +3688,13 @@ impl Editor {
                 .nodes
                 .iter()
                 .copied()
-                .filter(|n| *n != id && self.state.inspect_material.is_none()),
+                .filter(|n| *n != id && self.state.inspection_override.is_none()),
         );
         let Some(view) = attribute_rows_multi(&shown, &ids) else {
             ui.weak("Nothing selected");
             return;
         };
-        let can_draft = !self.state.autokey && self.state.inspect_material.is_none();
+        let can_draft = !self.state.autokey && self.state.inspection_override.is_none();
         let theme = Theme::current(ui.ctx());
         let mut rename = None;
         let type_id = shown
@@ -3496,6 +3725,40 @@ impl Editor {
         });
         if let Some(name) = rename {
             self.run(("object.rename", json!({"node": id.0, "name": name})));
+        }
+        match type_id.as_str() {
+            forge_material::TEXTURE_TAG => {
+                if let Some(forge_core::Value::Link(Some(material))) = shown.param(id, "material")
+                    && shown.materials().contains(material)
+                    && ui
+                        .button("Edit Material")
+                        .on_hover_text("Open the material shared by this tag")
+                        .clicked()
+                {
+                    self.state.inspect(Some(*material));
+                    ui.ctx().request_repaint();
+                    return;
+                }
+            }
+            forge_material::MATERIAL => {
+                if ui.button("Convert to Node Material")
+                    .on_hover_text("Keep the material's settings, shaders, and assignments and add a node graph.")
+                    .clicked()
+                    && self.run(("material.convert_to_node", json!({"material": id.0})))
+                {
+                    ui.ctx().request_repaint();
+                    return;
+                }
+            }
+            forge_material::node_material::NODE_MATERIAL => {
+                if ui.button("Edit Nodes").clicked() {
+                    self.state.open_material_nodes(id);
+                }
+            }
+            forge_nodes::TAG if ui.button("Edit Expression").clicked() => {
+                self.state.open_node_editor(id);
+            }
+            _ => {}
         }
         let tabs = view.tabs();
         let selection = self.attr_tabs.entry(type_id.clone()).or_insert_with(|| {
@@ -3613,7 +3876,7 @@ impl Editor {
             distance: self.state.prefs.distance,
         };
         if let Some(edit) = widgets::show(ui, &cx, shown) {
-            let mut nodes: Vec<NodeId> = if self.state.inspect_material.is_some() {
+            let mut nodes: Vec<NodeId> = if self.state.inspection_override.is_some() {
                 vec![id]
             } else {
                 self.state.selection.nodes.iter().copied().collect()

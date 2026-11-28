@@ -358,6 +358,9 @@ pub fn frame_base(
     frame[f::RY1] = y1 as f32;
     frame[f::SAMPLE_TOTAL] = f32::from_bits(settings.samples);
     frame[f::MAX_DEPTH] = settings.max_depth as f32;
+    frame[f::INDIRECT_DIFFUSE] = u32::from(settings.path.indirect_diffuse) as f32;
+    frame[f::GLOSSY] = u32::from(settings.path.glossy_reflections) as f32;
+    frame[f::AO_RADIUS] = settings.path.ao_radius as f32;
     frame[f::SEED_LO] = f32::from_bits(settings.seed as u32);
     frame[f::SEED_HI] = f32::from_bits((settings.seed >> 32) as u32);
     frame[f::FILTER] = match settings.filter {

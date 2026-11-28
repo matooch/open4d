@@ -1,10 +1,11 @@
 //! Picture history and the background still-render queue (RENDER.md §R17).
 
 use std::collections::{BTreeMap, VecDeque};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
+use std::sync::{Arc, Mutex};
 
+use crate::render_mode::{StudioPathTracer, display_rgb, progressive_samples, render_camera};
 use egui::{ColorImage, Context, TextureHandle, Ui};
 use forge_core::{RenderConfig, Scene};
 use forge_geometry::triangulate::triangulate;
@@ -15,7 +16,7 @@ use forge_render_api::{
 use forge_render_bridge::{
     apply_scene_objects, settings_from_config, settings_from_scene, snapshot_from_polys,
 };
-use forge_render_cpu::CpuEngine;
+use forge_viewport::camera::Camera;
 use glam::DMat4;
 
 use crate::material_preview::{Binding, load_image};
@@ -41,8 +42,24 @@ impl Channel {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum RenderDevice {
+    #[default]
+    Gpu,
+    Cpu,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum RenderMode {
+    #[default]
+    Buckets,
+    Progressive,
+}
+
 struct Job {
-    gpu_path_trace: bool,
+    device: RenderDevice,
+    mode: RenderMode,
+    camera: Option<Camera>,
     id: u64,
     frame: i64,
     scene: Scene,
@@ -53,9 +70,13 @@ struct Job {
 struct Progress {
     done: AtomicUsize,
     total: AtomicUsize,
+    live_image: Mutex<Option<ColorImage>>,
+    dirty: std::sync::atomic::AtomicBool,
 }
 
 struct Running {
+    mode: RenderMode,
+    device: RenderDevice,
     id: u64,
     frame: i64,
     control: Control,
@@ -154,18 +175,51 @@ pub(crate) fn prepare_render(
     Ok((snap, applied.warnings))
 }
 
-fn render(mut job: Job, control: &Control) -> Result<Completed, RenderError> {
-    let (snap, warnings) = prepare_render(&job.scene, job.frame, &mut job.settings, control)?;
-    let output = if job.gpu_path_trace {
-        let (device, queue) =
-            forge_render_rt::request_rt_device().map_err(RenderError::Unsupported)?;
-        forge_render_rt::PathTraceEngine::with_device(device, queue).render(
-            &snap,
-            &job.settings,
-            control,
-        )?
-    } else {
-        CpuEngine::new().render(&snap, &job.settings, control)?
+fn render(
+    mut job: Job,
+    control: &Control,
+    progress: &Progress,
+    ctx: &Context,
+) -> Result<Completed, RenderError> {
+    let (mut snap, warnings) = prepare_render(&job.scene, job.frame, &mut job.settings, control)?;
+    if let Some(camera) = job.camera {
+        snap.camera = render_camera(&camera, job.settings.width, job.settings.height);
+    }
+    let engine: Box<dyn RenderEngine> = match job.device {
+        RenderDevice::Gpu => Box::new(StudioPathTracer::default()),
+        RenderDevice::Cpu => Box::new(forge_render_cpu::CpuEngine::new()),
+    };
+    let output = match job.mode {
+        RenderMode::Buckets => engine.render(&snap, &job.settings, control)?,
+        RenderMode::Progressive => {
+            let target = job.settings.samples;
+            progress.total.store(target as usize, Ordering::Relaxed);
+            let mut settings = job.settings.clone();
+            for samples in progressive_samples(target).take_while(|&samples| samples < target) {
+                settings.samples = samples;
+                settings.aovs.clear();
+                let pass = engine.render(&snap, &settings, control)?;
+                if control.is_cancelled() {
+                    return Err(RenderError::Cancelled);
+                }
+                let pixels = pass
+                    .beauty
+                    .data
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|&[r, g, b, _]| display_rgb([r, g, b], 1.0))
+                    .collect();
+                *progress.live_image.lock().unwrap() = Some(ColorImage::new(
+                    [pass.width as usize, pass.height as usize],
+                    pixels,
+                ));
+                progress.dirty.store(true, Ordering::Release);
+                progress.done.store(samples as usize, Ordering::Relaxed);
+                ctx.request_repaint();
+            }
+            engine.render(&snap, &job.settings, control)?
+        }
     };
     Ok(Completed {
         id: job.id,
@@ -180,25 +234,58 @@ fn start(job: Job, ctx: &Context) -> std::io::Result<Running> {
     let progress = Arc::new(Progress::default());
     let counter = progress.clone();
     let repaint = ctx.clone();
+    let buckets = job.mode == RenderMode::Buckets;
+    let size = [job.settings.width as usize, job.settings.height as usize];
     let control = Control::with_events(move |event| {
-        if let RenderEvent::Progress { done, total } = event {
-            counter.total.store(*total, Ordering::Relaxed);
-            counter.done.fetch_max(*done, Ordering::Relaxed);
-            repaint.request_repaint();
+        if !buckets {
+            return;
+        }
+        match event {
+            RenderEvent::Tile {
+                x,
+                y,
+                width,
+                height,
+                rgba,
+            } => {
+                let mut slot = counter.live_image.lock().unwrap();
+                let image =
+                    slot.get_or_insert_with(|| ColorImage::filled(size, egui::Color32::BLACK));
+                let (x, y, w) = (*x as usize, *y as usize, *width as usize);
+                for (row, src) in rgba.chunks_exact(w * 4).take(*height as usize).enumerate() {
+                    let start = (y + row) * size[0] + x;
+                    for (dst, &[r, g, b, _]) in image.pixels[start..start + w]
+                        .iter_mut()
+                        .zip(src.as_chunks::<4>().0)
+                    {
+                        *dst = display_rgb([r, g, b], 1.0);
+                    }
+                }
+                counter.dirty.store(true, Ordering::Release);
+                repaint.request_repaint();
+            }
+            RenderEvent::Progress { done, total } => {
+                counter.total.store(*total, Ordering::Relaxed);
+                counter.done.fetch_max(*done, Ordering::Relaxed);
+                repaint.request_repaint();
+            }
+            _ => {}
         }
     });
     let running = Running {
+        mode: job.mode,
+        device: job.device,
         id: job.id,
         frame: job.frame,
         control: control.clone(),
-        progress,
+        progress: progress.clone(),
         result,
     };
     let ctx = ctx.clone();
     std::thread::Builder::new()
         .name("picture-render".into())
         .spawn(move || {
-            let _ = tx.send(render(job, &control));
+            let _ = tx.send(render(job, &control, &progress, &ctx));
             ctx.request_repaint();
         })?;
     Ok(running)
@@ -206,6 +293,10 @@ fn start(job: Job, ctx: &Context) -> std::io::Result<Running> {
 
 #[derive(Default)]
 pub struct PictureViewer {
+    pub(crate) device: RenderDevice,
+    pub(crate) mode: RenderMode,
+    pub(crate) lighting: forge_render_api::PathLighting,
+    live_texture: Option<(u64, TextureHandle)>,
     defaults: Option<RenderConfig>,
     next_id: u64,
     waiting: VecDeque<Job>,
@@ -217,7 +308,6 @@ pub struct PictureViewer {
     channel: Channel,
     exposure: f32,
     all_passes: bool,
-    gpu_path_trace: bool,
     notice: String,
     texture: Option<((u64, Channel, u32), TextureHandle)>,
 }
@@ -251,8 +341,13 @@ impl PictureViewer {
         self.entry().map(|image| &image.output)
     }
 
-    fn queue(&mut self, scene: &Scene, frame: i64) {
+    pub(crate) fn queue(&mut self, scene: &Scene, frame: i64, camera: Option<Camera>) {
+        if self.waiting.len() + usize::from(self.running.is_some()) >= QUEUE_LIMIT {
+            self.notice = "Render queue is full".into();
+            return;
+        }
         let mut settings = editor_render_settings(scene, self.defaults.as_ref());
+        settings.path = self.lighting;
         if self.all_passes {
             settings.aovs = Aov::ALL.to_vec();
         }
@@ -271,7 +366,9 @@ impl PictureViewer {
         }
         self.next_id += 1;
         self.waiting.push_back(Job {
-            gpu_path_trace: self.gpu_path_trace,
+            mode: self.mode,
+            device: self.device,
+            camera,
             id: self.next_id,
             frame,
             scene: scene.clone(),
@@ -355,7 +452,7 @@ impl PictureViewer {
                         data_rgb(aov, [r, g, b])
                     }
                 } else {
-                    [r, g, b].map(|v| forge_image::linear_to_srgb((v * gain).clamp(0.0, 1.0)))
+                    return display_rgb([r, g, b], gain);
                 };
                 let [r, g, b] = rgb.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
                 egui::Color32::from_rgb(r, g, b)
@@ -405,7 +502,7 @@ impl PictureViewer {
         };
     }
 
-    pub fn show(&mut self, ui: &mut Ui, scene: &Scene, frame: i64) {
+    pub fn show(&mut self, ui: &mut Ui, scene: &Scene, frame: i64, camera: Option<Camera>) {
         self.tick(ui.ctx());
         ui.horizontal_wrapped(|ui| {
             let full = self.waiting.len() + usize::from(self.running.is_some()) >= QUEUE_LIMIT;
@@ -413,16 +510,22 @@ impl PictureViewer {
                 .add_enabled(!full, egui::Button::new("Queue frame"))
                 .clicked()
             {
-                self.queue(scene, frame);
+                self.queue(scene, frame, camera);
                 self.tick(ui.ctx());
             }
-            ui.checkbox(&mut self.gpu_path_trace, "GPU path tracing")
-                .on_hover_text("Trace queued frames on the GPU. Supports thickness-based subsurface backlighting.");
             ui.checkbox(&mut self.all_passes, "All passes");
             if let Some(job) = &self.running {
                 let total = job.progress.total.load(Ordering::Relaxed);
                 let done = job.progress.done.load(Ordering::Relaxed);
-                let text = format!("Rendering #{} · Frame {}", job.id, job.frame);
+                let device = match job.device {
+                    RenderDevice::Gpu => "GPU",
+                    RenderDevice::Cpu => "CPU",
+                };
+                let unit = match job.mode {
+                    RenderMode::Buckets => "buckets",
+                    RenderMode::Progressive => "spp",
+                };
+                let text = format!("{device} · Frame {} · {done}/{total} {unit}", job.frame);
                 ui.add(egui::ProgressBar::new(done as f32 / total.max(1) as f32).text(text));
                 if ui.button("Cancel render").clicked() {
                     job.control.cancel();
@@ -507,6 +610,40 @@ impl PictureViewer {
                 self.select(clicked, false);
             }
         });
+        if let Some(job) = &self.running {
+            if self
+                .live_texture
+                .as_ref()
+                .is_some_and(|(id, _)| *id != job.id)
+            {
+                self.live_texture = None;
+            }
+            if job.progress.dirty.swap(false, Ordering::AcqRel)
+                && let Some(image) = job.progress.live_image.lock().unwrap().clone()
+            {
+                if let Some((_, texture)) = &mut self.live_texture {
+                    texture.set(image, egui::TextureOptions::LINEAR);
+                } else {
+                    self.live_texture = Some((
+                        job.id,
+                        ui.ctx().load_texture(
+                            "live full render",
+                            image,
+                            egui::TextureOptions::LINEAR,
+                        ),
+                    ));
+                }
+            }
+            if let Some((_, texture)) = &self.live_texture {
+                let size = texture.size_vec2();
+                let fit = (ui.available_width() / size.x).min(ui.available_height() / size.y);
+                ui.add(egui::Image::new((texture.id(), size * fit.max(0.0))));
+            } else {
+                ui.label("Preparing full render…");
+            }
+            return;
+        }
+        self.live_texture = None;
         if let Some(id) = self.selected {
             let key = (id, self.channel, self.exposure.to_bits());
             if self.texture.as_ref().is_none_or(|(old, _)| *old != key) {
@@ -559,6 +696,70 @@ fn data_rgb(aov: Aov, [r, g, b]: [f32; 3]) -> [f32; 3] {
 mod sample_scene_tests {
     use super::*;
     #[test]
+    fn material_projection_is_per_tag_and_render_uses_primitive_uvw() {
+        use forge_core::Value;
+        use serde_json::json;
+
+        let mut app = forge_app::App::new_default();
+        let create_plane = |app: &mut forge_app::App, orientation| {
+            app.doc
+                .transact("Plane", |tx| {
+                    let plane = tx.create("forge.plane", None, None)?;
+                    tx.set_param(plane, "orientation", Value::Enum(orientation))?;
+                    tx.set_param(plane, "segments_w", Value::Int(3))?;
+                    tx.set_param(plane, "segments_h", Value::Int(3))?;
+                    Ok(plane)
+                })
+                .unwrap()
+        };
+        let ground = create_plane(&mut app, "pos_y".into());
+        let wall = create_plane(&mut app, "pos_x".into());
+        let material = app.run("material.create", json!({})).unwrap()["material"]
+            .as_u64()
+            .unwrap();
+        let assigned = app
+            .run(
+                "material.assign",
+                json!({"material": material, "nodes": [ground.0, wall.0]}),
+            )
+            .unwrap();
+        let ground_tag = forge_core::NodeId(assigned["tags"][0].as_u64().unwrap());
+        let snapshot = |scene: &Scene| {
+            prepare_render(
+                scene,
+                0,
+                &mut RenderSettings::new(40, 24, 1),
+                &Control::new(),
+            )
+            .unwrap()
+            .0
+        };
+        let full_uv = |mesh: &forge_render_api::MeshData| {
+            mesh.uvs.iter().any(|uv| uv[1] == 0.0)
+                && mesh.uvs.iter().any(|uv| uv[1] == 1.0)
+                && mesh.uvs.iter().any(|uv| uv[0] == 0.0)
+                && mesh.uvs.iter().any(|uv| uv[0] == 1.0)
+        };
+        let before = snapshot(app.doc.scene());
+        assert_eq!(before.meshes.len(), 2);
+        assert!(before.meshes.iter().all(full_uv));
+        app.doc
+            .transact("Change projection", |tx| {
+                tx.set_param(ground_tag, "projection", Value::Enum("spherical".into()))
+            })
+            .unwrap();
+        let after = snapshot(app.doc.scene());
+        assert_eq!(after.meshes.iter().filter(|mesh| full_uv(mesh)).count(), 1);
+        assert!(
+            after
+                .meshes
+                .iter()
+                .any(|mesh| mesh.uvs.iter().all(|uv| uv[1] == 0.5))
+        );
+        assert_eq!(after.instances[0].material, after.instances[1].material);
+    }
+
+    #[test]
     fn showcase_materials_reach_the_picture_viewer() {
         let registry = Arc::new(forge_app::default_registry().unwrap());
         for sample in forge_command::browser::SAMPLE_SCENES {
@@ -585,5 +786,50 @@ mod sample_scene_tests {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod live_render_tests {
+    use super::*;
+
+    #[test]
+    fn both_render_orders_publish_a_live_image_and_agree_at_completion() {
+        let mut app = forge_app::App::new_default();
+        app.doc
+            .transact("Cube", |tx| tx.create("forge.cube", None, None))
+            .unwrap();
+        let ctx = Context::default();
+        let mut beauty = Vec::new();
+        for mode in [RenderMode::Buckets, RenderMode::Progressive] {
+            let job = Job {
+                device: RenderDevice::Cpu,
+                mode,
+                camera: Some(Camera::default()),
+                id: 1,
+                frame: 0,
+                scene: app.doc.scene().clone(),
+                settings: RenderSettings::new(40, 24, 4),
+            };
+            let running = start(job, &ctx).unwrap();
+            let completed = running
+                .result
+                .recv_timeout(std::time::Duration::from_secs(10))
+                .unwrap()
+                .unwrap();
+            let image = running.progress.live_image.lock().unwrap();
+            let image = image
+                .as_ref()
+                .expect("render publishes pixels before completion");
+            assert_eq!(image.size, [40, 24]);
+            assert!(
+                image
+                    .pixels
+                    .iter()
+                    .any(|pixel| *pixel != egui::Color32::BLACK)
+            );
+            beauty.push(completed.output.beauty.data);
+        }
+        assert_eq!(beauty[0], beauty[1]);
     }
 }

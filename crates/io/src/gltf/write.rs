@@ -4,7 +4,7 @@ use forge_core::transform::{POS, ROT, SCALE, Transform, hpb_from_rotation};
 use forge_core::{EvalCtx, Interp, NodeId, Scene, Value};
 use forge_generators::scene_objects::{Lens, camera_data};
 use forge_geometry::{CornerUvs, PolyMesh, triangulate::triangulate};
-use forge_material::node_material::{NODE_MATERIAL, SurfaceValues, load_graph};
+use forge_material::node_material::{NODE_MATERIAL, SurfaceValues, graph_with_inherited_inputs};
 use forge_rig::weights::{WeightMap, find_weight_tag, read_bind_pose, read_weights, tag_joints};
 use glam::{DMat3, DQuat, DVec3};
 use serde_json::{Value as Json, json};
@@ -108,7 +108,8 @@ impl MaterialAssets {
         }
         let node = scene.node(id).ok_or_else(|| invalid("missing material"))?;
         let s = if node.type_id == NODE_MATERIAL {
-            let graph = load_graph(node).map_err(|e| invalid(e.to_string()))?;
+            let graph =
+                graph_with_inherited_inputs(node, false).map_err(|e| invalid(e.to_string()))?;
             SurfaceValues::from_graph(&graph).map_err(|e| invalid(e.to_string()))?
         } else {
             let m = forge_material::Material::from_node(node);

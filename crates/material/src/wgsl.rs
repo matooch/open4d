@@ -122,17 +122,21 @@ impl TextureCodegen for WhiteShaders {
 
 /// The material surface, mirroring [`crate::ir::Outputs`] (REALTIME.md §1.1).
 pub const SURFACE_WGSL: &str = r#"
-fn forge_node_fresnel(ior_in: f32, normal: vec3<f32>, view: vec3<f32>) -> f32 {
+fn forge_node_fresnel(ior_in: f32, falloff: f32, darken: f32, center_hold: f32, normal: vec3<f32>, view: vec3<f32>) -> f32 {
     let ior = clamp(ior_in, 1.0, 10.0);
     let r = (ior - 1.0) / (ior + 1.0);
-    let f0 = r * r;
+    let f0 = r * r * (1.0 - clamp(darken, 0.0, 1.0));
     let lengths = sqrt(dot(normal, normal) * dot(view, view));
     let cosine = min(1.0, abs(dot(normal, view)) / max(lengths, 1e-8));
-    return f0 + (1.0 - f0) * pow(1.0 - select(1.0, cosine, lengths > 1e-8), 5.0);
+    let hold = clamp(center_hold, 0.0, 0.99);
+    let edge = clamp((1.0 - select(1.0, cosine, lengths > 1e-8) - hold) / (1.0 - hold), 0.0, 1.0);
+    return f0 + (1.0 - f0) * pow(edge, clamp(falloff, 0.1, 32.0));
 }
-fn forge_ramp_factor(position: f32, start: f32, end: f32) -> f32 {
+fn forge_ramp_factor(position: f32, start: f32, end: f32, midpoint: f32) -> f32 {
     if (start == end) { return select(0.0, 1.0, position >= end); }
-    return clamp((position - start) / (end - start), 0.0, 1.0);
+    let t = clamp((position - start) / (end - start), 0.0, 1.0);
+    if (midpoint == 0.5) { return t; }
+    return pow(t, log(0.5) / log(clamp(midpoint, 0.001, 0.999)));
 }
 struct ShadeCtx {
     uvw: vec3<f32>,
@@ -325,8 +329,15 @@ pub fn compile_into(
     for (ix, node) in graph.nodes.iter().enumerate() {
         let (expr, fallback) = match node {
             IrNode::Color(c) => (vec3(*c), None),
-            IrNode::Fresnel { ior } => (
-                format!("vec3<f32>(forge_node_fresnel(ir{ior}(ctx).x, ctx.normal, ctx.view))"),
+            IrNode::Fresnel {
+                ior,
+                falloff,
+                center_darkening,
+                center_hold,
+            } => (
+                format!(
+                    "vec3<f32>(forge_node_fresnel(ir{ior}(ctx).x, ir{falloff}(ctx).x, ir{center_darkening}(ctx).x, ir{center_hold}(ctx).x, ctx.normal, ctx.view))"
+                ),
                 None,
             ),
             IrNode::Ramp {
@@ -335,9 +346,10 @@ pub fn compile_into(
                 position,
                 start,
                 end,
+                midpoint,
             } => (
                 format!(
-                    "mix(ir{a}(ctx), ir{b}(ctx), forge_ramp_factor(ir{position}(ctx).x, ir{start}(ctx).x, ir{end}(ctx).x))"
+                    "mix(ir{a}(ctx), ir{b}(ctx), forge_ramp_factor(ir{position}(ctx).x, ir{start}(ctx).x, ir{end}(ctx).x, ir{midpoint}(ctx).x))"
                 ),
                 None,
             ),

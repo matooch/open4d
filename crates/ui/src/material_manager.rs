@@ -186,7 +186,8 @@ pub fn material_manager_ui(
     previews: &mut MaterialPreviews,
 ) -> Vec<Cmd> {
     let mut cmds: Vec<Cmd> = Vec::new();
-    let mut edit = None;
+    let mut inspect = None;
+    let mut edit_nodes = None;
     let has_selection = !s.selection.nodes.is_empty();
     ui.horizontal(|ui| {
         if ui.button("New").clicked() {
@@ -223,16 +224,22 @@ pub fn material_manager_ui(
                             );
                             response
                         };
+                        let image = image.accessible_name(format!("Inspect {name}"));
                         image.dnd_set_drag_payload(MaterialDrag(id));
                         let name = ui
                             .add_sized(
                                 [100.0, 18.0],
                                 Label::new(name).truncate().sense(Sense::click_and_drag()),
                             )
-                            .on_hover_text("Drag to assign. Double-click to edit this material.");
+                            .on_hover_text(
+                                "Click for attributes. Drag to assign. Double-click to edit.",
+                            );
                         name.dnd_set_drag_payload(MaterialDrag(id));
+                        if image.clicked() || name.clicked() {
+                            inspect = Some(id);
+                        }
                         if image.double_clicked() || name.double_clicked() {
-                            edit = Some(id);
+                            edit_nodes = Some(id);
                         }
                         ui.horizontal(|ui| {
                             if ui
@@ -251,25 +258,23 @@ pub fn material_manager_ui(
                             .is_some_and(|m| m.type_id == NODE_MATERIAL)
                             && ui.small_button("Nodes").clicked()
                         {
-                            edit = Some(id);
+                            edit_nodes = Some(id);
                         }
                     });
                 });
             }
         });
     });
-    if let Some(id) = edit {
-        if s.doc
+    if let Some(id) = inspect {
+        s.inspect(Some(id));
+    }
+    if let Some(id) = edit_nodes
+        && s.doc
             .scene()
             .node(id)
             .is_some_and(|node| node.type_id == NODE_MATERIAL)
-        {
-            s.dock.reveal(crate::dock::Panel::NodeEditor);
-            s.node_editor.show_material(id);
-        } else {
-            s.inspect_material = Some(id);
-            s.dock.reveal(crate::dock::Panel::Attributes);
-        }
+    {
+        s.open_material_nodes(id);
     }
     cmds
 }

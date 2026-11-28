@@ -319,21 +319,13 @@ impl KeyMapEditor {
         self.message = keys.save().err().unwrap_or_default();
     }
 
-    /// Draws the window when open.
-    pub fn show(&mut self, ctx: &egui::Context, state: &mut EditorState) {
-        let mut open = self.open;
-        let now = ctx.input(|i| i.time);
+    pub(crate) fn show_panel(&mut self, ui: &mut Ui, state: &mut EditorState) {
+        let now = ui.input(|i| i.time);
         if self.tick(&mut state.keys, now) {
-            ctx.request_repaint_after(std::time::Duration::from_millis(200));
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(200));
         }
-        egui::Window::new("Key map")
-            .open(&mut open)
-            .default_size([560.0, 460.0])
-            .show(ctx, |ui| self.ui(ui, state));
-        self.open = open;
-        if !open {
-            self.cancel();
-        }
+        self.ui(ui, state);
     }
 
     fn ui(&mut self, ui: &mut Ui, state: &mut EditorState) {

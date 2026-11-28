@@ -38,6 +38,26 @@ pub struct RenderSettings {
     pub post: PostSettings,
     /// Optional ray-traced effects for the real-time engine (RENDER.md R24).
     pub hybrid: HybridSettings,
+    /// Lighting controls shared by the CPU and GPU path tracers.
+    pub path: PathLighting,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PathLighting {
+    pub indirect_diffuse: bool,
+    pub glossy_reflections: bool,
+    /// Contact-occlusion ray distance in scene units. Zero disables this effect.
+    pub ao_radius: f64,
+}
+
+impl Default for PathLighting {
+    fn default() -> Self {
+        Self {
+            indirect_diffuse: true,
+            glossy_reflections: true,
+            ao_radius: 0.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -170,6 +190,7 @@ impl Default for RenderSettings {
             depth_of_field: false,
             post: PostSettings::default(),
             hybrid: HybridSettings::default(),
+            path: PathLighting::default(),
         }
     }
 }
@@ -191,6 +212,9 @@ impl RenderSettings {
         }
         if self.samples == 0 {
             return bad("samples must be at least 1");
+        }
+        if !self.path.ao_radius.is_finite() || self.path.ao_radius < 0.0 {
+            return bad("path AO radius must be finite and nonnegative");
         }
         if self.tile == 0 {
             return bad("tile size must be at least 1");

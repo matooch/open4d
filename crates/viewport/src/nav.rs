@@ -3,7 +3,7 @@
 
 use std::f64::consts::FRAC_PI_4;
 
-use glam::DVec3;
+use glam::{DMat3, DVec3};
 
 use crate::camera::{AxisView, Camera, Handedness, Projection};
 
@@ -40,6 +40,16 @@ pub fn orbit_drag(cam: &Camera, dx_px: f64, dy_px: f64) -> Camera {
     c
 }
 
+/// Rotates around a world-space point while keeping its screen position fixed.
+pub fn orbit_around(cam: &Camera, anchor: DVec3, dx_px: f64, dy_px: f64) -> Camera {
+    let mut next = orbit_drag(cam, dx_px, dy_px);
+    let basis = |c: &Camera| DMat3::from_cols(c.right(), c.up(), -c.forward());
+    let rotation = basis(&next) * basis(cam).transpose();
+    let anchor = anchor * cam.mirror();
+    next.target = anchor + rotation * (cam.target - anchor);
+    next
+}
+
 /// Middle drag: the pivot moves in the view plane so content follows the cursor.
 pub fn pan_drag(cam: &Camera, dx_px: f64, dy_px: f64, viewport_h: f64) -> Camera {
     let mut c = *cam;
@@ -52,6 +62,26 @@ pub fn dolly_drag(cam: &Camera, dx_px: f64) -> Camera {
     let mut c = *cam;
     c.dolly((-DOLLY_PER_PX * dx_px).exp());
     c
+}
+
+/// Zooms towards a world-space point, using its actual depth in perspective.
+pub fn dolly_around(cam: &Camera, anchor: DVec3, dx_px: f64) -> Camera {
+    let mut next = dolly_drag(cam, dx_px);
+    let offset = anchor * cam.mirror() - cam.target;
+    let (offset, factor) = match (cam.projection, next.projection) {
+        (
+            Projection::Orthographic { height },
+            Projection::Orthographic {
+                height: next_height,
+            },
+        ) => {
+            let forward = cam.forward();
+            (offset - offset.dot(forward) * forward, next_height / height)
+        }
+        _ => (offset, next.distance / cam.distance),
+    };
+    next.target += offset * (1.0 - factor);
+    next
 }
 
 /// Distance factor of a wheel motion in points (positive zooms in).

@@ -454,3 +454,89 @@ fn uv_generate_errors_and_reuse() {
     assert_eq!(a["tag"], b["tag"]);
     assert_eq!(app.doc.undo_depth(), depth, "same result: no new step");
 }
+
+#[test]
+fn conversion_preserves_shading_and_assignments_and_allows_graph_edits() {
+    use forge_material::node_material::{NODE_MATERIAL, compile_hosted, load_graph, registry};
+
+    let mut app = App::new_default();
+    let object = cube(&mut app);
+    let material = id(
+        &app.run(
+            "material.create",
+            json!({"name": "Copper", "params": {
+                "color.color": [0.7, 0.3, 0.15],
+                "color.roughness": 0.24,
+                "reflectance.spec.attenuation": "metal",
+                "enable.transparency": true
+            }}),
+        )
+        .unwrap(),
+        "material",
+    );
+    let shader = id(
+        &app.run(
+            "shader.set",
+            json!({
+                "material": material.0, "channel": "color", "type": "forge.shader.gradient"
+            }),
+        )
+        .unwrap(),
+        "shader",
+    );
+    let assignments = app
+        .run(
+            "material.assign",
+            json!({"material": material.0, "nodes": [object.0]}),
+        )
+        .unwrap();
+    let tag = NodeId(assignments["tags"][0].as_u64().unwrap());
+    let before = compile_hosted(app.doc.scene().node(material).unwrap()).unwrap();
+    let depth = app.doc.undo_depth();
+    app.run("material.convert_to_node", json!({"material": material.0}))
+        .unwrap();
+    assert_eq!(app.doc.undo_depth(), depth + 1);
+    let scene = app.doc.scene();
+    let converted = scene.node(material).unwrap();
+    assert_eq!(converted.type_id, NODE_MATERIAL);
+    assert_eq!(converted.name, "Copper");
+    assert_eq!(converted.children, [shader]);
+    assert_eq!(compile_hosted(converted).unwrap(), before);
+    assert_eq!(
+        scene.param(tag, "material"),
+        Some(&Value::Link(Some(material)))
+    );
+    assert!(app.doc.undo());
+    assert_eq!(
+        app.doc.scene().node(material).unwrap().type_id,
+        forge_material::MATERIAL
+    );
+    assert!(app.doc.redo());
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("converted.forge");
+    app.save(path.to_str().unwrap()).unwrap();
+    let mut app = App::new_default();
+    app.open(path.to_str().unwrap()).unwrap();
+    let converted = app.doc.scene().node(material).unwrap();
+    assert_eq!(compile_hosted(converted).unwrap(), before);
+    let mut graph = load_graph(converted).unwrap();
+    let surface = graph.nodes().next().unwrap().id;
+    graph
+        .set_value(
+            registry(),
+            surface,
+            "roughness",
+            forge_nodes::PortValue::Float(0.8),
+        )
+        .unwrap();
+    app.run(
+        "material.set_graph",
+        json!({"material": material.0, "graph": graph.to_json()}),
+    )
+    .unwrap();
+    let edited = compile_hosted(app.doc.scene().node(material).unwrap()).unwrap();
+    assert_eq!(edited.outputs.diffuse.unwrap().roughness, 0.8);
+    assert_eq!(edited.outputs.specular.unwrap().width, 0.8);
+    assert_eq!(edited.outputs.transmission, before.outputs.transmission);
+}

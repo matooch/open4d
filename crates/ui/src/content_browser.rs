@@ -99,7 +99,9 @@ pub fn content_browser_ui(ui: &mut Ui, st: &mut EditorState) -> Vec<BrowserActio
                                 .image;
                             let pixels = image
                                 .data
-                                .chunks_exact(4)
+                                .as_chunks::<4>()
+                                .0
+                                .iter()
                                 .map(|p| {
                                     let [r, g, b] =
                                         [p[0], p[1], p[2]].map(forge_image::linear_to_srgb8);

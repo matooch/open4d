@@ -708,7 +708,7 @@ fn editor_with_file(name: &str) -> (Editor, PathBuf) {
 fn open_editor_window(h: &mut Harness<'_, Editor>, filter: &str) {
     h.get_by_label("Window").click();
     h.run();
-    h.get_by_label_contains("Key map").click();
+    h.get_by_label("Key map…").click();
     h.run();
     h.state_mut().keymap_editor_mut().filter = filter.to_string();
     h.run();

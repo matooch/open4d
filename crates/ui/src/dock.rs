@@ -56,6 +56,10 @@ pub enum Panel {
     DopeSheet,
     ValueGraph,
     Materials,
+    Preferences,
+    KeyMap,
+    DynamicsSettings,
+    RenderSettings,
     PictureViewer,
     InteractiveRender,
     UvEditor,
@@ -63,7 +67,7 @@ pub enum Panel {
 
 impl Panel {
     /// Every panel, in Window menu order.
-    pub const ALL: [Panel; 20] = [
+    pub const ALL: [Panel; 23] = [
         Panel::CommandBar,
         Panel::ToolPalette,
         Panel::Viewport,
@@ -81,8 +85,11 @@ impl Panel {
         Panel::DopeSheet,
         Panel::ValueGraph,
         Panel::Materials,
+        Panel::Preferences,
+        Panel::KeyMap,
+        Panel::DynamicsSettings,
+        Panel::RenderSettings,
         Panel::PictureViewer,
-        Panel::InteractiveRender,
         Panel::UvEditor,
     ];
 
@@ -119,6 +126,10 @@ impl Panel {
             Panel::DopeSheet => "Dope Sheet",
             Panel::ValueGraph => "Value Graph",
             Panel::Materials => "Materials",
+            Panel::Preferences => "Preferences",
+            Panel::KeyMap => "Key map",
+            Panel::DynamicsSettings => "Dynamics Settings",
+            Panel::RenderSettings => "Render Settings",
             Panel::PictureViewer => "Picture Viewer",
             Panel::InteractiveRender => "Interactive Render",
             Panel::UvEditor => "UV Editor",
@@ -163,6 +174,8 @@ impl Panel {
             Panel::ContentBrowser => Area::RightBottom,
             Panel::WeightManager => Area::RightBottom,
             Panel::Materials => Area::Bottom,
+            Panel::RenderSettings | Panel::DynamicsSettings => Area::RightBottom,
+            Panel::Preferences | Panel::KeyMap => Area::Center,
             Panel::PictureViewer => Area::Center,
             Panel::InteractiveRender => Area::Center,
             Panel::UvEditor => Area::Center,
